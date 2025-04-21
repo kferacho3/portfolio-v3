@@ -1,0 +1,12 @@
+{
+  "extends": [
+    "next",
+    "plugin:@next/next/recommended",
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "plugins": ["prettier"],
+  "rules": {
+    "prettier/prettier": "error",
+    "@typescript-eslint/no-namespace": ["error", { "allowDeclarations": true }]
+  }
+}

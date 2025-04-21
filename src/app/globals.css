@@ -1,0 +1,344 @@
+/* styles/globals.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reset and Base Styles */
+html,
+body,
+#__next {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden; /* Prevent horizontal scrolling */
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Canvas Styles */
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1; /* Ensures the 3D canvas stays in the background */
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+/* Gradient Border Effect */
+.hover-gradient-border {
+  position: relative; /* Necessary for pseudo-element positioning */
+  overflow: hidden;
+}
+
+.hover-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px; /* Adjusted inset for better visibility */
+  padding: 2px;
+  background: linear-gradient(
+    45deg,
+    #39ff14,
+    /* Neon Green */ #ffa500,
+    /* Orange */ #9400d3,
+    /* Purple */ #ff1493,
+    /* Pink */ #ffff00 /* Yellow */
+  );
+  border-radius: inherit;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: destination-out; /* For Safari */
+  transition:
+    opacity 0.5s ease,
+    background-position 0.5s ease;
+  opacity: 0;
+  z-index: 1; /* Corrected z-index to position below the content */
+  pointer-events: none; /* Allow clicks to pass through */
+}
+
+.hover-gradient-border:hover::before {
+  opacity: 1;
+  background-position: 100% 50%;
+  /* Optional: Animate background position for movement */
+  animation: gradientMove 3s linear infinite;
+}
+
+/* Gradient Text on Hover */
+.text-gradient-hover {
+  position: relative;
+  color: inherit; /* Maintain original text color */
+  transition: color 0.5s ease;
+}
+
+.text-gradient-hover::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    45deg,
+    #39ff14,
+    /* Neon Green */ #ffa500,
+    /* Orange */ #9400d3,
+    /* Purple */ #ff1493,
+    /* Pink */ #ffff00 /* Yellow */
+  );
+  background-size: 400%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  z-index: -1; /* Position below the text */
+  pointer-events: none; /* Ensure the overlay doesn't block interactions */
+}
+
+.text-gradient-hover:hover::after {
+  opacity: 1;
+  animation: gradientMove 3s linear infinite;
+}
+
+/* Gradient Border for Valid Inputs */
+.input-valid {
+  position: relative;
+  border: 2px solid transparent;
+  transition: border-color 0.5s ease;
+}
+
+.input-valid::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(
+    45deg,
+    #39ff14,
+    /* Neon Green */ #ffa500,
+    /* Orange */ #9400d3,
+    /* Purple */ #ff1493,
+    /* Pink */ #ffff00 /* Yellow */
+  );
+  border-radius: inherit;
+  z-index: -1; /* Position below the input */
+  opacity: 0; /* Initially hidden */
+  transition: opacity 0.5s ease;
+  pointer-events: none; /* Allow clicks to pass through */
+}
+
+.input-valid:focus {
+  border-color: transparent; /* Remove default border */
+}
+
+.input-valid:valid::before {
+  opacity: 1;
+  animation: gradientMove 3s linear infinite;
+}
+
+/* Utility Classes */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .border-border {
+    border-color: hsl(var(--border));
+  }
+}
+
+/* Hide Scrollbar for All Browsers */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+/* Custom Scrollbar Styling for Better Aesthetics (Fallback) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #cccccc;
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+/* Theme Variables */
+@layer base {
+  :root {
+    /* Dark theme variables (default) */
+    --background: 240 10% 10.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 240 4.9% 83.9%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --radius: 0.5rem;
+  }
+
+  .light {
+    /* Light theme variables */
+    --background: 10 10% 90%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 10% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+  }
+
+  /* General Body Styles */
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Invert the canvas background */
+  canvas {
+    background-color: hsl(var(--background));
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Keyframes should be defined only once */
+@keyframes gradientMove {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+
+/* Music Bar Animation */
+/* Add bounce keyframes */
+@keyframes bounce {
+  10% {
+    transform: scaleY(0.3);
+  }
+
+  30% {
+    transform: scaleY(1);
+  }
+
+  60% {
+    transform: scaleY(0.5);
+  }
+
+  80% {
+    transform: scaleY(0.75);
+  }
+
+  100% {
+    transform: scaleY(0.6);
+  }
+}
+
+/* Add gradientMove keyframes if not already present */
+@keyframes gradientMove {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Music Bar Styles */
+.music-bar {
+  width: 2px;
+  height: 1px;
+  background-color: #ccc; /* Default color when music is disabled */
+  transition: transform 0.2s, background-color 0.5s;
+  transform-origin: bottom;
+}
+
+.music-bar.playing {
+  animation: bounce 2.2s ease infinite alternate, gradientMove 3s linear infinite;
+  background: linear-gradient(
+    45deg,
+    #39ff14, /* Neon Green */
+    #ffa500, /* Orange */
+    #9400d3, /* Purple */
+    #ff1493, /* Pink */
+    #ffff00  /* Yellow */
+  );
+  background-size: 400%;
+  background-position: 0 50%;
+}
