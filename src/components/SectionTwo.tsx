@@ -28,7 +28,6 @@ export default function SectionTwo() {
   const uiUxRef = useRef<HTMLDivElement>(null);
 
   // Desktop scroll: by container width
-  // Replace your existing desktopScroll with this:
   const desktopScroll = (
     ref: React.RefObject<HTMLDivElement>,
     direction: 'left' | 'right'
@@ -81,7 +80,7 @@ export default function SectionTwo() {
         ref={ref}
         className={`${
           isMobile
-            ? 'flex flex-col space-y-8'
+            ? 'flex flex-col items-center space-y-8'
             : 'flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden scrollbar-hide space-x-4'
         }`}
       >
@@ -89,8 +88,8 @@ export default function SectionTwo() {
           <div
             key={project.id}
             className={`relative flex-none ${
-              isMobile ? 'w-full' : 'w-2/5'
-            } rounded-lg  border-2 border-border p-4 bg-card transition-transform duration-300 hover:scale-105 cursor-pointer`}
+              isMobile ? 'w-[95vw] ' : 'w-2/5'
+            } rounded-lg border-2 border-border p-4 bg-card transition-transform duration-300 hover:scale-105 cursor-pointer`}
             onClick={() => window.open(project.link, '_blank')}
           >
             <div className="w-full h-60 relative overflow-hidden">
