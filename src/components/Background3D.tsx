@@ -379,7 +379,26 @@ const Background3D: React.FC<Background3DProps> = ({ onAnimationComplete }) => {
     setRotationSpeed(newRotationSpeed);
   };
 
+  // 2. Inside your component, set up mobile detection and scroll
   const scroll = useScroll();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // 3. Create a spring that uses scroll.offset to interpolate scale
+  const { scaleValue } = useSpring({
+    scaleValue: isMobile
+      ? scroll.offset < 1
+        ? 0.5 // reduce to 50% on mobile until you hit bottom
+        : 1 // at bottom, smoothly go back to 100%
+      : 1, // always 100% on desktop
+    config: { mass: 1, tension: 170, friction: 26 },
+  });
   const sheet = useCurrentSheet();
 
   // Setup parallax: both the main shape and icons will subtly follow the mouse.
@@ -493,51 +512,54 @@ const Background3D: React.FC<Background3DProps> = ({ onAnimationComplete }) => {
   return (
     <EGroup theatreKey="Dodecahedron">
       {/* Wrap main shape and icons in a parallax group */}
+
       <group ref={parallaxRef}>
-        {shapeVisible && texture && (
-          <CubeCamera resolution={256} frames={1} envMap={texture}>
-            {(cubeCameraEnvMap) => (
-              <AnimatedGroup
-                scale={logoSpring.scale.to(
-                  (x, y, z) => [x, y, z] as [number, number, number]
-                )}
-                position={logoSpring.position.to(
-                  (x, y, z) => [x, y, z] as [number, number, number]
-                )}
-              >
-                <e.mesh
-                  onClick={handleShapeClick}
-                  ref={shapeRef}
-                  theatreKey="Background3DMesh"
-                >
-                  {getGeometry(currentShape)}
-                  {materialOptions[currentMaterialIndex](
-                    cubeCameraEnvMap,
-                    currentColor
+        <AnimatedGroup scale={scaleValue.to((s) => [s, s, s])}>
+          {shapeVisible && texture && (
+            <CubeCamera resolution={256} frames={1} envMap={texture}>
+              {(cubeCameraEnvMap) => (
+                <AnimatedGroup
+                  scale={logoSpring.scale.to(
+                    (x, y, z) => [x, y, z] as [number, number, number]
                   )}
-                </e.mesh>
-              </AnimatedGroup>
-            )}
-          </CubeCamera>
-        )}
-        {iconsVisible &&
-          iconPositions.map((pos, idx) => (
-            <e.mesh
-              key={icons[idx].name}
-              position={pos}
-              ref={(el: THREE.Mesh | null) => {
-                if (el) iconRefs.current[idx] = el;
-              }}
-              theatreKey={`IconMesh_${idx}`}
-            >
-              <planeGeometry args={[0.4, 0.4]} />
-              <meshBasicMaterial
-                map={iconTextures[idx]}
-                transparent
-                side={THREE.DoubleSide}
-              />
-            </e.mesh>
-          ))}
+                  position={logoSpring.position.to(
+                    (x, y, z) => [x, y, z] as [number, number, number]
+                  )}
+                >
+                  <e.mesh
+                    onClick={handleShapeClick}
+                    ref={shapeRef}
+                    theatreKey="Background3DMesh"
+                  >
+                    {getGeometry(currentShape)}
+                    {materialOptions[currentMaterialIndex](
+                      cubeCameraEnvMap,
+                      currentColor
+                    )}
+                  </e.mesh>
+                </AnimatedGroup>
+              )}
+            </CubeCamera>
+          )}
+          {iconsVisible &&
+            iconPositions.map((pos, idx) => (
+              <e.mesh
+                key={icons[idx].name}
+                position={pos}
+                ref={(el: THREE.Mesh | null) => {
+                  if (el) iconRefs.current[idx] = el;
+                }}
+                theatreKey={`IconMesh_${idx}`}
+              >
+                <planeGeometry args={[0.4, 0.4]} />
+                <meshBasicMaterial
+                  map={iconTextures[idx]}
+                  transparent
+                  side={THREE.DoubleSide}
+                />
+              </e.mesh>
+            ))}
+        </AnimatedGroup>
       </group>
       {/* Add postprocessing for a nicer look */}
       <EffectComposer>

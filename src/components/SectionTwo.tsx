@@ -1,157 +1,150 @@
-import {
-  ArrowRightIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  InformationCircleIcon,
-} from '@heroicons/react/24/solid';
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import {
   Project,
+  earlyProjects,
   featuredWebsites,
-  incompleteProjects,
   uiUxDesigns,
 } from './SectionTwoData';
 
-function SectionTwo() {
+export default function SectionTwo() {
   const [isMobile, setIsMobile] = useState(false);
-  // Active index for each carousel
   const [activeFeatured, setActiveFeatured] = useState(0);
-  const [activeIncomplete, setActiveIncomplete] = useState(0);
+  const [activeEarly, setActiveEarly] = useState(0);
   const [activeUiUx, setActiveUiUx] = useState(0);
-  const [expandedProjects, setExpandedProjects] = useState<number[]>([]);
 
-  // Set isMobile based on viewport width
+  // Update isMobile on resize
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Refs for horizontal scrolling
+  // Refs for scrollable containers
   const featuredRef = useRef<HTMLDivElement>(null);
-  const incompleteRef = useRef<HTMLDivElement>(null);
+  const earlyRef = useRef<HTMLDivElement>(null);
   const uiUxRef = useRef<HTMLDivElement>(null);
 
-  // Helper: calculates card width and gap (using viewport values) for mobile
-  const getMobileDimensions = () => {
-    const cardWidth = window.innerWidth * 0.9; // 90% of viewport width
-    const gap = window.innerWidth * 0.025; // 2.5% gap for preview
-    return { cardWidth, gap };
-  };
-
-  // Generic mobile scroll function for a given carousel
-  const mobileScroll = (
-    ref: React.RefObject<HTMLDivElement>,
-    currentIndex: number,
-    setIndex: (val: number) => void,
-    direction: 'left' | 'right',
-    total: number
-  ) => {
-    if (ref.current) {
-      const { cardWidth, gap } = getMobileDimensions();
-      let newIndex = currentIndex;
-      if (direction === 'left' && currentIndex > 0) {
-        newIndex = currentIndex - 1;
-      }
-      if (direction === 'right' && currentIndex < total - 1) {
-        newIndex = currentIndex + 1;
-      }
-      setIndex(newIndex);
-      ref.current.scrollTo({
-        left: newIndex * (cardWidth + gap),
-        behavior: 'smooth',
-      });
-    }
-  };
-
-  // Desktop scroll remains similar (scroll by 300px)
+  // Desktop scroll: by container width
+  // Replace your existing desktopScroll with this:
   const desktopScroll = (
     ref: React.RefObject<HTMLDivElement>,
     direction: 'left' | 'right'
   ) => {
-    if (ref.current) {
-      ref.current.scrollBy({
-        left: direction === 'left' ? -300 : 300,
-        behavior: 'smooth',
-      });
-    }
-  };
-
-  // Toggle project details expansion
-  const toggleExpand = (id: number) => {
-    setExpandedProjects((prev) =>
-      prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
+    if (!ref.current) return;
+    const firstCard = ref.current.querySelector<HTMLElement>(
+      '.relative.flex-none'
     );
+    if (!firstCard) return;
+    const style = getComputedStyle(firstCard);
+    const gap = parseFloat(style.marginRight);
+    const scrollAmount = firstCard.clientWidth + gap;
+    ref.current.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
   };
 
-  // Render a project card – uses min-w-[85vw] in mobile so that each card takes up 90vw
-  const renderProjects = (projects: Project[]) => {
-    return projects.map((project) => {
-      const isExpanded = expandedProjects.includes(project.id);
-      return (
-        <div
-          key={project.id}
-          className={`relative group overflow-hidden rounded-lg border-2 border-border p-4 bg-card hover-gradient-border transition-transform duration-300 cursor-pointer ${
-            isMobile ? 'min-w-[80vw] snap-center' : 'snap-start'
-          }`}
-        >
-          <Image
-            src={isMobile ? project.imageMobile : project.imageDesktop}
-            alt={project.title}
-            width={320}
-            height={200}
-            className="object-cover w-full h-40 transform transition-transform duration-500 group-hover:scale-110 rounded-md"
-          />
-          <div className="mt-4 text-foreground">
-            <h3 className="text-xl font-semibold">{project.title}</h3>
-            <div className="mt-2">
-              <p className="font-semibold">Tech Stack:</p>
-              <ul className="list-disc list-inside text-sm">
-                {project.techStack.map((tech) => (
-                  <li key={tech}>{tech}</li>
-                ))}
-              </ul>
+  // Mobile scroll: by one full viewport
+  const mobileScroll = (
+    ref: React.RefObject<HTMLDivElement>,
+    currentIndex: number,
+    setIndex: (i: number) => void,
+    direction: 'left' | 'right',
+    total: number
+  ) => {
+    if (!ref.current) return;
+    const width = ref.current.clientWidth;
+    let nextIndex = currentIndex;
+    if (direction === 'left' && currentIndex > 0) {
+      nextIndex = currentIndex - 1;
+    }
+    if (direction === 'right' && currentIndex < total - 1) {
+      nextIndex = currentIndex + 1;
+    }
+    setIndex(nextIndex);
+    ref.current.scrollTo({ left: nextIndex * width, behavior: 'smooth' });
+  };
+
+  // Renders a carousel (horizontal on desktop, vertical list on mobile)
+  const renderProjects = (
+    projects: Project[],
+    activeIndex: number,
+    setActiveIndex: (i: number) => void,
+    ref: React.RefObject<HTMLDivElement>
+  ) => {
+    const isUiUx = projects === uiUxDesigns;
+    return (
+      <div
+        ref={ref}
+        className={`${
+          isMobile
+            ? 'flex flex-col space-y-8'
+            : 'flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden scrollbar-hide space-x-4'
+        }`}
+      >
+        {projects.map((project) => (
+          <div
+            key={project.id}
+            className={`relative flex-none ${
+              isMobile ? 'w-full' : 'w-2/5'
+            } rounded-lg  border-2 border-border p-4 bg-card transition-transform duration-300 hover:scale-105 cursor-pointer`}
+            onClick={() => window.open(project.link, '_blank')}
+          >
+            <div className="w-full h-60 relative overflow-hidden">
+              <Image
+                src={isMobile ? project.imageMobile : project.imageDesktop}
+                alt={project.title}
+                fill
+                className="absolute inset-0 w-full h-full object-cover rounded-md"
+              />
             </div>
-            {isExpanded && (
-              <>
-                <p className="mt-2 text-sm">{project.description}</p>
-                <div className="mt-2">
+
+            <h3 className="text-xl font-semibold mt-4 text-foreground">
+              {project.title}
+            </h3>
+
+            <div className="mt-2 text-sm text-foreground">
+              {/* Tech Stack always shown */}
+              <div
+                className={`${isUiUx ? 'w-full' : 'w-1/2 pr-2'} inline-block align-top`}
+              >
+                <p className="font-semibold">Tech Stack:</p>
+                <ul className="list-disc list-inside">
+                  {project.techStack.map((tech) => (
+                    <li key={tech}>{tech}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Frameworks only if not UI/UX section */}
+              {!isUiUx && (
+                <div className="w-1/2 pl-2 inline-block align-top">
                   <p className="font-semibold">Frameworks:</p>
-                  <ul className="list-disc list-inside text-sm">
-                    {project.frameworks.map((framework) => (
-                      <li key={framework}>{framework}</li>
+                  <ul className="list-disc list-inside">
+                    {project.frameworks.map((fw) => (
+                      <li key={fw}>{fw}</li>
                     ))}
                   </ul>
                 </div>
-              </>
-            )}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <a
-                href={project.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-md cursor-pointer hover-gradient-border transition-colors duration-200"
-              >
-                Visit Site <ArrowRightIcon className="w-5 h-5 ml-2" />
-              </a>
-              <button
-                onClick={() => toggleExpand(project.id)}
-                className="inline-flex items-center px-4 py-2 bg-muted text-muted-foreground rounded-md cursor-pointer hover-gradient-border transition-colors duration-200"
-                aria-expanded={isExpanded}
-                aria-controls={`project-details-${project.id}`}
-              >
-                {isExpanded ? 'Less Info' : 'More Info'}{' '}
-                <InformationCircleIcon className="w-5 h-5 ml-2" />
-              </button>
+              )}
             </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(project.link, '_blank');
+              }}
+              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary-hover transition-colors duration-200"
+            >
+              View More
+            </button>
           </div>
-        </div>
-      );
-    });
+        ))}
+      </div>
+    );
   };
 
   return (
@@ -161,35 +154,30 @@ function SectionTwo() {
         Featured Websites
       </h2>
       <div className="relative mb-16">
-        {/* Desktop arrows */}
         {!isMobile && (
           <>
             <button
               onClick={() => desktopScroll(featuredRef, 'left')}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200 z-10"
+              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
               aria-label="Scroll Left"
             >
               <ChevronLeftIcon className="w-6 h-6 text-foreground" />
             </button>
             <button
               onClick={() => desktopScroll(featuredRef, 'right')}
-              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200 z-10"
+              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
               aria-label="Scroll Right"
             >
               <ChevronRightIcon className="w-6 h-6 text-foreground" />
             </button>
           </>
         )}
-        {/* Carousel container with flex-nowrap */}
-        <div
-          ref={featuredRef}
-          className={`flex flex-nowrap space-x-[2.5vw] overflow-x-auto scrollbar-hide snap-x snap-mandatory ${
-            isMobile ? 'pl-[5vw] pr-[5vw]' : 'justify-center'
-          }`}
-        >
-          {renderProjects(featuredWebsites)}
-        </div>
-        {/* Mobile arrow controls */}
+        {renderProjects(
+          featuredWebsites,
+          activeFeatured,
+          setActiveFeatured,
+          featuredRef
+        )}
         {isMobile && (
           <div className="flex justify-center items-center mt-4 space-x-4">
             {activeFeatured > 0 && (
@@ -203,7 +191,7 @@ function SectionTwo() {
                     featuredWebsites.length
                   )
                 }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200"
+                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
                 aria-label="Scroll Left"
               >
                 <ChevronLeftIcon className="w-6 h-6 text-foreground" />
@@ -220,7 +208,7 @@ function SectionTwo() {
                     featuredWebsites.length
                   )
                 }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200"
+                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
                 aria-label="Scroll Right"
               >
                 <ChevronRightIcon className="w-6 h-6 text-foreground" />
@@ -230,68 +218,61 @@ function SectionTwo() {
         )}
       </div>
 
-      {/* Incomplete Projects */}
+      {/* Early Projects */}
       <h2 className="text-3xl font-bold mb-8 text-center text-foreground">
-        Incomplete Projects
+        Early Projects
       </h2>
       <div className="relative mb-16">
         {!isMobile && (
           <>
             <button
-              onClick={() => desktopScroll(incompleteRef, 'left')}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200 z-10"
+              onClick={() => desktopScroll(earlyRef, 'left')}
+              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
               aria-label="Scroll Left"
             >
               <ChevronLeftIcon className="w-6 h-6 text-foreground" />
             </button>
             <button
-              onClick={() => desktopScroll(incompleteRef, 'right')}
-              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200 z-10"
+              onClick={() => desktopScroll(earlyRef, 'right')}
+              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
               aria-label="Scroll Right"
             >
               <ChevronRightIcon className="w-6 h-6 text-foreground" />
             </button>
           </>
         )}
-        <div
-          ref={incompleteRef}
-          className={`flex flex-nowrap space-x-[2.5vw] overflow-x-auto scrollbar-hide snap-x snap-mandatory ${
-            isMobile ? 'pl-[5vw] pr-[5vw]' : 'justify-center'
-          }`}
-        >
-          {renderProjects(incompleteProjects)}
-        </div>
+        {renderProjects(earlyProjects, activeEarly, setActiveEarly, earlyRef)}
         {isMobile && (
           <div className="flex justify-center items-center mt-4 space-x-4">
-            {activeIncomplete > 0 && (
+            {activeEarly > 0 && (
               <button
                 onClick={() =>
                   mobileScroll(
-                    incompleteRef,
-                    activeIncomplete,
-                    setActiveIncomplete,
+                    earlyRef,
+                    activeEarly,
+                    setActiveEarly,
                     'left',
-                    incompleteProjects.length
+                    earlyProjects.length
                   )
                 }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200"
+                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
                 aria-label="Scroll Left"
               >
                 <ChevronLeftIcon className="w-6 h-6 text-foreground" />
               </button>
             )}
-            {activeIncomplete < incompleteProjects.length - 1 && (
+            {activeEarly < earlyProjects.length - 1 && (
               <button
                 onClick={() =>
                   mobileScroll(
-                    incompleteRef,
-                    activeIncomplete,
-                    setActiveIncomplete,
+                    earlyRef,
+                    activeEarly,
+                    setActiveEarly,
                     'right',
-                    incompleteProjects.length
+                    earlyProjects.length
                   )
                 }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200"
+                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
                 aria-label="Scroll Right"
               >
                 <ChevronRightIcon className="w-6 h-6 text-foreground" />
@@ -310,28 +291,21 @@ function SectionTwo() {
           <>
             <button
               onClick={() => desktopScroll(uiUxRef, 'left')}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200 z-10"
+              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
               aria-label="Scroll Left"
             >
               <ChevronLeftIcon className="w-6 h-6 text-foreground" />
             </button>
             <button
               onClick={() => desktopScroll(uiUxRef, 'right')}
-              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200 z-10"
+              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
               aria-label="Scroll Right"
             >
               <ChevronRightIcon className="w-6 h-6 text-foreground" />
             </button>
           </>
         )}
-        <div
-          ref={uiUxRef}
-          className={`flex flex-nowrap space-x-[2.5vw] overflow-x-auto scrollbar-hide snap-x snap-mandatory ${
-            isMobile ? 'pl-[5vw] pr-[5vw]' : 'justify-center'
-          }`}
-        >
-          {renderProjects(uiUxDesigns)}
-        </div>
+        {renderProjects(uiUxDesigns, activeUiUx, setActiveUiUx, uiUxRef)}
         {isMobile && (
           <div className="flex justify-center items-center mt-4 space-x-4">
             {activeUiUx > 0 && (
@@ -345,7 +319,7 @@ function SectionTwo() {
                     uiUxDesigns.length
                   )
                 }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200"
+                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
                 aria-label="Scroll Left"
               >
                 <ChevronLeftIcon className="w-6 h-6 text-foreground" />
@@ -362,7 +336,7 @@ function SectionTwo() {
                     uiUxDesigns.length
                   )
                 }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none cursor-pointer hover:bg-muted-hover transition-colors duration-200"
+                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
                 aria-label="Scroll Right"
               >
                 <ChevronRightIcon className="w-6 h-6 text-foreground" />
@@ -374,5 +348,3 @@ function SectionTwo() {
     </section>
   );
 }
-
-export default SectionTwo;

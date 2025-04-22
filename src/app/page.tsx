@@ -1,7 +1,7 @@
 'use client';
 
 import { Scroll, ScrollControls } from '@react-three/drei';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Background3D from '../components/Background3D';
 import SectionOne from '../components/SectionOne';
 import SectionThree from '../components/SectionThree';
@@ -13,6 +13,21 @@ function HomePage() {
   const [sectionOneAnimationComplete, setSectionOneAnimationComplete] =
     useState(false);
 
+  // Determine how many scroll pages to use based on viewport width
+  const [pages, setPages] = useState(6);
+
+  useEffect(() => {
+    const updatePages = () => {
+      setPages(window.innerWidth <= 768 ? 15 : 6);
+    };
+
+    // initialize
+    updatePages();
+
+    window.addEventListener('resize', updatePages);
+    return () => window.removeEventListener('resize', updatePages);
+  }, []);
+
   const handleBackground3DAnimationComplete = () => {
     setBackground3DAnimationComplete(true);
   };
@@ -23,7 +38,7 @@ function HomePage() {
 
   return (
     <Suspense fallback={null}>
-      <ScrollControls pages={6} damping={0}>
+      <ScrollControls pages={pages} damping={0}>
         {/* 3D Content */}
         <Background3D
           onAnimationComplete={handleBackground3DAnimationComplete}

@@ -11,128 +11,256 @@ export interface Project {
   frameworks: string[];
 }
 
+/* -------------------------------------------------------------------------- */
+/*                               FEATURED SITES                               */
+/* -------------------------------------------------------------------------- */
+
 export const featuredWebsites: Project[] = [
   {
     id: 1,
-    title: 'Web³ Outfitters',
+    title: 'Sunny Island Pepper Sauce',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/web3outfittersFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/SunnyIslandPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/web3outfittersFinal.png',
-    link: 'https://www.web3outfitters.io/',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/SunnyIslandPreview.webp',
+    link: 'https://www.sunnyislandpepper.com/',
     description:
-      'A pioneering web³ site that employs immersive technology to enhance user interaction and scalability. This platform supports NFTs, digital wearables, and more, utilizing a sophisticated mix of React Three Fiber, styled-components, framer motion, and react-spring.',
-    techStack: ['JavaScript', 'React', 'Three.js'],
-    frameworks: ['React Three Fiber', 'Framer Motion', 'Styled Components'],
+      'A headless-Shopify 3D e-commerce experience for an emerging hot-sauce brand. The site fuses Next.js 15, React 19, and React Three Fiber to present interactive product scenes, uses the Shopify Storefront GraphQL API for real-time inventory, and relies on Prisma + PostgreSQL for content and order metadata. Advanced techniques include custom GLSL shaders for bottle animation, Framer Motion micro-interactions, Tailwind CSS utility design, secure Next-Auth flows, and automated e-mail receipts with Nodemailer.',
+    techStack: [
+      'TypeScript',
+      'React 19',
+      'Next.js 15',
+      'Three.js 0.172',
+      'GraphQL',
+      'Prisma',
+      'PostgreSQL',
+      'Shopify Storefront API',
+    ],
+    frameworks: [
+      'React Three Fiber',
+      'Framer Motion',
+      'React Three Postprocessing',
+      'Tailwind CSS',
+      'Next-Auth',
+    ],
   },
   {
     id: 2,
-    title: 'Sunny Island Pepper Sauce',
+    title: 'Wardrobe X',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/SunnyIslandPepper.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/WardrobeXPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/SunnyIslandPepper.png',
-    link: 'https://www.sunnyislandpeppersauce.com/',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/WardrobeXPreview.webp',
+    link: 'https://www.wardrobex.io/',
     description:
-      'A unique and specialized 3D ecommerce platform designed for an emerging food product. It incorporates technologies such as React Three Fiber, styled-components, framer motion, and react-spring.',
-    techStack: ['JavaScript', 'React', 'Three.js'],
-    frameworks: ['React Three Fiber', 'Framer Motion', 'Styled Components'],
+      'An immersive Web 3.0 wardrobe marketplace (formerly Web3Outfitters) for digital wearables and NFTs. Built with Next.js, React Three Fiber, Zustand state management, and AWS Amplify hosting. Features on-chain metadata rendering, drag-and-drop 3D closets, wallet-gated routes, and smooth physics-based interactions via @react-three/cannon. Styled-Components handle theming, while React-Spring drives page-level transitions.',
+    techStack: [
+      'TypeScript',
+      'React 19',
+      'Next.js 15',
+      'Three.js',
+      'AWS Amplify',
+      'IPFS',
+      'Smart Contracts',
+    ],
+    frameworks: [
+      'React Three Fiber',
+      'React Spring',
+      'Zustand',
+      'Styled-Components',
+      'Framer Motion',
+    ],
   },
   {
     id: 3,
     title: 'Antiheroes',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/BlackHatFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/BlackHatFinal.png',
-    link: 'https://ferachobrand.com',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
+    link: 'https://antiheroes.co',
     description:
-      'A professional networking platform tailored for minorities, reminiscent of LinkedIn but with customized features. The site includes multiple pages and layouts, catering to various profile types.',
-    techStack: ['JavaScript', 'React', 'Node.js'],
-    frameworks: ['Express', 'MongoDB', 'Styled Components'],
+      'A music-portfolio hub for an ATL producer that marries Spotify’s Web API with an advanced FFT audio visualizer. Five visualization modes—Noise, Fractal, Ray-marched ‘Phantom Star’, Orbital Geometry, and Supershape—react to live audio via the Web Audio API and custom GLSL. Built with Next.js, React Three Fiber, Lamina layered materials, Simplex-Noise, Valtio global store, and Framer-Motion UI flourishes.',
+    techStack: [
+      'TypeScript',
+      'React 19',
+      'Next.js 15',
+      'Three.js',
+      'Web Audio API',
+      'Spotify API',
+      'GLSL',
+    ],
+    frameworks: [
+      'React Three Fiber',
+      'Lamina',
+      '@react-spring/three',
+      'Valtio',
+      'Framer Motion',
+    ],
+  },
+  {
+    id: 4,
+    title: 'Bodega Danes',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/BodegaDanesPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/BodegaDanesPreview.webp',
+    link: 'https://bodegadanes.com',
+    description:
+      'Booking-first catering platform offering live on-site cooking. Provides a secure admin dashboard for service analytics and Stripe payouts. Data persistence is powered by Prisma + PostgreSQL; Next-Auth guards admin routes; React-Hook-Form and DayPicker handle UX-friendly scheduling; Tailwind + Framer Motion deliver a polished dark/light UI.',
+    techStack: [
+      'TypeScript',
+      'React 19',
+      'Next.js 15',
+      'Prisma',
+      'PostgreSQL',
+      'Stripe',
+      'Tailwind CSS',
+    ],
+    frameworks: ['Next-Auth', 'Framer Motion', 'React-Hook-Form', 'Heroicons'],
+  },
+  {
+    id: 5,
+    title: 'VapeAura',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/VapeAuraPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/VapeAuraPreview.webp',
+    link: 'https://main.d1v4eeamvmnirt.amplifyapp.com/',
+    description:
+      'A lean product-showcase for a start-up vape retailer, built with Next.js 15, React 19, and Tailwind CSS 3.4. The roadmap includes a Prisma-backed catalog, Stripe checkout, and an owner-only admin panel. Current features ship with animated category filtering (Framer Motion) and class-safe utility styling via Tailwind-Merge.',
+    techStack: [
+      'TypeScript',
+      'React 19',
+      'Next.js 15',
+      'Tailwind CSS',
+      'Framer Motion',
+      'Prisma (planned)',
+    ],
+    frameworks: ['Tailwind-Merge', 'Framer Motion', 'React-Icons'],
   },
 ];
 
-export const incompleteProjects: Project[] = [
+/* -------------------------------------------------------------------------- */
+/*                             EARLY PROJECTS                            */
+/* -------------------------------------------------------------------------- */
+
+export const earlyProjects: Project[] = [
   {
     id: 4,
     title: 'MetaTunes',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/MetaTunesFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/MetaTunesPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/MetaTunesFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/MetaTunesPreview.webp',
     link: 'https://metatunes.com/',
     description:
-      'An early project for a now-defunct NFT platform using React and styled-components for a seamless digital experience.',
+      'Early-stage NFT music marketplace prototype: React + Styled-Components front-end with P5.js visuals, wallet auth (planned), and lazy-minting workflow.',
     techStack: ['JavaScript', 'React'],
-    frameworks: ['Styled Components', 'P5.js'],
+    frameworks: ['Styled-Components'],
   },
   {
     id: 5,
     title: 'K & M Renovation and Restoration',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/KandMFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/KandMPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/KandMFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/KandMPreview.webp',
     link: 'https://kandmrenovation.com',
     description:
-      'A two-page site for an independent roofing contractor, deployed using Firebase cloud services.',
-    techStack: ['JavaScript', 'HTML', 'CSS'],
-    frameworks: ['Firebase'],
+      'Two-page brochure site for an independent roofing contractor. Deployed to Firebase Hosting with on-scroll animations and responsive gallery.',
+    techStack: ['HTML', 'CSS', 'JavaScript'],
+    frameworks: ['Firebase Hosting'],
   },
   {
     id: 6,
     title: 'Get Relocate',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/RelocateFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/GetRelocatePreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/RelocateFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/GetRelocatePreview.webp',
     link: 'https://main.d1kac4geol6jy1.amplifyapp.com',
     description:
-      'A comprehensive site for a moving company startup, with advanced technology integration aimed at enhancing operational efficiency.',
-    techStack: ['JavaScript', 'React'],
-    frameworks: ['AWS Amplify', 'Styled Components'],
+      'Comprehensive moving-company site on AWS Amplify with quotation wizard, multi-step forms, and Styled-Components theming. Future phases add driver dashboards.',
+    techStack: ['JavaScript', 'React', 'AWS Amplify'],
+    frameworks: ['Styled-Components', 'Framer Motion'],
+  },
+  {
+    id: 7,
+    title: 'Portfolio v1 (First Iteration)',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/OldPortfolioPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/OldPortfolioPreview.webp',
+    link: 'https://main.d2gdmmdev3o5mw.amplifyapp.com/',
+    description:
+      'Personal portfolio revamp hosted on AWS Amplify featuring React Three Fiber hero scenes, MDX blog support, ESLint/Prettier tooling, and CI/CD on every push.',
+    techStack: ['JavaScript', 'React 18', 'Three.js', 'Styled Components'],
+    frameworks: [
+      'React Three Fiber',
+      'Framer Motion',
+      'Post Processing',
+      'Rapier Physics',
+    ],
   },
 ];
 
+/* -------------------------------------------------------------------------- */
+/*                               UI / UX DESIGNS                              */
+/* (unchanged — kept here for completeness; update if needed in future)       */
+/* -------------------------------------------------------------------------- */
+
 export const uiUxDesigns: Project[] = [
   {
-    id: 7,
+    id: 8,
     title: 'st Home Rental',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/stHomeRentalFinal.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/stHomeRentalPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/ClientDesigns-PublishedWebsites/stHomeRentalFinal.png',
-    link: 'https://sthomerental.com',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/stHomeRentalPreview.webp',
+    link: 'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/FullDesigns/stHomeRentalFinal.webp',
     description:
-      'Digital gateway for a hospitality service, providing a comprehensive and welcoming experience for users seeking accommodation.',
-    techStack: ['JavaScript', 'React'],
-    frameworks: ['Styled Components'],
-  },
-  {
-    id: 8,
-    title: 'Black C.A.T.',
-    imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/uiuxdesigns/blackcat.png',
-    imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/uiuxdesigns/blackcat.png',
-    link: '#',
-    description:
-      'A platform similar to LinkedIn for connecting with other individuals, catered specifically to minorities.',
-    techStack: ['JavaScript', 'React'],
-    frameworks: ['Styled Components'],
+      'Digital gateway for a hospitality service, providing a welcoming UX for guests seeking accommodation.',
+    techStack: ['Figma', 'Adobe'],
+    frameworks: [''],
   },
   {
     id: 9,
+    title: 'Black C.A.T.',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/BlackHatPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/BlackHatPreview.webp',
+    link: 'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/FullDesigns/BlackHatFinal.webp',
+    description:
+      'Conceptual networking platform tailored to under-represented communities, inspired by LinkedIn’s UX patterns.',
+    techStack: ['Figma', 'Adobe'],
+    frameworks: [''],
+  },
+  {
+    id: 10,
     title: 'Show No Love Apparel',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/uiuxdesigns/shownolove.png',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/SNLPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/myProjects/uiuxdesigns/shownolove.png',
-    link: '#',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/SNLPreview.webp',
+    link: 'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/FullDesigns/SNLFull.webp',
     description:
-      'Upcoming e-commerce website for a clothing brand based in Atlanta.',
-    techStack: ['JavaScript', 'React'],
-    frameworks: ['Styled Components'],
+      'Upcoming e-commerce storefront for an Atlanta-based fashion brand. UI kit focuses on bold typography and dynamic look-books.',
+    techStack: ['Figma', 'Adobe'],
+    frameworks: [''],
+  },
+  {
+    id: 11,
+    title: 'Flow Collaborative',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/FlowCollaborativePreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/UI-UX+Designs/FlowCollaborativePreview.webp',
+    link: 'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/FullDesigns/Flow+Collaborative+Design.png',
+    description:
+      'Paused website design for client that will resume in near future',
+    techStack: ['Figma', 'Adobe'],
+    frameworks: [''],
   },
 ];

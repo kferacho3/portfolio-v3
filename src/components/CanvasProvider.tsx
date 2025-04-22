@@ -100,7 +100,6 @@ const CanvasProvider: React.FC<CanvasProviderProps> = ({ children }) => {
         <AccumulativeShadows
           temporal
           frames={100}
-         // color="orange"
           colorBlend={2}
           toneMapped
           alphaTest={0.7}
