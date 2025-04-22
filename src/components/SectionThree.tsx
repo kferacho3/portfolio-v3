@@ -166,7 +166,7 @@ function SectionThree() {
               >
                 <SelectValue placeholder="Select an option" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="backdrop-blur-sm bg-white/30">
                 <SelectItem value="Website Development">
                   Website Development
                 </SelectItem>
@@ -187,6 +187,7 @@ function SectionThree() {
               <p className="text-destructive text-sm mt-1">{errors.service}</p>
             )}
           </div>
+
           {/* Website Type Selection */}
           <div>
             <Label
@@ -203,7 +204,7 @@ function SectionThree() {
               >
                 <SelectValue placeholder="Select an option" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="backdrop-blur-sm bg-white/30">
                 <SelectItem value="Personal">Personal</SelectItem>
                 <SelectItem value="NFT">NFT</SelectItem>
                 <SelectItem value="Landing Page">Landing Page</SelectItem>
@@ -215,6 +216,7 @@ function SectionThree() {
               <p className="text-destructive text-sm mt-1">{errors.website}</p>
             )}
           </div>
+
           {/* Message Field */}
           <div>
             <Label

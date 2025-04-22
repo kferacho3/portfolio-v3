@@ -120,8 +120,8 @@ const Sidebar = ({ isOpen, toggle }: SidebarProps) => {
               text="Download CV"
               icon={<AiOutlineDownload className="w-6 h-6" />}
               link="/Resume.pdf"
-              className={`flex items-center justify-center border border-border  px-4 py-2 text-center hover-gradient-border ${
-                theme === 'dark' ? 'bg-white text-black' : 'bg-black text-white'
+              className={`w-full border border-border  px-4 py-2 text-center text-xl font-semibold hover-gradient-border ${
+                theme === 'dark' ? 'text-white' : 'text-black'
               }`}
             />
           </motion.div>
@@ -136,7 +136,7 @@ const Sidebar = ({ isOpen, toggle }: SidebarProps) => {
           >
             <AnimatedLink
               icon={<AiFillGithub className="w-6 h-6" />}
-              link="https://github.com/yourusername"
+              link="https://github.com/"
               className={`text-foreground w-12 h-12 flex items-center justify-center border border-border  hover-gradient-border ${
                 theme === 'dark' ? 'text-white' : 'text-black'
               }`}

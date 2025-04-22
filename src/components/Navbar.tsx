@@ -160,8 +160,9 @@ const Navbar: React.FC = () => {
       </motion.nav>
 
       {/* Sidebar */}
-      <Sidebar isOpen={isOpen} toggle={handleToggleMenu} />
-
+      <div className="text-black dark:text-white">
+        <Sidebar isOpen={isOpen} toggle={handleToggleMenu} />
+      </div>
       {/* Adjust padding-top of the content to prevent overlap */}
       <div style={{ paddingTop: '70px' }}></div>
     </>
