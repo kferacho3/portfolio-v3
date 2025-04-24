@@ -1,3 +1,4 @@
+/* src/components/SectionThree.tsx */
 'use client';
 
 import { Input } from '@/components/ui/input';
@@ -10,147 +11,181 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import emailjs from 'emailjs-com';
+import emailjs from 'emailjs-com'; // v3.x API
 import { AnimatePresence, motion } from 'framer-motion';
-import { useRef, useState } from 'react';
+import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import AnimatedButton from './AnimatedButton';
+
+// ▸ keep keys out of the bundle — configure in your host’s env-vars panel
+const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || 'RachoDevs';
+const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || 'RachoDevs';
+const PUBLIC_KEY =
+  process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || 'asi1IXWXVQKV4AGlS';
 
 function SectionThree() {
   const form = useRef<HTMLFormElement>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     service: '',
     website: '',
     message: '',
+    _honeypot: '',
   });
 
   const [sending, setSending] = useState(false);
-  const [sentSuccessfully, setSentSuccessfully] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+  const [errors, setErrors] = useState<{ [k: string]: string }>({});
+  const [lastSentAt, setLastSentAt] = useState<number | null>(null);
 
+  /* ────────────────────────────────── helpers ───────────────────────────────── */
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((p) => ({ ...p, [name]: value }));
   };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
+  const handleSelectChange = (name: string, value: string) =>
+    setFormData((p) => ({ ...p, [name]: value }));
 
   const validateForm = () => {
-    const newErrors: { [key: string]: string } = {};
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required.';
-    }
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required.';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid.';
-    }
-    if (!formData.service) {
-      newErrors.service = 'Please select a service.';
-    }
-    if (!formData.website) {
-      newErrors.website = 'Please select a website type.';
-    }
-    if (!formData.message.trim()) {
-      newErrors.message = 'Message is required.';
-    }
-    return newErrors;
+    const errs: { [k: string]: string } = {};
+    if (!formData.name.trim()) errs.name = 'Name is required.';
+    if (!formData.email.trim()) errs.email = 'Email is required.';
+    else if (!/\S+@\S+\.\S+/.test(formData.email))
+      errs.email = 'Email is invalid.';
+    if (!formData.service) errs.service = 'Select a service.';
+    if (!formData.website) errs.website = 'Select a website type.';
+    if (!formData.message.trim()) errs.message = 'Message is required.';
+    if (formData._honeypot.trim()) errs.form = 'Bot submission blocked.';
+    if (lastSentAt && Date.now() - lastSentAt < 30_000)
+      errs.form = 'Please wait a bit before sending another message.';
+    return errs;
   };
 
-  const sendEmail = (e: React.FormEvent<HTMLFormElement>) => {
+  const isValid = (f: keyof typeof formData) =>
+    (f === 'name' && formData.name.trim().length > 0) ||
+    (f === 'email' && /\S+@\S+\.\S+/.test(formData.email)) ||
+    (f === 'service' && formData.service) ||
+    (f === 'website' && formData.website) ||
+    (f === 'message' && formData.message.trim().length > 0);
+
+  /* ───────────────────────────────── send mail ─────────────────────────────── */
+  const sendEmail = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const validationErrors = validateForm();
-    if (Object.keys(validationErrors).length > 0) {
+    if (Object.keys(validationErrors).length) {
       setErrors(validationErrors);
       return;
     }
     setErrors({});
     setSending(true);
 
-    emailjs
-      .sendForm('gmail', 'RachoDevs', form.current!, 'asi1IXWXVQKV4AGlS')
-      .then(
-        (result) => {
-          console.log(result.text);
-          setSending(false);
-          setSentSuccessfully(true);
-          setFormData({
-            name: '',
-            email: '',
-            service: '',
-            website: '',
-            message: '',
-          });
-          setTimeout(() => {
-            setSentSuccessfully(false);
-          }, 5000);
+    try {
+      await emailjs.send(
+        SERVICE_ID,
+        TEMPLATE_ID,
+        {
+          from_name: formData.name,
+          to_name: 'RachoDevs',
+          email: formData.email,
+          service: formData.service,
+          website: formData.website,
+          message: formData.message,
         },
-        (error) => {
-          console.log(error.text);
-          setSending(false);
-        }
+        PUBLIC_KEY
       );
+
+      setModalMessage('Message sent successfully! I will reply shortly.');
+      setModalOpen(true);
+      setLastSentAt(Date.now());
+      setFormData({
+        name: '',
+        email: '',
+        service: '',
+        website: '',
+        message: '',
+        _honeypot: '',
+      });
+    } catch (err) {
+      console.error(err);
+      setModalMessage('Something went wrong. Please try again later.');
+      setModalOpen(true);
+    } finally {
+      setSending(false);
+    }
   };
 
-  const isValid = (field: string): boolean => {
-    if (field === 'name') return formData.name.trim().length > 0;
-    if (field === 'email') return /\S+@\S+\.\S+/.test(formData.email);
-    if (field === 'service') return formData.service.length > 0;
-    if (field === 'website') return formData.website.length > 0;
-    if (field === 'message') return formData.message.trim().length > 0;
-    return false;
-  };
+  /* ESC closes modal */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) =>
+      e.key === 'Escape' && setModalOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
+  /* ────────────────────────────── render ───────────────────────────────────── */
   return (
     <section className="flex flex-col md:flex-row items-start px-4 sm:px-8 md:px-12 py-16 gap-8">
-      {/* Contact Form */}
-      <div className="md:w-1/2 w-full px-4">
+      {/* Contact Form Column */}
+      <div className="md:w-1/2 w-full px-4 relative">
         <h2 className="text-3xl font-bold mb-6 text-center md:text-left text-foreground">
           Contact Me
         </h2>
+
         <form ref={form} className="space-y-6" onSubmit={sendEmail} noValidate>
-          {/* Name Field */}
+          {/* honeypot */}
+          <input
+            type="text"
+            name="_honeypot"
+            value={formData._honeypot}
+            onChange={handleInputChange}
+            className="hidden"
+            tabIndex={-1}
+            autoComplete="off"
+          />
+
+          {/* Name */}
           <div>
             <Label htmlFor="name" className="block text-muted-foreground mb-1">
               Name
             </Label>
             <Input
-              type="text"
-              name="name"
               id="name"
-              className={`w-full ${isValid('name') ? 'input-valid' : ''}`}
+              name="name"
               value={formData.name}
               onChange={handleInputChange}
+              className={`w-full ${isValid('name') ? 'input-valid' : ''}`}
               required
             />
             {errors.name && (
               <p className="text-destructive text-sm mt-1">{errors.name}</p>
             )}
           </div>
-          {/* Email Field */}
+
+          {/* Email */}
           <div>
             <Label htmlFor="email" className="block text-muted-foreground mb-1">
               Email
             </Label>
             <Input
-              type="email"
-              name="email"
               id="email"
-              className={`w-full ${isValid('email') ? 'input-valid' : ''}`}
+              name="email"
+              type="email"
               value={formData.email}
               onChange={handleInputChange}
+              className={`w-full ${isValid('email') ? 'input-valid' : ''}`}
               required
             />
             {errors.email && (
               <p className="text-destructive text-sm mt-1">{errors.email}</p>
             )}
           </div>
-          {/* Service Selection */}
+
+          {/* Service */}
           <div>
             <Label
               htmlFor="service"
@@ -159,28 +194,44 @@ function SectionThree() {
               What kind of service do you need?
             </Label>
             <Select
-              onValueChange={(value) => handleSelectChange('service', value)}
+              onValueChange={(v) => handleSelectChange('service', v)}
+              required
             >
               <SelectTrigger
                 className={`w-full ${isValid('service') ? 'input-valid' : ''}`}
               >
                 <SelectValue placeholder="Select an option" />
               </SelectTrigger>
-              <SelectContent className="backdrop-blur-sm bg-white/30">
-                <SelectItem value="Website Development">
-                  Website Development
-                </SelectItem>
-                <SelectItem value="Website/Application Design">
-                  Website/Application Design
-                </SelectItem>
-                <SelectItem value="3D Model">3D Model</SelectItem>
-                <SelectItem value="SVG Graphics">SVG Graphics</SelectItem>
-                <SelectItem value="Audio Engineering">
-                  Audio Engineering
-                </SelectItem>
-                <SelectItem value="AV Synchronization">
-                  AV Synchronization
-                </SelectItem>
+
+              {/* Add divide-y to draw lines, and dark:bg for night mode */}
+              <SelectContent
+                className="
+        backdrop-blur-sm
+        bg-white/30 dark:bg-gray-800
+        divide-y divide-white/20 dark:divide-gray-600
+      "
+              >
+                {[
+                  'Website Development',
+                  'Website/Application Design',
+                  'E-commerce Website',
+                  '3D Model',
+                  'SVG Graphics',
+                  'Audio Engineering',
+                  'AV Synchronization',
+                ].map((opt) => (
+                  <SelectItem
+                    key={opt}
+                    value={opt}
+                    className="
+            py-2 px-3
+            hover:bg-white/20 dark:hover:bg-white/10
+            transition-colors
+          "
+                  >
+                    {opt}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {errors.service && (
@@ -188,7 +239,7 @@ function SectionThree() {
             )}
           </div>
 
-          {/* Website Type Selection */}
+          {/* Website type */}
           <div>
             <Label
               htmlFor="website"
@@ -197,19 +248,43 @@ function SectionThree() {
               What kind of website do you need?
             </Label>
             <Select
-              onValueChange={(value) => handleSelectChange('website', value)}
+              onValueChange={(v) => handleSelectChange('website', v)}
+              required
             >
               <SelectTrigger
                 className={`w-full ${isValid('website') ? 'input-valid' : ''}`}
               >
                 <SelectValue placeholder="Select an option" />
               </SelectTrigger>
-              <SelectContent className="backdrop-blur-sm bg-white/30">
-                <SelectItem value="Personal">Personal</SelectItem>
-                <SelectItem value="NFT">NFT</SelectItem>
-                <SelectItem value="Landing Page">Landing Page</SelectItem>
-                <SelectItem value="Other (Specify)">Other (Specify)</SelectItem>
-                <SelectItem value="None">None</SelectItem>
+
+              {/* Same styling here */}
+              <SelectContent
+                className="
+        backdrop-blur-sm
+        bg-white/30 dark:bg-gray-800
+        divide-y divide-white/20 dark:divide-gray-600
+      "
+              >
+                {[
+                  'Personal',
+                  'NFT',
+                  'Landing Page',
+                  'E-commerce',
+                  'Other (Specify)',
+                  'None',
+                ].map((opt) => (
+                  <SelectItem
+                    key={opt}
+                    value={opt}
+                    className="
+            py-2 px-3
+            hover:bg-white/20 dark:hover:bg-white/10
+            transition-colors
+          "
+                  >
+                    {opt}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {errors.website && (
@@ -217,7 +292,7 @@ function SectionThree() {
             )}
           </div>
 
-          {/* Message Field */}
+          {/* Message */}
           <div>
             <Label
               htmlFor="message"
@@ -226,49 +301,71 @@ function SectionThree() {
               Message
             </Label>
             <Textarea
-              name="message"
               id="message"
-              className={`w-full ${isValid('message') ? 'input-valid' : ''}`}
+              name="message"
               rows={4}
               value={formData.message}
               onChange={handleInputChange}
+              className={`w-full ${isValid('message') ? 'input-valid' : ''}`}
               required
             />
             {errors.message && (
               <p className="text-destructive text-sm mt-1">{errors.message}</p>
             )}
           </div>
-          {/* Submit Button */}
+
+          {errors.form && (
+            <p className="text-destructive text-sm">{errors.form}</p>
+          )}
+
           <AnimatedButton
             type="submit"
             className="mt-4 cursor-pointer text-foreground hover-gradient-border"
             disabled={sending}
           >
-            {sending ? 'Sending...' : 'Submit'}
+            {sending ? 'Sending…' : 'Submit'}
           </AnimatedButton>
         </form>
-        {/* Success Message */}
+
+        {/* Success/Error Modal — constrained to this column */}
         <AnimatePresence>
-          {sentSuccessfully && (
+          {modalOpen && (
             <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.5 }}
-              className="fixed top-10 right-4 md:right-10 bg-green-500 text-white p-4 rounded-md shadow-lg z-50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl"
+              onClick={() => setModalOpen(false)}
             >
-              <p>Message sent successfully!</p>
+              <motion.div
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+                className="relative bg-background max-w-md w-[90%] p-6 rounded-lg shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  aria-label="Close"
+                  className="absolute top-3 right-3 text-foreground/70 hover:text-foreground"
+                  onClick={() => setModalOpen(false)}
+                >
+                  <X size={20} />
+                </button>
+                <p className="text-center text-foreground leading-relaxed">
+                  {modalMessage}
+                </p>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Right Column */}
+      {/* Decorative right column */}
       <div className="md:w-1/2 w-full flex flex-col items-center px-4">
         <h3 className="text-2xl font-semibold text-center mt-4 text-foreground">
           Let&apos;s Connect!
         </h3>
-        {/* Optional extra content/animations can be added here */}
       </div>
     </section>
   );

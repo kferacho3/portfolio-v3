@@ -8,9 +8,9 @@ import AnimatedLink from './AnimatedLink';
 
 // Import icons from react-icons
 import {
-  AiFillGithub,
-  AiFillLinkedin,
-  AiOutlineDownload,
+    AiFillGithub,
+    AiFillLinkedin,
+    AiOutlineDownload,
 } from 'react-icons/ai';
 
 interface SidebarProps {
@@ -136,14 +136,14 @@ const Sidebar = ({ isOpen, toggle }: SidebarProps) => {
           >
             <AnimatedLink
               icon={<AiFillGithub className="w-6 h-6" />}
-              link="https://github.com/"
+              link="https://github.com/kferacho3"
               className={`text-foreground w-12 h-12 flex items-center justify-center border border-border  hover-gradient-border ${
                 theme === 'dark' ? 'text-white' : 'text-black'
               }`}
             />
             <AnimatedLink
               icon={<AiFillLinkedin className="w-6 h-6" />}
-              link="https://www.linkedin.com/in/yourusername/"
+              link="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
               className={`text-foreground w-12 h-12 flex items-center justify-center border border-border  hover-gradient-border ${
                 theme === 'dark' ? 'text-white' : 'text-black'
               }`}

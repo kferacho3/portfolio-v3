@@ -153,7 +153,7 @@ export const earlyProjects: Project[] = [
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/MetaTunesPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/MetaTunesPreview.webp',
-    link: 'https://metatunes.com/',
+    link: 'https://main.d2x3hcw4tp5zi4.amplifyapp.com/',
     description:
       'Early-stage NFT music marketplace prototype: React + Styled-Components front-end with P5.js visuals, wallet auth (planned), and lazy-minting workflow.',
     techStack: ['JavaScript', 'React'],
@@ -166,7 +166,7 @@ export const earlyProjects: Project[] = [
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/KandMPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Past+Designs+%26+Developments/KandMPreview.webp',
-    link: 'https://kandmrenovation.com',
+    link: 'https://k-m-restoration.firebaseapp.com/',
     description:
       'Two-page brochure site for an independent roofing contractor. Deployed to Firebase Hosting with on-scroll animations and responsive gallery.',
     techStack: ['HTML', 'CSS', 'JavaScript'],
