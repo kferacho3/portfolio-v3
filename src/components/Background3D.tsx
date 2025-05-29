@@ -1,30 +1,16 @@
-/* ╔═══════════════════════════════════════════════════════════════════════════╗
-   ║  Background3D.tsx  —  COMPLETE 1 000-line implementation (TSX, Next 13)   ║
-   ║                                                                           ║
-   ║  ✅ 2025-05-28 — FINAL patch set                                          ║
-   ║  • Gradient shader ➜ Perlin-noise shader with random tint                 ║
-   ║  • Central shape uniformly scaled 0.8 (-20 %)                             ║
-   ║  • Orbit + icon radii guarantee no intersections                          ║
-   ║  • All refs typed ⇒ ts(7006) resolved                                      ║
-   ║  • 6-mini orbit system, single randomized mode                            ║
-   ║  • Smooth lerped scroll, mobile-aware scaling                             ║
-   ║  • Glass / Neon / Wireframe / Noise (Perlin) / Physical materials         ║
-   ║  • Ready to paste into /app/components                                    ║
-   ╚═══════════════════════════════════════════════════════════════════════════╝ */
-
-/* ────────────────────────────────────────────────────────────────────────────
-   0.  PREAMBLE                                                               
-   ───────────────────────────────────────────────────────────────────────── */
 'use client';
-
 import { a, useSpring } from '@react-spring/three';
-import { CubeCamera, useScroll } from '@react-three/drei';
+import {
+  AccumulativeShadows,
+  CubeCamera,
+  RandomizedLight,
+  useScroll,
+} from '@react-three/drei';
 import {
   GroupProps,
   MeshStandardMaterialProps,
   useFrame,
 } from '@react-three/fiber';
-import { Bloom, EffectComposer } from '@react-three/postprocessing';
 import { val } from '@theatre/core';
 import { editable as e, useCurrentSheet } from '@theatre/r3f';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -276,7 +262,8 @@ const ParticleRing: React.FC<{ radius: number; color: string }> = ({
   radius,
   color,
 }) => {
-  const COUNT = 100;
+  const COUNT = Math.floor(Math.random() * (100 - 35 + 1)) + 35;
+
   const positions = useMemo(() => {
     const arr = new Float32Array(COUNT * 3);
     for (let i = 0; i < COUNT; i++) {
@@ -298,7 +285,7 @@ const ParticleRing: React.FC<{ radius: number; color: string }> = ({
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.02}
+        size={0.01}
         color={color}
         depthWrite={false}
         transparent
@@ -324,6 +311,7 @@ const OrbitSystem: React.FC<{
       {configs.map((cfg, i) => (
         <group
           key={i}
+          scale={1.2}
           ref={(el: THREE.Group | null) => {
             if (el) groups.current[i] = el;
           }}
@@ -332,7 +320,7 @@ const OrbitSystem: React.FC<{
           {/* torus / halo */}
           {(mode === 'ring-only' || mode === 'ring-and-shape') && (
             <mesh rotation-x={Math.PI / 2}>
-              <torusGeometry args={[cfg.radius, 0.012, 12, 48]} />
+              <torusGeometry args={[cfg.radius, 0.003, 6, 24]} />
               <meshBasicMaterial
                 color={cfg.colour}
                 transparent
@@ -605,9 +593,27 @@ const Background3D: React.FC<Props> = ({ onAnimationComplete }) => {
 
   /* 6-H JSX */
   return (
-    <EGroup theatreKey="BG3D">
+    <EGroup theatreKey="Dodecahedron">
       <Lights />
-
+      {/* Soft-shadow receiver */}
+      <AccumulativeShadows
+        temporal
+        frames={Infinity}
+        colorBlend={2}
+        toneMapped
+        alphaTest={0.7}
+        opacity={1}
+        scale={12}
+        position={[0, -0.6, 0]}
+      >
+        <RandomizedLight
+          amount={8}
+          radius={10}
+          ambient={0.5}
+          position={[5, 5, -10]}
+          bias={0.001}
+        />
+      </AccumulativeShadows>
       <group ref={pRef}>
         <AnimatedGroup
           scale={scaleVal.to((v) => [v, v, v] as [number, number, number])}
@@ -616,12 +622,16 @@ const Background3D: React.FC<Props> = ({ onAnimationComplete }) => {
             <CubeCamera resolution={256} frames={1} envMap={hdr}>
               {(envMap) => (
                 <>
-                  {/* centre */}
+                  {/* Background3DMesh */}
                   <AnimatedGroup
                     scale={intro.scl.to((x, y, z) => [x, y, z])}
                     position={intro.pos.to((x, y, z) => [x, y, z])}
                   >
-                    <e.mesh ref={sRef} theatreKey="Centre" onClick={randomise}>
+                    <e.mesh
+                      ref={sRef}
+                      theatreKey="Background3DMesh"
+                      onClick={randomise}
+                    >
                       {makeGeometry(shape)}
                       {materials[matIdx](envMap, col)}
                     </e.mesh>
@@ -654,14 +664,6 @@ const Background3D: React.FC<Props> = ({ onAnimationComplete }) => {
             ))}
         </AnimatedGroup>
       </group>
-
-      <EffectComposer>
-        <Bloom
-          intensity={0.5}
-          luminanceThreshold={0.1}
-          luminanceSmoothing={0.9}
-        />
-      </EffectComposer>
     </EGroup>
   );
 };

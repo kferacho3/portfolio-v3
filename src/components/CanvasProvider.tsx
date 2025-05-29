@@ -1,120 +1,75 @@
 // src/components/CanvasProvider.tsx
 'use client';
 
-import { AccumulativeShadows, RandomizedLight } from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import { getProject } from '@theatre/core';
 import { SheetProvider } from '@theatre/r3f';
 import React, { useEffect } from 'react';
 import * as THREE from 'three';
-import siteState from '../../site.json'; // Adjust path if needed
-import { useGame } from '../contexts/GameContext';
+import siteState from '../../site.json'; // ← adjust if needed
 
+/* ──────────────────────────────────────────  Theatre sheet  ────────────── */
 const project = getProject('My Project', { state: siteState });
 const sheet = project.sheet('Scene');
 
+/* ──────────────────────────────────────────  Props  ────────────────────── */
 interface CanvasProviderProps {
   children: React.ReactNode;
 }
 
+/* ──────────────────────────────────────────  Component  ────────────────── */
 const CanvasProvider: React.FC<CanvasProviderProps> = ({ children }) => {
-  const { currentGame } = useGame();
-
+  /* graceful handling of context-loss (iOS etc.) */
   useEffect(() => {
-    const handleContextLost = (event: Event) => {
-      event.preventDefault();
-      console.warn('WebGL context lost');
+    const lost = (e: Event) => {
+      e.preventDefault();
+      console.warn('WebGL lost');
     };
-    const handleContextRestored = () => {
-      console.info('WebGL context restored');
-    };
-
-    window.addEventListener('webglcontextlost', handleContextLost, false);
-    window.addEventListener(
-      'webglcontextrestored',
-      handleContextRestored,
-      false
-    );
-
+    const restored = () => console.info('WebGL restored');
+    window.addEventListener('webglcontextlost', lost, false);
+    window.addEventListener('webglcontextrestored', restored, false);
     return () => {
-      window.removeEventListener('webglcontextlost', handleContextLost);
-      window.removeEventListener('webglcontextrestored', handleContextRestored);
+      window.removeEventListener('webglcontextlost', lost);
+      window.removeEventListener('webglcontextrestored', restored);
     };
   }, []);
 
-  // Determine camera properties based on currentGame
-  let cameraProps: { position: [number, number, number]; fov: number };
-
-  switch (currentGame) {
-    case 'dropper':
-      cameraProps = { position: [0, 5, 15], fov: 50 };
-      break;
-    case 'reactpong':
-      cameraProps = { position: [0, 5, 12], fov: 45 };
-      break;
-    case 'shapeshifter':
-      cameraProps = { position: [0, 0, 15], fov: 50 };
-      break;
-    case 'skyblitz':
-      cameraProps = { position: [0, 0, 25], fov: 50 };
-      break;
-    case 'spinblock':
-      cameraProps = { position: [0, 5, 12], fov: 85 };
-      break;
-    case 'stackz':
-      cameraProps = { position: [0, 5, 12], fov: 60 };
-      break;
-    case 'home':
-    default:
-      cameraProps = { position: [-5, 0.5, 5], fov: 45 };
-      break;
-  }
-
   return (
     <Canvas
-      shadows
-      camera={cameraProps}
+      shadows /* enable shadow maps      */
+      camera={{ position: [-5, 0.5, 5], fov: 45 }} /* default “home” view   */
       dpr={[1, 1.5]}
       eventPrefix="client"
-      gl={{ outputColorSpace: THREE.SRGBColorSpace }}
+      gl={{ antialias: true, outputColorSpace: THREE.SRGBColorSpace }}
       onCreated={({ gl }) => {
         gl.outputColorSpace = THREE.SRGBColorSpace;
+        gl.shadowMap.enabled = true;
+        gl.shadowMap.type = THREE.PCFSoftShadowMap;
       }}
       className="w-full h-screen"
     >
       <SheetProvider sheet={sheet}>
-        {/* Basic Lights */}
+        {/* basic key-lights (they still cast shadows) */}
         <ambientLight intensity={0.5} />
         <spotLight
+          castShadow
           decay={0}
           position={[5, 5, -10]}
-          angle={0.15}
+          angle={0.18}
           penumbra={1}
-          castShadow
+          intensity={1.1}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
         />
-        <pointLight decay={0} position={[-10, -10, -10]} />
+        <pointLight
+          castShadow
+          decay={0}
+          position={[-10, -15, -10]}
+          intensity={0.35}
+        />
 
+        {/* 3-D children (e.g. <Background3D />) */}
         {children}
-
-        {/* Accumulative Shadows */}
-        <AccumulativeShadows
-          temporal
-          frames={100}
-          colorBlend={2}
-          toneMapped
-          alphaTest={0.7}
-          opacity={1}
-          scale={12}
-          position={[0, -0.5, 0]}
-        >
-          <RandomizedLight
-            amount={8}
-            radius={10}
-            ambient={0.5}
-            position={[5, 5, -10]}
-            bias={0.001}
-          />
-        </AccumulativeShadows>
       </SheetProvider>
     </Canvas>
   );
