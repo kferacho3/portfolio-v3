@@ -1,3 +1,4 @@
+/* ===========================  SectionOne.tsx  =========================== */
 'use client';
 
 import { motion } from 'framer-motion';
@@ -7,258 +8,183 @@ import {
   AiFillLinkedin,
   AiOutlineDownload,
 } from 'react-icons/ai';
-import { FaProjectDiagram, FaRunning, FaSitemap } from 'react-icons/fa';
-import {
-  SiAdobe,
-  SiCss3,
-  SiFigma,
-  SiFramer,
-  SiGit,
-  SiHtml5,
-  SiJavascript,
-  SiNextdotjs,
-  SiPrisma,
-  SiReact,
-  SiReactivex,
-  SiStripe,
-  SiStyledcomponents,
-  SiTailwindcss,
-  SiTypescript,
-} from 'react-icons/si';
 import AnimatedLink from './AnimatedLink';
 
 interface SectionOneProps {
   onAnimationComplete: () => void;
 }
 
-function SectionOne({ onAnimationComplete }: SectionOneProps) {
-  // Define tab names.
-  type TabName = 'Tech Stack' | 'Libraries Used' | 'Additional Skills';
+/* ------------------------------------------------------------------ */
+/*  SERVICES                                                          */
+/* ------------------------------------------------------------------ */
+const SERVICES = [
+  'SaaS Products',
+  'Website Services',
+  'E-commerce Websites',
+  'Immersive Experiences',
+  'Portfolios',
+  'Web & Mobile App Design',
+  'UX / UI Research',
+  'Brand Identity',
+  'Logos, Labels & Graphics',
+  '3D Modeling',
+];
 
-  const [activeTab, setActiveTab] = useState<TabName>('Tech Stack');
-  const [contentVisible, setContentVisible] = useState(false);
-
-  // Reveal content after a short delay.
+export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
+  /* 1. wait for 3-D intro to finish -------------------------------- */
+  const [shown, setShown] = useState(false);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setContentVisible(true);
+    const id = setTimeout(() => {
+      setShown(true);
       onAnimationComplete();
     }, 1500);
-    return () => clearTimeout(timer);
+    return () => clearTimeout(id);
   }, [onAnimationComplete]);
 
-  // Data arrays.
-  const techStack = [
-    { name: 'JavaScript', icon: <SiJavascript /> },
-    { name: 'CSS', icon: <SiCss3 /> },
-    { name: 'HTML', icon: <SiHtml5 /> },
-    { name: 'ReactJS', icon: <SiReact /> },
-    { name: 'Styled-Components', icon: <SiStyledcomponents /> },
-    { name: 'TypeScript', icon: <SiTypescript /> },
-    { name: 'Next.js', icon: <SiNextdotjs /> },
-    { name: 'Tailwind CSS', icon: <SiTailwindcss /> },
-    { name: 'Prisma', icon: <SiPrisma /> },
-    { name: 'Stripe', icon: <SiStripe /> },
-  ];
+  /* 2. type-writer FSM --------------------------------------------- */
+  const [idx, setIdx] = useState(0); // which service
+  const [txt, setTxt] = useState(''); // rendered substring
+  const [del, setDel] = useState(false);
 
-  const librariesUsed = [
-    { name: 'react-spring', icon: <SiReactivex /> },
-    { name: 'framer-motion-3d', icon: <SiFramer /> },
-    { name: '@react-three/drei', icon: <SiReact /> },
-    { name: '@react-three/rapier', icon: <SiReact /> },
-    { name: '@react-three/cannon', icon: <SiReact /> },
-    { name: '@react-three/gltfjsx', icon: <SiReact /> },
-    { name: '@react-three/postprocessing', icon: <SiReact /> },
-    { name: 'theatre.js', icon: <SiReact /> },
-  ];
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    const word = SERVICES[idx];
 
-  const additionalSkills = [
-    { name: 'Git', icon: <SiGit /> },
-    { name: 'Agile Methodologies', icon: <FaRunning /> },
-    { name: 'UI/UX Design', icon: <SiAdobe /> },
-    { name: 'Figma Mockups', icon: <SiFigma /> },
-    { name: 'Wireframing', icon: <FaProjectDiagram /> },
-    { name: 'Sequence Diagramming', icon: <FaSitemap /> },
-    { name: 'UML Diagrams', icon: <FaSitemap /> },
-  ];
+    /* typing phase */
+    if (!del && txt.length < word.length) {
+      timer = setTimeout(() => {
+        setTxt(word.slice(0, txt.length + 1));
+      }, 50);
+    } else if (!del && txt.length === word.length) {
+      /* hold full word 2 s */
+      timer = setTimeout(() => setDel(true), 2000);
+    } else if (del && txt.length > 0) {
+      /* deleting phase */
+      timer = setTimeout(() => {
+        setTxt(word.slice(0, txt.length - 1));
+      }, 35);
+    } else if (del && txt.length === 0) {
+      /* finished deleting – move to next word */
+      setDel(false);
+      setIdx((i) => (i + 1) % SERVICES.length);
+    }
 
-  const tabContent: Record<TabName, JSX.Element> = {
-    'Tech Stack': (
-      <ul className="space-y-2 break-words">
-        {techStack.map((item) => (
-          <li
-            key={item.name}
-            className="flex items-center space-x-2 group cursor-pointer break-words"
-          >
-            <span className="relative text-xl text-foreground transition-colors duration-300">
-              {item.icon}
-              <span className="absolute inset-0 bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-overlay"></span>
-            </span>
-            <span className="text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300 break-words">
-              {item.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ),
-    'Libraries Used': (
-      <ul className="space-y-2 break-words">
-        {librariesUsed.map((item) => (
-          <li
-            key={item.name}
-            className="flex items-center space-x-2 group cursor-pointer break-words"
-          >
-            <span className="relative text-xl text-foreground transition-colors duration-300">
-              {item.icon}
-              <span className="absolute inset-0 bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-overlay"></span>
-            </span>
-            <span className="text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300 break-words">
-              {item.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ),
-    'Additional Skills': (
-      <ul className="space-y-2 break-words">
-        {additionalSkills.map((item) => (
-          <li
-            key={item.name}
-            className="flex items-center space-x-2 group cursor-pointer break-words"
-          >
-            <span className="relative text-xl text-foreground transition-colors duration-300">
-              {item.icon}
-              <span className="absolute inset-0 bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mix-blend-overlay"></span>
-            </span>
-            <span className="text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300 break-words">
-              {item.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ),
-  };
+    return () => clearTimeout(timer);
+  }, [txt, del, idx]);
 
+  /* 4. markup ------------------------------------------------------- */
   return (
-    // Use a full-width container with box-border and hidden horizontal overflow.
-    <section className="w-full box-border overflow-x-hidden px-4 py-4 md:py-16">
-      {contentVisible && (
-        <div className="flex flex-col md:flex-row items-start gap-8">
-          {/* Left Column – Intro Text */}
-          <div className="w-full md:w-1/2">
-            {/* For mobile view only, group the header texts with tighter spacing and extra bottom gap.
-                Desktop view retains original spacing. */}
-            <div className="space-y-2 md:space-y-2 mt-[0vh] mb-[50vh] md:mt-5 md:mb-0">
-              <motion.p
-                className="text-sm uppercase text-muted-foreground break-words whitespace-normal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                UI / UX DESIGNER &amp; DEVELOPER
-              </motion.p>
-              <motion.h1
-                className="text-3xl sm:text-5xl font-bold text-foreground break-words whitespace-normal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.3 }}
-              >
-                WELCOME TO
-              </motion.h1>
-              <motion.h2
-                className="text-2xl sm:text-4xl font-semibold text-foreground break-words whitespace-normal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-              >
-                Kamal Feracho&apos;s Portfolio
-              </motion.h2>
-              <motion.h1
-                className="text-4xl sm:text-6xl font-bold text-red-600 break-words whitespace-normal"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-              >
-                REVAMPED
-              </motion.h1>
-            </div>
-            {/* Description and Buttons – these remain lower on mobile with the extra gap above. */}
+    <section className="relative w-full h-screen flex flex-col items-center justify-end overflow-hidden px-4 pb-40">
+      {shown && (
+        <div className="relative z-10 w-full max-w-6xl text-center space-y-6">
+          {/* ---------- HEADLINE ---------- */}
+          <motion.div
+            className="space-y-1"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+          >
             <motion.p
-              className="text-muted-foreground mt-5 break-words whitespace-normal"
+              className="font-light text-sm sm:text-base uppercase tracking-[0.2em] mb-3 text-gray-700 dark:text-gray-300"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
+              transition={{ delay: 0.3 }}
             >
-              I&apos;m a UI/UX developer specializing in building exceptional
-              digital experiences. I have a passion for creating intuitive and
-              dynamic user interfaces.
+              SERVICES & EXPERTISE
             </motion.p>
-            <motion.div
-              className="flex flex-wrap items-center mt-10 gap-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.7 }}
-            >
-              <AnimatedLink
-                text="Download CV"
-                icon={<AiOutlineDownload className="w-6 h-6" />}
-                link="/resume.pdf"
-                className="text-foreground hover-gradient-border"
-              />
+
+            <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-gray-900 dark:text-white">
+              <span className="font-light">I DELIVER</span>{' '}
+              <span
+                className="font-black bg-clip-text text-transparent inline-block"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(90deg, #8b5cf6, #ec4899 50%, #3b82f6 100%)',
+                  backgroundSize: '200%',
+                  backgroundPosition: del ? '100% 50%' : '0% 50%',
+                  transition: 'background-position 1.2s ease',
+                }}
+              >
+                {txt || '\u00A0'}
+              </span>
+              <motion.span
+                className="inline-block ml-1 text-purple-600 dark:text-purple-400"
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ duration: 1, repeat: Infinity }}
+              >
+                |
+              </motion.span>
+            </h1>
+          </motion.div>
+
+          {/* ---------- PARAGRAPH ---------- */}
+          <motion.p
+            className="mx-auto max-w-3xl text-base sm:text-lg lg:text-xl leading-relaxed text-gray-700 dark:text-gray-300"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.6 }}
+          >
+            I craft intuitive, immersive digital experiences—merging clean
+            aesthetics, performant code and thoughtful interaction design.
+          </motion.p>
+
+          {/* ---------- CTA BUTTONS ---------- */}
+          <motion.div
+            className="flex flex-wrap justify-center gap-4 pt-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45, duration: 0.6 }}
+          >
+            <AnimatedLink
+              text="Download CV"
+              icon={<AiOutlineDownload className="w-5 h-5" />}
+              link="/resume.pdf"
+              className="px-8 py-3 rounded-full font-medium text-sm bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 hover:scale-105 border border-transparent"
+            />
+
+            <div className="flex gap-3">
               <AnimatedLink
                 icon={<AiFillGithub className="w-6 h-6" />}
                 link="https://github.com/yourusername"
-                className="text-foreground w-12 h-12 flex items-center justify-center hover-gradient-border"
+                className="w-12 h-12 flex items-center justify-center rounded-full text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-purple-500/50"
               />
               <AnimatedLink
                 icon={<AiFillLinkedin className="w-6 h-6" />}
                 link="https://www.linkedin.com/in/yourusername/"
-                className="text-foreground w-12 h-12 flex items-center justify-center hover-gradient-border"
+                className="w-12 h-12 flex items-center justify-center rounded-full text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-purple-500/50"
+              />
+            </div>
+          </motion.div>
+
+          {/* ---------- SCROLL HINT ---------- */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+            className="pt-8"
+          >
+            <motion.div
+              className="mx-auto w-6 h-10 rounded-full border-2 border-purple-600/40 dark:border-purple-500/40 relative backdrop-blur-sm"
+              animate={{ y: [0, 8, 0] }}
+              transition={{
+                duration: 1.5,
+                ease: 'easeInOut',
+                repeat: Infinity,
+              }}
+            >
+              <motion.span
+                className="absolute left-1/2 top-2 w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400 -translate-x-1/2 shadow-lg shadow-purple-600/50 dark:shadow-purple-400/50"
+                animate={{ y: [0, 16, 0] }}
+                transition={{
+                  duration: 1.5,
+                  ease: 'easeInOut',
+                  repeat: Infinity,
+                }}
               />
             </motion.div>
-          </div>
-          {/* Right Column – Skills Tabs */}
-          <motion.div
-            className="w-full md:w-1/2 mt-5"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.8 }}
-          >
-            <div className="border-2 border-border rounded-md hover-gradient-border w-full">
-              <ul className="flex flex-wrap justify-center">
-                {['Tech Stack', 'Libraries Used', 'Additional Skills'].map(
-                  (tab) => (
-                    <li key={tab} className="flex-1">
-                      <button
-                        onClick={() => setActiveTab(tab as TabName)}
-                        className={`w-full py-2 px-4 font-semibold border-b-2 ${
-                          activeTab === tab
-                            ? 'border-foreground text-foreground'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
-                        }`}
-                      >
-                        {tab}
-                      </button>
-                    </li>
-                  )
-                )}
-              </ul>
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.3 }}
-                className="p-6 bg-card rounded-b-md break-words whitespace-normal"
-              >
-                {tabContent[activeTab]}
-              </motion.div>
-            </div>
           </motion.div>
         </div>
       )}
     </section>
   );
 }
-
-export default SectionOne;

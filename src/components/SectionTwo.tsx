@@ -1,349 +1,171 @@
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid';
-import Image from 'next/image';
-import { useEffect, useRef, useState } from 'react';
+'use client';
+
+import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { FaProjectDiagram, FaRunning, FaSitemap } from 'react-icons/fa';
 import {
-  Project,
-  earlyProjects,
-  featuredWebsites,
-  uiUxDesigns,
-} from './SectionTwoData';
+  SiAdobe,
+  SiCss3,
+  SiFigma,
+  SiFramer,
+  SiGit,
+  SiHtml5,
+  SiJavascript,
+  SiNextdotjs,
+  SiPrisma,
+  SiReact,
+  SiReactivex,
+  SiStripe,
+  SiStyledcomponents,
+  SiTailwindcss,
+  SiTypescript,
+} from 'react-icons/si';
 
 export default function SectionTwo() {
-  const [isMobile, setIsMobile] = useState(false);
-  const [activeFeatured, setActiveFeatured] = useState(0);
-  const [activeEarly, setActiveEarly] = useState(0);
-  const [activeUiUx, setActiveUiUx] = useState(0);
+  type TabName = 'Tech Stack' | 'Libraries Used' | 'Additional Skills';
+  const [activeTab, setActiveTab] = useState<TabName>('Tech Stack');
 
-  // Update isMobile on resize
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  /* ─────────────  data  ───────────── */
+  const techStack = [
+    { name: 'JavaScript', icon: <SiJavascript /> },
+    { name: 'CSS', icon: <SiCss3 /> },
+    { name: 'HTML', icon: <SiHtml5 /> },
+    { name: 'React', icon: <SiReact /> },
+    { name: 'Styled-Components', icon: <SiStyledcomponents /> },
+    { name: 'TypeScript', icon: <SiTypescript /> },
+    { name: 'Next.js', icon: <SiNextdotjs /> },
+    { name: 'Tailwind CSS', icon: <SiTailwindcss /> },
+    { name: 'Prisma', icon: <SiPrisma /> },
+    { name: 'Stripe SDK', icon: <SiStripe /> },
+  ];
 
-  // Refs for scrollable containers
-  const featuredRef = useRef<HTMLDivElement>(null);
-  const earlyRef = useRef<HTMLDivElement>(null);
-  const uiUxRef = useRef<HTMLDivElement>(null);
+  const librariesUsed = [
+    { name: 'react-spring', icon: <SiReactivex /> },
+    { name: 'framer-motion-3d', icon: <SiFramer /> },
+    { name: '@react-three/drei', icon: <SiReact /> },
+    { name: '@react-three/rapier', icon: <SiReact /> },
+    { name: '@react-three/cannon', icon: <SiReact /> },
+    { name: '@react-three/gltfjsx', icon: <SiReact /> },
+    { name: '@react-three/postprocessing', icon: <SiReact /> },
+    { name: 'theatre.js', icon: <SiReact /> },
+  ];
 
-  // Desktop scroll: by container width
-  const desktopScroll = (
-    ref: React.RefObject<HTMLDivElement>,
-    direction: 'left' | 'right'
-  ) => {
-    if (!ref.current) return;
-    const firstCard = ref.current.querySelector<HTMLElement>(
-      '.relative.flex-none'
-    );
-    if (!firstCard) return;
-    const style = getComputedStyle(firstCard);
-    const gap = parseFloat(style.marginRight);
-    const scrollAmount = firstCard.clientWidth + gap;
-    ref.current.scrollBy({
-      left: direction === 'left' ? -scrollAmount : scrollAmount,
-      behavior: 'smooth',
-    });
-  };
+  const additionalSkills = [
+    { name: 'Git & Version Control', icon: <SiGit /> },
+    { name: 'Agile Methodologies', icon: <FaRunning /> },
+    { name: 'UI/UX Design', icon: <SiAdobe /> },
+    { name: 'Figma Mock-ups', icon: <SiFigma /> },
+    { name: 'Wire-framing', icon: <FaProjectDiagram /> },
+    { name: 'Sequence Diagrams', icon: <FaSitemap /> },
+    { name: 'UML Diagrams', icon: <FaSitemap /> },
+  ];
 
-  // Mobile scroll: by one full viewport
-  const mobileScroll = (
-    ref: React.RefObject<HTMLDivElement>,
-    currentIndex: number,
-    setIndex: (i: number) => void,
-    direction: 'left' | 'right',
-    total: number
-  ) => {
-    if (!ref.current) return;
-    const width = ref.current.clientWidth;
-    let nextIndex = currentIndex;
-    if (direction === 'left' && currentIndex > 0) {
-      nextIndex = currentIndex - 1;
-    }
-    if (direction === 'right' && currentIndex < total - 1) {
-      nextIndex = currentIndex + 1;
-    }
-    setIndex(nextIndex);
-    ref.current.scrollTo({ left: nextIndex * width, behavior: 'smooth' });
-  };
-
-  // Renders a carousel (horizontal on desktop, vertical list on mobile)
-  const renderProjects = (
-    projects: Project[],
-    activeIndex: number,
-    setActiveIndex: (i: number) => void,
-    ref: React.RefObject<HTMLDivElement>
-  ) => {
-    const isUiUx = projects === uiUxDesigns;
-    return (
-      <div
-        ref={ref}
-        className={`${
-          isMobile
-            ? 'flex flex-col items-center space-y-8'
-            : 'flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden scrollbar-hide space-x-4'
-        }`}
-      >
-        {projects.map((project) => (
-          <div
-            key={project.id}
-            className={`relative flex-none ${
-              isMobile ? 'w-[95vw] ' : 'w-2/5'
-            } rounded-lg border-2 border-border p-4 bg-card transition-transform duration-300 hover:scale-105 cursor-pointer`}
-            onClick={() => window.open(project.link, '_blank')}
+  const tabContent: Record<TabName, JSX.Element> = {
+    'Tech Stack': (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {techStack.map((item) => (
+          <li
+            key={item.name}
+            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
           >
-            <div className="w-full h-60 relative overflow-hidden">
-              <Image
-                src={isMobile ? project.imageMobile : project.imageDesktop}
-                alt={project.title}
-                fill
-                className="absolute inset-0 w-full h-full object-cover rounded-md"
-              />
-            </div>
-
-            <h3 className="text-xl font-semibold mt-4 text-foreground">
-              {project.title}
-            </h3>
-
-            <div className="mt-2 text-sm text-foreground">
-              {/* Tech Stack always shown */}
-              <div
-                className={`${isUiUx ? 'w-full' : 'w-1/2 pr-2'} inline-block align-top`}
-              >
-                <p className="font-semibold">Tech Stack:</p>
-                <ul className="list-disc list-inside">
-                  {project.techStack.map((tech) => (
-                    <li key={tech}>{tech}</li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Frameworks only if not UI/UX section */}
-              {!isUiUx && (
-                <div className="w-1/2 pl-2 inline-block align-top">
-                  <p className="font-semibold">Frameworks:</p>
-                  <ul className="list-disc list-inside">
-                    {project.frameworks.map((fw) => (
-                      <li key={fw}>{fw}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(project.link, '_blank');
-              }}
-              className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary-hover transition-colors duration-200"
-            >
-              View More
-            </button>
-          </div>
+            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.icon}
+            </span>
+            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.name}
+            </span>
+          </li>
         ))}
-      </div>
-    );
+      </ul>
+    ),
+    'Libraries Used': (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {librariesUsed.map((item) => (
+          <li
+            key={item.name}
+            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
+          >
+            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.icon}
+            </span>
+            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ),
+    'Additional Skills': (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {additionalSkills.map((item) => (
+          <li
+            key={item.name}
+            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
+          >
+            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.icon}
+            </span>
+            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ),
   };
 
+  /* ─────────────  render  ───────────── */
   return (
-    <section className="px-4 md:px-12 py-16">
-      {/* Featured Websites */}
-      <h2 className="text-3xl font-bold mb-8 text-center text-foreground">
-        Featured Websites
-      </h2>
-      <div className="relative mb-16">
-        {!isMobile && (
-          <>
-            <button
-              onClick={() => desktopScroll(featuredRef, 'left')}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
-              aria-label="Scroll Left"
-            >
-              <ChevronLeftIcon className="w-6 h-6 text-foreground" />
-            </button>
-            <button
-              onClick={() => desktopScroll(featuredRef, 'right')}
-              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
-              aria-label="Scroll Right"
-            >
-              <ChevronRightIcon className="w-6 h-6 text-foreground" />
-            </button>
-          </>
-        )}
-        {renderProjects(
-          featuredWebsites,
-          activeFeatured,
-          setActiveFeatured,
-          featuredRef
-        )}
-        {isMobile && (
-          <div className="flex justify-center items-center mt-4 space-x-4">
-            {activeFeatured > 0 && (
-              <button
-                onClick={() =>
-                  mobileScroll(
-                    featuredRef,
-                    activeFeatured,
-                    setActiveFeatured,
-                    'left',
-                    featuredWebsites.length
-                  )
-                }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
-                aria-label="Scroll Left"
-              >
-                <ChevronLeftIcon className="w-6 h-6 text-foreground" />
-              </button>
-            )}
-            {activeFeatured < featuredWebsites.length - 1 && (
-              <button
-                onClick={() =>
-                  mobileScroll(
-                    featuredRef,
-                    activeFeatured,
-                    setActiveFeatured,
-                    'right',
-                    featuredWebsites.length
-                  )
-                }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
-                aria-label="Scroll Right"
-              >
-                <ChevronRightIcon className="w-6 h-6 text-foreground" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+    <section className="w-full px-4 md:px-12 py-16">
+      <motion.h2
+        className="text-3xl md:text-4xl font-bold text-center mb-10 text-foreground"
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        viewport={{ once: true }}
+      >
+        Skills&nbsp;&amp;&nbsp;Toolbox
+      </motion.h2>
 
-      {/* Early Projects */}
-      <h2 className="text-3xl font-bold mb-8 text-center text-foreground">
-        Early Projects
-      </h2>
-      <div className="relative mb-16">
-        {!isMobile && (
-          <>
-            <button
-              onClick={() => desktopScroll(earlyRef, 'left')}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
-              aria-label="Scroll Left"
-            >
-              <ChevronLeftIcon className="w-6 h-6 text-foreground" />
-            </button>
-            <button
-              onClick={() => desktopScroll(earlyRef, 'right')}
-              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
-              aria-label="Scroll Right"
-            >
-              <ChevronRightIcon className="w-6 h-6 text-foreground" />
-            </button>
-          </>
-        )}
-        {renderProjects(earlyProjects, activeEarly, setActiveEarly, earlyRef)}
-        {isMobile && (
-          <div className="flex justify-center items-center mt-4 space-x-4">
-            {activeEarly > 0 && (
+      <motion.div
+        className="mx-auto max-w-5xl border-2 border-border rounded-md hover-gradient-border"
+        initial={{ opacity: 0, scale: 0.96 }}
+        whileInView={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.4 }}
+        viewport={{ once: true }}
+      >
+        {/* tab headers */}
+        <ul className="flex flex-wrap justify-center">
+          {(
+            ['Tech Stack', 'Libraries Used', 'Additional Skills'] as TabName[]
+          ).map((tab) => (
+            <li key={tab} className="flex-1">
               <button
-                onClick={() =>
-                  mobileScroll(
-                    earlyRef,
-                    activeEarly,
-                    setActiveEarly,
-                    'left',
-                    earlyProjects.length
-                  )
-                }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
-                aria-label="Scroll Left"
+                onClick={() => setActiveTab(tab)}
+                className={`w-full py-3 px-4 font-semibold border-b-2 transition-colors duration-200 ${
+                  activeTab === tab
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <ChevronLeftIcon className="w-6 h-6 text-foreground" />
+                {tab}
               </button>
-            )}
-            {activeEarly < earlyProjects.length - 1 && (
-              <button
-                onClick={() =>
-                  mobileScroll(
-                    earlyRef,
-                    activeEarly,
-                    setActiveEarly,
-                    'right',
-                    earlyProjects.length
-                  )
-                }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
-                aria-label="Scroll Right"
-              >
-                <ChevronRightIcon className="w-6 h-6 text-foreground" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+            </li>
+          ))}
+        </ul>
 
-      {/* UI/UX Designs */}
-      <h2 className="text-3xl font-bold mb-8 text-center text-foreground">
-        UI/UX Designs
-      </h2>
-      <div className="relative">
-        {!isMobile && (
-          <>
-            <button
-              onClick={() => desktopScroll(uiUxRef, 'left')}
-              className="absolute left-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
-              aria-label="Scroll Left"
-            >
-              <ChevronLeftIcon className="w-6 h-6 text-foreground" />
-            </button>
-            <button
-              onClick={() => desktopScroll(uiUxRef, 'right')}
-              className="absolute right-0 top-1/2 transform -translate-y-1/2 bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200 z-10"
-              aria-label="Scroll Right"
-            >
-              <ChevronRightIcon className="w-6 h-6 text-foreground" />
-            </button>
-          </>
-        )}
-        {renderProjects(uiUxDesigns, activeUiUx, setActiveUiUx, uiUxRef)}
-        {isMobile && (
-          <div className="flex justify-center items-center mt-4 space-x-4">
-            {activeUiUx > 0 && (
-              <button
-                onClick={() =>
-                  mobileScroll(
-                    uiUxRef,
-                    activeUiUx,
-                    setActiveUiUx,
-                    'left',
-                    uiUxDesigns.length
-                  )
-                }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
-                aria-label="Scroll Left"
-              >
-                <ChevronLeftIcon className="w-6 h-6 text-foreground" />
-              </button>
-            )}
-            {activeUiUx < uiUxDesigns.length - 1 && (
-              <button
-                onClick={() =>
-                  mobileScroll(
-                    uiUxRef,
-                    activeUiUx,
-                    setActiveUiUx,
-                    'right',
-                    uiUxDesigns.length
-                  )
-                }
-                className="bg-muted bg-opacity-50 p-2 rounded-full focus:outline-none hover:bg-muted-hover transition-colors duration-200"
-                aria-label="Scroll Right"
-              >
-                <ChevronRightIcon className="w-6 h-6 text-foreground" />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+        {/* animated panel */}
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -12 }}
+          transition={{ duration: 0.25 }}
+          className="p-6 bg-card rounded-b-md"
+        >
+          {tabContent[activeTab]}
+        </motion.div>
+      </motion.div>
     </section>
   );
 }

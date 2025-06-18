@@ -123,10 +123,10 @@ export const featuredWebsites: Project[] = [
     id: 5,
     title: 'VapeAura',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/VapeAuraPreview.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AuraHempandVaporPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/VapeAuraPreview.webp',
-    link: 'https://main.d1v4eeamvmnirt.amplifyapp.com/',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AuraHempandVaporPreview.webp',
+    link: 'https://vapeaura.shop/',
     description:
       'A lean product-showcase for a start-up vape retailer, built with Next.js 15, React 19, and Tailwind CSS 3.4. The roadmap includes a Prisma-backed catalog, Stripe checkout, and an owner-only admin panel. Current features ship with animated category filtering (Framer Motion) and class-safe utility styling via Tailwind-Merge.',
     techStack: [
@@ -137,7 +137,7 @@ export const featuredWebsites: Project[] = [
       'Framer Motion',
       'Prisma (planned)',
     ],
-    frameworks: ['Tailwind-Merge', 'Framer Motion', 'React-Icons'],
+    frameworks: ['Tailwind', 'Framer Motion', 'React-Icons'],
   },
 ];
 

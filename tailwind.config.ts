@@ -1,15 +1,17 @@
+/* ============================  tailwind.config.ts  ============================ */
 import type { Config } from 'tailwindcss';
 import tailwindcssAnimate from 'tailwindcss-animate';
 
 const config: Config = {
-  darkMode: ['class'], // Enable dark mode with a class
+  darkMode: ['class'], // use class="dark" on <html>
   content: [
-    './src/pages/**/*.{js,ts,jsx,tsx,mdx}', // Pages
-    './src/components/**/*.{js,ts,jsx,tsx,mdx}', // Components
-    './src/app/**/*.{js,ts,jsx,tsx,mdx}', // App directory
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
+      /* ---------- design-token colours (your originals) ---------- */
       colors: {
         background: 'hsl(var(--background) / <alpha-value>)',
         foreground: 'hsl(var(--foreground) / <alpha-value>)',
@@ -28,10 +30,22 @@ const config: Config = {
           'hsl(var(--destructive-foreground) / <alpha-value>)',
         ring: 'hsl(var(--ring) / <alpha-value>)',
       },
+
+      /* ---------- border radii (unchanged) ---------- */
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+
+      /* ---------- NEW background gradients ---------- */
+      backgroundImage: {
+        /* Light-mode: cloudy-white ➜ aqua-blue */
+        'cloud-aqua':
+          'linear-gradient(140deg, #f1f5f9 0%, #e2f8ff 35%, #c9f2ff 70%, #b2ecff 100%)',
+
+        /* Dark-mode fallback */
+        'dark-cloud': 'linear-gradient(140deg, #0a0a0a 0%, #1b1d24 100%)',
       },
     },
   },

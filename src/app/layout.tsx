@@ -21,7 +21,7 @@ const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       <head>
         <link rel="icon" href="/favicon.ico" />
       </head>
-      <body>
+      <body className="min-h-screen bg-cloud-aqua dark:bg-dark-cloud">
         <ThemeProvider>
           <Navbar />
           <GameProvider>

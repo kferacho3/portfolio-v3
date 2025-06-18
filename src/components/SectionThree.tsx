@@ -1,374 +1,306 @@
-/* src/components/SectionThree.tsx */
+/* =============================  SectionThree.tsx  ============================= */
 'use client';
 
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import emailjs from 'emailjs-com'; // v3.x API
 import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import AnimatedButton from './AnimatedButton';
+import Image from 'next/image';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  Project,
+  earlyProjects,
+  featuredWebsites,
+  uiUxDesigns,
+} from './SectionThreeData';
 
-// ▸ keep keys out of the bundle — configure in your host’s env-vars panel
-const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || 'RachoDevs';
-const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || 'RachoDevs';
-const PUBLIC_KEY =
-  process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || 'asi1IXWXVQKV4AGlS';
+/* -----------------------------  Modal Portal  ----------------------------- */
+type ModalProps = {
+  project: Project;
+  onClose: () => void;
+};
 
-function SectionThree() {
-  const form = useRef<HTMLFormElement>(null);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    service: '',
-    website: '',
-    message: '',
-    _honeypot: '',
-  });
-
-  const [sending, setSending] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMessage, setModalMessage] = useState('');
-  const [errors, setErrors] = useState<{ [k: string]: string }>({});
-  const [lastSentAt, setLastSentAt] = useState<number | null>(null);
-
-  /* ────────────────────────────────── helpers ───────────────────────────────── */
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((p) => ({ ...p, [name]: value }));
-  };
-  const handleSelectChange = (name: string, value: string) =>
-    setFormData((p) => ({ ...p, [name]: value }));
-
-  const validateForm = () => {
-    const errs: { [k: string]: string } = {};
-    if (!formData.name.trim()) errs.name = 'Name is required.';
-    if (!formData.email.trim()) errs.email = 'Email is required.';
-    else if (!/\S+@\S+\.\S+/.test(formData.email))
-      errs.email = 'Email is invalid.';
-    if (!formData.service) errs.service = 'Select a service.';
-    if (!formData.website) errs.website = 'Select a website type.';
-    if (!formData.message.trim()) errs.message = 'Message is required.';
-    if (formData._honeypot.trim()) errs.form = 'Bot submission blocked.';
-    if (lastSentAt && Date.now() - lastSentAt < 30_000)
-      errs.form = 'Please wait a bit before sending another message.';
-    return errs;
-  };
-
-  const isValid = (f: keyof typeof formData) =>
-    (f === 'name' && formData.name.trim().length > 0) ||
-    (f === 'email' && /\S+@\S+\.\S+/.test(formData.email)) ||
-    (f === 'service' && formData.service) ||
-    (f === 'website' && formData.website) ||
-    (f === 'message' && formData.message.trim().length > 0);
-
-  /* ───────────────────────────────── send mail ─────────────────────────────── */
-  const sendEmail = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const validationErrors = validateForm();
-    if (Object.keys(validationErrors).length) {
-      setErrors(validationErrors);
-      return;
-    }
-    setErrors({});
-    setSending(true);
-
-    try {
-      await emailjs.send(
-        SERVICE_ID,
-        TEMPLATE_ID,
-        {
-          from_name: formData.name,
-          to_name: 'RachoDevs',
-          email: formData.email,
-          service: formData.service,
-          website: formData.website,
-          message: formData.message,
-        },
-        PUBLIC_KEY
-      );
-
-      setModalMessage('Message sent successfully! I will reply shortly.');
-      setModalOpen(true);
-      setLastSentAt(Date.now());
-      setFormData({
-        name: '',
-        email: '',
-        service: '',
-        website: '',
-        message: '',
-        _honeypot: '',
-      });
-    } catch (err) {
-      console.error(err);
-      setModalMessage('Something went wrong. Please try again later.');
-      setModalOpen(true);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  /* ESC closes modal */
+function ProjectModal({ project, onClose }: ModalProps) {
+  // lock background scroll
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) =>
-      e.key === 'Escape' && setModalOpen(false);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const { overflow } = document.body.style;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflow;
+    };
   }, []);
 
-  /* ────────────────────────────── render ───────────────────────────────────── */
-  return (
-    <section className="flex flex-col md:flex-row items-start px-4 sm:px-8 md:px-12 py-16 gap-8">
-      {/* Contact Form Column */}
-      <div className="md:w-1/2 w-full px-4 relative">
-        <h2 className="text-3xl font-bold mb-6 text-center md:text-left text-foreground">
-          Contact Me
-        </h2>
+  // escape-key close
+  const escHandler = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+  useEffect(() => {
+    window.addEventListener('keydown', escHandler);
+    return () => window.removeEventListener('keydown', escHandler);
+  });
 
-        <form ref={form} className="space-y-6" onSubmit={sendEmail} noValidate>
-          {/* honeypot */}
-          <input
-            type="text"
-            name="_honeypot"
-            value={formData._honeypot}
-            onChange={handleInputChange}
-            className="hidden"
-            tabIndex={-1}
-            autoComplete="off"
-          />
+  // avoid SSR mismatch
+  const isBrowser = typeof window !== 'undefined';
+  if (!isBrowser) return null;
 
-          {/* Name */}
-          <div>
-            <Label htmlFor="name" className="block text-muted-foreground mb-1">
-              Name
-            </Label>
-            <Input
-              id="name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              className={`w-full ${isValid('name') ? 'input-valid' : ''}`}
-              required
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        key="backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+        onClick={onClose}
+      >
+        <motion.div
+          key="dialog"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 25 }}
+          className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card shadow-2xl shadow-black/30"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* header / hero */}
+          <div className="relative aspect-video rounded-t-3xl overflow-hidden">
+            <Image
+              src={project.imageDesktop || project.imageMobile}
+              alt={project.title}
+              fill
+              priority
+              className="object-cover"
             />
-            {errors.name && (
-              <p className="text-destructive text-sm mt-1">{errors.name}</p>
-            )}
+            <button
+              aria-label="Close"
+              onClick={onClose}
+              className="absolute top-4 right-4 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80"
+            >
+              ✕
+            </button>
           </div>
 
-          {/* Email */}
-          <div>
-            <Label htmlFor="email" className="block text-muted-foreground mb-1">
-              Email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className={`w-full ${isValid('email') ? 'input-valid' : ''}`}
-              required
-            />
-            {errors.email && (
-              <p className="text-destructive text-sm mt-1">{errors.email}</p>
-            )}
+          {/* body */}
+          <div className="space-y-8 p-6 md:p-10">
+            <h3 className="text-3xl font-bold">{project.title}</h3>
+
+            <div className="grid gap-8 md:grid-cols-2">
+              <div>
+                <h4 className="mb-3 font-semibold">Tech Stack</h4>
+                <div className="flex flex-wrap gap-2">
+                  {project.techStack.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded-lg bg-muted px-3 py-1 text-sm text-muted-foreground"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {project.frameworks?.length ? (
+                <div>
+                  <h4 className="mb-3 font-semibold">Frameworks & Tools</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {project.frameworks.map((f) => (
+                      <span
+                        key={f}
+                        className="rounded-lg bg-muted px-3 py-1 text-sm text-muted-foreground"
+                      >
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-4 md:flex-row">
+              <a
+                href={project.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 rounded-lg bg-primary px-6 py-3 text-center font-medium text-primary-foreground transition hover:bg-primary/90"
+              >
+                View Live Project
+              </a>
+              <button
+                onClick={onClose}
+                className="flex-1 rounded-lg bg-muted px-6 py-3 text-center font-medium text-foreground transition hover:bg-muted-foreground/20"
+              >
+                Close
+              </button>
+            </div>
           </div>
-
-          {/* Service */}
-          <div>
-            <Label
-              htmlFor="service"
-              className="block text-muted-foreground mb-1"
-            >
-              What kind of service do you need?
-            </Label>
-            <Select
-              onValueChange={(v) => handleSelectChange('service', v)}
-              required
-            >
-              <SelectTrigger
-                className={`w-full ${isValid('service') ? 'input-valid' : ''}`}
-              >
-                <SelectValue placeholder="Select an option" />
-              </SelectTrigger>
-
-              {/* Add divide-y to draw lines, and dark:bg for night mode */}
-              <SelectContent
-                className="
-        backdrop-blur-sm
-        bg-white/30 dark:bg-gray-800
-        divide-y divide-white/20 dark:divide-gray-600
-      "
-              >
-                {[
-                  'Website Development',
-                  'Website/Application Design',
-                  'E-commerce Website',
-                  '3D Model',
-                  'SVG Graphics',
-                  'Audio Engineering',
-                  'AV Synchronization',
-                ].map((opt) => (
-                  <SelectItem
-                    key={opt}
-                    value={opt}
-                    className="
-            py-2 px-3
-            hover:bg-white/20 dark:hover:bg-white/10
-            transition-colors
-          "
-                  >
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.service && (
-              <p className="text-destructive text-sm mt-1">{errors.service}</p>
-            )}
-          </div>
-
-          {/* Website type */}
-          <div>
-            <Label
-              htmlFor="website"
-              className="block text-muted-foreground mb-1"
-            >
-              What kind of website do you need?
-            </Label>
-            <Select
-              onValueChange={(v) => handleSelectChange('website', v)}
-              required
-            >
-              <SelectTrigger
-                className={`w-full ${isValid('website') ? 'input-valid' : ''}`}
-              >
-                <SelectValue placeholder="Select an option" />
-              </SelectTrigger>
-
-              {/* Same styling here */}
-              <SelectContent
-                className="
-        backdrop-blur-sm
-        bg-white/30 dark:bg-gray-800
-        divide-y divide-white/20 dark:divide-gray-600
-      "
-              >
-                {[
-                  'Personal',
-                  'NFT',
-                  'Landing Page',
-                  'E-commerce',
-                  'Other (Specify)',
-                  'None',
-                ].map((opt) => (
-                  <SelectItem
-                    key={opt}
-                    value={opt}
-                    className="
-            py-2 px-3
-            hover:bg-white/20 dark:hover:bg-white/10
-            transition-colors
-          "
-                  >
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.website && (
-              <p className="text-destructive text-sm mt-1">{errors.website}</p>
-            )}
-          </div>
-
-          {/* Message */}
-          <div>
-            <Label
-              htmlFor="message"
-              className="block text-muted-foreground mb-1"
-            >
-              Message
-            </Label>
-            <Textarea
-              id="message"
-              name="message"
-              rows={4}
-              value={formData.message}
-              onChange={handleInputChange}
-              className={`w-full ${isValid('message') ? 'input-valid' : ''}`}
-              required
-            />
-            {errors.message && (
-              <p className="text-destructive text-sm mt-1">{errors.message}</p>
-            )}
-          </div>
-
-          {errors.form && (
-            <p className="text-destructive text-sm">{errors.form}</p>
-          )}
-
-          <AnimatedButton
-            type="submit"
-            className="mt-4 cursor-pointer text-foreground hover-gradient-border"
-            disabled={sending}
-          >
-            {sending ? 'Sending…' : 'Submit'}
-          </AnimatedButton>
-        </form>
-
-        {/* Success/Error Modal — constrained to this column */}
-        <AnimatePresence>
-          {modalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 rounded-xl"
-              onClick={() => setModalOpen(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.92, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-                className="relative bg-background max-w-md w-[90%] p-6 rounded-lg shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  aria-label="Close"
-                  className="absolute top-3 right-3 text-foreground/70 hover:text-foreground"
-                  onClick={() => setModalOpen(false)}
-                >
-                  <X size={20} />
-                </button>
-                <p className="text-center text-foreground leading-relaxed">
-                  {modalMessage}
-                </p>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Decorative right column */}
-      <div className="md:w-1/2 w-full flex flex-col items-center px-4">
-        <h3 className="text-2xl font-semibold text-center mt-4 text-foreground">
-          Let&apos;s Connect!
-        </h3>
-      </div>
-    </section>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>,
+    document.body
   );
 }
 
-export default SectionThree;
+/* ------------------------------  Section  ------------------------------ */
+export default function SectionThree() {
+  const [selectedCategory, setSelectedCategory] = useState<
+    'featured' | 'early' | 'uiux'
+  >('featured');
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  const categories = {
+    featured: { label: 'Featured Websites', projects: featuredWebsites },
+    early: { label: 'Early Projects', projects: earlyProjects },
+    uiux: { label: 'UI/UX Designs', projects: uiUxDesigns },
+  };
+
+  const currentProjects = categories[selectedCategory].projects;
+
+  return (
+    <section className="min-h-screen px-4 py-12 md:px-8 md:py-20 lg:px-12">
+      {/* ----------  Enhanced heading with better legibility  ---------- */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="mb-10 md:mb-16 relative"
+      >
+        {/* Background blur/contrast helper */}
+        <div className="absolute inset-0 -inset-x-8 md:-inset-x-16 h-full flex items-center justify-center">
+          <div className="w-full max-w-4xl h-32  rounded-3xl" />
+        </div>
+
+        {/* Main heading with enhanced visibility */}
+        <h2 className="relative text-center text-4xl font-black md:text-6xl lg:text-7xl">
+          {/* Shadow layers for better contrast */}
+          <span className="absolute inset-0 text-black/50 dark:blur-xl">
+            My Portfolio
+          </span>
+          <span className="absolute inset-0 text-black/30 dark:blur-md">
+            My Portfolio
+          </span>
+
+          {/* Main text with gradient and outline */}
+          <span
+            className="relative bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text dark:text-transparent"
+            style={{
+              textShadow: `
+                0 0 20px rgba(139, 92, 246, 0.5),
+                0 0 40px rgba(139, 92, 246, 0.3),
+                0 2px 4px rgba(0, 0, 0, 0.5),
+                0 4px 8px rgba(0, 0, 0, 0.3)
+              `,
+            }}
+          >
+            My Portfolio
+          </span>
+        </h2>
+
+        {/* Subtitle for additional context */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="relative text-center mt-4 text-lg md:text-xl text-white/90 font-medium"
+          style={{
+            textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 4px 8px rgba(0,0,0,0.5)',
+          }}
+        >
+          Explore my creative journey through code and design
+        </motion.p>
+      </motion.div>
+
+      <div className="mx-auto mb-12 flex flex-wrap justify-center gap-3 md:gap-6">
+        {Object.entries(categories).map(([key, { label }]) => (
+          <motion.button
+            key={key}
+            onClick={() => setSelectedCategory(key as typeof selectedCategory)}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.96 }}
+            className={`rounded-full px-5 py-2 text-sm font-medium transition 
+              md:px-9 md:py-3 md:text-base
+              ${
+                selectedCategory === key
+                  ? 'bg-gradient-to-r from-primary to-purple-500 text-white shadow-lg'
+                  : 'bg-muted text-foreground hover:bg-muted-foreground/10'
+              }`}
+          >
+            {label}
+          </motion.button>
+        ))}
+      </div>
+
+      {/* ----------  project grid with rounded widgets  ---------- */}
+      <div className="mx-auto max-w-7xl">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedCategory}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.35 }}
+            className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8"
+          >
+            {currentProjects.map((project, idx) => (
+              <motion.div
+                key={project.id}
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ delay: idx * 0.05 }}
+                className="group relative cursor-pointer overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 to-purple-500/10 p-1 shadow-lg shadow-black/10 backdrop-blur"
+                onClick={() => setSelectedProject(project)}
+              >
+                {/* Inner container for better rounded corners */}
+                <div className="relative overflow-hidden rounded-lg bg-card/50 backdrop-blur-sm">
+                  <div className="aspect-[16/9] overflow-hidden">
+                    <Image
+                      src={project.imageMobile}
+                      alt={project.title}
+                      fill
+                      priority={idx < 3}
+                      sizes="(max-width:768px) 100vw, (max-width:1200px) 50vw, 33vw"
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    {/* gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                    {/* info overlay */}
+                    <div
+                      className="absolute inset-0 flex flex-col justify-end gap-4 p-6 translate-y-10 opacity-0 transition 
+                      duration-300 group-hover:translate-y-0 group-hover:opacity-100"
+                    >
+                      <h3 className="text-xl font-bold text-white md:text-2xl drop-shadow-lg">
+                        {project.title}
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {project.techStack.slice(0, 3).map((t) => (
+                          <span
+                            key={t}
+                            className="rounded-full bg-white/20 px-3 py-1 text-xs text-white backdrop-blur"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                        {project.techStack.length > 3 && (
+                          <span className="rounded-full bg-white/20 px-3 py-1 text-xs text-white backdrop-blur">
+                            +{project.techStack.length - 3}
+                          </span>
+                        )}
+                      </div>
+                      <button className="self-start rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-white/90">
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* ----------  modal ---------- */}
+      {selectedProject && (
+        <ProjectModal
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
+        />
+      )}
+    </section>
+  );
+}

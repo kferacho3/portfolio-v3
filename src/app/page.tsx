@@ -1,5 +1,6 @@
 'use client';
 
+import SectionFour from '@/components/SectionFour';
 import { Scroll, ScrollControls } from '@react-three/drei';
 import { Suspense, useEffect, useState } from 'react';
 import Background3D from '../components/Background3D';
@@ -18,7 +19,7 @@ function HomePage() {
 
   useEffect(() => {
     const updatePages = () => {
-      setPages(window.innerWidth <= 768 ? 15 : 6);
+      setPages(window.innerWidth <= 768 ? 8 : 6.5);
     };
 
     // initialize
@@ -46,7 +47,7 @@ function HomePage() {
 
         {/* Always mount Scroll html, but conditionally render its content */}
         <Scroll html style={{ width: '100vw' }}>
-          <main className="p-6 min-h-screen">
+          <main className="min-h-screen p-6">
             {background3DAnimationComplete ? (
               <>
                 <SectionOne
@@ -56,6 +57,7 @@ function HomePage() {
                   <>
                     <SectionTwo />
                     <SectionThree />
+                    <SectionFour />
                   </>
                 )}
               </>
