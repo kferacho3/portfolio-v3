@@ -74,9 +74,9 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
 
   /* 4. markup ------------------------------------------------------- */
   return (
-    <section className="relative w-full h-screen flex flex-col items-center justify-end overflow-hidden px-4 pb-40">
+    <section className="relative w-full h-screen flex flex-col items-center justify-end overflow-hidden px-4 pb-[120px]">
       {shown && (
-        <div className="relative z-10 w-full max-w-6xl text-center space-y-6">
+        <div className="relative z-10 w-full max-w-6xl text-center space-y-2">
           {/* ---------- HEADLINE ---------- */}
           <motion.div
             className="space-y-1"
@@ -84,15 +84,6 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.6 }}
           >
-            <motion.p
-              className="font-light text-sm sm:text-base uppercase tracking-[0.2em] mb-3 text-gray-700 dark:text-gray-300"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-            >
-              SERVICES & EXPERTISE
-            </motion.p>
-
             <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-gray-900 dark:text-white">
               <span className="font-light">I DELIVER</span>{' '}
               <span
@@ -119,7 +110,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
 
           {/* ---------- PARAGRAPH ---------- */}
           <motion.p
-            className="mx-auto max-w-3xl text-base sm:text-lg lg:text-xl leading-relaxed text-gray-700 dark:text-gray-300"
+            className="mx-auto max-w-5xl text-base sm:text-lg lg:text-xl leading-relaxed text-gray-700 dark:text-gray-300"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, duration: 0.6 }}
@@ -161,7 +152,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.7 }}
-            className="pt-8"
+            className="pt-3"
           >
             <motion.div
               className="mx-auto w-6 h-10 rounded-full border-2 border-purple-600/40 dark:border-purple-500/40 relative backdrop-blur-sm"

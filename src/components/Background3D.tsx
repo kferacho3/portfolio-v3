@@ -311,8 +311,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
       scl: [0.15, 0.15, 0.15] as [number, number, number],
     },
     to: {
-      pos: [0, 0, 0] as [number, number, number],
-      scl: [1, 1, 1] as [number, number, number],
+      pos: [0, 0.35, 0] as [number, number, number],
+      scl: [0.9, 0.9, 0.9] as [number, number, number],
     },
     config: { mass: 1, tension: 180, friction: 24 },
     onRest: onAnimationComplete,
