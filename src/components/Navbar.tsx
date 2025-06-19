@@ -131,7 +131,7 @@ const Navbar: React.FC = () => {
             <div
               onClick={handleToggleMenu}
               className="grid grid-cols-3 gap-1 w-12 h-12 p-1 bg-transparent rounded cursor-pointer z-50"
-              style={{ boxShadow: 'rgb(38, 57, 77) 0px 20px 30px -10px' }}
+              style={{ boxShadow: 'rgb(38, 57, 77) 0px 20px 30px -15px' }}
             >
               {[...Array(9)].map((_, index) => {
                 const randomColor =

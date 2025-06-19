@@ -41,7 +41,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
     return () => clearTimeout(id);
   }, [onAnimationComplete]);
 
-  /* 2. type-writer FSM --------------------------------------------- */
+  /* 2. type-writer FSM -------------------------------------------- */
   const [idx, setIdx] = useState(0); // which service
   const [txt, setTxt] = useState(''); // rendered substring
   const [del, setDel] = useState(false);
@@ -72,7 +72,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
     return () => clearTimeout(timer);
   }, [txt, del, idx]);
 
-  /* 4. markup ------------------------------------------------------- */
+  /* 4. markup ------------------------------------------------------ */
   return (
     <section className="relative w-full h-screen flex flex-col items-center justify-end overflow-hidden px-4 pb-[120px]">
       {shown && (
@@ -84,10 +84,18 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, duration: 0.6 }}
           >
-            <h1 className="font-bold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-gray-900 dark:text-white">
-              <span className="font-light">I DELIVER</span>{' '}
+            <h1 className="font-extrabold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-gray-900 dark:text-white leading-tight sm:leading-tight">
+              <span className="font-extrabold">I DELIVER</span>{' '}
               <span
-                className="font-black bg-clip-text text-transparent inline-block"
+                className="
+                  font-black
+                  uppercase
+                  inline-block
+                  italic
+                  bg-clip-text
+                  text-transparent
+                  text-2xl sm:text-3xl md:text-4xl lg:text-5xl
+                "
                 style={{
                   backgroundImage:
                     'linear-gradient(90deg, #8b5cf6, #ec4899 50%, #3b82f6 100%)',
@@ -110,7 +118,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
 
           {/* ---------- PARAGRAPH ---------- */}
           <motion.p
-            className="mx-auto max-w-5xl text-base sm:text-lg lg:text-xl leading-relaxed text-gray-700 dark:text-gray-300"
+            className="mx-auto max-w-5xl text-base sm:text-lg lg:text-xl leading-normal sm:leading-relaxed text-gray-700 dark:text-gray-300"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, duration: 0.6 }}
@@ -136,12 +144,12 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
             <div className="flex gap-3">
               <AnimatedLink
                 icon={<AiFillGithub className="w-6 h-6" />}
-                link="https://github.com/yourusername"
+                link="https://github.com/kferacho3"
                 className="w-12 h-12 flex items-center justify-center rounded-full text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-purple-500/50"
               />
               <AnimatedLink
                 icon={<AiFillLinkedin className="w-6 h-6" />}
-                link="https://www.linkedin.com/in/yourusername/"
+                link="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
                 className="w-12 h-12 flex items-center justify-center rounded-full text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-purple-500/50"
               />
             </div>
