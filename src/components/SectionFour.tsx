@@ -571,7 +571,7 @@ function SectionFour() {
                         </svg>
                       </a>
                       <a
-                        href="mailto:kferacho@rachodevs.com"
+                        href="mailto:kferacho64@gmail.com"
                         className="p-3 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-purple-100 dark:hover:bg-purple-900/20 hover:text-purple-600 dark:hover:text-purple-400 transition-all duration-200"
                       >
                         <Mail className="w-5 h-5" />
