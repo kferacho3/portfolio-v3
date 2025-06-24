@@ -1728,10 +1728,17 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const isMobileView = isMobile();
 
   /* Random initial shape */
+  /* Random initial shape */
   const getRandomShape = (exclude?: ShapeName): ShapeName => {
+    // Filter out Gyroid on mobile
+    const availableShapes = isMobileView
+      ? SHAPES.filter((shape) => shape !== 'Gyroid')
+      : SHAPES;
+
     let shape: ShapeName;
     do {
-      shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+      shape =
+        availableShapes[Math.floor(Math.random() * availableShapes.length)];
     } while (shape === exclude);
     return shape;
   };
@@ -1792,7 +1799,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const { gl } = useThree();
 
   /* shape / material state - always start with FractalCube */
-  const [shape, setShape] = useState<ShapeName>('FractalCube');
+  /* shape / material state - always start with FractalCube */
+  const [shape, setShape] = useState<ShapeName>(() => {
+    // If mobile and somehow Gyroid was going to be selected, use FractalCube instead
+    return isMobileView ? 'FractalCube' : 'FractalCube';
+  });
   const [materialIndex, setMaterialIndex] = useState(4); // Index 4 is meshNormalMaterial
   const [color, setColor] = useState(randHex());
   const [wireframe, setWireframe] = useState(false);
