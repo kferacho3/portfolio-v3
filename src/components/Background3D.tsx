@@ -1579,6 +1579,7 @@ const HolographicMaterial = (color: string): JSX.Element => (
 );
 
 /* ────────────── 5.   Enhanced Perlin Noise ────────────────────────── */
+/* ────────────── 5.   Enhanced Perlin Noise ────────────────────────── */
 const noise3D = createNoise3D();
 const noise4D = createNoise4D();
 const tmpV = new THREE.Vector3();
@@ -1615,14 +1616,15 @@ function displace(
     n += scrollNoise * scrollOffset * 0.5;
   }
 
-  // Hover influence (also apply on mobile drag)
-  if (hoverDistance < 2 || (isMobileView && isDragging)) {
+  // Hover influence - Apply for both desktop hover and mobile drag
+  const effectiveHoverDistance = isMobileView && isDragging ? 0 : hoverDistance;
+  if (effectiveHoverDistance < 2) {
     const hoverNoise = noise3D(
       v.x * 3 * complexity + t * 0.2,
       v.y * 3 * complexity,
       v.z * 3 * complexity
     );
-    n += hoverNoise * (2 - Math.min(hoverDistance, 2)) * 0.3;
+    n += hoverNoise * (2 - Math.min(effectiveHoverDistance, 2)) * 0.3;
   }
 
   // Enhanced drag influence with rhythmic, symmetric, and chaotic manipulation
@@ -1787,7 +1789,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const originalPositions = useRef<Float32Array | null>(null);
   const scroll = useScroll();
   const theatre = useCurrentSheet();
-  const { gl, pointer } = useThree();
+  const { gl } = useThree();
 
   /* shape / material state - always start with FractalCube */
   const [shape, setShape] = useState<ShapeName>('FractalCube');
@@ -1970,14 +1972,29 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* hover state for perlin noise */
   const [isHovering, setIsHovering] = useState(false);
   const hoverPos = useRef(new THREE.Vector3());
+  // Add mobile touch position tracking
+  const mobileHoverPos = useRef(new THREE.Vector3());
+  const lastTouchPos = useRef<{ x: number; y: number } | null>(null);
 
-  const onPointerDown = useCallback((e: PointerEvent) => {
-    isDragging.current = true;
-    dragStartTime.current = Date.now();
-    prev.current = { x: e.clientX, y: e.clientY };
-    dragVelocity.current = { x: 0, y: 0 };
-    dragIntensity.current = 0;
-  }, []);
+  const onPointerDown = useCallback(
+    (e: PointerEvent) => {
+      isDragging.current = true;
+      dragStartTime.current = Date.now();
+      prev.current = { x: e.clientX, y: e.clientY };
+      dragVelocity.current = { x: 0, y: 0 };
+      dragIntensity.current = 0;
+
+      // For mobile, update the touch position
+      if (isMobileView) {
+        const rect = gl.domElement.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        lastTouchPos.current = { x, y };
+        mobileHoverPos.current.set(x * 5, y * 5, 0);
+      }
+    },
+    [gl.domElement, isMobileView]
+  );
 
   const onPointerUp = useCallback(() => {
     isDragging.current = false;
@@ -1985,29 +2002,46 @@ export default function Background3D({ onAnimationComplete }: Props) {
     vel.current.x = dragVelocity.current.x * 0.5;
     vel.current.y = dragVelocity.current.y * 0.5;
     dragIntensity.current = 0;
-  }, []);
 
-  const onPointerMove = useCallback((e: PointerEvent) => {
-    if (!isDragging.current || !prev.current) return;
-    const dx = e.clientX - prev.current.x;
-    const dy = e.clientY - prev.current.y;
-
-    // Calculate velocity based on movement
-    dragVelocity.current.x = dx * 0.01;
-    dragVelocity.current.y = dy * 0.01;
-
-    // Calculate drag intensity based on movement speed
-    const speed = Math.sqrt(dx * dx + dy * dy);
-    dragIntensity.current = Math.min(speed / 10, 2); // Cap at 2
-
-    // Apply immediate rotation
-    if (outerGroupRef.current) {
-      outerGroupRef.current.rotation.y += dragVelocity.current.x;
-      outerGroupRef.current.rotation.x += dragVelocity.current.y;
+    // Clear mobile touch position
+    if (isMobileView) {
+      lastTouchPos.current = null;
     }
+  }, [isMobileView]);
 
-    prev.current = { x: e.clientX, y: e.clientY };
-  }, []);
+  const onPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (!isDragging.current || !prev.current) return;
+      const dx = e.clientX - prev.current.x;
+      const dy = e.clientY - prev.current.y;
+
+      // Calculate velocity based on movement
+      dragVelocity.current.x = dx * 0.01;
+      dragVelocity.current.y = dy * 0.01;
+
+      // Calculate drag intensity based on movement speed
+      const speed = Math.sqrt(dx * dx + dy * dy);
+      dragIntensity.current = Math.min(speed / 10, 2); // Cap at 2
+
+      // Apply immediate rotation
+      if (outerGroupRef.current) {
+        outerGroupRef.current.rotation.y += dragVelocity.current.x;
+        outerGroupRef.current.rotation.x += dragVelocity.current.y;
+      }
+
+      // Update mobile hover position during drag
+      if (isMobileView && isDragging.current) {
+        const rect = gl.domElement.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        lastTouchPos.current = { x, y };
+        mobileHoverPos.current.set(x * 5, y * 5, 0);
+      }
+
+      prev.current = { x: e.clientX, y: e.clientY };
+    },
+    [gl.domElement, isMobileView]
+  );
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -2128,7 +2162,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const hoverMix = useRef(0);
 
   /* frame-loop with enhanced perlin noise */
-  useFrame(({ clock }, delta) => {
+  useFrame(({ clock, pointer }, delta) => {
     hoverMix.current = THREE.MathUtils.damp(
       hoverMix.current,
       isHovering || (isMobileView && isDragging.current) ? 1 : 0,
@@ -2154,6 +2188,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
         scrollScale: [1, 1, 1],
       });
     }
+
+    /* Update hover position */
+    hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
 
     /* Calculate hover distance */
     const hoverDistance = meshRef.current
@@ -2222,9 +2259,6 @@ export default function Background3D({ onAnimationComplete }: Props) {
       vel.current.x *= 0.95;
       vel.current.y *= 0.95;
     }
-
-    /* Update hover position */
-    hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
 
     /* Theatre sync */
     if (theatre?.sequence) {
