@@ -33,3 +33,7 @@ declare module 'meshline' {
     side: THREE.Side;
   }
 }
+
+declare module 'three/examples/jsm/utils/BufferGeometryUtils.js' {
+  export * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+}

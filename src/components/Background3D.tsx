@@ -10,6 +10,7 @@ import {
   GradientTexture,
   MeshDistortMaterial,
   Sparkles,
+  useCursor,
   useScroll,
 } from '@react-three/drei';
 import {
@@ -20,7 +21,6 @@ import {
 } from '@react-three/fiber';
 import { val } from '@theatre/core';
 import { editable as e, useCurrentSheet } from '@theatre/r3f';
-import type { MutableRefObject } from 'react';
 import React, {
   Suspense,
   useCallback,
@@ -32,7 +32,76 @@ import React, {
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createNoise3D, createNoise4D } from 'simplex-noise';
 import * as THREE from 'three';
-import { MarchingCubes, ParametricGeometry, RGBELoader } from 'three-stdlib';
+import { RGBELoader } from 'three-stdlib';
+/* ─────────────────────── 1. Imports ──────────────────────────────────── */
+import {
+  apollonianGasketShaderGeometry,
+  kleinianLimitGeometry,
+  mengerSpongeShaderGeometry,
+  quaternionJuliaShaderGeometry as quaternionJuliaSetsShaderGeometry,
+  quaternionPhoenixShaderGeometry,
+} from './Background3DHelpers/fractalShaders';
+
+import {
+  /* metadata */
+  SHAPES,
+  ShapeName,
+  apollonianPackingGeometry,
+  /* NEW: Non-orientable surfaces */
+  boySurfaceGeometry,
+  cinquefoilKnotGeometry,
+  cowrieShellGeometry,
+  crystalGeometry,
+  eightKnotGeometry,
+  /* fractals, TPMS, shells, grids … */
+  fractalCubeGeometry,
+  gearShape,
+  goursatTetrahedralGeometry,
+  grannyKnotGeometry,
+  greatIcosahedronGeometry,
+  greatIcosidodecahedronGeometry,
+  /* NEW: Minimal surfaces */
+  heartShape,
+  kleinGeometry,
+  knot1Geometry,
+  knot2Geometry,
+  knot4Geometry,
+  knot5Geometry,
+  koch3DGeometry,
+  /* NEW: Fractals */
+  mandelbulbGeometry,
+  mandelbulbSliceGeometry,
+  mengerSpongeGeometry,
+  /* parametric & special shapes */
+  mobiusGeometry,
+  neoviusGeometry,
+  octahedronsGridGeometry,
+  platonicCompoundGeometry,
+  quaternionJuliaGeometry,
+  romanSurfaceGeometry,
+  sacredGeometryShape,
+  schwarzPGeometry,
+  sierpinskiIcosahedronGeometry,
+  springGeometry,
+  /* platonic / stellations / compounds */
+  stellarDodecahedronGeometry,
+  superShape3D,
+  /* supershape presets */
+  superShapeVariant1,
+  superShapeVariant2,
+  superShapeVariant3,
+  superToroidGeometry,
+  /* NEW: Superquadrics */
+  superquadricStarGeometry,
+  toroidalSuperShapeGeometry,
+  torusKnotVariationGeometry,
+  /* knots & variants */
+  trefoilKnotGeometry,
+  /* misc utilities */
+  validateAndFixGeometry,
+  wendelstein7XGeometry,
+} from './Background3DHelpers/shapeFunctions';
+
 /*  NEW: helper components  */
 import CameraRig from './CameraRig';
 import Particles from './Particles';
@@ -70,12 +139,6 @@ declare module 'three' {
     scale(x: number, y: number): this;
   }
 }
-interface MarchingCubesMesh extends THREE.Mesh {
-  field: Float32Array;
-  isolation: number;
-  reset(): void;
-  update(): void;
-}
 
 /* ────────────────── 2.   Types / helpers ─────────────────────────────── */
 type TheatreGroupProps = Omit<GroupProps, 'visible'> & { theatreKey: string };
@@ -83,6 +146,13 @@ export type NeonMaterialProps = MeshStandardMaterialProps & {
   baseColor?: string;
   envMap?: THREE.Texture | null;
 };
+/* right after ShapeName, still near the top */
+type ShaderShape =
+  | 'QuaternionPhoenixShader'
+  | 'ApollonianGasketShader'
+  | 'MergerSpongeShader'
+  | 'QuaternionJuliaSetsShader'
+  | 'KleinianLimitShader';
 
 /* random colour */
 const randHex = () =>
@@ -100,1392 +170,8 @@ const isMobile = () => {
   );
 };
 
-/* ────────────────── 3.   Geometry helpers ────────────────────────────── */
-const SHAPES = [
-  'Box',
-  'Sphere',
-  'Cylinder',
-  'Cone',
-  'Capsule',
-  'Torus',
-  'TorusKnot',
-  'Dodecahedron',
-  'Icosahedron',
-  'Octahedron',
-  'Tetrahedron',
-  'SuperShape3D',
-  'Mobius',
-  'Klein',
-  'Spring',
-  'Heart',
-  'TorusKnotVariation',
-  'Gear',
-  'Gyroid',
-  'Crystal',
-  'Seashell',
-  'TrefoilKnot',
-  'EightKnot',
-  'Knot1',
-  'Knot2',
-  'Knot4',
-  'Knot5',
-  'SuperToroid',
-  'GrannyKnot',
-  'CinquefoilKnot',
-  'StellarDodecahedron',
-  'GreatIcosidodecahedron',
-  'GreatIcosahedron',
-  'SphericalHarmonic',
-  'MetaBall',
-  'TorusField',
-  'PlatonicCompound',
-  'FractalCube',
-  'QuantumField',
-  'SacredGeometry',
-  'MandelbulbSlice',
-  'EnergyOrb',
-  'OctahedronsGrid',
-  'Wendelstein7X',
-  'SuperShapeVariant1',
-  'SuperShapeVariant2',
-  'SuperShapeVariant3',
-] as const;
-type ShapeName = (typeof SHAPES)[number];
-/* ------------------------------------------------------------------ */
-/* Enhanced Geometry Generators                                       */
-/* ------------------------------------------------------------------ */
-
-/* Supershape formula */
-
-/* Fixed SuperShape3D - properly closed */
-/* Replace the existing superShape3D function with this: */
-const superShape3D = (
-  m1 = 7,
-  n11 = 0.2,
-  n21 = 1.7,
-  n31 = 1.7,
-  m2 = 7,
-  n12 = 0.2,
-  n22 = 1.7,
-  n32 = 1.7,
-  a = 1,
-  b = 1,
-  res = 48
-) => {
-  const vertices: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-
-  // Supershape radius function
-  const superRadius = (
-    angle: number,
-    m: number,
-    n1: number,
-    n2: number,
-    n3: number
-  ) => {
-    const t1 = Math.pow(Math.abs(Math.cos((m * angle) / 4) / a), n2);
-    const t2 = Math.pow(Math.abs(Math.sin((m * angle) / 4) / b), n3);
-    const r = Math.pow(t1 + t2, -1 / n1);
-    return isFinite(r) ? r : 0;
-  };
-
-  // Generate vertices using spherical product
-  for (let i = 0; i <= res; i++) {
-    const theta = (i / res) * Math.PI; // 0 to π
-    const r1 = superRadius(theta - Math.PI / 2, m1, n11, n21, n31);
-
-    for (let j = 0; j <= res; j++) {
-      const phi = (j / res) * 2 * Math.PI; // 0 to 2π
-      const r2 = superRadius(phi, m2, n12, n22, n32);
-
-      // Spherical coordinates with supershape modulation
-      const x = r1 * Math.sin(theta) * r2 * Math.cos(phi);
-      const y = r1 * Math.sin(theta) * r2 * Math.sin(phi);
-      const z = r1 * Math.cos(theta);
-
-      vertices.push(x, y, z);
-      uvs.push(j / res, i / res);
-
-      // Create indices
-      if (i < res && j < res) {
-        const a = i * (res + 1) + j;
-        const b = a + 1;
-        const c = a + res + 1;
-        const d = c + 1;
-        indices.push(a, c, b, b, c, d);
-      }
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(vertices, 3)
-  );
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-
-  return geometry;
-};
-
-/* Add this new function after superShape3D */
-const superToroidGeometry = (s = 1.5, t = 0.5, n = 3, e = 1.5) => {
-  const vertices: number[] = [];
-  const uvs: number[] = [];
-  const indices: number[] = [];
-  const res = 48;
-
-  // Helper function for signed power
-  const signedPow = (base: number, exp: number) => {
-    return Math.sign(base) * Math.pow(Math.abs(base), exp);
-  };
-
-  for (let i = 0; i <= res; i++) {
-    const u = (i / res) * 2 * Math.PI;
-    const cu = signedPow(Math.cos(u), e);
-    const su = signedPow(Math.sin(u), e);
-
-    for (let j = 0; j <= res; j++) {
-      const v = (j / res) * 2 * Math.PI;
-      const cv = signedPow(Math.cos(v), n);
-      const sv = signedPow(Math.sin(v), n);
-
-      const x = (s + cu) * cv;
-      const y = (t + cu) * sv;
-      const z = su;
-
-      vertices.push(x * 0.3, y * 0.3, z * 0.3);
-      uvs.push(j / res, i / res);
-
-      if (i < res && j < res) {
-        const a = i * (res + 1) + j;
-        const b = a + 1;
-        const c = a + res + 1;
-        const d = c + 1;
-        indices.push(a, c, b, b, c, d);
-      }
-    }
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(vertices, 3)
-  );
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-
-  return geometry;
-};
-
-/* Fixed validateAndFixGeometry function */
-/* Fixed validateAndFixGeometry function */
-const validateAndFixGeometry = (
-  geometry: THREE.BufferGeometry,
-  shapeName: string
-): THREE.BufferGeometry => {
-  const positions = geometry.attributes.position;
-
-  if (!positions || positions.count === 0) {
-    console.warn(
-      `[Background3D] "${shapeName}" has no vertices, using sphere fallback`
-    );
-    return new THREE.SphereGeometry(1, 32, 32);
-  }
-
-  // Check for NaN values
-  const array = positions.array;
-  let hasNaN = false;
-  for (let i = 0; i < array.length; i++) {
-    if (!isFinite(array[i])) {
-      hasNaN = true;
-      break;
-    }
-  }
-
-  if (hasNaN) {
-    console.warn(
-      `[Background3D] "${shapeName}" has NaN values, using sphere fallback`
-    );
-    return new THREE.SphereGeometry(1, 32, 32);
-  }
-
-  // Compute bounding sphere safely
-  try {
-    geometry.computeBoundingSphere();
-    if (!geometry.boundingSphere || !isFinite(geometry.boundingSphere.radius)) {
-      console.warn(
-        `[Background3D] "${shapeName}" has invalid bounds, using sphere fallback`
-      );
-      return new THREE.SphereGeometry(1, 32, 32);
-    }
-  } catch {
-    // ← remove the (_err) param
-    console.warn(
-      `[Background3D] "${shapeName}" bounding sphere failed, using sphere fallback`
-    );
-    return new THREE.SphereGeometry(1, 32, 32);
-  }
-
-  return geometry;
-};
-
-/* Updated makeGeometry function with validation - move this INSIDE the component */
-// This should be inside the Background3D component after the state declarations
-
-// const superShapeRadius = (
-//   angle: number,
-//   m: number,
-//   n1: number,
-//   n2: number,
-//   n3: number,
-//   a: number,
-//   b: number
-// ) => {
-//   const t1 = Math.abs((1 / a) * Math.cos((m * angle) / 4));
-//   const t2 = Math.abs((1 / b) * Math.sin((m * angle) / 4));
-//   return Math.pow(Math.pow(t1, n2) + Math.pow(t2, n3), -1 / n1);
-// };
-
-/* Enhanced special shapes */
-const mobiusGeometry = () =>
-  new ParametricGeometry(
-    (u: number, v: number, target: THREE.Vector3) => {
-      u = u * Math.PI * 2;
-      v = v * 2 - 1;
-      const x = (1 + (v / 2) * Math.cos(u / 2)) * Math.cos(u);
-      const y = (1 + (v / 2) * Math.cos(u / 2)) * Math.sin(u);
-      const z = (v / 2) * Math.sin(u / 2);
-      target.set(x, y, z);
-    },
-    64,
-    32
-  );
-
-const kleinGeometry = () =>
-  new ParametricGeometry(
-    (u: number, v: number, target: THREE.Vector3) => {
-      u *= Math.PI * 2;
-      v *= Math.PI * 2;
-      const x =
-        (2 +
-          Math.cos(v / 2) * Math.sin(u) -
-          Math.sin(v / 2) * Math.sin(2 * u)) *
-        Math.cos(v);
-      const y =
-        (2 +
-          Math.cos(v / 2) * Math.sin(u) -
-          Math.sin(v / 2) * Math.sin(2 * u)) *
-        Math.sin(v);
-      const z =
-        Math.sin(v / 2) * Math.sin(u) + Math.cos(v / 2) * Math.sin(2 * u);
-      target.set(x * 0.3, y * 0.3, z * 0.3);
-    },
-    64,
-    32
-  );
-
-const springGeometry = () => {
-  const points: THREE.Vector3[] = [];
-  const turns = 5;
-  const radius = 0.8;
-  const height = 2;
-  const segments = 200;
-
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const angle = t * turns * Math.PI * 2;
-    const x = Math.cos(angle) * radius;
-    const y = (t - 0.5) * height;
-    const z = Math.sin(angle) * radius;
-    points.push(new THREE.Vector3(x, y, z));
-  }
-
-  return new THREE.TubeGeometry(
-    new THREE.CatmullRomCurve3(points),
-    200,
-    0.1,
-    16,
-    false
-  );
-};
-
-/* New Knot Geometries */
-const trefoilKnotGeometry = () => {
-  // Use built-in THREE.js TorusKnotGeometry as a reliable fallback
-  return new THREE.TorusKnotGeometry(1, 0.3, 128, 16, 2, 3);
-};
-
-const eightKnotGeometry = () => {
-  const points: THREE.Vector3[] = [];
-  const segments = 512;
-
-  for (let i = 0; i <= segments; i++) {
-    const t = (i / segments) * 2 * Math.PI;
-    const x = (2 + Math.cos(2 * t)) * Math.cos(3 * t);
-    const y = (2 + Math.cos(2 * t)) * Math.sin(3 * t);
-    const z = Math.sin(4 * t);
-    points.push(new THREE.Vector3(x * 0.3, y * 0.3, z * 0.3));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 512, 0.06, 20, true);
-};
-
-const knot1Geometry = () => {
-  const points: THREE.Vector3[] = [];
-  const segments = 512;
-
-  for (let i = 0; i <= segments; i++) {
-    const t = (i / segments) * 2 * Math.PI;
-    const x =
-      10 * (Math.cos(t) + Math.cos(3 * t)) + Math.cos(2 * t) + Math.cos(4 * t);
-    const y = 6 * Math.sin(t) + 10 * Math.sin(3 * t);
-    const z =
-      4 * Math.sin(3 * t) * Math.sin((5 * t) / 2) +
-      4 * Math.sin(4 * t) -
-      2 * Math.sin(6 * t);
-    points.push(new THREE.Vector3(x * 0.04, y * 0.04, z * 0.04));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 512, 0.06, 20, true);
-};
-/* Fixed Knot2 */
-const knot2Geometry = () => {
-  const points: THREE.Vector3[] = [];
-  const segments = 256; // Reduced segments
-
-  for (let i = 0; i <= segments; i++) {
-    const t = (i / segments) * 2 * Math.PI;
-    const x = Math.cos(t) + 2 * Math.cos(2 * t);
-    const y = Math.sin(t) + 2 * Math.sin(2 * t);
-    const z = Math.sin(3 * t);
-    points.push(new THREE.Vector3(x * 0.25, y * 0.25, z * 0.25));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 256, 0.08, 16, true);
-};
-
-const knot4Geometry = () => {
-  const points: THREE.Vector3[] = [];
-  const segments = 512;
-
-  for (let i = 0; i <= segments; i++) {
-    const beta = (i / segments) * Math.PI;
-    const r = 0.8 + 1.6 * Math.sin(6 * beta);
-    const theta = 2 * beta;
-    const phi = 0.6 * Math.PI * Math.sin(12 * beta);
-
-    const x = r * Math.cos(phi) * Math.cos(theta);
-    const y = r * Math.cos(phi) * Math.sin(theta);
-    const z = r * Math.sin(phi);
-    points.push(new THREE.Vector3(x * 0.3, y * 0.3, z * 0.3));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 512, 0.06, 20, true);
-};
-
-const knot5Geometry = () => {
-  const points: THREE.Vector3[] = [];
-  const segments = 512;
-
-  for (let i = 0; i <= segments; i++) {
-    const beta = (i / segments) * Math.PI;
-    const r = 0.72 * Math.sin(0.5 * Math.PI + 6 * beta);
-    const theta = 4 * beta;
-    const phi = 0.2 * Math.PI * Math.sin(6 * beta);
-
-    const x = r * Math.cos(phi) * Math.cos(theta);
-    const y = r * Math.cos(phi) * Math.sin(theta);
-    const z = r * Math.sin(phi);
-    points.push(new THREE.Vector3(x * 0.3, y * 0.3, z * 0.3));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 512, 0.06, 20, true);
-};
-
-const grannyKnotGeometry = () => {
-  const points: THREE.Vector3[] = [];
-  const segments = 512;
-
-  for (let i = 0; i <= segments; i++) {
-    const u = (i / segments) * 2 * Math.PI;
-    const x =
-      -22 * Math.cos(u) -
-      128 * Math.sin(u) -
-      44 * Math.cos(3 * u) -
-      78 * Math.sin(3 * u);
-    const y =
-      -10 * Math.cos(2 * u) -
-      27 * Math.sin(2 * u) +
-      38 * Math.cos(4 * u) +
-      46 * Math.sin(4 * u);
-    const z = 70 * Math.cos(3 * u) - 40 * Math.sin(3 * u);
-    points.push(new THREE.Vector3(x * 0.003, y * 0.003, z * 0.003));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 512, 0.06, 20, true);
-};
-
-const cinquefoilKnotGeometry = (rad = 0.08, segments = 1024) => {
-  const pts: THREE.Vector3[] = [];
-  const k = 2,
-    maxU = (4 * k + 2) * Math.PI;
-  for (let i = 0; i <= segments; i++) {
-    const u = (i / segments) * maxU;
-    const f = 2 - Math.cos((2 * u) / (2 * k + 1));
-    pts.push(
-      new THREE.Vector3(
-        Math.cos(u) * f * 0.3,
-        Math.sin(u) * f * 0.3,
-        -Math.sin((2 * u) / (2 * k + 1)) * 0.3
-      )
-    );
-  }
-  return new THREE.TubeGeometry(
-    new THREE.CatmullRomCurve3(pts, true),
-    segments,
-    rad,
-    20,
-    true
-  );
-};
-const gyroidGeometry = (
-  cells: number = 32,
-  size: number = 1,
-  variation?: number // Add optional variation parameter
-): THREE.BufferGeometry => {
-  const mc = new MarchingCubes(
-    cells,
-    new THREE.MeshStandardMaterial(), // dummy material
-    true,
-    true,
-    100000 // Add maxPolyCount parameter
-  ) as MarchingCubesMesh;
-
-  mc.isolation = 0;
-
-  const step = (2 * Math.PI) / cells;
-  let k = 0;
-
-  // Use provided variation or randomly select one
-  const selectedVariation = variation || Math.floor(Math.random() * 10) + 1;
-  console.log(`Displaying gyroid variation ${selectedVariation}`);
-
-  // First, we need to reset the field
-  for (let i = 0; i < cells * cells * cells; i++) {
-    mc.field[i] = 0;
-  }
-
-  for (let z = 0; z < cells; z++) {
-    for (let y = 0; y < cells; y++) {
-      for (let x = 0; x < cells; x++) {
-        const X = (x - cells / 2) * step;
-        const Y = (y - cells / 2) * step;
-        const Z = (z - cells / 2) * step;
-
-        let value = 0;
-
-        switch (selectedVariation) {
-          case 1: // Classic Gyroid
-            value =
-              Math.sin(X) * Math.cos(Y) +
-              Math.sin(Y) * Math.cos(Z) +
-              Math.sin(Z) * Math.cos(X);
-            break;
-
-          case 2: // Double Gyroid
-            value =
-              Math.sin(2 * X) * Math.cos(2 * Y) +
-              Math.sin(2 * Y) * Math.cos(2 * Z) +
-              Math.sin(2 * Z) * Math.cos(2 * X);
-            break;
-
-          case 3: // Hybrid Gyroid
-            value =
-              Math.sin(X) * Math.cos(2 * Y) +
-              Math.sin(2 * Y) * Math.cos(Z) +
-              Math.sin(Z) * Math.cos(2 * X);
-            break;
-
-          case 4: // Neovius Surface
-            value =
-              3 * (Math.cos(X) + Math.cos(Y) + Math.cos(Z)) +
-              4 * Math.cos(X) * Math.cos(Y) * Math.cos(Z);
-            break;
-
-          case 5: // Schwarz D Surface
-            value =
-              Math.sin(X) * Math.sin(Y) * Math.sin(Z) +
-              Math.sin(X) * Math.cos(Y) * Math.cos(Z) +
-              Math.cos(X) * Math.sin(Y) * Math.cos(Z) +
-              Math.cos(X) * Math.cos(Y) * Math.sin(Z);
-            break;
-
-          case 6: // Lidinoid Surface
-            value =
-              0.5 *
-                (Math.sin(2 * X) * Math.cos(Y) * Math.sin(Z) +
-                  Math.sin(2 * Y) * Math.cos(Z) * Math.sin(X) +
-                  Math.sin(2 * Z) * Math.cos(X) * Math.sin(Y)) -
-              0.5 *
-                (Math.cos(2 * X) * Math.cos(2 * Y) +
-                  Math.cos(2 * Y) * Math.cos(2 * Z) +
-                  Math.cos(2 * Z) * Math.cos(2 * X)) +
-              0.15;
-            break;
-
-          case 7: // Split P Surface
-            value = Math.cos(X) + Math.cos(Y) + Math.cos(Z);
-            break;
-
-          case 8: // Diamond Surface
-            value =
-              Math.sin(X) * Math.sin(Y) * Math.sin(Z) +
-              Math.sin(X) * Math.cos(Y) * Math.cos(Z) +
-              Math.cos(X) * Math.sin(Y) * Math.cos(Z) +
-              Math.cos(X) * Math.cos(Y) * Math.sin(Z);
-            break;
-
-          case 9: // Fischer-Koch S Surface
-            value =
-              Math.cos(2 * X) * Math.sin(Y) * Math.cos(Z) +
-              Math.cos(X) * Math.cos(2 * Y) * Math.sin(Z) +
-              Math.sin(X) * Math.cos(Y) * Math.cos(2 * Z);
-            break;
-
-          case 10: // Gyroid Fractal
-            value =
-              Math.sin(X) * Math.cos(Y) +
-              Math.sin(Y) * Math.cos(Z) +
-              Math.sin(Z) * Math.cos(X) +
-              0.3 *
-                (Math.sin(3 * X) * Math.cos(3 * Y) +
-                  Math.sin(3 * Y) * Math.cos(3 * Z) +
-                  Math.sin(3 * Z) * Math.cos(3 * X)) +
-              0.1 *
-                (Math.sin(5 * X) * Math.cos(5 * Y) +
-                  Math.sin(5 * Y) * Math.cos(5 * Z) +
-                  Math.sin(5 * Z) * Math.cos(5 * X));
-            break;
-
-          default: // Fallback to classic
-            value =
-              Math.sin(X) * Math.cos(Y) +
-              Math.sin(Y) * Math.cos(Z) +
-              Math.sin(Z) * Math.cos(X);
-        }
-
-        mc.field[k++] = value;
-      }
-    }
-  }
-
-  // Update the marching cubes
-  mc.update();
-
-  // Check if geometry was generated
-  if (!mc.geometry || mc.geometry.attributes.position.count === 0) {
-    console.warn('Gyroid geometry generation failed, creating fallback');
-    // Return a simple sphere as fallback
-    return new THREE.SphereGeometry(1, 32, 32);
-  }
-
-  /* clone the geometry */
-  const geo = mc.geometry.clone();
-  geo.scale(size / 2, size / 2, size / 2);
-
-  // Compute bounds and normals
-  geo.computeBoundingSphere();
-  geo.computeVertexNormals();
-
-  // Dispose of the MarchingCubes object to prevent memory leaks
-  mc.geometry.dispose();
-
-  return geo;
-};
-const torusKnotVariationGeometry = (k: number = 2) => {
-  const points: THREE.Vector3[] = [];
-  const segments = 512;
-  const maxU = (4 * k + 2) * Math.PI;
-
-  for (let i = 0; i <= segments; i++) {
-    const u = (i / segments) * maxU;
-    const factor = 2 - Math.cos((2 * u) / (2 * k + 1));
-    const x = Math.cos(u) * factor;
-    const y = Math.sin(u) * factor;
-    const z = -Math.sin((2 * u) / (2 * k + 1));
-    points.push(new THREE.Vector3(x * 0.3, y * 0.3, z * 0.3));
-  }
-
-  const curve = new THREE.CatmullRomCurve3(points, true);
-  return new THREE.TubeGeometry(curve, 512, 0.08, 20, true);
-};
-
-/* Enhanced Stellar Dodecahedron */
-/* Fixed StellarDodecahedron */
-/* Fixed StellarDodecahedron */
-const stellarDodecahedronGeometry = () => {
-  const dodeca = new THREE.DodecahedronGeometry(1);
-  const geometry = new THREE.BufferGeometry();
-  const vertices: number[] = [];
-  const indices: number[] = [];
-
-  // Get dodecahedron vertices
-  const positions = dodeca.attributes.position;
-
-  if (!positions) {
-    console.warn('Dodecahedron geometry has no position attribute');
-    return new THREE.SphereGeometry(1, 32, 32);
-  }
-
-  const posArray = positions.array;
-
-  // Handle both indexed and non-indexed geometries
-  const faces: THREE.Vector3[][] = [];
-
-  if (dodeca.index) {
-    // Indexed geometry
-    const dodecaIndices = dodeca.index.array;
-    for (let i = 0; i < dodecaIndices.length; i += 3) {
-      const v1 = new THREE.Vector3(
-        posArray[dodecaIndices[i] * 3],
-        posArray[dodecaIndices[i] * 3 + 1],
-        posArray[dodecaIndices[i] * 3 + 2]
-      );
-      const v2 = new THREE.Vector3(
-        posArray[dodecaIndices[i + 1] * 3],
-        posArray[dodecaIndices[i + 1] * 3 + 1],
-        posArray[dodecaIndices[i + 1] * 3 + 2]
-      );
-      const v3 = new THREE.Vector3(
-        posArray[dodecaIndices[i + 2] * 3],
-        posArray[dodecaIndices[i + 2] * 3 + 1],
-        posArray[dodecaIndices[i + 2] * 3 + 2]
-      );
-      faces.push([v1, v2, v3]);
-    }
-  } else {
-    // Non-indexed geometry - process every 3 vertices as a face
-    for (let i = 0; i < posArray.length; i += 9) {
-      const v1 = new THREE.Vector3(
-        posArray[i],
-        posArray[i + 1],
-        posArray[i + 2]
-      );
-      const v2 = new THREE.Vector3(
-        posArray[i + 3],
-        posArray[i + 4],
-        posArray[i + 5]
-      );
-      const v3 = new THREE.Vector3(
-        posArray[i + 6],
-        posArray[i + 7],
-        posArray[i + 8]
-      );
-      faces.push([v1, v2, v3]);
-    }
-  }
-
-  // Create stellated faces
-  faces.forEach((face) => {
-    const center = new THREE.Vector3()
-      .add(face[0])
-      .add(face[1])
-      .add(face[2])
-      .divideScalar(3);
-    const peak = center.clone().normalize().multiplyScalar(1.5);
-
-    const baseIndex = vertices.length / 3;
-
-    // Add vertices
-    vertices.push(...face[0].toArray());
-    vertices.push(...face[1].toArray());
-    vertices.push(...face[2].toArray());
-    vertices.push(...peak.toArray());
-
-    // Create pyramid faces
-    indices.push(baseIndex, baseIndex + 1, baseIndex + 3);
-    indices.push(baseIndex + 1, baseIndex + 2, baseIndex + 3);
-    indices.push(baseIndex + 2, baseIndex, baseIndex + 3);
-  });
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(vertices, 3)
-  );
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-
-  return geometry;
-};
-/* Fixed Great Icosidodecahedron */
-/* Fixed GreatIcosidodecahedron */
-/* Fixed GreatIcosidodecahedron */
-const greatIcosidodecahedronGeometry = () => {
-  const icosa = new THREE.IcosahedronGeometry(1, 1);
-  const dodeca = new THREE.DodecahedronGeometry(0.8, 0);
-
-  // Merge the two geometries
-  const geometry = new THREE.BufferGeometry();
-  const positions: number[] = [];
-  const indices: number[] = [];
-
-  // Helper function to add geometry data
-  const addGeometry = (geo: THREE.BufferGeometry, offset: number) => {
-    const pos = geo.attributes.position;
-    if (!pos) return offset;
-
-    const posArray = pos.array;
-
-    // Add positions
-    for (let i = 0; i < posArray.length; i++) {
-      positions.push(posArray[i]);
-    }
-
-    // Add indices
-    if (geo.index) {
-      const idxArray = geo.index.array;
-      for (let i = 0; i < idxArray.length; i++) {
-        indices.push(idxArray[i] + offset);
-      }
-    } else {
-      // Non-indexed geometry - create indices
-      const vertCount = posArray.length / 3;
-      for (let i = 0; i < vertCount; i += 3) {
-        indices.push(i + offset, i + 1 + offset, i + 2 + offset);
-      }
-    }
-
-    return offset + posArray.length / 3;
-  };
-
-  // Add icosahedron
-  let currentOffset = 0;
-  currentOffset = addGeometry(icosa, currentOffset);
-
-  // Add dodecahedron
-  addGeometry(dodeca, currentOffset);
-
-  if (positions.length === 0) {
-    console.warn('GreatIcosidodecahedron generation failed, using fallback');
-    return new THREE.SphereGeometry(1, 32, 32);
-  }
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(positions, 3)
-  );
-
-  if (indices.length > 0) {
-    geometry.setIndex(indices);
-  }
-
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
-
-  return geometry;
-};
-
-/* Fixed Quantum Field */
-const quantumFieldGeometry = () =>
-  new ParametricGeometry(
-    (u, v, tgt) => {
-      const θ = u * 2 * Math.PI,
-        φ = v * Math.PI;
-      const σ = 0.8,
-        k = 3;
-      const ψ =
-        Math.exp(-Math.pow(θ - Math.PI, 2) / (2 * σ * σ)) * Math.cos(k * θ);
-      const r = 0.5 + 0.4 * Math.abs(ψ);
-      tgt.set(
-        r * Math.cos(φ) * Math.cos(θ / 2),
-        r * Math.cos(φ) * Math.sin(θ / 2),
-        r * Math.sin(φ)
-      );
-    },
-    128,
-    64
-  );
-
-/* Great Icosahedron */
-const greatIcosahedronGeometry = () => {
-  const t = (1.0 + Math.sqrt(5)) / 2.0; // Golden ratio
-
-  const vertices = [
-    [-1.0, t, 0.0],
-    [1.0, t, 0.0],
-    [-1.0, -t, 0.0],
-    [1.0, -t, 0.0],
-    [0.0, -1.0, t],
-    [0.0, 1.0, t],
-    [0.0, -1.0, -t],
-    [0.0, 1.0, -t],
-    [t, 0.0, -1.0],
-    [t, 0.0, 1.0],
-    [-t, 0.0, -1.0],
-    [-t, 0.0, 1.0],
-  ];
-
-  const indices = [
-    [0, 11, 5],
-    [0, 5, 1],
-    [0, 1, 7],
-    [0, 7, 10],
-    [0, 10, 11],
-    [1, 5, 9],
-    [5, 11, 4],
-    [11, 10, 2],
-    [10, 7, 6],
-    [7, 1, 8],
-    [3, 9, 4],
-    [3, 4, 2],
-    [3, 2, 6],
-    [3, 6, 8],
-    [3, 8, 9],
-    [4, 9, 5],
-    [2, 4, 11],
-    [6, 2, 10],
-    [8, 6, 7],
-    [9, 8, 1],
-  ];
-
-  const geometry = new THREE.BufferGeometry();
-  const positions: number[] = [];
-  const indexArray: number[] = [];
-
-  // Scale down for visibility
-  const scale = 0.5;
-  vertices.forEach((v) => {
-    positions.push(v[0] * scale, v[1] * scale, v[2] * scale);
-  });
-
-  indices.forEach((face) => {
-    indexArray.push(face[0], face[1], face[2]);
-  });
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(positions, 3)
-  );
-  geometry.setIndex(indexArray);
-  geometry.computeVertexNormals();
-
-  return geometry;
-};
-
-/* Octahedrons Grid */
-const octahedronsGridGeometry = () => {
-  const geometry = new THREE.BufferGeometry();
-  const vertices: number[] = [];
-  const indices: number[] = [];
-
-  const gridSize = 3;
-  const spacing = 0.8;
-  let vertexOffset = 0;
-
-  for (let x = -gridSize; x <= gridSize; x++) {
-    for (let y = -gridSize; y <= gridSize; y++) {
-      for (let z = -gridSize; z <= gridSize; z++) {
-        if ((x + y + z) % 2 === 0) {
-          // Alternating pattern
-          const cx = x * spacing;
-          const cy = y * spacing;
-          const cz = z * spacing;
-          const size = 0.3;
-
-          // Octahedron vertices
-          const octaVerts = [
-            [cx + size, cy, cz],
-            [cx - size, cy, cz],
-            [cx, cy + size, cz],
-            [cx, cy - size, cz],
-            [cx, cy, cz + size],
-            [cx, cy, cz - size],
-          ];
-
-          octaVerts.forEach((v) => {
-            vertices.push(v[0], v[1], v[2]);
-          });
-
-          // Octahedron faces
-          const octaFaces = [
-            [0, 2, 4],
-            [2, 1, 4],
-            [1, 3, 4],
-            [3, 0, 4],
-            [2, 0, 5],
-            [1, 2, 5],
-            [3, 1, 5],
-            [0, 3, 5],
-          ];
-
-          octaFaces.forEach((face) => {
-            indices.push(
-              face[0] + vertexOffset,
-              face[1] + vertexOffset,
-              face[2] + vertexOffset
-            );
-          });
-
-          vertexOffset += 6;
-        }
-      }
-    }
-  }
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(vertices, 3)
-  );
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-
-  return geometry;
-};
-
-/* Wendelstein 7-X Stellarator */
-const wendelstein7XGeometry = () =>
-  new ParametricGeometry(
-    (u, v, tgt) => {
-      const θ = u * 2 * Math.PI; // toroidal
-      const φ = v * 2 * Math.PI; // poloidal
-      const R0 = 1.0,
-        r0 = 0.3,
-        N = 5; // 5 field periods
-      const δ = 0.15 * Math.sin(N * θ); // shaping
-      const r = r0 * (1 + δ * Math.cos(φ + (θ * N) / 5));
-      const R = R0 + r * Math.cos(φ);
-      tgt.set(
-        0.7 * R * Math.cos(θ),
-        0.7 * R * Math.sin(θ),
-        0.7 * (r * Math.sin(φ) + 0.2 * Math.sin((N * θ) / 5))
-      );
-    },
-    256,
-    64
-  );
-
-const superShapeVariant1 = () =>
-  superShape3D(3, 1.5, 1.7, 5.7, 4, 0.5, 1.7, 1.7);
-const superShapeVariant2 = () =>
-  superShape3D(5, 1.1, 1.7, 4.7, 5, 0.1, 1.7, 1.7);
-const superShapeVariant3 = () =>
-  superShape3D(40, 0.1, 2.7, 3.7, 3, 0.25, 0.5, 0.5);
-
-/* Fixed Seashell */
-const seashellGeometry = () =>
-  new ParametricGeometry(
-    (u: number, v: number, target: THREE.Vector3) => {
-      const theta = u * 4 * Math.PI; // 0 to 4π
-      const phi = v * 2 * Math.PI; // 0 to 2π
-
-      const a = 0.2;
-      const b = 0.1;
-      const c = 0.1;
-      const n = 2;
-
-      const growth = Math.exp(a * theta);
-      const radius = b * growth * (1 + c * Math.cos(phi));
-
-      const x = radius * Math.cos(n * theta);
-      const y = radius * Math.sin(n * theta);
-      const z = b * growth * c * Math.sin(phi) + (0.5 * theta) / Math.PI;
-
-      target.set(x * 0.15, z * 0.15 - 0.5, y * 0.15);
-    },
-    64,
-    32
-  );
-
-const sphericalHarmonicGeometry = () =>
-  new ParametricGeometry(
-    (u: number, v: number, target: THREE.Vector3) => {
-      const theta = u * Math.PI;
-      const phi = v * 2 * Math.PI;
-
-      // Simpler Y(2,1) spherical harmonic
-      const r = 0.5 + 0.3 * Math.sin(2 * theta) * Math.cos(phi);
-
-      const x = r * Math.sin(theta) * Math.cos(phi);
-      const y = r * Math.sin(theta) * Math.sin(phi);
-      const z = r * Math.cos(theta);
-
-      target.set(x, y, z);
-    },
-    64,
-    32
-  );
-
-const metaBallGeometry = () => {
-  const geometry = new THREE.IcosahedronGeometry(1, 4);
-  const positions = geometry.attributes.position.array;
-  const newPositions = new Float32Array(positions.length);
-
-  for (let i = 0; i < positions.length; i += 3) {
-    const x = positions[i];
-    const y = positions[i + 1];
-    const z = positions[i + 2];
-
-    const distance = Math.sqrt(x * x + y * y + z * z);
-    const metaball = 1 / (1 + Math.exp(-10 * (distance - 0.8)));
-
-    newPositions[i] = x * metaball;
-    newPositions[i + 1] = y * metaball;
-    newPositions[i + 2] = z * metaball;
-  }
-
-  geometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-};
-
-const torusFieldGeometry = () => {
-  const geometry = new THREE.BufferGeometry();
-  const vertices: number[] = [];
-
-  for (let i = 0; i < 10; i++) {
-    const majorRadius = 0.8 + i * 0.05;
-    const minorRadius = 0.1 + i * 0.02;
-    const torus = new THREE.TorusGeometry(majorRadius, minorRadius, 16, 32);
-    const matrix = new THREE.Matrix4().makeRotationZ((i * Math.PI) / 10);
-    torus.applyMatrix4(matrix);
-
-    const positions = torus.attributes.position.array;
-    for (let j = 0; j < positions.length; j++) {
-      vertices.push(positions[j]);
-    }
-  }
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(vertices, 3)
-  );
-  geometry.computeVertexNormals();
-  return geometry;
-};
-
-const platonicCompoundGeometry = () => {
-  const tetra = new THREE.TetrahedronGeometry(1);
-  const cube = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-  const octa = new THREE.OctahedronGeometry(4);
-
-  const group = new THREE.BufferGeometry();
-  const vertices: number[] = [];
-
-  [tetra, cube, octa].forEach((geo, idx) => {
-    const rotation = new THREE.Matrix4().makeRotationY((idx * Math.PI) / 3);
-    geo.applyMatrix4(rotation);
-    const positions = geo.attributes.position.array;
-    for (let i = 0; i < positions.length; i++) {
-      vertices.push(positions[i]);
-    }
-  });
-
-  group.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  group.computeVertexNormals();
-  return group;
-};
-
-const fractalCubeGeometry = () => {
-  const geometries: THREE.BoxGeometry[] = [];
-
-  const recursiveCubes = (
-    x: number,
-    y: number,
-    z: number,
-    size: number,
-    depth: number
-  ) => {
-    if (depth === 0) {
-      const cube = new THREE.BoxGeometry(size, size, size);
-      cube.translate(x, y, z);
-      geometries.push(cube);
-      return;
-    }
-
-    const newSize = size / 3;
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
-          if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 1) {
-            recursiveCubes(
-              x + dx * newSize * 2,
-              y + dy * newSize * 2,
-              z + dz * newSize * 2,
-              newSize,
-              depth - 1
-            );
-          }
-        }
-      }
-    }
-  };
-
-  recursiveCubes(0, 0, 0, 1, 2);
-
-  // Merge all geometries
-  const mergedGeometry = new THREE.BufferGeometry();
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const indices: number[] = [];
-
-  let indexOffset = 0;
-
-  geometries.forEach((geo) => {
-    const pos = geo.attributes.position.array;
-    const norm = geo.attributes.normal.array;
-    const idx = geo.index!.array;
-
-    for (let i = 0; i < pos.length; i++) {
-      positions.push(pos[i]);
-    }
-    for (let i = 0; i < norm.length; i++) {
-      normals.push(norm[i]);
-    }
-    for (let i = 0; i < idx.length; i++) {
-      indices.push(idx[i] + indexOffset);
-    }
-
-    indexOffset += pos.length / 3;
-  });
-
-  mergedGeometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(positions, 3)
-  );
-  mergedGeometry.setAttribute(
-    'normal',
-    new THREE.Float32BufferAttribute(normals, 3)
-  );
-  mergedGeometry.setIndex(indices);
-  mergedGeometry.computeBoundingSphere();
-
-  return mergedGeometry;
-};
-
-const sacredGeometryShape = () => {
-  const geometry = new THREE.BufferGeometry();
-  const vertices: number[] = [];
-  const indices: number[] = [];
-
-  // Create Flower of Life pattern with 7 spheres
-  const sphereGeo = new THREE.SphereGeometry(0.3, 16, 16);
-  const centers = [
-    [0, 0, 0], // Center
-    ...Array.from({ length: 6 }, (_, i) => [
-      Math.cos((i * Math.PI) / 3) * 0.5,
-      Math.sin((i * Math.PI) / 3) * 0.5,
-      0,
-    ]),
-  ];
-
-  let vertexOffset = 0;
-
-  centers.forEach((center) => {
-    const matrix = new THREE.Matrix4().makeTranslation(
-      center[0],
-      center[1],
-      center[2]
-    );
-    const transformedGeo = sphereGeo.clone();
-    transformedGeo.applyMatrix4(matrix);
-
-    const positions = transformedGeo.attributes.position.array;
-    const sphereIndices = transformedGeo.index!.array;
-
-    // Add vertices
-    for (let i = 0; i < positions.length; i++) {
-      vertices.push(positions[i]);
-    }
-
-    // Add indices with offset
-    for (let i = 0; i < sphereIndices.length; i++) {
-      indices.push(sphereIndices[i] + vertexOffset);
-    }
-
-    vertexOffset += positions.length / 3;
-  });
-
-  //const verts = vertices.length / 3;
-  const idx = new Uint32Array(indices);
-
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute(vertices, 3)
-  );
-  geometry.setIndex(new THREE.BufferAttribute(idx, 1));
-  geometry.computeVertexNormals();
-
-  return geometry;
-};
-
-const mandelbulbSliceGeometry = () => {
-  const geometry = new THREE.IcosahedronGeometry(1, 4);
-  const positions = geometry.attributes.position.array;
-  const newPositions = new Float32Array(positions.length);
-
-  for (let i = 0; i < positions.length; i += 3) {
-    const x = positions[i];
-    const y = positions[i + 1];
-    const z = positions[i + 2];
-
-    const length = Math.sqrt(x * x + y * y + z * z);
-    const nx = x / length;
-    const ny = y / length;
-    const nz = z / length;
-
-    const theta = Math.atan2(Math.sqrt(nx * nx + ny * ny), nz);
-    const phi = Math.atan2(ny, nx);
-
-    const n = 8;
-    const detail1 = Math.pow(Math.sin(n * theta), 2) * Math.cos(n * phi);
-    const detail2 = Math.pow(Math.cos(n * theta), 2) * Math.sin(n * phi);
-    const detail3 = Math.sin(4 * theta) * Math.cos(4 * phi);
-
-    const r =
-      1 +
-      0.15 * detail1 +
-      0.1 * detail2 +
-      0.05 * detail3 +
-      0.08 * Math.sin(8 * theta) * Math.sin(8 * phi);
-
-    const fractalNoise =
-      Math.sin(x * 10) * Math.cos(y * 10) * Math.sin(z * 10) * 0.05;
-    const finalR = r + fractalNoise;
-
-    newPositions[i] = nx * finalR;
-    newPositions[i + 1] = ny * finalR;
-    newPositions[i + 2] = nz * finalR;
-  }
-
-  geometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-};
-
-/* Fixed Energy Orb */
-const energyOrbGeometry = () => {
-  const geometry = new THREE.IcosahedronGeometry(1, 3); // Order 3 = 642 vertices
-  const positions = geometry.attributes.position.array;
-  const newPositions = new Float32Array(positions.length);
-
-  for (let i = 0; i < positions.length; i += 3) {
-    const x = positions[i];
-    const y = positions[i + 1];
-    const z = positions[i + 2];
-
-    // Normalize to get direction
-    const length = Math.sqrt(x * x + y * y + z * z);
-    const nx = x / length;
-    const ny = y / length;
-    const nz = z / length;
-
-    // Cymatic displacement
-    const deltaR = 0.1 * Math.sin(5 * x) * Math.cos(5 * y) * Math.sin(5 * z);
-    const radius = 1 + deltaR;
-
-    newPositions[i] = nx * radius;
-    newPositions[i + 1] = ny * radius;
-    newPositions[i + 2] = nz * radius;
-  }
-
-  geometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
-  geometry.computeVertexNormals();
-  return geometry;
-};
-
-/* Heart shape */
-const heartShape = (() => {
-  /*  36-point Bézier path lifted from the official docs & scaled to ±1  */
-  const outline = [
-    25, 25, 20, 0, 0, 0, -30, 0, -30, 35, -30, 35, -30, 55, -10, 77, 25, 95, 60,
-    77, 80, 55, 80, 35, 80, 35, 80, 0, 50, 0, 35, 0, 25, 25, 25, 25,
-  ] as const;
-
-  const scale = 1 / 80; // normalise to roughly unit size
-  const offX = 25,
-    offY = 47.5; // centre of original control-net
-  const map = (x: number, y: number): [number, number] => [
-    (x - offX) * scale,
-    (y - offY) * scale,
-  ];
-
-  const s = new THREE.Shape();
-  s.moveTo(...map(25, 25)); // first anchor
-
-  for (let i = 0; i < outline.length; i += 6) {
-    const [c1x, c1y, c2x, c2y, ex, ey] = outline.slice(i, i + 6);
-    s.bezierCurveTo(...map(c1x, c1y), ...map(c2x, c2y), ...map(ex, ey));
-  }
-  return s;
-})();
-
-const gearShape = (() => {
-  const s = new THREE.Shape();
-  const teeth = 12;
-  const outerRadius = 1;
-  const innerRadius = 0.7;
-  const toothHeight = 0.2;
-
-  for (let i = 0; i < teeth * 2; i++) {
-    const angle = (i / (teeth * 2)) * Math.PI * 2;
-    const radius = i % 2 === 0 ? outerRadius : outerRadius - toothHeight;
-    const x = Math.cos(angle) * radius;
-    const y = Math.sin(angle) * radius;
-    if (i === 0) s.moveTo(x, y);
-    else s.lineTo(x, y);
-  }
-  s.closePath();
-
-  const hole = new THREE.Path();
-  for (let i = 0; i <= 32; i++) {
-    const angle = (i / 32) * Math.PI * 2;
-    const x = Math.cos(angle) * innerRadius * 0.5;
-    const y = Math.sin(angle) * innerRadius * 0.5;
-    if (i === 0) hole.moveTo(x, y);
-    else hole.lineTo(x, y);
-  }
-  s.holes.push(hole);
-
-  return s;
-})();
-
-const crystalGeometry = () => {
-  const geometry = new THREE.ConeGeometry(0.8, 2, 6);
-  const geometry2 = new THREE.ConeGeometry(0.8, 0.8, 6);
-  geometry2.rotateX(Math.PI);
-  geometry2.translate(0, -1.4, 0);
-
-  const merged = new THREE.BufferGeometry();
-  const positions = Array.from(geometry.attributes.position.array);
-  const positions2 = Array.from(geometry2.attributes.position.array);
-  const indices = Array.from(geometry.index!.array);
-  const indices2 = Array.from(geometry2.index!.array).map(
-    (i) => i + positions.length / 3
-  );
-
-  merged.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute([...positions, ...positions2], 3)
-  );
-  merged.setIndex([...indices, ...indices2]);
-  merged.computeVertexNormals();
-
-  return merged;
-};
-
+const ROT_LIMIT_X = Math.PI / 2.5; // ~72° – feels natural                // NEW
+const ROT_LIMIT_Y = Math.PI; // 180° – full spin sideways
 /* ────────────────── 4.   Enhanced Materials ──────────────────────────── */
 const NeonMaterial: React.FC<NeonMaterialProps> = ({
   baseColor = '#222',
@@ -1595,10 +281,10 @@ function displace(
   dragIntensity: number = 1
 ): THREE.Vector3 {
   // Reduce noise complexity on mobile
-  const complexity = isMobileView ? 0.7 : 1;
+  const complexity = isMobileView ? 0.7 : 2;
 
   // Base noise
-  const tSlow = t * 0.025;
+  const tSlow = t * 0.0025;
   let n = noise3D(
     v.x * 0.5 * complexity,
     v.y * 0.5 * complexity,
@@ -1723,17 +409,30 @@ export default function Background3D({ onAnimationComplete }: Props) {
       }
     );
   }, []);
+  /* ====  2. STATE just below other useState calls ========== */ // NEW
+  const [hovered, setHovered] = useState(false); // NEW
+  const [grabbing, setGrabbing] = useState(false); // NEW
+  useCursor(hovered, grabbing ? 'grabbing' : 'pointer');
+  /* ====  3. CURSOR-helper (place near clampRotation) ====== */ // NEW
+  const setCanvasCursor = (style: string) => {
+    // NEW
+    gl.domElement.style.cursor = style; // NEW
+  };
 
   /* Mobile detection */
   const isMobileView = isMobile();
+  /* ─────────────  NEW HELPERS FOR ROTATION CONSTRAINTS  ───────────── */ // NEW
+  const clampRotation = (e: THREE.Euler) => {
+    // NEW
+    e.x = THREE.MathUtils.clamp(e.x, -ROT_LIMIT_X, ROT_LIMIT_X); // NEW
+    e.y = THREE.MathUtils.clamp(e.y, -ROT_LIMIT_Y, ROT_LIMIT_Y); // NEW
+  }; // NEW
 
   /* Random initial shape */
   /* Random initial shape */
   const getRandomShape = (exclude?: ShapeName): ShapeName => {
     // Filter out Gyroid on mobile
-    const availableShapes = isMobileView
-      ? SHAPES.filter((shape) => shape !== 'Gyroid')
-      : SHAPES;
+    const availableShapes = SHAPES;
 
     let shape: ShapeName;
     do {
@@ -1787,11 +486,20 @@ export default function Background3D({ onAnimationComplete }: Props) {
     config: { mass: 1, tension: 280, friction: 60 },
   }));
 
+  /* running amplitude for the noise */
+  const ampRef = useRef(0);
+  //const deformMixRef = useRef(0); // ← NEW
+
   /* refs & context */
+  const spriteRef = useRef<THREE.Points | null>(null); /* ★ NEW ★ */
   const outerGroupRef = useRef<THREE.Group>(null);
-  const meshRef = useRef<THREE.Mesh | null>(
-    null
-  ) as MutableRefObject<THREE.Mesh | null>; // mutable → no TS2540
+  /* 1️⃣  declare once, near the other refs */
+  const meshRef = useRef<
+    | THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>
+    | THREE.Points<THREE.BufferGeometry, THREE.Material | THREE.Material[]>
+    | null
+  >(null);
+
   const iconRefs = useRef<(THREE.Mesh | null)[]>([]);
   const originalPositions = useRef<Float32Array | null>(null);
   const scroll = useScroll();
@@ -1800,14 +508,72 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* shape / material state - always start with FractalCube */
   /* shape / material state - always start with FractalCube */
-  const [shape, setShape] = useState<ShapeName>(() => {
-    // If mobile and somehow Gyroid was going to be selected, use FractalCube instead
-    return isMobileView ? 'FractalCube' : 'FractalCube';
-  });
+  /* initial value must be a member of the union */
+  const [shape, setShape] = useState<ShapeName>('MergerSpongeShader');
+  const [bulb, setBulb] =
+    useState<Awaited<ReturnType<typeof mandelbulbGeometry>>>();
+  /* where the other React states sit, e.g. right after `bulb` */
+  const [shaderCloud, setShaderCloud] = useState<
+    Partial<
+      Record<
+        ShaderShape,
+        Awaited<ReturnType<typeof quaternionPhoenixShaderGeometry>>
+      >
+    >
+  >({});
   const [materialIndex, setMaterialIndex] = useState(4); // Index 4 is meshNormalMaterial
   const [color, setColor] = useState(randHex());
   const [wireframe, setWireframe] = useState(false);
-  const [gyroidVariation] = useState(() => Math.floor(Math.random() * 10) + 1);
+
+  // kick off the worker once
+  useEffect(() => {
+    let live = true;
+    mandelbulbGeometry({ dim: 100, maxIterations: 24 }).then((g) => {
+      if (live) setBulb(g);
+    });
+    return () => {
+      live = false;
+      bulb?.dispose(); // tidy up if the component unmounts
+    };
+  }, []);
+
+  useEffect(() => {
+    /* run only for the five shader shapes */
+    const need = shape as ShaderShape;
+    if (
+      ![
+        'QuaternionPhoenixShader',
+        'ApollonianGasketShader',
+        'MergerSpongeShader',
+        'QuaternionJuliaSetsShader',
+        'KleinianLimitShader',
+      ].includes(need)
+    )
+      return;
+    if (shaderCloud[need]) return; // already cached
+
+    (async () => {
+      let cloud;
+      switch (need) {
+        case 'QuaternionPhoenixShader':
+          cloud = await quaternionPhoenixShaderGeometry();
+          break;
+        case 'ApollonianGasketShader':
+          cloud = await apollonianGasketShaderGeometry();
+          break;
+        case 'MergerSpongeShader':
+          cloud = await mengerSpongeShaderGeometry();
+          break;
+        case 'QuaternionJuliaSetsShader':
+          cloud = await quaternionJuliaSetsShaderGeometry();
+          break;
+        case 'KleinianLimitShader':
+          cloud = await kleinianLimitGeometry();
+          break;
+      }
+      if (cloud) setShaderCloud((prev) => ({ ...prev, [need]: cloud }));
+    })();
+  }, [shape, shaderCloud]);
 
   /* geometry factory with new shapes */
   const makeGeometry = (kind: ShapeName): JSX.Element => {
@@ -1834,8 +600,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <octahedronGeometry args={[3, 3]} />;
       case 'Tetrahedron':
         return <tetrahedronGeometry args={[1.35, 4]} />;
-      case 'Gyroid':
-        return <primitive object={gyroidGeometry(48, 1, gyroidVariation)} />;
+
       case 'Mobius':
         return <primitive object={mobiusGeometry()} />;
       case 'Klein':
@@ -1915,47 +680,24 @@ export default function Background3D({ onAnimationComplete }: Props) {
             )}
           />
         );
-
-      case 'Seashell':
-        return (
-          <primitive
-            object={validateAndFixGeometry(seashellGeometry(), 'Seashell')}
-          />
-        );
-      case 'SphericalHarmonic':
-        return (
-          <primitive
-            object={validateAndFixGeometry(
-              sphericalHarmonicGeometry(),
-              'SphericalHarmonic'
-            )}
-          />
-        );
       case 'GreatIcosahedron':
         return <primitive object={greatIcosahedronGeometry()} />;
-      case 'SphericalHarmonic':
-        return <primitive object={sphericalHarmonicGeometry()} />;
-      case 'MetaBall':
-        return <primitive object={metaBallGeometry()} />;
-      case 'TorusField':
-        return <primitive object={torusFieldGeometry()} />;
       case 'PlatonicCompound':
         return <primitive object={platonicCompoundGeometry()} />;
       case 'FractalCube':
         return <primitive object={fractalCubeGeometry()} />;
-      case 'QuantumField':
-        return <primitive object={quantumFieldGeometry()} />;
       case 'SacredGeometry':
         return <primitive object={sacredGeometryShape()} />;
       case 'MandelbulbSlice':
         return <primitive object={mandelbulbSliceGeometry()} />;
-      case 'EnergyOrb':
-        return <primitive object={energyOrbGeometry()} />;
       case 'OctahedronsGrid':
         return <primitive object={octahedronsGridGeometry()} />;
       case 'Wendelstein7X':
         return <primitive object={wendelstein7XGeometry()} />;
-      /* In the makeGeometry function, update these cases: */
+      case 'CowrieShell':
+        return <primitive object={cowrieShellGeometry()} />;
+      case 'ToroidalSuperShape':
+        return <primitive object={toroidalSuperShapeGeometry()} />;
       case 'SuperShape3D':
         return (
           <primitive
@@ -1968,6 +710,84 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={superShapeVariant2()} />;
       case 'SuperShapeVariant3':
         return <primitive object={superShapeVariant3()} />;
+
+      case 'SchwarzP':
+        return <primitive object={schwarzPGeometry()} />;
+      case 'Neovius':
+        return <primitive object={neoviusGeometry()} />;
+      case 'BoySurface':
+        return <primitive object={boySurfaceGeometry()} />;
+      case 'RomanSurface':
+        return <primitive object={romanSurfaceGeometry()} />;
+      case 'SuperquadricStar':
+        return <primitive object={superquadricStarGeometry()} />;
+      case 'Mandelbulb':
+        /* while waiting show a loader / fallback */
+        return bulb ? (
+          <points
+            geometry={bulb.geometry}
+            material={bulb.material}
+            /* disable expensive hit-tests */
+            raycast={() => null}
+          />
+        ) : (
+          <mesh>
+            <sphereGeometry args={[0.5, 8, 8]} />
+            <meshBasicMaterial color="green" wireframe />
+          </mesh>
+        );
+      case 'QuaternionJulia':
+        return <primitive object={quaternionJuliaGeometry()} />;
+      case 'ApollonianPacking':
+        return <primitive object={apollonianPackingGeometry()} />;
+      case 'MengerSponge':
+        return <primitive object={mengerSpongeGeometry()} />;
+      case 'SierpinskiIcosahedron':
+        return <primitive object={sierpinskiIcosahedronGeometry()} />;
+      case 'Koch3D':
+        return <primitive object={koch3DGeometry()} />;
+      case 'GoursatTetrahedral':
+        return <primitive object={goursatTetrahedralGeometry()} />;
+
+      /* inside makeGeometry switch */
+      /* ——— FRACTAL SHADER MODES ——— */
+      case 'QuaternionPhoenixShader':
+      case 'ApollonianGasketShader':
+      case 'MergerSpongeShader':
+      case 'QuaternionJuliaSetsShader':
+      case 'KleinianLimitShader': {
+        const cloud = shaderCloud[kind as ShaderShape];
+
+        return cloud ? (
+          /* POINTS get displaced – lines & wire stay static */
+          <group raycast={() => null}>
+            <points
+              ref={(p) => {
+                spriteRef.current = p;
+                meshRef.current = p; // keeps hover-distance logic working
+              }}
+              geometry={cloud.geometry}
+              material={cloud.material}
+            />
+
+            <lineSegments
+              geometry={cloud.lines.geometry}
+              material={cloud.lines.material}
+            />
+            <lineSegments
+              geometry={cloud.wireframe.geometry}
+              material={cloud.wireframe.material}
+            />
+          </group>
+        ) : (
+          /* tiny placeholder while worker runs */
+          <mesh>
+            <sphereGeometry args={[0.3, 4, 4]} />
+            <meshBasicMaterial wireframe color="#444" />
+          </mesh>
+        );
+      }
+
       default:
         return <bufferGeometry />;
     }
@@ -1980,13 +800,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const dragVelocity = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragIntensity = useRef(0);
 
-  /* hover state for perlin noise */
-  const [isHovering, setIsHovering] = useState(false);
   const hoverPos = useRef(new THREE.Vector3());
   // Add mobile touch position tracking
   const mobileHoverPos = useRef(new THREE.Vector3());
   const lastTouchPos = useRef<{ x: number; y: number } | null>(null);
 
+  /* ---------------- Pointer handlers ---------------- */
   const onPointerDown = useCallback(
     (e: PointerEvent) => {
       isDragging.current = true;
@@ -2009,7 +828,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   const onPointerUp = useCallback(() => {
     isDragging.current = false;
-    // Transfer drag velocity to rotation velocity
+    setGrabbing(false); // Reset grabbing state
+    setCanvasCursor('auto'); // Reset cursor to default
+
+    // Transfer drag velocity to rotation inertia
     vel.current.x = dragVelocity.current.x * 0.5;
     vel.current.y = dragVelocity.current.y * 0.5;
     dragIntensity.current = 0;
@@ -2035,9 +857,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
       dragIntensity.current = Math.min(speed / 10, 2); // Cap at 2
 
       // Apply immediate rotation
+      // Apply immediate rotation
       if (outerGroupRef.current) {
         outerGroupRef.current.rotation.y += dragVelocity.current.x;
         outerGroupRef.current.rotation.x += dragVelocity.current.y;
+
+        clampRotation(outerGroupRef.current.rotation); // NEW
       }
 
       // Update mobile hover position during drag
@@ -2054,17 +879,27 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [gl.domElement, isMobileView]
   );
 
+  /* use _onPointerDown inside the inline handler */
+  const onPointerDownMesh = (e: THREE.Event) => {
+    setGrabbing(true);
+    setCanvasCursor('grabbing');
+    onPointerDown(e.nativeEvent as PointerEvent); // ✅ no `.current`
+  };
   useEffect(() => {
-    const canvas = gl.domElement;
-    canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointerup', onPointerUp);
+    if (spriteRef.current) meshRef.current = spriteRef.current; /* ★ NEW ★ */
+  }, [shape, spriteRef.current]);
+  /* ----------------- pointer-event subscriptions ---------------- */
+  useEffect(() => {
+    // global listeners for drag-move and drag-end
     window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+
+    // cleanup
     return () => {
-      canvas.removeEventListener('pointerdown', onPointerDown);
-      window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
     };
-  }, [gl.domElement, onPointerDown, onPointerMove, onPointerUp]);
+  }, [onPointerMove, onPointerUp]); // 📌 keep deps minimal
 
   /* Store original positions when geometry changes */
   /* Store original positions when geometry changes - FIXED TIMING */
@@ -2079,14 +914,54 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   // Add a ref callback to ensure positions are stored immediately
   // Instead of trying to modify meshRef.current directly, use the ref as intended
-  const handleMeshRef = useCallback((mesh: THREE.Mesh | null) => {
-    // ✅ typed
-    if (mesh && mesh.geometry?.attributes.position) {
-      originalPositions.current = new Float32Array(
-        mesh.geometry.attributes.position.array
-      );
-    }
-  }, []);
+  /* helper to widen the type only when the method exists */
+  type BufferAttrWithSetUsage = THREE.BufferAttribute & {
+    setUsage: (usage: number) => THREE.BufferAttribute;
+  };
+
+  /* ---------------- helper: capture pristine vertices ------------------ */
+  const handleMeshRef = useCallback(
+    (
+      mesh:
+        | THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>
+        | THREE.Points<THREE.BufferGeometry, THREE.Material | THREE.Material[]>
+        | null
+    ) => {
+      meshRef.current = mesh;
+
+      const posAttr = mesh?.geometry?.getAttribute('position') as
+        | THREE.BufferAttribute
+        | undefined;
+
+      if (posAttr) {
+        /* Capture pristine vertex positions **only if** we’ve never
+         seen this geometry (or its vertex count changed).           */
+        if (
+          !originalPositions.current ||
+          originalPositions.current.length !== posAttr.array.length
+        ) {
+          originalPositions.current = new Float32Array(posAttr.array);
+        }
+
+        /* Mark buffer dynamic for real-time edits */
+        if ('setUsage' in posAttr) {
+          (posAttr as BufferAttrWithSetUsage).setUsage(THREE.DynamicDrawUsage);
+        } else {
+          (posAttr as THREE.BufferAttribute).usage = THREE.DynamicDrawUsage;
+        }
+        /* ── keep every new geometry ≤ 1.2 units radius ───────────────────── */
+        if (mesh) {
+          mesh.geometry.computeBoundingSphere?.();
+          const r = mesh.geometry.boundingSphere?.radius ?? 1;
+          if (r > 1.2) {
+            const s = 1.2 / r;
+            mesh.scale.setScalar(s); // uniform down-scale
+          }
+        }
+      }
+    },
+    []
+  );
 
   /* click => randomize to different shape */
   const randomizeShape = () => {
@@ -2171,112 +1046,164 @@ export default function Background3D({ onAnimationComplete }: Props) {
   }, [icons.length, isMobileView]);
 
   const hoverMix = useRef(0);
+  /* ───────────────────────── frame-loop – FINAL ───────────────────────── */
+  // const AMP_DAMP = 5; // amplitude eases faster → no delay
+  const VERTEX_DAMP = 10; // vertices glide back quicker but still smooth
+  const AMP_ACTIVE = 0.002; // below this, treat deformation as OFF
 
-  /* frame-loop with enhanced perlin noise */
   useFrame(({ clock, pointer }, delta) => {
+    /* 1.  Hover / drag mix ---------------------------------------------- */
     hoverMix.current = THREE.MathUtils.damp(
       hoverMix.current,
-      isHovering || (isMobileView && isDragging.current) ? 1 : 0,
+      hovered || (isMobileView && isDragging.current) ? 1 : 0,
       4,
       delta
     );
 
-    /* Scroll-based position and scale adjustments */
+    /* 2.  Scroll wrapper motion ----------------------------------------- */
     const scrollProgress = scroll.offset;
-    const isNearBottom = scrollProgress > 0.8;
-
-    if (!isNearBottom) {
+    if (scrollProgress > 0.8) {
+      scrollApi.start({ scrollPos: [0, 0, 0], scrollScale: [1, 1, 1] });
+    } else {
       const yOffset = scrollProgress * 1.5;
       const scaleReduction = 1 - scrollProgress * 0.3;
-
       scrollApi.start({
         scrollPos: [0, yOffset, 0],
         scrollScale: [scaleReduction, scaleReduction, scaleReduction],
       });
-    } else {
-      scrollApi.start({
-        scrollPos: [0, 0, 0],
-        scrollScale: [1, 1, 1],
-      });
     }
 
-    /* Update hover position */
+    /* 3.  Pointer → world position -------------------------------------- */
     hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
-
-    /* Calculate hover distance */
     const hoverDistance = meshRef.current
       ? hoverPos.current.distanceTo(meshRef.current.position)
-      : Infinity;
+      : 1e9;
 
-    /* Apply perlin noise displacement */
-    if (meshRef.current && originalPositions.current) {
+    /* 4.  Amplitude with hard floor ------------------------------------- */
+    const targetAmp =
+      hoverMix.current * 0.35 +
+      (isDragging.current ? 0.45 * dragIntensity.current : 0);
+
+    ampRef.current = THREE.MathUtils.damp(ampRef.current, targetAmp, 4, delta);
+    const rawAmp = ampRef.current;
+    const effAmp = rawAmp; // ← keep true amplitude; gating happens later
+
+    /* 5.  Vertex displacement – jitter-free & smooth ---------------------- */
+    if (
+      meshRef.current &&
+      !(meshRef.current.geometry as THREE.BufferGeometry).userData.static
+    ) {
       const g = meshRef.current.geometry as THREE.BufferGeometry;
-      const posAttr = g.attributes.position as THREE.BufferAttribute;
+      const posAttr = g.getAttribute(
+        'position'
+      ) as THREE.BufferAttribute | null;
 
-      // Calculate base amplitude
-      const scrollAmp = scroll.offset * 0.3;
-      const hoverAmp = hoverMix.current * 0.2;
+      if (
+        posAttr &&
+        originalPositions.current &&
+        originalPositions.current.length === posAttr.array.length
+      ) {
+        // const hasNoise = effAmp > AMP_ACTIVE;
 
-      // Enhanced drag amplitude
-      const dragAmp = isDragging.current
-        ? isMobileView
-          ? 0.15
-          : 0.35 * dragIntensity.current
-        : 0;
+        for (let i = 0; i < posAttr.count; i++) {
+          const idx = i * 3;
 
-      const baseAmp = 0.01 + scrollAmp + hoverAmp + dragAmp;
+          /* pristine vertex */
+          tmpV.set(
+            originalPositions.current[idx],
+            originalPositions.current[idx + 1],
+            originalPositions.current[idx + 2]
+          );
 
-      // Apply displacement to each vertex
-      for (let i = 0; i < posAttr.count; i++) {
-        const idx = i * 3;
-        const v = tmpV.set(
-          originalPositions.current[idx],
-          originalPositions.current[idx + 1],
-          originalPositions.current[idx + 2]
-        );
+          /* displaced OR pristine */
+          const target =
+            effAmp > AMP_ACTIVE
+              ? displace(
+                  tmpV,
+                  clock.elapsedTime,
+                  effAmp,
+                  scrollProgress,
+                  hoverDistance,
+                  isDragging.current,
+                  isMobileView,
+                  dragIntensity.current
+                )
+              : tmpV;
 
-        const displaced = displace(
-          v,
-          clock.getElapsedTime(),
-          baseAmp,
-          scroll.offset,
-          hoverDistance,
-          isDragging.current,
-          isMobileView,
-          dragIntensity.current
-        );
+          /* --- NEW: boundary clamp ------------------------------------------ */
+          const MAX_R = 2.13; // 85 % of 2.5
+          const len = target.length();
+          if (len > MAX_R) target.multiplyScalar(MAX_R / len);
 
-        posAttr.setXYZ(i, displaced.x, displaced.y, displaced.z);
+          /* damp current → target */
+          posAttr.setXYZ(
+            i,
+            THREE.MathUtils.damp(
+              posAttr.array[idx],
+              target.x,
+              VERTEX_DAMP,
+              delta
+            ),
+            THREE.MathUtils.damp(
+              posAttr.array[idx + 1],
+              target.y,
+              VERTEX_DAMP,
+              delta
+            ),
+            THREE.MathUtils.damp(
+              posAttr.array[idx + 2],
+              target.z,
+              VERTEX_DAMP,
+              delta
+            )
+          );
+        }
+
+        posAttr.needsUpdate = true;
+        g.computeVertexNormals?.();
       }
-
-      posAttr.needsUpdate = true;
-      g.computeVertexNormals();
     }
 
-    /* Rotate icons with floating animation */
+    /* 6.  Shader-cloud uniforms ----------------------------------------- */
+    if (bulb) {
+      (bulb.material.uniforms.uMouse.value as THREE.Vector3).copy(
+        hoverPos.current
+      );
+      bulb.material.uniforms.uAmp.value = effAmp;
+      bulb.update(clock.elapsedTime);
+    }
+    Object.values(shaderCloud).forEach((b) => {
+      if (!b) return;
+      (b.material.uniforms.uMouse.value as THREE.Vector3).copy(
+        hoverPos.current
+      );
+      b.material.uniforms.uAmp.value = effAmp;
+      b.update(clock.elapsedTime);
+    });
+
+    /* 7.  Tech-icon float ------------------------------------------------ */
     iconRefs.current.forEach((m, i) => {
       if (!m) return;
       m.rotation.y += 0.01;
-      m.position.y =
-        iconPositions[i].y + Math.sin(clock.getElapsedTime() + i) * 0.1;
+      m.position.y = iconPositions[i].y + Math.sin(clock.elapsedTime + i) * 0.1;
     });
 
-    /* Apply rotation inertia */
+    /* 8.  Inertial rotation --------------------------------------------- */
     if (outerGroupRef.current && !isDragging.current) {
       outerGroupRef.current.rotation.y += vel.current.x;
       outerGroupRef.current.rotation.x += vel.current.y;
-
-      // Damping
+      clampRotation(outerGroupRef.current.rotation);
       vel.current.x *= 0.95;
       vel.current.y *= 0.95;
     }
 
-    /* Theatre sync */
+    /* 9.  Theatre timeline ---------------------------------------------- */
     if (theatre?.sequence) {
       theatre.sequence.position =
-        scroll.offset * val(theatre.sequence.pointer.length);
+        scrollProgress * val(theatre.sequence.pointer.length);
     }
   });
+  /* ───────────────────────────── EOF ───────────────────────────────────── */
 
   /* Validate geometry on shape change */
   useEffect(() => {
@@ -2347,65 +1274,64 @@ export default function Background3D({ onAnimationComplete }: Props) {
             scale={scl as unknown as [number, number, number]}
             position={pos as unknown as [number, number, number]}
           >
-            {/* Additional scroll-based transform wrapper */}
-            <a.group
-              position={scrollPos as unknown as [number, number, number]}
-              scale={scrollScale as unknown as [number, number, number]}
-            >
-              {/* Floating animation wrapper */}
-              <Float
-                speed={isMobileView ? 1.5 : 2}
-                rotationIntensity={isMobileView ? 0.3 : 0.5}
-                floatIntensity={isMobileView ? 0.3 : 0.5}
-                floatingRange={[-0.1, 0.1]}
+            <group ref={outerGroupRef}>
+              {/* Additional scroll-based transform wrapper */}
+              <a.group
+                position={scrollPos as unknown as [number, number, number]}
+                scale={scrollScale as unknown as [number, number, number]}
               >
-                {/* Inner morph spring */}
-                <a.group
-                  scale={
-                    shapeScale.scale as unknown as [number, number, number]
-                  }
+                {/* Floating animation wrapper */}
+                <Float
+                  speed={isMobileView ? 1.5 : 2}
+                  rotationIntensity={isMobileView ? 0.3 : 0.5}
+                  floatIntensity={isMobileView ? 0.3 : 0.5}
+                  floatingRange={[-0.1, 0.1]}
                 >
-                  {hdr && (
-                    <CubeCamera
-                      resolution={isMobileView ? 256 : 512}
-                      frames={1}
-                      envMap={hdr}
-                    >
-                      {(envMap) => (
-                        <>
-                          <e.mesh
-                            ref={(mesh: THREE.Mesh | null) => {
-                              // no implicit any
-                              meshRef.current = mesh; // property now mutable
-                              if (mesh) handleMeshRef(mesh);
-                            }}
-                            theatreKey="Background3DMesh"
-                            onPointerEnter={() =>
-                              !isMobileView && setIsHovering(true)
-                            }
-                            onPointerLeave={() =>
-                              !isMobileView && setIsHovering(false)
-                            }
-                            castShadow
-                            receiveShadow
-                          >
-                            {makeGeometry(shape)}
-                            {materialFns[materialIndex](envMap)}
-                          </e.mesh>
+                  {/* Inner morph spring */}
+                  <a.group
+                    scale={
+                      shapeScale.scale as unknown as [number, number, number]
+                    }
+                  >
+                    {hdr && (
+                      <CubeCamera
+                        resolution={isMobileView ? 256 : 512}
+                        frames={1}
+                        envMap={hdr}
+                      >
+                        {(envMap) => (
+                          <>
+                            <e.mesh
+                              ref={(m: THREE.Mesh | null) => {
+                                // ✅ typed, no implicit any
+                                meshRef.current = m;
+                                if (m) handleMeshRef(m);
+                              }}
+                              theatreKey="Background3DMesh"
+                              /* cursor + hover ↓ */
+                              onPointerEnter={() => setHovered(true)}
+                              onPointerLeave={() => setHovered(false)}
+                              onPointerDown={onPointerDownMesh} // NEW
+                              castShadow
+                              receiveShadow
+                            >
+                              {makeGeometry(shape)}
+                              {materialFns[materialIndex](envMap)}
+                            </e.mesh>
 
-                          {/* Invisible click barrier for better hit detection */}
-                          <mesh onClick={randomizeShape} visible={false}>
-                            <sphereGeometry args={[2.5, 32, 32]} />
-                            <meshBasicMaterial transparent opacity={0} />
-                          </mesh>
-                        </>
-                      )}
-                    </CubeCamera>
-                  )}
-                </a.group>
-              </Float>
-            </a.group>
-
+                            {/* Invisible click barrier for better hit detection */}
+                            <mesh onClick={randomizeShape} visible={false}>
+                              <sphereGeometry args={[2.5, 32, 32]} />
+                              <meshBasicMaterial transparent opacity={0} />
+                            </mesh>
+                          </>
+                        )}
+                      </CubeCamera>
+                    )}
+                  </a.group>
+                </Float>
+              </a.group>
+            </group>
             {/* Tech icons orbiting around the shape */}
             <Suspense fallback={null}>
               {iconPositions.map((p, i) => (
