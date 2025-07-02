@@ -1624,21 +1624,67 @@ export const boySurfaceGeometry = (res: number = 128) => {
   return geom;
 };
 
-// 5. Roman (Steiner) Surface
-export const romanSurfaceGeometry = () => {
-  return new ParametricGeometry(
-    (u: number, v: number, target: THREE.Vector3) => {
-      u *= Math.PI * 2;
-      v *= Math.PI;
-      const denom = Math.abs(Math.cos(u) + Math.cos(v)) + 0.001;
-      const x = (Math.sin(2 * u) * Math.cos(v)) / denom;
-      const y = (Math.sin(u) * Math.sin(2 * v)) / denom;
-      const z = (Math.cos(u) * Math.sin(2 * v)) / denom;
-      target.set(x * 0.5, y * 0.5, z * 0.5);
-    },
-    64,
-    64
-  );
+// 5. Roman (Steiner) Surface/* ──────────────────────────  Special Supershape  ─────────────────────────
+
+export const romanSurfaceGeometry = ({
+  segU = 128, // longitudinal segments     (≥ 64 recommended)
+  segV = 128, // latitudinal  segments
+  a = 1, // super-formula “a”         (aa in your shader)
+  b = 1, //               “b”         (bb)
+  m = 6, // symmetry count            (m )
+  n1 = 0.2, // exponent n₁               (n1)
+  n2 = 1.7, // exponent n₂               (n2)
+  n3 = 1.7, // exponent n₃               (n3)
+  r = 1.0, // overall radius multiplier (rr)
+} = {}): THREE.BufferGeometry => {
+  /* --- helper: 2-D super-formula -------------------------------------- */
+  const superFormula = (θ: number): number => {
+    const t1 = Math.pow(Math.abs(Math.cos((m * θ) / 4) / a), n2);
+    const t2 = Math.pow(Math.abs(Math.sin((m * θ) / 4) / b), n3);
+    const d = Math.pow(t1 + t2, -1 / n1);
+    return d;
+  };
+
+  /* --- generate vertices --------------------------------------------- */
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  for (let i = 0; i <= segV; i++) {
+    const v = (i / segV) * Math.PI - Math.PI / 2; // φ ∈ [−π/2 … π/2]
+    const r2 = superFormula(v);
+
+    for (let j = 0; j <= segU; j++) {
+      const u = (j / segU) * Math.PI * 2 - Math.PI; // θ ∈ [−π … π]
+      const r1 = superFormula(u);
+
+      /* Shiffman’s 3-D supershape equations */
+      const x = r * r1 * Math.cos(u) * r2 * Math.cos(v);
+      const y = r * r1 * Math.sin(u) * r2 * Math.cos(v);
+      const z = r * r2 * Math.sin(v);
+
+      positions.push(x, y, z);
+      uvs.push(j / segU, i / segV);
+
+      /* build two triangles per quad (except on the last row/col) */
+      if (i < segV && j < segU) {
+        const a = i * (segU + 1) + j;
+        const b = (i + 1) * (segU + 1) + j;
+        const c = a + 1;
+        const d = b + 1;
+        indices.push(a, b, d, a, d, c);
+      }
+    }
+  }
+
+  /* --- assemble BufferGeometry --------------------------------------- */
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals(); // crisp lighting
+
+  return geo;
 };
 
 // 6. Superquadric Star

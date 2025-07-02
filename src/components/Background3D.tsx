@@ -409,18 +409,41 @@ export default function Background3D({ onAnimationComplete }: Props) {
       }
     );
   }, []);
-  /* ====  2. STATE just below other useState calls ========== */ // NEW
-  const [hovered, setHovered] = useState(false); // NEW
-  const [grabbing, setGrabbing] = useState(false); // NEW
+  /* ==================  SPRINGS & CURSOR  ================== */
+  const [hovered, setHovered] = useState(false);
+  const [grabbing, setGrabbing] = useState(false);
   useCursor(hovered, grabbing ? 'grabbing' : 'pointer');
-  /* ====  3. CURSOR-helper (place near clampRotation) ====== */ // NEW
-  const setCanvasCursor = (style: string) => {
-    // NEW
-    gl.domElement.style.cursor = style; // NEW
+
+  /* ★ MOD – spring now represents *hover amplitude* 0 → 1  */
+  /* ──────────────  Hover / vertex-damp helpers ────────────── */
+  const FAST_IN = {
+    mass: 1,
+    tension: 190,
+    friction: 22,
+    precision: 0.001,
+    clamp: true,
   };
+  const SLOW_OUT = {
+    mass: 1,
+    tension: 120,
+    friction: 70,
+    precision: 0.001,
+    clamp: true,
+  };
+
+  const AMP_ACTIVE = 0.18; // smaller → deformation starts later       // CHANGED
+  const VERTEX_DAMP = 0.65; // higher  → slower, smoother relax         // CHANGED
+  const [{ hoverAmp }, api] = useSpring(() => ({
+    hoverAmp: 0,
+    config: SLOW_OUT,
+  }));
 
   /* Mobile detection */
   const isMobileView = isMobile();
+
+  const setCanvasCursor = (style: string) => {
+    gl.domElement.style.cursor = style;
+  };
   /* ─────────────  NEW HELPERS FOR ROTATION CONSTRAINTS  ───────────── */ // NEW
   const clampRotation = (e: THREE.Euler) => {
     // NEW
@@ -487,12 +510,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
   }));
 
   /* running amplitude for the noise */
-  const ampRef = useRef(0);
+  // const ampRef = useRef(0);
   //const deformMixRef = useRef(0); // ← NEW
 
   /* refs & context */
-  const spriteRef = useRef<THREE.Points | null>(null); /* ★ NEW ★ */
-  const outerGroupRef = useRef<THREE.Group>(null);
+  const spriteRef = useRef<THREE.Points | null>(null);
+  const outerGroupRef = useRef<THREE.Group>(null); // drag rotation
+  const spinGroupRef = useRef<THREE.Group>(null); // inertial spin
+  const hoverShellRef = useRef<THREE.Mesh>(null); // NEW – invisible hit-sphere
+
   /* 1️⃣  declare once, near the other refs */
   const meshRef = useRef<
     | THREE.Mesh<THREE.BufferGeometry, THREE.Material | THREE.Material[]>
@@ -509,7 +535,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* shape / material state - always start with FractalCube */
   /* shape / material state - always start with FractalCube */
   /* initial value must be a member of the union */
-  const [shape, setShape] = useState<ShapeName>('MergerSpongeShader');
+  const [shape, setShape] = useState<ShapeName>('Knot5');
   const [bulb, setBulb] =
     useState<Awaited<ReturnType<typeof mandelbulbGeometry>>>();
   /* where the other React states sit, e.g. right after `bulb` */
@@ -805,6 +831,27 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const mobileHoverPos = useRef(new THREE.Vector3());
   const lastTouchPos = useRef<{ x: number; y: number } | null>(null);
 
+  /* ─────────── Hover helpers with debounce & normalised amp ─────────── */
+  // const hoverTimeout: NodeJS.Timeout | null = null;
+  /* ===============  4. Hover timeout (FIX #2)  =============== */
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handlePointerEnter = (e: THREE.Event) => {
+    e.stopPropagation();
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setHovered(true);
+    api.start({ hoverAmp: 1, config: FAST_IN, immediate: true });
+  };
+
+  const handlePointerLeave = (e: THREE.Event) => {
+    e.stopPropagation();
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      //setHovered(false);
+      api.start({ hoverAmp: 0, config: SLOW_OUT });
+    }, 180); /* debounce now ≈ 180 ms (FIX #9) */
+  };
+
   /* ---------------- Pointer handlers ---------------- */
   const onPointerDown = useCallback(
     (e: PointerEvent) => {
@@ -880,10 +927,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
   );
 
   /* use _onPointerDown inside the inline handler */
+  // The onPointerDownMesh function is correct and requires no changes.
   const onPointerDownMesh = (e: THREE.Event) => {
     setGrabbing(true);
     setCanvasCursor('grabbing');
-    onPointerDown(e.nativeEvent as PointerEvent); // ✅ no `.current`
+    onPointerDown(e.nativeEvent as PointerEvent);
   };
   useEffect(() => {
     if (spriteRef.current) meshRef.current = spriteRef.current; /* ★ NEW ★ */
@@ -1045,50 +1093,57 @@ export default function Background3D({ onAnimationComplete }: Props) {
     return list;
   }, [icons.length, isMobileView]);
 
+  /* ================================================================
+   * Frame-loop setup
+   * ================================================================ */
   const hoverMix = useRef(0);
-  /* ───────────────────────── frame-loop – FINAL ───────────────────────── */
-  // const AMP_DAMP = 5; // amplitude eases faster → no delay
-  const VERTEX_DAMP = 10; // vertices glide back quicker but still smooth
-  const AMP_ACTIVE = 0.002; // below this, treat deformation as OFF
 
+  /* ─────────────────────────── Mobile drag spring ────────────────────── */
+  // Ensures the hover/distort spring is triggered while dragging on touch
+  useEffect(() => {
+    if (isMobileView) {
+      if (isDragging.current) {
+        api.start({ hoverAmp: 1 });
+      } else {
+        api.start({ hoverAmp: 0 });
+      }
+    }
+  }, [isMobileView, isDragging.current, api]);
+
+  /* ─────────────────────────── Main frame-loop ───────────────────────── */
   useFrame(({ clock, pointer }, delta) => {
-    /* 1.  Hover / drag mix ---------------------------------------------- */
-    hoverMix.current = THREE.MathUtils.damp(
-      hoverMix.current,
-      hovered || (isMobileView && isDragging.current) ? 1 : 0,
-      4,
-      delta
-    );
+    /* 1 ▸ Hover / drag mix ---------------------------------------------- */
+    hoverMix.current = hoverAmp.get(); // 0 – 1
 
-    /* 2.  Scroll wrapper motion ----------------------------------------- */
+    /* 2 ▸ Scroll wrapper ------------------------------------------------- */
     const scrollProgress = scroll.offset;
     if (scrollProgress > 0.8) {
       scrollApi.start({ scrollPos: [0, 0, 0], scrollScale: [1, 1, 1] });
     } else {
       const yOffset = scrollProgress * 1.5;
-      const scaleReduction = 1 - scrollProgress * 0.3;
+      const scaleR = 1 - scrollProgress * 0.3;
       scrollApi.start({
         scrollPos: [0, yOffset, 0],
-        scrollScale: [scaleReduction, scaleReduction, scaleReduction],
+        scrollScale: [scaleR, scaleR, scaleR],
       });
     }
 
-    /* 3.  Pointer → world position -------------------------------------- */
-    hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
+    /* 3 ▸ Pointer ↔︎ world (desktop) or drag-pos (mobile) ---------------- */
+    if (isMobileView && lastTouchPos.current) {
+      hoverPos.current.copy(mobileHoverPos.current);
+    } else {
+      hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
+    }
     const hoverDistance = meshRef.current
       ? hoverPos.current.distanceTo(meshRef.current.position)
       : 1e9;
 
-    /* 4.  Amplitude with hard floor ------------------------------------- */
-    const targetAmp =
+    /* 4 ▸ Effective deformation amplitude -------------------------------- */
+    const effAmp =
       hoverMix.current * 0.35 +
       (isDragging.current ? 0.45 * dragIntensity.current : 0);
 
-    ampRef.current = THREE.MathUtils.damp(ampRef.current, targetAmp, 4, delta);
-    const rawAmp = ampRef.current;
-    const effAmp = rawAmp; // ← keep true amplitude; gating happens later
-
-    /* 5.  Vertex displacement – jitter-free & smooth ---------------------- */
+    /* 5 ▸ Vertex displacement ------------------------------------------- */
     if (
       meshRef.current &&
       !(meshRef.current.geometry as THREE.BufferGeometry).userData.static
@@ -1098,17 +1153,16 @@ export default function Background3D({ onAnimationComplete }: Props) {
         'position'
       ) as THREE.BufferAttribute | null;
 
+      /* guard – skip if attribute missing or lengths mismatched */
       if (
         posAttr &&
         originalPositions.current &&
         originalPositions.current.length === posAttr.array.length
       ) {
-        // const hasNoise = effAmp > AMP_ACTIVE;
-
         for (let i = 0; i < posAttr.count; i++) {
           const idx = i * 3;
 
-          /* pristine vertex */
+          /* pristine */
           tmpV.set(
             originalPositions.current[idx],
             originalPositions.current[idx + 1],
@@ -1129,11 +1183,6 @@ export default function Background3D({ onAnimationComplete }: Props) {
                   dragIntensity.current
                 )
               : tmpV;
-
-          /* --- NEW: boundary clamp ------------------------------------------ */
-          const MAX_R = 2.13; // 85 % of 2.5
-          const len = target.length();
-          if (len > MAX_R) target.multiplyScalar(MAX_R / len);
 
           /* damp current → target */
           posAttr.setXYZ(
@@ -1158,51 +1207,46 @@ export default function Background3D({ onAnimationComplete }: Props) {
             )
           );
         }
-
         posAttr.needsUpdate = true;
         g.computeVertexNormals?.();
       }
     }
 
-    /* 6.  Shader-cloud uniforms ----------------------------------------- */
+    /* 6 ▸ Shader clouds -------------------------------------------------- */
     if (bulb) {
-      (bulb.material.uniforms.uMouse.value as THREE.Vector3).copy(
-        hoverPos.current
-      );
+      bulb.material.uniforms.uMouse.value.copy(hoverPos.current);
       bulb.material.uniforms.uAmp.value = effAmp;
       bulb.update(clock.elapsedTime);
     }
     Object.values(shaderCloud).forEach((b) => {
       if (!b) return;
-      (b.material.uniforms.uMouse.value as THREE.Vector3).copy(
-        hoverPos.current
-      );
+      b.material.uniforms.uMouse.value.copy(hoverPos.current);
       b.material.uniforms.uAmp.value = effAmp;
       b.update(clock.elapsedTime);
     });
 
-    /* 7.  Tech-icon float ------------------------------------------------ */
+    /* 7 ▸ Icon float ----------------------------------------------------- */
     iconRefs.current.forEach((m, i) => {
       if (!m) return;
       m.rotation.y += 0.01;
       m.position.y = iconPositions[i].y + Math.sin(clock.elapsedTime + i) * 0.1;
     });
 
-    /* 8.  Inertial rotation --------------------------------------------- */
-    if (outerGroupRef.current && !isDragging.current) {
-      outerGroupRef.current.rotation.y += vel.current.x;
-      outerGroupRef.current.rotation.x += vel.current.y;
-      clampRotation(outerGroupRef.current.rotation);
+    /* 8 ▸ Inertial rotation (spinGroupRef) ------------------------------- */
+    if (spinGroupRef.current && !isDragging.current) {
+      spinGroupRef.current.rotation.y += vel.current.x;
+      spinGroupRef.current.rotation.x += vel.current.y;
+      clampRotation(spinGroupRef.current.rotation);
       vel.current.x *= 0.95;
       vel.current.y *= 0.95;
     }
 
-    /* 9.  Theatre timeline ---------------------------------------------- */
-    if (theatre?.sequence) {
+    /* 9 ▸ Theatre-sequence sync ----------------------------------------- */
+    if (theatre?.sequence)
       theatre.sequence.position =
         scrollProgress * val(theatre.sequence.pointer.length);
-    }
   });
+
   /* ───────────────────────────── EOF ───────────────────────────────────── */
 
   /* Validate geometry on shape change */
@@ -1274,7 +1318,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
             scale={scl as unknown as [number, number, number]}
             position={pos as unknown as [number, number, number]}
           >
-            <group ref={outerGroupRef}>
+            <group ref={spinGroupRef}>
               {/* Additional scroll-based transform wrapper */}
               <a.group
                 position={scrollPos as unknown as [number, number, number]}
@@ -1303,15 +1347,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
                           <>
                             <e.mesh
                               ref={(m: THREE.Mesh | null) => {
-                                // ✅ typed, no implicit any
                                 meshRef.current = m;
                                 if (m) handleMeshRef(m);
                               }}
                               theatreKey="Background3DMesh"
-                              /* cursor + hover ↓ */
-                              onPointerEnter={() => setHovered(true)}
-                              onPointerLeave={() => setHovered(false)}
-                              onPointerDown={onPointerDownMesh} // NEW
                               castShadow
                               receiveShadow
                             >
@@ -1319,8 +1358,19 @@ export default function Background3D({ onAnimationComplete }: Props) {
                               {materialFns[materialIndex](envMap)}
                             </e.mesh>
 
-                            {/* Invisible click barrier for better hit detection */}
-                            <mesh onClick={randomizeShape} visible={false}>
+                            {/* Invisible hover / click shell – same radius for every shape */}
+                            <mesh
+                              ref={hoverShellRef}
+                              visible={false}
+                              onPointerEnter={
+                                isMobileView ? undefined : handlePointerEnter
+                              }
+                              onPointerLeave={
+                                isMobileView ? undefined : handlePointerLeave
+                              }
+                              onPointerDown={onPointerDownMesh}
+                              onClick={randomizeShape}
+                            >
                               <sphereGeometry args={[2.5, 32, 32]} />
                               <meshBasicMaterial transparent opacity={0} />
                             </mesh>
