@@ -625,7 +625,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'Octahedron':
         return <octahedronGeometry args={[3, 3]} />;
       case 'Tetrahedron':
-        return <tetrahedronGeometry args={[1.35, 4]} />;
+        return <tetrahedronGeometry args={[1.35, 6]} />;
 
       case 'Mobius':
         return <primitive object={mobiusGeometry()} />;
