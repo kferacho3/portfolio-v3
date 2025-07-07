@@ -1,6 +1,6 @@
-'use client'; // Ensures it's a Client Component
+'use client';
 
-import React, { createContext, useEffect, useState } from 'react';
+import React, { createContext, useLayoutEffect, useState } from 'react';
 
 interface ThemeContextProps {
   theme: 'light' | 'dark';
@@ -8,27 +8,27 @@ interface ThemeContextProps {
 }
 
 export const ThemeContext = createContext<ThemeContextProps>({
-  theme: 'dark', // Default theme
+  theme: 'dark',
   toggleTheme: () => {},
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark'); // Initial state
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
-  const toggleTheme = () => {
-    setTheme((prevTheme) => (prevTheme === 'dark' ? 'light' : 'dark'));
-  };
+  const toggleTheme = () =>
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
 
-  // Apply theme class to <html>
-  useEffect(() => {
+  /* useLayoutEffect → class is set before paint after hydration */
+  useLayoutEffect(() => {
+    const root = document.documentElement;
     if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
+      root.classList.add('dark');
+      root.classList.remove('light');
     } else {
-      document.documentElement.classList.add('light');
-      document.documentElement.classList.remove('dark');
+      root.classList.add('light');
+      root.classList.remove('dark');
     }
   }, [theme]);
 

@@ -2,21 +2,32 @@
 
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { FaProjectDiagram, FaRunning, FaSitemap } from 'react-icons/fa';
+import {
+  FaProjectDiagram,
+  FaRunning,
+  FaUserShield
+} from 'react-icons/fa';
+import { MdAccessibility } from 'react-icons/md';
 import {
   SiAdobe,
+  SiAmazonaws,
+  SiBlender,
   SiCss3,
   SiFigma,
   SiFramer,
   SiGit,
+  SiGraphql,
   SiHtml5,
   SiJavascript,
   SiNextdotjs,
+  SiNodedotjs,
+  SiPostgresql,
   SiPrisma,
   SiReact,
   SiReactivex,
   SiStripe,
   SiStyledcomponents,
+  SiSupabase,
   SiTailwindcss,
   SiTypescript,
 } from 'react-icons/si';
@@ -28,26 +39,30 @@ export default function SectionTwo() {
   /* ─────────────  data  ───────────── */
   const techStack = [
     { name: 'JavaScript', icon: <SiJavascript /> },
-    { name: 'CSS', icon: <SiCss3 /> },
-    { name: 'HTML', icon: <SiHtml5 /> },
-    { name: 'React', icon: <SiReact /> },
-    { name: 'Styled-Components', icon: <SiStyledcomponents /> },
     { name: 'TypeScript', icon: <SiTypescript /> },
+    { name: 'HTML', icon: <SiHtml5 /> },
+    { name: 'CSS', icon: <SiCss3 /> },
+    { name: 'React', icon: <SiReact /> },
     { name: 'Next.js', icon: <SiNextdotjs /> },
+    { name: 'Node.js', icon: <SiNodedotjs /> },
     { name: 'Tailwind CSS', icon: <SiTailwindcss /> },
+    { name: 'Styled-Components', icon: <SiStyledcomponents /> },
     { name: 'Prisma', icon: <SiPrisma /> },
     { name: 'Stripe SDK', icon: <SiStripe /> },
   ];
 
   const librariesUsed = [
+    { name: 'NextAuth.js', icon: <FaUserShield /> },
     { name: 'react-spring', icon: <SiReactivex /> },
-    { name: 'framer-motion-3d', icon: <SiFramer /> },
+    { name: 'Framer Motion 3D', icon: <SiFramer /> },
     { name: '@react-three/drei', icon: <SiReact /> },
     { name: '@react-three/rapier', icon: <SiReact /> },
     { name: '@react-three/cannon', icon: <SiReact /> },
     { name: '@react-three/gltfjsx', icon: <SiReact /> },
     { name: '@react-three/postprocessing', icon: <SiReact /> },
     { name: 'theatre.js', icon: <SiReact /> },
+    { name: 'GraphQL', icon: <SiGraphql /> },
+    { name: 'Supabase', icon: <SiSupabase /> },
   ];
 
   const additionalSkills = [
@@ -55,68 +70,46 @@ export default function SectionTwo() {
     { name: 'Agile Methodologies', icon: <FaRunning /> },
     { name: 'UI/UX Design', icon: <SiAdobe /> },
     { name: 'Figma Mock-ups', icon: <SiFigma /> },
-    { name: 'Wire-framing', icon: <FaProjectDiagram /> },
-    { name: 'Sequence Diagrams', icon: <FaSitemap /> },
-    { name: 'UML Diagrams', icon: <FaSitemap /> },
+    { name: 'Design Systems', icon: <SiAdobe /> },
+    { name: 'Accessibility (WCAG)', icon: <MdAccessibility /> },
+    { name: 'A/B Testing', icon: <SiAdobe /> },
+    { name: 'User Research', icon: <FaProjectDiagram /> },
+    { name: '3D Modeling (Blender)', icon: <SiBlender /> },
+    { name: 'AWS Amplify CI/CD', icon: <SiAmazonaws /> },
+    { name: 'PostgreSQL', icon: <SiPostgresql /> },
   ];
 
+  /* ─────────────  helpers  ───────────── */
+  const makeList = (items: typeof techStack) => (
+    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {items.map(({ name, icon }) => (
+        <li
+          key={name}
+          className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
+        >
+          {/* ICON – stays visible, turns green on hover */}
+          <span className="text-2xl text-foreground transition-colors duration-300 group-hover:text-green-400">
+            {icon}
+          </span>
+
+          {/* LABEL – keeps your fancy gradient on hover */}
+          <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+            {name}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+
   const tabContent: Record<TabName, JSX.Element> = {
-    'Tech Stack': (
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {techStack.map((item) => (
-          <li
-            key={item.name}
-            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
-          >
-            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-              {item.icon}
-            </span>
-            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-              {item.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ),
-    'Libraries Used': (
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {librariesUsed.map((item) => (
-          <li
-            key={item.name}
-            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
-          >
-            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-              {item.icon}
-            </span>
-            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-              {item.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ),
-    'Additional Skills': (
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {additionalSkills.map((item) => (
-          <li
-            key={item.name}
-            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
-          >
-            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-              {item.icon}
-            </span>
-            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-              {item.name}
-            </span>
-          </li>
-        ))}
-      </ul>
-    ),
+    'Tech Stack': makeList(techStack),
+    'Libraries Used': makeList(librariesUsed),
+    'Additional Skills': makeList(additionalSkills),
   };
 
   /* ─────────────  render  ───────────── */
   return (
-    <section className="w-full px-4 md:px-12 py-16">
+    <section className="w-full px-3 sm:px-4 md:px-8 lg:px-12 py-12 sm:py-14 md:py-16">
       <motion.h2
         className="text-3xl md:text-4xl font-bold text-center mb-10 text-foreground"
         initial={{ opacity: 0, y: 30 }}
@@ -128,7 +121,7 @@ export default function SectionTwo() {
       </motion.h2>
 
       <motion.div
-        className="mx-auto max-w-5xl border-2 border-border rounded-md hover-gradient-border"
+        className="mx-auto w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl border-2 border-border rounded-md hover-gradient-border"
         initial={{ opacity: 0, scale: 0.96 }}
         whileInView={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.4 }}

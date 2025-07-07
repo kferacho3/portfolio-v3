@@ -1,59 +1,64 @@
+/* ==========================  app/page.tsx  ==========================
+   HomePage 
+   --------------------------------------------------------------------
+   ------------------------------------------------------------------ */
+
 'use client';
 
-import SectionFour from '@/components/SectionFour';
 import { Scroll, ScrollControls } from '@react-three/drei';
 import { Suspense, useEffect, useState } from 'react';
+
 import Background3D from '../components/Background3D';
+import SectionFour from '../components/SectionFour';
 import SectionOne from '../components/SectionOne';
 import SectionThree from '../components/SectionThree';
 import SectionTwo from '../components/SectionTwo';
 
 function HomePage() {
-  const [background3DAnimationComplete, setBackground3DAnimationComplete] =
-    useState(false);
-  const [sectionOneAnimationComplete, setSectionOneAnimationComplete] =
-    useState(false);
+  /* ─────────────────────── 1. Animation flags ──────────────────────── */
+  const [bgAnimationDone, setBgAnimationDone] = useState(false);
+  const [sectionOneDone, setSectionOneDone] = useState(false);
 
-  // Determine how many scroll pages to use based on viewport width
-  const [pages, setPages] = useState(6);
+  /* ─────────────────────── 2. Scroll page count ─────────────────────── */
+  // Use a stable value for both SSR and the very first client paint
+  const [pages, setPages] = useState<number>(6.5);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const updatePages = () => {
-      setPages(window.innerWidth <= 768 ? 8 : 6.5);
+      const next = window.innerWidth <= 768 ? 8 : 6.5;
+      setPages(next);
     };
 
-    // initialize
-    updatePages();
-
+    updatePages(); // first client pass
     window.addEventListener('resize', updatePages);
+    setMounted(true); // we’re on the client
+
     return () => window.removeEventListener('resize', updatePages);
   }, []);
 
-  const handleBackground3DAnimationComplete = () => {
-    setBackground3DAnimationComplete(true);
-  };
+  /* ─────────────────────── 3. Event handlers ────────────────────────── */
+  const handleBackgroundComplete = () => setBgAnimationDone(true);
+  const handleSectionOneComplete = () => setSectionOneDone(true);
 
-  const handleSectionOneAnimationComplete = () => {
-    setSectionOneAnimationComplete(true);
-  };
+  /* ─────────────────────── 4. Hydration guard ───────────────────────── */
+  if (!mounted) return null; // prevents SSR/CSR markup mismatch flashes
 
+  /* ─────────────────────── 5. Render ────────────────────────────────── */
   return (
     <Suspense fallback={null}>
       <ScrollControls pages={pages} damping={0}>
-        {/* 3D Content */}
-        <Background3D
-          onAnimationComplete={handleBackground3DAnimationComplete}
-        />
+        {/* 3D layer  ----------------------------------------------------- */}
+        <Background3D onAnimationComplete={handleBackgroundComplete} />
 
-        {/* Always mount Scroll html, but conditionally render its content */}
+        {/* DOM layer ----------------------------------------------------- */}
         <Scroll html style={{ width: '100vw' }}>
           <main className="min-h-screen p-6">
-            {background3DAnimationComplete ? (
+            {bgAnimationDone && (
               <>
-                <SectionOne
-                  onAnimationComplete={handleSectionOneAnimationComplete}
-                />
-                {sectionOneAnimationComplete && (
+                <SectionOne onAnimationComplete={handleSectionOneComplete} />
+
+                {sectionOneDone && (
                   <>
                     <SectionTwo />
                     <SectionThree />
@@ -61,7 +66,7 @@ function HomePage() {
                   </>
                 )}
               </>
-            ) : null}
+            )}
           </main>
         </Scroll>
       </ScrollControls>
