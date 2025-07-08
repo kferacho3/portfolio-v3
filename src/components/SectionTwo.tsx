@@ -3,14 +3,15 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import {
+  FaAws,
   FaProjectDiagram,
   FaRunning,
-  FaUserShield
+  FaUserShield,
 } from 'react-icons/fa';
 import { MdAccessibility } from 'react-icons/md';
+
 import {
   SiAdobe,
-  SiAmazonaws,
   SiBlender,
   SiCss3,
   SiFigma,
@@ -75,36 +76,62 @@ export default function SectionTwo() {
     { name: 'A/B Testing', icon: <SiAdobe /> },
     { name: 'User Research', icon: <FaProjectDiagram /> },
     { name: '3D Modeling (Blender)', icon: <SiBlender /> },
-    { name: 'AWS Amplify CI/CD', icon: <SiAmazonaws /> },
+    { name: 'AWS Amplify CI/CD', icon: <FaAws /> },
     { name: 'PostgreSQL', icon: <SiPostgresql /> },
   ];
 
-  /* ─────────────  helpers  ───────────── */
-  const makeList = (items: typeof techStack) => (
-    <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {items.map(({ name, icon }) => (
-        <li
-          key={name}
-          className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
-        >
-          {/* ICON – stays visible, turns green on hover */}
-          <span className="text-2xl text-foreground transition-colors duration-300 group-hover:text-green-400">
-            {icon}
-          </span>
-
-          {/* LABEL – keeps your fancy gradient on hover */}
-          <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
-            {name}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-
   const tabContent: Record<TabName, JSX.Element> = {
-    'Tech Stack': makeList(techStack),
-    'Libraries Used': makeList(librariesUsed),
-    'Additional Skills': makeList(additionalSkills),
+    'Tech Stack': (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {techStack.map((item) => (
+          <li
+            key={item.name}
+            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
+          >
+            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.icon}
+            </span>
+            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ),
+    'Libraries Used': (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {librariesUsed.map((item) => (
+          <li
+            key={item.name}
+            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
+          >
+            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.icon}
+            </span>
+            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ),
+    'Additional Skills': (
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {additionalSkills.map((item) => (
+          <li
+            key={item.name}
+            className="flex items-center gap-3 p-3 rounded-lg group cursor-default transition-colors duration-300 hover:bg-muted/50"
+          >
+            <span className="text-2xl text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.icon}
+            </span>
+            <span className="font-medium text-foreground group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r from-green-400 via-pink-500 to-yellow-500 transition-colors duration-300">
+              {item.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ),
   };
 
   /* ─────────────  render  ───────────── */
