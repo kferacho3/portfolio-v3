@@ -136,8 +136,13 @@ export default function SectionTwo() {
 
   /* ─────────────  render  ───────────── */
   return (
-    <section className="w-full px-3 sm:px-4 md:px-8 lg:px-12 py-12 sm:py-14 md:py-16">
+    <section
+      id="skills"
+      aria-labelledby="skills-title"
+      className="w-full px-3 sm:px-4 md:px-8 lg:px-12 py-12 sm:py-14 md:py-16"
+    >
       <motion.h2
+        id="skills-title"
         className="text-3xl md:text-4xl font-bold text-center mb-10 text-foreground"
         initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}

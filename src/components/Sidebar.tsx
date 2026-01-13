@@ -38,6 +38,8 @@ const Sidebar = ({ isOpen, toggle }: SidebarProps) => {
 
   // Navigation routes updated to use button styling with border
   const navLinks = [
+    { href: '/myRoom', label: "Racho's Room" },
+    { href: '/fun', label: "Racho's Arcade" },
     { href: 'https://www.rachocreates.com', label: "Racho's Creative World" },
     { href: 'https://antiheroes.co/', label: 'Audio Visualizer' },
   ];

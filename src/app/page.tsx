@@ -9,6 +9,7 @@ import { Scroll, ScrollControls } from '@react-three/drei';
 import { Suspense, useEffect, useState } from 'react';
 
 import Background3D from '../components/Background3D';
+import CanvasProvider from '../components/CanvasProvider';
 import SectionFour from '../components/SectionFour';
 import SectionOne from '../components/SectionOne';
 import SectionThree from '../components/SectionThree';
@@ -21,12 +22,12 @@ function HomePage() {
 
   /* ─────────────────────── 2. Scroll page count ─────────────────────── */
   // Use a stable value for both SSR and the very first client paint
-  const [pages, setPages] = useState<number>(6.5);
+  const [pages, setPages] = useState<number>(7.5);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const updatePages = () => {
-      const next = window.innerWidth <= 768 ? 8 : 6.5;
+      const next = window.innerWidth <= 768 ? 9 : 7.5;
       setPages(next);
     };
 
@@ -46,31 +47,33 @@ function HomePage() {
 
   /* ─────────────────────── 5. Render ────────────────────────────────── */
   return (
-    <Suspense fallback={null}>
-      <ScrollControls pages={pages} damping={0}>
-        {/* 3D layer  ----------------------------------------------------- */}
-        <Background3D onAnimationComplete={handleBackgroundComplete} />
+    <CanvasProvider>
+      <Suspense fallback={null}>
+        <ScrollControls pages={pages} damping={0}>
+          {/* 3D layer  ----------------------------------------------------- */}
+          <Background3D onAnimationComplete={handleBackgroundComplete} />
 
-        {/* DOM layer ----------------------------------------------------- */}
-        <Scroll html style={{ width: '100vw' }}>
-          <main className="min-h-screen p-6">
-            {bgAnimationDone && (
-              <>
-                <SectionOne onAnimationComplete={handleSectionOneComplete} />
+          {/* DOM layer ----------------------------------------------------- */}
+          <Scroll html style={{ width: '100vw' }}>
+            <main className="min-h-screen p-6">
+              {bgAnimationDone && (
+                <>
+                  <SectionOne onAnimationComplete={handleSectionOneComplete} />
 
-                {sectionOneDone && (
-                  <>
-                    <SectionTwo />
-                    <SectionThree />
-                    <SectionFour />
-                  </>
-                )}
-              </>
-            )}
-          </main>
-        </Scroll>
-      </ScrollControls>
-    </Suspense>
+                  {sectionOneDone && (
+                    <>
+                      <SectionTwo />
+                      <SectionThree />
+                      <SectionFour />
+                    </>
+                  )}
+                </>
+              )}
+            </main>
+          </Scroll>
+        </ScrollControls>
+      </Suspense>
+    </CanvasProvider>
   );
 }
 

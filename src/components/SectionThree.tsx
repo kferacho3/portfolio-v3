@@ -12,14 +12,14 @@ import {
   uiUxDesigns,
 } from './SectionThreeData';
 
-/* -----------------------------  Modal Portal  ----------------------------- */
+type CategoryKey = 'featured' | 'early' | 'uiux';
+
 type ModalProps = {
   project: Project;
   onClose: () => void;
 };
 
 function ProjectModal({ project, onClose }: ModalProps) {
-  // lock background scroll
   useEffect(() => {
     const { overflow } = document.body.style;
     document.body.style.overflow = 'hidden';
@@ -28,16 +28,19 @@ function ProjectModal({ project, onClose }: ModalProps) {
     };
   }, []);
 
-  // escape-key close
-  const escHandler = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
   useEffect(() => {
+    const escHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     window.addEventListener('keydown', escHandler);
     return () => window.removeEventListener('keydown', escHandler);
-  });
+  }, [onClose]);
 
-  // avoid SSR mismatch
   const isBrowser = typeof window !== 'undefined';
   if (!isBrowser) return null;
+
+  const titleId = `project-dialog-title-${project.id}`;
+  const descId = `project-dialog-desc-${project.id}`;
 
   return createPortal(
     <AnimatePresence>
@@ -51,24 +54,28 @@ function ProjectModal({ project, onClose }: ModalProps) {
       >
         <motion.div
           key="dialog"
-          initial={{ scale: 0.9, opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={descId}
+          initial={{ scale: 0.92, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
+          exit={{ scale: 0.92, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 260, damping: 25 }}
-          className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-card shadow-2xl shadow-black/30"
+          className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10 bg-card/90 shadow-2xl shadow-black/30"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* header / hero */}
-          <div className="relative aspect-video rounded-t-3xl overflow-hidden">
+          <div className="relative aspect-video overflow-hidden rounded-t-3xl">
             <Image
               src={project.imageDesktop || project.imageMobile}
-              alt={project.title}
+              alt={`${project.title} preview`}
               fill
               priority
               className="object-cover"
             />
+            <div className="absolute inset-0 bg-gradient-to-tr from-black/60 via-black/20 to-transparent" />
             <button
-              aria-label="Close"
+              aria-label="Close project details"
               onClick={onClose}
               className="absolute top-4 right-4 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white hover:bg-black/80"
             >
@@ -76,13 +83,47 @@ function ProjectModal({ project, onClose }: ModalProps) {
             </button>
           </div>
 
-          {/* body */}
           <div className="space-y-8 p-6 md:p-10">
-            <h3 className="text-3xl font-bold">{project.title}</h3>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              Project Overview
+            </p>
+            <h3 id={titleId} className="text-3xl font-bold text-foreground">
+              {project.title}
+            </h3>
+
+            {project.description && (
+              <p
+                id={descId}
+                className="text-muted-foreground leading-relaxed"
+              >
+                {project.description}
+              </p>
+            )}
+
+            {project.highlights && project.highlights.length > 0 && (
+              <div>
+                <h4 className="mb-3 font-semibold text-foreground">
+                  Technical Highlights
+                </h4>
+                <ul className="space-y-2">
+                  {project.highlights.map((highlight, idx) => (
+                    <li
+                      key={idx}
+                      className="flex items-start gap-2 text-muted-foreground"
+                    >
+                      <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+                      <span className="leading-relaxed">{highlight}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="grid gap-8 md:grid-cols-2">
               <div>
-                <h4 className="mb-3 font-semibold">Tech Stack</h4>
+                <h4 className="mb-3 font-semibold text-foreground">
+                  Tech Stack
+                </h4>
                 <div className="flex flex-wrap gap-2">
                   {project.techStack.map((t) => (
                     <span
@@ -97,7 +138,9 @@ function ProjectModal({ project, onClose }: ModalProps) {
 
               {project.frameworks?.length ? (
                 <div>
-                  <h4 className="mb-3 font-semibold">Frameworks & Tools</h4>
+                  <h4 className="mb-3 font-semibold text-foreground">
+                    Systems & Tools
+                  </h4>
                   <div className="flex flex-wrap gap-2">
                     {project.frameworks.map((f) => (
                       <span
@@ -119,7 +162,7 @@ function ProjectModal({ project, onClose }: ModalProps) {
                 rel="noopener noreferrer"
                 className="flex-1 rounded-lg bg-primary px-6 py-3 text-center font-medium text-primary-foreground transition hover:bg-primary/90"
               >
-                View Live Project
+                Visit Live Project
               </a>
               <button
                 onClick={onClose}
@@ -136,165 +179,328 @@ function ProjectModal({ project, onClose }: ModalProps) {
   );
 }
 
-/* ------------------------------  Section  ------------------------------ */
+const buildKeywords = (project: Project) =>
+  [...project.techStack, ...(project.frameworks ?? [])].join(', ');
+
+type SpotlightProps = {
+  project: Project;
+  onSelect: (project: Project) => void;
+};
+
+function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
+  const highlights = project.highlights?.slice(0, 3) ?? [];
+
+  return (
+    <article
+      itemScope
+      itemType="https://schema.org/CreativeWork"
+      className="hover-gradient-border group relative overflow-hidden rounded-3xl border border-white/10 bg-card/60 shadow-[0_30px_70px_rgba(0,0,0,0.3)] backdrop-blur"
+    >
+      <meta itemProp="url" content={project.link} />
+      <meta itemProp="keywords" content={buildKeywords(project)} />
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="relative min-h-[240px] sm:min-h-[320px]">
+          <Image
+            src={project.imageDesktop || project.imageMobile}
+            alt={`${project.title} preview`}
+            fill
+            sizes="(max-width: 1024px) 100vw, 60vw"
+            className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+            itemProp="image"
+          />
+          <div className="absolute inset-0 bg-gradient-to-tr from-black/70 via-black/20 to-transparent" />
+          <div className="absolute left-6 bottom-6 flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+              Spotlight
+            </span>
+            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+              Featured
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-5 p-6 lg:p-8">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              Featured Build
+            </p>
+            <h3
+              itemProp="name"
+              className="text-2xl font-bold text-foreground sm:text-3xl"
+            >
+              {project.title}
+            </h3>
+          </div>
+
+          <p
+            itemProp="description"
+            className="text-sm text-muted-foreground leading-relaxed"
+          >
+            {project.description}
+          </p>
+
+          {highlights.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                Technical Contributions
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                {highlights.map((highlight, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+                    <span>{highlight}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {project.techStack.slice(0, 6).map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-muted-foreground"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => onSelect(project)}
+              className="flex-1 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-[0_10px_30px_rgba(255,255,255,0.15)] transition hover:shadow-[0_16px_40px_rgba(255,255,255,0.25)]"
+            >
+              Open Case Study
+            </button>
+            <a
+              href={project.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-center text-sm font-semibold text-foreground transition hover:border-white/40 hover:bg-white/10"
+            >
+              Visit Live Project
+            </a>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+type CardProps = {
+  project: Project;
+  onSelect: (project: Project) => void;
+  priority?: boolean;
+};
+
+function ProjectCard({ project, onSelect, priority = false }: CardProps) {
+  return (
+    <article
+      itemScope
+      itemType="https://schema.org/CreativeWork"
+      className="group h-full"
+    >
+      <meta itemProp="url" content={project.link} />
+      <meta itemProp="keywords" content={buildKeywords(project)} />
+      <button
+        type="button"
+        onClick={() => onSelect(project)}
+        aria-label={`View ${project.title} details`}
+        className="hover-gradient-border flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-card/50 text-left shadow-[0_18px_50px_rgba(0,0,0,0.25)] transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-card/70"
+      >
+        <div className="relative aspect-[16/10] overflow-hidden">
+          <Image
+            src={project.imageMobile || project.imageDesktop}
+            alt={`${project.title} preview`}
+            fill
+            priority={priority}
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover transition-transform duration-700 group-hover:scale-[1.05]"
+            itemProp="image"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+        </div>
+
+        <div className="flex h-full flex-col gap-3 p-5">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+            Project
+          </div>
+          <h3 itemProp="name" className="text-xl font-semibold text-foreground">
+            {project.title}
+          </h3>
+          <p
+            itemProp="description"
+            className="max-h-16 overflow-hidden text-sm text-muted-foreground"
+          >
+            {project.description}
+          </p>
+          <div className="mt-auto flex flex-wrap gap-2">
+            {project.techStack.slice(0, 4).map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground"
+              >
+                {t}
+              </span>
+            ))}
+            {project.techStack.length > 4 && (
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                +{project.techStack.length - 4}
+              </span>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Tap to view details
+          </span>
+        </div>
+      </button>
+    </article>
+  );
+}
+
 export default function SectionThree() {
-  const [selectedCategory, setSelectedCategory] = useState<
-    'featured' | 'early' | 'uiux'
-  >('featured');
+  const [selectedCategory, setSelectedCategory] =
+    useState<CategoryKey>('featured');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  const categories = {
-    featured: { label: 'Featured Websites', projects: featuredWebsites },
+  const categories: Record<
+    CategoryKey,
+    { label: string; projects: Project[] }
+  > = {
+    featured: { label: 'Featured Builds', projects: featuredWebsites },
     early: { label: 'Early Projects', projects: earlyProjects },
-    uiux: { label: 'UI/UX Designs', projects: uiUxDesigns },
+    uiux: { label: 'UI/UX Design', projects: uiUxDesigns },
   };
 
   const currentProjects = categories[selectedCategory].projects;
+  const spotlightProject = currentProjects[0];
+  const gridProjects = currentProjects.slice(1);
+  const categoryKeys: CategoryKey[] = ['featured', 'early', 'uiux'];
 
   return (
-    <section className="min-h-screen px-4 py-12 md:px-8 md:py-20 lg:px-12">
-      {/* ----------  Enhanced heading with better legibility  ---------- */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="mb-10 md:mb-16 relative"
-      >
-        {/* Background blur/contrast helper */}
-        <div className="absolute inset-0 -inset-x-8 md:-inset-x-16 h-full flex items-center justify-center">
-          <div className="w-full max-w-4xl h-32  rounded-3xl" />
-        </div>
-
-        {/* Main heading with enhanced visibility */}
-        <h2 className="relative text-center text-4xl font-black md:text-6xl lg:text-7xl">
-          {/* Shadow layers for better contrast */}
-          <span className="absolute inset-0 text-black/50 dark:blur-xl">
-            My Portfolio
-          </span>
-          <span className="absolute inset-0 text-black/30 dark:blur-md">
-            My Portfolio
-          </span>
-
-          {/* Main text with gradient and outline */}
-          <span
-            className="relative bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text dark:text-transparent"
-            style={{
-              textShadow: `
-                0 0 20px rgba(139, 92, 246, 0.5),
-                0 0 40px rgba(139, 92, 246, 0.3),
-                0 2px 4px rgba(0, 0, 0, 0.5),
-                0 4px 8px rgba(0, 0, 0, 0.3)
-              `,
-            }}
-          >
-            My Portfolio
-          </span>
-        </h2>
-
-        {/* Subtitle for additional context */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="relative text-center mt-4 text-lg md:text-xl text-white/90 font-medium"
-          style={{
-            textShadow: '0 2px 4px rgba(0,0,0,0.8), 0 4px 8px rgba(0,0,0,0.5)',
-          }}
-        >
-          Explore my creative journey through code and design
-        </motion.p>
-      </motion.div>
-
-      <div className="mx-auto mb-12 flex flex-wrap justify-center gap-3 md:gap-6">
-        {Object.entries(categories).map(([key, { label }]) => (
-          <motion.button
-            key={key}
-            onClick={() => setSelectedCategory(key as typeof selectedCategory)}
-            whileHover={{ scale: 1.06 }}
-            whileTap={{ scale: 0.96 }}
-            className={`rounded-full px-5 py-2 text-sm font-medium transition 
-              md:px-9 md:py-3 md:text-base
-              ${
-                selectedCategory === key
-                  ? 'bg-gradient-to-r from-primary to-purple-500 text-white shadow-lg'
-                  : 'bg-muted text-foreground hover:bg-muted-foreground/10'
-              }`}
-          >
-            {label}
-          </motion.button>
-        ))}
+    <section
+      id="projects"
+      aria-labelledby="projects-title"
+      className="relative w-full px-4 py-14 sm:px-6 md:px-8 md:py-20 lg:px-12"
+    >
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full bg-gradient-to-br from-emerald-500/25 via-pink-500/20 to-amber-400/25 blur-3xl" />
+        <div className="absolute bottom-[-10%] left-[-5%] h-64 w-64 rounded-full bg-gradient-to-br from-sky-500/20 via-purple-500/20 to-rose-500/20 blur-3xl" />
       </div>
 
-      {/* ----------  project grid with rounded widgets  ---------- */}
-      <div className="mx-auto max-w-7xl">
+      <div className="relative z-10 mx-auto max-w-6xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center"
+        >
+          <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
+            Portfolio
+          </p>
+          <h2
+            id="projects-title"
+            className="mt-3 text-4xl font-black text-foreground sm:text-5xl md:text-6xl"
+          >
+            <span className="bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400 bg-clip-text text-transparent">
+              Selected Projects
+            </span>
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-sm text-muted-foreground sm:text-base">
+            A focused collection of product-driven work where I lead UI systems,
+            build full-stack integrations, and ship immersive interactive
+            experiences.
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            {[
+              'Product UI',
+              'Design Systems',
+              'API Orchestration',
+              'Real-Time Interfaces',
+              '3D Web Experiences',
+            ].map((tag) => (
+              <span
+                key={tag}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        </motion.div>
+
+        <div className="mt-8 flex justify-center">
+          <div
+            role="tablist"
+            aria-label="Project categories"
+            className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/10 bg-card/40 p-2 backdrop-blur"
+          >
+            {categoryKeys.map((key) => {
+              const isActive = selectedCategory === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`projects-panel-${key}`}
+                  id={`projects-tab-${key}`}
+                  onClick={() => setSelectedCategory(key)}
+                  className={`rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition sm:text-sm ${
+                    isActive
+                      ? 'bg-white text-slate-900 shadow-[0_8px_30px_rgba(255,255,255,0.2)]'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {categories[key].label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <AnimatePresence mode="wait">
           <motion.div
             key={selectedCategory}
+            id={`projects-panel-${selectedCategory}`}
+            role="tabpanel"
+            aria-labelledby={`projects-tab-${selectedCategory}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.35 }}
-            className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8"
+            className="mt-10 space-y-8"
           >
-            {currentProjects.map((project, idx) => (
-              <motion.div
-                key={project.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ delay: idx * 0.05 }}
-                className="group relative cursor-pointer overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 to-purple-500/10 p-1 shadow-lg shadow-black/10 backdrop-blur"
-                onClick={() => setSelectedProject(project)}
-              >
-                {/* Inner container for better rounded corners */}
-                <div className="relative overflow-hidden rounded-lg bg-card/50 backdrop-blur-sm">
-                  <div className="aspect-[16/9] overflow-hidden">
-                    <Image
-                      src={project.imageMobile}
-                      alt={project.title}
-                      fill
-                      priority={idx < 3}
-                      sizes="(max-width:768px) 100vw, (max-width:1200px) 50vw, 33vw"
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                    {/* gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    {/* info overlay */}
-                    <div
-                      className="absolute inset-0 flex flex-col justify-end gap-4 p-6 translate-y-10 opacity-0 transition 
-                      duration-300 group-hover:translate-y-0 group-hover:opacity-100"
-                    >
-                      <h3 className="text-xl font-bold text-white md:text-2xl drop-shadow-lg">
-                        {project.title}
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {project.techStack.slice(0, 3).map((t) => (
-                          <span
-                            key={t}
-                            className="rounded-full bg-white/20 px-3 py-1 text-xs text-white backdrop-blur"
-                          >
-                            {t}
-                          </span>
-                        ))}
-                        {project.techStack.length > 3 && (
-                          <span className="rounded-full bg-white/20 px-3 py-1 text-xs text-white backdrop-blur">
-                            +{project.techStack.length - 3}
-                          </span>
-                        )}
-                      </div>
-                      <button className="self-start rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition hover:bg-white/90">
-                        View Details
-                      </button>
-                    </div>
-                  </div>
+            {spotlightProject && (
+              <ProjectSpotlight
+                project={spotlightProject}
+                onSelect={setSelectedProject}
+              />
+            )}
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {gridProjects.map((project, idx) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onSelect={setSelectedProject}
+                  priority={selectedCategory === 'featured' && idx < 2}
+                />
+              ))}
+              {gridProjects.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-card/30 p-6 text-center text-sm text-muted-foreground">
+                  More work is on the way. The spotlight project covers the most
+                  recent build.
                 </div>
-              </motion.div>
-            ))}
+              )}
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>
 
-      {/* ----------  modal ---------- */}
       {selectedProject && (
         <ProjectModal
           project={selectedProject}

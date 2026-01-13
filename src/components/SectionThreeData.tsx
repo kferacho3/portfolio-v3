@@ -7,6 +7,7 @@ export interface Project {
   imageMobile: string;
   link: string;
   description: string;
+  highlights?: string[];
   techStack: string[];
   frameworks: string[];
 }
@@ -16,6 +17,32 @@ export interface Project {
 /* -------------------------------------------------------------------------- */
 
 export const featuredWebsites: Project[] = [
+  {
+    id: 0,
+    title: 'Zom AI',
+    imageDesktop: 'https://zom.ai/og.png',
+    imageMobile: 'https://zom.ai/og.png',
+    link: 'https://zom.ai',
+    description:
+      'Lead frontend and UI engineering across the product. Built the app shell and component architecture, delivered responsive UX from mobile to desktop, and orchestrated complex API integrations with authenticated workflows and synchronized state.',
+    highlights: [
+      'Owned the design system and reusable component library for the core UI.',
+      'Integrated secure authentication, role-based routing, and session handling.',
+      'Connected multiple backend endpoints and built real-time UI synchronization.',
+      'Shipped performance profiling, accessibility improvements, and QA release checks.',
+      'Instrumented analytics and error tracking for production observability.',
+    ],
+    techStack: [
+      'TypeScript',
+      'React',
+      'Next.js',
+      'API Integrations',
+      'Authentication',
+      'State Management',
+      'Design Systems',
+    ],
+    frameworks: [],
+  },
   {
     id: 1,
     title: 'Sunny Island Pepper Sauce',

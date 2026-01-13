@@ -19,6 +19,9 @@ const AnimatedLink: React.FC<AnimatedLinkProps> = ({
   className,
 }) => {
   const colors = ['#39FF14', '#FFA500', '#9400D3', '#FF1493', '#FFFF00']; // Neon green, orange, purple, pink, yellow
+  const isExternal =
+    !!link &&
+    (link.startsWith('http') || link.startsWith('mailto:') || link.startsWith('tel:'));
 
   return (
     <motion.a
@@ -31,8 +34,8 @@ const AnimatedLink: React.FC<AnimatedLinkProps> = ({
         borderColor: 'transparent', // Remove border on hover
       }}
       transition={{ duration: 0.3 }}
-      target="_blank"
-      rel="noopener noreferrer"
+      target={isExternal ? '_blank' : undefined}
+      rel={isExternal ? 'noopener noreferrer' : undefined}
     >
       {icon && <span className="mr-2">{icon}</span>}
       {text}

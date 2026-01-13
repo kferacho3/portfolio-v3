@@ -4,6 +4,7 @@ import { MoonIcon, SunIcon } from '@heroicons/react/24/solid';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useContext, useEffect, useState } from 'react';
 import { FaGithub, FaLinkedin } from 'react-icons/fa';
 import { ThemeContext } from '../contexts/ThemeContext';
@@ -15,6 +16,33 @@ const Navbar: React.FC = () => {
   const [menuOpen, setMenuOpen] = useState(false); // To control the grid animation
   const [navbarVisible, setNavbarVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const pathname = usePathname();
+  const baseNavLinkClass =
+    'relative inline-flex items-center justify-center rounded-full border border-transparent px-4 py-1.5 text-[11px] font-semibold tracking-wide transition sm:text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70';
+  const navLinkClass = (isActive: boolean) =>
+    [
+      baseNavLinkClass,
+      theme === 'dark'
+        ? 'text-white/70 hover:text-white'
+        : 'text-gray-700 hover:text-gray-900',
+      isActive
+        ? theme === 'dark'
+          ? 'border-white/30 bg-gradient-to-r from-emerald-400/20 via-pink-500/20 to-amber-400/20 text-white shadow-[0_10px_30px_-20px_rgba(16,185,129,0.5)]'
+          : 'border-gray-200 bg-gradient-to-r from-emerald-200 via-pink-200 to-amber-200 text-gray-900 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.25)]'
+        : theme === 'dark'
+          ? 'hover:bg-white/10'
+          : 'hover:bg-black/5',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  const navPillClass =
+    theme === 'dark'
+      ? 'border border-white/10 bg-white/5 shadow-[0_12px_30px_-22px_rgba(0,0,0,0.65)]'
+      : 'border border-gray-200/70 bg-white/80 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.2)]';
+  const primaryLinks = [
+    { href: '/myRoom', label: "Racho's Room" },
+    { href: '/fun', label: "Racho's Arcade" },
+  ];
 
   // Define bright colors
   const brightColors = ['#39FF14', '#FF00FF', '#FFA500'];
@@ -66,19 +94,40 @@ const Navbar: React.FC = () => {
         initial={{ y: 0 }}
         animate={{ y: navbarVisible ? 0 : '-100%' }}
         transition={{ duration: 0.3 }}
+        aria-label="Primary"
       >
         <div className="flex items-center justify-between px-4 py-3 shadow-md">
-          {/* Left: Logo */}
-          <div className="flex-shrink-0 ml-[2%]">
-            <Link href="/">
+          {/* Left: Logo + Primary Links */}
+          <div className="ml-[2%] flex items-center gap-4">
+            <Link href="/" aria-label="Go to homepage">
               <Image
                 src="/logo.png"
-                alt="MyLogo"
+                alt="Kamal Feracho logo"
                 width={600}
                 height={600}
                 className="h-8 w-auto"
               />
             </Link>
+            <nav
+              className={`hidden items-center gap-1.5 rounded-full px-1.5 py-1 backdrop-blur sm:flex ${navPillClass}`}
+            >
+              {primaryLinks.map((link) => {
+                const isActive =
+                  link.href.startsWith('/') &&
+                  (pathname === link.href ||
+                    pathname?.startsWith(`${link.href}/`));
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={navLinkClass(isActive)}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
 
           {/* Center: Social Icons with hover effects */}
@@ -157,6 +206,8 @@ const Navbar: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Mobile nav links removed - available in sidebar instead */}
       </motion.nav>
 
       {/* Sidebar */}

@@ -1,0 +1,50 @@
+body {
+  font: 100% Helvetica, sans-serif;
+
+}
+/*
+.p5Canvas {
+  display: flex;
+  justify-self: start;
+  align-items: center;
+  margin-right: auto;
+  margin-left: auto;
+  margin: 0 auto; 
+  width: 100% !important;
+  min-width: 135vh;
+  min-height: 215vh;
+  max-height: 230vh;
+  height: 100%!important;
+  margin-top: 348px;
+  margin-bottom: 200px;
+  z-index: 10000000;
+  border-radius: 20px;
+  transform: scale(0.6) translateY(0px);
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  pointer-events: all;
+}
+*/
+
+.fun {
+
+  background-image: url(funBg.svg) ;
+}
+
+
+
+ @media only screen and (max-width: 420px) {
+    .p5Canvas {
+      zoom: 0.6;
+      transform: scale(0.57) translateX(10px) translateY(-80px);
+    
+  }
+ 
+}
+
+.processing {
+  /* opacity: 0.1; */
+  position: absolute;
+  display: none;
+}

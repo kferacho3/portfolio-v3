@@ -303,6 +303,10 @@ export const SHAPES = [
   'Sphere',
   'Cylinder',
   'Cone',
+  'TriPrism',
+  'PentPrism',
+  'HexPrism',
+  'StarPrism',
   'Capsule',
   'Torus',
   // platonic & std
@@ -361,9 +365,12 @@ export const SHAPES = [
   'Mandelbulb',
   'QuaternionJulia',
   'ApollonianPacking',
+  'ApollonianPyramid',
   'MengerSponge',
+  'MengerSpongeDense',
   'SierpinskiIcosahedron',
   'Koch3D',
+  'Koch3DDeep',
   'GoursatTetrahedral',
   // NEW: Fractal Shaders
   'QuaternionPhoenixShader',
@@ -371,6 +378,53 @@ export const SHAPES = [
   'MergerSpongeShader',
   'QuaternionJuliaSetsShader',
   'KleinianLimitShader',
+  // NEW: Ultra-rare surfaces & attractor tubes
+  'EnneperSurface',
+  'HelicoidSurface',
+  'CatenoidSurface',
+  'ScherkSurface',
+  'DupinCyclide',
+  'SphericalHarmonics',
+  'TorusFlower',
+  'TwistedSuperEllipsoid',
+  'LorenzAttractorTube',
+  'RosslerAttractorTube',
+  'HypotrochoidKnot',
+  'SuperformulaSpiral',
+  'NautilusShell',
+  'Oloid',
+  // NEW: Links & Polyhedra (Phase 4)
+  'TorusLink',
+  'BorromeanRings',
+  'LissajousKnot',
+  'RhombicDodecahedron',
+  'TruncatedIcosahedron',
+  'DisdyakisTriacontahedron',
+  // NEW: 4D Projections (Phase 4)
+  'TesseractHull',
+  'Cell16Hull',
+  'Cell24Hull',
+  'Cell600Hull',
+  // NEW: Strange Attractors (Phase 4)
+  'LorenzAttractor',
+  'AizawaAttractor',
+  'ThomasAttractor',
+  'HalvorsenAttractor',
+  'ChenAttractor',
+  'RosslerAttractor',
+  'DadrasAttractor',
+  'SprottAttractor',
+  // NEW: Implicit Surfaces (Phase 4)
+  'GyroidSurface',
+  'SchwarzDSurface',
+  'MetaballSurface',
+  'BlobbySurface',
+  // NEW: Harmonic Surfaces (Phase 4)
+  'SphericalHarmonic',
+  'HarmonicSuperposition',
+  'FourierBlob',
+  'AtomicOrbital',
+  'ToroidalHarmonic',
 ] as const;
 export type ShapeName = (typeof SHAPES)[number];
 /* ------------------------------------------------------------------ */
@@ -1420,6 +1474,50 @@ export const mandelbulbSliceGeometry = () => {
   return geometry;
 };
 
+const makePrismGeometry = (
+  sides: number,
+  radius = 0.95,
+  height = 1.6
+) => new THREE.CylinderGeometry(radius, radius, height, sides, 1, false);
+
+export const triPrismGeometry = () => makePrismGeometry(3);
+export const pentPrismGeometry = () => makePrismGeometry(5);
+export const hexPrismGeometry = () => makePrismGeometry(6);
+
+export const starShape = (() => {
+  const s = new THREE.Shape();
+  const spikes = 5;
+  const outerRadius = 1;
+  const innerRadius = 0.45;
+
+  for (let i = 0; i < spikes * 2; i++) {
+    const angle = (i / (spikes * 2)) * Math.PI * 2;
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    if (i === 0) s.moveTo(x, y);
+    else s.lineTo(x, y);
+  }
+  s.closePath();
+  return s;
+})();
+
+export const starPrismGeometry = () => {
+  const depth = 0.7;
+  const geometry = new THREE.ExtrudeGeometry(starShape, {
+    depth,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    steps: 2,
+    bevelSize: 0.08,
+    bevelThickness: 0.08,
+  });
+  geometry.translate(0, 0, -depth / 2);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
 /* Heart shape */
 export const heartShape = (() => {
   /*  36-point Bézier path lifted from the official docs & scaled to ±1  */
@@ -1957,7 +2055,7 @@ export const apollonianPackingGeometry = (
 };
 
 // 10. Menger Sponge (level 2 for performance)
-export const mengerSpongeGeometry = () => {
+export const mengerSpongeGeometry = (level = 2, size = 8) => {
   const geometry = new THREE.BufferGeometry();
   const vertices: number[] = [];
   const indices: number[] = [];
@@ -2083,7 +2181,7 @@ export const mengerSpongeGeometry = () => {
     return currentOffset;
   };
 
-  generateMenger(0, 0, 0, 8, 2, 0);
+  generateMenger(0, 0, 0, size, level, 0);
 
   geometry.setAttribute(
     'position',
@@ -2354,3 +2452,828 @@ export const goursatTetrahedralGeometry = (depth = 6): THREE.BufferGeometry => {
   geom.computeBoundingSphere();
   return geom;
 };
+
+/* ──────────────────  Ultra‑rare: surfaces & attractors  ──────────────────
+   These are deliberately "eye‑candy" geometries: parametric minimal surfaces,
+   attractor tubes, and convex hull curiosities.
+   They're designed to look wild *before* simplex deformation is applied.
+   ---------------------------------------------------------------------- */
+
+/** Center a geometry at the origin and scale it to a target bounding radius. */
+const normalizeGeometry = (
+  g: THREE.BufferGeometry,
+  targetRadius = 1
+): THREE.BufferGeometry => {
+  g.computeBoundingBox?.();
+  if (g.boundingBox) {
+    const c = new THREE.Vector3();
+    g.boundingBox.getCenter(c);
+    g.translate(-c.x, -c.y, -c.z);
+  }
+
+  g.computeBoundingSphere?.();
+  const r = g.boundingSphere?.radius ?? 1;
+  if (isFinite(r) && r > 1e-6) {
+    const s = targetRadius / r;
+    g.scale(s, s, s);
+  }
+
+  g.computeVertexNormals?.();
+  g.computeBoundingSphere?.();
+  return g;
+};
+
+/** Signed power (keeps sign; used for superquadrics). */
+const spow = (x: number, e: number) => Math.sign(x) * Math.pow(Math.abs(x), e);
+
+/** Helper: tube geometry from a list of points, centered & normalized. */
+const tubeFromPoints = (
+  pts: THREE.Vector3[],
+  tubularSegments: number,
+  radius: number,
+  radialSegments: number,
+  closed = false
+) => {
+  const curve = new THREE.CatmullRomCurve3(pts, closed, 'catmullrom', 0.15);
+  const geom = new THREE.TubeGeometry(
+    curve,
+    tubularSegments,
+    radius,
+    radialSegments,
+    closed
+  );
+  return normalizeGeometry(geom);
+};
+
+/* 1) Enneper surface (minimal surface) */
+export const enneperSurfaceGeometry = (uSeg = 120, vSeg = 120) => {
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      // map 0..1 → -2..2
+      const U = (u * 2 - 1) * 2.0;
+      const V = (v * 2 - 1) * 2.0;
+
+      const x = U - (U * U * U) / 3 + U * V * V;
+      const y = V - (V * V * V) / 3 + V * U * U;
+      const z = U * U - V * V;
+
+      target.set(x, y, z).multiplyScalar(0.22);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 2) Helicoid surface (spiral ramp) */
+export const helicoidSurfaceGeometry = (uSeg = 140, vSeg = 90) => {
+  const a = 0.18; // pitch
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      // u = radial, v = angle
+      const r = (u * 2 - 1) * 1.15;
+      const ang = (v * 2 - 1) * Math.PI * 3.2;
+
+      const x = r * Math.cos(ang);
+      const y = r * Math.sin(ang);
+      const z = a * ang;
+      target.set(x, y, z);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 3) Catenoid surface (minimal surface "waist") */
+export const catenoidSurfaceGeometry = (uSeg = 140, vSeg = 90) => {
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      const ang = u * Math.PI * 2;
+      const t = (v * 2 - 1) * 1.2;
+
+      const ch = Math.cosh(t);
+      const x = ch * Math.cos(ang);
+      const y = ch * Math.sin(ang);
+      const z = t;
+
+      target.set(x, y, z).multiplyScalar(0.55);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 4) Scherk's first minimal surface (clamped to avoid infinities) */
+export const scherkSurfaceGeometry = (uSeg = 160, vSeg = 160) => {
+  const clamp = (x: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, x));
+
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      const x = (u * 2 - 1) * 1.15;
+      const y = (v * 2 - 1) * 1.15;
+
+      const cx = clamp(Math.cos(x), 0.12, 1.0);
+      const cy = clamp(Math.cos(y), 0.12, 1.0);
+      const z = Math.log(cy / cx) * 0.35;
+
+      target.set(x, y, z);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 5) Dupin cyclide (toroidal "pinched" surface) */
+export const dupinCyclideGeometry = (uSeg = 160, vSeg = 120) => {
+  const a = 1.25;
+  const b = 0.55;
+  const c = 0.35;
+
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      const U = u * Math.PI * 2;
+      const V = v * Math.PI * 2;
+      const den = a - c * Math.cos(U);
+
+      const x = (a * (c * Math.cos(U) + b) * Math.cos(V)) / den;
+      const y = (a * (c * Math.cos(U) + b) * Math.sin(V)) / den;
+      const z = (c * Math.sin(U) * (a * Math.cos(V) - b)) / den;
+
+      target.set(x, y, z).multiplyScalar(0.62);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 6) Spherical harmonics "alien mask" surface (high symmetry) */
+export const sphericalHarmonicsGeometry = (
+  detail = 128,
+  seed = Math.floor(Math.random() * 1e9)
+) => {
+  // tiny deterministic PRNG so the surface is stable per call
+  const mulberry32 = (a0: number) => {
+    let a = a0 >>> 0;
+    return () => {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  const rnd = mulberry32(seed);
+
+  const g = new THREE.SphereGeometry(1, detail, Math.floor(detail * 0.75));
+  const pos = g.attributes.position.array as Float32Array;
+
+  // Even-ish frequencies help the "kaleidoscopic" symmetry feel.
+  const m1 = 2 + Math.floor(rnd() * 6) * 2;
+  const n1 = 2 + Math.floor(rnd() * 6) * 2;
+  const m2 = 2 + Math.floor(rnd() * 5) * 2;
+  const n2 = 2 + Math.floor(rnd() * 5) * 2;
+
+  const w1 = 0.22 + rnd() * 0.15;
+  const w2 = 0.12 + rnd() * 0.12;
+  const w3 = 0.08 + rnd() * 0.10;
+
+  for (let i = 0; i < pos.length; i += 3) {
+    const x = pos[i];
+    const y = pos[i + 1];
+    const z = pos[i + 2];
+
+    const r = Math.hypot(x, y, z) + 1e-9;
+    const nx = x / r;
+    const ny = y / r;
+    const nz = z / r;
+
+    const theta = Math.acos(ny); // 0..π
+    const phi = Math.atan2(nz, nx); // -π..π
+
+    const h1 = Math.sin(m1 * theta) * Math.cos(n1 * phi);
+    const h2 = Math.cos(m2 * theta) * Math.sin(n2 * phi);
+    const h3 = Math.sin(4 * theta) * Math.cos(6 * phi);
+
+    const rr = 1 + w1 * h1 + w2 * h2 + w3 * h3;
+
+    pos[i] = nx * rr;
+    pos[i + 1] = ny * rr;
+    pos[i + 2] = nz * rr;
+  }
+
+  g.computeVertexNormals();
+  return normalizeGeometry(g);
+};
+
+/* 7) Torus "flower" (petal‑modulated torus) */
+export const torusFlowerGeometry = (uSeg = 180, vSeg = 120) => {
+  const R = 1.0;
+  const baseTube = 0.26;
+  const petals = 7;
+
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      const U = u * Math.PI * 2;
+      const V = v * Math.PI * 2;
+
+      const tube = baseTube * (1.0 + 0.35 * Math.sin(petals * U));
+      const x = (R + tube * Math.cos(V)) * Math.cos(U);
+      const z = (R + tube * Math.cos(V)) * Math.sin(U);
+      const y = tube * Math.sin(V) + 0.08 * Math.sin(3.0 * U + 2.0 * V);
+
+      target.set(x, y, z);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 8) Twisted super‑ellipsoid (superquadric + twist) */
+export const twistedSuperEllipsoidGeometry = (
+  uSeg = 160,
+  vSeg = 120,
+  e1 = 0.38,
+  e2 = 0.65,
+  twist = 1.65
+) => {
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      // u: -π/2..π/2, v: -π..π
+      const U = (u * 2 - 1) * (Math.PI / 2);
+      const V = (v * 2 - 1) * Math.PI;
+
+      const cu = Math.cos(U);
+      const su = Math.sin(U);
+      const cv = Math.cos(V);
+      const sv = Math.sin(V);
+
+      let x = spow(cu, e1) * spow(cv, e2);
+      let y = spow(su, e1);
+      let z = spow(cu, e1) * spow(sv, e2);
+
+      // Twist around Y by height
+      const ang = y * twist;
+      const cs = Math.cos(ang);
+      const sn = Math.sin(ang);
+      const tx = x * cs - z * sn;
+      const tz = x * sn + z * cs;
+
+      x = tx;
+      z = tz;
+
+      target.set(x, y, z);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 9) Lorenz attractor tube (legacy version for shapeFunctions) */
+export const lorenzAttractorTubeGeometry = (
+  tubularSegments = 700,
+  radialSegments = 16
+) => {
+  const sigma = 10;
+  const rho = 28;
+  const beta = 8 / 3;
+  const dt = 0.01;
+
+  let x = 0.1,
+    y = 0,
+    z = 0;
+
+  const pts: THREE.Vector3[] = [];
+  const steps = Math.max(1200, tubularSegments + 400);
+
+  for (let i = 0; i < steps; i++) {
+    const dx = sigma * (y - x);
+    const dy = x * (rho - z) - y;
+    const dz = x * y - beta * z;
+
+    x += dx * dt;
+    y += dy * dt;
+    z += dz * dt;
+
+    if (i > 250) {
+      pts.push(new THREE.Vector3(x, y, z).multiplyScalar(0.045));
+    }
+  }
+
+  return tubeFromPoints(
+    pts,
+    Math.min(tubularSegments, pts.length - 1),
+    0.085,
+    radialSegments,
+    false
+  );
+};
+
+/* 10) Rössler attractor tube (legacy version for shapeFunctions) */
+export const rosslerAttractorTubeGeometry = (
+  tubularSegments = 700,
+  radialSegments = 16
+) => {
+  const a = 0.2;
+  const b = 0.2;
+  const c = 5.7;
+  const dt = 0.02;
+
+  let x = 0.1,
+    y = 0.1,
+    z = 0.1;
+
+  const pts: THREE.Vector3[] = [];
+  const steps = Math.max(1200, tubularSegments + 400);
+
+  for (let i = 0; i < steps; i++) {
+    const dx = -y - z;
+    const dy = x + a * y;
+    const dz = b + z * (x - c);
+
+    x += dx * dt;
+    y += dy * dt;
+    z += dz * dt;
+
+    if (i > 250) {
+      pts.push(new THREE.Vector3(x, y, z).multiplyScalar(0.09));
+    }
+  }
+
+  return tubeFromPoints(
+    pts,
+    Math.min(tubularSegments, pts.length - 1),
+    0.075,
+    radialSegments,
+    false
+  );
+};
+
+/* 11) Hypotrochoid "spiro‑knot" tube */
+export const hypotrochoidKnotGeometry = (
+  tubularSegments = 520,
+  radialSegments = 16
+) => {
+  const R = 1.0;
+  const r = 0.33;
+  const d = 0.62;
+  const loops = 10;
+
+  const pts: THREE.Vector3[] = [];
+  const n = tubularSegments + 1;
+
+  for (let i = 0; i < n; i++) {
+    const t = (i / (n - 1)) * Math.PI * 2 * loops;
+    const k = (R - r) / r;
+
+    const x = (R - r) * Math.cos(t) + d * Math.cos(k * t);
+    const y = (R - r) * Math.sin(t) - d * Math.sin(k * t);
+    const z = 0.55 * Math.sin(3 * t) + 0.18 * Math.sin(9 * t);
+
+    pts.push(new THREE.Vector3(x, z, y).multiplyScalar(0.55));
+  }
+
+  return tubeFromPoints(pts, tubularSegments, 0.08, radialSegments, true);
+};
+
+/* 12) Superformula spiral tube (2D superformula projected into 3D) */
+export const superformulaSpiralGeometry = (
+  tubularSegments = 700,
+  radialSegments = 16
+) => {
+  // classic superformula parameters (tweak these for more insanity)
+  const m = 9;
+  const n1 = 0.24;
+  const n2 = 1.7;
+  const n3 = 1.7;
+  const a = 1;
+  const b = 1;
+
+  const superR = (ang: number) => {
+    const t1 = Math.pow(Math.abs(Math.cos((m * ang) / 4) / a), n2);
+    const t2 = Math.pow(Math.abs(Math.sin((m * ang) / 4) / b), n3);
+    const r = Math.pow(t1 + t2, -1 / n1);
+    return isFinite(r) ? r : 0;
+  };
+
+  const loops = 3.0;
+  const pts: THREE.Vector3[] = [];
+  const n = tubularSegments + 1;
+
+  for (let i = 0; i < n; i++) {
+    const t = (i / (n - 1)) * Math.PI * 2 * loops;
+    const r = superR(t) * (0.72 + 0.22 * Math.sin(t * 0.35));
+
+    const x = r * Math.cos(t);
+    const z = r * Math.sin(t);
+    const y = 0.55 * Math.sin(2.0 * t) + 0.22 * Math.cos(7.0 * t);
+
+    pts.push(new THREE.Vector3(x, y, z));
+  }
+
+  return tubeFromPoints(pts, tubularSegments, 0.08, radialSegments, false);
+};
+
+/* 13) Nautilus shell (log‑spiral surface) */
+export const nautilusShellGeometry = (uSeg = 180, vSeg = 120) => {
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      const t = u * Math.PI * 2 * 3.25; // turns
+      const V = v * Math.PI * 2;
+
+      // growth curve (tempered exponential so it doesn't explode)
+      const g = Math.pow(1.85, u * 2.15);
+
+      const R = 0.18 * g;
+      const tube = 0.12 * g;
+
+      const x = (R + tube * Math.cos(V)) * Math.cos(t);
+      const y = (R + tube * Math.cos(V)) * Math.sin(t);
+      const z = tube * Math.sin(V) + 0.06 * t;
+
+      target.set(x, y, z);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 14) Oloid (convex hull of two perpendicular circles) */
+export const oloidGeometry = (samplesPerCircle = 160) => {
+  const pts: THREE.Vector3[] = [];
+  const r = 1;
+
+  // Circle A: xz-plane, centered at origin
+  for (let i = 0; i < samplesPerCircle; i++) {
+    const t = (i / samplesPerCircle) * Math.PI * 2;
+    pts.push(new THREE.Vector3(Math.cos(t) * r, 0, Math.sin(t) * r));
+  }
+
+  // Circle B: yz-plane, centered at (0, 0, +1)
+  for (let i = 0; i < samplesPerCircle; i++) {
+    const t = (i / samplesPerCircle) * Math.PI * 2;
+    pts.push(new THREE.Vector3(0, Math.cos(t) * r, 1 + Math.sin(t) * r));
+  }
+
+  try {
+    const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const geom = new ConvexGeometry(pts);
+    geom.computeVertexNormals();
+    return normalizeGeometry(geom);
+  } catch {
+    // Fallback to a simple sphere if ConvexGeometry fails
+    return new THREE.SphereGeometry(1, 32, 32);
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   NEW SHAPES - Phase 4: Links, Polyhedra, and Advanced Geometries
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * (p,q)-Torus Link - Two or more torus knots linked together
+ * Creates beautiful intertwined curves
+ */
+export const torusLinkGeometry = (p: number = 2, q: number = 3, loops: number = 2) => {
+  const allPoints: THREE.Vector3[][] = [];
+  
+  for (let loop = 0; loop < loops; loop++) {
+    const points: THREE.Vector3[] = [];
+    const phaseOffset = (loop / loops) * Math.PI * 2;
+    const segments = 256;
+    
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * Math.PI * 2;
+      const r = 0.5 + 0.2 * Math.cos(q * t + phaseOffset);
+      const x = r * Math.cos(p * t);
+      const y = r * Math.sin(p * t);
+      const z = 0.2 * Math.sin(q * t + phaseOffset);
+      points.push(new THREE.Vector3(x, y, z));
+    }
+    allPoints.push(points);
+  }
+  
+  // Combine all tube geometries
+  const geometries: THREE.BufferGeometry[] = [];
+  for (const points of allPoints) {
+    const curve = new THREE.CatmullRomCurve3(points, true);
+    geometries.push(new THREE.TubeGeometry(curve, 200, 0.04, 12, true));
+  }
+  
+  // Merge geometries
+  return mergeGeometries(geometries);
+};
+
+/**
+ * Borromean Rings - Three interlocked rings where no two are directly linked
+ * Removing any one frees the other two
+ */
+export const borromeanRingsGeometry = () => {
+  const createRing = (
+    axis: 'x' | 'y' | 'z',
+    offset: number = 0,
+    phase: number = 0
+  ): THREE.Vector3[] => {
+    const points: THREE.Vector3[] = [];
+    const segments = 128;
+    const R = 0.6; // Major radius
+    const amplitude = 0.25; // Wave amplitude
+    
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) * Math.PI * 2;
+      
+      // Base circle with sinusoidal modulation for interlocking
+      let x = R * Math.cos(t);
+      let y = R * Math.sin(t);
+      let z = amplitude * Math.sin(3 * t + phase);
+      
+      // Rotate based on axis
+      if (axis === 'y') {
+        [x, z] = [z, x];
+      } else if (axis === 'z') {
+        [y, z] = [z, y];
+      }
+      
+      points.push(new THREE.Vector3(x, y + offset, z));
+    }
+    return points;
+  };
+  
+  const rings = [
+    createRing('x', 0, 0),
+    createRing('y', 0.15, Math.PI * 2 / 3),
+    createRing('z', -0.15, Math.PI * 4 / 3),
+  ];
+  
+  const geometries = rings.map(points => {
+    const curve = new THREE.CatmullRomCurve3(points, true);
+    return new THREE.TubeGeometry(curve, 100, 0.05, 12, true);
+  });
+  
+  return mergeGeometries(geometries);
+};
+
+/**
+ * Lissajous Knot - Parametric knot defined by Lissajous curves
+ * Beautiful mathematical curves with controllable complexity
+ */
+export const lissajousKnotGeometry = (
+  nx: number = 3,
+  ny: number = 2,
+  nz: number = 5,
+  phaseX: number = 0.7,
+  phaseY: number = 0.2
+) => {
+  const points: THREE.Vector3[] = [];
+  const segments = 512;
+  
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const x = Math.cos(nx * t + phaseX) * 0.5;
+    const y = Math.cos(ny * t + phaseY) * 0.5;
+    const z = Math.cos(nz * t) * 0.5;
+    points.push(new THREE.Vector3(x, y, z));
+  }
+  
+  const curve = new THREE.CatmullRomCurve3(points, true);
+  const geometry = new THREE.TubeGeometry(curve, 400, 0.04, 16, true);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+/**
+ * Rhombic Dodecahedron - Dual of the cuboctahedron, space-filling polyhedron
+ * 12 rhombic faces, 14 vertices, 24 edges
+ */
+export const rhombicDodecahedronGeometry = (scale: number = 1) => {
+  // Vertices of a rhombic dodecahedron
+  const vertices: [number, number, number][] = [
+    // Cube vertices (8)
+    [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
+    [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1],
+    // Octahedron vertices (6)
+    [2, 0, 0], [-2, 0, 0],
+    [0, 2, 0], [0, -2, 0],
+    [0, 0, 2], [0, 0, -2],
+  ];
+  
+  // Rhombic faces (12 faces, each with 4 vertices)
+  const faces = [
+    [0, 10, 4, 12], [0, 8, 2, 12], [0, 12, 6, 10], [0, 2, 8, 10],
+    [1, 8, 0, 10], [1, 10, 5, 13], [1, 13, 3, 8], [2, 8, 3, 11],
+    [4, 10, 5, 9], [5, 13, 7, 9], [6, 12, 2, 11], [6, 9, 7, 11],
+  ];
+  
+  // Build geometry
+  const positions: number[] = [];
+  const indices: number[] = [];
+  
+  // Add all vertices
+  vertices.forEach(v => {
+    positions.push(v[0] * scale * 0.35, v[1] * scale * 0.35, v[2] * scale * 0.35);
+  });
+  
+  // Triangulate faces (each rhombus = 2 triangles)
+  faces.forEach(face => {
+    indices.push(face[0], face[1], face[2]);
+    indices.push(face[0], face[2], face[3]);
+  });
+  
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+/**
+ * Truncated Icosahedron - Soccer ball shape (Buckminsterfullerene/C60)
+ * 12 regular pentagons and 20 regular hexagons
+ */
+export const truncatedIcosahedronGeometry = () => {
+  const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
+  const scale = 0.3;
+  
+  // Vertices of truncated icosahedron
+  const verts: [number, number, number][] = [];
+  
+  // Generate vertices using the standard formulas
+  // (0, ±1, ±3φ)
+  [[0, 1, 3*phi], [0, 1, -3*phi], [0, -1, 3*phi], [0, -1, -3*phi]].forEach(v => {
+    verts.push([v[0] * scale, v[1] * scale, v[2] * scale]);
+  });
+  
+  // (±1, ±(2+φ), ±2φ)
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        verts.push([sx * scale, sy * (2 + phi) * scale, sz * 2 * phi * scale]);
+      }
+    }
+  }
+  
+  // (±φ, ±2, ±(2φ+1))
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        verts.push([sx * phi * scale, sy * 2 * scale, sz * (2*phi + 1) * scale]);
+      }
+    }
+  }
+  
+  // Cyclic permutations of all the above
+  const allVerts: [number, number, number][] = [];
+  verts.forEach(([x, y, z]) => {
+    allVerts.push([x, y, z], [y, z, x], [z, x, y]);
+  });
+  
+  // Remove duplicates
+  const uniqueVerts: [number, number, number][] = [];
+  const seen = new Set<string>();
+  allVerts.forEach(v => {
+    const key = v.map(n => n.toFixed(4)).join(',');
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueVerts.push(v);
+    }
+  });
+  
+  // Create convex hull from vertices
+  const points = uniqueVerts.map(v => new THREE.Vector3(v[0], v[1], v[2]));
+  
+  try {
+    // Use THREE.js ConvexGeometry through dynamic import
+    const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const geometry = new ConvexGeometry(points);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return geometry;
+  } catch {
+    // Fallback to a simple approximation
+    const geometry = new THREE.IcosahedronGeometry(1, 1);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+};
+
+/**
+ * Disdyakis Triacontahedron - Catalan solid with 120 scalene triangular faces
+ * Dual of the truncated icosidodecahedron
+ * Desktop only due to complexity
+ */
+export const disdyakisTriacontahedronGeometry = () => {
+  const phi = (1 + Math.sqrt(5)) / 2;
+  const scale = 0.4;
+  
+  // Generate vertices for disdyakis triacontahedron
+  const vertices: THREE.Vector3[] = [];
+  
+  // Face-centered vertices scaled differently for the characteristic shape
+  const a = 1, b = phi, c = phi * phi;
+  
+  // Rectangular parallelepiped vertices
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        vertices.push(new THREE.Vector3(sx * a * scale, sy * b * scale, sz * c * scale));
+        vertices.push(new THREE.Vector3(sx * b * scale, sy * c * scale, sz * a * scale));
+        vertices.push(new THREE.Vector3(sx * c * scale, sy * a * scale, sz * b * scale));
+      }
+    }
+  }
+  
+  // Add axis-aligned vertices
+  const d = phi + 1;
+  vertices.push(new THREE.Vector3(d * scale, 0, 0));
+  vertices.push(new THREE.Vector3(-d * scale, 0, 0));
+  vertices.push(new THREE.Vector3(0, d * scale, 0));
+  vertices.push(new THREE.Vector3(0, -d * scale, 0));
+  vertices.push(new THREE.Vector3(0, 0, d * scale));
+  vertices.push(new THREE.Vector3(0, 0, -d * scale));
+  
+  try {
+    const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const geometry = new ConvexGeometry(vertices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    geometry.userData.complexity = 'high';
+    return geometry;
+  } catch {
+    // Fallback
+    return new THREE.IcosahedronGeometry(1, 2);
+  }
+};
+
+/**
+ * Helper function to merge multiple geometries
+ */
+function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  if (geometries.length === 0) return new THREE.SphereGeometry(1, 16, 16);
+  if (geometries.length === 1) return geometries[0];
+  
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const indices: number[] = [];
+  let indexOffset = 0;
+  
+  for (const geo of geometries) {
+    const pos = geo.attributes.position.array;
+    const norm = geo.attributes.normal?.array;
+    
+    // Add positions
+    for (let i = 0; i < pos.length; i++) {
+      positions.push(pos[i]);
+    }
+    
+    // Add normals if available
+    if (norm) {
+      for (let i = 0; i < norm.length; i++) {
+        normals.push(norm[i]);
+      }
+    }
+    
+    // Add indices
+    if (geo.index) {
+      const idx = geo.index.array;
+      for (let i = 0; i < idx.length; i++) {
+        indices.push(idx[i] + indexOffset);
+      }
+    } else {
+      // Non-indexed geometry
+      const vertCount = pos.length / 3;
+      for (let i = 0; i < vertCount; i++) {
+        indices.push(i + indexOffset);
+      }
+    }
+    
+    indexOffset += pos.length / 3;
+  }
+  
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  if (normals.length > 0) {
+    merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  }
+  merged.setIndex(indices);
+  merged.computeVertexNormals();
+  merged.computeBoundingSphere();
+  
+  return merged;
+}

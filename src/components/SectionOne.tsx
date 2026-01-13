@@ -3,11 +3,7 @@
 
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
-import {
-  AiFillGithub,
-  AiFillLinkedin,
-  AiOutlineDownload,
-} from 'react-icons/ai';
+import { AiFillGithub, AiFillLinkedin } from 'react-icons/ai';
 import AnimatedLink from './AnimatedLink';
 
 interface SectionOneProps {
@@ -15,19 +11,17 @@ interface SectionOneProps {
 }
 
 /* ------------------------------------------------------------------ */
-/*  SERVICES                                                          */
+/*  SERVICES - Enhanced capability showcase                           */
 /* ------------------------------------------------------------------ */
 const SERVICES = [
-  'SaaS Products',
-  'Website Services',
-  'E-commerce Websites',
-  'Immersive Experiences',
-  'Portfolios',
-  'Web & Mobile App Design',
-  'UX / UI Research',
-  'Brand Identity',
-  'Logos, Labels & Graphics',
-  '3D Modeling',
+  'Product-Ready UI',
+  'Design Systems',
+  'Realtime Interfaces',
+  'Immersive 3D',
+  'High-Performance Apps',
+  'API Integrations',
+  'Authenticated Flows',
+  'Mobile-First UX',
 ];
 
 export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
@@ -74,115 +68,118 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
 
   /* 4. markup ------------------------------------------------------ */
   return (
-    <section className="relative w-full h-screen flex flex-col items-center justify-end overflow-hidden px-4 pb-[120px]">
+    <section
+      id="home"
+      aria-labelledby="hero-title"
+      className="relative flex h-screen w-full flex-col items-center justify-between overflow-hidden"
+    >
+      {/* ═══════════════════════════════════════════════════════════════════
+          TOP: Eyebrow text positioned above the 3D model
+          ═══════════════════════════════════════════════════════════════════ */}
       {shown && (
-        <div className="relative z-10 w-full max-w-6xl text-center space-y-2">
-          {/* ---------- HEADLINE ---------- */}
-          <motion.div
-            className="space-y-1"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-          >
-            <h1 className="font-extrabold text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-gray-900 dark:text-white leading-tight sm:leading-tight">
-              <span className="font-extrabold">I DELIVER</span>{' '}
-              <span
-                className="
-                  font-black
-                  uppercase
-                  inline-block
-                  italic
-                  bg-clip-text
-                  text-transparent
-                  text-2xl sm:text-3xl md:text-4xl lg:text-5xl
-                "
-                style={{
-                  backgroundImage:
-                    'linear-gradient(90deg, #8b5cf6, #ec4899 50%, #3b82f6 100%)',
-                  backgroundSize: '200%',
-                  backgroundPosition: del ? '100% 50%' : '0% 50%',
-                  transition: 'background-position 1.2s ease',
-                }}
-              >
-                {txt || '\u00A0'}
-              </span>
-              <motion.span
-                className="inline-block ml-1 text-purple-600 dark:text-purple-400"
-                animate={{ opacity: [1, 0, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-              >
-                |
-              </motion.span>
-            </h1>
-          </motion.div>
+        <motion.div
+          className="relative z-10 pt-0 sm:pt-4 text-center"
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-purple-400/70 font-semibold">
+            Kamal Feracho
+          </p>
+          <p className="mt-0.5 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] text-emerald-400/50">
+            Full-Stack Engineer
+          </p>
+        </motion.div>
+      )}
 
-          {/* ---------- PARAGRAPH ---------- */}
-          <motion.p
-            className="mx-auto max-w-5xl text-base sm:text-lg lg:text-xl leading-normal sm:leading-relaxed text-gray-700 dark:text-gray-300"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.6 }}
-          >
-            I craft intuitive, immersive digital experiences—merging clean
-            aesthetics, performant code and thoughtful interaction design.
-          </motion.p>
+      {/* CENTER: Clear zone for 3D model */}
+      <div className="flex-1" aria-hidden="true" />
 
-          {/* ---------- CTA BUTTONS ---------- */}
-          <motion.div
-            className="flex flex-wrap justify-center gap-4 pt-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.45, duration: 0.6 }}
-          >
-            <AnimatedLink
-              text="Download CV"
-              icon={<AiOutlineDownload className="w-5 h-5" />}
-              link="/resume.pdf"
-              className="px-8 py-3 rounded-full font-medium text-sm bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/25 hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 hover:scale-105 border border-transparent"
-            />
-
-            <div className="flex gap-3">
-              <AnimatedLink
-                icon={<AiFillGithub className="w-6 h-6" />}
-                link="https://github.com/kferacho3"
-                className="w-12 h-12 flex items-center justify-center rounded-full text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-purple-500/50"
-              />
-              <AnimatedLink
-                icon={<AiFillLinkedin className="w-6 h-6" />}
-                link="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
-                className="w-12 h-12 flex items-center justify-center rounded-full text-gray-900 dark:text-white border border-gray-300 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 backdrop-blur-sm transition-all duration-300 hover:scale-110 hover:border-purple-500/50"
-              />
-            </div>
-          </motion.div>
-
-          {/* ---------- SCROLL HINT ---------- */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.7 }}
-            className="pt-3"
-          >
-            <motion.div
-              className="mx-auto w-6 h-10 rounded-full border-2 border-purple-600/40 dark:border-purple-500/40 relative backdrop-blur-sm"
-              animate={{ y: [0, 8, 0] }}
-              transition={{
-                duration: 1.5,
-                ease: 'easeInOut',
-                repeat: Infinity,
-              }}
+      {/* ═══════════════════════════════════════════════════════════════════
+          BOTTOM: ULTRA COMPACT hero content - FULLY VISIBLE ON LOAD
+          ═══════════════════════════════════════════════════════════════════ */}
+      {shown && (
+        <motion.div
+          className="relative z-10 w-full pb-40"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        >
+          {/* Super compact neon container */}
+          <div className="mx-auto max-w-xl px-2">
+            <div 
+              className="
+                relative rounded-lg
+                bg-slate-950/95
+                backdrop-blur-xl
+                border border-purple-500/40
+                shadow-[0_0_40px_rgba(168,85,247,0.25),0_0_80px_rgba(16,185,129,0.15)]
+                px-3 py-2.5 sm:px-4 sm:py-3
+              "
             >
-              <motion.span
-                className="absolute left-1/2 top-2 w-1.5 h-1.5 rounded-full bg-purple-600 dark:bg-purple-400 -translate-x-1/2 shadow-lg shadow-purple-600/50 dark:shadow-purple-400/50"
-                animate={{ y: [0, 16, 0] }}
-                transition={{
-                  duration: 1.5,
-                  ease: 'easeInOut',
-                  repeat: Infinity,
-                }}
-              />
-            </motion.div>
-          </motion.div>
-        </div>
+              {/* Neon top edge */}
+              <div className="absolute inset-x-0 -top-px h-[2px] bg-gradient-to-r from-emerald-500 via-purple-500 to-orange-500" />
+              
+              {/* SUPER TIGHT Content */}
+              <div className="text-center space-y-1.5">
+                {/* Main headline */}
+                <h1
+                  id="hero-title"
+                  className="text-base font-black leading-none text-white sm:text-lg md:text-xl lg:text-2xl"
+                >
+                  <span className="text-white">I craft</span>{' '}
+                  <span
+                    className="inline-block font-black italic bg-clip-text text-transparent"
+                    style={{
+                      backgroundImage: 'linear-gradient(135deg, #10b981 0%, #a855f7 50%, #f97316 100%)',
+                      backgroundSize: '250%',
+                      backgroundPosition: del ? '100% 50%' : '0% 50%',
+                      transition: 'background-position 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
+                    }}
+                  >
+                    {txt || '\u00A0'}
+                  </span>
+                  <motion.span
+                    className="inline-block ml-0.5 text-emerald-500"
+                    animate={{ opacity: [1, 0.2, 1] }}
+                    transition={{ duration: 0.8, repeat: Infinity }}
+                  >
+                    _
+                  </motion.span>
+                </h1>
+
+                {/* Subtitle */}
+                <p className="text-[9px] sm:text-[10px] text-white/70">
+                  Building product-ready UI systems & immersive 3D worlds.
+                </p>
+
+                {/* CTA Buttons + Socials - SINGLE ROW */}
+                <div className="flex flex-wrap justify-center items-center gap-1.5 sm:gap-2">
+                  <AnimatedLink
+                    text="VIEW PROJECTS"
+                    link="#projects"
+                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-white text-slate-900 shadow-[0_0_25px_rgba(255,255,255,0.5)] hover:shadow-[0_0_35px_rgba(255,255,255,0.7)] transition-all duration-300 hover:scale-105"
+                  />
+                  <AnimatedLink
+                    text="DOWNLOAD CV"
+                    link="/Resume.pdf"
+                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-purple-500 to-orange-500 text-white shadow-[0_0_30px_rgba(168,85,247,0.6)] hover:shadow-[0_0_40px_rgba(168,85,247,0.8)] transition-all duration-300 hover:scale-105"
+                  />
+                  <AnimatedLink
+                    icon={<AiFillGithub className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    link="https://github.com/kferacho3"
+                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md text-white border border-purple-500/50 bg-purple-500/30 hover:bg-purple-500/50 hover:border-purple-400 transition-all duration-300"
+                  />
+                  <AnimatedLink
+                    icon={<AiFillLinkedin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    link="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
+                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md text-white border border-purple-500/50 bg-purple-500/30 hover:bg-purple-500/50 hover:border-purple-400 transition-all duration-300"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       )}
     </section>
   );
