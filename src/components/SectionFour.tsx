@@ -147,9 +147,12 @@ function SectionFour() {
       aria-labelledby="contact-title"
       className="relative min-h-screen overflow-hidden py-12 px-4 sm:py-16 sm:px-6 lg:px-8"
     >
+      {/* Smooth top fade */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-transparent via-transparent to-transparent dark:from-[#0a0a0f]/60 dark:via-transparent" />
+      
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full bg-gradient-to-br from-emerald-500/25 via-pink-500/20 to-amber-400/25 blur-3xl" />
-        <div className="absolute bottom-[-10%] left-[-5%] h-64 w-64 rounded-full bg-gradient-to-br from-sky-500/20 via-purple-500/20 to-rose-500/20 blur-3xl" />
+        <div className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full bg-gradient-to-br from-[#39FF14]/10 via-[#9400D3]/08 to-[#FFA500]/10 dark:from-[#39FF14]/25 dark:via-[#9400D3]/20 dark:to-[#FFA500]/25 blur-3xl" />
+        <div className="absolute bottom-[-10%] left-[-5%] h-64 w-64 rounded-full bg-gradient-to-br from-[#39FF14]/08 via-[#9400D3]/08 to-[#FFA500]/08 dark:from-[#39FF14]/20 dark:via-[#9400D3]/20 dark:to-[#FFA500]/20 blur-3xl" />
       </div>
 
       <div className="relative max-w-7xl mx-auto">
@@ -167,7 +170,7 @@ function SectionFour() {
             id="contact-title"
             className="mt-3 text-4xl sm:text-5xl lg:text-6xl font-bold"
           >
-            <span className="bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] bg-clip-text text-transparent">
               Let&apos;s Build Together
             </span>
           </h2>
@@ -187,7 +190,7 @@ function SectionFour() {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="relative"
           >
-            <div className="hover-gradient-border rounded-2xl border border-white/10 bg-card/60 p-6 sm:p-8 lg:p-10 shadow-[0_24px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+            <div className="hover-gradient-border rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/50 p-6 sm:p-8 lg:p-10 shadow-[0_16px_40px_rgba(0,0,0,0.06)] dark:shadow-[0_24px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
               <div className="mb-6">
                 <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
                   Project Intake
@@ -230,7 +233,7 @@ function SectionFour() {
                     placeholder="John Doe"
                     className={`
                       w-full px-4 py-3 rounded-lg border
-                      bg-slate-950/50
+                      bg-gray-100/60 dark:bg-slate-950/50
                       text-foreground
                       placeholder:text-muted-foreground/60
                       focus:ring-4 focus:ring-primary/20
@@ -238,10 +241,10 @@ function SectionFour() {
                       transition-all duration-200
                       ${
                         isValid('name')
-                          ? 'border-emerald-400/60'
+                          ? 'border-[#39FF14]/60'
                           : errors.name && touched.name
                             ? 'border-rose-500/70'
-                            : 'border-white/10'
+                            : 'border-gray-200/50 dark:border-white/10'
                       }
                     `}
                     required
@@ -268,7 +271,7 @@ function SectionFour() {
                     placeholder="john@example.com"
                     className={`
                       w-full px-4 py-3 rounded-lg border
-                      bg-slate-950/50
+                      bg-gray-100/60 dark:bg-slate-950/50
                       text-foreground
                       placeholder:text-muted-foreground/60
                       focus:ring-4 focus:ring-primary/20
@@ -276,10 +279,10 @@ function SectionFour() {
                       transition-all duration-200
                       ${
                         isValid('email')
-                          ? 'border-emerald-400/60'
+                          ? 'border-[#39FF14]/60'
                           : errors.email && touched.email
                             ? 'border-rose-500/70'
-                            : 'border-white/10'
+                            : 'border-gray-200/50 dark:border-white/10'
                       }
                     `}
                     required
@@ -306,17 +309,17 @@ function SectionFour() {
                     <SelectTrigger
                       className={`
                         w-full px-4 py-3 rounded-lg border
-                        bg-slate-950/50
+                        bg-gray-100/60 dark:bg-slate-950/50
                         text-foreground
                         focus:ring-4 focus:ring-primary/20
                         focus:border-primary
                         transition-all duration-200
                         ${
                           isValid('service')
-                            ? 'border-emerald-400/60'
+                            ? 'border-[#39FF14]/60'
                             : errors.service && touched.service
                               ? 'border-rose-500/70'
-                              : 'border-white/10'
+                              : 'border-gray-200/50 dark:border-white/10'
                         }
                       `}
                     >
@@ -364,17 +367,17 @@ function SectionFour() {
                     <SelectTrigger
                       className={`
                         w-full px-4 py-3 rounded-lg border
-                        bg-slate-950/50
+                        bg-gray-100/60 dark:bg-slate-950/50
                         text-foreground
                         focus:ring-4 focus:ring-primary/20
                         focus:border-primary
                         transition-all duration-200
                         ${
                           isValid('website')
-                            ? 'border-emerald-400/60'
+                            ? 'border-[#39FF14]/60'
                             : errors.website && touched.website
                               ? 'border-rose-500/70'
-                              : 'border-white/10'
+                              : 'border-gray-200/50 dark:border-white/10'
                         }
                       `}
                     >
@@ -423,7 +426,7 @@ function SectionFour() {
                     placeholder="Tell me about your project..."
                     className={`
                       w-full px-4 py-3 rounded-lg border resize-none
-                      bg-slate-950/50
+                      bg-gray-100/60 dark:bg-slate-950/50
                       text-foreground
                       placeholder:text-muted-foreground/60
                       focus:ring-4 focus:ring-primary/20
@@ -431,10 +434,10 @@ function SectionFour() {
                       transition-all duration-200
                       ${
                         isValid('message')
-                          ? 'border-emerald-400/60'
+                          ? 'border-[#39FF14]/60'
                           : errors.message && touched.message
                             ? 'border-rose-500/70'
-                            : 'border-white/10'
+                            : 'border-gray-200/50 dark:border-white/10'
                       }
                     `}
                     required
@@ -457,7 +460,7 @@ function SectionFour() {
                   disabled={sending}
                   className={`
                     w-full px-6 py-3 rounded-lg font-medium text-slate-900
-                    bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400
+                    bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]
                     focus:ring-4 focus:ring-primary/30
                     transform transition-all duration-200
                     disabled:opacity-50 disabled:cursor-not-allowed
@@ -486,7 +489,7 @@ function SectionFour() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="lg:pl-8"
           >
-            <div className="hover-gradient-border rounded-2xl border border-white/10 bg-card/60 p-8 backdrop-blur-xl">
+            <div className="hover-gradient-border rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/50 p-8 backdrop-blur-xl">
               <h3 className="text-2xl font-bold text-foreground mb-6">
                 Let&apos;s Build Something Distinct
               </h3>
@@ -503,7 +506,7 @@ function SectionFour() {
                       'Clear build phases with fast iteration and QA polish.',
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2">
-                        <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+                        <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -520,7 +523,7 @@ function SectionFour() {
                   </p>
                 </div>
 
-                <div className="pt-6 border-t border-white/10">
+                <div className="pt-6 border-t border-gray-200/40 dark:border-white/10">
                   <p className="text-sm text-muted-foreground mb-4">
                     Prefer to connect elsewhere?
                   </p>
@@ -548,7 +551,7 @@ function SectionFour() {
                             ? 'noopener noreferrer'
                             : undefined
                         }
-                        className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-white/30 hover:text-foreground"
+                        className="rounded-full border border-gray-200/50 dark:border-white/10 bg-gray-100/50 dark:bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-gray-300/60 dark:hover:border-white/30 hover:text-foreground"
                       >
                         {item.label}
                       </a>
@@ -565,7 +568,7 @@ function SectionFour() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: 0.3 }}
-                className="rounded-2xl border border-white/10 bg-card/50 p-4 text-center backdrop-blur"
+                className="rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 p-4 text-center backdrop-blur-xl"
               >
                 <div className="text-3xl font-bold text-foreground">
                   20+
@@ -579,7 +582,7 @@ function SectionFour() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: 0.4 }}
-                className="rounded-2xl border border-white/10 bg-card/50 p-4 text-center backdrop-blur"
+                className="rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 p-4 text-center backdrop-blur-xl"
               >
                 <div className="text-3xl font-bold text-foreground">
                   100%
@@ -618,7 +621,7 @@ function SectionFour() {
                   transition={{ delay: 0.15, duration: 0.3 }}
                   className={`mx-auto mb-4 inline-flex items-center rounded-full border px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] ${
                     modalType === 'success'
-                      ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                      ? 'border-[#39FF14]/40 bg-[#39FF14]/10 text-[#39FF14]'
                       : 'border-rose-400/40 bg-rose-500/10 text-rose-200'
                   }`}
                 >
@@ -630,7 +633,7 @@ function SectionFour() {
                 <p className="text-muted-foreground mb-6">{modalMessage}</p>
                 <button
                   onClick={() => setModalOpen(false)}
-                  className="px-6 py-3 rounded-lg bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400 text-slate-900 font-medium transition-all duration-200 transform hover:scale-105 active:scale-95"
+                  className="px-6 py-3 rounded-lg bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] text-slate-900 font-medium transition-all duration-200 transform hover:scale-105 active:scale-95"
                 >
                   Got it
                 </button>

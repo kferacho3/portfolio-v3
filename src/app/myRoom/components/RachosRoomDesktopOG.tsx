@@ -781,7 +781,7 @@ type ContextType = Record<
 export function Model(props: JSX.IntrinsicElements['group']) {
   const group = useRef<THREE.Group>();
   const { nodes, materials, animations } = useGLTF(
-    '/RachosRoomDesktop.glb'
+    'https://racho-devs.s3.us-east-2.amazonaws.com/roomV2/desktop/RachosRoomDesktop.glb'
   ) as GLTFResult;
   const { actions } = useAnimations<GLTFActions>(animations, group);
   return (

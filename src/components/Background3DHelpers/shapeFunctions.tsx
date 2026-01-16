@@ -6,6 +6,25 @@ import { GroupProps, MeshStandardMaterialProps } from '@react-three/fiber';
 import * as THREE from 'three';
 
 import { ParametricGeometry } from 'three-stdlib';
+
+/* ─────────────────────── 1b. Exotic Shapes Import ────────────────────── */
+import {
+  hyperbolicParaboloidGeometry,
+  diniSurfaceGeometry,
+  seifertSurfaceGeometry,
+  calabiFoldGeometry,
+  celticKnotGeometry,
+  solomonSealGeometry,
+  doubleHelixGeometry,
+  spiralTorusGeometry,
+  voronoiShellGeometry,
+  penroseTiling3DGeometry,
+  hexapodGeometry,
+  ruledSurfaceGeometry,
+  gyroidMinimalGeometry,
+  snubDodecahedronGeometry,
+  greatStellatedDodecahedronGeometry,
+} from './shapes/exotic';
 /*  NEW: helper components  */
 
 /* icons */
@@ -425,6 +444,29 @@ export const SHAPES = [
   'FourierBlob',
   'AtomicOrbital',
   'ToroidalHarmonic',
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEW: EXOTIC SHAPES (Phase 5) - 15 Ultra-Unique Geometries
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Exotic Surfaces
+  'HyperbolicParaboloid',
+  'DiniSurface',
+  'SeifertSurface',
+  'CalabiFold',
+  // Advanced Knots
+  'CelticKnot',
+  'SolomonSeal',
+  'DoubleHelix',
+  // Geometric Structures
+  'SpiralTorus',
+  'VoronoiShell',
+  'PenroseTiling3D',
+  'Hexapod',
+  // Minimal Surfaces
+  'RuledSurface',
+  'GyroidMinimal',
+  // Polyhedra
+  'SnubDodecahedron',
+  'GreatStellatedDodecahedron',
 ] as const;
 export type ShapeName = (typeof SHAPES)[number];
 /* ------------------------------------------------------------------ */

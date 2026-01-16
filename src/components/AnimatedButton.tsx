@@ -14,7 +14,7 @@ const AnimatedButton: FC<AnimatedButtonProps> = ({
   disabled = false,
   ...props
 }) => {
-  const colors = ['#39FF14', '#FFA500', '#9400D3', '#FF1493', '#FFFF00']; // Neon green, orange, purple, pink, yellow
+  const colors = ['#39FF14', '#FFA500', '#9400D3']; // Neon green, orange, purple
 
   return (
     <motion.button

@@ -166,6 +166,25 @@ import {
   toroidalHarmonicGeometry,
 } from './Background3DHelpers/harmonics';
 
+/* NEW: Phase 5 - Exotic Shapes */
+import {
+  hyperbolicParaboloidGeometry,
+  diniSurfaceGeometry,
+  seifertSurfaceGeometry,
+  calabiFoldGeometry,
+  celticKnotGeometry,
+  solomonSealGeometry,
+  doubleHelixGeometry,
+  spiralTorusGeometry,
+  voronoiShellGeometry,
+  penroseTiling3DGeometry,
+  hexapodGeometry,
+  ruledSurfaceGeometry,
+  gyroidMinimalGeometry,
+  snubDodecahedronGeometry,
+  greatStellatedDodecahedronGeometry,
+} from './Background3DHelpers/shapes/exotic';
+
 /* NEW: Phase 4 - Shape Registry */
 import { SHAPE_META, getDeformParams, isStaticShape } from './Background3DHelpers/shapeRegistry';
 
@@ -243,7 +262,18 @@ type ProceduralPreset =
   | 'GoldGilded'
   | 'SilverMercury'
   | 'PlatinumFrost'
-  | 'DiamondCaustics';
+  | 'DiamondCaustics'
+  // NEW: 5 Unique Pattern Shaders
+  | 'PlasmaFlow'
+  | 'CrystalGeode'
+  | 'NebulaSwirl'
+  | 'OilSlick'
+  | 'MagmaCore'
+  // NEW: 4 Precious Metal Variations
+  | 'GoldLiquid'
+  | 'SilverChrome'
+  | 'PlatinumMirror'
+  | 'DiamondRainbow';
 
 const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   InkSplatter: 0,
@@ -255,6 +285,17 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   SilverMercury: 6,
   PlatinumFrost: 7,
   DiamondCaustics: 8,
+  // NEW: 5 Unique Pattern Shaders
+  PlasmaFlow: 9,
+  CrystalGeode: 10,
+  NebulaSwirl: 11,
+  OilSlick: 12,
+  MagmaCore: 13,
+  // NEW: 4 Precious Metal Variations
+  GoldLiquid: 14,
+  SilverChrome: 15,
+  PlatinumMirror: 16,
+  DiamondRainbow: 17,
 } as const;
 
 const PROCEDURAL_PRESET_META: Record<
@@ -282,6 +323,46 @@ const PROCEDURAL_PRESET_META: Record<
     envIntensity: 5.25,
     transparent: true,
     palette: ['#D7F2FF', '#FFFFFF', '#89BFFF', '#FF7AF6'],
+  },
+  // NEW: 5 Unique Pattern Shaders
+  PlasmaFlow: {
+    envIntensity: 2.2,
+    palette: ['#FF00FF', '#00FFFF', '#FF6600', '#FFFFFF'],
+  },
+  CrystalGeode: {
+    envIntensity: 3.0,
+    palette: ['#9B59B6', '#3498DB', '#1ABC9C', '#F39C12'],
+  },
+  NebulaSwirl: {
+    envIntensity: 2.4,
+    transparent: true,
+    palette: ['#1A0533', '#4B0082', '#FF1493', '#00CED1'],
+  },
+  OilSlick: {
+    envIntensity: 3.2,
+    palette: ['#000000', '#FF00FF', '#00FF00', '#FFFF00'],
+  },
+  MagmaCore: {
+    envIntensity: 1.8,
+    palette: ['#1A0000', '#FF4500', '#FFD700', '#FFFFFF'],
+  },
+  // NEW: 4 Precious Metal Variations
+  GoldLiquid: {
+    envIntensity: 3.5,
+    palette: ['#B8860B', '#FFD700', '#FFA500', '#FFFACD'],
+  },
+  SilverChrome: {
+    envIntensity: 4.0,
+    palette: ['#808080', '#C0C0C0', '#FFFFFF', '#E8E8E8'],
+  },
+  PlatinumMirror: {
+    envIntensity: 4.5,
+    palette: ['#A0A0A0', '#E8E8E8', '#FFFFFF', '#D0D0D0'],
+  },
+  DiamondRainbow: {
+    envIntensity: 6.0,
+    transparent: true,
+    palette: ['#FFFFFF', '#FF0000', '#00FF00', '#0000FF'],
   },
 };
 
@@ -557,7 +638,7 @@ void main() {
 
     metal = 1.0;
     rough = 0.28;
-  } else {
+  } else if (style < 8.5) {
     // 8) Diamond Caustics (dispersion-ish + sparkle)
     vec2 q = p * 4.2;
     float caust = pow(fbm(q * 2.8 + uTime * 0.18), 2.5);
@@ -569,6 +650,188 @@ void main() {
     metal = 0.0;
     rough = 0.02;
     alpha = 0.85;
+  } else if (style < 9.5) {
+    // 9) PlasmaFlow - electric plasma tendrils
+    vec2 q = p * 2.5;
+    float t = uTime * 0.8;
+    
+    // Plasma tendrils using layered sin waves
+    float plasma1 = sin(q.x * 3.0 + t) * sin(q.y * 3.0 - t * 0.7);
+    float plasma2 = sin(q.x * 5.0 - t * 1.2 + q.y * 2.0) * sin(q.y * 4.0 + t);
+    float plasma3 = sin(length(q) * 4.0 - t * 2.0);
+    
+    float plasma = plasma1 * 0.4 + plasma2 * 0.35 + plasma3 * 0.25;
+    plasma = plasma * 0.5 + 0.5; // normalize
+    
+    // Electric crackling
+    float crack = pow(fbm(q * 8.0 + t * 2.0), 3.0);
+    
+    v = plasma;
+    edge = crack * 2.0;
+    
+    metal = 0.15;
+    rough = 0.3;
+  } else if (style < 10.5) {
+    // 10) CrystalGeode - sharp crystalline facets
+    vec2 q = p * 4.0;
+    vec2 vd = voronoi2(q + uSeed);
+    vec2 vd2 = voronoi2(q * 2.0 + uSeed * 0.5);
+    
+    // Sharp crystal edges
+    float crystalEdge = smoothstep(0.05, 0.0, vd.y - vd.x);
+    float innerCrystal = smoothstep(0.08, 0.02, vd2.y - vd2.x);
+    
+    // Faceted depth
+    float depth = vd.x * vd2.x;
+    float sparkle = pow(hash21(floor(q * 5.0)), 15.0);
+    
+    v = depth;
+    edge = crystalEdge + innerCrystal * 0.5 + sparkle * 3.0;
+    
+    metal = 0.6;
+    rough = 0.15;
+  } else if (style < 11.5) {
+    // 11) NebulaSwirl - cosmic gas clouds
+    vec2 q = p * 1.5;
+    float t = uTime * 0.15;
+    
+    // Swirling nebula
+    float angle = atan(q.y, q.x);
+    float radius = length(q);
+    vec2 spiral = vec2(
+      cos(angle + radius * 3.0 - t) * radius,
+      sin(angle + radius * 3.0 - t) * radius
+    );
+    
+    float nebula1 = fbm(spiral * 2.0 + t);
+    float nebula2 = fbm(q * 3.0 - t * 0.5 + nebula1);
+    float stars = pow(hash21(floor(q * 20.0 + t * 0.5)), 25.0);
+    
+    v = nebula1 * 0.6 + nebula2 * 0.4;
+    edge = stars * 5.0;
+    
+    metal = 0.0;
+    rough = 0.8;
+    alpha = 0.9;
+  } else if (style < 12.5) {
+    // 12) OilSlick - rainbow thin-film interference
+    vec2 q = p * 2.0;
+    float t = uTime * 0.3;
+    
+    // Flowing oil pattern
+    float flow = fbm(q * 1.5 + t * 0.5);
+    float thickness = fbm(q * 3.0 - t * 0.3 + flow);
+    
+    // Thin-film interference creates rainbow based on thickness
+    float interference = sin(thickness * 25.0) * 0.5 + 0.5;
+    float interference2 = sin(thickness * 25.0 + 2.094) * 0.5 + 0.5;
+    float interference3 = sin(thickness * 25.0 + 4.188) * 0.5 + 0.5;
+    
+    v = interference;
+    edge = smoothstep(0.4, 0.6, interference2);
+    
+    metal = 0.9;
+    rough = 0.05;
+  } else if (style < 13.5) {
+    // 13) MagmaCore - volcanic with glowing cracks
+    vec2 q = p * 2.5;
+    float t = uTime * 0.2;
+    
+    // Cooling rock surface
+    float rock = fbm(q * 2.0 + uSeed);
+    float rock2 = fbm(q * 4.0 - t * 0.1);
+    
+    // Glowing cracks
+    vec2 vd = voronoi2(q * 3.0 + t * 0.05);
+    float cracks = smoothstep(0.15, 0.0, vd.y - vd.x);
+    
+    // Pulsing glow
+    float pulse = sin(t * 3.0) * 0.3 + 0.7;
+    float heat = cracks * pulse;
+    
+    v = rock * 0.7 + rock2 * 0.3;
+    edge = heat * 3.0;
+    
+    metal = 0.1;
+    rough = 0.7;
+  } else if (style < 14.5) {
+    // 14) GoldLiquid - molten flowing gold
+    vec2 q = p * 1.5;
+    float t = uTime * 0.4;
+    
+    // Liquid flow
+    float flow1 = fbm(q * 2.0 + vec2(t, t * 0.7));
+    float flow2 = fbm(q * 3.0 - vec2(t * 0.8, t));
+    float ripple = sin(length(q - uMouse.xy * 0.1) * 8.0 - t * 4.0) * 0.5 + 0.5;
+    
+    // Molten surface tension
+    float surface = flow1 * 0.6 + flow2 * 0.4;
+    float highlight = pow(surface, 3.0);
+    
+    v = surface;
+    edge = highlight + ripple * 0.3;
+    
+    metal = 1.0;
+    rough = 0.08;
+  } else if (style < 15.5) {
+    // 15) SilverChrome - perfect mirror chrome
+    vec2 q = p * 2.0;
+    float t = uTime * 0.1;
+    
+    // Subtle surface variation
+    float micro = fbm(q * 15.0 + t) * 0.05;
+    float wave = sin(q.x * 10.0 + q.y * 10.0 + t) * 0.02;
+    
+    // Sharp reflections
+    float reflect = 0.5 + micro + wave;
+    float highlight = pow(sat(reflect + 0.3), 8.0);
+    
+    v = reflect;
+    edge = highlight;
+    
+    metal = 1.0;
+    rough = 0.0;
+  } else if (style < 16.5) {
+    // 16) PlatinumMirror - flawless mirror surface
+    vec2 q = p * 1.0;
+    float t = uTime * 0.05;
+    
+    // Nearly perfect surface with subtle depth
+    float depth = fbm(q * 0.5 + t) * 0.1;
+    float clarity = 1.0 - depth;
+    
+    // Subtle caustic patterns
+    float caustic = pow(fbm(q * 8.0 + t * 2.0), 4.0) * 0.3;
+    
+    v = clarity;
+    edge = caustic;
+    
+    metal = 1.0;
+    rough = 0.0;
+  } else {
+    // 17) DiamondRainbow - strong chromatic dispersion
+    vec2 q = p * 3.0;
+    float t = uTime * 0.25;
+    
+    // Faceted structure
+    vec2 vd = voronoi2(q * 2.0 + uSeed);
+    float facet = vd.x;
+    
+    // Rainbow fire dispersion
+    float dispR = fbm(q * 4.0 + t + 0.0);
+    float dispG = fbm(q * 4.0 + t + 1.0);
+    float dispB = fbm(q * 4.0 + t + 2.0);
+    
+    // Brilliant sparkle
+    float sparkle = pow(hash21(floor(q * 8.0 + t * 3.0)), 20.0);
+    float fire = (dispR + dispG + dispB) / 3.0;
+    
+    v = facet * 0.5 + fire * 0.5;
+    edge = sparkle * 5.0;
+    
+    metal = 0.0;
+    rough = 0.0;
+    alpha = 0.8;
   }
 
   // palette blend
@@ -1076,7 +1339,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* ==================  SPRINGS & CURSOR  ================== */
   const [hovered, setHovered] = useState(false);
   const [grabbing, setGrabbing] = useState(false);
-  useCursor(hovered, grabbing ? 'grabbing' : 'pointer');
+  // Only show pointer cursor when hovering directly on the 3D shape
+  useCursor(hovered && !grabbing, 'pointer');
+  useCursor(grabbing, 'grabbing');
 
   /* ★ MOD – spring now represents *hover amplitude* 0 → 1  */
   /* ──────────────  Hover / vertex-damp helpers ────────────── */
@@ -1107,9 +1372,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* Mobile detection */
   const isMobileView = isMobile();
 
-  const setCanvasCursor = (style: string) => {
-    gl.domElement.style.cursor = style;
-  };
+  // Cursor is now managed via useCursor hooks above
   /* ─────────────  NEW HELPERS FOR ROTATION CONSTRAINTS  ───────────── */ // NEW
   const clampRotation = (e: THREE.Euler) => {
     // NEW
@@ -1662,6 +1925,45 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'ToroidalHarmonic':
         return <primitive object={toroidalHarmonicGeometry()} />;
 
+      /* ═══════════════════════════════════════════════════════════════════
+         NEW PHASE 5 SHAPES - Exotic Surfaces, Advanced Knots, Structures
+         ═══════════════════════════════════════════════════════════════════ */
+      // Exotic Surfaces
+      case 'HyperbolicParaboloid':
+        return <primitive object={hyperbolicParaboloidGeometry()} />;
+      case 'DiniSurface':
+        return <primitive object={diniSurfaceGeometry()} />;
+      case 'SeifertSurface':
+        return <primitive object={seifertSurfaceGeometry()} />;
+      case 'CalabiFold':
+        return <primitive object={calabiFoldGeometry()} />;
+      // Advanced Knots
+      case 'CelticKnot':
+        return <primitive object={celticKnotGeometry()} />;
+      case 'SolomonSeal':
+        return <primitive object={solomonSealGeometry()} />;
+      case 'DoubleHelix':
+        return <primitive object={doubleHelixGeometry()} />;
+      // Geometric Structures
+      case 'SpiralTorus':
+        return <primitive object={spiralTorusGeometry()} />;
+      case 'VoronoiShell':
+        return <primitive object={voronoiShellGeometry()} />;
+      case 'PenroseTiling3D':
+        return <primitive object={penroseTiling3DGeometry()} />;
+      case 'Hexapod':
+        return <primitive object={hexapodGeometry()} />;
+      // Minimal Surfaces
+      case 'RuledSurface':
+        return <primitive object={ruledSurfaceGeometry()} />;
+      case 'GyroidMinimal':
+        return <primitive object={gyroidMinimalGeometry()} />;
+      // Polyhedra
+      case 'SnubDodecahedron':
+        return <primitive object={snubDodecahedronGeometry()} />;
+      case 'GreatStellatedDodecahedron':
+        return <primitive object={greatStellatedDodecahedronGeometry()} />;
+
       default:
         return <bufferGeometry />;
     }
@@ -1797,7 +2099,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const onPointerUp = useCallback(() => {
     isDragging.current = false;
     setGrabbing(false); // Reset grabbing state
-    setCanvasCursor('auto'); // Reset cursor to default
+    // useCursor will handle cursor reset based on hovered state
 
     // Transfer drag velocity to rotation inertia
     vel.current.x = dragVelocity.current.x * 0.5;
@@ -1851,7 +2153,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   // The onPointerDownMesh function is correct and requires no changes.
   const onPointerDownMesh = (e: THREE.Event) => {
     setGrabbing(true);
-    setCanvasCursor('grabbing');
+    // useCursor will automatically set cursor to 'grabbing' when grabbing state is true
     onPointerDown(e.nativeEvent as PointerEvent);
   };
   useEffect(() => {
@@ -1965,17 +2267,23 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const pickMaterialIndex = () => {
     const roll = Math.random();
 
-    // Common (original set 0-4): ~48%
-    if (roll < 0.48) return Math.floor(Math.random() * 5);
+    // Common (original set 0-4): ~30%
+    if (roll < 0.30) return Math.floor(Math.random() * 5);
 
-    // Phase 4 materials (5-9): ~22%
-    if (roll < 0.70) return 5 + Math.floor(Math.random() * 5);
+    // Phase 4 materials (5-9): ~15%
+    if (roll < 0.45) return 5 + Math.floor(Math.random() * 5);
 
-    // Procedural patterns (10-14): ~20%
-    if (roll < 0.90) return 10 + Math.floor(Math.random() * 5);
+    // Original procedural patterns (10-14): ~12%
+    if (roll < 0.57) return 10 + Math.floor(Math.random() * 5);
 
-    // Legendary precious metals/gems (15-18): ~10%
-    return 15 + Math.floor(Math.random() * 4);
+    // Original precious metals (15-18): ~8%
+    if (roll < 0.65) return 15 + Math.floor(Math.random() * 4);
+
+    // NEW: Ultra pattern shaders (19-23): ~18%
+    if (roll < 0.83) return 19 + Math.floor(Math.random() * 5);
+
+    // NEW: Legendary precious metal variations (24-27): ~17%
+    return 24 + Math.floor(Math.random() * 4);
   };
 
   /* click => randomize to different shape */
@@ -2160,6 +2468,71 @@ export default function Background3D({ onAnimationComplete }: Props) {
         <meshBasicMaterial color="#D7F2FF" wireframe />
       ) : (
         <ProceduralMeshMaterial preset="DiamondCaustics" envMap={env} seed={shaderSeed} />
+      ),
+    /* ───── NEW: 5 Unique Pattern Shaders ───── */
+    // 19: Plasma Flow
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FF00FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="PlasmaFlow" envMap={env} baseColor={color} seed={shaderSeed} />
+      ),
+    // 20: Crystal Geode
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#9B59B6" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="CrystalGeode" envMap={env} baseColor={color} seed={shaderSeed} />
+      ),
+    // 21: Nebula Swirl
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#4B0082" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="NebulaSwirl" envMap={env} baseColor={color} seed={shaderSeed} />
+      ),
+    // 22: Oil Slick
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#000000" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="OilSlick" envMap={env} baseColor={color} seed={shaderSeed} />
+      ),
+    // 23: Magma Core
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FF4500" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="MagmaCore" envMap={env} baseColor={color} seed={shaderSeed} />
+      ),
+    /* ───── NEW: 4 Precious Metal Variations ───── */
+    // 24: Gold Liquid (molten flowing gold)
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FFD700" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="GoldLiquid" envMap={env} seed={shaderSeed} />
+      ),
+    // 25: Silver Chrome (perfect mirror)
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#C0C0C0" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="SilverChrome" envMap={env} seed={shaderSeed} />
+      ),
+    // 26: Platinum Mirror (flawless surface)
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#E8E8E8" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="PlatinumMirror" envMap={env} seed={shaderSeed} />
+      ),
+    // 27: Diamond Rainbow (chromatic dispersion)
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FFFFFF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial preset="DiamondRainbow" envMap={env} seed={shaderSeed} />
       ),
   ] as const;
 

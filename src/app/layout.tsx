@@ -121,7 +121,7 @@ export const viewport: Viewport = {
 
 const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <html lang="en" className="dark" suppressHydrationWarning>
-    <body className="min-h-screen bg-dark-cloud antialiased">
+    <body className="min-h-screen bg-cloud-aqua dark:bg-dark-cloud antialiased transition-colors duration-300">
       <ThemeProvider>
         <Navbar />
         <GameProvider>{children}</GameProvider>

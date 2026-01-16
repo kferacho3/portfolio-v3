@@ -9,7 +9,7 @@ import { Color, Group, Vector3 } from 'three';
 import CanvasProvider from '../../components/CanvasProvider';
 import { ThemeContext } from '../../contexts/ThemeContext';
 import AnimatedCamera from './components/AnimatedCamera';
-import { RachosArcade } from './components/RachosArcade';
+import { GameCard, RachosArcade } from './components/RachosArcade';
 import Dropper, { dropperState } from './games/Dropper';
 import FlappyBird from './games/FlappyBird';
 import GeoChrome from './games/GeoChrome';
@@ -36,14 +36,6 @@ type GameType =
   | 'spinblock'
   | 'museum';
 
-type GameCard = {
-  id: Exclude<GameType, 'home'>;
-  title: string;
-  description: string;
-  accent: string;
-  poster: string;
-};
-
 const GAME_CARDS: GameCard[] = [
   {
     id: 'geochrome',
@@ -51,6 +43,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Collect, sort, and survive evolving geometry lanes.',
     accent: '#60a5fa',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/GeoChrome.png',
+    hotkey: '0',
   },
   {
     id: 'shapeshifter',
@@ -58,6 +51,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Memory grid challenge with accelerating patterns.',
     accent: '#a78bfa',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ShapeShift.png',
+    hotkey: '1',
   },
   {
     id: 'skyblitz',
@@ -65,6 +59,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Arcade flight runs with dodges, targets, and score runs.',
     accent: '#f472b6',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SkyBlitz.png',
+    hotkey: '2',
   },
   {
     id: 'dropper',
@@ -72,6 +67,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Timing, precision, and rapid catch cycles.',
     accent: '#f59e0b',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Dropper.png',
+    hotkey: '3',
   },
   {
     id: 'stackz',
@@ -79,6 +75,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Stack discipline with clean pacing and control.',
     accent: '#f97316',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Stackz.png',
+    hotkey: '4',
   },
   {
     id: 'pinball',
@@ -86,6 +83,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Physics-driven targets with high-energy rebounds.',
     accent: '#38bdf8',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pinball+3D.png',
+    hotkey: '5',
   },
   {
     id: 'rollette',
@@ -93,6 +91,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Bounce chaos with precision timing and boosts.',
     accent: '#fda4af',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png',
+    hotkey: '6',
   },
   {
     id: 'flappybird',
@@ -100,6 +99,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Classic one-tap endurance with score chasing.',
     accent: '#34d399',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/flappyBird.png',
+    hotkey: '7',
   },
   {
     id: 'reactpong',
@@ -107,6 +107,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Solo pong with reactive walls and momentum.',
     accent: '#22d3ee',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png',
+    hotkey: '8',
   },
   {
     id: 'spinblock',
@@ -114,6 +115,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'Rotate the arena and control the physics.',
     accent: '#34d399',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SpinBlock.png',
+    hotkey: '9',
   },
   {
     id: 'museum',
@@ -121,6 +123,7 @@ const GAME_CARDS: GameCard[] = [
     description: 'A curated walkthrough of systems, UI, and integrations.',
     accent: '#e2e8f0',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RachoMuseum.png',
+    hotkey: 'M',
   },
 ];
 
@@ -181,12 +184,12 @@ const FunScene: React.FC = () => {
   const [lookAtPosition, setLookAtPosition] = useState<[number, number, number]>([0, 1.5, 0]);
   const [arcadeFocus, setArcadeFocus] = useState<[number, number, number]>([0, 1.5, 0]);
   const [arcadeRadius, setArcadeRadius] = useState(3);
+  const cameraPositionsSet = useRef(false);
 
   const [musicOn, setMusicOn] = useState(true);
   const [soundsOn, setSoundsOn] = useState(true);
   const [currentGame, setCurrentGame] = useState<GameType>('home');
-  const [selectedGame, setSelectedGame] = useState<GameType>('geochrome');
-  const [screenIndex, setScreenIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const [paused, setPaused] = useState(false);
   const [health, setHealth] = useState(100);
@@ -195,8 +198,6 @@ const FunScene: React.FC = () => {
   const [skyBlitzMode, setSkyBlitzMode] = useState<'UfoMode' | 'RunnerManMode'>('UfoMode');
   const [reactPongMode, setReactPongMode] = useState<'SoloPaddle' | 'SoloWalls'>('SoloPaddle');
   const [shapeShifterMode, setShapeShifterMode] = useState<'3x3' | '4x4' | '5x5'>('3x3');
-  const selectedCard =
-    GAME_CARDS.find((game) => game.id === selectedGame) ?? GAME_CARDS[0];
 
   const lockedSkinImage =
     'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
@@ -248,35 +249,14 @@ const FunScene: React.FC = () => {
     };
   }, [currentGame]);
 
-  useEffect(() => {
-    if (currentGame !== 'home') {
-      setSelectedGame(currentGame);
-    }
-  }, [currentGame]);
-
+  // Auto-cycle games on the arcade screen when idle
   useEffect(() => {
     if (currentGame !== 'home' || GAME_CARDS.length === 0) return;
     const interval = setInterval(() => {
-      setScreenIndex((prev) => (prev + 1) % GAME_CARDS.length);
+      setSelectedIndex((prev) => (prev + 1) % GAME_CARDS.length);
     }, 5500);
     return () => clearInterval(interval);
   }, [currentGame]);
-
-  useEffect(() => {
-    if (currentGame !== 'home') return;
-    const next = GAME_CARDS[screenIndex];
-    if (next && next.id !== selectedGame) {
-      setSelectedGame(next.id);
-    }
-  }, [currentGame, screenIndex, selectedGame]);
-
-  useEffect(() => {
-    if (currentGame !== 'home') return;
-    const idx = GAME_CARDS.findIndex((game) => game.id === selectedGame);
-    if (idx !== -1 && idx !== screenIndex) {
-      setScreenIndex(idx);
-    }
-  }, [currentGame, screenIndex, selectedGame]);
 
   // Toggle music on/off
   useEffect(() => {
@@ -301,17 +281,26 @@ const FunScene: React.FC = () => {
   }, [scene, theme]);
 
   useEffect(() => {
+    // Only calculate camera positions once when arcade focus is ready
+    if (cameraPositionsSet.current) return;
+    if (arcadeFocus[0] === 0 && arcadeFocus[1] === 1.5 && arcadeFocus[2] === 0) return; // Skip default values
+    
+    cameraPositionsSet.current = true;
+    
     const [fx, fy, fz] = arcadeFocus;
-    const baseDistance = Math.max(arcadeRadius * 2.6, 7);
-    const height = Math.max(arcadeRadius * 0.9, 2.2);
+    
+    // Camera path - arcade front is at positive Z
     const positions: [number, number, number][] = [
-      [fx - baseDistance * 2.2, fy + height * 1.6, fz + baseDistance * 2.2],
-      [fx + baseDistance * 1.2, fy + height * 1.3, fz + baseDistance * 1.4],
-      [fx - baseDistance * 0.9, fy + height, fz + baseDistance * 1.05],
-      [fx - baseDistance * 0.7, fy + height * 0.85, fz + baseDistance * 0.95],
+      // Start: behind and high
+      [fx - 5, fy + 6, fz - 8],
+      // Sweep around
+      [fx - 8, fy + 3, fz + 3],
+      // Final: front view (positive Z)
+      [fx, fy + 1.5, fz + 10],
     ];
     setTargetCameraPositions(positions);
-    setLookAtPosition([fx, fy, fz]);
+    // Look at the center of the arcade
+    setLookAtPosition([fx, fy + 1.5, fz]);
   }, [arcadeFocus, arcadeRadius]);
 
   // Key bindings
@@ -544,7 +533,7 @@ const FunScene: React.FC = () => {
                       (currentGame === 'skyblitz' && skyBlitzMode === m) ||
                       (currentGame === 'reactpong' && reactPongMode === m) ||
                       (currentGame === 'shapeshifter' && shapeShifterMode === m)
-                        ? 'border-emerald-400/60 text-emerald-200'
+                        ? 'border-[#39FF14]/60 text-[#39FF14]'
                         : ''
                     }`}
                   >
@@ -562,6 +551,14 @@ const FunScene: React.FC = () => {
     );
   };
 
+  const handleSelectGame = useCallback((index: number) => {
+    setSelectedIndex(index);
+  }, []);
+
+  const handleLaunchGame = useCallback((gameId: string) => {
+    setCurrentGame(gameId as GameType);
+  }, []);
+
   // Conditionally render the active game
   let content: JSX.Element | null = null;
   switch (currentGame) {
@@ -569,10 +566,10 @@ const FunScene: React.FC = () => {
       content = (
         <RachosArcade
           arcadeRef={arcadeRef}
-          screenTextureUrl={selectedCard.poster}
-          screenTitle={selectedCard.title}
-          screenHint={`Hotkey ${HOTKEYS[selectedCard.id]}`}
-          startGame={() => setCurrentGame(selectedCard.id)}
+          games={GAME_CARDS}
+          selectedIndex={selectedIndex}
+          onSelectGame={handleSelectGame}
+          onLaunchGame={handleLaunchGame}
           onFocusReady={handleArcadeFocus}
         />
       );
@@ -638,10 +635,10 @@ const FunScene: React.FC = () => {
       content = (
         <RachosArcade
           arcadeRef={arcadeRef}
-          screenTextureUrl={selectedCard.poster}
-          screenTitle={selectedCard.title}
-          screenHint={`Hotkey ${HOTKEYS[selectedCard.id]}`}
-          startGame={() => setCurrentGame(selectedCard.id)}
+          games={GAME_CARDS}
+          selectedIndex={selectedIndex}
+          onSelectGame={handleSelectGame}
+          onLaunchGame={handleLaunchGame}
           onFocusReady={handleArcadeFocus}
         />
       );
@@ -701,74 +698,7 @@ const FunScene: React.FC = () => {
           </div>
         </Html>
 
-        {currentGame === 'home' && (
-          <Html fullscreen>
-            <div className="fixed inset-0 pointer-events-none z-[9998]">
-              <div className="absolute top-24 left-1/2 w-[min(960px,92vw)] -translate-x-1/2 pointer-events-auto">
-                <div className="rounded-2xl border border-white/10 bg-slate-950/80 p-6 text-white shadow-[0_24px_60px_rgba(0,0,0,0.35)] backdrop-blur-lg">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.2em] text-white/50">
-                        Arcade Hub
-                      </div>
-                      <h2 className="mt-2 text-2xl font-semibold text-white">
-                        Choose a game
-                      </h2>
-                      <p className="mt-2 text-sm text-white/70">
-                        Click to launch or use the hotkeys for quick access.
-                      </p>
-                    </div>
-                    <div className="text-xs text-white/50">
-                      Now showing: <span className="text-white/80">{selectedCard.title}</span>
-                    </div>
-                  </div>
-                  <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {GAME_CARDS.map((game) => {
-                      const isSelected = selectedGame === game.id;
-                      return (
-                      <button
-                        key={game.id}
-                        onClick={() => {
-                          setSelectedGame(game.id);
-                          setCurrentGame(game.id);
-                        }}
-                        className={`rounded-xl border px-4 py-3 text-left transition ${
-                          isSelected
-                            ? 'border-white/40 bg-white/15'
-                            : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'
-                        }`}
-                      >
-                        <div className="relative h-20 overflow-hidden rounded-lg border border-white/10">
-                          <div
-                            className="absolute inset-0 bg-cover bg-center"
-                            style={{ backgroundImage: `url(${game.poster})` }}
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/40 to-transparent" />
-                        </div>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-base font-semibold text-white">
-                            {game.title}
-                          </span>
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: game.accent }}
-                          />
-                        </div>
-                        <p className="mt-2 text-xs text-white/70">
-                          {game.description}
-                        </p>
-                        <span className="mt-3 inline-flex rounded-full border border-white/15 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-white/60">
-                          Press {HOTKEYS[game.id]}
-                        </span>
-                      </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Html>
-        )}
+        {/* Game selection is now handled directly on the arcade monitor screen */}
 
         {content}
 
@@ -810,8 +740,6 @@ const FunScene: React.FC = () => {
             autoRotateSpeed={0.6}
             maxPolarAngle={Math.PI / 2}
             minPolarAngle={0.15}
-            minDistance={orbitDistance * 0.85}
-            maxDistance={orbitDistance * 1.6}
             target={orbitTarget}
           />
         )}

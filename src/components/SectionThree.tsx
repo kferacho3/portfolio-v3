@@ -111,7 +111,7 @@ function ProjectModal({ project, onClose }: ModalProps) {
                       key={idx}
                       className="flex items-start gap-2 text-muted-foreground"
                     >
-                      <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+                      <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
                       <span className="leading-relaxed">{highlight}</span>
                     </li>
                   ))}
@@ -194,60 +194,84 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
     <article
       itemScope
       itemType="https://schema.org/CreativeWork"
-      className="hover-gradient-border group relative overflow-hidden rounded-3xl border border-white/10 bg-card/60 shadow-[0_30px_70px_rgba(0,0,0,0.3)] backdrop-blur"
+      className="hover-gradient-border group relative overflow-hidden rounded-3xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/50 shadow-[0_20px_50px_rgba(0,0,0,0.08)] dark:shadow-[0_30px_70px_rgba(0,0,0,0.3)] backdrop-blur-xl"
     >
       <meta itemProp="url" content={project.link} />
       <meta itemProp="keywords" content={buildKeywords(project)} />
-      <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="relative min-h-[240px] sm:min-h-[320px]">
+      
+      {/* Top-bottom layout with full width */}
+      <div className="flex flex-col">
+        {/* Image section - landscape preview at top, constrained height */}
+        <div className="relative w-full h-[180px] sm:h-[220px] md:h-[280px] overflow-hidden">
           <Image
             src={project.imageDesktop || project.imageMobile}
             alt={`${project.title} preview`}
             fill
-            sizes="(max-width: 1024px) 100vw, 60vw"
-            className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+            sizes="100vw"
+            className="object-cover object-top transition-transform duration-700 group-hover:scale-[1.02]"
             itemProp="image"
           />
-          <div className="absolute inset-0 bg-gradient-to-tr from-black/70 via-black/20 to-transparent" />
-          <div className="absolute left-6 bottom-6 flex flex-wrap gap-2">
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/40" />
+          <div className="absolute left-6 top-6 flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
               Spotlight
             </span>
-            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+            <span className="rounded-full border border-white/20 bg-black/30 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white/80 backdrop-blur-sm">
               Featured
             </span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-5 p-6 lg:p-8">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              Featured Build
-            </p>
-            <h3
-              itemProp="name"
-              className="text-2xl font-bold text-foreground sm:text-3xl"
-            >
-              {project.title}
-            </h3>
+        {/* Content section - full width below image */}
+        <div className="flex flex-col gap-5 p-6 md:p-8 lg:p-10">
+          {/* Header and description row */}
+          <div className="flex flex-col lg:flex-row lg:items-start lg:gap-10">
+            <div className="flex-1 space-y-3">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                  Featured Build
+                </p>
+                <h3
+                  itemProp="name"
+                  className="text-2xl font-bold text-foreground sm:text-3xl lg:text-4xl"
+                >
+                  {project.title}
+                </h3>
+              </div>
+
+              <p
+                itemProp="description"
+                className="text-sm text-muted-foreground leading-relaxed max-w-2xl"
+              >
+                {project.description}
+              </p>
+            </div>
+
+            {/* Tech stack - moves to right on large screens */}
+            <div className="mt-4 lg:mt-0 lg:flex-shrink-0">
+              <div className="flex flex-wrap gap-2 lg:max-w-[280px]">
+                {project.techStack.slice(0, 6).map((t) => (
+                  <span
+                    key={t}
+                    className="rounded-full border border-gray-200/40 dark:border-white/10 bg-gray-100/50 dark:bg-white/5 px-3 py-1 text-xs font-medium text-muted-foreground"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <p
-            itemProp="description"
-            className="text-sm text-muted-foreground leading-relaxed"
-          >
-            {project.description}
-          </p>
-
+          {/* Highlights section */}
           {highlights.length > 0 && (
-            <div>
-              <p className="text-sm font-semibold text-foreground">
+            <div className="border-t border-gray-200/30 dark:border-white/10 pt-5">
+              <p className="text-sm font-semibold text-foreground mb-3">
                 Technical Contributions
               </p>
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm text-muted-foreground">
                 {highlights.map((highlight, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
                     <span>{highlight}</span>
                   </li>
                 ))}
@@ -255,22 +279,12 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            {project.techStack.slice(0, 6).map((t) => (
-              <span
-                key={t}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-muted-foreground"
-              >
-                {t}
-              </span>
-            ))}
-          </div>
-
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+          {/* Action buttons */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-start pt-2">
             <button
               type="button"
               onClick={() => onSelect(project)}
-              className="flex-1 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-[0_10px_30px_rgba(255,255,255,0.15)] transition hover:shadow-[0_16px_40px_rgba(255,255,255,0.25)]"
+              className="rounded-xl bg-gray-900 dark:bg-white px-6 py-3 text-sm font-semibold text-white dark:text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_rgba(255,255,255,0.15)] transition hover:shadow-[0_16px_40px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_16px_40px_rgba(255,255,255,0.25)]"
             >
               Open Case Study
             </button>
@@ -278,7 +292,7 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
               href={project.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-center text-sm font-semibold text-foreground transition hover:border-white/40 hover:bg-white/10"
+              className="rounded-xl border border-gray-300/60 dark:border-white/20 bg-gray-100/50 dark:bg-white/5 px-6 py-3 text-center text-sm font-semibold text-foreground transition hover:border-gray-400/80 dark:hover:border-white/40 hover:bg-gray-200/50 dark:hover:bg-white/10"
             >
               Visit Live Project
             </a>
@@ -308,7 +322,7 @@ function ProjectCard({ project, onSelect, priority = false }: CardProps) {
         type="button"
         onClick={() => onSelect(project)}
         aria-label={`View ${project.title} details`}
-        className="hover-gradient-border flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-card/50 text-left shadow-[0_18px_50px_rgba(0,0,0,0.25)] transition duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-card/70"
+        className="hover-gradient-border flex h-full w-full flex-col overflow-hidden rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 text-left shadow-[0_12px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-gray-300/60 dark:hover:border-white/20 hover:bg-white/70 dark:hover:bg-card/60"
       >
         <div className="relative aspect-[16/10] overflow-hidden">
           <Image
@@ -325,7 +339,7 @@ function ProjectCard({ project, onSelect, priority = false }: CardProps) {
 
         <div className="flex h-full flex-col gap-3 p-5">
           <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400" />
+            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
             Project
           </div>
           <h3 itemProp="name" className="text-xl font-semibold text-foreground">
@@ -341,13 +355,13 @@ function ProjectCard({ project, onSelect, priority = false }: CardProps) {
             {project.techStack.slice(0, 4).map((t) => (
               <span
                 key={t}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground"
+                className="rounded-full border border-gray-200/40 dark:border-white/10 bg-gray-100/50 dark:bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground"
               >
                 {t}
               </span>
             ))}
             {project.techStack.length > 4 && (
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+              <span className="rounded-full border border-gray-200/40 dark:border-white/10 bg-gray-100/50 dark:bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground">
                 +{project.techStack.length - 4}
               </span>
             )}
@@ -386,9 +400,15 @@ export default function SectionThree() {
       aria-labelledby="projects-title"
       className="relative w-full px-4 py-14 sm:px-6 md:px-8 md:py-20 lg:px-12"
     >
+      {/* Smooth top fade */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-transparent via-transparent to-transparent dark:from-[#0a0a0f]/60 dark:via-transparent" />
+      
+      {/* Smooth bottom fade */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-transparent via-transparent to-transparent dark:from-[#0a0a0f]/60 dark:via-transparent" />
+      
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full bg-gradient-to-br from-emerald-500/25 via-pink-500/20 to-amber-400/25 blur-3xl" />
-        <div className="absolute bottom-[-10%] left-[-5%] h-64 w-64 rounded-full bg-gradient-to-br from-sky-500/20 via-purple-500/20 to-rose-500/20 blur-3xl" />
+        <div className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full bg-gradient-to-br from-[#39FF14]/10 via-[#9400D3]/08 to-[#FFA500]/10 dark:from-[#39FF14]/25 dark:via-[#9400D3]/20 dark:to-[#FFA500]/25 blur-3xl" />
+        <div className="absolute bottom-[-10%] left-[-5%] h-64 w-64 rounded-full bg-gradient-to-br from-[#39FF14]/08 via-[#9400D3]/08 to-[#FFA500]/08 dark:from-[#39FF14]/20 dark:via-[#9400D3]/20 dark:to-[#FFA500]/20 blur-3xl" />
       </div>
 
       <div className="relative z-10 mx-auto max-w-6xl">
@@ -405,7 +425,7 @@ export default function SectionThree() {
             id="projects-title"
             className="mt-3 text-4xl font-black text-foreground sm:text-5xl md:text-6xl"
           >
-            <span className="bg-gradient-to-r from-emerald-400 via-pink-500 to-amber-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] bg-clip-text text-transparent">
               Selected Projects
             </span>
           </h2>
@@ -424,7 +444,7 @@ export default function SectionThree() {
             ].map((tag) => (
               <span
                 key={tag}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground"
+                className="rounded-full border border-gray-200/40 dark:border-white/10 bg-gray-100/50 dark:bg-white/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground"
               >
                 {tag}
               </span>
@@ -436,7 +456,7 @@ export default function SectionThree() {
           <div
             role="tablist"
             aria-label="Project categories"
-            className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/10 bg-card/40 p-2 backdrop-blur"
+            className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 p-2 backdrop-blur-xl"
           >
             {categoryKeys.map((key) => {
               const isActive = selectedCategory === key;
@@ -451,7 +471,7 @@ export default function SectionThree() {
                   onClick={() => setSelectedCategory(key)}
                   className={`rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition sm:text-sm ${
                     isActive
-                      ? 'bg-white text-slate-900 shadow-[0_8px_30px_rgba(255,255,255,0.2)]'
+                      ? 'bg-gray-900 dark:bg-white text-white dark:text-slate-900 shadow-[0_8px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_30px_rgba(255,255,255,0.2)]'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >

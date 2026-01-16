@@ -24,7 +24,8 @@ export type ShapeCategory =
   | 'projection4D'   // 4D polytopes projected to 3D
   | 'attractor'      // Strange attractors
   | 'shell'          // Shell-like surfaces
-  | 'prism';         // Prism shapes
+  | 'prism'          // Prism shapes
+  | 'exotic';        // Ultra-unique exotic geometries (Phase 5)
 
 export type ComplexityLevel = 'low' | 'mid' | 'high' | 'extreme';
 
@@ -1073,6 +1074,157 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     noiseScaleBias: 0.75,
     preferredMaterials: ['glass', 'thinfilm', 'matcap'],
   },
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // PHASE 5: EXOTIC SHAPES - Ultra-Unique Geometries
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // ──────────────── Exotic Surfaces ────────────────
+  HyperbolicParaboloid: {
+    name: 'HyperbolicParaboloid',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.9,
+    noiseScaleBias: 0.85,
+    preferredMaterials: ['glass', 'thinfilm', 'marble'],
+  },
+  DiniSurface: {
+    name: 'DiniSurface',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.75,
+    noiseScaleBias: 0.7,
+    preferredMaterials: ['holographic', 'thinfilm', 'rimglow'],
+  },
+  SeifertSurface: {
+    name: 'SeifertSurface',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.85,
+    noiseScaleBias: 0.8,
+    preferredMaterials: ['glass', 'diamond', 'thinfilm'],
+  },
+  CalabiFold: {
+    name: 'CalabiFold',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.7,
+    noiseScaleBias: 0.65,
+    preferredMaterials: ['diamond', 'holographic', 'matcap'],
+  },
+
+  // ──────────────── Advanced Knots ────────────────
+  CelticKnot: {
+    name: 'CelticKnot',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.6,
+    noiseScaleBias: 0.55,
+    preferredMaterials: ['neon', 'thinfilm', 'matcap'],
+  },
+  SolomonSeal: {
+    name: 'SolomonSeal',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.55,
+    noiseScaleBias: 0.5,
+    preferredMaterials: ['holographic', 'diamond', 'rimglow'],
+  },
+  DoubleHelix: {
+    name: 'DoubleHelix',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.65,
+    noiseScaleBias: 0.6,
+    preferredMaterials: ['glass', 'neon', 'thinfilm'],
+  },
+
+  // ──────────────── Geometric Structures ────────────────
+  SpiralTorus: {
+    name: 'SpiralTorus',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.5,
+    noiseScaleBias: 0.45,
+    preferredMaterials: ['neon', 'thinfilm', 'rimglow'],
+  },
+  VoronoiShell: {
+    name: 'VoronoiShell',
+    category: 'exotic',
+    complexity: 'extreme',
+    mobileSafe: false,
+    deformBias: 0.4,
+    noiseScaleBias: 0.35,
+    preferredMaterials: ['glass', 'diamond', 'holographic'],
+    static: true,
+  },
+  PenroseTiling3D: {
+    name: 'PenroseTiling3D',
+    category: 'exotic',
+    complexity: 'extreme',
+    mobileSafe: false,
+    deformBias: 0.45,
+    noiseScaleBias: 0.4,
+    preferredMaterials: ['marble', 'matcap', 'thinfilm'],
+  },
+  Hexapod: {
+    name: 'Hexapod',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.55,
+    noiseScaleBias: 0.5,
+    preferredMaterials: ['neon', 'glass', 'rimglow'],
+  },
+
+  // ──────────────── Minimal Surfaces ────────────────
+  RuledSurface: {
+    name: 'RuledSurface',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.85,
+    noiseScaleBias: 0.8,
+    preferredMaterials: ['glass', 'marble', 'thinfilm'],
+  },
+  GyroidMinimal: {
+    name: 'GyroidMinimal',
+    category: 'exotic',
+    complexity: 'extreme',
+    mobileSafe: false,
+    deformBias: 0.3,
+    noiseScaleBias: 0.25,
+    preferredMaterials: ['glass', 'diamond', 'holographic'],
+    static: true,
+  },
+
+  // ──────────────── Polyhedra ────────────────
+  SnubDodecahedron: {
+    name: 'SnubDodecahedron',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.9,
+    noiseScaleBias: 0.85,
+    preferredMaterials: ['diamond', 'glass', 'matcap'],
+  },
+  GreatStellatedDodecahedron: {
+    name: 'GreatStellatedDodecahedron',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.7,
+    noiseScaleBias: 0.65,
+    preferredMaterials: ['holographic', 'diamond', 'rimglow'],
+  },
 };
 
 /* ─────────────────────────── Utility Functions ─────────────────────────────── */
@@ -1144,17 +1296,18 @@ export function pickWeightedRandomShape(
 
   // Default weights
   const defaultWeights: Record<ShapeCategory, number> = {
-    primitive: 0.08,
-    poly: 0.12,
-    knot: 0.15,
-    parametric: 0.15,
-    implicit: 0.1,
-    fractalMesh: 0.18,
-    fractalPoints: isMobile ? 0.02 : 0.1,
-    projection4D: 0.08,
-    attractor: 0.08,
-    shell: 0.04,
-    prism: 0.05,
+    primitive: 0.06,
+    poly: 0.10,
+    knot: 0.12,
+    parametric: 0.12,
+    implicit: 0.08,
+    fractalMesh: 0.14,
+    fractalPoints: isMobile ? 0.02 : 0.08,
+    projection4D: 0.06,
+    attractor: 0.06,
+    shell: 0.03,
+    prism: 0.04,
+    exotic: 0.15, // Higher weight for new exotic shapes
   };
 
   const weights = { ...defaultWeights, ...categoryWeights };

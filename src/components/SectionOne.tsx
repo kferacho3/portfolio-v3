@@ -83,10 +83,10 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
         >
-          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-purple-400/70 font-semibold">
+          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-semibold text-[#9400D3] dark:text-[#9400D3]/70">
             Kamal Feracho
           </p>
-          <p className="mt-0.5 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] text-emerald-400/50">
+          <p className="mt-0.5 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] text-[#39FF14]/80 dark:text-[#39FF14]/50">
             Full-Stack Engineer
           </p>
         </motion.div>
@@ -105,33 +105,34 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
-          {/* Super compact neon container */}
+          {/* Super compact container - theme aware */}
           <div className="mx-auto max-w-xl px-2">
             <div 
               className="
                 relative rounded-lg
-                bg-slate-950/95
                 backdrop-blur-xl
-                border border-purple-500/40
-                shadow-[0_0_40px_rgba(168,85,247,0.25),0_0_80px_rgba(16,185,129,0.15)]
                 px-3 py-2.5 sm:px-4 sm:py-3
+                transition-all duration-300
+                bg-white/80 dark:bg-slate-950/95 
+                border border-gray-200/60 dark:border-[#9400D3]/40 
+                shadow-[0_20px_50px_rgba(0,0,0,0.08),0_0_30px_rgba(148,0,211,0.1)] dark:shadow-[0_0_40px_rgba(148,0,211,0.25),0_0_80px_rgba(57,255,20,0.15)]
               "
             >
               {/* Neon top edge */}
-              <div className="absolute inset-x-0 -top-px h-[2px] bg-gradient-to-r from-emerald-500 via-purple-500 to-orange-500" />
+              <div className="absolute inset-x-0 -top-px h-[2px] bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
               
               {/* SUPER TIGHT Content */}
               <div className="text-center space-y-1.5">
                 {/* Main headline */}
                 <h1
                   id="hero-title"
-                  className="text-base font-black leading-none text-white sm:text-lg md:text-xl lg:text-2xl"
+                  className="text-base font-black leading-none sm:text-lg md:text-xl lg:text-2xl text-gray-900 dark:text-white"
                 >
-                  <span className="text-white">I craft</span>{' '}
+                  <span>I craft</span>{' '}
                   <span
                     className="inline-block font-black italic bg-clip-text text-transparent"
                     style={{
-                      backgroundImage: 'linear-gradient(135deg, #10b981 0%, #a855f7 50%, #f97316 100%)',
+                      backgroundImage: 'linear-gradient(135deg, #39FF14 0%, #9400D3 50%, #FFA500 100%)',
                       backgroundSize: '250%',
                       backgroundPosition: del ? '100% 50%' : '0% 50%',
                       transition: 'background-position 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -140,7 +141,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
                     {txt || '\u00A0'}
                   </span>
                   <motion.span
-                    className="inline-block ml-0.5 text-emerald-500"
+                    className="inline-block ml-0.5 text-[#39FF14]"
                     animate={{ opacity: [1, 0.2, 1] }}
                     transition={{ duration: 0.8, repeat: Infinity }}
                   >
@@ -149,7 +150,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
                 </h1>
 
                 {/* Subtitle */}
-                <p className="text-[9px] sm:text-[10px] text-white/70">
+                <p className="text-[9px] sm:text-[10px] text-gray-600 dark:text-white/70">
                   Building product-ready UI systems & immersive 3D worlds.
                 </p>
 
@@ -158,22 +159,22 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
                   <AnimatedLink
                     text="VIEW PROJECTS"
                     link="#projects"
-                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-white text-slate-900 shadow-[0_0_25px_rgba(255,255,255,0.5)] hover:shadow-[0_0_35px_rgba(255,255,255,0.7)] transition-all duration-300 hover:scale-105"
+                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider transition-all duration-300 hover:scale-105 bg-gray-900 dark:bg-white text-white dark:text-slate-900 shadow-[0_8px_20px_rgba(0,0,0,0.15)] dark:shadow-[0_0_25px_rgba(255,255,255,0.5)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_0_35px_rgba(255,255,255,0.7)]"
                   />
                   <AnimatedLink
                     text="DOWNLOAD CV"
                     link="/Resume.pdf"
-                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-gradient-to-r from-emerald-500 via-purple-500 to-orange-500 text-white shadow-[0_0_30px_rgba(168,85,247,0.6)] hover:shadow-[0_0_40px_rgba(168,85,247,0.8)] transition-all duration-300 hover:scale-105"
+                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] text-white shadow-[0_0_30px_rgba(148,0,211,0.6)] hover:shadow-[0_0_40px_rgba(148,0,211,0.8)] transition-all duration-300 hover:scale-105"
                   />
                   <AnimatedLink
                     icon={<AiFillGithub className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     link="https://github.com/kferacho3"
-                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md text-white border border-purple-500/50 bg-purple-500/30 hover:bg-purple-500/50 hover:border-purple-400 transition-all duration-300"
+                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-all duration-300 text-gray-700 dark:text-white border border-gray-300 dark:border-[#9400D3]/50 bg-gray-100 dark:bg-[#9400D3]/30 hover:bg-[#9400D3]/10 dark:hover:bg-[#9400D3]/50 hover:border-[#9400D3]/50 dark:hover:border-[#9400D3] hover:text-[#9400D3] dark:hover:text-white"
                   />
                   <AnimatedLink
                     icon={<AiFillLinkedin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     link="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
-                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md text-white border border-purple-500/50 bg-purple-500/30 hover:bg-purple-500/50 hover:border-purple-400 transition-all duration-300"
+                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-all duration-300 text-gray-700 dark:text-white border border-gray-300 dark:border-[#9400D3]/50 bg-gray-100 dark:bg-[#9400D3]/30 hover:bg-[#9400D3]/10 dark:hover:bg-[#9400D3]/50 hover:border-[#9400D3]/50 dark:hover:border-[#9400D3] hover:text-[#9400D3] dark:hover:text-white"
                   />
                 </div>
               </div>

@@ -96,7 +96,7 @@ const Navbar: React.FC = () => {
         transition={{ duration: 0.3 }}
         aria-label="Primary"
       >
-        <div className="flex items-center justify-between px-4 py-3 shadow-md">
+        <div className="relative flex items-center justify-between px-4 py-3 shadow-md">
           {/* Left: Logo + Primary Links */}
           <div className="ml-[2%] flex items-center gap-4">
             <Link href="/" aria-label="Go to homepage">
@@ -130,8 +130,8 @@ const Navbar: React.FC = () => {
             </nav>
           </div>
 
-          {/* Center: Social Icons with hover effects */}
-          <div className="hidden md:flex space-x-4">
+          {/* Center: Social Icons with hover effects - absolutely positioned for true centering */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden md:flex items-center space-x-4">
             <motion.div
               whileHover={{
                 color: randomColorGithub,
@@ -142,6 +142,7 @@ const Navbar: React.FC = () => {
                 href="https://github.com/kferacho3"
                 target="_blank"
                 rel="noopener noreferrer"
+                className="flex items-center justify-center"
               >
                 <FaGithub className="w-6 h-6 text-gray-700 dark:text-gray-300" />
               </Link>
@@ -156,6 +157,7 @@ const Navbar: React.FC = () => {
                 href="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
                 target="_blank"
                 rel="noopener noreferrer"
+                className="flex items-center justify-center"
               >
                 <FaLinkedin className="w-6 h-6 text-gray-700 dark:text-gray-300" />
               </Link>
