@@ -2,7 +2,8 @@
 'use client';
 
 import { Html, useTexture } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
+import { EffectComposer, Bloom, Noise, Vignette } from '@react-three/postprocessing';
 import {
   BallCollider,
   CuboidCollider,
@@ -12,6 +13,7 @@ import {
 } from '@react-three/rapier';
 import { useDrag } from '@use-gesture/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 
 // Define the interface for unlockable skins
@@ -85,6 +87,11 @@ interface Block {
   hitsLeft: number;
 }
 
+interface SpecialBlock {
+  id: string;
+  position: [number, number, number];
+}
+
 function getRandomColor(): string {
   const letters = '0123456789ABCDEF';
   let color = '#';
@@ -107,10 +114,15 @@ const spinBlockState = proxy({
   score: 0,
   hitStreak: 0,
   count: 0,
+  elapsed: 0,
+  penalties: 0,
+  lastPenaltyAt: 0,
+  scoreMultiplier: 1,
   ballColor: '#FFFFFF',
   scoreColor: '#FFFFFF',
   scoreSparks: 25,
   ballTexture: spinBlockSkins[0].url,  // default unlocked skin
+  graphicsMode: 'clean' as 'clean' | 'classic',
 
   // Each block type keeps a record of ID -> block
   blocks: {
@@ -129,6 +141,10 @@ const spinBlockState = proxy({
     scoreBonusSound: null as HTMLAudioElement | null,
   },
 
+  setGraphicsMode: (mode: 'clean' | 'classic') => {
+    spinBlockState.graphicsMode = mode;
+  },
+
   addBlock(
     type: BlockType,
     id: string,
@@ -145,7 +161,7 @@ const spinBlockState = proxy({
     if (block && block.hitsLeft > 0) {
       block.hitsLeft -= 1;
       if (block.hitsLeft === 0) {
-        this.score += block.points;
+        this.score += block.points * this.scoreMultiplier;
         delete this.blocks[type][id];
         this.checkAchievements();
       }
@@ -154,6 +170,7 @@ const spinBlockState = proxy({
 
   pong(blockType: string) {
     let isWall = false;
+    let scoreDelta = 0;
     if (blockType.includes('wall')) {
       if (this.audio.wallHitSound) {
         this.audio.wallHitSound.currentTime = 0;
@@ -163,6 +180,7 @@ const spinBlockState = proxy({
       }
       this.hitStreak = 0;
       isWall = true;
+      scoreDelta += 2;
     } else {
       if (this.audio.paddleHitSound) {
         this.audio.paddleHitSound.currentTime = 0;
@@ -171,6 +189,7 @@ const spinBlockState = proxy({
         });
       }
       this.hitStreak++;
+      scoreDelta += 5;
     }
     this.count++;
     // Score logic for spinBlock
@@ -182,6 +201,7 @@ const spinBlockState = proxy({
         });
       }
       this.count += 5;
+      scoreDelta += 10;
     }
     if (this.hitStreak > 0 && this.hitStreak % 25 === 0 && !isWall) {
       if (this.audio.scoreBonusSound) {
@@ -191,15 +211,34 @@ const spinBlockState = proxy({
         });
       }
       this.count += 10;
+      scoreDelta += 25;
+    }
+
+    if (scoreDelta > 0) {
+      this.score += scoreDelta * this.scoreMultiplier;
     }
 
     // Spark color changes
-    if (this.count >= this.scoreSparks) {
+    if (this.score >= this.scoreSparks) {
       const newColor = getRandomColor();
       this.ballColor = newColor;
       this.scoreColor = newColor;
-      this.scoreSparks += 25;
+      this.scoreSparks += 100;
     }
+  },
+
+  applyPenalty() {
+    this.penalties += 1;
+    this.hitStreak = 0;
+    this.lastPenaltyAt = this.elapsed;
+    this.score = Math.max(0, this.score - 50);
+  },
+
+  applyPowerUp() {
+    this.scoreMultiplier = 2;
+    setTimeout(() => {
+      spinBlockState.scoreMultiplier = 1;
+    }, 8000);
   },
 
   checkAchievements() {
@@ -220,8 +259,8 @@ const spinBlockState = proxy({
       if (!skin) return;
 
       if (achievement.type === 'time') {
-        // 'count' might represent time in some logic
-        if (this.count >= achievement.threshold && !skin.unlocked) {
+        const cleanRunTime = this.elapsed - this.lastPenaltyAt;
+        if (cleanRunTime >= achievement.threshold && !skin.unlocked) {
           skin.unlocked = true;
           console.log(`Unlocked skin: ${skin.name}`);
         }
@@ -240,6 +279,10 @@ const spinBlockState = proxy({
     this.score = 0;
     this.hitStreak = 0;
     this.count = 0;
+    this.elapsed = 0;
+    this.penalties = 0;
+    this.lastPenaltyAt = 0;
+    this.scoreMultiplier = 1;
     this.ballColor = '#FFFFFF';
     this.scoreColor = '#FFFFFF';
     this.scoreSparks = 25;
@@ -393,6 +436,53 @@ const BouncyBlock: React.FC<BlockProps> = ({ id, position, color }) => {
   );
 };
 
+interface PenaltyBlockProps {
+  id: string;
+  position: [number, number, number];
+  onRespawn: (id: string) => void;
+}
+
+const PenaltyBlock: React.FC<PenaltyBlockProps> = ({ id, position, onRespawn }) => {
+  const onCollisionEnter = useCallback(() => {
+    spinBlockState.applyPenalty();
+    onRespawn(id);
+  }, [id, onRespawn]);
+
+  return (
+    <RigidBody type="fixed" position={position} onCollisionEnter={onCollisionEnter}>
+      <CuboidCollider args={[0.6, 0.6, 0.6]} />
+      <mesh>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.4} />
+      </mesh>
+    </RigidBody>
+  );
+};
+
+interface PowerUpBlockProps {
+  id: string;
+  position: [number, number, number];
+  onRespawn: (id: string) => void;
+}
+
+const PowerUpBlock: React.FC<PowerUpBlockProps> = ({ id, position, onRespawn }) => {
+  const onCollisionEnter = useCallback(() => {
+    spinBlockState.applyPowerUp();
+    spinBlockState.score += 50;
+    onRespawn(id);
+  }, [id, onRespawn]);
+
+  return (
+    <RigidBody type="fixed" position={position} onCollisionEnter={onCollisionEnter}>
+      <CuboidCollider args={[0.6, 0.6, 0.6]} />
+      <mesh>
+        <octahedronGeometry args={[0.8]} />
+        <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.6} />
+      </mesh>
+    </RigidBody>
+  );
+};
+
 const Arena: React.FC = () => {
   const { blocks } = useSnapshot(spinBlockState);
 
@@ -518,11 +608,30 @@ const Arena: React.FC = () => {
   );
 };
 
+// Camera setup component for SpinBlock
+const SpinBlockCamera: React.FC = () => {
+  const { camera } = useThree();
+  
+  useEffect(() => {
+    camera.position.set(0, 5, 12);
+    if ('fov' in camera) {
+      (camera as THREE.PerspectiveCamera).fov = 85;
+      camera.updateProjectionMatrix();
+    }
+    camera.lookAt(0, 0, 0);
+  }, [camera]);
+  
+  return null;
+};
+
 const SpinBlock: React.FC = () => {
   const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0]);
   const [paused, setPaused] = useState(false);
   const [musicOn, setMusicOn] = useState(true);
+  const [penaltyBlocks, setPenaltyBlocks] = useState<SpecialBlock[]>([]);
+  const [powerUpBlocks, setPowerUpBlocks] = useState<SpecialBlock[]>([]);
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
+  const achievementTimer = useRef(0);
 
   // Setup Background Music
   useEffect(() => {
@@ -566,7 +675,18 @@ const SpinBlock: React.FC = () => {
   });
 
   const bind: Partial<JSX.IntrinsicElements['group']> = dragBind() as any;
-  const { score } = useSnapshot(spinBlockState);
+  const spinBlockSnap = useSnapshot(spinBlockState);
+  const { score, graphicsMode } = spinBlockSnap;
+
+  useFrame((_, delta) => {
+    if (paused) return;
+    spinBlockState.elapsed += delta;
+    achievementTimer.current += delta;
+    if (achievementTimer.current >= 1) {
+      spinBlockState.checkAchievements();
+      achievementTimer.current = 0;
+    }
+  });
 
   // Generate Blocks on Mount
   useEffect(() => {
@@ -596,7 +716,40 @@ const SpinBlock: React.FC = () => {
     };
 
     generateBlocks();
+
+    const penaltySet = Array.from({ length: 6 }, () => ({
+      id: `penalty-${Math.random().toString(36).slice(2, 9)}`,
+      position: getRandomPosition(),
+    }));
+    const powerSet = Array.from({ length: 3 }, () => ({
+      id: `power-${Math.random().toString(36).slice(2, 9)}`,
+      position: getRandomPosition(),
+    }));
+    setPenaltyBlocks(penaltySet);
+    setPowerUpBlocks(powerSet);
   }, []);
+
+  useEffect(() => {
+    if (spinBlockSnap.score === 0 && spinBlockSnap.elapsed === 0) {
+      setRotation([0, 0, 0]);
+      setPenaltyBlocks((prev) =>
+        prev.length === 0
+          ? Array.from({ length: 6 }, () => ({
+              id: `penalty-${Math.random().toString(36).slice(2, 9)}`,
+              position: getRandomPosition(),
+            }))
+          : prev.map((item) => ({ ...item, position: getRandomPosition() }))
+      );
+      setPowerUpBlocks((prev) =>
+        prev.length === 0
+          ? Array.from({ length: 3 }, () => ({
+              id: `power-${Math.random().toString(36).slice(2, 9)}`,
+              position: getRandomPosition(),
+            }))
+          : prev.map((item) => ({ ...item, position: getRandomPosition() }))
+      );
+    }
+  }, [spinBlockSnap.score, spinBlockSnap.elapsed]);
 
   // Handle Key Presses
   useEffect(() => {
@@ -614,6 +767,7 @@ const SpinBlock: React.FC = () => {
 
   return (
     <>
+      <SpinBlockCamera />
       <color attach="background" args={['#f0f0f0']} />
       <ambientLight intensity={0.5 * Math.PI} />
       <spotLight
@@ -635,9 +789,47 @@ const SpinBlock: React.FC = () => {
         {!paused && (
           <group {...bind} rotation={rotation}>
             <Arena />
+            {penaltyBlocks.map((block) => (
+              <PenaltyBlock
+                key={block.id}
+                id={block.id}
+                position={block.position}
+                onRespawn={(id) => {
+                  setPenaltyBlocks((prev) =>
+                    prev.map((item) =>
+                      item.id === id ? { ...item, position: getRandomPosition() } : item
+                    )
+                  );
+                }}
+              />
+            ))}
+            {powerUpBlocks.map((block) => (
+              <PowerUpBlock
+                key={block.id}
+                id={block.id}
+                position={block.position}
+                onRespawn={(id) => {
+                  setPowerUpBlocks((prev) =>
+                    prev.map((item) =>
+                      item.id === id ? { ...item, position: getRandomPosition() } : item
+                    )
+                  );
+                }}
+              />
+            ))}
           </group>
         )}
       </Physics>
+
+      {/* Classic graphics mode with postprocessing */}
+      {graphicsMode === 'classic' && (
+        <EffectComposer disableNormalPass>
+          <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.9} intensity={0.6} />
+          <Noise opacity={0.02} />
+          <Vignette eskil={false} offset={0.1} darkness={1.1} />
+        </EffectComposer>
+      )}
+
       <Html center>
         <div className="text-white text-xl">Score: {score}</div>
       </Html>

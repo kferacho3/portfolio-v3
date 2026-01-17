@@ -2,10 +2,13 @@
 'use client';
 
 import { Html, OrbitControls, Stars } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
+import { easeCubicInOut } from 'd3-ease';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Color, Group, Vector3 } from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import { useSnapshot } from 'valtio';
 import CanvasProvider from '../../components/CanvasProvider';
 import { ThemeContext } from '../../contexts/ThemeContext';
 import AnimatedCamera from './components/AnimatedCamera';
@@ -16,11 +19,25 @@ import GeoChrome from './games/GeoChrome';
 import Pinball from './games/Pinball3D';
 import ReactPong, { reactPongState } from './games/ReactPong';
 import Rollette from './games/Rollette';
-import ShapeShifter from './games/ShapeShifter';
+import ShapeShifter, { shapeShifterState } from './games/ShapeShifter';
 import SkyBlitz, { skyBlitzState } from './games/SkyBlitz';
 import SpinBlock, { spinBlockState } from './games/SpinBlock';
 import Stackz, { stackzState } from './games/Stackz';
+import Sizr, { sizrState } from './games/Sizr';
 import ProjectMuseum from './games/ProjectMuseum';
+// Classic ports
+import RolletteClassic, { rolletteClassicState } from './games/RolletteClassic';
+import SkyBlitzClassic, { skyBlitzClassicState } from './games/SkyBlitzClassic';
+import DropperClassic, { dropperClassicState } from './games/DropperClassic';
+import StackzCatchClassic, { stackzCatchClassicState } from './games/StackzCatchClassic';
+// New geometry games
+import Gyro, { gyroState } from './games/Gyro';
+import Prism, { prismState } from './games/Prism';
+import Forma, { formaState } from './games/Forma';
+import Weave, { weaveState } from './games/Weave';
+import Pave, { paveState } from './games/Pave';
+// Legacy wrapper for comparison
+import { LegacyCanvasWrapper, useLegacyMode } from './components/LegacyCanvasWrapper';
 
 type GameType =
   | 'home'
@@ -29,18 +46,118 @@ type GameType =
   | 'skyblitz'
   | 'dropper'
   | 'stackz'
+  | 'sizr'
   | 'pinball'
   | 'rollette'
   | 'flappybird'
   | 'reactpong'
   | 'spinblock'
-  | 'museum';
+  | 'museum'
+  // Classic ports
+  | 'rolletteClassic'
+  | 'skyblitzClassic'
+  | 'dropperClassic'
+  | 'stackzCatchClassic'
+  // New geometry games
+  | 'gyro'
+  | 'prism'
+  | 'forma'
+  | 'weave'
+  | 'pave';
+
+// Game rules for the info panel
+const GAME_RULES: Record<string, { controls: string; objective: string; tips?: string }> = {
+  geochrome: {
+    controls: 'WASD to move • Space to change shape • Mouse to steer',
+    objective: 'Collect geometry that matches your shape and deposit them in the correct gates. Avoid red obstacles.',
+    tips: 'Match your shape before collecting. Watch for hazards!',
+  },
+  shapeshifter: {
+    controls: 'Click shapes in sequence • R to restart',
+    objective: 'Watch the shapes pulse in order, then repeat the sequence. Grid expands as you progress.',
+    tips: 'Focus on the pattern. Normal mode increases difficulty automatically.',
+  },
+  skyblitz: {
+    controls: 'Mouse/Arrow keys to move • Space to shoot (UFO mode)',
+    objective: 'Dodge obstacles and collect power-ups. Shoot targets in UFO mode, survive in Runner mode.',
+    tips: 'Switch between modes for variety. Watch your health bar!',
+  },
+  dropper: {
+    controls: 'Move mouse to control bag • Catch items',
+    objective: 'Catch falling treasures in your bag! Collect coins, gems, diamonds and rare items. Avoid bombs and skulls!',
+    tips: 'Choose difficulty: Easy (5❤️), Medium (3❤️), Hard (1❤️). Rare items fall fast but give big points!',
+  },
+  stackz: {
+    controls: 'Mouse or A/D to move stack',
+    objective: 'Catch falling blocks and build your tower! Avoid bombs that cost you hearts.',
+    tips: 'Choose difficulty for more or fewer lives. Special blocks give bonus points!',
+  },
+  sizr: {
+    controls: 'Space to place block',
+    objective: 'Time your placement perfectly. Misaligned sections get cut off!',
+    tips: 'Watch the moving block carefully. Perfect placements build your streak.',
+  },
+  pinball: {
+    controls: 'A/D or ←/→ for flippers • Space to launch',
+    objective: 'Keep the ball alive and hit targets for points. Chain hits for bonus multipliers.',
+    tips: 'Time your flipper hits. Aim for the bumpers!',
+  },
+  rollette: {
+    controls: 'Mouse/WASD to steer',
+    objective: 'Steer the ball, collect golden rings, and avoid red cones to maintain health.',
+    tips: 'Keep moving. Green pyramids restore health.',
+  },
+  flappybird: {
+    controls: 'Space/Click to flap',
+    objective: 'Navigate through pipe gaps. Classic one-tap endurance gameplay.',
+    tips: 'Small, consistent taps work better than big ones.',
+  },
+  reactpong: {
+    controls: 'Mouse to move paddle',
+    objective: 'Solo pong with momentum effects. Build streaks for bonus points.',
+    tips: 'Watch the ball speed increase. Center hits are more controlled.',
+  },
+  spinblock: {
+    controls: 'A/D to spin arena • Space for power-ups',
+    objective: 'Spin the arena to bank the ball off targets. Grab power-ups, avoid penalties.',
+    tips: 'Gentle rotations give more control.',
+  },
+  gyro: {
+    controls: 'Space/Click to change shape',
+    objective: 'Spin through the helix. Match your shape to pass through gates. Super Hexagon meets 3D.',
+    tips: 'Stay calm. Focus on the approaching gate shape.',
+  },
+  prism: {
+    controls: 'Space/Click to jump • Mouse to drift',
+    objective: 'Match color AND shape to pass platforms. Land centered for bonus points.',
+    tips: 'Watch ahead for platform types. Combo perfect landings.',
+  },
+  forma: {
+    controls: 'WASD or Arrow Keys to merge',
+    objective: 'Merge matching polygons to evolve them. Triangle → Square → Pentagon and beyond.',
+    tips: 'Red tiles decay fast—merge them quickly!',
+  },
+  weave: {
+    controls: 'A/D to hop vertices • Space to phase jump',
+    objective: 'Thread through spinning segments. Collect shards to evolve your polygon.',
+    tips: 'Phase jump through hazards when timed right.',
+  },
+  pave: {
+    controls: '1/2/3 to select tile • Space to place • A/D to move',
+    objective: 'Build your path before you reach the void. Drop tiles to survive.',
+    tips: 'Plan ahead. Wrong tiles break your streak.',
+  },
+  museum: {
+    controls: 'Scroll to browse',
+    objective: 'Explore featured builds and systems. A curated walkthrough of recent work.',
+  },
+};
 
 const GAME_CARDS: GameCard[] = [
   {
     id: 'geochrome',
     title: 'GeoChrome',
-    description: 'Collect, sort, and survive evolving geometry lanes.',
+    description: 'Shift shapes, collect matching geometry, and deposit in the right gates while dodging hazards.',
     accent: '#60a5fa',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/GeoChrome.png',
     hotkey: '0',
@@ -48,7 +165,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'shapeshifter',
     title: 'Shape Shifter',
-    description: 'Memory grid challenge with accelerating patterns.',
+    description: 'Memorize the flashing sequence and repeat it as grids expand and speed up.',
     accent: '#a78bfa',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ShapeShift.png',
     hotkey: '1',
@@ -56,7 +173,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'skyblitz',
     title: 'Sky Blitz',
-    description: 'Arcade flight runs with dodges, targets, and score runs.',
+    description: 'Pilot the UFO or run the gauntlet—dodge hazards, shoot targets, and chase high scores.',
     accent: '#f472b6',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SkyBlitz.png',
     hotkey: '2',
@@ -64,7 +181,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'dropper',
     title: 'Dropper',
-    description: 'Timing, precision, and rapid catch cycles.',
+    description: 'Your collector oscillates automatically—absorb falling blocks at the right moment!',
     accent: '#f59e0b',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Dropper.png',
     hotkey: '3',
@@ -72,15 +189,23 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'stackz',
     title: 'Stackz',
-    description: 'Stack discipline with clean pacing and control.',
+    description: 'Catch falling blocks by moving your stack left and right. Build the tallest tower!',
     accent: '#f97316',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Stackz.png',
     hotkey: '4',
   },
   {
+    id: 'sizr',
+    title: 'Sizr',
+    description: 'Match and align blocks perfectly. Whatever misaligns gets cut off!',
+    accent: '#a855f7',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Sizr.png',
+    hotkey: 'S',
+  },
+  {
     id: 'pinball',
     title: 'Pinball 3D',
-    description: 'Physics-driven targets with high-energy rebounds.',
+    description: 'Use flippers to keep the ball alive and chain target hits.',
     accent: '#38bdf8',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pinball+3D.png',
     hotkey: '5',
@@ -88,7 +213,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'rollette',
     title: 'Rollette',
-    description: 'Bounce chaos with precision timing and boosts.',
+    description: 'Steer the ball, collect rings, and avoid the red cones.',
     accent: '#fda4af',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png',
     hotkey: '6',
@@ -96,7 +221,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'flappybird',
     title: 'Flappy Bird',
-    description: 'Classic one-tap endurance with score chasing.',
+    description: 'Classic one-tap endurance through tight pipe gaps.',
     accent: '#34d399',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/flappyBird.png',
     hotkey: '7',
@@ -104,7 +229,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'reactpong',
     title: 'React Pong',
-    description: 'Solo pong with reactive walls and momentum.',
+    description: 'Solo pong with momentum, reactive walls, and streak bonuses.',
     accent: '#22d3ee',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png',
     hotkey: '8',
@@ -112,7 +237,7 @@ const GAME_CARDS: GameCard[] = [
   {
     id: 'spinblock',
     title: 'Spin Block',
-    description: 'Rotate the arena and control the physics.',
+    description: 'Spin the arena, bank the ball off targets, and grab power-ups while avoiding penalties.',
     accent: '#34d399',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SpinBlock.png',
     hotkey: '9',
@@ -125,11 +250,53 @@ const GAME_CARDS: GameCard[] = [
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RachoMuseum.png',
     hotkey: 'M',
   },
+  // New Geometry Games
+  {
+    id: 'gyro',
+    title: 'Gyro',
+    description: 'Spin through the helix. Dodge the ribs. Super Hexagon meets 3D.',
+    accent: '#ff0055',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Gyro.webp',
+    hotkey: 'G',
+  },
+  {
+    id: 'prism',
+    title: 'Prism',
+    description: 'Match color AND shape to pass. Precision runner with a twist.',
+    accent: '#3366ff',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Prism.webp',
+    hotkey: 'I',
+  },
+  {
+    id: 'forma',
+    title: 'Forma',
+    description: 'Merge to evolve. Triangle to square to pentagon. 2048 meets geometry.',
+    accent: '#ff6b6b',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Forma.webp',
+    hotkey: 'F',
+  },
+  {
+    id: 'weave',
+    title: 'Weave',
+    description: 'Thread through spinning segments. Stitch shapes. Flow-state geometry.',
+    accent: '#48dbfb',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Weave.webp',
+    hotkey: 'W',
+  },
+  {
+    id: 'pave',
+    title: 'Pave',
+    description: 'Build your path or fall. Drop tiles before you reach the void.',
+    accent: '#00ffff',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pave.webp',
+    hotkey: 'B',
+  },
 ];
 
 const KEY_TO_GAME: Record<string, GameType> = {
   h: 'home',
   m: 'museum',
+  s: 'sizr',
   '0': 'geochrome',
   '1': 'shapeshifter',
   '2': 'skyblitz',
@@ -140,6 +307,12 @@ const KEY_TO_GAME: Record<string, GameType> = {
   '7': 'flappybird',
   '8': 'reactpong',
   '9': 'spinblock',
+  // New geometry games
+  g: 'gyro',
+  i: 'prism',
+  f: 'forma',
+  w: 'weave',
+  b: 'pave', // 'b' for build
 };
 
 const HUD_GAMES: GameType[] = [
@@ -149,7 +322,55 @@ const HUD_GAMES: GameType[] = [
   'skyblitz',
   'spinblock',
   'stackz',
+  'sizr',
 ];
+
+const ORBIT_AUTO_SPEED = 0.6;
+const ORBIT_RAMP_DURATION = 1.35;
+
+const ArcadeOrbitControls: React.FC<{ active: boolean; target: Vector3 }> = ({ active, target }) => {
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  const rampStartRef = useRef<number | null>(null);
+
+  useFrame(({ clock }) => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    if (!active) {
+      rampStartRef.current = null;
+      controls.autoRotate = false;
+      controls.autoRotateSpeed = 0;
+      return;
+    }
+
+    if (rampStartRef.current === null) {
+      rampStartRef.current = clock.elapsedTime;
+    }
+
+    const elapsed = clock.elapsedTime - rampStartRef.current;
+    const t = Math.min(elapsed / ORBIT_RAMP_DURATION, 1);
+    const eased = easeCubicInOut(t);
+
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = ORBIT_AUTO_SPEED * eased;
+  });
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      enablePan={false}
+      enableZoom
+      enableRotate
+      enableDamping
+      dampingFactor={0.08}
+      autoRotate={active}
+      autoRotateSpeed={0}
+      maxPolarAngle={Math.PI / 2}
+      minPolarAngle={0.15}
+      target={target}
+    />
+  );
+};
 
 interface UnlockableSkin {
   name: string;
@@ -214,12 +435,24 @@ const FunScene: React.FC<FunSceneProps> = ({
     skyblitz: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/skyBlitz/SkyBlitzTheme.mp3',
     dropper: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
     stackz: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    sizr: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
     pinball: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
     rollette: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
     flappybird: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
     reactpong: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/ReactPongBackgroundMusic.mp3',
     spinblock: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
     museum: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    // Classic ports
+    rolletteClassic: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    skyblitzClassic: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/skyBlitz/SkyBlitzTheme.mp3',
+    dropperClassic: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    stackzCatchClassic: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    // New geometry games
+    gyro: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    prism: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    forma: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    weave: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
+    pave: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
   };
 
   // Load the music track on game selection
@@ -280,29 +513,52 @@ const FunScene: React.FC<FunSceneProps> = ({
     const up = new Vector3(0, 1, 0);
     const right = new Vector3().crossVectors(up, forward).normalize();
 
-    const baseDistance = Math.max(arcadeRadius * 4.5, 6);
-    const sweepDistance = Math.max(arcadeRadius * 6.5, 9);
-    const height = Math.max(arcadeRadius * 2.4, 3);
-    
+    // Premium cinematic camera positions for multi-phase animation
+    // Camera starts from IN FRONT of the arcade (where we can see the monitor)
+    // and sweeps in dramatically to lock onto the screen
+    // FORWARD = direction the monitor faces (toward viewer)
+
+    const r = Math.max(arcadeRadius, 1.5);
+
+    // Shot 1: Far establishing shot - IN FRONT of arcade, high and to the side
+    // Positive forward = in front of screen where player would stand
+    const shot1 = focus.clone()
+      .addScaledVector(forward, r * 12)      // Far in front
+      .addScaledVector(right, r * 6)         // Off to the right
+      .addScaledVector(up, r * 5);           // High up for drama
+
+    // Shot 2: Mid-sweep - coming around, still elevated
+    const shot2 = focus.clone()
+      .addScaledVector(forward, r * 7)       // Closer
+      .addScaledVector(right, r * 3)         // Less to the side
+      .addScaledVector(up, r * 3);           // Coming down
+
+    // Shot 3: Approach - getting closer, almost centered
+    const shot3 = focus.clone()
+      .addScaledVector(forward, r * 4)       // Much closer
+      .addScaledVector(right, r * 0.5)       // Nearly centered
+      .addScaledVector(up, r * 1.5);         // Eye level approaching
+
+    // Shot 4: Focus pull - tightening on monitor
+    const shot4 = focus.clone()
+      .addScaledVector(forward, r * 2)       // Close
+      .addScaledVector(right, r * 0.05)      // Centered
+      .addScaledVector(up, r * 0.3);         // Slightly above center
+
+    // Shot 5: Final lock - EXTREMELY close to monitor, dead center
+    // This position should result in the monitor filling the entire view
+    const shot5 = focus.clone()
+      .addScaledVector(forward, r * 0.55)    // Super close - monitor fills entire view
+      .addScaledVector(up, r * 0.01);        // Perfectly centered
+
     const positions: [number, number, number][] = [
-      focus
-        .clone()
-        .addScaledVector(right, -sweepDistance * 0.5)
-        .addScaledVector(up, height * 1.6)
-        .addScaledVector(forward, -sweepDistance * 0.8)
-        .toArray() as [number, number, number],
-      focus
-        .clone()
-        .addScaledVector(right, -sweepDistance)
-        .addScaledVector(up, height * 0.8)
-        .addScaledVector(forward, sweepDistance * 0.25)
-        .toArray() as [number, number, number],
-      focus
-        .clone()
-        .addScaledVector(forward, baseDistance)
-        .addScaledVector(up, height * 0.15)
-        .toArray() as [number, number, number],
+      shot1.toArray() as [number, number, number],
+      shot2.toArray() as [number, number, number],
+      shot3.toArray() as [number, number, number],
+      shot4.toArray() as [number, number, number],
+      shot5.toArray() as [number, number, number],
     ];
+
     setTargetCameraPositions(positions);
     setLookAtPosition([fx, fy, fz]);
   }, [arcadeFocus, arcadeRadius, arcadeForward]);
@@ -330,38 +586,20 @@ const FunScene: React.FC<FunSceneProps> = ({
       );
       break;
     case 'geochrome':
-      content = (
-        <Html fullscreen>
-          <div className="fixed inset-0 pointer-events-auto" key={`geochrome-${restartSeed}`}>
-            <GeoChrome />
-          </div>
-        </Html>
-      );
+      content = <GeoChrome key={`geochrome-${restartSeed}`} />;
       break;
     case 'dropper':
       content = <Dropper soundsOn={soundsOn} />;
       break;
     case 'pinball':
-      content = (
-        <Html fullscreen>
-          <div className="fixed inset-0 pointer-events-auto" key={`pinball-${restartSeed}`}>
-            <Pinball />
-          </div>
-        </Html>
-      );
+      content = <Pinball key={`pinball-${restartSeed}`} />;
       break;
     case 'rollette':
-      content = (
-        <Html fullscreen>
-          <div className="fixed inset-0 pointer-events-auto" key={`rollette-${restartSeed}`}>
-            <Rollette />
-          </div>
-        </Html>
-      );
+      content = <Rollette key={`rollette-${restartSeed}`} />;
       break;
     case 'flappybird':
       content = (
-        <Html fullscreen>
+        <Html fullscreen style={{ pointerEvents: 'none' }}>
           <div className="fixed inset-0 pointer-events-auto" key={`flappybird-${restartSeed}`}>
             <FlappyBird />
           </div>
@@ -383,8 +621,40 @@ const FunScene: React.FC<FunSceneProps> = ({
     case 'stackz':
       content = <Stackz soundsOn={soundsOn} />;
       break;
+    case 'sizr':
+      content = <Sizr soundsOn={soundsOn} />;
+      break;
     case 'museum':
       content = <ProjectMuseum key={`museum-${restartSeed}`} />;
+      break;
+    // Classic ports
+    case 'rolletteClassic':
+      content = <RolletteClassic key={`rolletteClassic-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'skyblitzClassic':
+      content = <SkyBlitzClassic key={`skyblitzClassic-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'dropperClassic':
+      content = <DropperClassic key={`dropperClassic-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'stackzCatchClassic':
+      content = <StackzCatchClassic key={`stackzCatchClassic-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    // New geometry games
+    case 'gyro':
+      content = <Gyro key={`gyro-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'prism':
+      content = <Prism key={`prism-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'forma':
+      content = <Forma key={`forma-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'weave':
+      content = <Weave key={`weave-${restartSeed}`} soundsOn={soundsOn} />;
+      break;
+    case 'pave':
+      content = <Pave key={`pave-${restartSeed}`} soundsOn={soundsOn} />;
       break;
     default:
       content = (
@@ -405,11 +675,12 @@ const FunScene: React.FC<FunSceneProps> = ({
         {content}
 
         {/* Home camera animation */}
-        {!animationComplete && targetCameraPositions.length > 0 && currentGame === 'home' && (
+        {targetCameraPositions.length > 0 && currentGame === 'home' && (
           <AnimatedCamera
             positions={targetCameraPositions}
             lookAtPosition={lookAtPosition}
             onAnimationComplete={() => setAnimationComplete(true)}
+            active={!animationComplete}
           />
         )}
 
@@ -432,18 +703,7 @@ const FunScene: React.FC<FunSceneProps> = ({
         <hemisphereLight groundColor="#FFB1A1" intensity={0.4} />
 
         {animationComplete && arcadeRef.current && currentGame === 'home' && (
-          <OrbitControls
-            enablePan={false}
-            enableZoom
-            enableRotate
-            enableDamping
-            dampingFactor={0.08}
-            autoRotate
-            autoRotateSpeed={0.6}
-            maxPolarAngle={Math.PI / 2}
-            minPolarAngle={0.15}
-            target={orbitTarget}
-          />
+          <ArcadeOrbitControls active={animationComplete} target={orbitTarget} />
         )}
 
         {theme === 'dark' && (
@@ -512,16 +772,27 @@ const FunPageUI: React.FC<{
   const activeGameCard = GAME_CARDS.find((game) => game.id === currentGame) ?? selectedGame;
   const showHud = HUD_GAMES.includes(currentGame);
   const [showInfo, setShowInfo] = useState(false);
+  const [showGameRules, setShowGameRules] = useState(false);
+  const currentGameRules = GAME_RULES[currentGame];
+  const reactPongSnap = useSnapshot(reactPongState);
+  const spinBlockSnap = useSnapshot(spinBlockState);
+  const skyBlitzSnap = useSnapshot(skyBlitzState);
+  const dropperSnap = useSnapshot(dropperState);
+  const stackzSnap = useSnapshot(stackzState);
+  const sizrSnap = useSnapshot(sizrState);
+  const shapeShifterSnap = useSnapshot(shapeShifterState);
 
   const lockedSkinImage = 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
 
   const getScore = () => {
     switch (currentGame) {
-      case 'spinblock': return spinBlockState.score;
-      case 'reactpong': return reactPongState.score;
-      case 'skyblitz': return skyBlitzState.score;
-      case 'dropper': return dropperState.score;
-      case 'stackz': return stackzState.score;
+      case 'spinblock': return spinBlockSnap.score;
+      case 'reactpong': return reactPongSnap.score;
+      case 'skyblitz': return skyBlitzSnap.score;
+      case 'dropper': return dropperSnap.score;
+      case 'stackz': return stackzSnap.score;
+      case 'sizr': return sizrSnap.score;
+      case 'shapeshifter': return shapeShifterSnap.score;
       default: return 0;
     }
   };
@@ -542,6 +813,11 @@ const FunPageUI: React.FC<{
     setShowInfo(false);
   }, [selectedIndex]);
 
+  // Reset game rules panel when game changes
+  useEffect(() => {
+    setShowGameRules(false);
+  }, [currentGame]);
+
   const panelStyles = {
     fontFamily: '"Geist", sans-serif',
     ['--arcade-accent' as any]: activeGameCard?.accent ?? selectedGame.accent,
@@ -558,16 +834,52 @@ const FunPageUI: React.FC<{
     if (currentGame !== 'home') {
       return (
         <div className="fixed right-4 top-4 z-[9999] pointer-events-none">
-          <div className="pointer-events-auto w-[min(92vw,260px)] animate-in fade-in slide-in-from-right-4 duration-500" style={panelStyles}>
+          <div className="pointer-events-auto w-[min(92vw,280px)] animate-in fade-in slide-in-from-right-4 duration-500" style={panelStyles}>
             <div className="rounded-2xl border p-3 backdrop-blur-xl" style={{ borderColor: 'var(--arcade-stroke)', background: 'var(--arcade-panel)', boxShadow: '0 18px 40px rgba(0, 0, 0, 0.45)' }}>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-[0.32em] text-white/60" style={{ fontFamily: '"Geist Mono", monospace' }}>Arcade Deck</span>
-                <span className="h-2 w-2 rounded-full" style={{ background: 'var(--arcade-accent)' }} />
+              {/* Game Name Header */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full animate-pulse" style={{ background: 'var(--arcade-accent)' }} />
+                  <span className="text-sm font-semibold text-white">{activeGameCard?.title || 'Game'}</span>
+                </div>
+                {/* Info Icon */}
+                <button
+                  onClick={() => setShowGameRules(!showGameRules)}
+                  aria-label="Game rules"
+                  className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] transition ${
+                    showGameRules ? 'border-[var(--arcade-accent)] text-[var(--arcade-accent)] bg-[var(--arcade-accent)]/10' : 'border-white/30 text-white/50 hover:text-white hover:border-white/50'
+                  }`}
+                  style={{ fontFamily: '"Geist Mono", monospace' }}
+                >
+                  ?
+                </button>
               </div>
-              <button onClick={onPauseHome} className="mt-3 w-full rounded-xl border px-3 py-2 text-xs uppercase tracking-[0.28em] text-white/80 transition hover:text-white" style={{ borderColor: 'var(--arcade-stroke)' }}>Return Home</button>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-[0.32em] text-white/40" style={{ fontFamily: '"Geist Mono", monospace' }}>Arcade Deck</span>
+              </div>
+
+              {/* Game Rules Panel */}
+              {showGameRules && currentGameRules && (
+                <div className="mt-3 rounded-xl border px-3 py-2.5 text-xs" style={{ borderColor: 'var(--arcade-stroke)', background: 'rgba(0,0,0,0.3)' }}>
+                  <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">How to Play</div>
+                  <div className="text-white/80 leading-relaxed">{currentGameRules.objective}</div>
+                  <div className="mt-2 pt-2 border-t border-white/10">
+                    <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Controls</div>
+                    <div className="text-white/70 text-[11px]">{currentGameRules.controls}</div>
+                  </div>
+                  {currentGameRules.tips && (
+                    <div className="mt-2 pt-2 border-t border-white/10">
+                      <div className="text-[10px] uppercase tracking-wider text-[var(--arcade-accent)]/70 mb-1">Tip</div>
+                      <div className="text-white/60 text-[11px] italic">{currentGameRules.tips}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <button onClick={onPauseHome} className="mt-3 w-full rounded-xl border px-3 py-2 text-xs uppercase tracking-[0.28em] text-white/80 transition hover:text-white hover:bg-white/5" style={{ borderColor: 'var(--arcade-stroke)' }}>Return Home</button>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <button onClick={onToggleMusic} className="rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition hover:text-white" style={{ borderColor: 'var(--arcade-stroke)' }}>Music {musicOn ? 'On' : 'Off'}</button>
-                <button onClick={onToggleSounds} className="rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition hover:text-white" style={{ borderColor: 'var(--arcade-stroke)' }}>Sounds {soundsOn ? 'On' : 'Off'}</button>
+                <button onClick={onToggleMusic} className={`rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] transition hover:text-white ${musicOn ? 'text-white/90 bg-white/5' : 'text-white/50'}`} style={{ borderColor: 'var(--arcade-stroke)' }}>Music {musicOn ? 'On' : 'Off'}</button>
+                <button onClick={onToggleSounds} className={`rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] transition hover:text-white ${soundsOn ? 'text-white/90 bg-white/5' : 'text-white/50'}`} style={{ borderColor: 'var(--arcade-stroke)' }}>Sounds {soundsOn ? 'On' : 'Off'}</button>
               </div>
             </div>
           </div>
@@ -671,11 +983,15 @@ const FunPageUI: React.FC<{
   const renderHUDOverlay = () => {
     if (!showHud) return null;
     const score = getScore();
-    const showModeSelection = currentGame === 'skyblitz' || currentGame === 'reactpong' || currentGame === 'shapeshifter';
+    const activeHealth = currentGame === 'skyblitz' ? skyBlitzSnap.health : health;
+    // ShapeShifter has its own built-in UI for mode selection
+    const showModeSelection = currentGame === 'skyblitz' || currentGame === 'reactpong';
     let modeOptions: string[] = [];
     if (currentGame === 'skyblitz') modeOptions = ['UfoMode', 'RunnerManMode'];
     else if (currentGame === 'reactpong') modeOptions = ['SoloPaddle', 'SoloWalls'];
-    else if (currentGame === 'shapeshifter') modeOptions = ['3x3', '4x4', '5x5'];
+
+    // ShapeShifter has its own complete HUD, so skip the generic one
+    if (currentGame === 'shapeshifter') return null;
 
     return (
       <div className="fixed bottom-4 right-4 flex flex-col items-end space-y-2 text-white z-[9999] pointer-events-auto">
@@ -686,7 +1002,7 @@ const FunPageUI: React.FC<{
           <div className="bg-slate-950/80 px-4 py-2 rounded shadow w-48 border border-white/10">
             <span className="text-sm">Health</span>
             <div className="w-full bg-white/10 h-2 mt-1 rounded">
-              <div className="bg-red-500 h-2 rounded" style={{ width: `${health}%` }} />
+              <div className="bg-red-500 h-2 rounded" style={{ width: `${activeHealth}%` }} />
             </div>
           </div>
         )}
@@ -695,7 +1011,7 @@ const FunPageUI: React.FC<{
             <span className="text-xs uppercase tracking-[0.2em] text-white/60">Mode</span>
             <div className="flex flex-wrap mt-1 gap-2">
               {modeOptions.map((m) => (
-                <button key={m} onClick={() => onModeSwitch(m)} className={`text-xs rounded px-2 py-1 border border-white/10 bg-white/5 hover:bg-white/15 ${(currentGame === 'skyblitz' && skyBlitzMode === m) || (currentGame === 'reactpong' && reactPongMode === m) || (currentGame === 'shapeshifter' && shapeShifterMode === m) ? 'border-[#39FF14]/60 text-[#39FF14]' : ''}`}>{m}</button>
+                <button key={m} onClick={() => onModeSwitch(m)} className={`text-xs rounded px-2 py-1 border border-white/10 bg-white/5 hover:bg-white/15 ${(currentGame === 'skyblitz' && skyBlitzMode === m) || (currentGame === 'reactpong' && reactPongMode === m) ? 'border-[#39FF14]/60 text-[#39FF14]' : ''}`}>{m}</button>
               ))}
             </div>
             <button className="mt-2 text-xs hover:text-yellow-300">Game Mode Info</button>
@@ -709,8 +1025,8 @@ const FunPageUI: React.FC<{
   const renderPauseMenu = () => {
     if (!paused) return null;
     let skins: { name: string; url: string; unlocked: boolean; achievement: string }[] = [];
-    if (currentGame === 'reactpong') skins = reactPongState.skins;
-    else if (currentGame === 'spinblock') skins = spinBlockState.skins;
+    if (currentGame === 'reactpong') skins = [...reactPongSnap.skins];
+    else if (currentGame === 'spinblock') skins = [...spinBlockSnap.skins];
 
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[9999] pointer-events-auto">
@@ -782,9 +1098,25 @@ export default function FunPage() {
   const handleRestartGame = useCallback(() => {
     if (currentGame === 'spinblock') spinBlockState.reset();
     if (currentGame === 'reactpong') reactPongState.reset();
-    if (currentGame === 'skyblitz') skyBlitzState.reset();
+    if (currentGame === 'skyblitz') {
+      skyBlitzState.reset();
+      setSkyBlitzMode('UfoMode');
+    }
     if (currentGame === 'dropper') dropperState.reset();
     if (currentGame === 'stackz') stackzState.reset();
+    if (currentGame === 'sizr') sizrState.reset();
+    // Classic ports
+    if (currentGame === 'rolletteClassic') rolletteClassicState.reset();
+    if (currentGame === 'skyblitzClassic') skyBlitzClassicState.reset();
+    if (currentGame === 'dropperClassic') dropperClassicState.reset();
+    if (currentGame === 'stackzCatchClassic') stackzCatchClassicState.reset();
+    // New geometry games
+    if (currentGame === 'gyro') gyroState.reset();
+    if (currentGame === 'prism') prismState.reset();
+    if (currentGame === 'forma') formaState.reset();
+    if (currentGame === 'weave') weaveState.reset();
+    if (currentGame === 'pave') paveState.reset();
+    // Games that use restartSeed for remounting
     if (['geochrome', 'pinball', 'rollette', 'flappybird', 'shapeshifter', 'museum'].includes(currentGame)) {
       setRestartSeed((prev) => prev + 1);
     }

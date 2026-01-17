@@ -303,6 +303,16 @@ export function RachosArcade(props: ModelProps) {
     };
   }, [actions]);
 
+  // Enable raycast on all meshes in the scene for interactivity
+  useEffect(() => {
+    if (!scene) return;
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        child.raycast = THREE.Mesh.prototype.raycast;
+      }
+    });
+  }, [scene]);
+
   // Load and apply texture to screen mesh
   useEffect(() => {
     const mesh = screenPlaneRef.current;
@@ -361,21 +371,31 @@ export function RachosArcade(props: ModelProps) {
   }, [selectedIndex, games.length, onSelectGame, currentGame, onLaunchGame]);
 
   // Handle pointer events on the model - launch game on click
-  const handlePointerDown = useCallback(
-    (event: { object?: THREE.Object3D; stopPropagation?: () => void }) => {
-      if (
-        event.object &&
-        (event.object === screenPlaneRef.current || event.object === screenMeshRef.current)
-      ) {
-        event.stopPropagation?.();
-        handleScreenClick();
-      }
+  const handleModelClick = useCallback(
+    (e: THREE.Event & { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      handleScreenClick();
     },
     [handleScreenClick]
   );
 
+  const handlePointerOver = useCallback(() => {
+    document.body.style.cursor = 'pointer';
+  }, []);
+
+  const handlePointerOut = useCallback(() => {
+    document.body.style.cursor = 'auto';
+  }, []);
+
   return (
-    <group ref={setRefs} {...rest} dispose={null} onClick={handlePointerDown}>
+    <group
+      ref={setRefs}
+      {...rest}
+      dispose={null}
+      onClick={handleModelClick}
+      onPointerOver={handlePointerOver}
+      onPointerOut={handlePointerOut}
+    >
       <group ref={modelGroupRef} position={modelOffset} scale={modelScale}>
         <primitive object={scene} />
         {screenPlaneConfig && screenShape && (
@@ -384,6 +404,18 @@ export function RachosArcade(props: ModelProps) {
             position={screenPlaneConfig.position}
             quaternion={screenPlaneConfig.quaternion}
             renderOrder={2}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleScreenClick();
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              document.body.style.cursor = 'pointer';
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              document.body.style.cursor = 'auto';
+            }}
           >
             <shapeGeometry args={[screenShape, 10]} />
             <meshBasicMaterial toneMapped={false} side={THREE.DoubleSide} />

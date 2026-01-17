@@ -16,7 +16,7 @@ const ProjectMuseum: React.FC = () => {
           <meshStandardMaterial color="#7dd3fc" metalness={0.6} roughness={0.2} />
         </mesh>
       </Float>
-      <Html fullscreen>
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="pointer-events-auto fixed inset-0 flex items-center justify-center">
           <div className="w-[min(960px,92vw)] rounded-3xl border border-white/10 bg-slate-950/80 p-6 text-white shadow-[0_24px_60px_rgba(0,0,0,0.35)] backdrop-blur-lg">
             <div className="flex flex-wrap items-center justify-between gap-4">

@@ -5,6 +5,7 @@ import { Physics, useBox, useCylinder, usePlane, useSphere } from '@react-three/
 import {
   Box,
   Cone,
+  Html,
   PerspectiveCamera,
   RoundedBox,
   SpotLight,
@@ -12,7 +13,7 @@ import {
   useAspect,
   useTexture,
 } from '@react-three/drei';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import React, {
   Suspense,
   forwardRef,
@@ -129,10 +130,12 @@ const handleSphereCollision = (sphereId) => {
 function ScoreDisplay() {
     const { score, bestScore } = React.useContext(ScoreContext); // Use the context to get the current score
     return (
-        <div style={{ position: 'absolute', top: 20, left: 20, color: 'white', fontSize: '24px', zIndex: 100 }}>
+        <Html fullscreen style={{ pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', top: 20, left: 20, color: 'white', fontSize: '20px', pointerEvents: 'auto' }}>
             Current: {score}<br />
             Best Score: {bestScore}
-        </div>
+          </div>
+        </Html>
     );
 }
 
@@ -271,7 +274,7 @@ function BallAndCollisions({ args = [1.2, 32, 32] }) {
   
     return (
       <>
-        <PerspectiveCamera ref={cam} makeDefault position={[0, 0, 12]} fov={100} />
+        <PerspectiveCamera ref={cam} makeDefault position={[0, 5, 18]} fov={50} />
         {showSparks && <Sparks position={ballPositionRef.current} count={20} lifetime={300} />}
         {showScore && (
                 <Score3D position={ballPositionRef.current} hitCount={lastHitCount}  />
@@ -292,10 +295,31 @@ function BallAndCollisions({ args = [1.2, 32, 32] }) {
 
 
 
-function Paddle({ args = [5, 1.5, 4] }) {
-  const api = useRef()
-  useFrame((state) => (api.current.position.set(state.mouse.x * 10, -5, 0), api.current.rotation.set(0, 0, (state.mouse.x * Math.PI) / 4)))
-  return <Block  ref={api} args={args} material={{ restitution: 1.3 }} />
+type FlipperSide = 'left' | 'right';
+
+function Flipper({ side, controlsRef }: { side: FlipperSide; controlsRef: React.MutableRefObject<{ left: boolean; right: boolean }> }) {
+  const [ref, api] = useBox(() => ({
+    type: 'Kinematic',
+    args: [3, 0.4, 1.6],
+    position: [side === 'left' ? -4 : 4, -6.5, 0],
+    rotation: [0, 0, side === 'left' ? -0.2 : 0.2],
+    material: { restitution: 1.2 },
+  }));
+
+  useFrame(() => {
+    if (!ref.current) return;
+    const active = side === 'left' ? controlsRef.current.left : controlsRef.current.right;
+    const target = active ? (side === 'left' ? 0.9 : -0.9) : (side === 'left' ? -0.2 : 0.2);
+    const next = THREE.MathUtils.lerp(ref.current.rotation.z, target, 0.25);
+    api.rotation.set(0, 0, next);
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <boxGeometry args={[3, 0.4, 1.6]} />
+      <meshStandardMaterial color="#f8fafc" />
+    </mesh>
+  );
 }
 
 function MovingBlock({ blockId, offset = 0, position: [x, y, z], ...props }) {
@@ -452,7 +476,7 @@ function MovingPyramid({ blockId, offset = 0, position: [x, y, z], ...props }) {
     <Pyramid
       ref={api}
       blockId={blockId}
-      onCollide={() => decreaseScore(100000, blockId)}
+      onCollide={() => decreaseScore(250, blockId)}
       args={[0.1, 1, 2, 4]}
       material={{ color: '#FF0000', restitution: 1.1 }}
       {...props}
@@ -469,7 +493,7 @@ const Pyramid = forwardRef(({ blockId, args = [0.1, 1, 2, 4], shake = 0,  vec = 
   const [pyramidRef, api] = useCylinder(() => ({
     mass: 0.1,
     args: [0.1, 1, 2, 4], // Approximating a pyramid: top radius, bottom radius, height, numSegments
-    onCollide: () => decreaseScore(100000, blockId)
+    onCollide: () => decreaseScore(250, blockId)
   }));
 
     useFrame(() => group.current.position.lerp(vec.set(0, (shake = THREE.MathUtils.lerp(shake, 0, 0.1)), 0), 0.2));
@@ -503,50 +527,78 @@ const Background = (props) => (
 
 
 
-export const Pinball = () => (
-  <ScoreProvider>
-    <ScoreDisplay />
-    <Canvas dpr={1.5} camera={{ position: [0, 2, 12], fov: 50 }}>
-    <Suspense fallback={null}>
-    <SpotLight
-      position={[10, 10, 10]} // Adjust position to fit your scene
-      angle={0.3} // The spread of the light
-      penumbra={0.2} // How soft the edge of the light is
-      intensity={1} // Brightness of the light
-      castShadow={true} // Whether the light casts shadows
-    />
-      <Physics iterations={5} gravity={[0, -30, 0]}>
-      <ambientLight intensity={0.5} />
-      <spotLight position={[10, 15, 10]} angle={0.3} intensity={1} />
-        <BallAndCollisions />
-        <Paddle />
-        {/* Existing Moving Blocks */}
-        {Array.from({ length: 6 }, (_, i) => (
-          <MovingBlock blockId={`block-${i}`} key={i} position={[0, 1 + i * 4.5, 0]} offset={10000 * i} />
-        ))}
-        {Array.from({ length: 8 }, (_, i) => (
-          <MovingBlock blockId={`block-${i + 6}`} key={i + 6} position={[0, 1 + (i + 1) * 4.5, 0]} offset={10000 * i} />
-        ))}
-        {/* Moving Pyramids */}
-        {Array.from({ length: 20 }, (_, i) => (
-          <MovingPyramid blockId={`pyramid-${i}`} key={`pyramid-${i}`} position={[i * 2 - 8,  10+ i * 8.5, -i * 2]} offset={i * 2000} />
-        ))}
-        {/* Moving Cubes */}
-        {Array.from({ length: 4 }, (_, i) => (
-          <MovingCube blockId={`cube-${i}`} key={`cube-${i}`} position={[-5 + i * 3, 1 + i * 6.5, 0]} offset={i * 750} />
-        ))}
-        {/* Effect Spheres */}
-        {Array.from({ length: 3 }, (_, i) => (
-          <MovingSphere blockId={`sphere-${i}`} key={`sphere-${i}`} position={[i * 2 - 2,  20 + i * 3.5, 0]} offset={i * 500} />
-        ))}
-        {/* Static Blocks for Boundaries */}
-        <Block args={[10, 1.5, 4]} position={[-11, -7, 0]} rotation={[0, 0, -0.7]} material={{ restitution: 1.2 }} />
-        <Block args={[10, 1.5, 4]} position={[11, -7, 0]} rotation={[0, 0, 0.7]} material={{ restitution: 1.2 }} />
-        <Background position={[0, 0, -5]} />
-      </Physics>
+export const Pinball: React.FC = () => {
+  const controlsRef = useRef({ left: false, right: false });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+        controlsRef.current.left = true;
+      }
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+        controlsRef.current.right = true;
+      }
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+        controlsRef.current.left = false;
+      }
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+        controlsRef.current.right = false;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  return (
+    <ScoreProvider>
+      <ScoreDisplay />
+      <Suspense fallback={null}>
+        <SpotLight
+          position={[10, 10, 10]}
+          angle={0.3}
+          penumbra={0.2}
+          intensity={1}
+          castShadow={true}
+        />
+        <Physics iterations={5} gravity={[0, -30, 0]}>
+          <ambientLight intensity={0.5} />
+          <spotLight position={[10, 15, 10]} angle={0.3} intensity={1} />
+          <BallAndCollisions />
+          <Flipper side="left" controlsRef={controlsRef} />
+          <Flipper side="right" controlsRef={controlsRef} />
+          {/* Existing Moving Blocks */}
+          {Array.from({ length: 6 }, (_, i) => (
+            <MovingBlock blockId={`block-${i}`} key={i} position={[0, 1 + i * 4.5, 0]} offset={10000 * i} />
+          ))}
+          {Array.from({ length: 8 }, (_, i) => (
+            <MovingBlock blockId={`block-${i + 6}`} key={i + 6} position={[0, 1 + (i + 1) * 4.5, 0]} offset={10000 * i} />
+          ))}
+          {/* Moving Pyramids */}
+          {Array.from({ length: 20 }, (_, i) => (
+            <MovingPyramid blockId={`pyramid-${i}`} key={`pyramid-${i}`} position={[i * 2 - 8,  10+ i * 8.5, -i * 2]} offset={i * 2000} />
+          ))}
+          {/* Moving Cubes */}
+          {Array.from({ length: 4 }, (_, i) => (
+            <MovingCube blockId={`cube-${i}`} key={`cube-${i}`} position={[-5 + i * 3, 1 + i * 6.5, 0]} offset={i * 750} />
+          ))}
+          {/* Effect Spheres */}
+          {Array.from({ length: 3 }, (_, i) => (
+            <MovingSphere blockId={`sphere-${i}`} key={`sphere-${i}`} position={[i * 2 - 2,  20 + i * 3.5, 0]} offset={i * 500} />
+          ))}
+          {/* Static Blocks for Boundaries */}
+          <Block args={[10, 1.5, 4]} position={[-11, -7, 0]} rotation={[0, 0, -0.7]} material={{ restitution: 1.2 }} />
+          <Block args={[10, 1.5, 4]} position={[11, -7, 0]} rotation={[0, 0, 0.7]} material={{ restitution: 1.2 }} />
+          <Background position={[0, 0, -5]} />
+        </Physics>
       </Suspense>
-    </Canvas>
-  </ScoreProvider>
-);
+    </ScoreProvider>
+  );
+};
 
 export default Pinball;

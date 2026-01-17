@@ -3,6 +3,7 @@
 
 import { Text, useTexture } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
+import { EffectComposer, N8AO, TiltShift2 } from '@react-three/postprocessing';
 import {
   BallCollider,
   CuboidCollider,
@@ -87,9 +88,14 @@ export const reactPongState = proxy({
 
   skins: [...reactPongSkins],
   mode: 'SoloPaddle' as 'SoloPaddle' | 'SoloWalls',
+  graphicsMode: 'clean' as 'clean' | 'classic',
 
   setMode: (mode: 'SoloPaddle' | 'SoloWalls') => {
     reactPongState.mode = mode;
+  },
+
+  setGraphicsMode: (mode: 'clean' | 'classic') => {
+    reactPongState.graphicsMode = mode;
   },
 
   hitBlock(type: BlockType, id: string) {
@@ -104,6 +110,7 @@ export const reactPongState = proxy({
   },
 
   pong(velocity: number, colliderType: string) {
+    let scoreDelta = 0;
     // If colliding with paddle
     if (colliderType === 'paddle') {
       const localAudio = reactPongState.audio.paddleHitSound;
@@ -120,6 +127,7 @@ export const reactPongState = proxy({
       }
       this.hitStreak++;
       this.count++;
+      scoreDelta += Math.max(1, Math.round(velocity));
 
       // Achievements for hitting streak
       const hitStreakAchievements = [
@@ -154,6 +162,7 @@ export const reactPongState = proxy({
           }
         }
         this.count += 5;
+        scoreDelta += 5;
       }
       if (this.hitStreak % 25 === 0 && this.hitStreak > 0) {
         const localScoreBonusSound = reactPongState.audio.scoreBonusSound;
@@ -168,6 +177,7 @@ export const reactPongState = proxy({
           }
         }
         this.count += 10;
+        scoreDelta += 15;
       }
 
     } 
@@ -190,33 +200,55 @@ export const reactPongState = proxy({
       switch (colliderType) {
         case 'wall-top':
           this.count += 2;
+          scoreDelta += 2;
           break;
         case 'wall-left':
         case 'wall-right':
           this.count += 3;
+          scoreDelta += 3;
           break;
         case 'wall-bottom-left':
         case 'wall-bottom-right':
           this.count += 5;
+          scoreDelta += 5;
           break;
       }
 
-      // Score achievements
-      const scoreAchievements = [
-        { threshold: 100,   skinName: 'Black' },
-        { threshold: 1000,  skinName: 'Black' },
-        { threshold: 10000, skinName: 'Black' },
-      ];
-      scoreAchievements.forEach((ach) => {
-        if (this.score === ach.threshold) {
-          const skin = this.skins.find((s) => s.name === ach.skinName);
-          if (skin && !skin.unlocked) {
-            skin.unlocked = true;
-            console.log(`Unlocked skin: ${skin.name}`);
-          }
-        }
-      });
     }
+    // Block hits
+    else {
+      this.count += 2;
+      switch (colliderType) {
+        case 'breakable':
+          scoreDelta += 15;
+          break;
+        case 'bouncy':
+          scoreDelta += 12;
+          break;
+        default:
+          scoreDelta += 8;
+          break;
+      }
+    }
+
+    if (scoreDelta > 0) {
+      this.score += scoreDelta;
+    }
+
+    const scoreAchievements = [
+      { threshold: 100,   skinName: 'Black' },
+      { threshold: 1000,  skinName: 'Black' },
+      { threshold: 10000, skinName: 'Black' },
+    ];
+    scoreAchievements.forEach((ach) => {
+      if (this.score >= ach.threshold) {
+        const skin = this.skins.find((s) => s.name === ach.skinName);
+        if (skin && !skin.unlocked) {
+          skin.unlocked = true;
+          console.log(`Unlocked skin: ${skin.name}`);
+        }
+      }
+    });
 
     // Color logic
     if (this.count >= this.scoreSparks) {
@@ -325,9 +357,10 @@ interface BallProps {
   position: [number, number, number];
   ballColor: string;
   ballTextureUrl: string;
+  onBodyReady?: (body: RapierRigidBody | null) => void;
 }
 
-const Ball: React.FC<BallProps> = ({ position, ballColor, ballTextureUrl }) => {
+const Ball: React.FC<BallProps> = ({ position, ballColor, ballTextureUrl, onBodyReady }) => {
   const api = useRef<RapierRigidBody | null>(null);
   const map = useTexture(ballTextureUrl);
   const { viewport } = useThree();
@@ -339,6 +372,10 @@ const Ball: React.FC<BallProps> = ({ position, ballColor, ballTextureUrl }) => {
       api.current.setLinvel({ x: 0, y: 3.5, z: 0 }, true);
     }
   }, []);
+
+  useEffect(() => {
+    if (onBodyReady) onBodyReady(api.current);
+  }, [onBodyReady]);
 
   return (
     <group position={position}>
@@ -474,6 +511,10 @@ const Arena: React.FC = () => {
   const arenaHeight = 10;
   const wallThickness = 0.25;
 
+  // Bottom wall split configuration (matches legacy)
+  const bottomWallLength = (arenaWidth * 0.33) / 2;
+  const bottomWallGap = arenaWidth * 0.8;
+
   const transmissiveMaterial = new THREE.MeshPhysicalMaterial({
     color: '#fff',
     transmission: 1,
@@ -523,6 +564,32 @@ const Arena: React.FC = () => {
         </mesh>
       </RigidBody>
 
+      {/* Bottom Left Wall (split with gap - matches legacy) */}
+      <RigidBody
+        restitution={1.1}
+        position={[-(bottomWallGap / 2 + bottomWallLength / 2), -arenaHeight / 2, 0]}
+        type="fixed"
+        onCollisionEnter={() => onWallCollision('wall-bottom-left')}
+      >
+        <CuboidCollider args={[bottomWallLength, wallThickness, arenaDepth]} />
+        <mesh material={transmissiveMaterial}>
+          <boxGeometry args={[bottomWallLength, wallThickness, arenaDepth]} />
+        </mesh>
+      </RigidBody>
+
+      {/* Bottom Right Wall (split with gap - matches legacy) */}
+      <RigidBody
+        restitution={1.1}
+        position={[(bottomWallGap / 2 + bottomWallLength / 2), -arenaHeight / 2, 0]}
+        type="fixed"
+        onCollisionEnter={() => onWallCollision('wall-bottom-right')}
+      >
+        <CuboidCollider args={[bottomWallLength, wallThickness, arenaDepth]} />
+        <mesh material={transmissiveMaterial}>
+          <boxGeometry args={[bottomWallLength, wallThickness, arenaDepth]} />
+        </mesh>
+      </RigidBody>
+
       {/* Render breakable / stationary / bouncy blocks */}
       <group>
         {Object.entries(blocks.breakable).map(([id, block]) => (
@@ -555,13 +622,28 @@ const Arena: React.FC = () => {
 };
 
 // --------------------------------------
+// Background Sphere
+// --------------------------------------
+
+const Bg: React.FC = () => {
+  const texture = useTexture('/fun/resources/bg.jpg');
+  return (
+    <mesh rotation={[0, Math.PI / 1.25, 0]} scale={100}>
+      <sphereGeometry />
+      <meshBasicMaterial map={texture} side={THREE.BackSide} />
+    </mesh>
+  );
+};
+
+// --------------------------------------
 // ReactPong (Main Component)
 // --------------------------------------
 
-const ReactPong: React.FC<{ ready: boolean }> = ({ ready }) => {
-  const { scoreColor, ballColor, ballTexture } = useSnapshot(reactPongState);
+const ReactPong: React.FC<{ ready: boolean }> = ({ ready: _ready }) => {
+  const { scoreColor, ballColor, ballTexture, mode, count, graphicsMode } = useSnapshot(reactPongState);
   const [sparkPosition, setSparkPosition] = useState<[number, number, number] | null>(null);
   const [paused, setPaused] = useState(false);
+  const ballBodyRef = useRef<RapierRigidBody | null>(null);
 
   // Audio Refs
   const paddleHitSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -592,6 +674,12 @@ const ReactPong: React.FC<{ ready: boolean }> = ({ ready }) => {
     setTimeout(() => setSparkPosition(null), 1000);
   }, []);
 
+  useEffect(() => {
+    if (!ballBodyRef.current || count === 0 || count % 25 !== 0) return;
+    const translation = ballBodyRef.current.translation();
+    triggerSparkEffectAtBallPosition([translation.x, translation.y, translation.z]);
+  }, [count, triggerSparkEffectAtBallPosition]);
+
   const togglePause = useCallback(() => {
     setPaused((prev) => !prev);
   }, []);
@@ -617,8 +705,7 @@ const ReactPong: React.FC<{ ready: boolean }> = ({ ready }) => {
 
   return (
     <>
-      {/* No EffectComposer here or just no special passes */}
-      <color attach="background" args={['#f0f0f0']} />
+      <Bg />
       <ambientLight intensity={0.5 * Math.PI} />
       <spotLight
         decay={0}
@@ -632,10 +719,26 @@ const ReactPong: React.FC<{ ready: boolean }> = ({ ready }) => {
       />
       <Physics gravity={[0, -40, 0]} timeStep="vary">
         {sparkPosition && <SparkEffect position={sparkPosition} />}
-        <Ball position={[0, 5, 0]} ballColor={ballColor} ballTextureUrl={ballTexture} />
-        {!paused && <Paddle scoreColor={scoreColor} />}
+        <Ball
+          position={[0, 5, 0]}
+          ballColor={ballColor}
+          ballTextureUrl={ballTexture}
+          onBodyReady={(body) => {
+            ballBodyRef.current = body;
+          }}
+        />
+        {!paused && mode === 'SoloPaddle' && <Paddle scoreColor={scoreColor} />}
+        {!paused && mode === 'SoloWalls' && <SoloWallsAssist ballRef={ballBodyRef} />}
         <Arena />
       </Physics>
+
+      {/* Classic graphics mode with postprocessing */}
+      {graphicsMode === 'classic' && (
+        <EffectComposer disableNormalPass>
+          <N8AO distanceFalloff={1} aoRadius={1} intensity={4} />
+          <TiltShift2 blur={0.1} />
+        </EffectComposer>
+      )}
     </>
   );
 };
@@ -716,4 +819,42 @@ const Paddle: React.FC<PaddleProps> = ({ scoreColor }) => {
       </group>
     </RigidBody>
   );
+};
+
+interface SoloWallsAssistProps {
+  ballRef: React.MutableRefObject<RapierRigidBody | null>;
+}
+
+const SoloWallsAssist: React.FC<SoloWallsAssistProps> = ({ ballRef }) => {
+  const pointerDown = useRef(false);
+
+  useEffect(() => {
+    const handlePointerDown = () => {
+      pointerDown.current = true;
+    };
+    const handlePointerUp = () => {
+      pointerDown.current = false;
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, []);
+
+  useFrame((state, delta) => {
+    if (!pointerDown.current || !ballRef.current) return;
+    const impulseScale = 1.2;
+    ballRef.current.applyImpulse(
+      {
+        x: state.pointer.x * impulseScale * delta * 60,
+        y: state.pointer.y * impulseScale * delta * 60,
+        z: 0,
+      },
+      true
+    );
+  });
+
+  return null;
 };

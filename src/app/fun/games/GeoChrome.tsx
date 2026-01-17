@@ -7,9 +7,10 @@ import {
   Dodecahedron,
   Html,
   Sphere,
+  Torus,
   TorusKnot,
 } from '@react-three/drei';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { colorPalettes } from './ColorPalettes';
@@ -18,6 +19,9 @@ const ICOSPHERE_RADIUS = 98;
 const GRAVITY_FORCE = 0.81;
 const SHAPES = ['sphere', 'cube', 'torusKnot', 'cone', 'dodecahedron'] as const;
 const SPEED = 100;
+const DEPOSIT_COUNT = SHAPES.length;
+const OBSTACLE_COUNT = 12;
+const COLLISION_RADIUS = 3;
 
 type ShapeType = (typeof SHAPES)[number];
 
@@ -25,6 +29,19 @@ type ShapeProps = {
   type: ShapeType;
   color: string;
 } & JSX.IntrinsicElements['mesh'];
+
+type Deposit = {
+  id: string;
+  shape: ShapeType;
+  position: [number, number, number];
+  color: string;
+};
+
+type Obstacle = {
+  id: string;
+  position: [number, number, number];
+  color: string;
+};
 
 function Shape({ type, color, ...props }: ShapeProps) {
   switch (type) {
@@ -113,6 +130,25 @@ const selectRandomPalette = () => {
 const generateRandomColor = (palette: string[]) =>
   palette[Math.floor(Math.random() * palette.length)];
 
+const createDeposit = (shape: ShapeType, palette: string[]): Deposit => ({
+  id: `${shape}-${Math.random().toString(36).slice(2, 8)}`,
+  shape,
+  position: randomPositionOnSurface(),
+  color: generateRandomColor(palette),
+});
+
+const createObstacle = (): Obstacle => ({
+  id: `obstacle-${Math.random().toString(36).slice(2, 8)}`,
+  position: randomPositionOnSurface(),
+  color: '#ef4444',
+});
+
+const createEmptyCargo = () =>
+  SHAPES.reduce((acc, shape) => {
+    acc[shape] = 0;
+    return acc;
+  }, {} as Record<ShapeType, number>);
+
 function IcosahedronSurface() {
   return (
     <mesh>
@@ -133,12 +169,14 @@ type PlayerShapeProps = {
   playerColor: React.MutableRefObject<string>;
   playerShape: React.MutableRefObject<ShapeType>;
   playerRef: React.MutableRefObject<THREE.Group | null>;
+  onPlayerMove?: (position: THREE.Vector3) => void;
 };
 
 function PlayerShape({
   setScore: _setScore,
   playerColor,
   playerShape,
+  onPlayerMove,
 }: PlayerShapeProps) {
   const [ref, api] = useSphere<THREE.Mesh>(() => ({
     mass: 0.00001,
@@ -153,6 +191,7 @@ function PlayerShape({
   const direction = useRef(new THREE.Vector3());
   const frontVector = useRef(new THREE.Vector3());
   const sideVector = useRef(new THREE.Vector3());
+  const pointer = useRef(new THREE.Vector2());
 
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     switch (event.code) {
@@ -221,13 +260,16 @@ function PlayerShape({
   }, [api.velocity]);
 
   useFrame((state) => {
+    pointer.current.set(state.pointer.x, state.pointer.y);
+    const pointerX = Math.abs(pointer.current.x) > 0.05 ? pointer.current.x : 0;
+    const pointerY = Math.abs(pointer.current.y) > 0.05 ? pointer.current.y : 0;
     frontVector.current.set(
       0,
       0,
-      Number(controls.current.backward) - Number(controls.current.forward)
+      Number(controls.current.backward) - Number(controls.current.forward) - pointerY
     );
     sideVector.current.set(
-      Number(controls.current.left) - Number(controls.current.right),
+      Number(controls.current.left) - Number(controls.current.right) + pointerX,
       0,
       0
     );
@@ -241,6 +283,7 @@ function PlayerShape({
     api.velocity.set(velocity.current.x, velocity.current.y, velocity.current.z);
 
     const currentPosition = ref.current.getWorldPosition(new THREE.Vector3());
+    onPlayerMove?.(currentPosition);
     const distanceToCenter = currentPosition.length();
     const correctionVector = currentPosition
       .clone()
@@ -274,7 +317,7 @@ type ProceduralShapeProps = {
   position: [number, number, number];
   color: string;
   shape: ShapeType;
-  onCollect: (points: number) => void;
+  onCollect: (shape: ShapeType) => void;
   playerShape: React.MutableRefObject<ShapeType>;
   playerRef: React.MutableRefObject<THREE.Group | null>;
 };
@@ -294,7 +337,7 @@ function ProceduralShape({
     userData: { size: 1 },
     onCollide: () => {
       if (playerShape.current === shape && playerRef.current) {
-        onCollect(100);
+        onCollect(shape);
         const newShape = new THREE.Mesh(
           shape === 'cube'
             ? new THREE.BoxGeometry(0.5, 0.5, 0.5)
@@ -360,14 +403,14 @@ function ProceduralShape({
 }
 
 type ProceduralShapesProps = {
-  setScore: (points: number) => void;
+  onCollect: (shape: ShapeType) => void;
   playerShape: React.MutableRefObject<ShapeType>;
   currentPalette: string[];
   playerRef: React.MutableRefObject<THREE.Group | null>;
 };
 
 function ProceduralShapes({
-  setScore,
+  onCollect,
   playerShape,
   currentPalette,
   playerRef,
@@ -400,7 +443,7 @@ function ProceduralShapes({
           position={shape.position}
           color={shape.color}
           shape={shape.type}
-          onCollect={setScore}
+          onCollect={onCollect}
           playerShape={playerShape}
           playerRef={playerRef}
         />
@@ -411,10 +454,21 @@ function ProceduralShapes({
 
 const GeoChrome: React.FC = () => {
   const [score, setScore] = useState(0);
+  const [health, setHealth] = useState(100);
+  const [gameOver, setGameOver] = useState(false);
+  const [cargo, setCargo] = useState<Record<ShapeType, number>>(createEmptyCargo);
   const [currentPalette, setCurrentPalette] = useState(selectRandomPalette());
+  const [deposits, setDeposits] = useState<Deposit[]>(() =>
+    SHAPES.map((shape) => createDeposit(shape, selectRandomPalette()))
+  );
+  const [obstacles, setObstacles] = useState<Obstacle[]>(() =>
+    Array.from({ length: OBSTACLE_COUNT }, () => createObstacle())
+  );
   const playerColor = useRef(generateRandomColor(currentPalette));
   const playerShape = useRef<ShapeType>('sphere');
   const playerRef = useRef<THREE.Group | null>(null);
+  const playerPositionRef = useRef(new THREE.Vector3());
+  const lastCollisionRef = useRef(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -427,12 +481,80 @@ const GeoChrome: React.FC = () => {
     playerColor.current = generateRandomColor(currentPalette);
   }, [currentPalette]);
 
+  const handleCollect = useCallback((shape: ShapeType) => {
+    setCargo((prev) => ({ ...prev, [shape]: prev[shape] + 1 }));
+  }, []);
+
+  const handlePlayerMove = useCallback((position: THREE.Vector3) => {
+    playerPositionRef.current.copy(position);
+  }, []);
+
   const handleScoreUpdate = useCallback((points: number) => {
     setScore((current) => current + points);
   }, []);
 
+  const resetGame = useCallback(() => {
+    setScore(0);
+    setHealth(100);
+    setGameOver(false);
+    setCargo(createEmptyCargo());
+    setDeposits(SHAPES.map((shape) => createDeposit(shape, currentPalette)));
+    setObstacles(Array.from({ length: OBSTACLE_COUNT }, () => createObstacle()));
+    playerShape.current = 'sphere';
+    playerColor.current = generateRandomColor(currentPalette);
+  }, [currentPalette]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'r') resetGame();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [resetGame]);
+
+  useFrame(() => {
+    if (gameOver) return;
+    const now = performance.now();
+    const playerPosition = playerPositionRef.current;
+
+    deposits.forEach((deposit) => {
+      const depositPos = new THREE.Vector3(...deposit.position);
+      if (playerPosition.distanceTo(depositPos) <= COLLISION_RADIUS) {
+        if (now - lastCollisionRef.current < 400) return;
+        lastCollisionRef.current = now;
+        if (playerShape.current === deposit.shape && cargo[deposit.shape] > 0) {
+          setCargo((prev) => ({ ...prev, [deposit.shape]: prev[deposit.shape] - 1 }));
+          setScore((prev) => prev + 250);
+          setDeposits((prev) =>
+            prev.map((d) =>
+              d.id === deposit.id ? createDeposit(d.shape, currentPalette) : d
+            )
+          );
+        } else if (playerShape.current !== deposit.shape) {
+          setHealth((prev) => Math.max(0, prev - 10));
+        }
+      }
+    });
+
+    obstacles.forEach((obstacle) => {
+      const obstaclePos = new THREE.Vector3(...obstacle.position);
+      if (playerPosition.distanceTo(obstaclePos) <= COLLISION_RADIUS) {
+        if (now - lastCollisionRef.current < 400) return;
+        lastCollisionRef.current = now;
+        setHealth((prev) => Math.max(0, prev - 15));
+        setObstacles((prev) =>
+          prev.map((o) => (o.id === obstacle.id ? createObstacle() : o))
+        );
+      }
+    });
+  });
+
+  useEffect(() => {
+    if (health <= 0) setGameOver(true);
+  }, [health]);
+
   return (
-    <Canvas>
+    <>
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
       <Physics gravity={[0, -GRAVITY_FORCE, 0]}>
@@ -442,20 +564,40 @@ const GeoChrome: React.FC = () => {
             playerShape={playerShape}
             playerColor={playerColor}
             playerRef={playerRef}
+            onPlayerMove={handlePlayerMove}
           />
         </group>
         <ProceduralShapes
           currentPalette={currentPalette}
-          setScore={handleScoreUpdate}
+          onCollect={handleCollect}
           playerShape={playerShape}
           playerRef={playerRef}
         />
+        {deposits.map((deposit) => (
+          <group key={deposit.id} position={deposit.position}>
+            <Torus args={[1.6, 0.25, 16, 32]} rotation={[Math.PI / 2, 0, 0]}>
+              <meshStandardMaterial color={deposit.color} emissive={deposit.color} emissiveIntensity={0.35} />
+            </Torus>
+          </group>
+        ))}
+        {obstacles.map((obstacle) => (
+          <Dodecahedron key={obstacle.id} args={[1]} position={obstacle.position}>
+            <meshStandardMaterial color={obstacle.color} emissive={obstacle.color} emissiveIntensity={0.4} />
+          </Dodecahedron>
+        ))}
         <IcosahedronSurface />
         <Html center>
-          <div style={{ color: 'white', fontSize: '24px' }}>Score: {score}</div>
+          <div style={{ color: 'white', fontSize: '22px' }}>
+            <div>Score: {score}</div>
+            <div>Health: {Math.round(health)}%</div>
+            <div>
+              Cargo: {SHAPES.map((shape) => `${shape}:${cargo[shape]}`).join(' ')}
+            </div>
+            {gameOver && <div style={{ color: '#fca5a5' }}>Game Over - press R</div>}
+          </div>
         </Html>
       </Physics>
-    </Canvas>
+    </>
   );
 };
 

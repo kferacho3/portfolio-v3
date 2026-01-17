@@ -162,8 +162,7 @@ const UfoShip: React.FC<UfoShipProps> = ({ playerRef, bodyRef, ...props }) => {
       <mesh position={[20,0,0]} renderOrder={1000} material={crossMaterial}><boxGeometry args={[2,40,2]} /></mesh>
       <mesh position={[-20,0,0]} renderOrder={1000} material={crossMaterial}><boxGeometry args={[2,40,2]} /></mesh>
     </group>
-    {/* Rig Component for Camera and Lighting */}
-    <Rig><group rotation={[0, Math.PI, 0]}><group name="Scene">
+    <group rotation={[0, Math.PI, 0]}><group name="Scene">
       {/* UfoPurpleBod1 Mesh */}
       <mesh name="UfoPurpleBod1" castShadow receiveShadow geometry={nodes.UfoPurpleBod1.geometry} material={materials.PaletteMaterial001} position={[1.247,-1.158,0.088]} rotation={[1.57,0,-3.141]} scale={[4.877,0.516,4.877]} />
       {/* Empty Group */}
@@ -284,7 +283,7 @@ const UfoShip: React.FC<UfoShipProps> = ({ playerRef, bodyRef, ...props }) => {
       <mesh name="pTorus6_PistolType_0002" castShadow receiveShadow geometry={nodes.pTorus6_PistolType_0002.geometry} material={materials['PistolType.002']} position={[-0.008,-0.719,0.439]} rotation={[1.523,-0.079,-1.582]} scale={0.258} />
       {/* Spinner004 Mesh */}
       <mesh name="Spinner004" castShadow receiveShadow geometry={nodes.Spinner004.geometry} material={materials['material_0.004']} position={[-1.001,-0.757,-0.4]} rotation={[1.531,-1.437,3.124]} scale={[0.004,0.023,0.005]} />
-    </group> </group>  </Rig></group></group>;
+    </group> </group></group></group>;
 };
 useGLTF.preload('/fun/models/UFOgames.glb');
 

@@ -7,12 +7,16 @@ import {
   Cone,
   Dodecahedron,
   Html,
+  Icosahedron,
+  Octahedron,
   Sparkles,
   Sphere,
   Torus,
   TorusKnot,
 } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useState } from 'react';
+import * as THREE from 'three'; // Used for camera type check
 import { proxy, useSnapshot } from 'valtio';
 
 // Define and export the game state using Valtio
@@ -56,20 +60,48 @@ export const shapeShifterState = proxy({
   },
 });
 
-// Define available shapes and colors
-const shapes = [Box, Sphere, Dodecahedron, Cone, Torus, TorusKnot];
-const roygbivColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
+// Shape types with distinct visual properties
+type ShapeType = 'box' | 'sphere' | 'dodecahedron' | 'cone' | 'torus' | 'torusknot' | 'octahedron' | 'icosahedron';
+
+interface ShapeConfig {
+  Component: React.FC<any>;
+  name: ShapeType;
+  materialStyle: 'iridescent' | 'glass' | 'neon' | 'metallic';
+}
+
+// Define shapes with their unique visual styles
+const SHAPE_CONFIGS: ShapeConfig[] = [
+  { Component: Box, name: 'box', materialStyle: 'metallic' },
+  { Component: Sphere, name: 'sphere', materialStyle: 'glass' },
+  { Component: Dodecahedron, name: 'dodecahedron', materialStyle: 'iridescent' },
+  { Component: Cone, name: 'cone', materialStyle: 'neon' },
+  { Component: Torus, name: 'torus', materialStyle: 'iridescent' },
+  { Component: TorusKnot, name: 'torusknot', materialStyle: 'glass' },
+  { Component: Octahedron, name: 'octahedron', materialStyle: 'metallic' },
+  { Component: Icosahedron, name: 'icosahedron', materialStyle: 'neon' },
+];
+
+// Distinct, vibrant color palette for better shape distinction
+const SHAPE_COLORS = [
+  '#FF3366', // Vibrant Pink
+  '#00D4FF', // Cyan
+  '#FFD700', // Gold
+  '#00FF88', // Mint Green
+  '#FF6B35', // Orange
+  '#9B59B6', // Purple
+  '#3498DB', // Blue
+  '#E74C3C', // Red
+];
 
 // Utility functions
-const getRandomShape = () => shapes[Math.floor(Math.random() * shapes.length)];
-const getRoygbivColor = () => roygbivColors[Math.floor(Math.random() * roygbivColors.length)];
-const getRandomColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16);
+const getRandomShapeConfig = () => SHAPE_CONFIGS[Math.floor(Math.random() * SHAPE_CONFIGS.length)];
+const getRandomColor = () => SHAPE_COLORS[Math.floor(Math.random() * SHAPE_COLORS.length)];
 
-// Shape component
+// Shape component - EXACT copy of legacy JS structure
 interface ShapeProps {
   position: [number, number, number];
   color: string;
-  shape: any;
+  shapeConfig: ShapeConfig;
   onClick: () => void;
   onPointerOver: () => void;
   onPointerOut: () => void;
@@ -83,7 +115,7 @@ interface ShapeProps {
 const Shape: React.FC<ShapeProps> = ({
   position,
   color,
-  shape: ShapeComponent,
+  shapeConfig,
   onClick,
   onPointerOver,
   onPointerOut,
@@ -93,6 +125,8 @@ const Shape: React.FC<ShapeProps> = ({
   initialScale,
   gridSize,
 }) => {
+  const { Component } = shapeConfig;
+
   const getScale = (size: number) => {
     if (size === 3) return 0.5;
     if (size === 4) return 0.35;
@@ -100,6 +134,7 @@ const Shape: React.FC<ShapeProps> = ({
     return 0.5;
   };
 
+  // EXACT legacy structure - DO NOT CHANGE
   return (
     <a.group scale={initialScale}>
       <a.group scale={jiggleScale}>
@@ -112,9 +147,9 @@ const Shape: React.FC<ShapeProps> = ({
               onPointerOut={onPointerOut}
             >
               <group scale={getScale(gridSize)}>
-                <ShapeComponent>
+                <Component>
                   <meshStandardMaterial color={color} />
-                </ShapeComponent>
+                </Component>
               </group>
             </a.mesh>
           </a.group>
@@ -130,8 +165,20 @@ interface ShapeShiftProps {
   onModeChange: (mode: string, size: number) => void;
 }
 
-const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onModeChange }) => {
+const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp: _gridSizeProp, modeProp: _modeProp, onModeChange }) => {
   const snap = useSnapshot(shapeShifterState);
+  const { camera } = useThree();
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+
+  // Camera setup for ShapeShifter - matches original JS: position [0, 0, 15], fov 50
+  useEffect(() => {
+    camera.position.set(0, 0, 15);
+    if ('fov' in camera) {
+      (camera as THREE.PerspectiveCamera).fov = 50;
+      camera.updateProjectionMatrix();
+    }
+    camera.lookAt(0, 0, 0);
+  }, [camera]);
   const [jiggleSprings, setJiggleSprings] = useSprings(snap.gridSize * snap.gridSize, (index) => ({
     scale: [1, 1, 1],
     config: { tension: 300, friction: 10 },
@@ -157,12 +204,12 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [showPulse, setShowPulse] = useState<boolean>(false);
 
-  const generateGrid = useCallback((size: number, mode: string) => {
+  const generateGrid = useCallback((size: number, _mode: string) => {
     return Array(size ** 2)
       .fill(null)
       .map((_, index) => ({
-        shape: getRandomShape(),
-        color: mode === 'normal' ? getRoygbivColor() : getRandomColor(),
+        shapeConfig: getRandomShapeConfig(),
+        color: getRandomColor(),
         index,
       }));
   }, []);
@@ -201,6 +248,7 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
   const resetGame = useCallback(
     (newGridSize = 3) => {
       shapeShifterState.reset(newGridSize);
+      setSpeedMultiplier(1);
       setGrid([]);
       setUserSequence([]);
       setPulseSequence(generateSequence(1, newGridSize));
@@ -238,9 +286,9 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
   }, [shapeShifterState.gridSize, shapeShifterState.mode, shapeShifterState.wave, animateGridEntry, generateSequence]);
 
   useEffect(() => {
-    if (shapeShifterState.wave > 1 && shapeShifterState.wave % 30 === 1) {
-      shapeShifterState.incrementWave();
-      if (shapeShifterState.wave % 10 === 0 && shapeShifterState.gridSize < 5) {
+    if (shapeShifterState.wave > 1 && shapeShifterState.wave % 30 === 0) {
+      setSpeedMultiplier((prev) => prev * 1.1);
+      if (shapeShifterState.mode === 'normal' && shapeShifterState.gridSize < 5) {
         shapeShifterState.setGridSize(shapeShifterState.gridSize + 1);
         animateGridEntry(shapeShifterState.gridSize + 1);
       }
@@ -254,10 +302,15 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
         JSON.stringify(pulseSequence.map((p) => p.index))
       ) {
         setTimeout(() => {
+          const nextWave = shapeShifterState.wave + 1;
           shapeShifterState.incrementWave();
           shapeShifterState.incrementScore(pulseSequence.length * 10);
+          if (shapeShifterState.mode === 'normal' && nextWave % 10 === 0 && shapeShifterState.gridSize < 5) {
+            shapeShifterState.setGridSize(shapeShifterState.gridSize + 1);
+            animateGridEntry(shapeShifterState.gridSize + 1);
+          }
           setUserSequence([]);
-          setPulseSequence(generateSequence(shapeShifterState.wave + 1, shapeShifterState.gridSize));
+          setPulseSequence(generateSequence(nextWave, shapeShifterState.gridSize));
           setShowPulse(false);
         }, 1000);
       } else {
@@ -275,6 +328,7 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
   ]);
 
   const handleShapeClick = (index: number) => {
+    // Match legacy: only block clicks during animation, not during showPulse
     if (!isAnimating) {
       setClickedIndex(index);
       setUserSequence((prev) => [...prev, index]);
@@ -284,23 +338,56 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
 
   const handleShapeHover = (index: number, isHovering: boolean) => {
     setHoveredIndex(isHovering ? index : null);
-    document.body.style.cursor = isHovering ? 'pointer' : 'default';
+    if (isHovering) {
+      document.body.style.cursor = 'pointer';
+    } else {
+      document.body.style.cursor = 'default';
+    }
   };
+
+  useEffect(() => {
+    setJiggleSprings((index) => ({
+      scale: clickedIndex === index ? [1.1, 1.1, 1.1] : [1, 1, 1],
+    }));
+  }, [clickedIndex, setJiggleSprings]);
+
+  useEffect(() => {
+    setHoverSprings((index) => ({
+      scale: hoveredIndex === index ? [1.02, 1.02, 1.02] : [1, 1, 1],
+    }));
+  }, [hoveredIndex, setHoverSprings]);
+
+  useEffect(() => {
+    if (!showPulse || pulseSequence.length === 0 || isAnimating) return;
+    setIsAnimating(true);
+    pulseSequence.forEach((item, i) => {
+      setTimeout(() => {
+        setPulseSprings((index) =>
+          index === item.index ? { scale: [1.2, 1.2, 1.2] } : {}
+        );
+        setTimeout(() => {
+          setPulseSprings((index) =>
+            index === item.index ? { scale: [1, 1, 1] } : {}
+          );
+          if (i === pulseSequence.length - 1) {
+            setIsAnimating(false);
+            setShowPulse(false);
+          }
+        }, 330);
+      }, i * (660 / speedMultiplier));
+    });
+  }, [pulseSequence, showPulse, speedMultiplier, isAnimating, setPulseSprings]);
 
   return (
     <>
-      <Html>
-        <div className="fixed bottom-2.5 left-1/2 transform -translate-x-1/2 text-white text-lg bg-black bg-opacity-50 p-2.5 rounded z-50 flex justify-center gap-5">
-          <div>Wave: {shapeShifterState.wave}</div>
-          <div>Best Wave: {shapeShifterState.bestWave}</div>
-          <div>Score: {shapeShifterState.score}</div>
-          <div>Best Score: {shapeShifterState.bestScore}</div>
-        </div>
-      </Html>
-
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} />
-      <Sparkles count={30} scale={[20, 20, 20]} />
+      {/* Enhanced lighting for advanced materials */}
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[5, 10, 5]} intensity={1.2} color="#ffffff" />
+      <directionalLight position={[-5, 5, -5]} intensity={0.5} color="#4488ff" />
+      <pointLight position={[0, 0, 8]} intensity={0.8} color="#ffffff" />
+      
+      <Sparkles count={40} scale={[25, 25, 25]} color="#ffffff" opacity={0.6} />
+      
       <group position={[1.25, 1.5, 0]}>
         {grid.map((item, i) => (
           <Shape
@@ -311,7 +398,7 @@ const ShapeShiftCore: React.FC<ShapeShiftProps> = ({ gridSizeProp, modeProp, onM
               0,
             ]}
             color={item.color}
-            shape={item.shape}
+            shapeConfig={item.shapeConfig}
             onClick={() => handleShapeClick(item.index)}
             onPointerOver={() => handleShapeHover(item.index, true)}
             onPointerOut={() => handleShapeHover(item.index, false)}
@@ -335,53 +422,68 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
   const [key, setKey] = useState<number>(0);
   const [mode, setMode] = useState<string>('normal');
   const [gridSize, setGridSize] = useState<number>(3);
+  const snap = useSnapshot(shapeShifterState);
 
   const handleModeChange = (newMode: string, newGridSize: number) => {
     shapeShifterState.setMode(newMode);
     shapeShifterState.setGridSize(newGridSize);
+    setMode(newMode);
+    setGridSize(newGridSize);
     setKey((prevKey) => prevKey + 1);
   };
 
   return (
     <>
-      <Html>
-        <div className="fixed bottom-[1.5%] right-[1.5%] p-2.5 bg-white border-none cursor-pointer z-[999999999]">
+      {/* Stats HUD - Top Left */}
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
+        <div className="absolute top-4 left-4 text-white text-base bg-slate-900/80 backdrop-blur-sm px-4 py-3 rounded-xl border border-white/10 shadow-lg pointer-events-auto">
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-6">
+              <span>Wave: <strong>{snap.wave}</strong></span>
+              <span>Best: <strong>{snap.bestWave}</strong></span>
+            </div>
+            <div className="flex gap-6">
+              <span>Score: <strong>{snap.score}</strong></span>
+              <span>Best: <strong>{snap.bestScore}</strong></span>
+            </div>
+          </div>
+        </div>
+
+        {/* Mode Controls - Bottom Left (moved from bottom-right to avoid overlap with Arcade Deck) */}
+        <div className="absolute bottom-4 left-4 flex flex-col items-start gap-2 pointer-events-auto">
+          {/* Grid Size Selector (Casual Mode Only) */}
+          {snap.mode === 'casual' && (
+            <div className="flex gap-2 mb-2">
+              {[3, 4, 5].map((size) => (
+                <button
+                  key={size}
+                  onClick={() => handleModeChange('casual', size)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    gridSize === size
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-slate-800/80 text-white/70 hover:bg-slate-700/80'
+                  }`}
+                >
+                  {size}x{size}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Mode Toggle Button */}
           <button
             onClick={() => {
-              if (shapeShifterState.mode === 'normal') {
+              if (snap.mode === 'normal') {
                 handleModeChange('casual', gridSize);
               } else {
                 handleModeChange('normal', 3);
               }
             }}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg"
           >
-            Switch to {shapeShifterState.mode === 'normal' ? 'Casual' : 'Normal'} Mode
+            Switch to {snap.mode === 'normal' ? 'Casual' : 'Normal'} Mode
           </button>
         </div>
-
-        {shapeShifterState.mode === 'casual' && (
-          <div className="fixed bottom-[10%] right-[1.5%] p-0 w-auto text-white flex flex-row border-none z-[99999999999]">
-            <button
-              className="p-1.5 w-24 text-center bg-black ml-2.5 border-none cursor-pointer rounded-full z-50 mb-2.5 hover:scale-110 transition-transform duration-200"
-              onClick={() => handleModeChange('casual', 3)}
-            >
-              Casual 3x3
-            </button>
-            <button
-              className="p-1.5 w-24 text-center bg-black ml-2.5 border-none cursor-pointer rounded-full z-50 mb-2.5 hover:scale-110 transition-transform duration-200"
-              onClick={() => handleModeChange('casual', 4)}
-            >
-              Casual 4x4
-            </button>
-            <button
-              className="p-1.5 w-24 text-center bg-black ml-2.5 border-none cursor-pointer rounded-full z-50 mb-2.5 hover:scale-110 transition-transform duration-200"
-              onClick={() => handleModeChange('casual', 5)}
-            >
-              Casual 5x5
-            </button>
-          </div>
-        )}
       </Html>
 
       <ShapeShiftCore key={key} gridSizeProp={gridSize} modeProp={mode} onModeChange={handleModeChange} />
