@@ -40,7 +40,7 @@ const Navbar: React.FC = () => {
       ? 'border border-white/10 bg-white/5 shadow-[0_12px_30px_-22px_rgba(0,0,0,0.65)]'
       : 'border border-gray-200/70 bg-white/80 shadow-[0_10px_24px_-18px_rgba(15,23,42,0.2)]';
   const primaryLinks = [
-    { href: '/myRoom', label: "Racho's Room" },
+    // { href: '/myRoom', label: "Racho's Room" }, // Temporarily hidden
     { href: '/fun', label: "Racho's Arcade" },
   ];
 

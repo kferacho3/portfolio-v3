@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -31,12 +32,20 @@ type ModelProps = JSX.IntrinsicElements['group'] & {
   selectedIndex: number;
   onSelectGame: (index: number) => void;
   onLaunchGame: (gameId: string) => void;
-  onFocusReady?: (focus: [number, number, number], radius: number) => void;
+  onFocusReady?: (
+    focus: [number, number, number],
+    radius: number,
+    forward?: [number, number, number]
+  ) => void;
 };
 
 const TARGET_SIZE = 6;
 const GROUND_Y = 0.5; // Slightly raised
-
+// Rotate the screen upright with a slight backward tilt to match arcade cabinet angle
+const SCREEN_ROTATION = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(1, 0, 0),
+  Math.PI / 2 - 0.2  // ~78 degrees - tilts top of screen backward
+);
 // Texture cache to avoid reloading
 const textureCache = new Map<string, THREE.Texture>();
 const textureLoader = new THREE.TextureLoader();
@@ -60,10 +69,23 @@ export function RachosArcade(props: ModelProps) {
     ...rest
   } = props;
   const group = useRef<THREE.Group>(null);
-  const focusRef = useRef<{ focus: [number, number, number]; radius: number } | null>(
-    null
-  );
+  const focusRef = useRef<{
+    focus: [number, number, number];
+    radius: number;
+    forward: [number, number, number];
+  } | null>(null);
+  const modelGroupRef = useRef<THREE.Group>(null);
   const screenMeshRef = useRef<THREE.Mesh | null>(null);
+  const screenPlaneRef = useRef<THREE.Mesh | null>(null);
+  const [screenMesh, setScreenMesh] = useState<THREE.Mesh | null>(null);
+  const [screenSearchDone, setScreenSearchDone] = useState(false);
+  const [screenPlaneConfig, setScreenPlaneConfig] = useState<{
+    position: [number, number, number];
+    quaternion: [number, number, number, number];
+    width: number;
+    height: number;
+    radius: number;
+  } | null>(null);
 
   const currentGame = games[selectedIndex] || games[0];
 
@@ -77,58 +99,41 @@ export function RachosArcade(props: ModelProps) {
   // Find and store the screen mesh from the model
   useLayoutEffect(() => {
     if (!nodes) return;
-    
-    // Log all available nodes to find the screen mesh
-    console.log('Available nodes in arcade model:', Object.keys(nodes));
-    
+
+    let foundMesh: THREE.Mesh | null = null;
+
     // Search for the monitor/screen mesh - prioritize MONITOR_ARCADE
     const node = nodes['MONITOR_ARCADE'];
     if (node && (node as THREE.Mesh).isMesh) {
-      const mesh = node as THREE.Mesh;
-      screenMeshRef.current = mesh;
-      
-      // Log mesh info for debugging
-      const mat = mesh.material as THREE.MeshBasicMaterial;
-      mesh.updateMatrixWorld(true);
-      const worldPos = new THREE.Vector3();
-      mesh.getWorldPosition(worldPos);
-      
-      // Get bounding box size
-      mesh.geometry.computeBoundingBox();
-      const bbox = mesh.geometry.boundingBox;
-      const size = new THREE.Vector3();
-      bbox?.getSize(size);
-      
-      console.log('Found MONITOR_ARCADE mesh:', {
-        name: mesh.name,
-        visible: mesh.visible,
-        worldPosition: `(${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)})`,
-        size: `(${size.x.toFixed(2)}, ${size.y.toFixed(2)}, ${size.z.toFixed(2)})`,
-        hasUVs: mesh.geometry?.attributes?.uv ? true : false,
-        materialType: mat?.type,
-      });
-      
-      // Ensure mesh is visible
-      mesh.visible = true;
-      return;
+      foundMesh = node as THREE.Mesh;
     }
-    
+
     // Fallback: search for any mesh containing monitor/screen
-    for (const [name, n] of Object.entries(nodes)) {
-      const lowerName = name.toLowerCase();
-      if (
-        (lowerName.includes('screen') || 
-         lowerName.includes('monitor') ||
-         lowerName.includes('display')) &&
-        (n as THREE.Mesh).isMesh
-      ) {
-        screenMeshRef.current = n as THREE.Mesh;
-        console.log('Found screen mesh by partial match:', name);
-        return;
+    if (!foundMesh) {
+      for (const [name, n] of Object.entries(nodes)) {
+        const lowerName = name.toLowerCase();
+        if (
+          (lowerName.includes('screen') ||
+            lowerName.includes('monitor') ||
+            lowerName.includes('display')) &&
+          (n as THREE.Mesh).isMesh
+        ) {
+          foundMesh = n as THREE.Mesh;
+          break;
+        }
       }
     }
-    
-    console.log('No screen mesh found in model');
+
+    if (foundMesh) {
+      foundMesh.visible = false;
+      screenMeshRef.current = foundMesh;
+      setScreenMesh(foundMesh);
+    } else {
+      screenMeshRef.current = null;
+      setScreenMesh(null);
+    }
+
+    setScreenSearchDone(true);
   }, [nodes]);
 
   const [modelScale, setModelScale] = useState(1);
@@ -159,23 +164,120 @@ export function RachosArcade(props: ModelProps) {
 
     setModelScale(scale);
     setModelOffset([offset.x, offset.y, offset.z]);
+  }, [scene]);
 
-    const focusY = GROUND_Y + (size.y * scale) / 2;
-    const focus: [number, number, number] = [0, focusY, 0];
-    const radius = Math.max(size.x, size.y, size.z) * scale * 0.5;
+  useLayoutEffect(() => {
+    if (!screenMesh || !modelGroupRef.current || !scene) {
+      setScreenPlaneConfig(null);
+      return;
+    }
+
+    modelGroupRef.current.updateWorldMatrix(true, true);
+    screenMesh.updateWorldMatrix(true, true);
+
+    const localMatrix = new THREE.Matrix4()
+      .copy(modelGroupRef.current.matrixWorld)
+      .invert()
+      .multiply(screenMesh.matrixWorld);
+
+    const localPosition = new THREE.Vector3();
+    const localScale = new THREE.Vector3();
+    const localQuat = new THREE.Quaternion();
+    localMatrix.decompose(localPosition, localQuat, localScale);
+
+    const geometry = screenMesh.geometry as THREE.BufferGeometry | undefined;
+    geometry?.computeBoundingBox();
+    const bbox = geometry?.boundingBox;
+    if (!bbox) return;
+
+    const size = new THREE.Vector3();
+    bbox.getSize(size);
+    size.multiply(localScale);
+
+    const dims = [Math.abs(size.x), Math.abs(size.y), Math.abs(size.z)].sort(
+      (a, b) => b - a
+    );
+    const width = dims[0] ?? 1;
+    const height = dims[1] ?? 1;
+    const radius = Math.min(width, height) * 0.08;
+
+    const planeLocalQuat = localQuat.clone().multiply(SCREEN_ROTATION);
+
+    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(planeLocalQuat).normalize();
+    localPosition.addScaledVector(normal, Math.min(width, height) * 0.02);
+
+    setScreenPlaneConfig({
+      position: [localPosition.x, localPosition.y, localPosition.z],
+      quaternion: [planeLocalQuat.x, planeLocalQuat.y, planeLocalQuat.z, planeLocalQuat.w],
+      width,
+      height,
+      radius,
+    });
+  }, [screenMesh, modelScale, modelOffset, scene]);
+
+  const screenShape = useMemo(() => {
+    if (!screenPlaneConfig) return null;
+    return createRoundedRectShape(
+      screenPlaneConfig.width,
+      screenPlaneConfig.height,
+      screenPlaneConfig.radius
+    );
+  }, [screenPlaneConfig]);
+
+  useLayoutEffect(() => {
+    if (!scene || !onFocusReady) return;
+    if (!screenMesh && !screenSearchDone) return;
+
+    group.current?.updateWorldMatrix(true, true);
+
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+
+    let focus: [number, number, number] = [center.x, center.y, center.z];
+    let radius = Math.max(size.x, size.y, size.z) * 0.5;
+    let forward: [number, number, number] = [0, 0, 1];
+
+    if (screenMesh) {
+      const screenPosition = new THREE.Vector3();
+      screenMesh.updateWorldMatrix(true, true);
+      screenMesh.getWorldPosition(screenPosition);
+      const screenSize = getMeshWorldSize(screenMesh);
+      const screenDims = [screenSize.x, screenSize.y, screenSize.z]
+        .map((value) => Math.abs(value))
+        .sort((a, b) => b - a);
+      const screenWidth = screenDims[0] ?? 1;
+      const screenHeight = screenDims[1] ?? 1;
+
+      focus = [screenPosition.x, screenPosition.y, screenPosition.z];
+      radius = Math.max(screenWidth, screenHeight) * 0.55;
+
+      const screenWorldQuat = new THREE.Quaternion();
+      screenMesh.getWorldQuaternion(screenWorldQuat);
+      const planeWorldQuat = screenWorldQuat.clone().multiply(SCREEN_ROTATION);
+      const planeForward = new THREE.Vector3(0, 0, 1)
+        .applyQuaternion(planeWorldQuat)
+        .normalize();
+      forward = [planeForward.x, planeForward.y, planeForward.z];
+    }
+
     const prev = focusRef.current;
     if (
-      onFocusReady &&
       (!prev ||
         prev.radius !== radius ||
         prev.focus[0] !== focus[0] ||
         prev.focus[1] !== focus[1] ||
-        prev.focus[2] !== focus[2])
+        prev.focus[2] !== focus[2] ||
+        prev.forward[0] !== forward[0] ||
+        prev.forward[1] !== forward[1] ||
+        prev.forward[2] !== forward[2])
     ) {
-      onFocusReady(focus, radius);
-      focusRef.current = { focus, radius };
+      onFocusReady(focus, radius, forward);
+      focusRef.current = { focus, radius, forward };
     }
-  }, [scene, onFocusReady]);
+  }, [scene, onFocusReady, screenMesh, screenSearchDone, modelScale, modelOffset]);
 
   const setRefs = useCallback(
     (node: THREE.Group | null) => {
@@ -203,9 +305,9 @@ export function RachosArcade(props: ModelProps) {
 
   // Load and apply texture to screen mesh
   useEffect(() => {
-    if (!screenMeshRef.current || !currentGame?.poster) return;
-    
-    const mesh = screenMeshRef.current;
+    const mesh = screenPlaneRef.current;
+    if (!mesh || !currentGame?.poster) return;
+
     const posterUrl = currentGame.poster;
     const proxyUrl = getProxyUrl(posterUrl);
     
@@ -223,14 +325,13 @@ export function RachosArcade(props: ModelProps) {
         // Cache the texture
         textureCache.set(posterUrl, texture);
         applyTextureToMesh(mesh, texture);
-        console.log('Applied texture to screen mesh:', posterUrl);
       },
       undefined,
       (error) => {
         console.warn('Failed to load poster texture:', posterUrl, error);
       }
     );
-  }, [currentGame?.poster]);
+  }, [currentGame?.poster, screenPlaneConfig]);
 
   // Handle click on the screen mesh to launch game
   const handleScreenClick = useCallback(() => {
@@ -260,17 +361,34 @@ export function RachosArcade(props: ModelProps) {
   }, [selectedIndex, games.length, onSelectGame, currentGame, onLaunchGame]);
 
   // Handle pointer events on the model - launch game on click
-  const handlePointerDown = useCallback((event: { object?: THREE.Object3D; stopPropagation?: () => void }) => {
-    if (event.object && event.object === screenMeshRef.current) {
-      event.stopPropagation?.();
-      handleScreenClick();
-    }
-  }, [handleScreenClick]);
+  const handlePointerDown = useCallback(
+    (event: { object?: THREE.Object3D; stopPropagation?: () => void }) => {
+      if (
+        event.object &&
+        (event.object === screenPlaneRef.current || event.object === screenMeshRef.current)
+      ) {
+        event.stopPropagation?.();
+        handleScreenClick();
+      }
+    },
+    [handleScreenClick]
+  );
 
   return (
     <group ref={setRefs} {...rest} dispose={null} onClick={handlePointerDown}>
-      <group position={modelOffset} scale={modelScale}>
+      <group ref={modelGroupRef} position={modelOffset} scale={modelScale}>
         <primitive object={scene} />
+        {screenPlaneConfig && screenShape && (
+          <mesh
+            ref={screenPlaneRef}
+            position={screenPlaneConfig.position}
+            quaternion={screenPlaneConfig.quaternion}
+            renderOrder={2}
+          >
+            <shapeGeometry args={[screenShape, 10]} />
+            <meshBasicMaterial toneMapped={false} side={THREE.DoubleSide} />
+          </mesh>
+        )}
       </group>
     </group>
   );
@@ -284,35 +402,168 @@ function applyTextureToMesh(mesh: THREE.Mesh, texture: THREE.Texture) {
   texture.wrapT = THREE.ClampToEdgeWrapping;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  // Try both flipY values - GLTF models typically use flipY=false
-  texture.flipY = false;
-  texture.needsUpdate = true;
-  
-  // Debug: Check UV coordinates
-  const uvAttr = mesh.geometry?.attributes?.uv;
-  if (uvAttr) {
-    const uvArray = uvAttr.array;
-    const minU = Math.min(...Array.from(uvArray).filter((_, i) => i % 2 === 0));
-    const maxU = Math.max(...Array.from(uvArray).filter((_, i) => i % 2 === 0));
-    const minV = Math.min(...Array.from(uvArray).filter((_, i) => i % 2 === 1));
-    const maxV = Math.max(...Array.from(uvArray).filter((_, i) => i % 2 === 1));
-    console.log(`UV bounds: U[${minU.toFixed(2)}-${maxU.toFixed(2)}] V[${minV.toFixed(2)}-${maxV.toFixed(2)}]`);
+  texture.flipY = true;
+
+  normalizeMeshUVs(mesh);
+
+  const screenAspect = getMeshAspect(mesh);
+  const imageAspect =
+    texture.image && texture.image.height
+      ? texture.image.width / texture.image.height
+      : screenAspect;
+
+  // Ensure full height is visible - use contain mode (no cropping)
+  // Full height, auto width - always fit image to screen height
+  if (Number.isFinite(screenAspect) && Number.isFinite(imageAspect)) {
+    // Always fit to height to ensure full height is visible (contain mode)
+    // When image is wider: fit to height, letterbox on sides
+    // When image is taller: scale entire image down to fit, letterbox on all sides
+    if (imageAspect >= screenAspect) {
+      // Image is wider or same aspect - fit to height, letterbox on sides
+      const widthScale = screenAspect / imageAspect;
+      texture.repeat.set(widthScale, 1);
+      texture.offset.set((1 - widthScale) / 2, 0);
+    } else {
+      // Image is taller - need to scale down to fit within screen
+      // To show full height, we scale based on height ratio
+      // Since imageAspect = imageWidth/imageHeight and screenAspect = screenWidth/screenHeight
+      // To fit height: scale = screenHeight / imageHeight
+      // But we need this in aspect terms...
+      // Actually: if image height is 'h' and screen height is 'sh',
+      // and we want h to fit in sh, we scale by sh/h
+      // In aspect terms: scale = (1/imageAspect) / (1/screenAspect) = screenAspect / imageAspect
+      // This is > 1, which means we're showing MORE of the texture (zooming out)
+      // But wait, repeat > 1 zooms out, which shows less detail but more area
+      // For contain mode when taller, we want to zoom out so it fits
+      const scale = screenAspect / imageAspect; // > 1 when image is taller
+      texture.repeat.set(scale, scale);
+      texture.offset.set((1 - scale) / 2, (1 - scale) / 2);
+    }
+  } else {
+    texture.repeat.set(1, 1);
+    texture.offset.set(0, 0);
   }
-  
-  // Create MeshBasicMaterial for consistent display regardless of lighting
-  const material = new THREE.MeshBasicMaterial({
-    map: texture,
-    toneMapped: false,
-    side: THREE.DoubleSide,
-    transparent: false,
-  });
-  
-  // Apply material
+
+  texture.needsUpdate = true;
+
+  const existingMaterial = mesh.material as THREE.MeshBasicMaterial | undefined;
+  const material =
+    existingMaterial && existingMaterial.isMeshBasicMaterial
+      ? existingMaterial
+      : new THREE.MeshBasicMaterial({
+          toneMapped: false,
+          side: THREE.DoubleSide,
+          transparent: false,
+        });
+
+  material.toneMapped = false;
+  material.side = THREE.DoubleSide;
+  material.transparent = false;
+  material.map = texture;
+  material.needsUpdate = true;
+
   mesh.material = material;
   mesh.visible = true;
   mesh.frustumCulled = false;
-  
-  console.log('Applied texture to', mesh.name, 'texture size:', texture.image?.width, 'x', texture.image?.height);
+}
+
+function createRoundedRectShape(width: number, height: number, radius: number) {
+  const shape = new THREE.Shape();
+  const halfW = width / 2;
+  const halfH = height / 2;
+  const r = Math.min(radius, halfW, halfH);
+
+  shape.moveTo(-halfW + r, -halfH);
+  shape.lineTo(halfW - r, -halfH);
+  shape.quadraticCurveTo(halfW, -halfH, halfW, -halfH + r);
+  shape.lineTo(halfW, halfH - r);
+  shape.quadraticCurveTo(halfW, halfH, halfW - r, halfH);
+  shape.lineTo(-halfW + r, halfH);
+  shape.quadraticCurveTo(-halfW, halfH, -halfW, halfH - r);
+  shape.lineTo(-halfW, -halfH + r);
+  shape.quadraticCurveTo(-halfW, -halfH, -halfW + r, -halfH);
+
+  return shape;
+}
+
+function normalizeMeshUVs(mesh: THREE.Mesh) {
+  const geometry = mesh.geometry as THREE.BufferGeometry | undefined;
+  const uvAttr = geometry?.attributes?.uv as THREE.BufferAttribute | undefined;
+  if (!geometry || !uvAttr) return;
+
+  if (mesh.userData.uvNormalized) return;
+
+  let minU = Infinity;
+  let minV = Infinity;
+  let maxU = -Infinity;
+  let maxV = -Infinity;
+
+  for (let i = 0; i < uvAttr.count; i += 1) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    if (u < minU) minU = u;
+    if (v < minV) minV = v;
+    if (u > maxU) maxU = u;
+    if (v > maxV) maxV = v;
+  }
+
+  const rangeU = maxU - minU;
+  const rangeV = maxV - minV;
+
+  if (!Number.isFinite(rangeU) || !Number.isFinite(rangeV) || rangeU === 0 || rangeV === 0) {
+    return;
+  }
+
+  for (let i = 0; i < uvAttr.count; i += 1) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    uvAttr.setXY(i, (u - minU) / rangeU, (v - minV) / rangeV);
+  }
+
+  uvAttr.needsUpdate = true;
+  mesh.userData.uvNormalized = true;
+}
+
+function getMeshWorldSize(mesh: THREE.Mesh) {
+  const geometry = mesh.geometry as THREE.BufferGeometry | undefined;
+  if (!geometry) return new THREE.Vector3(1, 1, 1);
+
+  geometry.computeBoundingBox();
+  const bbox = geometry.boundingBox;
+  if (!bbox) return new THREE.Vector3(1, 1, 1);
+
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+
+  const meshScale = new THREE.Vector3(1, 1, 1);
+  mesh.getWorldScale(meshScale);
+
+  return size.multiply(meshScale);
+}
+
+function getMeshAspect(mesh: THREE.Mesh) {
+  const geometry = mesh.geometry as THREE.BufferGeometry | undefined;
+  if (!geometry) return 1;
+
+  geometry.computeBoundingBox();
+  const bbox = geometry.boundingBox;
+  if (!bbox) return 1;
+
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+
+  const meshScale = mesh.scale;
+  const dims = [
+    Math.abs(size.x * meshScale.x),
+    Math.abs(size.y * meshScale.y),
+    Math.abs(size.z * meshScale.z),
+  ].sort((a, b) => b - a);
+
+  const width = dims[0] ?? 1;
+  const height = dims[1] ?? 1;
+
+  if (height === 0) return 1;
+  return width / height;
 }
 
 useGLTF.preload('/fun/models/rachoArcade.glb', true);

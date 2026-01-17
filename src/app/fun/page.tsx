@@ -127,21 +127,6 @@ const GAME_CARDS: GameCard[] = [
   },
 ];
 
-const HOTKEYS: Record<GameType, string> = {
-  home: 'H',
-  geochrome: '0',
-  shapeshifter: '1',
-  skyblitz: '2',
-  dropper: '3',
-  stackz: '4',
-  pinball: '5',
-  rollette: '6',
-  flappybird: '7',
-  reactpong: '8',
-  spinblock: '9',
-  museum: 'M',
-};
-
 const KEY_TO_GAME: Record<string, GameType> = {
   h: 'home',
   m: 'museum',
@@ -173,7 +158,25 @@ interface UnlockableSkin {
   achievement: string;
 }
 
-const FunScene: React.FC = () => {
+interface FunSceneProps {
+  currentGame: GameType;
+  selectedIndex: number;
+  musicOn: boolean;
+  soundsOn: boolean;
+  restartSeed: number;
+  onSelectGame: (index: number) => void;
+  onLaunchGame: (gameId: string) => void;
+}
+
+const FunScene: React.FC<FunSceneProps> = ({
+  currentGame,
+  selectedIndex,
+  musicOn,
+  soundsOn,
+  restartSeed,
+  onSelectGame,
+  onLaunchGame,
+}) => {
   const router = useRouter();
   const { scene } = useThree();
   const { theme } = useContext(ThemeContext);
@@ -184,33 +187,25 @@ const FunScene: React.FC = () => {
   const [lookAtPosition, setLookAtPosition] = useState<[number, number, number]>([0, 1.5, 0]);
   const [arcadeFocus, setArcadeFocus] = useState<[number, number, number]>([0, 1.5, 0]);
   const [arcadeRadius, setArcadeRadius] = useState(3);
+  const [arcadeForward, setArcadeForward] = useState<[number, number, number]>([0, 0, 1]);
   const cameraPositionsSet = useRef(false);
-
-  const [musicOn, setMusicOn] = useState(true);
-  const [soundsOn, setSoundsOn] = useState(true);
-  const [currentGame, setCurrentGame] = useState<GameType>('home');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-
-  const [paused, setPaused] = useState(false);
-  const [health, setHealth] = useState(100);
-  const [restartSeed, setRestartSeed] = useState(0);
-
-  const [skyBlitzMode, setSkyBlitzMode] = useState<'UfoMode' | 'RunnerManMode'>('UfoMode');
-  const [reactPongMode, setReactPongMode] = useState<'SoloPaddle' | 'SoloWalls'>('SoloPaddle');
-  const [shapeShifterMode, setShapeShifterMode] = useState<'3x3' | '4x4' | '5x5'>('3x3');
-
-  const lockedSkinImage =
-    'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
+  const focusReady = useRef(false);
 
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
 
-  const handleArcadeFocus = useCallback((focus: [number, number, number], radius: number) => {
-    setArcadeFocus(focus);
-    setArcadeRadius(radius);
-  }, []);
+  const handleArcadeFocus = useCallback(
+    (focus: [number, number, number], radius: number, forward?: [number, number, number]) => {
+      setArcadeFocus(focus);
+      setArcadeRadius(radius);
+      if (forward) {
+        setArcadeForward(forward);
+      }
+      focusReady.current = true;
+    },
+    []
+  );
 
   const orbitTarget = useMemo(() => new Vector3(...arcadeFocus), [arcadeFocus]);
-  const orbitDistance = useMemo(() => Math.max(arcadeRadius * 2.6, 7), [arcadeRadius]);
 
   const musicTracks: Record<GameType, string> = {
     home: 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/GameLoadingScreen.mp3',
@@ -247,16 +242,7 @@ const FunScene: React.FC = () => {
       audio.pause();
       audio.src = '';
     };
-  }, [currentGame]);
-
-  // Auto-cycle games on the arcade screen when idle
-  useEffect(() => {
-    if (currentGame !== 'home' || GAME_CARDS.length === 0) return;
-    const interval = setInterval(() => {
-      setSelectedIndex((prev) => (prev + 1) % GAME_CARDS.length);
-    }, 5500);
-    return () => clearInterval(interval);
-  }, [currentGame]);
+  }, [currentGame, musicOn]);
 
   // Toggle music on/off
   useEffect(() => {
@@ -283,281 +269,50 @@ const FunScene: React.FC = () => {
   useEffect(() => {
     // Only calculate camera positions once when arcade focus is ready
     if (cameraPositionsSet.current) return;
-    if (arcadeFocus[0] === 0 && arcadeFocus[1] === 1.5 && arcadeFocus[2] === 0) return; // Skip default values
+    if (!focusReady.current) return;
     
     cameraPositionsSet.current = true;
     
     const [fx, fy, fz] = arcadeFocus;
+    const [nx, ny, nz] = arcadeForward;
+    const focus = new Vector3(fx, fy, fz);
+    const forward = new Vector3(nx, ny, nz).normalize();
+    const up = new Vector3(0, 1, 0);
+    const right = new Vector3().crossVectors(up, forward).normalize();
+
+    const baseDistance = Math.max(arcadeRadius * 4.5, 6);
+    const sweepDistance = Math.max(arcadeRadius * 6.5, 9);
+    const height = Math.max(arcadeRadius * 2.4, 3);
     
-    // Camera path - arcade front is at positive Z
     const positions: [number, number, number][] = [
-      // Start: behind and high
-      [fx - 5, fy + 6, fz - 8],
-      // Sweep around
-      [fx - 8, fy + 3, fz + 3],
-      // Final: front view (positive Z)
-      [fx, fy + 1.5, fz + 10],
+      focus
+        .clone()
+        .addScaledVector(right, -sweepDistance * 0.5)
+        .addScaledVector(up, height * 1.6)
+        .addScaledVector(forward, -sweepDistance * 0.8)
+        .toArray() as [number, number, number],
+      focus
+        .clone()
+        .addScaledVector(right, -sweepDistance)
+        .addScaledVector(up, height * 0.8)
+        .addScaledVector(forward, sweepDistance * 0.25)
+        .toArray() as [number, number, number],
+      focus
+        .clone()
+        .addScaledVector(forward, baseDistance)
+        .addScaledVector(up, height * 0.15)
+        .toArray() as [number, number, number],
     ];
     setTargetCameraPositions(positions);
-    // Look at the center of the arcade
-    setLookAtPosition([fx, fy + 1.5, fz]);
-  }, [arcadeFocus, arcadeRadius]);
-
-  // Key bindings
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-      if (KEY_TO_GAME[key]) {
-        setCurrentGame(KEY_TO_GAME[key]);
-        return;
-      }
-      if (key === 'p') {
-        setPaused((prev) => !prev);
-      }
-      if (key === 'r') {
-        handleRestartGame();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const toggleMusic = () => {
-    setMusicOn((prev) => !prev);
-  };
-
-  const toggleSounds = () => {
-    setSoundsOn((prev) => !prev);
-  };
-
-  const handleModeSwitch = (mode: string) => {
-    if (currentGame === 'skyblitz') {
-      setSkyBlitzMode(mode as 'UfoMode' | 'RunnerManMode');
-      skyBlitzState.setMode(mode as 'UfoMode' | 'RunnerManMode');
-    } else if (currentGame === 'reactpong') {
-      setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls');
-      reactPongState.setMode(mode as 'SoloPaddle' | 'SoloWalls');
-    } else if (currentGame === 'shapeshifter') {
-      setShapeShifterMode(mode as '3x3' | '4x4' | '5x5');
-    }
-  };
-
-  const handleRestartGame = () => {
-    if (currentGame === 'spinblock') spinBlockState.reset();
-    if (currentGame === 'reactpong') reactPongState.reset();
-    if (currentGame === 'skyblitz') skyBlitzState.reset();
-    if (currentGame === 'dropper') dropperState.reset();
-    if (currentGame === 'stackz') stackzState.reset();
-    if (
-      [
-        'geochrome',
-        'pinball',
-        'rollette',
-        'flappybird',
-        'shapeshifter',
-        'museum',
-      ].includes(currentGame)
-    ) {
-      setRestartSeed((prev) => prev + 1);
-    }
-    setPaused(false);
-  };
+    setLookAtPosition([fx, fy, fz]);
+  }, [arcadeFocus, arcadeRadius, arcadeForward]);
 
   // If home, push /fun, else do nothing or do partial route
   useEffect(() => {
     if (currentGame === 'home') {
       router.push('/fun');
-    } else {
-      // e.g. router.push(`/fun/${currentGame}`);
     }
   }, [currentGame, router]);
-
-  const getScore = () => {
-    switch (currentGame) {
-      case 'spinblock':
-        return spinBlockState.score;
-      case 'reactpong':
-        return reactPongState.score;
-      case 'skyblitz':
-        return skyBlitzState.score;
-      case 'dropper':
-        return dropperState.score;
-      case 'stackz':
-        return stackzState.score;
-      default:
-        return 0;
-    }
-  };
-
-  const handlePauseResume = useCallback(() => {
-    setPaused(false);
-  }, []);
-
-  const handlePauseHome = useCallback(() => {
-    setCurrentGame('home');
-    setPaused(false);
-  }, []);
-
-  const handleSelectSkin = (url: string) => {
-    if (currentGame === 'spinblock') {
-      spinBlockState.ballTexture = url;
-    } else if (currentGame === 'reactpong') {
-      reactPongState.ballTexture = url;
-    }
-  };
-
-  const PauseMenu = () => {
-    let skins: UnlockableSkin[] = [];
-    if (currentGame === 'reactpong') {
-      skins = reactPongState.skins;
-    } else if (currentGame === 'spinblock') {
-      skins = spinBlockState.skins;
-    }
-
-    return (
-      <Html fullscreen>
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[9999]">
-          <div className="flex flex-col items-center text-white p-6 rounded-2xl border border-white/10 shadow-lg bg-slate-950/85 backdrop-blur">
-            <h1 className="mb-4 text-2xl font-bold">Game Paused</h1>
-            <ul className="list-none text-center mb-6">
-              <li
-                onClick={handleRestartGame}
-                className="mb-2 cursor-pointer text-white/70 hover:text-white"
-              >
-                Restart Game (R)
-              </li>
-              <li
-                onClick={handlePauseHome}
-                className="mb-2 cursor-pointer text-white/70 hover:text-white"
-              >
-                Home Screen (H)
-              </li>
-              {(currentGame === 'spinblock' || currentGame === 'reactpong') && (
-                <>
-                  <li className="mb-2">Ball Skins:</li>
-                  <div className="grid grid-cols-4 gap-4 mb-4">
-                    {skins.map((skin, index) => (
-                      <div key={index} className="relative group">
-                        {skin.unlocked ? (
-                          <img
-                            src={skin.url}
-                            alt={skin.name}
-                            className="w-12 h-12 object-cover cursor-pointer rounded-md border-2 border-transparent hover:border-yellow-400 transition-colors duration-200"
-                            onClick={() => handleSelectSkin(skin.url)}
-                          />
-                        ) : (
-                          <div className="w-12 h-12 flex items-center justify-center bg-gray-700 cursor-pointer rounded-md border-2 border-transparent hover:border-yellow-400 transition-colors duration-200">
-                            <img src={lockedSkinImage} alt="Locked" className="w-6 h-6" />
-                          </div>
-                        )}
-                        {!skin.unlocked && (
-                          <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                            <div className="bg-gray-900 bg-opacity-90 text-white text-xs rounded py-1 px-2 whitespace-nowrap">
-                              {skin.achievement}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-              <li
-                onClick={toggleMusic}
-                className="mb-2 cursor-pointer text-white/70 hover:text-white"
-              >
-                Music: {musicOn ? 'On' : 'Off'}
-              </li>
-              <li
-                onClick={toggleSounds}
-                className="mb-4 cursor-pointer text-white/70 hover:text-white"
-              >
-                Sounds: {soundsOn ? 'On' : 'Off'}
-              </li>
-            </ul>
-            <button
-              onClick={handlePauseResume}
-              className="px-6 py-2 text-xl rounded-md border border-white/10 bg-white/10 hover:bg-white/20 transition-colors duration-200"
-            >
-              Resume (P)
-            </button>
-          </div>
-        </div>
-      </Html>
-    );
-  };
-
-  const HUDOverlay = () => {
-    const score = getScore();
-    const showModeSelection =
-      currentGame === 'skyblitz' ||
-      currentGame === 'reactpong' ||
-      currentGame === 'shapeshifter';
-
-    let modeOptions: string[] = [];
-    if (currentGame === 'skyblitz') {
-      modeOptions = ['UfoMode', 'RunnerManMode'];
-    } else if (currentGame === 'reactpong') {
-      modeOptions = ['SoloPaddle', 'SoloWalls'];
-    } else if (currentGame === 'shapeshifter') {
-      modeOptions = ['3x3', '4x4', '5x5'];
-    }
-
-    return (
-      <Html fullscreen>
-        <div className="fixed bottom-4 right-4 flex flex-col items-end space-y-2 text-white z-[9999]">
-          <div className="bg-slate-950/80 px-4 py-2 rounded shadow border border-white/10">
-            <span className="text-lg font-semibold">Score: {score}</span>
-          </div>
-
-          {currentGame === 'skyblitz' && (
-            <div className="bg-slate-950/80 px-4 py-2 rounded shadow w-48 border border-white/10">
-              <span className="text-sm">Health</span>
-              <div className="w-full bg-white/10 h-2 mt-1 rounded">
-                <div className="bg-red-500 h-2 rounded" style={{ width: `${health}%` }}></div>
-              </div>
-            </div>
-          )}
-
-          {showModeSelection && (
-            <div className="bg-slate-950/80 px-4 py-2 rounded shadow w-48 flex flex-col space-y-1 border border-white/10">
-              <span className="text-xs uppercase tracking-[0.2em] text-white/60">
-                Mode
-              </span>
-              <div className="flex flex-wrap mt-1 gap-2">
-                {modeOptions.map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => handleModeSwitch(m)}
-                    className={`text-xs rounded px-2 py-1 border border-white/10 bg-white/5 hover:bg-white/15 ${
-                      (currentGame === 'skyblitz' && skyBlitzMode === m) ||
-                      (currentGame === 'reactpong' && reactPongMode === m) ||
-                      (currentGame === 'shapeshifter' && shapeShifterMode === m)
-                        ? 'border-[#39FF14]/60 text-[#39FF14]'
-                        : ''
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-              <button className="mt-2 text-xs hover:text-yellow-300">
-                Game Mode Info
-              </button>
-            </div>
-          )}
-        </div>
-      </Html>
-    );
-  };
-
-  const handleSelectGame = useCallback((index: number) => {
-    setSelectedIndex(index);
-  }, []);
-
-  const handleLaunchGame = useCallback((gameId: string) => {
-    setCurrentGame(gameId as GameType);
-  }, []);
 
   // Conditionally render the active game
   let content: JSX.Element | null = null;
@@ -568,8 +323,8 @@ const FunScene: React.FC = () => {
           arcadeRef={arcadeRef}
           games={GAME_CARDS}
           selectedIndex={selectedIndex}
-          onSelectGame={handleSelectGame}
-          onLaunchGame={handleLaunchGame}
+          onSelectGame={onSelectGame}
+          onLaunchGame={onLaunchGame}
           onFocusReady={handleArcadeFocus}
         />
       );
@@ -637,69 +392,16 @@ const FunScene: React.FC = () => {
           arcadeRef={arcadeRef}
           games={GAME_CARDS}
           selectedIndex={selectedIndex}
-          onSelectGame={handleSelectGame}
-          onLaunchGame={handleLaunchGame}
+          onSelectGame={onSelectGame}
+          onLaunchGame={onLaunchGame}
           onFocusReady={handleArcadeFocus}
         />
       );
       break;
   }
 
-  const showHud = HUD_GAMES.includes(currentGame);
-  const hotkeyHints = [
-    { hotkey: HOTKEYS.home, label: 'Home' },
-    { hotkey: HOTKEYS.geochrome, label: 'GeoChrome' },
-    { hotkey: HOTKEYS.shapeshifter, label: 'Shape Shifter' },
-    { hotkey: HOTKEYS.skyblitz, label: 'Sky Blitz' },
-    { hotkey: HOTKEYS.dropper, label: 'Dropper' },
-    { hotkey: HOTKEYS.stackz, label: 'Stackz' },
-    { hotkey: HOTKEYS.pinball, label: 'Pinball 3D' },
-    { hotkey: HOTKEYS.rollette, label: 'Rollette' },
-    { hotkey: HOTKEYS.flappybird, label: 'Flappy Bird' },
-    { hotkey: HOTKEYS.reactpong, label: 'React Pong' },
-    { hotkey: HOTKEYS.spinblock, label: 'Spin Block' },
-    { hotkey: HOTKEYS.museum, label: 'Museum' },
-    { hotkey: 'P', label: 'Pause' },
-    { hotkey: 'R', label: 'Reset' },
-  ];
-
   return (
     <>
-        {/* Top instructions + toggles */}
-        <Html fullscreen>
-          <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999]">
-            <div className="rounded-xl border border-white/10 bg-slate-950/80 px-4 py-3 text-white/80 shadow-lg backdrop-blur-lg">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-white/50">
-                Hotkeys
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-3 lg:grid-cols-4">
-                {hotkeyHints.map((hint) => (
-                  <span key={`${hint.hotkey}-${hint.label}`}>
-                    <span className="text-white/90">{hint.hotkey}</span> {hint.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="fixed bottom-4 left-4 z-[9999] flex flex-col space-y-2 pointer-events-auto">
-            <button
-              onClick={toggleMusic}
-              className="rounded-full border border-white/10 bg-slate-950/80 px-4 py-2 text-sm text-white/80 transition hover:text-white hover:border-white/30"
-            >
-              Music: {musicOn ? 'On' : 'Off'}
-            </button>
-            <button
-              onClick={toggleSounds}
-              className="rounded-full border border-white/10 bg-slate-950/80 px-4 py-2 text-sm text-white/80 transition hover:text-white hover:border-white/30"
-            >
-              Sounds: {soundsOn ? 'On' : 'Off'}
-            </button>
-          </div>
-        </Html>
-
-        {/* Game selection is now handled directly on the arcade monitor screen */}
-
         {content}
 
         {/* Home camera animation */}
@@ -762,16 +464,407 @@ const FunScene: React.FC = () => {
           <shadowMaterial transparent opacity={0.2} />
         </mesh>
 
-        {showHud && <HUDOverlay />}
-      {paused && <PauseMenu />}
+    </>
+  );
+};
+
+// Wrapper component to handle UI outside the Canvas
+const FunPageUI: React.FC<{
+  currentGame: GameType;
+  selectedIndex: number;
+  musicOn: boolean;
+  soundsOn: boolean;
+  paused: boolean;
+  health: number;
+  onToggleMusic: () => void;
+  onToggleSounds: () => void;
+  onPauseResume: () => void;
+  onPauseHome: () => void;
+  onRestartGame: () => void;
+  onSelectGame: (index: number) => void;
+  onLaunchGame: (gameId: string) => void;
+  onModeSwitch: (mode: string) => void;
+  onSelectSkin: (url: string) => void;
+  skyBlitzMode: 'UfoMode' | 'RunnerManMode';
+  reactPongMode: 'SoloPaddle' | 'SoloWalls';
+  shapeShifterMode: '3x3' | '4x4' | '5x5';
+}> = ({
+  currentGame,
+  selectedIndex,
+  musicOn,
+  soundsOn,
+  paused,
+  health,
+  onToggleMusic,
+  onToggleSounds,
+  onPauseResume,
+  onPauseHome,
+  onRestartGame,
+  onSelectGame,
+  onLaunchGame,
+  onModeSwitch,
+  onSelectSkin,
+  skyBlitzMode,
+  reactPongMode,
+  shapeShifterMode,
+}) => {
+  const selectedGame = GAME_CARDS[selectedIndex] ?? GAME_CARDS[0];
+  const activeGameCard = GAME_CARDS.find((game) => game.id === currentGame) ?? selectedGame;
+  const showHud = HUD_GAMES.includes(currentGame);
+  const [showInfo, setShowInfo] = useState(false);
+
+  const lockedSkinImage = 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
+
+  const getScore = () => {
+    switch (currentGame) {
+      case 'spinblock': return spinBlockState.score;
+      case 'reactpong': return reactPongState.score;
+      case 'skyblitz': return skyBlitzState.score;
+      case 'dropper': return dropperState.score;
+      case 'stackz': return stackzState.score;
+      default: return 0;
+    }
+  };
+
+  const handleSelectPrevious = () => {
+    onSelectGame((selectedIndex - 1 + GAME_CARDS.length) % GAME_CARDS.length);
+  };
+
+  const handleSelectNext = () => {
+    onSelectGame((selectedIndex + 1) % GAME_CARDS.length);
+  };
+
+  const handleLaunchSelected = () => {
+    if (selectedGame) onLaunchGame(selectedGame.id);
+  };
+
+  useEffect(() => {
+    setShowInfo(false);
+  }, [selectedIndex]);
+
+  const panelStyles = {
+    fontFamily: '"Geist", sans-serif',
+    ['--arcade-accent' as any]: activeGameCard?.accent ?? selectedGame.accent,
+    ['--arcade-surface' as any]: 'linear-gradient(135deg, rgba(15, 17, 22, 0.94), rgba(22, 26, 36, 0.96))',
+    ['--arcade-panel' as any]: 'linear-gradient(135deg, rgba(22, 26, 36, 0.96), rgba(12, 14, 22, 0.94))',
+    ['--arcade-stroke' as any]: 'rgba(255, 255, 255, 0.14)',
+    ['--arcade-glow' as any]: 'rgba(255, 180, 102, 0.35)',
+  } as React.CSSProperties;
+
+  // Game Control Panel
+  const renderGameControlPanel = () => {
+    if (!selectedGame) return null;
+
+    if (currentGame !== 'home') {
+      return (
+        <div className="fixed right-4 top-4 z-[9999] pointer-events-none">
+          <div className="pointer-events-auto w-[min(92vw,260px)] animate-in fade-in slide-in-from-right-4 duration-500" style={panelStyles}>
+            <div className="rounded-2xl border p-3 backdrop-blur-xl" style={{ borderColor: 'var(--arcade-stroke)', background: 'var(--arcade-panel)', boxShadow: '0 18px 40px rgba(0, 0, 0, 0.45)' }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-[0.32em] text-white/60" style={{ fontFamily: '"Geist Mono", monospace' }}>Arcade Deck</span>
+                <span className="h-2 w-2 rounded-full" style={{ background: 'var(--arcade-accent)' }} />
+              </div>
+              <button onClick={onPauseHome} className="mt-3 w-full rounded-xl border px-3 py-2 text-xs uppercase tracking-[0.28em] text-white/80 transition hover:text-white" style={{ borderColor: 'var(--arcade-stroke)' }}>Return Home</button>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button onClick={onToggleMusic} className="rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition hover:text-white" style={{ borderColor: 'var(--arcade-stroke)' }}>Music {musicOn ? 'On' : 'Off'}</button>
+                <button onClick={onToggleSounds} className="rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition hover:text-white" style={{ borderColor: 'var(--arcade-stroke)' }}>Sounds {soundsOn ? 'On' : 'Off'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-x-0 bottom-6 z-[9999] flex justify-center px-4 pointer-events-none">
+        <div className="pointer-events-auto w-full max-w-[760px] animate-in fade-in slide-in-from-bottom-6 duration-700" style={panelStyles}>
+          <div
+            className="relative overflow-hidden rounded-[26px] border px-4 py-3 backdrop-blur-xl"
+            style={{
+              borderColor: 'var(--arcade-stroke)',
+              background: 'var(--arcade-surface)',
+              boxShadow: '0 24px 60px rgba(0, 0, 0, 0.45), 0 0 30px var(--arcade-glow)',
+            }}
+          >
+            <div
+              className="pointer-events-none absolute inset-0 opacity-60"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.08), transparent 55%), radial-gradient(circle at 85% 20%, rgba(255, 180, 102, 0.25), transparent 50%)',
+                mixBlendMode: 'screen',
+              }}
+            />
+            <div className="relative flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleSelectPrevious}
+                  aria-label="Previous game"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border text-sm text-white/80 transition hover:text-white"
+                  style={{
+                    borderColor: 'var(--arcade-stroke)',
+                    background: 'rgba(10, 12, 18, 0.6)',
+                    fontFamily: '"Geist Mono", monospace',
+                  }}
+                >
+                  &larr;
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold text-white md:text-xl">
+                    {selectedGame.title}
+                  </span>
+                  <button
+                    onClick={() => setShowInfo((prev) => !prev)}
+                    aria-label="Toggle game info"
+                    aria-pressed={showInfo}
+                    className="flex h-8 w-8 items-center justify-center rounded-full border text-[11px] text-white/70 transition hover:text-white"
+                    style={{
+                      borderColor: 'var(--arcade-stroke)',
+                      background: 'rgba(10, 12, 18, 0.45)',
+                      fontFamily: '"Geist Mono", monospace',
+                    }}
+                  >
+                    i
+                  </button>
+                </div>
+                <button
+                  onClick={handleSelectNext}
+                  aria-label="Next game"
+                  className="flex h-10 w-10 items-center justify-center rounded-full border text-sm text-white/80 transition hover:text-white"
+                  style={{
+                    borderColor: 'var(--arcade-stroke)',
+                    background: 'rgba(10, 12, 18, 0.6)',
+                    fontFamily: '"Geist Mono", monospace',
+                  }}
+                >
+                  &rarr;
+                </button>
+              </div>
+              <button
+                onClick={handleLaunchSelected}
+                className="rounded-full px-5 py-2 text-[11px] uppercase tracking-[0.35em] text-black transition hover:brightness-110"
+                style={{
+                  background: 'linear-gradient(135deg, var(--arcade-accent), #f7b267)',
+                  fontFamily: '"Geist Mono", monospace',
+                }}
+              >
+                Start
+              </button>
+            </div>
+            {showInfo && (
+              <div
+                className="relative mt-3 rounded-xl border px-3 py-2 text-sm text-white/80"
+                style={{
+                  borderColor: 'var(--arcade-stroke)',
+                  background: 'rgba(10, 12, 18, 0.6)',
+                }}
+              >
+                {selectedGame.description}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // HUD Overlay
+  const renderHUDOverlay = () => {
+    if (!showHud) return null;
+    const score = getScore();
+    const showModeSelection = currentGame === 'skyblitz' || currentGame === 'reactpong' || currentGame === 'shapeshifter';
+    let modeOptions: string[] = [];
+    if (currentGame === 'skyblitz') modeOptions = ['UfoMode', 'RunnerManMode'];
+    else if (currentGame === 'reactpong') modeOptions = ['SoloPaddle', 'SoloWalls'];
+    else if (currentGame === 'shapeshifter') modeOptions = ['3x3', '4x4', '5x5'];
+
+    return (
+      <div className="fixed bottom-4 right-4 flex flex-col items-end space-y-2 text-white z-[9999] pointer-events-auto">
+        <div className="bg-slate-950/80 px-4 py-2 rounded shadow border border-white/10">
+          <span className="text-lg font-semibold">Score: {score}</span>
+        </div>
+        {currentGame === 'skyblitz' && (
+          <div className="bg-slate-950/80 px-4 py-2 rounded shadow w-48 border border-white/10">
+            <span className="text-sm">Health</span>
+            <div className="w-full bg-white/10 h-2 mt-1 rounded">
+              <div className="bg-red-500 h-2 rounded" style={{ width: `${health}%` }} />
+            </div>
+          </div>
+        )}
+        {showModeSelection && (
+          <div className="bg-slate-950/80 px-4 py-2 rounded shadow w-48 flex flex-col space-y-1 border border-white/10">
+            <span className="text-xs uppercase tracking-[0.2em] text-white/60">Mode</span>
+            <div className="flex flex-wrap mt-1 gap-2">
+              {modeOptions.map((m) => (
+                <button key={m} onClick={() => onModeSwitch(m)} className={`text-xs rounded px-2 py-1 border border-white/10 bg-white/5 hover:bg-white/15 ${(currentGame === 'skyblitz' && skyBlitzMode === m) || (currentGame === 'reactpong' && reactPongMode === m) || (currentGame === 'shapeshifter' && shapeShifterMode === m) ? 'border-[#39FF14]/60 text-[#39FF14]' : ''}`}>{m}</button>
+              ))}
+            </div>
+            <button className="mt-2 text-xs hover:text-yellow-300">Game Mode Info</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Pause Menu
+  const renderPauseMenu = () => {
+    if (!paused) return null;
+    let skins: { name: string; url: string; unlocked: boolean; achievement: string }[] = [];
+    if (currentGame === 'reactpong') skins = reactPongState.skins;
+    else if (currentGame === 'spinblock') skins = spinBlockState.skins;
+
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-[9999] pointer-events-auto">
+        <div className="flex flex-col items-center text-white p-6 rounded-2xl border border-white/10 shadow-lg bg-slate-950/85 backdrop-blur">
+          <h1 className="mb-4 text-2xl font-bold">Game Paused</h1>
+          <ul className="list-none text-center mb-6">
+            <li onClick={onRestartGame} className="mb-2 cursor-pointer text-white/70 hover:text-white">Restart Game (R)</li>
+            <li onClick={onPauseHome} className="mb-2 cursor-pointer text-white/70 hover:text-white">Home Screen (H)</li>
+            {(currentGame === 'spinblock' || currentGame === 'reactpong') && (
+              <>
+                <li className="mb-2">Ball Skins:</li>
+                <div className="grid grid-cols-4 gap-4 mb-4">
+                  {skins.map((skin, index) => (
+                    <div key={index} className="relative group">
+                      {skin.unlocked ? (
+                        <img src={skin.url} alt={skin.name} className="w-12 h-12 object-cover cursor-pointer rounded-md border-2 border-transparent hover:border-yellow-400 transition-colors duration-200" onClick={() => onSelectSkin(skin.url)} />
+                      ) : (
+                        <div className="w-12 h-12 flex items-center justify-center bg-gray-700 cursor-pointer rounded-md border-2 border-transparent hover:border-yellow-400 transition-colors duration-200">
+                          <img src={lockedSkinImage} alt="Locked" className="w-6 h-6" />
+                        </div>
+                      )}
+                      {!skin.unlocked && (
+                        <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                          <div className="bg-gray-900 bg-opacity-90 text-white text-xs rounded py-1 px-2 whitespace-nowrap">{skin.achievement}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            <li onClick={onToggleMusic} className="mb-2 cursor-pointer text-white/70 hover:text-white">Music: {musicOn ? 'On' : 'Off'}</li>
+            <li onClick={onToggleSounds} className="mb-4 cursor-pointer text-white/70 hover:text-white">Sounds: {soundsOn ? 'On' : 'Off'}</li>
+          </ul>
+          <button onClick={onPauseResume} className="px-6 py-2 text-xl rounded-md border border-white/10 bg-white/10 hover:bg-white/20 transition-colors duration-200">Resume (P)</button>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {renderGameControlPanel()}
+      {renderHUDOverlay()}
+      {renderPauseMenu()}
     </>
   );
 };
 
 export default function FunPage() {
+  const [currentGame, setCurrentGame] = useState<GameType>('home');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [musicOn, setMusicOn] = useState(true);
+  const [soundsOn, setSoundsOn] = useState(true);
+  const [paused, setPaused] = useState(false);
+  const [health, setHealth] = useState(100);
+  const [restartSeed, setRestartSeed] = useState(0);
+  const [skyBlitzMode, setSkyBlitzMode] = useState<'UfoMode' | 'RunnerManMode'>('UfoMode');
+  const [reactPongMode, setReactPongMode] = useState<'SoloPaddle' | 'SoloWalls'>('SoloPaddle');
+  const [shapeShifterMode, setShapeShifterMode] = useState<'3x3' | '4x4' | '5x5'>('3x3');
+
+  const handleToggleMusic = useCallback(() => setMusicOn((prev) => !prev), []);
+  const handleToggleSounds = useCallback(() => setSoundsOn((prev) => !prev), []);
+  const handlePauseResume = useCallback(() => setPaused(false), []);
+  const handlePauseHome = useCallback(() => { setCurrentGame('home'); setPaused(false); }, []);
+  const handleSelectGame = useCallback((index: number) => setSelectedIndex(index), []);
+  const handleLaunchGame = useCallback((gameId: string) => setCurrentGame(gameId as GameType), []);
+
+  const handleRestartGame = useCallback(() => {
+    if (currentGame === 'spinblock') spinBlockState.reset();
+    if (currentGame === 'reactpong') reactPongState.reset();
+    if (currentGame === 'skyblitz') skyBlitzState.reset();
+    if (currentGame === 'dropper') dropperState.reset();
+    if (currentGame === 'stackz') stackzState.reset();
+    if (['geochrome', 'pinball', 'rollette', 'flappybird', 'shapeshifter', 'museum'].includes(currentGame)) {
+      setRestartSeed((prev) => prev + 1);
+    }
+    setPaused(false);
+  }, [currentGame]);
+
+  const handleModeSwitch = useCallback((mode: string) => {
+    if (currentGame === 'skyblitz') {
+      setSkyBlitzMode(mode as 'UfoMode' | 'RunnerManMode');
+      skyBlitzState.setMode(mode as 'UfoMode' | 'RunnerManMode');
+    } else if (currentGame === 'reactpong') {
+      setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls');
+      reactPongState.setMode(mode as 'SoloPaddle' | 'SoloWalls');
+    } else if (currentGame === 'shapeshifter') {
+      setShapeShifterMode(mode as '3x3' | '4x4' | '5x5');
+    }
+  }, [currentGame]);
+
+  const handleSelectSkin = useCallback((url: string) => {
+    if (currentGame === 'spinblock') spinBlockState.ballTexture = url;
+    else if (currentGame === 'reactpong') reactPongState.ballTexture = url;
+  }, [currentGame]);
+
+  // Key bindings
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (KEY_TO_GAME[key]) {
+        setCurrentGame(KEY_TO_GAME[key]);
+        return;
+      }
+      if (key === 'p') setPaused((prev) => !prev);
+      if (key === 'r') handleRestartGame();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleRestartGame]);
+
+  // Auto-cycle games on the arcade screen when idle
+  useEffect(() => {
+    if (currentGame !== 'home' || GAME_CARDS.length === 0) return;
+    const interval = setInterval(() => {
+      setSelectedIndex((prev) => (prev + 1) % GAME_CARDS.length);
+    }, 5500);
+    return () => clearInterval(interval);
+  }, [currentGame]);
+
   return (
-    <CanvasProvider>
-      <FunScene />
-    </CanvasProvider>
+    <>
+      <CanvasProvider>
+        <FunScene
+          currentGame={currentGame}
+          selectedIndex={selectedIndex}
+          musicOn={musicOn}
+          soundsOn={soundsOn}
+          restartSeed={restartSeed}
+          onSelectGame={handleSelectGame}
+          onLaunchGame={handleLaunchGame}
+        />
+      </CanvasProvider>
+      <FunPageUI
+        currentGame={currentGame}
+        selectedIndex={selectedIndex}
+        musicOn={musicOn}
+        soundsOn={soundsOn}
+        paused={paused}
+        health={health}
+        onToggleMusic={handleToggleMusic}
+        onToggleSounds={handleToggleSounds}
+        onPauseResume={handlePauseResume}
+        onPauseHome={handlePauseHome}
+        onRestartGame={handleRestartGame}
+        onSelectGame={handleSelectGame}
+        onLaunchGame={handleLaunchGame}
+        onModeSwitch={handleModeSwitch}
+        onSelectSkin={handleSelectSkin}
+        skyBlitzMode={skyBlitzMode}
+        reactPongMode={reactPongMode}
+        shapeShifterMode={shapeShifterMode}
+      />
+    </>
   );
 }

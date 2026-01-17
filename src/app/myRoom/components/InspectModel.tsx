@@ -1,8 +1,7 @@
 // src/components/myRoom/InspectModel.tsx
 
 import { Html } from '@react-three/drei';
-import { motion } from 'framer-motion';
-import React, { Component } from 'react';
+import React, { Component, useState } from 'react';
 import modelMap from './RoomItems/AllItems';
 
 interface InspectModelProps {
@@ -36,6 +35,30 @@ class ErrorBoundary extends Component<
   }
 }
 
+// Animated close button using CSS instead of framer-motion
+const CloseButton: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [mounted, setMounted] = useState(false);
+  
+  React.useEffect(() => {
+    // Trigger mount animation
+    const timer = setTimeout(() => setMounted(true), 10);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <button
+      onClick={onClose}
+      className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-all duration-300 ease-in-out"
+      style={{
+        transform: mounted ? 'scale(1)' : 'scale(0.8)',
+        opacity: mounted ? 1 : 0,
+      }}
+    >
+      Close Inspect
+    </button>
+  );
+};
+
 const InspectModel: React.FC<InspectModelProps> = ({ modelName, onClose }) => {
   // Retrieve the model component from the map
   const ModelComponent = modelMap[modelName];
@@ -52,16 +75,7 @@ const InspectModel: React.FC<InspectModelProps> = ({ modelName, onClose }) => {
           {/* Close Button */}
           <Html fullscreen>
             <div className="absolute top-4 left-4 z-20">
-              <motion.button
-                onClick={onClose}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.8 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-              >
-                Close Inspect
-              </motion.button>
+              <CloseButton onClose={onClose} />
             </div>
           </Html>
         </>
@@ -73,16 +87,7 @@ const InspectModel: React.FC<InspectModelProps> = ({ modelName, onClose }) => {
           {/* Close Button */}
           <Html fullscreen>
             <div className="absolute top-4 left-4 z-20">
-              <motion.button
-                onClick={onClose}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.8 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-              >
-                Close Inspect
-              </motion.button>
+              <CloseButton onClose={onClose} />
             </div>
           </Html>
         </>
@@ -96,16 +101,7 @@ const InspectModel: React.FC<InspectModelProps> = ({ modelName, onClose }) => {
           {/* Close Button */}
           <Html fullscreen>
             <div className="absolute top-4 left-4 z-20">
-              <motion.button
-                onClick={onClose}
-                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-                initial={{ scale: 0.8 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0.8 }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-              >
-                Close Inspect
-              </motion.button>
+              <CloseButton onClose={onClose} />
             </div>
           </Html>
         </>

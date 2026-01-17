@@ -1,7 +1,8 @@
 'use client';
 
-import { useAnimations, useCursor, useGLTF } from '@react-three/drei';
+import { Html, useAnimations, useCursor, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
+import { motion } from 'framer-motion';
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTF } from 'three-stdlib';
@@ -94,6 +95,59 @@ const averageRange = (data: Float32Array, start: number, end: number) => {
   return sum / (safeEnd - start);
 };
 
+// Indicator Component
+const Indicator: React.FC<{
+  isSelected: boolean;
+  hovered: boolean;
+  onSelect: () => void;
+  gradient: string;
+}> = ({ isSelected, hovered, onSelect, gradient }) => {
+  const pulseVariants = (gradient: string) => ({
+    initial: { scale: 1, opacity: 0.5 },
+    pulse: {
+      scale: [1, 1.1, 1],
+      opacity: [0.5, 1, 0.5],
+      transition: {
+        duration: 1.5,
+        repeat: Infinity,
+        ease: 'easeInOut',
+      },
+    },
+    hover: {
+      scale: 1.05,
+      opacity: 1,
+      background: gradient,
+      transition: {
+        duration: 0.5,
+        ease: 'easeInOut',
+      },
+    },
+    selected: {
+      scale: 1.05,
+      opacity: 1,
+      background: gradient,
+      transition: {
+        duration: 0.5,
+        ease: 'easeInOut',
+      },
+    },
+  });
+
+  const variants = pulseVariants(gradient);
+
+  return (
+    <motion.div
+      className="absolute flex items-center justify-center w-6 h-6 border-2 border-blue-300 rounded-full cursor-pointer"
+      variants={variants}
+      initial="initial"
+      animate={isSelected ? 'selected' : hovered ? 'hover' : 'pulse'}
+      onClick={onSelect}
+    >
+      {/* Curved Diamond Shape */}
+      <div className="w-4 h-4 border-2 border-blue-300 rounded-md transform rotate-45"></div>
+    </motion.div>
+  );
+};
 
 // Define AnimatedGroupProps by extending GroupProps
 interface AnimatedGroupProps
@@ -108,6 +162,7 @@ interface AnimatedGroupProps
   analyser?: THREE.AudioAnalyser;
   frequencyIndices?: number[];
   isPlaying?: boolean;
+  indicatorPosition?: [number, number, number];
 }
 
 // AnimatedGroup Component
@@ -120,6 +175,7 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
   onMeBitFound,
   frequencyIndices,
   isPlaying,
+  indicatorPosition,
   ...props
 }) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -138,6 +194,48 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
   const glowMaterials = useRef<
     { material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial; base: number }[]
   >([]);
+  
+  // Dynamically calculate indicator position from the bounding box of all meshes
+  const [computedIndicatorPosition, setComputedIndicatorPosition] = useState<[number, number, number] | null>(null);
+  
+  useEffect(() => {
+    if (!groupRef.current || !indicatorPosition) return;
+    
+    // Use a small delay to ensure all matrices are updated
+    const timeoutId = setTimeout(() => {
+      if (!groupRef.current) return;
+      
+      // Force update all matrices in the scene hierarchy
+      groupRef.current.updateMatrixWorld(true);
+      
+      // Calculate bounding box in world space for all meshes
+      const box = new THREE.Box3();
+      let meshCount = 0;
+      
+      groupRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.geometry) {
+          const childBox = new THREE.Box3().setFromObject(child);
+          if (!childBox.isEmpty()) {
+            box.union(childBox);
+            meshCount++;
+          }
+        }
+      });
+      
+      if (meshCount > 0 && !box.isEmpty()) {
+        const worldCenter = new THREE.Vector3();
+        box.getCenter(worldCenter);
+        
+        // Convert world center to the AnimatedGroup's local space
+        const localCenter = groupRef.current.worldToLocal(worldCenter.clone());
+        
+        // Add a small Y offset to place indicator above the center
+        setComputedIndicatorPosition([localCenter.x, localCenter.y + 0.5, localCenter.z]);
+      }
+    }, 200);
+    
+    return () => clearTimeout(timeoutId);
+  }, [indicatorPosition]);
 
   const effect = useMemo(() => {
     const id = name ?? 'group';
@@ -508,6 +606,24 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     return false;
   }, [name, groupData]);
 
+  // Determine gradient based on group name
+  const gradient = useMemo(() => {
+    if (!name) return '';
+    if (goldGroups.includes(name)) {
+      return 'linear-gradient(to right, gold, yellow)';
+    }
+    if (redGroups.includes(name)) {
+      return 'linear-gradient(to right, red, orange, yellow)';
+    }
+    if (whiteGroups.includes(name)) {
+      return 'linear-gradient(to right, white, silver, blue)';
+    }
+    if (closetGroups.includes(name)) {
+      return 'linear-gradient(to right, #4de1ff, #7df9ff, #a0ffe6)';
+    }
+    return 'linear-gradient(to right, gold, yellow)'; // Default gradient
+  }, [name]);
+
   return (
     <group
       ref={groupRef}
@@ -537,10 +653,52 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
       }}
       name={name}
     >
+      {!isPlaying && enableHover && computedIndicatorPosition && (
+        <group position={computedIndicatorPosition}>
+          <Html center>
+            <Indicator
+              isSelected={groupData?.isSelected || false}
+              hovered={groupData?.isHovered || false}
+              onSelect={handleClick}
+              gradient={gradient}
+            />
+          </Html>
+        </group>
+      )}
       <group>{children}</group>
     </group>
   );
 };
+
+// Indicator positions for interactive groups (matched to the new model)
+const INDICATOR_POSITIONS: Record<string, [number, number, number]> = {
+  // Gold groups
+  BunnyEarsCactus: [0, 1.5, 0],
+  KitchenSet: [0, 1.5, 0],
+  PuzzleShelf: [0, 1.5, 0],
+  Arcade: [0, 2, 0],
+  LightUpSpeakers: [0, 1.5, 0],
+  // Red groups
+  RoomDisplayOne: [0, 1.5, 0],
+  RoomDisplayTwo: [0, 1.5, 0],
+  // White groups
+  TVMonitor: [0, 1.5, 0],
+  MonitorScreen: [0, 1, 0],
+  Computer: [0, 1, 0],
+  GraphicLeft: [0, 0.5, 0],
+  GraphicRight: [0, 0.5, 0],
+  GraphicMiddle: [0, 0.5, 0],
+  // Closet groups
+  ShelfKeyboard: [0, 0.5, 0],
+  KeyboardMouse: [0, 0.5, 0],
+  HeadsetStand: [0, 0.5, 0],
+  GameZone: [0, 1, 0],
+  XBOX: [0, 0.5, 0],
+  PS5: [0, 0.5, 0],
+  DVDPlayer: [0, 0.5, 0],
+  CableBox: [0, 0.5, 0],
+};
+
 // Main RachosRoom Component
 export default function RachosRoom({
   analyser,
@@ -857,6 +1015,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['LightUpSpeakers']}
+            indicatorPosition={INDICATOR_POSITIONS['LightUpSpeakers']}
           >
             <group position={[-3.372, -4.12, 6.032]} rotation={[Math.PI, -0.775, -Math.PI / 2]} scale={0.001}>
               <mesh geometry={nodes.Mesh_0001?.geometry} material={materials['PaletteMaterial001.002']} />
@@ -879,6 +1038,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['BunnyEarsCactus']}
+            indicatorPosition={INDICATOR_POSITIONS['BunnyEarsCactus']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
               <mesh geometry={nodes.Mesh_89005?.geometry} material={materials['lambert1.001']} />
@@ -898,6 +1058,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['Arcade']}
+            indicatorPosition={INDICATOR_POSITIONS['Arcade']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
               <mesh geometry={nodes.Mesh_36001?.geometry} material={materials['PaletteMaterial003.003']} />
@@ -947,6 +1108,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['TVMonitor']}
+            indicatorPosition={INDICATOR_POSITIONS['TVMonitor']}
           >
             <mesh geometry={nodes.TVMonitor?.geometry} material={materials['Material.004']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -960,6 +1122,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MonitorScreen']}
+            indicatorPosition={INDICATOR_POSITIONS['MonitorScreen']}
           >
             <mesh geometry={nodes.Computer_Monitor?.geometry} material={materials['Material.005']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -973,6 +1136,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['KitchenSet']}
+            indicatorPosition={INDICATOR_POSITIONS['KitchenSet']}
           >
             <mesh geometry={nodes.KitchenSet?.geometry} material={materials['PaletteMaterial001.009']} position={[-5.999, -0.966, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -1098,6 +1262,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['XBOX']}
+            indicatorPosition={INDICATOR_POSITIONS['XBOX']}
           >
             <group position={[4.076, 2.23, -2.919]} scale={[0.22, 0.499, 0.499]}>
               <mesh geometry={nodes.Cube005?.geometry} material={materials['Material.014']} />
@@ -1123,6 +1288,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['PuzzleShelf']}
+            indicatorPosition={INDICATOR_POSITIONS['PuzzleShelf']}
           >
             <group position={[-5.584, 0.309, -1.968]} rotation={[-Math.PI / 2, 0, -1.565]} scale={[2.617, 2.955, 3.725]}>
               <mesh geometry={nodes.PuzzleShelf012?.geometry} material={materials['Sticker_SPC-SG.006']} />
@@ -1151,6 +1317,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['RoomDisplayOne']}
+            indicatorPosition={INDICATOR_POSITIONS['RoomDisplayOne']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
               <mesh geometry={nodes.RoomDisplayOne003?.geometry} material={materials['PaletteMaterial001.018']} />
@@ -1176,6 +1343,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['RoomDisplayTwo']}
+            indicatorPosition={INDICATOR_POSITIONS['RoomDisplayTwo']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
               <mesh geometry={nodes.RoomDisplayOne004?.geometry} material={materials['blinn4SG.001']} />
@@ -1192,6 +1360,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['GraphicLeft']}
+            indicatorPosition={INDICATOR_POSITIONS['GraphicLeft']}
           >
             <mesh geometry={nodes.Graphic_Left_Plants?.geometry} material={materials['Material.011']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -1204,6 +1373,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['GraphicMiddle']}
+            indicatorPosition={INDICATOR_POSITIONS['GraphicMiddle']}
           >
             <mesh geometry={nodes.Graphic_Middle_Cats?.geometry} material={materials['Material.011']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -1216,6 +1386,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['GraphicRight']}
+            indicatorPosition={INDICATOR_POSITIONS['GraphicRight']}
           >
             <mesh geometry={nodes.Graphic_Right_Puzzles?.geometry} material={materials['Material.011']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -1247,6 +1418,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['PS5']}
+            indicatorPosition={INDICATOR_POSITIONS['PS5']}
           >
             <mesh geometry={nodes.PS5?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -1260,6 +1432,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['CableBox']}
+            indicatorPosition={INDICATOR_POSITIONS['CableBox']}
           >
             <mesh geometry={nodes.Cable_Box?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>
@@ -1273,6 +1446,7 @@ export default function RachosRoom({
             analyser={analyser}
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['ShelfKeyboard']}
+            indicatorPosition={INDICATOR_POSITIONS['ShelfKeyboard']}
           >
             <mesh geometry={nodes.Shelf_Keyboard?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
           </AnimatedGroup>

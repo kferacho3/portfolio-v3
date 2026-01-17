@@ -1040,4 +1040,7 @@ export function Model(props: JSX.IntrinsicElements['group']) {
   )
 }
 
-useGLTF.preload('/RachosRoomMain.glb')
+// Preload only in browser to avoid SSR issues
+if (typeof window !== 'undefined') {
+  useGLTF.preload('/RachosRoomMain.glb')
+}
