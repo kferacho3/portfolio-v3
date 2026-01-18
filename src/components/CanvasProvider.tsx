@@ -47,6 +47,7 @@ const CanvasProvider: React.FC<CanvasProviderProps> = ({ children }) => {
         gl.shadowMap.type = THREE.PCFSoftShadowMap;
       }}
       className="w-full h-screen"
+      style={{ touchAction: 'none' }}
     >
       <SheetProvider sheet={sheet}>
         {/* basic key-lights (they still cast shadows) */}

@@ -1,9 +1,9 @@
 /**
  * Forma.tsx (Vertex Merge)
  * 
- * 2048-like polygon evolution game with modifiers
+ * 2048-like polygon evolution game with multiple grid sizes
  * Merge same-sided polygons to evolve: triangle → square → pentagon → ...
- * Features: unstable tiles, gravity flip, wormholes, glass tiles
+ * Grid sizes: 4x4 (Classic), 8x8 (Extended), 12x12 (Challenge), 16x16 (Extreme)
  */
 'use client';
 
@@ -18,7 +18,7 @@ import { SeededRandom } from '../utils/seededRandom';
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-type ModifierType = 'wormhole' | 'glass' | null;
+type GridSizeOption = 4 | 8 | 12 | 16;
 
 interface Tile {
   id: string;
@@ -27,16 +27,83 @@ interface Tile {
   col: number;
   merging?: boolean;
   isNew?: boolean;
-  unstable?: number; // Decay timer (0-1), tile disappears at 0
-  modifier?: ModifierType;
-}
-
-interface CellModifier {
-  type: ModifierType;
-  linkedCell?: [number, number]; // For wormholes
+  unstable?: number;
 }
 
 type Direction = 'up' | 'down' | 'left' | 'right';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GRID SIZE CONFIGURATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface GridConfig {
+  size: number;
+  cellSize: number;
+  cellGap: number;
+  cameraZ: number;
+  initialTiles: number;
+  unstableChance: number;
+  unstableDecayRate: number;
+  spawnHigherChance: number; // Chance to spawn 4-sided instead of 3
+  maxUnstableChance: number;
+  name: string;
+  description: string;
+}
+
+const GRID_CONFIGS: Record<GridSizeOption, GridConfig> = {
+  4: {
+    size: 4,
+    cellSize: 2,
+    cellGap: 0.2,
+    cameraZ: 12,
+    initialTiles: 2,
+    unstableChance: 0.15,
+    unstableDecayRate: 0.12,
+    spawnHigherChance: 0.1,
+    maxUnstableChance: 0.3,
+    name: 'Classic',
+    description: '4×4 grid - Original gameplay',
+  },
+  8: {
+    size: 8,
+    cellSize: 1.2,
+    cellGap: 0.12,
+    cameraZ: 14,
+    initialTiles: 4,
+    unstableChance: 0.12,
+    unstableDecayRate: 0.08,
+    spawnHigherChance: 0.15,
+    maxUnstableChance: 0.25,
+    name: 'Extended',
+    description: '8×8 grid - More room to merge',
+  },
+  12: {
+    size: 12,
+    cellSize: 0.9,
+    cellGap: 0.08,
+    cameraZ: 17,
+    initialTiles: 6,
+    unstableChance: 0.1,
+    unstableDecayRate: 0.06,
+    spawnHigherChance: 0.2,
+    maxUnstableChance: 0.2,
+    name: 'Challenge',
+    description: '12×12 grid - Strategic depth',
+  },
+  16: {
+    size: 16,
+    cellSize: 0.7,
+    cellGap: 0.05,
+    cameraZ: 20,
+    initialTiles: 8,
+    unstableChance: 0.08,
+    unstableDecayRate: 0.05,
+    spawnHigherChance: 0.25,
+    maxUnstableChance: 0.15,
+    name: 'Extreme',
+    description: '16×16 grid - Ultimate challenge',
+  },
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -48,60 +115,66 @@ export const formaState = proxy({
   gameOver: false,
   highestSides: 3,
   mergeCount: 0,
-  modifiersUnlocked: 0,
-  gravityFlipped: false,
+  gridSize: 4 as GridSizeOption,
+  started: false,
+  
   reset: () => {
     formaState.score = 0;
     formaState.gameOver = false;
     formaState.highestSides = 3;
     formaState.mergeCount = 0;
-    formaState.modifiersUnlocked = 0;
-    formaState.gravityFlipped = false;
+  },
+  
+  setGridSize: (size: GridSizeOption) => {
+    formaState.gridSize = size;
+    formaState.reset();
+  },
+  
+  start: () => {
+    formaState.started = true;
+  },
+  
+  backToMenu: () => {
+    formaState.started = false;
+    formaState.reset();
   },
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CONSTANTS
+// POLYGON COLORS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const GRID_SIZE = 4;
-const CELL_SIZE = 2;
-const CELL_GAP = 0.2;
-const UNSTABLE_CHANCE = 0.15;
-const UNSTABLE_DECAY_RATE = 0.08; // Per move
-const GRAVITY_FLIP_INTERVAL = 10; // Merges between flips
-
 const POLYGON_COLORS: Record<number, string> = {
-  3: '#ff6b6b',
-  4: '#feca57',
-  5: '#48dbfb',
-  6: '#ff9ff3',
-  7: '#54a0ff',
-  8: '#5f27cd',
-  9: '#00d2d3',
-  10: '#ff6b6b',
-  11: '#feca57',
-  12: '#10ac84',
-};
-
-const MODIFIER_COLORS: Record<string, string> = {
-  wormhole: '#9b59b6',
-  glass: '#ecf0f1',
+  3: '#ff6b6b',   // Triangle - Red
+  4: '#feca57',   // Square - Yellow
+  5: '#48dbfb',   // Pentagon - Cyan
+  6: '#ff9ff3',   // Hexagon - Pink
+  7: '#54a0ff',   // Heptagon - Blue
+  8: '#5f27cd',   // Octagon - Purple
+  9: '#00d2d3',   // Nonagon - Teal
+  10: '#ff6348',  // Decagon - Orange
+  11: '#26de81',  // 11-gon - Green
+  12: '#fd79a8',  // Dodecagon - Light Pink
+  13: '#a29bfe',  // 13-gon - Lavender
+  14: '#ffeaa7',  // 14-gon - Light Yellow
+  15: '#81ecec',  // 15-gon - Light Cyan
+  16: '#fab1a0',  // 16-gon - Peach
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════════════════
 
-const createEmptyGrid = (): (Tile | null)[][] => {
-  return Array.from({ length: GRID_SIZE }, () =>
-    Array.from({ length: GRID_SIZE }, () => null)
+const createEmptyGrid = (size: number): (Tile | null)[][] => {
+  return Array.from({ length: size }, () =>
+    Array.from({ length: size }, () => null)
   );
 };
 
-const getGridPosition = (row: number, col: number): [number, number, number] => {
-  const x = (col - (GRID_SIZE - 1) / 2) * (CELL_SIZE + CELL_GAP);
-  const y = ((GRID_SIZE - 1) / 2 - row) * (CELL_SIZE + CELL_GAP);
+const getGridPosition = (row: number, col: number, config: GridConfig): [number, number, number] => {
+  const totalWidth = config.size * (config.cellSize + config.cellGap) - config.cellGap;
+  const x = col * (config.cellSize + config.cellGap) - totalWidth / 2 + config.cellSize / 2;
+  const y = (config.size - 1 - row) * (config.cellSize + config.cellGap) - totalWidth / 2 + config.cellSize / 2;
   return [x, y, 0];
 };
 
@@ -109,24 +182,31 @@ const getGridPosition = (row: number, col: number): [number, number, number] => 
 // COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Polygon mesh with enhanced animations
+// Polygon mesh with animations
 const PolygonTile: React.FC<{
   tile: Tile;
-}> = ({ tile }) => {
+  config: GridConfig;
+}> = ({ tile, config }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const [position, setPosition] = useState(getGridPosition(tile.row, tile.col));
+  const targetPos = useRef(getGridPosition(tile.row, tile.col, config));
+  const [position, setPosition] = useState(getGridPosition(tile.row, tile.col, config));
   const [scale, setScale] = useState(tile.isNew ? 0 : 1);
   const [rotation, setRotation] = useState(0);
 
-  const color = POLYGON_COLORS[tile.sides] || '#ffffff';
+  const color = POLYGON_COLORS[tile.sides] || POLYGON_COLORS[Math.min(tile.sides, 16)] || '#ffffff';
   const isUnstable = tile.unstable !== undefined;
+
+  // Update target position when tile moves
+  useEffect(() => {
+    targetPos.current = getGridPosition(tile.row, tile.col, config);
+  }, [tile.row, tile.col, config]);
 
   // Create polygon geometry
   const geometry = useMemo(() => {
     const shape = new THREE.Shape();
-    const radius = CELL_SIZE * 0.4;
-    const sides = tile.sides;
+    const radius = config.cellSize * 0.4;
+    const sides = Math.min(tile.sides, 32); // Cap sides for performance
 
     for (let i = 0; i < sides; i++) {
       const angle = (i / sides) * Math.PI * 2 - Math.PI / 2;
@@ -142,44 +222,42 @@ const PolygonTile: React.FC<{
 
     return new THREE.ExtrudeGeometry(shape, {
       steps: 1,
-      depth: 0.3,
+      depth: config.cellSize * 0.15,
       bevelEnabled: true,
-      bevelThickness: 0.1,
-      bevelSize: 0.05,
+      bevelThickness: config.cellSize * 0.05,
+      bevelSize: config.cellSize * 0.025,
       bevelSegments: 2,
     });
-  }, [tile.sides]);
+  }, [tile.sides, config.cellSize]);
 
   // Animate position, scale, and rotation
   useFrame((_, delta) => {
-    const targetPos = getGridPosition(tile.row, tile.col);
-    
     // Smooth position transition
     setPosition((prev) => [
-      THREE.MathUtils.lerp(prev[0], targetPos[0], delta * 12),
-      THREE.MathUtils.lerp(prev[1], targetPos[1], delta * 12),
+      THREE.MathUtils.lerp(prev[0], targetPos.current[0], Math.min(delta * 15, 1)),
+      THREE.MathUtils.lerp(prev[1], targetPos.current[1], Math.min(delta * 15, 1)),
       prev[2],
     ]);
 
     // Scale animation for new tiles
     if (tile.isNew && scale < 1) {
-      setScale((prev) => Math.min(1, prev + delta * 10));
+      setScale((prev) => Math.min(1, prev + delta * 12));
     }
 
     // Merge pop animation
     if (tile.merging) {
       setScale((prev) => {
-        if (prev > 1.2) return THREE.MathUtils.lerp(prev, 1, delta * 8);
-        return Math.min(1.3, prev + delta * 15);
+        if (prev > 1.15) return THREE.MathUtils.lerp(prev, 1, Math.min(delta * 10, 1));
+        return Math.min(1.2, prev + delta * 20);
       });
     }
 
-    // Constant rotation
-    setRotation((prev) => prev + delta * 0.8);
+    // Constant rotation (slower for larger polygons)
+    setRotation((prev) => prev + delta * (1.2 / Math.max(tile.sides - 2, 1)));
 
     // Unstable tile shake
     if (meshRef.current && isUnstable) {
-      const shake = Math.sin(Date.now() * 0.02) * 0.03 * (1 - (tile.unstable || 0));
+      const shake = Math.sin(Date.now() * 0.02) * config.cellSize * 0.02 * (1 - (tile.unstable || 0));
       meshRef.current.position.x = position[0] + shake;
     }
 
@@ -216,98 +294,125 @@ const PolygonTile: React.FC<{
       {/* Glow effect for unstable tiles */}
       {isUnstable && (
         <mesh ref={glowRef} rotation={[0, 0, rotation]} scale={[scale * 1.1, scale * 1.1, 1]}>
-          <circleGeometry args={[CELL_SIZE * 0.45, tile.sides]} />
+          <circleGeometry args={[config.cellSize * 0.45, Math.min(tile.sides, 16)]} />
           <meshBasicMaterial color="#ff0000" transparent opacity={0.3} />
         </mesh>
       )}
 
       {/* Unstable decay indicator */}
       {isUnstable && (
-        <mesh position={[0, 0, 0.3]} rotation={[0, 0, 0]}>
-          <ringGeometry args={[CELL_SIZE * 0.35, CELL_SIZE * 0.4, 32, 1, 0, Math.PI * 2 * (tile.unstable || 0)]} />
+        <mesh position={[0, 0, config.cellSize * 0.2]} rotation={[0, 0, 0]}>
+          <ringGeometry args={[
+            config.cellSize * 0.35,
+            config.cellSize * 0.4,
+            32, 1, 0,
+            Math.PI * 2 * (tile.unstable || 0)
+          ]} />
           <meshBasicMaterial color="#ff4444" />
         </mesh>
       )}
 
-      {/* Modifier indicator */}
-      {tile.modifier === 'glass' && (
-        <mesh position={[0, 0, 0.35]}>
-          <boxGeometry args={[CELL_SIZE * 0.6, CELL_SIZE * 0.6, 0.05]} />
-          <meshPhysicalMaterial
-            color="#ffffff"
-            transparent
-            opacity={0.4}
-            transmission={0.6}
-            roughness={0}
-          />
-        </mesh>
+      {/* Side count indicator for higher polygons */}
+      {tile.sides >= 6 && (
+        <Html center position={[0, 0, config.cellSize * 0.25]} style={{ pointerEvents: 'none' }}>
+          <div className="text-white font-bold text-xs bg-black/50 rounded px-1"
+               style={{ fontSize: `${Math.max(8, 14 - config.size)}px` }}>
+            {tile.sides}
+          </div>
+        </Html>
       )}
     </group>
   );
 };
 
-// Grid background with modifier indicators
-const GridBackground: React.FC<{
-  modifiers: Map<string, CellModifier>;
-  wormholeLinks: Array<[[number, number], [number, number]]>;
-}> = ({ modifiers, wormholeLinks }) => {
+// Grid background
+const GridBackground: React.FC<{ config: GridConfig }> = ({ config }) => {
   const cells = useMemo(() => {
     const result: JSX.Element[] = [];
-    for (let row = 0; row < GRID_SIZE; row++) {
-      for (let col = 0; col < GRID_SIZE; col++) {
-        const pos = getGridPosition(row, col);
+    for (let row = 0; row < config.size; row++) {
+      for (let col = 0; col < config.size; col++) {
+        const pos = getGridPosition(row, col, config);
         const key = `${row}-${col}`;
-        const modifier = modifiers.get(key);
         
-        let cellColor = '#1a1a2e';
-        if (modifier?.type === 'wormhole') cellColor = '#2d1b4e';
-        if (modifier?.type === 'glass') cellColor = '#2a3a4a';
+        // Checkerboard pattern for visual clarity
+        const isDark = (row + col) % 2 === 0;
+        const cellColor = isDark ? '#1a1a2e' : '#1f1f3a';
 
         result.push(
-          <mesh key={`cell-${key}`} position={pos}>
-            <boxGeometry args={[CELL_SIZE, CELL_SIZE, 0.1]} />
-            <meshStandardMaterial color={cellColor} transparent opacity={0.8} />
+          <mesh key={`cell-${key}`} position={[pos[0], pos[1], -0.1]}>
+            <boxGeometry args={[config.cellSize * 0.95, config.cellSize * 0.95, 0.05]} />
+            <meshStandardMaterial color={cellColor} transparent opacity={0.9} />
           </mesh>
         );
-
-        // Wormhole indicator
-        if (modifier?.type === 'wormhole') {
-          result.push(
-            <mesh key={`wormhole-${key}`} position={[pos[0], pos[1], 0.1]} rotation={[0, 0, Date.now() * 0.001]}>
-              <ringGeometry args={[CELL_SIZE * 0.3, CELL_SIZE * 0.4, 32]} />
-              <meshBasicMaterial color={MODIFIER_COLORS.wormhole} transparent opacity={0.6} />
-            </mesh>
-          );
-        }
       }
     }
     return result;
-  }, [modifiers]);
+  }, [config]);
 
-  return <group position={[0, 0, -0.2]}>{cells}</group>;
-};
-
-// Gravity indicator
-const GravityIndicator: React.FC<{ flipped: boolean }> = ({ flipped }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.z += delta * 2;
-    }
-  });
+  // Grid border
+  const totalWidth = config.size * (config.cellSize + config.cellGap) - config.cellGap;
 
   return (
-    <group position={[0, flipped ? 5 : -5, 0]}>
-      <mesh ref={meshRef}>
-        <coneGeometry args={[0.3, 0.6, 4]} />
-        <meshStandardMaterial
-          color={flipped ? '#ff6b6b' : '#48dbfb'}
-          emissive={flipped ? '#ff6b6b' : '#48dbfb'}
-          emissiveIntensity={0.5}
-        />
-      </mesh>
+    <group position={[0, 0, -0.2]}>
+      {cells}
+      {/* Border frame */}
+      <lineSegments>
+        <edgesGeometry args={[new THREE.BoxGeometry(totalWidth + 0.2, totalWidth + 0.2, 0.1)]} />
+        <lineBasicMaterial color="#3a3a5a" linewidth={2} />
+      </lineSegments>
     </group>
+  );
+};
+
+// Mode selection screen
+const ModeSelection: React.FC<{
+  onSelect: (size: GridSizeOption) => void;
+}> = ({ onSelect }) => {
+  const [hoveredSize, setHoveredSize] = useState<GridSizeOption | null>(null);
+
+  return (
+    <Html fullscreen style={{ pointerEvents: 'auto' }}>
+      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-[#0a0a1a] to-[#1a1a3a]">
+        <div className="text-center max-w-4xl px-4">
+          <h1 className="text-6xl font-bold text-white mb-2">FORMA</h1>
+          <p className="text-xl text-white/60 mb-8">Polygon Evolution Game</p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {([4, 8, 12, 16] as GridSizeOption[]).map((size) => {
+              const config = GRID_CONFIGS[size];
+              const isHovered = hoveredSize === size;
+              
+              return (
+                <button
+                  key={size}
+                  onClick={() => onSelect(size)}
+                  onMouseEnter={() => setHoveredSize(size)}
+                  onMouseLeave={() => setHoveredSize(null)}
+                  className={`p-6 rounded-xl border-2 transition-all duration-300 ${
+                    isHovered
+                      ? 'bg-white/20 border-white/60 scale-105'
+                      : 'bg-white/5 border-white/20 hover:bg-white/10'
+                  }`}
+                >
+                  <div className="text-4xl font-bold text-white mb-1">{size}×{size}</div>
+                  <div className="text-lg text-cyan-400 font-medium">{config.name}</div>
+                  <div className="text-xs text-white/50 mt-2">{config.description}</div>
+                  <div className="mt-3 text-xs text-white/40">
+                    <div>Start: {config.initialTiles} tiles</div>
+                    <div>Decay: {(config.unstableDecayRate * 100).toFixed(0)}%/move</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="text-white/40 text-sm">
+            <p className="mb-2">Use WASD or Arrow Keys to merge polygons</p>
+            <p>Match shapes to evolve: Triangle → Square → Pentagon → ...</p>
+          </div>
+        </div>
+      </div>
+    </Html>
   );
 };
 
@@ -319,28 +424,28 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const snap = useSnapshot(formaState);
   const { camera, scene } = useThree();
 
-  const [grid, setGrid] = useState<(Tile | null)[][]>(createEmptyGrid);
+  const config = GRID_CONFIGS[snap.gridSize];
+  
+  const [grid, setGrid] = useState<(Tile | null)[][]>(() => createEmptyGrid(config.size));
   const [tiles, setTiles] = useState<Tile[]>([]);
-  const [modifiers, setModifiers] = useState<Map<string, CellModifier>>(new Map());
-  const [wormholeLinks, setWormholeLinks] = useState<Array<[[number, number], [number, number]]>>([]);
 
   const rngRef = useRef(new SeededRandom(Date.now()));
   const tileIdCounter = useRef(0);
   const canMove = useRef(true);
 
-  // Camera setup
+  // Camera setup - updates when grid size changes
   useEffect(() => {
-    camera.position.set(0, 0, 12);
+    camera.position.set(0, 0, config.cameraZ);
     camera.lookAt(0, 0, 0);
     scene.background = new THREE.Color('#0a0a1a');
-  }, [camera, scene]);
+  }, [camera, scene, config.cameraZ]);
 
   // Spawn new tile
-  const spawnTile = useCallback((currentGrid: (Tile | null)[][]) => {
+  const spawnTile = useCallback((currentGrid: (Tile | null)[][], cfg: GridConfig) => {
     const emptyCells: [number, number][] = [];
-    for (let row = 0; row < GRID_SIZE; row++) {
-      for (let col = 0; col < GRID_SIZE; col++) {
-        if (!currentGrid[row][col]) {
+    for (let row = 0; row < cfg.size; row++) {
+      for (let col = 0; col < cfg.size; col++) {
+        if (!currentGrid[row]?.[col]) {
           emptyCells.push([row, col]);
         }
       }
@@ -349,11 +454,13 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     if (emptyCells.length === 0) return null;
 
     const [row, col] = rngRef.current.pick(emptyCells);
-    const sides = rngRef.current.bool(0.9) ? 3 : 4;
     
-    // Chance for unstable tile (increases with score)
-    const unstableChance = UNSTABLE_CHANCE + formaState.score * 0.0001;
-    const isUnstable = rngRef.current.bool(Math.min(0.3, unstableChance));
+    // Higher chance of 4-sided on larger grids
+    const sides = rngRef.current.bool(1 - cfg.spawnHigherChance) ? 3 : 4;
+    
+    // Unstable chance scales with score and grid size
+    const unstableChance = cfg.unstableChance + formaState.score * 0.00005;
+    const isUnstable = rngRef.current.bool(Math.min(cfg.maxUnstableChance, unstableChance));
 
     const tile: Tile = {
       id: `tile-${tileIdCounter.current++}`,
@@ -367,48 +474,14 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     return tile;
   }, []);
 
-  // Spawn modifier on board
-  const spawnModifier = useCallback(() => {
-    const emptyCells: [number, number][] = [];
-    for (let row = 0; row < GRID_SIZE; row++) {
-      for (let col = 0; col < GRID_SIZE; col++) {
-        const key = `${row}-${col}`;
-        if (!modifiers.has(key)) {
-          emptyCells.push([row, col]);
-        }
-      }
-    }
-
-    if (emptyCells.length < 2) return;
-
-    const modType = rngRef.current.bool(0.6) ? 'wormhole' : 'glass';
-
-    if (modType === 'wormhole' && emptyCells.length >= 2) {
-      const [cell1, cell2] = rngRef.current.shuffle(emptyCells).slice(0, 2);
-      setModifiers((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(`${cell1[0]}-${cell1[1]}`, { type: 'wormhole', linkedCell: cell2 });
-        newMap.set(`${cell2[0]}-${cell2[1]}`, { type: 'wormhole', linkedCell: cell1 });
-        return newMap;
-      });
-      setWormholeLinks((prev) => [...prev, [cell1, cell2]]);
-    } else {
-      const cell = rngRef.current.pick(emptyCells);
-      setModifiers((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(`${cell[0]}-${cell[1]}`, { type: 'glass' });
-        return newMap;
-      });
-    }
-  }, [modifiers]);
-
-  // Initialize game
-  useEffect(() => {
-    const initialGrid = createEmptyGrid();
+  // Initialize game when starting
+  const initializeGame = useCallback(() => {
+    const cfg = GRID_CONFIGS[formaState.gridSize];
+    const initialGrid = createEmptyGrid(cfg.size);
     const initialTiles: Tile[] = [];
 
-    for (let i = 0; i < 2; i++) {
-      const tile = spawnTile(initialGrid);
+    for (let i = 0; i < cfg.initialTiles; i++) {
+      const tile = spawnTile(initialGrid, cfg);
       if (tile) {
         initialGrid[tile.row][tile.col] = tile;
         initialTiles.push(tile);
@@ -417,53 +490,60 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
     setGrid(initialGrid);
     setTiles(initialTiles);
+    tileIdCounter.current = initialTiles.length;
+    rngRef.current = new SeededRandom(Date.now());
   }, [spawnTile]);
 
-  // Move tiles
+  // Initialize when game starts
+  useEffect(() => {
+    if (snap.started) {
+      initializeGame();
+    }
+  }, [snap.started, snap.gridSize, initializeGame]);
+
+  // Move tiles with proper boundary checking
   const moveTiles = useCallback((direction: Direction) => {
-    if (!canMove.current || snap.gameOver) return;
+    if (!canMove.current || snap.gameOver || !snap.started) return;
     canMove.current = false;
 
-    // Apply gravity flip
-    let actualDirection = direction;
-    if (snap.gravityFlipped) {
-      if (direction === 'up') actualDirection = 'down';
-      else if (direction === 'down') actualDirection = 'up';
-    }
+    const cfg = GRID_CONFIGS[snap.gridSize];
 
     setGrid((prevGrid) => {
-      const newGrid = createEmptyGrid();
+      const newGrid = createEmptyGrid(cfg.size);
       const newTiles: Tile[] = [];
       let moved = false;
       let scoreGain = 0;
       let mergesThisMove = 0;
 
-      const rows = actualDirection === 'down'
-        ? Array.from({ length: GRID_SIZE }, (_, i) => GRID_SIZE - 1 - i)
-        : Array.from({ length: GRID_SIZE }, (_, i) => i);
-      const cols = actualDirection === 'right'
-        ? Array.from({ length: GRID_SIZE }, (_, i) => GRID_SIZE - 1 - i)
-        : Array.from({ length: GRID_SIZE }, (_, i) => i);
+      // Determine traversal order based on direction
+      const rows = direction === 'down'
+        ? Array.from({ length: cfg.size }, (_, i) => cfg.size - 1 - i)
+        : Array.from({ length: cfg.size }, (_, i) => i);
+      const cols = direction === 'right'
+        ? Array.from({ length: cfg.size }, (_, i) => cfg.size - 1 - i)
+        : Array.from({ length: cfg.size }, (_, i) => i);
 
       const processLine = (line: (Tile | null)[], setCell: (idx: number, tile: Tile | null) => void) => {
         const compacted: Tile[] = [];
 
+        // Compact tiles and handle unstable decay
         for (const tile of line) {
           if (tile) {
-            // Decay unstable tiles
             let newTile = { ...tile, isNew: false, merging: false };
+            
+            // Decay unstable tiles
             if (newTile.unstable !== undefined) {
-              newTile.unstable -= UNSTABLE_DECAY_RATE;
+              newTile.unstable -= cfg.unstableDecayRate;
               if (newTile.unstable <= 0) {
-                // Tile decays - skip it
                 moved = true;
-                continue;
+                continue; // Tile decayed
               }
             }
             compacted.push(newTile);
           }
         }
 
+        // Merge adjacent matching tiles
         const merged: Tile[] = [];
         let i = 0;
         while (i < compacted.length) {
@@ -473,9 +553,9 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
               ...compacted[i],
               sides: newSides,
               merging: true,
-              unstable: undefined, // Merging removes unstable status
+              unstable: undefined, // Merging removes unstable
             });
-            scoreGain += newSides * newSides;
+            scoreGain += newSides * newSides * (cfg.size / 4); // Scale score with grid size
             mergesThisMove++;
             if (newSides > formaState.highestSides) {
               formaState.highestSides = newSides;
@@ -488,20 +568,26 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           }
         }
 
+        // Place merged tiles
         for (let j = 0; j < merged.length; j++) {
           setCell(j, merged[j]);
         }
       };
 
-      if (actualDirection === 'up' || actualDirection === 'down') {
+      // Process based on direction
+      if (direction === 'up' || direction === 'down') {
         for (const col of cols) {
           const line: (Tile | null)[] = [];
           for (const row of rows) {
-            line.push(prevGrid[row][col]);
+            if (row >= 0 && row < cfg.size && col >= 0 && col < cfg.size) {
+              line.push(prevGrid[row]?.[col] || null);
+            }
           }
+          
           processLine(line, (idx, tile) => {
-            const targetRow = actualDirection === 'up' ? idx : GRID_SIZE - 1 - idx;
-            if (tile) {
+            const targetRow = direction === 'up' ? idx : cfg.size - 1 - idx;
+            // Boundary check
+            if (targetRow >= 0 && targetRow < cfg.size && col >= 0 && col < cfg.size && tile) {
               const originalRow = tile.row;
               tile.row = targetRow;
               tile.col = col;
@@ -515,11 +601,15 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         for (const row of rows) {
           const line: (Tile | null)[] = [];
           for (const col of cols) {
-            line.push(prevGrid[row][col]);
+            if (row >= 0 && row < cfg.size && col >= 0 && col < cfg.size) {
+              line.push(prevGrid[row]?.[col] || null);
+            }
           }
+          
           processLine(line, (idx, tile) => {
-            const targetCol = actualDirection === 'left' ? idx : GRID_SIZE - 1 - idx;
-            if (tile) {
+            const targetCol = direction === 'left' ? idx : cfg.size - 1 - idx;
+            // Boundary check
+            if (row >= 0 && row < cfg.size && targetCol >= 0 && targetCol < cfg.size && tile) {
               const originalCol = tile.col;
               tile.row = row;
               tile.col = targetCol;
@@ -531,42 +621,41 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         }
       }
 
+      // If moved, update score and spawn new tile
       if (moved) {
-        formaState.score += scoreGain;
+        formaState.score += Math.round(scoreGain);
         formaState.mergeCount += mergesThisMove;
-
-        // Check for gravity flip
-        if (formaState.mergeCount > 0 && formaState.mergeCount % GRAVITY_FLIP_INTERVAL === 0) {
-          formaState.gravityFlipped = !formaState.gravityFlipped;
-        }
-
-        // Spawn modifier after certain merges
-        if (formaState.mergeCount % 5 === 0 && formaState.mergeCount > formaState.modifiersUnlocked * 5) {
-          formaState.modifiersUnlocked++;
-          spawnModifier();
-        }
 
         if (formaState.score > formaState.highScore) {
           formaState.highScore = formaState.score;
         }
 
-        const newTile = spawnTile(newGrid);
+        // Spawn new tile
+        const newTile = spawnTile(newGrid, cfg);
         if (newTile) {
-          newGrid[newTile.row][newTile.col] = newTile;
-          newTiles.push(newTile);
+          // Verify spawn position is valid
+          if (newTile.row >= 0 && newTile.row < cfg.size && 
+              newTile.col >= 0 && newTile.col < cfg.size &&
+              !newGrid[newTile.row][newTile.col]) {
+            newGrid[newTile.row][newTile.col] = newTile;
+            newTiles.push(newTile);
+          }
         }
       }
 
       setTiles(newTiles);
 
+      // Check game over
       const hasEmpty = newGrid.some((row) => row.some((cell) => !cell));
       const canMerge = () => {
-        for (let row = 0; row < GRID_SIZE; row++) {
-          for (let col = 0; col < GRID_SIZE; col++) {
-            const cell = newGrid[row][col];
+        for (let r = 0; r < cfg.size; r++) {
+          for (let c = 0; c < cfg.size; c++) {
+            const cell = newGrid[r]?.[c];
             if (!cell) continue;
-            if (row > 0 && newGrid[row - 1][col]?.sides === cell.sides) return true;
-            if (col > 0 && newGrid[row][col - 1]?.sides === cell.sides) return true;
+            if (r > 0 && newGrid[r - 1]?.[c]?.sides === cell.sides) return true;
+            if (c > 0 && newGrid[r]?.[c - 1]?.sides === cell.sides) return true;
+            if (r < cfg.size - 1 && newGrid[r + 1]?.[c]?.sides === cell.sides) return true;
+            if (c < cfg.size - 1 && newGrid[r]?.[c + 1]?.sides === cell.sides) return true;
           }
         }
         return false;
@@ -578,32 +667,27 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
       setTimeout(() => {
         canMove.current = true;
-      }, 100);
+      }, 80);
 
       return newGrid;
     });
-  }, [snap.gameOver, snap.gravityFlipped, spawnTile, spawnModifier]);
+  }, [snap.gameOver, snap.started, snap.gridSize, spawnTile]);
 
   // Keyboard handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Back to menu
+      if (e.key === 'Escape') {
+        formaState.backToMenu();
+        return;
+      }
+
+      if (!snap.started) return;
+
       if (snap.gameOver) {
         if (e.key.toLowerCase() === 'r') {
           formaState.reset();
-          setModifiers(new Map());
-          setWormholeLinks([]);
-          const initialGrid = createEmptyGrid();
-          const initialTiles: Tile[] = [];
-          for (let i = 0; i < 2; i++) {
-            const tile = spawnTile(initialGrid);
-            if (tile) {
-              initialGrid[tile.row][tile.col] = tile;
-              initialTiles.push(tile);
-            }
-          }
-          setGrid(initialGrid);
-          setTiles(initialTiles);
-          rngRef.current = new SeededRandom(Date.now());
+          initializeGame();
         }
         return;
       }
@@ -638,28 +722,38 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [snap.gameOver, moveTiles, spawnTile]);
+  }, [snap.gameOver, snap.started, moveTiles, initializeGame]);
+
+  // Mode selection screen
+  if (!snap.started) {
+    return (
+      <ModeSelection
+        onSelect={(size) => {
+          formaState.setGridSize(size);
+          formaState.start();
+        }}
+      />
+    );
+  }
 
   return (
     <>
       {/* Lighting */}
       <ambientLight intensity={0.5} />
       <pointLight position={[0, 5, 10]} intensity={1} />
+      <pointLight position={[-5, -5, 8]} intensity={0.3} />
 
       {/* Grid */}
-      <GridBackground modifiers={modifiers} wormholeLinks={wormholeLinks} />
-
-      {/* Gravity indicator */}
-      <GravityIndicator flipped={snap.gravityFlipped} />
+      <GridBackground config={config} />
 
       {/* Tiles */}
       {tiles.map((tile) => (
-        <PolygonTile key={tile.id} tile={tile} />
+        <PolygonTile key={tile.id} tile={tile} config={config} />
       ))}
 
       {/* HUD */}
       <Html fullscreen style={{ pointerEvents: 'none' }}>
-        <div className="absolute top-4 left-4 z-50 pointer-events-auto">
+        <div className="absolute top-4 left-4 z-50">
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3 text-white">
             <div className="text-2xl font-bold">{snap.score}</div>
             <div className="text-xs text-white/60">Best: {snap.highScore}</div>
@@ -669,18 +763,43 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           </div>
         </div>
 
-        <div className="absolute top-4 left-40 z-50 pointer-events-auto">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-xs">
-            <div>Merges: {snap.mergeCount}</div>
-            {snap.gravityFlipped && (
-              <div className="text-red-400 mt-1 animate-pulse">Gravity Flipped!</div>
-            )}
+        <div className="absolute top-4 right-4 z-50">
+          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm">
+            <div className="font-medium text-cyan-400">{config.name}</div>
+            <div className="text-xs text-white/50">{snap.gridSize}×{snap.gridSize} Grid</div>
+            <div className="text-xs text-white/40 mt-1">Merges: {snap.mergeCount}</div>
           </div>
         </div>
 
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
           <div>WASD or Arrow Keys to merge</div>
-          <div className="text-xs mt-1">Red tiles decay - merge them fast!</div>
+          <div className="text-xs mt-1 text-white/40">Red tiles decay - merge them fast!</div>
+          <button 
+            onClick={() => formaState.backToMenu()}
+            className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+          >
+            ESC - Back to Menu
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div className="absolute bottom-4 right-4 text-white/40 text-xs">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[3] }} />
+            <span>3 sides</span>
+          </div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[4] }} />
+            <span>4 sides</span>
+          </div>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[5] }} />
+            <span>5 sides</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[6] }} />
+            <span>6+ sides</span>
+          </div>
         </div>
 
         {snap.gameOver && (
@@ -690,8 +809,25 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
               <p className="text-3xl text-white/80 mb-2">{snap.score}</p>
               <p className="text-lg text-white/60 mb-1">Best: {snap.highScore}</p>
               <p className="text-lg text-white/60 mb-1">Max Polygon: {snap.highestSides} sides</p>
+              <p className="text-lg text-white/60 mb-1">Mode: {config.name} ({snap.gridSize}×{snap.gridSize})</p>
               <p className="text-lg text-white/60 mb-6">Total Merges: {snap.mergeCount}</p>
-              <p className="text-white/50">Press R to restart</p>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => {
+                    formaState.reset();
+                    initializeGame();
+                  }}
+                  className="px-6 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+                >
+                  Play Again (R)
+                </button>
+                <button
+                  onClick={() => formaState.backToMenu()}
+                  className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                >
+                  Change Mode
+                </button>
+              </div>
             </div>
           </div>
         )}

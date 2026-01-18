@@ -240,6 +240,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
   const rngRef = useRef(new SeededRandom(Date.now()));
   const platformIdCounter = useRef(0);
+  const justLandedRef = useRef(false);
 
   // Initialize scene
   useEffect(() => {
@@ -287,6 +288,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           setPlayerVel(new THREE.Vector3(0, 0, 0));
           setCurrentPlatformIndex(0);
           setIsGrounded(true);
+          justLandedRef.current = false;
           rngRef.current = new SeededRandom(Date.now());
           
           // Regenerate platforms
@@ -324,8 +326,9 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         const currentPlatform = platforms[currentPlatformIndex];
         const jumpMultiplier = currentPlatform?.type === 'boost' ? BOOST_MULTIPLIER : 1;
         
-        setPlayerVel((prev) => new THREE.Vector3(6, JUMP_FORCE * jumpMultiplier, 0));
+        setPlayerVel(new THREE.Vector3(6, JUMP_FORCE * jumpMultiplier, 0));
         setIsGrounded(false);
+        justLandedRef.current = false; // Reset landing flag when jumping
       }
     };
 
@@ -334,8 +337,9 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         const currentPlatform = platforms[currentPlatformIndex];
         const jumpMultiplier = currentPlatform?.type === 'boost' ? BOOST_MULTIPLIER : 1;
         
-        setPlayerVel((prev) => new THREE.Vector3(6, JUMP_FORCE * jumpMultiplier, 0));
+        setPlayerVel(new THREE.Vector3(6, JUMP_FORCE * jumpMultiplier, 0));
         setIsGrounded(false);
+        justLandedRef.current = false; // Reset landing flag when jumping
       }
     };
 
@@ -351,56 +355,71 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   useFrame((state, delta) => {
     if (snap.gameOver) return;
 
-    // Apply gravity
     const newVel = playerVel.clone();
-    newVel.y += GRAVITY * delta;
-
-    // Apply velocity
     const newPos = playerPos.clone();
-    newPos.add(newVel.clone().multiplyScalar(delta));
 
-    // Lateral drift control with pointer
+    // Only apply gravity and movement when NOT grounded
     if (!isGrounded) {
+      // Apply gravity
+      newVel.y += GRAVITY * delta;
+
+      // Apply velocity
+      newPos.add(newVel.clone().multiplyScalar(delta));
+
+      // Lateral drift control with pointer
       newPos.z += state.pointer.x * delta * 3;
       newPos.z = THREE.MathUtils.clamp(newPos.z, -2, 2);
+    } else {
+      // When grounded, stay on the current platform
+      const currentPlatform = platforms[currentPlatformIndex];
+      if (currentPlatform) {
+        newPos.y = currentPlatform.position.y + 0.3;
+        newPos.z = THREE.MathUtils.lerp(newPos.z, 0, delta * 5); // Slowly center
+      }
     }
 
-    // Check platform collision
+    // Check platform collision only when falling
     let landed = false;
     let landedPlatformIndex = -1;
 
-    for (let i = 0; i < platforms.length; i++) {
-      const platform = platforms[i];
-      const dx = newPos.x - platform.position.x;
-      const dy = newPos.y - platform.position.y;
-      const dz = newPos.z - platform.position.z;
+    if (!isGrounded && newVel.y < 0) {
+      for (let i = 0; i < platforms.length; i++) {
+        const platform = platforms[i];
+        const dx = newPos.x - platform.position.x;
+        const dy = newPos.y - platform.position.y;
+        const dz = newPos.z - platform.position.z;
 
-      // Check if landing on top of platform
-      if (
-        Math.abs(dx) < PLATFORM_SIZE * 0.9 &&
-        Math.abs(dz) < PLATFORM_SIZE * 0.9 &&
-        dy >= 0 && dy < 0.5 &&
-        newVel.y < 0
-      ) {
-        landed = true;
-        landedPlatformIndex = i;
+        // Check if landing on top of platform
+        if (
+          Math.abs(dx) < PLATFORM_SIZE * 0.9 &&
+          Math.abs(dz) < PLATFORM_SIZE * 0.9 &&
+          dy >= 0 && dy < 0.6 &&
+          newVel.y < 0
+        ) {
+          landed = true;
+          landedPlatformIndex = i;
 
-        // Perfect landing check
-        const distFromCenter = Math.sqrt(dx * dx + dz * dz);
-        if (distFromCenter < PERFECT_LANDING_RADIUS) {
-          prismState.score += 15;
-          prismState.perfectLandings += 1;
-          prismState.combo += 1;
-        } else {
-          prismState.score += 5;
-          prismState.combo = 0;
+          // Only score if this is a new landing (not already scored)
+          if (!justLandedRef.current) {
+            // Perfect landing check
+            const distFromCenter = Math.sqrt(dx * dx + dz * dz);
+            if (distFromCenter < PERFECT_LANDING_RADIUS) {
+              prismState.score += 15;
+              prismState.perfectLandings += 1;
+              prismState.combo += 1;
+            } else {
+              prismState.score += 5;
+              prismState.combo = 0;
+            }
+            justLandedRef.current = true;
+          }
+
+          // Set position on platform
+          newPos.y = platform.position.y + 0.3;
+          newVel.set(0, 0, 0);
+
+          break;
         }
-
-        // Set position on platform
-        newPos.y = platform.position.y + 0.3;
-        newVel.set(0, 0, 0);
-
-        break;
       }
     }
 

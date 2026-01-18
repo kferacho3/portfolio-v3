@@ -52,7 +52,7 @@ const getRandomLegoColor = () => LEGO_COLORS[Math.floor(Math.random() * LEGO_COL
 
 const BLOCK_SIZE: [number, number, number] = [3.5, 0.5, 3.5];
 const STACK_MOVE_SPEED = 10;
-const SPAWN_HEIGHT = 14;
+const SPAWN_OFFSET = 10; // Spawn this far above stack top
 const STACK_BASE_Y = 0;
 const CATCH_THRESHOLD = 2.5;
 
@@ -393,7 +393,7 @@ const PlayerStack: React.FC<PlayerStackProps> = ({ position, blocks, isHurt }) =
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// CAMERA CONTROLLER
+// CAMERA CONTROLLER - Follows the top of the stack smoothly
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface CameraControllerProps {
@@ -403,23 +403,44 @@ interface CameraControllerProps {
 
 const CameraController: React.FC<CameraControllerProps> = ({ stackHeight, playerX }) => {
   const { camera } = useThree();
-  const targetRef = useRef(new THREE.Vector3(0, 8, 16));
+  const currentY = useRef(5);
+  const currentLookY = useRef(2);
 
   useEffect(() => {
-    camera.position.set(0, 8, 16);
+    camera.position.set(0, 5, 12);
     if ('fov' in camera) {
-      (camera as THREE.PerspectiveCamera).fov = 50;
+      (camera as THREE.PerspectiveCamera).fov = 55;
       camera.updateProjectionMatrix();
     }
   }, [camera]);
 
   useFrame(() => {
-    const targetY = Math.max(8, stackHeight * 0.5 + 6);
-    const targetZ = 16 + Math.max(0, stackHeight * 0.15);
-    targetRef.current.set(playerX * 0.3, targetY, targetZ);
+    // Camera should always keep the top of stack visible with some headroom for falling blocks
+    // Position camera to look at the top portion of the stack
+    const topOfStack = stackHeight;
     
-    camera.position.lerp(targetRef.current, 0.05);
-    camera.lookAt(playerX * 0.3, stackHeight * 0.5, 0);
+    // Camera Y should be slightly above stack top to see incoming blocks
+    const targetCamY = Math.max(5, topOfStack + 5);
+    
+    // Look at point should be at stack top level
+    const targetLookY = Math.max(2, topOfStack + 1);
+    
+    // Camera Z stays relatively fixed but can zoom out slightly for very tall stacks
+    const targetCamZ = 12 + Math.max(0, stackHeight * 0.1);
+    
+    // Smooth interpolation - use higher lerp factor for more responsive following
+    currentY.current = THREE.MathUtils.lerp(currentY.current, targetCamY, 0.08);
+    currentLookY.current = THREE.MathUtils.lerp(currentLookY.current, targetLookY, 0.08);
+    
+    // Apply camera position
+    camera.position.set(
+      playerX * 0.15, // Slight X follow
+      currentY.current,
+      targetCamZ
+    );
+    
+    // Look at the top of the stack area
+    camera.lookAt(playerX * 0.1, currentLookY.current, 0);
   });
 
   return null;
@@ -518,16 +539,19 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
     stackzState.reset = reset;
   }, [reset]);
 
-  // Spawn new falling blocks
-  const spawnBlock = useCallback(() => {
+  // Spawn new falling blocks - spawn relative to stack height
+  const spawnBlock = useCallback((currentStackHeight: number) => {
     const type = getRandomBlockType();
     const config = BLOCK_TYPES[type];
     const color = config.color || getRandomLegoColor();
     const spawnX = (Math.random() - 0.5) * 12;
     
+    // Spawn blocks above the current stack top
+    const spawnY = currentStackHeight + SPAWN_OFFSET;
+    
     const newBlock: FallingBlock = {
       id: `falling-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      position: [spawnX, SPAWN_HEIGHT, 0],
+      position: [spawnX, spawnY, 0],
       type,
       color,
       velocity: 5 * config.dropSpeedMultiplier,
@@ -604,10 +628,11 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
       setPlayerX(playerXRef.current);
     }
 
-    // Spawn blocks
+    // Spawn blocks - pass current stack height so blocks spawn above it
     const now = Date.now();
+    const currentStackHeight = stackedBlocks.length * BLOCK_SIZE[1];
     if (now - lastDropTimeRef.current > dropInterval) {
-      spawnBlock();
+      spawnBlock(currentStackHeight);
       lastDropTimeRef.current = now;
     }
 
@@ -791,20 +816,12 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
         <planeGeometry args={[30, 30]} />
         <meshStandardMaterial color="#1a1a2e" />
       </mesh>
-      <gridHelper args={[30, 30, '#333333', '#222222']} position={[0, -0.49, 0]} />
 
-      {/* Spawn indicator line */}
-      <line>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={2}
-            array={new Float32Array([-8, SPAWN_HEIGHT, 0, 8, SPAWN_HEIGHT, 0])}
-            itemSize={3}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial color="#ffffff" transparent opacity={0.1} />
-      </line>
+      {/* Spawn indicator line - follows stack height */}
+      <mesh position={[0, stackHeight + SPAWN_OFFSET, -1]} rotation={[0, 0, 0]}>
+        <planeGeometry args={[16, 0.1]} />
+        <meshBasicMaterial color="#4488ff" transparent opacity={0.15} />
+      </mesh>
     </>
   );
 };

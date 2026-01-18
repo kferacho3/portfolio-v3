@@ -1,18 +1,17 @@
 /**
- * Weave.tsx (OrbitCraft)
+ * Weave.tsx
  * 
- * Vertex-hopping survival game
- * Jump between vertices of rotating polygons, avoid hazards, collect shards
- * Polygons evolve: triangle → square → pentagon → ...
+ * A neon arcade game where you orbit the center, dodging sweeping laser arms
+ * while collecting glowing orbs to build score. Thread through danger,
+ * collect the light, survive as long as you can.
  */
 'use client';
 
-import { Html, Line } from '@react-three/drei';
+import { Html, Trail } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
-import { SeededRandom } from '../utils/seededRandom';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
@@ -21,19 +20,24 @@ import { SeededRandom } from '../utils/seededRandom';
 export const weaveState = proxy({
   score: 0,
   highScore: 0,
-  energy: 100,
-  maxEnergy: 100,
-  gameOver: false,
-  polygonSides: 3, // Starting with triangle
+  lives: 3,
+  maxLives: 3,
   level: 1,
-  shardsCollected: 0,
+  orbs: 0,
+  orbsCollected: 0,
+  gameOver: false,
+  combo: 0,
+  bestCombo: 0,
+  invincible: false,
   reset: () => {
     weaveState.score = 0;
-    weaveState.energy = 100;
-    weaveState.gameOver = false;
-    weaveState.polygonSides = 3;
+    weaveState.lives = 3;
     weaveState.level = 1;
-    weaveState.shardsCollected = 0;
+    weaveState.orbs = 0;
+    weaveState.orbsCollected = 0;
+    weaveState.gameOver = false;
+    weaveState.combo = 0;
+    weaveState.invincible = false;
   },
 });
 
@@ -41,218 +45,315 @@ export const weaveState = proxy({
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const POLYGON_RADIUS = 3.5;
-const PLAYER_SIZE = 0.25;
-const BASE_ROTATION_SPEED = 0.3;
-const HAZARD_COUNT = 2;
-const SHARD_COUNT = 3;
-const PHASE_JUMP_COST = 20;
-const SHARD_ENERGY_RESTORE = 15;
+const PLAYER_ORBIT_RADIUS = 3.5;
+const PLAYER_SIZE = 0.22;
+const PLAYER_HITBOX = 0.12; // Reduced for more forgiving collision
+const BASE_PLAYER_SPEED = 3.8; // Increased player speed
+const BASE_ARM_SPEED = 0.6; // Slower arm rotation for better dodging
+const ARM_WIDTH = 0.08; // Thinner arms
+const INNER_SAFE_RADIUS = 0.8;
+const OUTER_RADIUS = 5.5;
+const ORB_SPAWN_INTERVAL = 1.5;
+const ORB_LIFETIME = 4.0;
+const ORB_SIZE = 0.18;
+const ORB_COLLECT_RADIUS = 0.4;
+const INVINCIBILITY_TIME = 1.5;
+const LEVEL_UP_ORBS = 8;
 
-const POLYGON_COLORS: Record<number, string> = {
-  3: '#ff6b6b',
-  4: '#feca57',
-  5: '#48dbfb',
-  6: '#ff9ff3',
-  7: '#54a0ff',
-  8: '#5f27cd',
-};
+const NEON_COLORS = ['#00ffff', '#ff00ff', '#00ff88', '#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+const ARM_COLOR = '#ff3366';
+const ARM_GLOW = '#ff0044';
+const ORB_COLOR = '#00ffff';
+const ORB_GLOW = '#00ddff';
+const BONUS_ORB_COLOR = '#feca57';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface Hazard {
+interface LaserArm {
   id: string;
-  type: 'beam' | 'spike';
-  vertexIndex?: number; // For spikes
-  edgeIndex?: number; // For beams
-  active: boolean;
-  timer: number;
+  angle: number;
+  speed: number;
+  length: number;
+  color: string;
 }
 
-interface Shard {
+interface Orb {
   id: string;
-  vertexIndex: number;
+  angle: number;
+  radius: number;
+  spawnTime: number;
+  isBonus: boolean;
   collected: boolean;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════
-
-const getVertexPosition = (index: number, sides: number, radius: number): [number, number] => {
-  const angle = (index / sides) * Math.PI * 2 - Math.PI / 2;
-  return [Math.cos(angle) * radius, Math.sin(angle) * radius];
-};
+interface Particle {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  color: string;
+  size: number;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Polygon outline
-const PolygonOutline: React.FC<{
-  sides: number;
-  radius: number;
-  rotation: number;
-  color: string;
-}> = ({ sides, radius, rotation, color }) => {
-  const points = useMemo(() => {
-    const pts: THREE.Vector3[] = [];
-    for (let i = 0; i <= sides; i++) {
-      const [x, y] = getVertexPosition(i % sides, sides, radius);
-      pts.push(new THREE.Vector3(x, y, 0));
-    }
-    return pts;
-  }, [sides, radius]);
-
-  return (
-    <group rotation={[0, 0, rotation]}>
-      <Line points={points} color={color} lineWidth={3} />
-      {/* Vertex markers */}
-      {Array.from({ length: sides }).map((_, i) => {
-        const [x, y] = getVertexPosition(i, sides, radius);
-        return (
-          <mesh key={i} position={[x, y, 0]}>
-            <circleGeometry args={[0.15, 16]} />
-            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-};
-
-// Player attached to vertex
-const Player: React.FC<{
-  vertexIndex: number;
-  sides: number;
-  radius: number;
-  rotation: number;
-  color: string;
-}> = ({ vertexIndex, sides, radius, rotation, color }) => {
+const CentralCore: React.FC<{ level: number; pulse: number }> = ({ level, pulse }) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const [x, y] = getVertexPosition(vertexIndex, sides, radius);
+  const glowRef = useRef<THREE.Mesh>(null);
+  const color = NEON_COLORS[(level - 1) % NEON_COLORS.length];
 
-  useFrame((_, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.z += delta * 3;
+  useFrame(({ clock }) => {
+    if (meshRef.current && glowRef.current) {
+      const t = clock.getElapsedTime();
+      const scale = 0.4 + 0.05 * Math.sin(t * 3) + pulse * 0.1;
+      meshRef.current.scale.setScalar(scale);
+      meshRef.current.rotation.z = t * 0.5;
+      meshRef.current.rotation.x = t * 0.3;
+      glowRef.current.scale.setScalar(scale * 1.8);
     }
   });
 
-  // Calculate rotated position
-  const rotatedX = x * Math.cos(rotation) - y * Math.sin(rotation);
-  const rotatedY = x * Math.sin(rotation) + y * Math.cos(rotation);
-
   return (
-    <group position={[rotatedX, rotatedY, 0.5]}>
+    <group>
       <mesh ref={meshRef}>
-        <octahedronGeometry args={[PLAYER_SIZE]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+        <dodecahedronGeometry args={[1]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} />
       </mesh>
-      <pointLight color={color} intensity={1} distance={2} />
-    </group>
-  );
-};
-
-// Hazard beam (sweeps between vertices)
-const HazardBeam: React.FC<{
-  edgeIndex: number;
-  sides: number;
-  radius: number;
-  rotation: number;
-  active: boolean;
-}> = ({ edgeIndex, sides, radius, rotation, active }) => {
-  const [x1, y1] = getVertexPosition(edgeIndex, sides, radius);
-  const [x2, y2] = getVertexPosition((edgeIndex + 1) % sides, sides, radius);
-
-  const opacity = active ? 0.8 : 0.2;
-
-  return (
-    <group rotation={[0, 0, rotation]}>
-      <Line
-        points={[new THREE.Vector3(x1, y1, 0.2), new THREE.Vector3(x2, y2, 0.2)]}
-        color={active ? '#ff0000' : '#440000'}
-        lineWidth={active ? 6 : 2}
-        opacity={opacity}
-        transparent
-      />
-    </group>
-  );
-};
-
-// Hazard spike (appears on vertex)
-const HazardSpike: React.FC<{
-  vertexIndex: number;
-  sides: number;
-  radius: number;
-  rotation: number;
-  active: boolean;
-}> = ({ vertexIndex, sides, radius, rotation, active }) => {
-  const [x, y] = getVertexPosition(vertexIndex, sides, radius);
-  const rotatedX = x * Math.cos(rotation) - y * Math.sin(rotation);
-  const rotatedY = x * Math.sin(rotation) + y * Math.cos(rotation);
-
-  if (!active) return null;
-
-  return (
-    <group position={[rotatedX, rotatedY, 0.3]}>
-      <mesh rotation={[0, 0, Math.PI]}>
-        <coneGeometry args={[0.3, 0.5, 4]} />
-        <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={0.6} />
+      <mesh ref={glowRef}>
+        <sphereGeometry args={[1, 24, 24]} />
+        <meshBasicMaterial color={color} transparent opacity={0.15} side={THREE.BackSide} />
       </mesh>
+      <pointLight color={color} intensity={2.5} distance={10} />
     </group>
   );
 };
 
-// Energy shard
-const EnergyShard: React.FC<{
-  vertexIndex: number;
-  sides: number;
-  radius: number;
-  rotation: number;
-  collected: boolean;
-}> = ({ vertexIndex, sides, radius, rotation, collected }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const [x, y] = getVertexPosition(vertexIndex, sides, radius * 0.7);
-  const rotatedX = x * Math.cos(rotation) - y * Math.sin(rotation);
-  const rotatedY = x * Math.sin(rotation) + y * Math.cos(rotation);
-
-  useFrame((_, delta) => {
-    if (meshRef.current && !collected) {
-      meshRef.current.rotation.y += delta * 4;
-      meshRef.current.position.z = 0.3 + Math.sin(Date.now() / 200) * 0.1;
-    }
-  });
-
-  if (collected) return null;
-
+const OrbitRing: React.FC<{ radius: number; color: string }> = ({ radius, color }) => {
   return (
-    <mesh ref={meshRef} position={[rotatedX, rotatedY, 0.3]}>
-      <octahedronGeometry args={[0.15]} />
-      <meshStandardMaterial
-        color="#00ff88"
-        emissive="#00ff88"
-        emissiveIntensity={0.8}
-        transparent
-        opacity={0.9}
-      />
+    <mesh rotation={[Math.PI / 2, 0, 0]}>
+      <torusGeometry args={[radius, 0.02, 8, 64]} />
+      <meshBasicMaterial color={color} transparent opacity={0.25} />
     </mesh>
   );
 };
 
-// Energy bar
-const EnergyBar: React.FC<{ energy: number; maxEnergy: number }> = ({ energy, maxEnergy }) => {
-  const percentage = (energy / maxEnergy) * 100;
-  const color = percentage > 50 ? '#00ff88' : percentage > 25 ? '#feca57' : '#ff6b6b';
+const DangerZone: React.FC = () => {
+  const innerRef = useRef<THREE.Mesh>(null);
+  const outerRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    if (innerRef.current) {
+      (innerRef.current.material as THREE.MeshBasicMaterial).opacity = 0.03 + 0.02 * Math.sin(t * 2);
+    }
+  });
 
   return (
-    <div className="w-32 h-3 bg-black/50 rounded-full overflow-hidden">
-      <div
-        className="h-full transition-all duration-200 rounded-full"
-        style={{ width: `${percentage}%`, backgroundColor: color }}
-      />
-    </div>
+    <group>
+      <mesh ref={innerRef} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.1]}>
+        <ringGeometry args={[INNER_SAFE_RADIUS, PLAYER_ORBIT_RADIUS - 0.3, 64]} />
+        <meshBasicMaterial color={ARM_COLOR} transparent opacity={0.05} side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+};
+
+const Player: React.FC<{
+  angle: number;
+  color: string;
+  isHit: boolean;
+  invincible: boolean;
+}> = ({ angle, color, isHit, invincible }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const x = Math.cos(angle) * PLAYER_ORBIT_RADIUS;
+  const y = Math.sin(angle) * PLAYER_ORBIT_RADIUS;
+
+  useFrame(({ clock }) => {
+    if (meshRef.current) {
+      const t = clock.getElapsedTime();
+      meshRef.current.rotation.z = t * 4;
+      meshRef.current.rotation.x = t * 3;
+      
+      if (invincible) {
+        meshRef.current.visible = Math.floor(t * 10) % 2 === 0;
+      } else {
+        meshRef.current.visible = true;
+      }
+    }
+  });
+
+  const displayColor = isHit ? '#ff0000' : color;
+
+  return (
+    <group position={[x, y, 0]}>
+      <Trail width={0.4} length={6} color={color} attenuation={(t) => t * t}>
+        <mesh ref={meshRef}>
+          <octahedronGeometry args={[PLAYER_SIZE]} />
+          <meshStandardMaterial
+            color={displayColor}
+            emissive={displayColor}
+            emissiveIntensity={isHit ? 1.5 : 0.8}
+          />
+        </mesh>
+      </Trail>
+      <pointLight color={color} intensity={1.2} distance={2.5} />
+    </group>
+  );
+};
+
+const LaserArmComponent: React.FC<{ arm: LaserArm }> = ({ arm }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const glowRef = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (glowRef.current) {
+      const t = clock.getElapsedTime();
+      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.04 * Math.sin(t * 8);
+    }
+  });
+
+  const armLength = arm.length - INNER_SAFE_RADIUS;
+  const armCenter = INNER_SAFE_RADIUS + armLength / 2;
+  
+  // Visual width slightly larger than hitbox for clarity
+  const visualWidth = ARM_WIDTH * 1.5;
+
+  return (
+    <group ref={groupRef} rotation={[0, 0, arm.angle]}>
+      {/* Main laser beam - thinner and more visible */}
+      <mesh position={[armCenter, 0, 0]}>
+        <boxGeometry args={[armLength, visualWidth, 0.04]} />
+        <meshStandardMaterial color={arm.color} emissive={arm.color} emissiveIntensity={1.5} />
+      </mesh>
+      {/* Glow effect - shows danger zone more clearly */}
+      <mesh ref={glowRef} position={[armCenter, 0, -0.02]}>
+        <boxGeometry args={[armLength, visualWidth * 3, 0.02]} />
+        <meshBasicMaterial color={ARM_GLOW} transparent opacity={0.12} />
+      </mesh>
+      {/* End caps */}
+      <mesh position={[INNER_SAFE_RADIUS, 0, 0]}>
+        <circleGeometry args={[visualWidth, 12]} />
+        <meshBasicMaterial color={arm.color} />
+      </mesh>
+      <mesh position={[arm.length, 0, 0]}>
+        <circleGeometry args={[visualWidth, 12]} />
+        <meshBasicMaterial color={arm.color} />
+      </mesh>
+    </group>
+  );
+};
+
+const OrbComponent: React.FC<{ orb: Orb; currentTime: number }> = ({ orb, currentTime }) => {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const x = Math.cos(orb.angle) * orb.radius;
+  const y = Math.sin(orb.angle) * orb.radius;
+  
+  const age = currentTime - orb.spawnTime;
+  const fadeStart = ORB_LIFETIME - 1.0;
+  const opacity = age > fadeStart ? 1 - (age - fadeStart) / 1.0 : 1;
+  const color = orb.isBonus ? BONUS_ORB_COLOR : ORB_COLOR;
+  const glow = orb.isBonus ? BONUS_ORB_COLOR : ORB_GLOW;
+
+  useFrame(({ clock }) => {
+    if (meshRef.current) {
+      const t = clock.getElapsedTime();
+      meshRef.current.rotation.z = t * 3;
+      meshRef.current.rotation.y = t * 2;
+      const pulse = 1 + 0.15 * Math.sin(t * 5 + orb.angle);
+      meshRef.current.scale.setScalar(pulse);
+    }
+  });
+
+  if (orb.collected) return null;
+
+  return (
+    <group position={[x, y, 0]}>
+      <mesh ref={meshRef}>
+        <octahedronGeometry args={[ORB_SIZE]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.9}
+          transparent
+          opacity={opacity}
+        />
+      </mesh>
+      <mesh scale={[1.8, 1.8, 1.8]}>
+        <sphereGeometry args={[ORB_SIZE, 16, 16]} />
+        <meshBasicMaterial color={glow} transparent opacity={opacity * 0.2} />
+      </mesh>
+      <pointLight color={color} intensity={0.8 * opacity} distance={1.5} />
+    </group>
+  );
+};
+
+const ParticleEffect: React.FC<{ particles: Particle[] }> = ({ particles }) => {
+  return (
+    <>
+      {particles.map((p) => (
+        <mesh key={p.id} position={[p.x, p.y, 0]}>
+          <circleGeometry args={[p.size * p.life, 6]} />
+          <meshBasicMaterial color={p.color} transparent opacity={p.life * 0.8} />
+        </mesh>
+      ))}
+    </>
+  );
+};
+
+const LivesDisplay: React.FC<{ lives: number; maxLives: number }> = ({ lives, maxLives }) => {
+  return (
+    <group position={[-5.5, 4, 0]}>
+      {Array.from({ length: maxLives }).map((_, i) => (
+        <mesh key={i} position={[i * 0.5, 0, 0]}>
+          <circleGeometry args={[0.15, 6]} />
+          <meshBasicMaterial
+            color={i < lives ? '#ff3366' : '#333333'}
+            transparent
+            opacity={i < lives ? 1 : 0.3}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+const BackgroundGrid: React.FC = () => {
+  const lines = useMemo(() => {
+    const result: THREE.Vector3[][] = [];
+    const gridSize = 12;
+    const divisions = 12;
+    const step = gridSize / divisions;
+
+    for (let i = -divisions / 2; i <= divisions / 2; i++) {
+      const pos = i * step;
+      result.push([new THREE.Vector3(pos, -gridSize / 2, -2), new THREE.Vector3(pos, gridSize / 2, -2)]);
+      result.push([new THREE.Vector3(-gridSize / 2, pos, -2), new THREE.Vector3(gridSize / 2, pos, -2)]);
+    }
+    return result;
+  }, []);
+
+  return (
+    <>
+      {lines.map((pts, i) => (
+        <line key={i}>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={2}
+              array={new Float32Array(pts.flatMap((p) => [p.x, p.y, p.z]))}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#1a1a2e" transparent opacity={0.4} />
+        </line>
+      ))}
+    </>
   );
 };
 
@@ -264,292 +365,549 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const snap = useSnapshot(weaveState);
   const { camera, scene } = useThree();
 
-  const [playerVertex, setPlayerVertex] = useState(0);
-  const [polygonRotation, setPolygonRotation] = useState(0);
-  const [hazards, setHazards] = useState<Hazard[]>([]);
-  const [shards, setShards] = useState<Shard[]>([]);
+  const [playerAngle, setPlayerAngle] = useState(Math.PI / 2);
+  const [arms, setArms] = useState<LaserArm[]>([]);
+  const [orbs, setOrbs] = useState<Orb[]>([]);
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [isHit, setIsHit] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [corePulse, setCorePulse] = useState(0);
 
-  const rngRef = useRef(new SeededRandom(Date.now()));
-  const survivalTimer = useRef(0);
-  const hazardTimer = useRef(0);
+  const playerDirection = useRef(0);
+  const lastOrbSpawn = useRef(0);
+  const invincibleTimer = useRef(0);
+  const gameTime = useRef(0);
+  const levelOrbCount = useRef(0);
 
-  const currentColor = POLYGON_COLORS[snap.polygonSides] || '#ffffff';
+  const currentColor = NEON_COLORS[(snap.level - 1) % NEON_COLORS.length];
 
   // Camera setup
   useEffect(() => {
     camera.position.set(0, 0, 10);
     camera.lookAt(0, 0, 0);
-    scene.background = new THREE.Color('#0a0a1f');
+    scene.background = new THREE.Color('#08080f');
   }, [camera, scene]);
 
-  // Generate initial hazards and shards
-  const regenerateLevel = useCallback(() => {
-    const sides = weaveState.polygonSides;
-    
-    // Generate hazards
-    const newHazards: Hazard[] = [];
-    const hazardCount = Math.min(HAZARD_COUNT + Math.floor(weaveState.level / 2), sides - 1);
-    
-    for (let i = 0; i < hazardCount; i++) {
-      const isBeam = rngRef.current.bool();
-      newHazards.push({
-        id: `hazard-${i}`,
-        type: isBeam ? 'beam' : 'spike',
-        edgeIndex: isBeam ? rngRef.current.int(0, sides - 1) : undefined,
-        vertexIndex: !isBeam ? rngRef.current.int(0, sides - 1) : undefined,
-        active: false,
-        timer: rngRef.current.float(1, 3),
+  // Generate arms for level with guaranteed safe gaps
+  const generateArms = useCallback((level: number) => {
+    // Start with 1 arm, add more gradually
+    const armCount = Math.min(1 + Math.floor(level / 3), 4);
+    const newArms: LaserArm[] = [];
+
+    // Calculate base speed - increases slowly with level
+    const baseSpeed = BASE_ARM_SPEED * (1 + (level - 1) * 0.08);
+
+    // All arms rotate in the same direction to maintain consistent gaps
+    // This ensures players can always find a safe window by moving faster/slower than arms
+    const rotationDirection = Math.random() > 0.5 ? 1 : -1;
+
+    for (let i = 0; i < armCount; i++) {
+      // Evenly space arms with no random offset - predictable pattern
+      const angleOffset = (i / armCount) * Math.PI * 2;
+      
+      // Very small speed variation to keep gaps consistent
+      const speedVariation = 0.95 + Math.random() * 0.1;
+
+      newArms.push({
+        id: `arm-${i}`,
+        angle: angleOffset,
+        speed: baseSpeed * rotationDirection * speedVariation,
+        length: OUTER_RADIUS,
+        color: ARM_COLOR,
       });
     }
-    setHazards(newHazards);
 
-    // Generate shards
-    const newShards: Shard[] = [];
-    const usedVertices = new Set<number>();
-    const shardCount = Math.min(SHARD_COUNT, sides);
-    
-    while (newShards.length < shardCount && usedVertices.size < sides) {
-      const vertex = rngRef.current.int(0, sides - 1);
-      if (!usedVertices.has(vertex)) {
-        usedVertices.add(vertex);
-        newShards.push({
-          id: `shard-${newShards.length}`,
-          vertexIndex: vertex,
-          collected: false,
-        });
-      }
-    }
-    setShards(newShards);
+    return newArms;
   }, []);
 
   // Initialize
   useEffect(() => {
-    regenerateLevel();
-  }, [regenerateLevel]);
+    setArms(generateArms(1));
+  }, [generateArms]);
 
-  // Keyboard handling
+  // Spawn particles
+  const spawnParticles = useCallback((x: number, y: number, color: string, count: number) => {
+    const newParticles: Particle[] = [];
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 1 + Math.random() * 2;
+      newParticles.push({
+        id: `p-${Date.now()}-${i}`,
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        color,
+        size: 0.05 + Math.random() * 0.08,
+      });
+    }
+    setParticles((prev) => [...prev, ...newParticles]);
+  }, []);
+
+  // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (snap.gameOver) {
         if (e.key.toLowerCase() === 'r') {
           weaveState.reset();
-          setPlayerVertex(0);
-          setPolygonRotation(0);
-          rngRef.current = new SeededRandom(Date.now());
-          regenerateLevel();
+          setPlayerAngle(Math.PI / 2);
+          setOrbs([]);
+          setParticles([]);
+          setArms(generateArms(1));
+          setGameStarted(true);
+          levelOrbCount.current = 0;
+          gameTime.current = 0;
+          lastOrbSpawn.current = 0;
         }
         return;
       }
 
-      // Move to adjacent vertex
-      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
-        setPlayerVertex((prev) => (prev - 1 + snap.polygonSides) % snap.polygonSides);
-      }
-      if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
-        setPlayerVertex((prev) => (prev + 1) % snap.polygonSides);
+      if (!gameStarted) {
+        if (e.key === ' ' || e.key.toLowerCase() === 'a' || e.key.toLowerCase() === 'd') {
+          e.preventDefault();
+          setGameStarted(true);
+        }
+        return;
       }
 
-      // Phase jump to opposite vertex (costs energy)
-      if (e.code === 'Space' && weaveState.energy >= PHASE_JUMP_COST) {
-        e.preventDefault();
-        weaveState.energy -= PHASE_JUMP_COST;
-        const oppositeVertex = Math.floor((playerVertex + snap.polygonSides / 2) % snap.polygonSides);
-        setPlayerVertex(oppositeVertex);
-        weaveState.score += 5; // Bonus for risky move
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+        playerDirection.current = 1;
+      } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+        playerDirection.current = -1;
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') {
+        if (playerDirection.current === 1) playerDirection.current = 0;
+      } else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') {
+        if (playerDirection.current === -1) playerDirection.current = 0;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [snap.gameOver, snap.polygonSides, playerVertex, regenerateLevel]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [snap.gameOver, gameStarted, generateArms]);
+
+  // Mouse/touch controls
+  useEffect(() => {
+    let isPointerDown = false;
+    let lastX = 0;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!gameStarted && !snap.gameOver) {
+        setGameStarted(true);
+        return;
+      }
+      if (snap.gameOver) {
+        weaveState.reset();
+        setPlayerAngle(Math.PI / 2);
+        setOrbs([]);
+        setParticles([]);
+        setArms(generateArms(1));
+        setGameStarted(true);
+        levelOrbCount.current = 0;
+        gameTime.current = 0;
+        lastOrbSpawn.current = 0;
+        return;
+      }
+      isPointerDown = true;
+      lastX = e.clientX;
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!gameStarted || snap.gameOver) return;
+
+      if (isPointerDown) {
+        const dx = e.clientX - lastX;
+        if (Math.abs(dx) > 2) {
+          playerDirection.current = dx > 0 ? -1 : 1;
+        }
+        lastX = e.clientX;
+      } else {
+        const centerX = window.innerWidth / 2;
+        const deadzone = 80;
+        if (e.clientX < centerX - deadzone) {
+          playerDirection.current = 1;
+        } else if (e.clientX > centerX + deadzone) {
+          playerDirection.current = -1;
+        } else {
+          playerDirection.current = 0;
+        }
+      }
+    };
+
+    const handlePointerUp = () => {
+      isPointerDown = false;
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [snap.gameOver, gameStarted, generateArms]);
+
+  // Check arm collision - uses angular difference for more reliable detection
+  const checkArmCollision = useCallback((playerAngle: number, arms: LaserArm[]) => {
+    // Normalize player angle to [0, 2π]
+    const normalizedPlayerAngle = ((playerAngle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    
+    // Calculate how wide the arm appears at the player's orbit radius (in radians)
+    // This gives a more intuitive collision based on angular width
+    const armAngularWidth = Math.atan2(ARM_WIDTH + PLAYER_HITBOX, PLAYER_ORBIT_RADIUS) * 2;
+
+    for (const arm of arms) {
+      // Normalize arm angle to [0, 2π]
+      const armAngle = ((arm.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      
+      // Calculate angular difference
+      let angleDiff = Math.abs(normalizedPlayerAngle - armAngle);
+      // Handle wrap-around
+      if (angleDiff > Math.PI) {
+        angleDiff = Math.PI * 2 - angleDiff;
+      }
+      
+      // Check if player is within the arm's angular width
+      if (angleDiff < armAngularWidth / 2) {
+        return true;
+      }
+    }
+    return false;
+  }, []);
 
   // Game loop
   useFrame((_, delta) => {
-    if (snap.gameOver) return;
+    if (snap.gameOver || !gameStarted) return;
 
-    // Rotate polygon
-    const rotationSpeed = BASE_ROTATION_SPEED * (1 + weaveState.level * 0.1);
-    setPolygonRotation((prev) => prev + rotationSpeed * delta);
+    gameTime.current += delta;
 
-    // Survival scoring
-    survivalTimer.current += delta;
-    if (survivalTimer.current >= 0.5) {
-      weaveState.score += 1;
-      survivalTimer.current = 0;
+    // Update invincibility
+    if (weaveState.invincible) {
+      invincibleTimer.current -= delta;
+      if (invincibleTimer.current <= 0) {
+        weaveState.invincible = false;
+        setIsHit(false);
+      }
     }
 
-    // Update hazards
-    hazardTimer.current += delta;
-    setHazards((prev) => {
-      return prev.map((hazard) => {
-        const newTimer = hazard.timer - delta;
-        if (newTimer <= 0) {
-          // Toggle hazard and reset timer
-          return {
-            ...hazard,
-            active: !hazard.active,
-            timer: rngRef.current.float(0.5, 2),
-          };
-        }
-        return { ...hazard, timer: newTimer };
-      });
-    });
+    // Update player
+    const playerSpeed = BASE_PLAYER_SPEED * (1 + snap.level * 0.08);
+    if (playerDirection.current !== 0) {
+      setPlayerAngle((prev) => prev + playerDirection.current * playerSpeed * delta);
+    }
 
-    // Check hazard collision
-    for (const hazard of hazards) {
-      if (!hazard.active) continue;
+    // Update arms - speed increases gradually with level
+    const levelSpeedMultiplier = 1 + (snap.level - 1) * 0.05; // 5% faster per level
+    setArms((prev) =>
+      prev.map((arm) => ({
+        ...arm,
+        angle: arm.angle + arm.speed * levelSpeedMultiplier * delta,
+      }))
+    );
 
-      if (hazard.type === 'spike' && hazard.vertexIndex === playerVertex) {
-        weaveState.gameOver = true;
-        return;
-      }
+    // Check arm collision
+    if (!weaveState.invincible) {
+      const hit = checkArmCollision(playerAngle, arms);
+      if (hit) {
+        setIsHit(true);
+        weaveState.lives -= 1;
+        weaveState.combo = 0;
+        weaveState.invincible = true;
+        invincibleTimer.current = INVINCIBILITY_TIME;
 
-      if (hazard.type === 'beam') {
-        // Beam covers edge between vertexIndex and vertexIndex+1
-        const v1 = hazard.edgeIndex!;
-        const v2 = (v1 + 1) % snap.polygonSides;
-        if (playerVertex === v1 || playerVertex === v2) {
+        const px = Math.cos(playerAngle) * PLAYER_ORBIT_RADIUS;
+        const py = Math.sin(playerAngle) * PLAYER_ORBIT_RADIUS;
+        spawnParticles(px, py, '#ff3366', 15);
+
+        if (weaveState.lives <= 0) {
           weaveState.gameOver = true;
-          return;
+          if (weaveState.score > weaveState.highScore) {
+            weaveState.highScore = weaveState.score;
+          }
         }
       }
     }
 
-    // Check shard collection
-    setShards((prev) => {
-      return prev.map((shard) => {
-        if (!shard.collected && shard.vertexIndex === playerVertex) {
-          weaveState.energy = Math.min(weaveState.maxEnergy, weaveState.energy + SHARD_ENERGY_RESTORE);
-          weaveState.score += 10;
-          weaveState.shardsCollected += 1;
-          return { ...shard, collected: true };
+    // Spawn orbs
+    if (gameTime.current - lastOrbSpawn.current > ORB_SPAWN_INTERVAL / (1 + snap.level * 0.1)) {
+      lastOrbSpawn.current = gameTime.current;
+      
+      // Find safe angle (away from arms)
+      let safeAngle = Math.random() * Math.PI * 2;
+      let attempts = 0;
+      while (attempts < 10) {
+        let isSafe = true;
+        for (const arm of arms) {
+          const armAngle = ((arm.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+          let diff = Math.abs(safeAngle - armAngle);
+          if (diff > Math.PI) diff = Math.PI * 2 - diff;
+          if (diff < 0.5) {
+            isSafe = false;
+            break;
+          }
         }
-        return shard;
-      });
+        if (isSafe) break;
+        safeAngle = Math.random() * Math.PI * 2;
+        attempts++;
+      }
+
+      const isBonus = Math.random() < 0.15;
+      const newOrb: Orb = {
+        id: `orb-${Date.now()}`,
+        angle: safeAngle,
+        radius: PLAYER_ORBIT_RADIUS + (Math.random() - 0.5) * 0.8,
+        spawnTime: gameTime.current,
+        isBonus,
+        collected: false,
+      };
+      setOrbs((prev) => [...prev, newOrb]);
+    }
+
+    // Update orbs - collect and expire
+    const px = Math.cos(playerAngle) * PLAYER_ORBIT_RADIUS;
+    const py = Math.sin(playerAngle) * PLAYER_ORBIT_RADIUS;
+
+    setOrbs((prev) => {
+      const updated: Orb[] = [];
+      for (const orb of prev) {
+        if (orb.collected) continue;
+        
+        const age = gameTime.current - orb.spawnTime;
+        if (age > ORB_LIFETIME) continue;
+
+        const ox = Math.cos(orb.angle) * orb.radius;
+        const oy = Math.sin(orb.angle) * orb.radius;
+        const dist = Math.sqrt((px - ox) ** 2 + (py - oy) ** 2);
+
+        if (dist < ORB_COLLECT_RADIUS) {
+          // Collected!
+          const points = orb.isBonus ? 50 : 10;
+          const comboBonus = Math.floor(weaveState.combo / 3) * 5;
+          weaveState.score += points + comboBonus;
+          weaveState.combo += 1;
+          weaveState.orbs += 1;
+          weaveState.orbsCollected += 1;
+          levelOrbCount.current += 1;
+
+          if (weaveState.combo > weaveState.bestCombo) {
+            weaveState.bestCombo = weaveState.combo;
+          }
+
+          spawnParticles(ox, oy, orb.isBonus ? BONUS_ORB_COLOR : ORB_COLOR, 8);
+          setCorePulse(1);
+          setTimeout(() => setCorePulse(0), 150);
+
+          // Level up
+          if (levelOrbCount.current >= LEVEL_UP_ORBS) {
+            levelOrbCount.current = 0;
+            weaveState.level += 1;
+            weaveState.score += weaveState.level * 25;
+            setArms(generateArms(weaveState.level));
+            
+            // Bonus life every 3 levels
+            if (weaveState.level % 3 === 0 && weaveState.lives < weaveState.maxLives) {
+              weaveState.lives += 1;
+            }
+          }
+
+          continue; // Don't add to updated
+        }
+
+        updated.push(orb);
+      }
+      return updated;
     });
 
-    // Check if all shards collected - evolve polygon
-    const allCollected = shards.every((s) => s.collected);
-    if (allCollected && shards.length > 0) {
-      weaveState.level += 1;
-      
-      // Evolve polygon (max 8 sides)
-      if (weaveState.polygonSides < 8) {
-        weaveState.polygonSides += 1;
-      }
-      
-      // Bonus for completing level
-      weaveState.score += weaveState.level * 25;
-      
-      // Regenerate level
-      setPlayerVertex(0);
-      regenerateLevel();
-    }
+    // Update particles
+    setParticles((prev) =>
+      prev
+        .map((p) => ({
+          ...p,
+          x: p.x + p.vx * delta,
+          y: p.y + p.vy * delta,
+          life: p.life - delta * 2,
+        }))
+        .filter((p) => p.life > 0)
+    );
 
-    // Energy drain over time (very slow)
-    weaveState.energy = Math.max(0, weaveState.energy - delta * 0.5);
-    if (weaveState.energy <= 0) {
-      weaveState.gameOver = true;
-    }
-
-    // Update high score
-    if (weaveState.score > weaveState.highScore) {
-      weaveState.highScore = weaveState.score;
-    }
+    // Decay combo if not collecting
+    // (Combo doesn't decay - resets on hit)
   });
+
+  const levelProgress = (levelOrbCount.current / LEVEL_UP_ORBS) * 100;
 
   return (
     <>
-      {/* Lighting */}
-      <ambientLight intensity={0.3} />
-      <pointLight position={[0, 0, 5]} intensity={1} />
+      <ambientLight intensity={0.15} />
+      <pointLight position={[0, 0, 8]} intensity={0.4} />
 
-      {/* Polygon outline */}
-      <PolygonOutline
-        sides={snap.polygonSides}
-        radius={POLYGON_RADIUS}
-        rotation={polygonRotation}
-        color={currentColor}
-      />
+      <DangerZone />
+      <OrbitRing radius={PLAYER_ORBIT_RADIUS} color={currentColor} />
+      <LivesDisplay lives={snap.lives} maxLives={snap.maxLives} />
+      <CentralCore level={snap.level} pulse={corePulse} />
 
-      {/* Hazards */}
-      {hazards.map((hazard) =>
-        hazard.type === 'beam' ? (
-          <HazardBeam
-            key={hazard.id}
-            edgeIndex={hazard.edgeIndex!}
-            sides={snap.polygonSides}
-            radius={POLYGON_RADIUS}
-            rotation={polygonRotation}
-            active={hazard.active}
-          />
-        ) : (
-          <HazardSpike
-            key={hazard.id}
-            vertexIndex={hazard.vertexIndex!}
-            sides={snap.polygonSides}
-            radius={POLYGON_RADIUS}
-            rotation={polygonRotation}
-            active={hazard.active}
-          />
-        )
-      )}
-
-      {/* Shards */}
-      {shards.map((shard) => (
-        <EnergyShard
-          key={shard.id}
-          vertexIndex={shard.vertexIndex}
-          sides={snap.polygonSides}
-          radius={POLYGON_RADIUS}
-          rotation={polygonRotation}
-          collected={shard.collected}
-        />
+      {arms.map((arm) => (
+        <LaserArmComponent key={arm.id} arm={arm} />
       ))}
 
-      {/* Player */}
+      {orbs.map((orb) => (
+        <OrbComponent key={orb.id} orb={orb} currentTime={gameTime.current} />
+      ))}
+
+      <ParticleEffect particles={particles} />
+
       <Player
-        vertexIndex={playerVertex}
-        sides={snap.polygonSides}
-        radius={POLYGON_RADIUS}
-        rotation={polygonRotation}
+        angle={playerAngle}
         color={currentColor}
+        isHit={isHit}
+        invincible={snap.invincible}
       />
+
+      {/* Combo display */}
+      {snap.combo >= 3 && (
+        <Html center position={[0, -2.5, 0]}>
+          <div
+            className="text-2xl font-bold animate-pulse"
+            style={{
+              color: snap.combo >= 10 ? '#feca57' : snap.combo >= 5 ? '#00ff88' : '#00ffff',
+              textShadow: `0 0 20px currentColor`,
+            }}
+          >
+            {snap.combo}x
+          </div>
+        </Html>
+      )}
 
       {/* HUD */}
       <Html fullscreen style={{ pointerEvents: 'none' }}>
-        <div className="absolute top-4 left-4 z-50 pointer-events-auto">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3 text-white">
-            <div className="text-2xl font-bold">{snap.score}</div>
-            <div className="text-xs text-white/60">Level {snap.level}</div>
-            <div className="text-xs text-white/40">{snap.polygonSides}-gon</div>
-            <div className="mt-2">
-              <EnergyBar energy={snap.energy} maxEnergy={snap.maxEnergy} />
+        <div className="absolute top-4 left-4 z-50">
+          <div className="bg-black/50 backdrop-blur-sm rounded-xl px-4 py-3 text-white border border-white/10">
+            <div className="text-3xl font-light tracking-wider" style={{ color: currentColor }}>
+              {snap.score}
+            </div>
+            <div className="text-[10px] text-white/40 uppercase tracking-widest">Score</div>
+
+            <div className="mt-3 flex items-center gap-4">
+              <div>
+                <div className="text-lg font-light">{snap.orbsCollected}</div>
+                <div className="text-[10px] text-white/40 uppercase">Orbs</div>
+              </div>
+              <div>
+                <div className="text-lg font-light">Lv.{snap.level}</div>
+                <div className="text-[10px] text-white/40 uppercase">Level</div>
+              </div>
+            </div>
+
+            {/* Level progress */}
+            <div className="mt-3">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1">
+                Next Level ({levelOrbCount.current}/{LEVEL_UP_ORBS})
+              </div>
+              <div className="w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full transition-all duration-200 rounded-full"
+                  style={{
+                    width: `${levelProgress}%`,
+                    backgroundColor: currentColor,
+                    boxShadow: `0 0 8px ${currentColor}`,
+                  }}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="absolute top-4 left-40 z-50 pointer-events-auto">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-xs">
-            <div>Shards: {snap.shardsCollected}</div>
+        <div className="absolute top-4 right-4 z-50">
+          <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-xs border border-white/10">
             <div className="text-white/60">Best: {snap.highScore}</div>
+            <div className="text-white/40">Best Combo: {snap.bestCombo}x</div>
           </div>
         </div>
 
-        <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
-          <div>A/D to hop vertices • Space to phase jump</div>
-          <div className="text-xs mt-1">Collect shards to evolve • Avoid hazards</div>
+        {/* Lives indicator */}
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex gap-2">
+          {Array.from({ length: snap.maxLives }).map((_, i) => (
+            <div
+              key={i}
+              className="w-4 h-4 rounded-full border-2 transition-all duration-200"
+              style={{
+                borderColor: '#ff3366',
+                backgroundColor: i < snap.lives ? '#ff3366' : 'transparent',
+                boxShadow: i < snap.lives ? '0 0 10px #ff3366' : 'none',
+              }}
+            />
+          ))}
         </div>
 
+        {/* Controls hint */}
+        <div className="absolute bottom-4 left-4 text-white/40 text-xs">
+          <div className="flex items-center gap-3">
+            <span>A/D or Mouse to orbit</span>
+            <span className="text-white/20">|</span>
+            <span>Collect orbs, dodge lasers</span>
+          </div>
+        </div>
+
+        {/* Start screen */}
+        {!gameStarted && !snap.gameOver && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50">
+            <div className="text-center max-w-md px-8">
+              <h1
+                className="text-6xl font-thin tracking-[0.3em] mb-6"
+                style={{ color: currentColor, textShadow: `0 0 40px ${currentColor}` }}
+              >
+                WEAVE
+              </h1>
+              <p className="text-white/60 text-sm leading-relaxed mb-4">
+                Orbit the center and collect glowing orbs.<br />
+                Dodge the sweeping laser arms.<br />
+                Build combos. Survive. Level up.
+              </p>
+              <div className="flex justify-center gap-6 text-xs text-white/40 mb-8">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ORB_COLOR }} />
+                  <span>Orb (+10)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: BONUS_ORB_COLOR }} />
+                  <span>Bonus (+50)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded" style={{ backgroundColor: ARM_COLOR }} />
+                  <span>Danger!</span>
+                </div>
+              </div>
+              <p className="text-white/40 text-xs animate-pulse">Click or press A/D to begin</p>
+            </div>
+          </div>
+        )}
+
+        {/* Game over screen */}
         {snap.gameOver && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 pointer-events-auto">
+          <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50">
             <div className="text-center">
-              <h1 className="text-5xl font-bold text-white mb-4">GAME OVER</h1>
-              <p className="text-3xl text-white/80 mb-2">{snap.score}</p>
-              <p className="text-lg text-white/60 mb-1">Level: {snap.level}</p>
-              <p className="text-lg text-white/60 mb-1">Shards: {snap.shardsCollected}</p>
-              <p className="text-lg text-white/60 mb-6">Best: {snap.highScore}</p>
-              <p className="text-white/50">Press R to restart</p>
+              <h1 className="text-5xl font-thin tracking-widest mb-6" style={{ color: '#ff3366' }}>
+                GAME OVER
+              </h1>
+              <p className="text-4xl text-white/80 mb-2 font-light">{snap.score}</p>
+              <div className="text-white/50 text-sm space-y-1 mb-6">
+                <p>Orbs Collected: {snap.orbsCollected}</p>
+                <p>Level Reached: {snap.level}</p>
+                <p>Best Combo: {snap.bestCombo}x</p>
+                {snap.score >= snap.highScore && snap.score > 0 && (
+                  <p className="text-yellow-400 mt-2">New High Score!</p>
+                )}
+              </div>
+              <p className="text-white/40 text-xs animate-pulse">Click or Press R to play again</p>
             </div>
           </div>
         )}

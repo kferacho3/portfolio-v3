@@ -10,7 +10,6 @@
 import { Physics, useBox, usePlane } from '@react-three/cannon';
 import { Html, Sky, Stars, useTexture } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { EffectComposer, Bloom, DepthOfField, Noise, Vignette } from '@react-three/postprocessing';
 import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
@@ -300,11 +299,6 @@ const UfoModeClassic: React.FC<{
         ))}
       </Physics>
 
-      {graphicsMode === 'classic' && (
-        <EffectComposer>
-          <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.9} intensity={0.4} />
-        </EffectComposer>
-      )}
 
       <Html>
         <div className="absolute bottom-2.5 right-2.5 text-3xl text-white font-bold">
@@ -486,14 +480,6 @@ const RunnerModeClassic: React.FC<{
         <RunnerObstacles playerRef={playerRef} />
       </Physics>
 
-      {graphicsMode === 'classic' && (
-        <EffectComposer>
-          <DepthOfField focusDistance={0} focalLength={0.02} bokehScale={2} height={480} />
-          <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.9} intensity={0.8} />
-          <Noise opacity={0.02} />
-          <Vignette eskil={false} offset={0.1} darkness={1.1} />
-        </EffectComposer>
-      )}
 
       <Html>
         <div className="absolute bottom-2.5 right-2.5 text-3xl text-white font-bold">

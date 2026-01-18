@@ -19,6 +19,7 @@ export type GameId =
   | 'pinball'
   | 'rollette'
   | 'flappybird'
+  | 'fluxhop'
   | 'reactpong'
   | 'spinblock'
   | 'museum'

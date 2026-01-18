@@ -39,7 +39,7 @@ export function Alien({ color = 'red', ...props }: AlienProps) {
   }, [color, materials]);
 
   return (
-    <group {...props} dispose={null}>
+    <group {...props} dispose={null} scale={0.4}>
       <mesh
         geometry={nodes.Object_2.geometry}
         material={clonedMaterial}

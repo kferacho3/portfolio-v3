@@ -3,7 +3,6 @@
 
 import { Text, useTexture } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { EffectComposer, N8AO, TiltShift2 } from '@react-three/postprocessing';
 import {
   BallCollider,
   CuboidCollider,
@@ -14,7 +13,7 @@ import {
 } from '@react-three/rapier';
 import clamp from 'lodash-es/clamp';
 import { easing } from 'maath';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 import PaddleHand from './models/PaddleHand';
@@ -363,13 +362,17 @@ interface BallProps {
 const Ball: React.FC<BallProps> = ({ position, ballColor, ballTextureUrl, onBodyReady }) => {
   const api = useRef<RapierRigidBody | null>(null);
   const map = useTexture(ballTextureUrl);
-  const { viewport } = useThree();
+  const frameCount = useRef(0);
 
-  const onCollisionEnter = useCallback(() => {
+  const resetBall = useCallback(() => {
     reactPongState.reset();
     if (api.current) {
-      api.current.setTranslation({ x: 0, y: 3.5, z: 0 }, true);
-      api.current.setLinvel({ x: 0, y: 3.5, z: 0 }, true);
+      // Reset position matching original - center at y=5
+      api.current.setTranslation({ x: 0, y: 5, z: 0 }, true);
+      // Give initial downward velocity matching original
+      api.current.setLinvel({ x: 0, y: -5, z: 0 }, true);
+      // Reset angular velocity
+      api.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
     }
   }, []);
 
@@ -377,47 +380,92 @@ const Ball: React.FC<BallProps> = ({ position, ballColor, ballTextureUrl, onBody
     if (onBodyReady) onBodyReady(api.current);
   }, [onBodyReady]);
 
+  // Initialize ball position and ensure proper physics behavior
+  useFrame(() => {
+    if (!api.current) return;
+    
+    frameCount.current++;
+    
+    // Initialize ball position on first few frames (rapier needs time to initialize)
+    if (frameCount.current < 5) {
+      api.current.setTranslation({ x: position[0], y: position[1], z: position[2] }, true);
+      api.current.setLinvel({ x: 0, y: -3, z: 0 }, true);
+      return;
+    }
+    
+    const vel = api.current.linvel();
+    const pos = api.current.translation();
+    const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
+    
+    // Force Z velocity to 0 to ensure 2D gameplay
+    if (Math.abs(vel.z) > 0.01) {
+      api.current.setLinvel({ x: vel.x, y: vel.y, z: 0 }, true);
+    }
+    
+    // If ball is moving too slowly, give it a boost
+    if (speed < 2 && speed > 0.1) {
+      const boost = 3 / speed;
+      api.current.setLinvel({ x: vel.x * boost, y: vel.y * boost, z: 0 }, true);
+    }
+    
+    // Cap maximum speed
+    const maxSpeed = 30;
+    if (speed > maxSpeed) {
+      const scale = maxSpeed / speed;
+      api.current.setLinvel({ x: vel.x * scale, y: vel.y * scale, z: 0 }, true);
+    }
+    
+    // Ensure ball stays at z=0
+    if (Math.abs(pos.z) > 0.1) {
+      api.current.setTranslation({ x: pos.x, y: pos.y, z: 0 }, true);
+    }
+  });
+
   return (
-    <group position={position}>
+    <>
+      {/* Ball RigidBody - position set via physics API, not React props */}
       <RigidBody
         ref={api}
         type="dynamic"
         ccd
         angularDamping={0.8}
+        linearDamping={0}
         restitution={1}
+        friction={0}
         canSleep={false}
         colliders={false}
         enabledTranslations={[true, true, false]}
+        enabledRotations={[true, true, true]}
       >
-        <BallCollider args={[0.5]} />
+        <BallCollider args={[0.5]} restitution={1} friction={0} />
         <mesh castShadow receiveShadow>
           <sphereGeometry args={[0.5, 64, 64]} />
           <meshStandardMaterial color={ballColor} map={map} />
         </mesh>
       </RigidBody>
 
-      {/* Bottom Trigger */}
+      {/* Bottom Trigger - resets game when ball falls out */}
       <RigidBody
         type="fixed"
         colliders={false}
-        position={[0, -viewport.height * 2, 0]}
+        position={[0, -20, 0]}
         restitution={2.1}
-        onCollisionEnter={onCollisionEnter}
+        onCollisionEnter={resetBall}
       >
         <CuboidCollider args={[1000, 2, 1000]} />
       </RigidBody>
 
-      {/* Top Trigger */}
+      {/* Top Trigger - prevents ball escaping upward */}
       <RigidBody
         type="fixed"
         colliders={false}
-        position={[0, viewport.height * 4, 0]}
+        position={[0, 30, 0]}
         restitution={2.1}
-        onCollisionEnter={onCollisionEnter}
+        onCollisionEnter={resetBall}
       >
         <CuboidCollider args={[1000, 2, 1000]} />
       </RigidBody>
-    </group>
+    </>
   );
 };
 
@@ -509,7 +557,7 @@ const Arena: React.FC = () => {
   const arenaWidth = 20;
   const arenaDepth = 5;
   const arenaHeight = 10;
-  const wallThickness = 0.25;
+  const wallThickness = 0.5;
 
   // Bottom wall split configuration (matches legacy)
   const bottomWallLength = (arenaWidth * 0.33) / 2;
@@ -517,22 +565,25 @@ const Arena: React.FC = () => {
 
   const transmissiveMaterial = new THREE.MeshPhysicalMaterial({
     color: '#fff',
-    transmission: 1,
+    transmission: 0.9,
     roughness: 0,
     thickness: 1.5,
     envMapIntensity: 4,
   });
 
+  // Wall restitution for bouncy reflections
+  const wallRestitution = 1.0;
+  const wallFriction = 0;
+
   return (
     <>
       {/* Top Wall */}
       <RigidBody
-        restitution={1.1}
-        position={[0, arenaHeight / 2, 0]}
         type="fixed"
+        position={[0, arenaHeight / 2, 0]}
         onCollisionEnter={() => onWallCollision('wall-top')}
       >
-        <CuboidCollider args={[arenaWidth, wallThickness, arenaDepth]} />
+        <CuboidCollider args={[arenaWidth / 2, wallThickness / 2, arenaDepth / 2]} restitution={wallRestitution} friction={wallFriction} />
         <mesh material={transmissiveMaterial}>
           <boxGeometry args={[arenaWidth, wallThickness, arenaDepth]} />
         </mesh>
@@ -540,12 +591,11 @@ const Arena: React.FC = () => {
 
       {/* Left Wall */}
       <RigidBody
-        restitution={1.1}
-        position={[-arenaWidth / 2 - wallThickness / 2, 0, 0]}
         type="fixed"
+        position={[-arenaWidth / 2 - wallThickness / 2, 0, 0]}
         onCollisionEnter={() => onWallCollision('wall-left')}
       >
-        <CuboidCollider args={[wallThickness, arenaHeight, arenaDepth]} />
+        <CuboidCollider args={[wallThickness / 2, arenaHeight / 2, arenaDepth / 2]} restitution={wallRestitution} friction={wallFriction} />
         <mesh material={transmissiveMaterial}>
           <boxGeometry args={[wallThickness, arenaHeight, arenaDepth]} />
         </mesh>
@@ -553,12 +603,11 @@ const Arena: React.FC = () => {
 
       {/* Right Wall */}
       <RigidBody
-        restitution={1.1}
-        position={[arenaWidth / 2 + wallThickness / 2, 0, 0]}
         type="fixed"
+        position={[arenaWidth / 2 + wallThickness / 2, 0, 0]}
         onCollisionEnter={() => onWallCollision('wall-right')}
       >
-        <CuboidCollider args={[wallThickness, arenaHeight, arenaDepth]} />
+        <CuboidCollider args={[wallThickness / 2, arenaHeight / 2, arenaDepth / 2]} restitution={wallRestitution} friction={wallFriction} />
         <mesh material={transmissiveMaterial}>
           <boxGeometry args={[wallThickness, arenaHeight, arenaDepth]} />
         </mesh>
@@ -566,12 +615,11 @@ const Arena: React.FC = () => {
 
       {/* Bottom Left Wall (split with gap - matches legacy) */}
       <RigidBody
-        restitution={1.1}
-        position={[-(bottomWallGap / 2 + bottomWallLength / 2), -arenaHeight / 2, 0]}
         type="fixed"
+        position={[-(bottomWallGap / 2 + bottomWallLength / 2), -arenaHeight / 2, 0]}
         onCollisionEnter={() => onWallCollision('wall-bottom-left')}
       >
-        <CuboidCollider args={[bottomWallLength, wallThickness, arenaDepth]} />
+        <CuboidCollider args={[bottomWallLength / 2, wallThickness / 2, arenaDepth / 2]} restitution={wallRestitution} friction={wallFriction} />
         <mesh material={transmissiveMaterial}>
           <boxGeometry args={[bottomWallLength, wallThickness, arenaDepth]} />
         </mesh>
@@ -579,12 +627,11 @@ const Arena: React.FC = () => {
 
       {/* Bottom Right Wall (split with gap - matches legacy) */}
       <RigidBody
-        restitution={1.1}
-        position={[(bottomWallGap / 2 + bottomWallLength / 2), -arenaHeight / 2, 0]}
         type="fixed"
+        position={[(bottomWallGap / 2 + bottomWallLength / 2), -arenaHeight / 2, 0]}
         onCollisionEnter={() => onWallCollision('wall-bottom-right')}
       >
-        <CuboidCollider args={[bottomWallLength, wallThickness, arenaDepth]} />
+        <CuboidCollider args={[bottomWallLength / 2, wallThickness / 2, arenaDepth / 2]} restitution={wallRestitution} friction={wallFriction} />
         <mesh material={transmissiveMaterial}>
           <boxGeometry args={[bottomWallLength, wallThickness, arenaDepth]} />
         </mesh>
@@ -639,8 +686,39 @@ const Bg: React.FC = () => {
 // ReactPong (Main Component)
 // --------------------------------------
 
+// Camera controller to set initial position - matches original exactly
+const CameraSetup: React.FC = () => {
+  const { camera, scene } = useThree();
+  const frameCount = useRef(0);
+  
+  useEffect(() => {
+    // Set initial camera position matching the original react-pong
+    camera.position.set(0, 5, 12);
+    camera.lookAt(0, 0, 0);
+    if ('fov' in camera) {
+      (camera as THREE.PerspectiveCamera).fov = 45;
+      (camera as THREE.PerspectiveCamera).near = 0.1;
+      (camera as THREE.PerspectiveCamera).far = 1000;
+      camera.updateProjectionMatrix();
+    }
+    // Set scene background
+    scene.background = new THREE.Color('#1a1a2e');
+  }, [camera, scene]);
+  
+  // Force camera position for first several frames to ensure proper initial view
+  useFrame(() => {
+    frameCount.current++;
+    if (frameCount.current < 30) {
+      camera.position.set(0, 5, 12);
+      camera.lookAt(0, 0, 0);
+    }
+  });
+  
+  return null;
+};
+
 const ReactPong: React.FC<{ ready: boolean }> = ({ ready: _ready }) => {
-  const { scoreColor, ballColor, ballTexture, mode, count, graphicsMode } = useSnapshot(reactPongState);
+  const { scoreColor, ballColor, ballTexture, mode, count } = useSnapshot(reactPongState);
   const [sparkPosition, setSparkPosition] = useState<[number, number, number] | null>(null);
   const [paused, setPaused] = useState(false);
   const ballBodyRef = useRef<RapierRigidBody | null>(null);
@@ -705,7 +783,12 @@ const ReactPong: React.FC<{ ready: boolean }> = ({ ready: _ready }) => {
 
   return (
     <>
-      <Bg />
+      <CameraSetup />
+      
+      {/* Background color fallback */}
+      <color attach="background" args={['#1a1a2e']} />
+      
+      {/* Lighting */}
       <ambientLight intensity={0.5 * Math.PI} />
       <spotLight
         decay={0}
@@ -717,28 +800,36 @@ const ReactPong: React.FC<{ ready: boolean }> = ({ ready: _ready }) => {
         shadow-mapSize={[1024, 1024]}
         shadow-bias={-0.0001}
       />
+      <pointLight position={[10, 10, 10]} intensity={0.5} />
+      
+      {/* Background sphere */}
+      <Suspense fallback={null}>
+        <Bg />
+      </Suspense>
+      
+      {/* Physics matching original react-pong: gravity -40, vary timestep */}
       <Physics gravity={[0, -40, 0]} timeStep="vary">
         {sparkPosition && <SparkEffect position={sparkPosition} />}
-        <Ball
-          position={[0, 5, 0]}
-          ballColor={ballColor}
-          ballTextureUrl={ballTexture}
-          onBodyReady={(body) => {
-            ballBodyRef.current = body;
-          }}
-        />
-        {!paused && mode === 'SoloPaddle' && <Paddle scoreColor={scoreColor} />}
+        
+        <Suspense fallback={null}>
+          <Ball
+            position={[0, 5, 0]}
+            ballColor={ballColor}
+            ballTextureUrl={ballTexture}
+            onBodyReady={(body) => {
+              ballBodyRef.current = body;
+            }}
+          />
+        </Suspense>
+        
+        {!paused && mode === 'SoloPaddle' && (
+          <Suspense fallback={null}>
+            <Paddle scoreColor={scoreColor} />
+          </Suspense>
+        )}
         {!paused && mode === 'SoloWalls' && <SoloWallsAssist ballRef={ballBodyRef} />}
         <Arena />
       </Physics>
-
-      {/* Classic graphics mode with postprocessing */}
-      {graphicsMode === 'classic' && (
-        <EffectComposer disableNormalPass>
-          <N8AO distanceFalloff={1} aoRadius={1} intensity={4} />
-          <TiltShift2 blur={0.1} />
-        </EffectComposer>
-      )}
     </>
   );
 };
@@ -758,6 +849,12 @@ const Paddle: React.FC<PaddleProps> = ({ scoreColor }) => {
   const model = useRef<THREE.Group>(null);
   const { count } = useSnapshot(reactPongState);
 
+  // Reusable vectors to avoid creating new ones each frame
+  const vec = useRef(new THREE.Vector3());
+  const dir = useRef(new THREE.Vector3());
+  const quaternion = useRef(new THREE.Quaternion());
+  const euler = useRef(new THREE.Euler());
+
   const minimumForceThreshold = 500;
 
   const contactForce = useCallback((payload: { totalForceMagnitude: number }) => {
@@ -770,21 +867,41 @@ const Paddle: React.FC<PaddleProps> = ({ scoreColor }) => {
   }, []);
 
   useFrame((state, delta) => {
-    const vec = new THREE.Vector3(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
-    const dir = new THREE.Vector3().copy(vec).sub(state.camera.position).normalize();
-    vec.add(dir.multiplyScalar(state.camera.position.length()));
+    // Convert mouse position to world coordinates
+    vec.current.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
+    dir.current.copy(vec.current).sub(state.camera.position).normalize();
+    vec.current.add(dir.current.multiplyScalar(state.camera.position.length()));
 
-    paddleApi.current?.setNextKinematicTranslation({ x: vec.x, y: vec.y, z: 0 });
+    // Clamp paddle position within arena bounds
+    const arenaWidth = 20;
+    const arenaHeight = 10;
+    const clampedX = clamp(vec.current.x, -arenaWidth / 2 + 2, arenaWidth / 2 - 2);
+    const clampedY = clamp(vec.current.y, -arenaHeight / 2 + 1, arenaHeight / 2 - 1);
+
+    // Set paddle position
+    paddleApi.current?.setNextKinematicTranslation({ x: clampedX, y: clampedY, z: 0 });
+
+    // Calculate rotation angle based on mouse X position (tilt towards center)
+    // Max rotation of ~18 degrees (PI/10) based on horizontal position
+    const rotationAngle = (state.pointer.x * Math.PI) / 10;
+    
+    // Convert Euler angle to proper Quaternion for Rapier
+    euler.current.set(0, 0, rotationAngle);
+    quaternion.current.setFromEuler(euler.current);
+    
     paddleApi.current?.setNextKinematicRotation({
-      x: 0,
-      y: 0,
-      z: (state.pointer.x * Math.PI) / 10,
-      w: 1,
+      x: quaternion.current.x,
+      y: quaternion.current.y,
+      z: quaternion.current.z,
+      w: quaternion.current.w,
     });
 
+    // Animate model bounce back after hit
     if (model.current) {
       easing.damp3(model.current.position, [0, 0, 0], 0.2, delta);
     }
+
+    // Camera follows paddle smoothly
     easing.damp3(
       state.camera.position,
       [-state.pointer.x * 4, 2.5 + -state.pointer.y * 4, 12],
