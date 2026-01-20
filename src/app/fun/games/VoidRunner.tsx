@@ -3,9 +3,9 @@
 // Enhanced and reimagined for Racho's Arcade
 'use client';
 
-import { Html, Stars, useTexture } from '@react-three/drei';
+import { Html, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useEffect, useMemo, useRef, Suspense } from 'react';
+import React, { useEffect, useMemo, useRef, Suspense, useState } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 
@@ -23,6 +23,33 @@ const WALL_RADIUS = 40;
 const INITIAL_GAME_SPEED = 0.8;
 const GAME_SPEED_MULTIPLIER = 0.2;
 const COLLISION_RADIUS = 12;
+const PLAYER_START_X = 0;
+const PLAYER_START_Y = 3;
+const PLAYER_START_Z = -10;
+const CAMERA_OFFSET_X = 0;
+const CAMERA_OFFSET_Y = 5;
+const CAMERA_OFFSET_Z = 13.5;
+const CAMERA_FOV = 75;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI OVERLAY (DOM via drei <Html>, safe in R3F)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FullscreenOverlay: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return (
+    <Html fullscreen portal={document.body} zIndexRange={[1000, 0]} style={{ width: '100%', height: '100%' }}>
+      {children}
+    </Html>
+  );
+};
 
 const COLORS = [
   { name: 'magenta', hex: '#ff2190', three: new THREE.Color(0xff2190) },
@@ -70,7 +97,8 @@ export const voidRunnerState = proxy({
     mutation.desiredSpeed = 0;
     mutation.horizontalVelocity = 0;
     mutation.colorLevel = 0;
-    mutation.playerZ = 0;
+    mutation.playerZ = PLAYER_START_Z;
+    mutation.playerX = PLAYER_START_X;
     mutation.gameOver = false;
     mutation.globalColor.copy(COLORS[0].three);
   },
@@ -83,7 +111,11 @@ export const voidRunnerState = proxy({
     this.nearMissCount = 0;
     this.comboMultiplier = 1;
     mutation.gameOver = false;
+    mutation.gameSpeed = 0;
     mutation.desiredSpeed = INITIAL_GAME_SPEED * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
+    mutation.playerZ = PLAYER_START_Z;
+    mutation.playerX = PLAYER_START_X;
+    mutation.horizontalVelocity = 0;
   },
 
   endGame() {
@@ -165,6 +197,28 @@ const Player: React.FC = () => {
   const { camera } = useThree();
   const snap = useSnapshot(voidRunnerState);
 
+  useEffect(() => {
+    camera.position.set(
+      PLAYER_START_X + CAMERA_OFFSET_X,
+      PLAYER_START_Y + CAMERA_OFFSET_Y,
+      PLAYER_START_Z + CAMERA_OFFSET_Z
+    );
+    camera.lookAt(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z + 10);
+    camera.fov = CAMERA_FOV;
+    camera.updateProjectionMatrix();
+  }, [camera]);
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+    if (snap.phase === 'menu' || snap.phase === 'playing') {
+      meshRef.current.position.set(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z);
+      meshRef.current.rotation.set(0, Math.PI, 0);
+      mutation.playerZ = PLAYER_START_Z;
+      mutation.playerX = PLAYER_START_X;
+      mutation.horizontalVelocity = 0;
+    }
+  }, [snap.phase]);
+
   useFrame((state, delta) => {
     if (!meshRef.current || snap.phase !== 'playing') return;
 
@@ -206,11 +260,17 @@ const Player: React.FC = () => {
       }
     }
 
-    // Camera follow
-    camera.position.z = mesh.position.z + 14;
-    camera.position.y = 8;
-    camera.position.x = mesh.position.x * 0.3;
-    camera.lookAt(mesh.position.x * 0.5, 2, mesh.position.z - 50);
+    // Camera follow - match Cuberun framing (no lag)
+    camera.position.set(
+      mesh.position.x + CAMERA_OFFSET_X,
+      mesh.position.y + CAMERA_OFFSET_Y,
+      mesh.position.z + CAMERA_OFFSET_Z
+    );
+    camera.lookAt(
+      mesh.position.x,
+      mesh.position.y,
+      mesh.position.z + 10
+    );
 
     // Trail effect
     if (trailRef.current) {
@@ -234,7 +294,11 @@ const Player: React.FC = () => {
   return (
     <>
       {/* Player ship */}
-      <mesh ref={meshRef} position={[0, 3, -10]} rotation={[0, Math.PI, 0]}>
+      <mesh
+        ref={meshRef}
+        position={[PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z]}
+        rotation={[0, Math.PI, 0]}
+      >
         <coneGeometry args={[1.5, 4, 4]} />
         <meshStandardMaterial
           color="#00ffff"
@@ -248,7 +312,7 @@ const Player: React.FC = () => {
       </mesh>
 
       {/* Trail */}
-      <mesh ref={trailRef} position={[0, 3, -7]}>
+      <mesh ref={trailRef} position={[PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z + 3]}>
         <planeGeometry args={[2, 8]} />
         <meshBasicMaterial
           color="#00ffff"
@@ -275,6 +339,7 @@ const Obstacles: React.FC = () => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
   const initializedRef = useRef(false);
+  const snap = useSnapshot(voidRunnerState);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
@@ -307,6 +372,18 @@ const Obstacles: React.FC = () => {
       initializedRef.current = true;
     }
   });
+
+  useEffect(() => {
+    if (snap.phase !== 'menu' || !meshRef.current) return;
+    cubesRef.current.forEach((cube, i) => {
+      cube.x = randomInRange(negativeBound, positiveBound);
+      cube.z = -200 - randomInRange(0, 800);
+      dummy.position.set(cube.x, cube.y, cube.z);
+      dummy.updateMatrix();
+      meshRef.current!.setMatrixAt(i, dummy.matrix);
+    });
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  }, [snap.phase, negativeBound, positiveBound, dummy]);
 
   useFrame((state) => {
     if (!meshRef.current) return;
@@ -392,6 +469,18 @@ const Ground: React.FC = () => {
   const moveCounter = useRef(1);
   const lastMove = useRef(0);
 
+  useEffect(() => {
+    if (snap.phase !== 'menu') return;
+    moveCounter.current = 1;
+    lastMove.current = 0;
+    if (groundRef.current) {
+      groundRef.current.position.z = -PLANE_SIZE / 2;
+    }
+    if (ground2Ref.current) {
+      ground2Ref.current.position.z = -PLANE_SIZE - PLANE_SIZE / 2;
+    }
+  }, [snap.phase]);
+
   useFrame(() => {
     if (snap.phase !== 'playing') return;
 
@@ -433,15 +522,14 @@ const Ground: React.FC = () => {
         receiveShadow
       >
         <planeGeometry args={[PLANE_SIZE, PLANE_SIZE, 100, 100]} />
-        <meshStandardMaterial
-          ref={materialRef}
-          color="#050510"
-          emissive={COLORS[0].three}
-          emissiveIntensity={0.1}
-          wireframe
-          transparent
-          opacity={0.4}
-        />
+      <meshStandardMaterial
+        ref={materialRef}
+        color="#050510"
+        emissive={COLORS[0].three}
+        emissiveIntensity={0.15}
+        roughness={1}
+        metalness={0}
+      />
       </mesh>
       <mesh
         ref={ground2Ref}
@@ -450,15 +538,14 @@ const Ground: React.FC = () => {
         receiveShadow
       >
         <planeGeometry args={[PLANE_SIZE, PLANE_SIZE, 100, 100]} />
-        <meshStandardMaterial
-          ref={material2Ref}
-          color="#050510"
-          emissive={COLORS[0].three}
-          emissiveIntensity={0.1}
-          wireframe
-          transparent
-          opacity={0.4}
-        />
+      <meshStandardMaterial
+        ref={material2Ref}
+        color="#050510"
+        emissive={COLORS[0].three}
+        emissiveIntensity={0.15}
+        roughness={1}
+        metalness={0}
+      />
       </mesh>
     </>
   );
@@ -516,7 +603,11 @@ const SpaceSkybox: React.FC = () => {
 
   // Set scene background
   useEffect(() => {
+    const prevBackground = scene.background;
     scene.background = new THREE.Color('#000008');
+    return () => {
+      scene.background = prevBackground;
+    };
   }, [scene]);
 
   useFrame((state) => {
@@ -687,19 +778,30 @@ const GlobalColorManager: React.FC = () => {
 const KeyboardControls: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      const key = e.key.toLowerCase();
+      const code = e.code;
+
+      const isArrow =
+        code === 'ArrowLeft' || code === 'ArrowRight' || key === 'arrowleft' || key === 'arrowright';
+
+      // Prevent page scrolling / focus jumps while playing
+      if (isArrow || code === 'Space' || code === 'Enter' || key === ' ' || key === 'enter') {
+        e.preventDefault();
+      }
+
+      if (code === 'ArrowLeft' || code === 'KeyA' || key === 'arrowleft' || key === 'a') {
         voidRunnerState.controls.left = true;
       }
-      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      if (code === 'ArrowRight' || code === 'KeyD' || key === 'arrowright' || key === 'd') {
         voidRunnerState.controls.right = true;
       }
-      if (e.key === ' ' || e.key === 'Enter') {
+      if (code === 'Space' || code === 'Enter' || key === ' ' || key === 'enter') {
         if (voidRunnerState.phase === 'menu' || voidRunnerState.phase === 'gameover') {
           voidRunnerState.reset();
           voidRunnerState.startGame();
         }
       }
-      if (e.key === 'r' || e.key === 'R') {
+      if (code === 'KeyR' || key === 'r') {
         if (voidRunnerState.phase !== 'menu') {
           voidRunnerState.reset();
         }
@@ -707,10 +809,13 @@ const KeyboardControls: React.FC = () => {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      const key = e.key.toLowerCase();
+      const code = e.code;
+
+      if (code === 'ArrowLeft' || code === 'KeyA' || key === 'arrowleft' || key === 'a') {
         voidRunnerState.controls.left = false;
       }
-      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      if (code === 'ArrowRight' || code === 'KeyD' || key === 'arrowright' || key === 'd') {
         voidRunnerState.controls.right = false;
       }
     };
@@ -741,34 +846,31 @@ const GameUI: React.FC = () => {
   // Menu Screen
   if (snap.phase === 'menu') {
     return (
-      <Html fullscreen>
+      <FullscreenOverlay>
         <div
-          className="fixed inset-0 flex flex-col items-center justify-center"
           style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
             background: 'radial-gradient(ellipse at center, #0a0a20 0%, #000008 70%, #000000 100%)',
             fontFamily: '"Geist", system-ui, sans-serif',
+            overflow: 'hidden',
+            textAlign: 'center',
           }}
         >
-          {/* Animated background stars */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {[...Array(50)].map((_, i) => (
-              <div
-                key={i}
-                className="absolute w-1 h-1 bg-white rounded-full animate-pulse"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 3}s`,
-                  opacity: Math.random() * 0.5 + 0.2,
-                }}
-              />
-            ))}
-          </div>
-
           {/* Title */}
           <h1
-            className="text-7xl md:text-8xl font-bold mb-4 tracking-wider"
             style={{
+              fontSize: 'clamp(3rem, 12vw, 6rem)',
+              fontWeight: 700,
+              marginBottom: '1rem',
+              letterSpacing: '0.05em',
               background: 'linear-gradient(135deg, #ff2190, #00ffff, #6942b8)',
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
@@ -779,26 +881,31 @@ const GameUI: React.FC = () => {
             VOID RUNNER
           </h1>
 
-          <p className="text-white/50 text-sm mb-8">
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem', marginBottom: '2rem' }}>
             Inspired by "Cuberun" by Adam Karlsten
           </p>
 
           {snap.highScore > 0 && (
-            <p className="text-cyan-400 text-lg mb-6">
+            <p style={{ color: '#22d3ee', fontSize: '1.125rem', marginBottom: '1.5rem' }}>
               High Score: {snap.highScore.toLocaleString()}
             </p>
           )}
 
           {/* Difficulty Selection */}
-          <div className="flex gap-4 mb-6">
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
             {(['easy', 'normal', 'hard'] as const).map((d) => (
               <button
                 key={d}
                 onClick={() => voidRunnerState.setDifficulty(d)}
-                className={`px-4 py-2 rounded-lg border transition-all ${snap.difficulty === d
-                    ? 'border-cyan-400 bg-cyan-400/20 text-cyan-400'
-                    : 'border-white/20 text-white/60 hover:border-white/40'
-                  }`}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  border: snap.difficulty === d ? '1px solid #22d3ee' : '1px solid rgba(255,255,255,0.2)',
+                  background: snap.difficulty === d ? 'rgba(34,211,238,0.2)' : 'transparent',
+                  color: snap.difficulty === d ? '#22d3ee' : 'rgba(255,255,255,0.6)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
               >
                 {d.toUpperCase()}
               </button>
@@ -806,15 +913,20 @@ const GameUI: React.FC = () => {
           </div>
 
           {/* Mode Selection */}
-          <div className="flex gap-4 mb-8">
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.75rem', marginBottom: '2rem' }}>
             {(['classic', 'zen'] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => voidRunnerState.setMode(m)}
-                className={`px-4 py-2 rounded-lg border transition-all ${snap.mode === m
-                    ? 'border-purple-400 bg-purple-400/20 text-purple-400'
-                    : 'border-white/20 text-white/60 hover:border-white/40'
-                  }`}
+                style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  border: snap.mode === m ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.2)',
+                  background: snap.mode === m ? 'rgba(168,85,247,0.2)' : 'transparent',
+                  color: snap.mode === m ? '#a855f7' : 'rgba(255,255,255,0.6)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
               >
                 {m === 'classic' ? 'CLASSIC' : 'ZEN (No Death)'}
               </button>
@@ -827,43 +939,61 @@ const GameUI: React.FC = () => {
               voidRunnerState.reset();
               voidRunnerState.startGame();
             }}
-            className="px-12 py-4 text-2xl font-bold rounded-xl transition-all duration-300 hover:scale-105"
             style={{
+              padding: '1rem 3rem',
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              borderRadius: '12px',
+              border: 'none',
               background: 'linear-gradient(135deg, #ff2190, #6942b8)',
               color: 'white',
               boxShadow: '0 0 40px rgba(255, 33, 144, 0.4)',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
             }}
           >
             START
           </button>
 
-          <div className="mt-8 text-white/40 text-sm text-center">
+          <div style={{ marginTop: '2rem', color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem', textAlign: 'center' }}>
             <p>A/D or Arrow Keys to move</p>
             <p>Space/Enter to start • R to restart</p>
           </div>
 
-          <div className="absolute bottom-6 left-0 right-0 text-center text-white/30 text-xs">
+          <div style={{ position: 'absolute', bottom: '1.5rem', left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>
             Touch left/right sides of screen on mobile
           </div>
         </div>
-      </Html>
+      </FullscreenOverlay>
     );
   }
 
   // Game Over Screen
   if (snap.phase === 'gameover') {
     return (
-      <Html fullscreen>
+      <FullscreenOverlay>
         <div
-          className="fixed inset-0 flex flex-col items-center justify-center"
           style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
             background: 'rgba(0, 0, 8, 0.95)',
             fontFamily: '"Geist", system-ui, sans-serif',
+            overflow: 'hidden',
+            textAlign: 'center',
           }}
         >
           <h1
-            className="text-6xl md:text-7xl font-bold mb-4"
             style={{
+              fontSize: 'clamp(3rem, 10vw, 5rem)',
+              fontWeight: 700,
+              marginBottom: '1rem',
               color: '#ff2190',
               textShadow: '0 0 40px rgba(255, 33, 144, 0.6)',
             }}
@@ -871,19 +1001,19 @@ const GameUI: React.FC = () => {
             GAME OVER
           </h1>
 
-          <div className="flex flex-col items-center gap-4 mb-8">
-            <div className="text-white/60 text-lg">Score</div>
-            <div className="text-5xl font-bold text-white">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.125rem' }}>Score</div>
+            <div style={{ fontSize: '3rem', fontWeight: 700, color: '#fff' }}>
               {snap.score.toLocaleString()}
             </div>
 
             {snap.score >= snap.highScore && snap.score > 0 && (
-              <div className="text-cyan-400 text-sm animate-pulse">
+              <div style={{ color: '#22d3ee', fontSize: '0.875rem' }}>
                 NEW HIGH SCORE!
               </div>
             )}
 
-            <div className="text-white/40 mt-2">
+            <div style={{ color: 'rgba(255,255,255,0.4)', marginTop: '0.5rem' }}>
               Level {snap.level} • x{snap.comboMultiplier.toFixed(1)} multiplier
             </div>
           </div>
@@ -893,11 +1023,17 @@ const GameUI: React.FC = () => {
               voidRunnerState.reset();
               voidRunnerState.startGame();
             }}
-            className="px-10 py-3 text-xl font-bold rounded-xl transition-all duration-300 hover:scale-105"
             style={{
+              padding: '0.75rem 2.5rem',
+              fontSize: '1.25rem',
+              fontWeight: 700,
+              borderRadius: '12px',
+              border: 'none',
               background: 'linear-gradient(135deg, #ff2190, #6942b8)',
               color: 'white',
               boxShadow: '0 0 30px rgba(255, 33, 144, 0.3)',
+              cursor: 'pointer',
+              transition: 'all 0.3s',
             }}
           >
             PLAY AGAIN
@@ -905,22 +1041,25 @@ const GameUI: React.FC = () => {
 
           <button
             onClick={() => voidRunnerState.reset()}
-            className="mt-4 text-white/40 hover:text-white/60 transition-colors"
+            style={{
+              marginTop: '1rem',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer',
+            }}
           >
             Back to Menu
           </button>
         </div>
-      </Html>
+      </FullscreenOverlay>
     );
   }
 
   // In-Game HUD
   return (
-    <Html fullscreen>
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{ fontFamily: '"Geist Mono", monospace' }}
-      >
+    <FullscreenOverlay>
+      <div className="fixed inset-0 pointer-events-none" style={{ fontFamily: '"Geist Mono", monospace' }}>
         {/* Score & Level */}
         <div className="absolute top-6 left-6">
           <div className="text-white/40 text-xs uppercase tracking-widest mb-1">Score</div>
@@ -934,7 +1073,9 @@ const GameUI: React.FC = () => {
         {/* Speed */}
         <div className="absolute top-6 right-6 text-right">
           <div className="text-white/40 text-xs uppercase tracking-widest mb-1">Speed</div>
-          <div className="text-2xl font-bold text-white">{snap.speed} <span className="text-sm text-white/40">km/h</span></div>
+          <div className="text-2xl font-bold text-white">
+            {snap.speed} <span className="text-sm text-white/40">km/h</span>
+          </div>
         </div>
 
         {/* Mode indicator */}
@@ -949,24 +1090,42 @@ const GameUI: React.FC = () => {
         {/* Mobile Touch Controls */}
         <div
           className="absolute bottom-0 left-0 w-1/2 h-1/3 pointer-events-auto opacity-0"
-          onTouchStart={() => voidRunnerState.controls.left = true}
-          onTouchEnd={() => voidRunnerState.controls.left = false}
+          onTouchStart={() => (voidRunnerState.controls.left = true)}
+          onTouchEnd={() => (voidRunnerState.controls.left = false)}
         />
         <div
           className="absolute bottom-0 right-0 w-1/2 h-1/3 pointer-events-auto opacity-0"
-          onTouchStart={() => voidRunnerState.controls.right = true}
-          onTouchEnd={() => voidRunnerState.controls.right = false}
+          onTouchStart={() => (voidRunnerState.controls.right = true)}
+          onTouchEnd={() => (voidRunnerState.controls.right = false)}
         />
 
-        <div className="absolute bottom-8 left-8 text-white/20 text-2xl pointer-events-none select-none md:hidden">
-          ◀
-        </div>
-        <div className="absolute bottom-8 right-8 text-white/20 text-2xl pointer-events-none select-none md:hidden">
-          ▶
-        </div>
+        <div className="absolute bottom-8 left-8 text-white/20 text-2xl pointer-events-none select-none md:hidden">◀</div>
+        <div className="absolute bottom-8 right-8 text-white/20 text-2xl pointer-events-none select-none md:hidden">▶</div>
       </div>
-    </Html>
+    </FullscreenOverlay>
   );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CAMERA SETUP COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CameraSetup: React.FC<{ phase: 'menu' | 'playing' | 'gameover' }> = ({ phase }) => {
+  const { camera } = useThree();
+
+  useEffect(() => {
+    if (phase === 'playing') return;
+    camera.position.set(
+      PLAYER_START_X + CAMERA_OFFSET_X,
+      PLAYER_START_Y + CAMERA_OFFSET_Y,
+      PLAYER_START_Z + CAMERA_OFFSET_Z
+    );
+    camera.lookAt(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z + 10);
+    camera.fov = CAMERA_FOV;
+    camera.updateProjectionMatrix();
+  }, [camera, phase]);
+
+  return null;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -992,6 +1151,9 @@ const VoidRunner: React.FC<VoidRunnerProps> = ({ soundsOn = true }) => {
       <ambientLight intensity={0.2} />
       <directionalLight position={[0, 50, -100]} intensity={0.8} color="#ff2190" />
       <pointLight position={[0, 30, 0]} intensity={0.5} color="#00ffff" />
+
+      {/* Camera setup for menu/game over */}
+      <CameraSetup phase={snap.phase} />
 
       {/* Space Background */}
       <SpaceSkybox />

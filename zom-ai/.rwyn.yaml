@@ -1,0 +1,14 @@
+# Documentation manifest for Zom AI System
+# Follows docs-framework conventions for component-scoped documentation
+
+scope: component
+name: Zom AI System
+description: >
+  Unified documentation for the Zom AI backend and frontend.
+  Covers the Advisor Copilot agent loop, AI Chat UI, and their integration.
+coverage: complete
+
+zones:
+  - foundation   # Purpose, principles, boundaries
+  - codebase     # Backend, frontend, integration
+  - appendix     # Development guide

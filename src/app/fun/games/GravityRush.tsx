@@ -26,6 +26,29 @@ const MAX_VELOCITY = 12;
 const JUMP_FORCE = 14;
 const GROUND_FRICTION = 0.88;
 const AIR_FRICTION = 0.96;
+const CAMERA_SHIFT_X = 0;
+const CAMERA_SHIFT_Y = 4;
+const CAMERA_SHIFT_Z = 9;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI OVERLAY (DOM via drei <Html>, safe in R3F)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FullscreenOverlay: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return (
+    <Html fullscreen portal={document.body} zIndexRange={[1000, 0]} style={{ width: '100%', height: '100%' }}>
+      {children}
+    </Html>
+  );
+};
 
 // Theme definitions
 const THEMES = {
@@ -445,11 +468,14 @@ const Player: React.FC<PlayerProps> = ({ theme, onChunkUpdate }) => {
   const shieldRef = useRef<THREE.Mesh>(null);
   const { camera } = useThree();
   const lastChunkRef = useRef(0);
+  const cameraPosRef = useRef(new THREE.Vector3());
   
   // Set initial camera position
   useEffect(() => {
-    camera.position.set(0, 6, 10);
-    camera.lookAt(0, 0, -8);
+    camera.position.set(CAMERA_SHIFT_X, CAMERA_SHIFT_Y, CAMERA_SHIFT_Z);
+    camera.lookAt(0, 0, 0);
+    camera.fov = 50;
+    camera.updateProjectionMatrix();
   }, [camera]);
   
   useFrame((state, delta) => {
@@ -630,12 +656,16 @@ const Player: React.FC<PlayerProps> = ({ theme, onChunkUpdate }) => {
     meshRef.current.rotation.x -= vz * dt * 2;
     meshRef.current.rotation.z += vx * dt * 2;
     
-    // Camera follow - slightly higher and further back for better view
-    camera.position.lerp(
-      new THREE.Vector3(newX * 0.5, newY + 5, newZ + 10),
-      dt * 4
-    );
-    camera.lookAt(newX * 0.3, newY - 1, newZ - 8);
+    // Camera follow - match original gravity-ball behavior
+    const cameraPos = cameraPosRef.current;
+    if (newY > -2.5) {
+      camera.position.lerp(
+        cameraPos.set(newX + CAMERA_SHIFT_X, newY + CAMERA_SHIFT_Y, newZ + CAMERA_SHIFT_Z),
+        dt * 10
+      );
+    } else {
+      camera.lookAt(newX, newY, newZ);
+    }
     
     // Trail effect
     if (trailRef.current) {
@@ -925,43 +955,57 @@ const Environment: React.FC<{ theme: typeof THEMES.neon }> = ({ theme }) => {
 const KeyboardControls: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+      const key = e.key.toLowerCase();
+      const code = e.code;
+
+      const isArrow =
+        code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight' ||
+        key === 'arrowup' || key === 'arrowdown' || key === 'arrowleft' || key === 'arrowright';
+
+      // Prevent page scrolling while using directional controls
+      if (isArrow || code === 'Space' || key === ' ') {
+        e.preventDefault();
+      }
+
+      if (code === 'ArrowUp' || code === 'KeyW' || key === 'arrowup' || key === 'w') {
         gravityRushState.controls.forward = true;
       }
-      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+      if (code === 'ArrowDown' || code === 'KeyS' || key === 'arrowdown' || key === 's') {
         gravityRushState.controls.back = true;
       }
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      if (code === 'ArrowLeft' || code === 'KeyA' || key === 'arrowleft' || key === 'a') {
         gravityRushState.controls.left = true;
       }
-      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      if (code === 'ArrowRight' || code === 'KeyD' || key === 'arrowright' || key === 'd') {
         gravityRushState.controls.right = true;
       }
-      if (e.key === ' ') {
+      if (code === 'Space' || key === ' ') {
         if (gravityRushState.phase === 'menu' || gravityRushState.phase === 'gameover') {
           gravityRushState.reset();
           gravityRushState.startGame();
         } else {
           gravityRushState.controls.jump = true;
         }
-        e.preventDefault();
       }
-      if (e.key === 'r' || e.key === 'R') {
+      if (code === 'KeyR' || key === 'r') {
         gravityRushState.reset();
       }
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+      const key = e.key.toLowerCase();
+      const code = e.code;
+
+      if (code === 'ArrowUp' || code === 'KeyW' || key === 'arrowup' || key === 'w') {
         gravityRushState.controls.forward = false;
       }
-      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+      if (code === 'ArrowDown' || code === 'KeyS' || key === 'arrowdown' || key === 's') {
         gravityRushState.controls.back = false;
       }
-      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+      if (code === 'ArrowLeft' || code === 'KeyA' || key === 'arrowleft' || key === 'a') {
         gravityRushState.controls.left = false;
       }
-      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+      if (code === 'ArrowRight' || code === 'KeyD' || key === 'arrowright' || key === 'd') {
         gravityRushState.controls.right = false;
       }
     };
@@ -993,17 +1037,30 @@ const GameUI: React.FC = () => {
   // Menu Screen
   if (snap.phase === 'menu') {
     return (
-      <Html fullscreen>
-        <div 
-          className="fixed inset-0 flex flex-col items-center justify-center"
-          style={{ 
+      <FullscreenOverlay>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
             background: `linear-gradient(180deg, ${theme.background} 0%, ${theme.fog} 100%)`,
             fontFamily: '"Geist", system-ui, sans-serif',
+            overflow: 'hidden',
+            textAlign: 'center',
           }}
         >
           <h1 
-            className="text-6xl md:text-8xl font-bold mb-4 tracking-wider"
             style={{
+              fontSize: 'clamp(3rem, 12vw, 6rem)',
+              fontWeight: 700,
+              marginBottom: '1rem',
+              letterSpacing: '0.05em',
               background: `linear-gradient(135deg, ${theme.platform}, ${theme.accent})`,
               backgroundClip: 'text',
               WebkitBackgroundClip: 'text',
@@ -1014,12 +1071,12 @@ const GameUI: React.FC = () => {
             GRAVITY RUSH
           </h1>
           
-          <p className="text-white/50 text-sm mb-8">
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.875rem', marginBottom: '2rem' }}>
             Inspired by "r3f-gravity-ball"
           </p>
           
           {snap.highScore > 0 && (
-            <p style={{ color: theme.accent }} className="text-lg mb-6">
+            <p style={{ color: theme.accent, fontSize: '1.125rem', marginBottom: '1.5rem' }}>
               High Score: {snap.highScore.toLocaleString()}
             </p>
           )}
@@ -1029,60 +1086,81 @@ const GameUI: React.FC = () => {
               gravityRushState.reset();
               gravityRushState.startGame();
             }}
-            className="px-12 py-4 text-2xl font-bold rounded-xl transition-all duration-300 hover:scale-105"
             style={{
+              padding: '1rem 3rem',
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              borderRadius: '12px',
+              border: 'none',
               background: `linear-gradient(135deg, ${theme.platform}, ${theme.accent})`,
               color: theme.background,
               boxShadow: `0 0 40px ${theme.accent}60`,
+              cursor: 'pointer',
+              transition: 'all 0.3s',
             }}
           >
             START
           </button>
           
-          <div className="mt-8 text-white/40 text-sm text-center">
+          <div style={{ marginTop: '2rem', color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem', textAlign: 'center' }}>
             <p>WASD / Arrow Keys to move</p>
             <p>Space to jump • R to restart</p>
           </div>
           
           {/* Mobile touch hint */}
-          <div className="absolute bottom-6 left-0 right-0 text-center text-white/30 text-xs">
+          <div style={{ position: 'absolute', bottom: '1.5rem', left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '0.75rem' }}>
             Touch controls on mobile
           </div>
         </div>
-      </Html>
+      </FullscreenOverlay>
     );
   }
   
   // Game Over Screen
   if (snap.phase === 'gameover') {
     return (
-      <Html fullscreen>
-        <div 
-          className="fixed inset-0 flex flex-col items-center justify-center"
-          style={{ 
+      <FullscreenOverlay>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
             background: 'rgba(0, 0, 0, 0.9)',
             fontFamily: '"Geist", system-ui, sans-serif',
+            overflow: 'hidden',
+            textAlign: 'center',
           }}
         >
           <h1 
-            className="text-5xl md:text-7xl font-bold mb-4"
-            style={{ color: theme.crumble, textShadow: `0 0 40px ${theme.crumble}80` }}
+            style={{ 
+              fontSize: 'clamp(2.5rem, 10vw, 5rem)',
+              fontWeight: 700,
+              marginBottom: '1rem',
+              color: theme.crumble, 
+              textShadow: `0 0 40px ${theme.crumble}80` 
+            }}
           >
             GAME OVER
           </h1>
           
-          <div className="flex flex-col items-center gap-4 mb-8">
-            <div className="text-white/60 text-lg">Score</div>
-            <div className="text-5xl font-bold text-white">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '1.125rem' }}>Score</div>
+            <div style={{ fontSize: '3rem', fontWeight: 700, color: '#fff' }}>
               {snap.score.toLocaleString()}
             </div>
             
-            <div className="text-white/40 text-sm">
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>
               Distance: {snap.distance}m • Coins: {snap.coins}
             </div>
             
             {snap.score >= snap.highScore && snap.score > 0 && (
-              <div style={{ color: theme.boost }} className="text-sm animate-pulse">
+              <div style={{ color: theme.boost, fontSize: '0.875rem' }}>
                 NEW HIGH SCORE!
               </div>
             )}
@@ -1093,11 +1171,17 @@ const GameUI: React.FC = () => {
               gravityRushState.reset();
               gravityRushState.startGame();
             }}
-            className="px-10 py-3 text-xl font-bold rounded-xl transition-all duration-300 hover:scale-105"
             style={{
+              padding: '0.75rem 2.5rem',
+              fontSize: '1.25rem',
+              fontWeight: 700,
+              borderRadius: '12px',
+              border: 'none',
               background: `linear-gradient(135deg, ${theme.platform}, ${theme.accent})`,
               color: theme.background,
               boxShadow: `0 0 30px ${theme.accent}50`,
+              cursor: 'pointer',
+              transition: 'all 0.3s',
             }}
           >
             PLAY AGAIN
@@ -1105,74 +1189,87 @@ const GameUI: React.FC = () => {
           
           <button
             onClick={() => gravityRushState.reset()}
-            className="mt-4 text-white/40 hover:text-white/60 transition-colors"
+            style={{
+              marginTop: '1rem',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer',
+            }}
           >
             Back to Menu
           </button>
         </div>
-      </Html>
+      </FullscreenOverlay>
     );
   }
   
   // In-Game HUD
   return (
-    <Html fullscreen>
+    <FullscreenOverlay>
       <div 
-        className="fixed inset-0 pointer-events-none"
-        style={{ fontFamily: '"Geist Mono", monospace' }}
+        style={{ 
+          position: 'fixed',
+          inset: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          fontFamily: '"Geist Mono", monospace',
+          padding: 'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+        }}
       >
         {/* Score & Distance */}
-        <div className="absolute top-6 left-6">
-          <div className="text-white/40 text-xs uppercase tracking-widest mb-1">Score</div>
-          <div className="text-3xl font-bold text-white">{snap.score.toLocaleString()}</div>
-          <div style={{ color: theme.accent }} className="text-sm mt-2">
+        <div style={{ position: 'absolute', top: '1.5rem', left: '1.5rem' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>Score</div>
+          <div style={{ fontSize: '1.875rem', fontWeight: 700, color: '#fff' }}>{snap.score.toLocaleString()}</div>
+          <div style={{ color: theme.accent, fontSize: '0.875rem', marginTop: '0.5rem' }}>
             {snap.distance}m
           </div>
           {snap.comboMultiplier > 1 && (
-            <div style={{ color: theme.boost }} className="text-sm">
+            <div style={{ color: theme.boost, fontSize: '0.875rem' }}>
               x{snap.comboMultiplier.toFixed(1)} combo
             </div>
           )}
         </div>
         
         {/* Theme indicator */}
-        <div className="absolute top-6 right-6 text-right">
-          <div className="text-white/40 text-xs uppercase tracking-widest mb-1">World</div>
-          <div className="text-lg font-bold" style={{ color: theme.platform }}>
+        <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', textAlign: 'right' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>World</div>
+          <div style={{ fontSize: '1.125rem', fontWeight: 700, color: theme.platform }}>
             {THEMES[snap.currentTheme].name}
           </div>
         </div>
         
         {/* Active power-ups */}
-        <div className="absolute top-20 right-6 flex flex-col gap-2">
+        <div style={{ position: 'absolute', top: '5rem', right: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {snap.hasShield && (
-            <div className="px-3 py-1 rounded-full text-xs" style={{ background: '#00ff8840', color: '#00ff88' }}>
+            <div style={{ padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', background: '#00ff8840', color: '#00ff88' }}>
               Shield {Math.ceil(snap.shieldTimer)}s
             </div>
           )}
           {snap.hasSpeedBoost && (
-            <div className="px-3 py-1 rounded-full text-xs" style={{ background: '#ff880040', color: '#ff8800' }}>
+            <div style={{ padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', background: '#ff880040', color: '#ff8800' }}>
               Speed {Math.ceil(snap.speedBoostTimer)}s
             </div>
           )}
           {snap.hasDoublePoints && (
-            <div className="px-3 py-1 rounded-full text-xs" style={{ background: '#ffff0040', color: '#ffff00' }}>
+            <div style={{ padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', background: '#ffff0040', color: '#ffff00' }}>
               2x Points {Math.ceil(snap.doublePointsTimer)}s
             </div>
           )}
         </div>
         
         {/* Mobile touch controls */}
-        <div className="absolute bottom-0 left-0 right-0 h-1/3 flex pointer-events-auto md:hidden">
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: '33.333%', display: 'flex', pointerEvents: 'auto' }}>
           <div 
-            className="flex-1 flex"
+            style={{ flex: 1, display: 'flex' }}
             onTouchStart={() => gravityRushState.controls.left = true}
             onTouchEnd={() => gravityRushState.controls.left = false}
           >
-            <div className="m-auto text-white/20 text-4xl">◀</div>
+            <div style={{ margin: 'auto', color: 'rgba(255,255,255,0.2)', fontSize: '2.25rem' }}>◀</div>
           </div>
           <div 
-            className="flex-1 flex"
+            style={{ flex: 1, display: 'flex' }}
             onTouchStart={() => {
               gravityRushState.controls.forward = true;
               gravityRushState.controls.jump = true;
@@ -1181,18 +1278,18 @@ const GameUI: React.FC = () => {
               gravityRushState.controls.forward = false;
             }}
           >
-            <div className="m-auto text-white/20 text-4xl">▲</div>
+            <div style={{ margin: 'auto', color: 'rgba(255,255,255,0.2)', fontSize: '2.25rem' }}>▲</div>
           </div>
           <div 
-            className="flex-1 flex"
+            style={{ flex: 1, display: 'flex' }}
             onTouchStart={() => gravityRushState.controls.right = true}
             onTouchEnd={() => gravityRushState.controls.right = false}
           >
-            <div className="m-auto text-white/20 text-4xl">▶</div>
+            <div style={{ margin: 'auto', color: 'rgba(255,255,255,0.2)', fontSize: '2.25rem' }}>▶</div>
           </div>
         </div>
       </div>
-    </Html>
+    </FullscreenOverlay>
   );
 };
 
@@ -1205,8 +1302,10 @@ const CameraSetup: React.FC = () => {
   
   useEffect(() => {
     // Set initial camera position for menu view
-    camera.position.set(0, 5, 12);
-    camera.lookAt(0, 0, -5);
+    camera.position.set(CAMERA_SHIFT_X, CAMERA_SHIFT_Y, CAMERA_SHIFT_Z);
+    camera.lookAt(0, 0, 0);
+    camera.fov = 50;
+    camera.updateProjectionMatrix();
   }, [camera]);
   
   return null;
@@ -1223,7 +1322,16 @@ interface GravityRushProps {
 const GravityRush: React.FC<GravityRushProps> = ({ soundsOn = true }) => {
   const snap = useSnapshot(gravityRushState);
   const theme = THEMES[snap.currentTheme];
+  const { scene } = useThree();
   const [currentChunk, setCurrentChunk] = useState(0);
+
+  useEffect(() => {
+    const prevBackground = scene.background;
+    scene.background = new THREE.Color(theme.background);
+    return () => {
+      scene.background = prevBackground;
+    };
+  }, [scene, theme.background]);
   
   // Handle chunk updates from player
   const handleChunkUpdate = useCallback((chunk: number) => {

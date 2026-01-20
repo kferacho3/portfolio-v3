@@ -4,9 +4,9 @@
 // Created for Racho's Arcade
 'use client';
 
-import { Html, Trail } from '@react-three/drei';
+import { Html, OrthographicCamera, Trail } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 
@@ -53,6 +53,54 @@ const POWERUP_DURATION = 5;
 const CAMERA_OFFSET_X = 19.05;
 const CAMERA_OFFSET_Y = 12;
 const CAMERA_OFFSET_Z = 15;
+const CAMERA_ZOOM_MOBILE = 40;
+const CAMERA_ZOOM_DESKTOP = 72;
+const CAMERA_FAR = 60;
+const PATH_EDGE_COLOR = '#0b0414';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI OVERLAY (DOM via drei <Html>, safe in R3F)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const FullscreenOverlay: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
+
+  return (
+    <Html fullscreen portal={document.body} zIndexRange={[1000, 0]} style={{ width: '100%', height: '100%' }}>
+      {children}
+    </Html>
+  );
+};
+
+const ApexCamera: React.FC = () => {
+  const { size } = useThree();
+  const cameraRef = useRef<THREE.OrthographicCamera>(null);
+  const zoom = size.width < 768 ? CAMERA_ZOOM_MOBILE : CAMERA_ZOOM_DESKTOP;
+
+  useEffect(() => {
+    if (!cameraRef.current) return;
+    cameraRef.current.zoom = zoom;
+    cameraRef.current.far = CAMERA_FAR;
+    cameraRef.current.updateProjectionMatrix();
+  }, [zoom]);
+
+  return (
+    <OrthographicCamera
+      makeDefault
+      ref={cameraRef}
+      zoom={zoom}
+      near={0.1}
+      far={CAMERA_FAR}
+      position={[-CAMERA_OFFSET_X, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z]}
+    />
+  );
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // THEME DEFINITIONS
@@ -536,18 +584,12 @@ const Sphere: React.FC = () => {
     rotationRef.current.z -= mutation.currentDirection.x * rotSpeed;
     mesh.rotation.copy(rotationRef.current);
     
-    // Camera follow - smooth tracking of sphere position
-    if (!mutation.gameOver) {
-      // Camera follows the sphere diagonally in isometric view
-      camera.position.x = mutation.spherePos.x - CAMERA_OFFSET_X;
-      camera.position.y = CAMERA_OFFSET_Y;
-      camera.position.z = mutation.spherePos.z + CAMERA_OFFSET_Z;
-      // Look at a point slightly ahead of the sphere
-      camera.lookAt(
-        mutation.spherePos.x - (CAMERA_OFFSET_X - CAMERA_OFFSET_Z),
-        0,
-        mutation.spherePos.z
-      );
+    // Camera follow (isometric, matching original ZigZag exactly)
+    // Only update camera if sphere hasn't fallen too far
+    if (mutation.spherePos.y > REMOVAL_Y) {
+      const movementAverage = (mutation.spherePos.x - mutation.spherePos.z) / 2;
+      camera.position.x = -CAMERA_OFFSET_X + movementAverage;
+      camera.position.z = CAMERA_OFFSET_Z - movementAverage;
     }
   });
   
@@ -582,6 +624,43 @@ const TileSystem: React.FC = () => {
   const snap = useSnapshot(apexState);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const clockRef = useRef(0);
+  const theme = THEMES[snap.currentTheme];
+
+  const tileGeometry = useMemo(
+    () => new THREE.BoxGeometry(TILE_SIZE, TILE_DEPTH, TILE_SIZE),
+    []
+  );
+  const sideMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: PATH_EDGE_COLOR,
+        emissive: PATH_EDGE_COLOR,
+        emissiveIntensity: 0.08,
+        metalness: 0.3,
+        roughness: 0.85,
+      }),
+    []
+  );
+  const topMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: theme.tileHex,
+        emissive: theme.tileHex,
+        emissiveIntensity: 0.45,
+        metalness: 0.6,
+        roughness: 0.4,
+      }),
+    []
+  );
+  const tileMaterials = useMemo(
+    () => [sideMaterial, sideMaterial, topMaterial, sideMaterial, sideMaterial, sideMaterial],
+    [sideMaterial, topMaterial]
+  );
+
+  useEffect(() => {
+    topMaterial.color.set(theme.tileHex);
+    topMaterial.emissive.set(theme.tileHex);
+  }, [theme.tileHex, topMaterial]);
   
   const initializeLevel = useCallback(() => {
     mutation.tiles = [];
@@ -605,7 +684,7 @@ const TileSystem: React.FC = () => {
     mutation.isOnPlatform = true;
     mutation.gameOver = false;
     
-    // Create starting platform (8x8 like original ZigZag)
+    // Create starting platform
     const halfWidth = Math.floor(PLATFORM_WIDTH / 2);
     const tileY = -TILE_DEPTH / 2;
     
@@ -682,92 +761,104 @@ const TileSystem: React.FC = () => {
   
   // Initialize on game start
   useEffect(() => {
-    if (snap.phase === 'playing' && !mutation.initialized) {
+    // Initialize a preview path in the menu too, so the maze is visible before starting.
+    if ((snap.phase === 'playing' || snap.phase === 'menu') && !mutation.initialized) {
       initializeLevel();
     }
   }, [snap.phase, initializeLevel]);
+
+  // If the player changes mode on the menu, refresh the preview.
+  useEffect(() => {
+    if (snap.phase === 'menu') {
+      initializeLevel();
+    }
+  }, [snap.mode, snap.phase, initializeLevel]);
   
   useFrame((_, delta) => {
-    if (!meshRef.current || snap.phase !== 'playing') return;
+    if (!meshRef.current) return;
     if (!mutation.initialized) return;
     
     clockRef.current += delta;
-    const spherePos = mutation.spherePos;
-    const halfTile = TILE_SIZE / 2;
-    
-    // Generate new tiles
-    while (spherePos.distanceTo(mutation.lastTilePos) < LOOKAHEAD_DISTANCE) {
-      addNewTile(snap.mode);
-    }
-    
-    // Collision detection - check if sphere is on any active tile
-    mutation.isOnPlatform = false;
-    let currentTileId: number | null = null;
-    
-    for (const tile of mutation.tiles) {
-      if (tile.status !== 'active') continue;
+
+    // Only run gameplay simulation while playing.
+    if (snap.phase === 'playing') {
+      const spherePos = mutation.spherePos;
+      const halfTile = TILE_SIZE / 2;
       
-      // Check collision (matching original ZigZag logic)
-      if (
-        spherePos.x >= tile.x - halfTile &&
-        spherePos.x <= tile.x + halfTile &&
-        spherePos.z >= tile.z - halfTile &&
-        spherePos.z <= tile.z + halfTile &&
-        spherePos.y >= tile.y - SPHERE_RADIUS &&
-        spherePos.y <= tile.y + TILE_DEPTH + SPHERE_RADIUS // Changed < to <=
-      ) {
-        mutation.isOnPlatform = true;
-        currentTileId = tile.id;
-        tile.lastContactTime = clockRef.current;
-        break;
+      // Generate new tiles
+      while (spherePos.distanceTo(mutation.lastTilePos) < LOOKAHEAD_DISTANCE) {
+        addNewTile(snap.mode);
       }
-    }
-    
-    // Process tile falling
-    const tilesToRemove: number[] = [];
-    let platformShouldFall = false;
-    
-    for (const tile of mutation.tiles) {
-      if (tile.status === 'active') {
-        // Check if tile should start falling
+      
+      // Collision detection - check if sphere is on any active tile
+      mutation.isOnPlatform = false;
+      let currentTileId: number | null = null;
+      
+      for (const tile of mutation.tiles) {
+        if (tile.status !== 'active') continue;
+        
+        // Check collision (matching original ZigZag logic)
         if (
-          tile.lastContactTime > 0 &&
-          tile.id !== currentTileId &&
-          clockRef.current - tile.lastContactTime > FALL_DELAY &&
-          tile.id >= PLATFORM_TILE_COUNT
+          spherePos.x >= tile.x - halfTile &&
+          spherePos.x <= tile.x + halfTile &&
+          spherePos.z >= tile.z - halfTile &&
+          spherePos.z <= tile.z + halfTile &&
+          spherePos.y >= tile.y - SPHERE_RADIUS &&
+          spherePos.y <= tile.y + TILE_DEPTH + SPHERE_RADIUS
         ) {
-          tile.status = 'falling';
-          apexState.addScore(1);
+          mutation.isOnPlatform = true;
+          currentTileId = tile.id;
+          tile.lastContactTime = clockRef.current;
+          break;
+        }
+      }
+      
+      // Process tile falling
+      const tilesToRemove: number[] = [];
+      let platformShouldFall = false;
+      
+      for (const tile of mutation.tiles) {
+        if (tile.status === 'active') {
+          // Check if tile should start falling
+          if (
+            tile.lastContactTime > 0 &&
+            tile.id !== currentTileId &&
+            clockRef.current - tile.lastContactTime > FALL_DELAY &&
+            tile.id >= PLATFORM_TILE_COUNT
+          ) {
+            tile.status = 'falling';
+            apexState.addScore(1);
+            
+            // First path tile triggers platform fall
+            if (tile.id === PLATFORM_TILE_COUNT) {
+              platformShouldFall = true;
+            }
+          }
+        } else if (tile.status === 'falling') {
+          tile.fallVelocity += GRAVITY * delta * 0.5;
+          tile.y -= tile.fallVelocity * delta;
           
-          // First path tile triggers platform fall
-          if (tile.id === PLATFORM_TILE_COUNT) {
-            platformShouldFall = true;
+          if (tile.y < REMOVAL_Y) {
+            tilesToRemove.push(tile.id);
           }
         }
-      } else if (tile.status === 'falling') {
-        tile.fallVelocity += GRAVITY * delta * 0.5;
-        tile.y -= tile.fallVelocity * delta;
-        
-        if (tile.y < REMOVAL_Y) {
-          tilesToRemove.push(tile.id);
+      }
+      
+      // Make platform fall together
+      if (platformShouldFall) {
+        for (const tile of mutation.tiles) {
+          if (tile.id < PLATFORM_TILE_COUNT && tile.status === 'active') {
+            tile.status = 'falling';
+          }
         }
       }
-    }
-    
-    // Make platform fall together
-    if (platformShouldFall) {
-      for (const tile of mutation.tiles) {
-        if (tile.id < PLATFORM_TILE_COUNT && tile.status === 'active') {
-          tile.status = 'falling';
-        }
+      
+      // Remove fallen tiles
+      if (tilesToRemove.length > 0) {
+        mutation.tiles = mutation.tiles.filter(t => !tilesToRemove.includes(t.id));
+        mutation.gems = mutation.gems.filter(g => !tilesToRemove.includes(g.tileId));
+        mutation.powerUps = mutation.powerUps.filter(p => !tilesToRemove.includes(p.tileId));
       }
-    }
-    
-    // Remove fallen tiles
-    if (tilesToRemove.length > 0) {
-      mutation.tiles = mutation.tiles.filter(t => !tilesToRemove.includes(t.id));
-      mutation.gems = mutation.gems.filter(g => !tilesToRemove.includes(g.tileId));
-      mutation.powerUps = mutation.powerUps.filter(p => !tilesToRemove.includes(p.tileId));
     }
     
     // Update instance matrices
@@ -788,17 +879,14 @@ const TileSystem: React.FC = () => {
     meshRef.current.instanceMatrix.needsUpdate = true;
   });
   
-  const theme = THEMES[snap.currentTheme];
-  
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, MAX_TILES]} frustumCulled={false}>
-      <boxGeometry args={[TILE_SIZE, TILE_DEPTH, TILE_SIZE]} />
-      <meshStandardMaterial 
-        color={theme.tileHex}
-        emissive={theme.tileHex}
-        emissiveIntensity={0.3}
-      />
-    </instancedMesh>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, MAX_TILES]}
+      geometry={tileGeometry}
+      material={tileMaterials}
+      frustumCulled={false}
+    />
   );
 };
 
@@ -909,8 +997,6 @@ const GemSystem: React.FC = () => {
 
 const Ground: React.FC = () => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const snap = useSnapshot(apexState);
-  const theme = THEMES[snap.currentTheme];
   
   useFrame(() => {
     if (!meshRef.current) return;
@@ -921,7 +1007,7 @@ const Ground: React.FC = () => {
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -15, 0]}>
       <planeGeometry args={[500, 500]} />
-      <meshBasicMaterial color={theme.bg} />
+      <meshBasicMaterial color={PATH_EDGE_COLOR} />
     </mesh>
   );
 };
@@ -939,6 +1025,10 @@ const InputHandler: React.FC = () => {
         (e.type === 'keydown' && ['Space', 'Enter', 'ArrowUp', 'ArrowDown'].includes((e as KeyboardEvent).code));
       
       if (isAction) {
+        if (e.type === 'keydown') {
+          // Prevent page scroll / focus movement while playing Apex
+          (e as KeyboardEvent).preventDefault();
+        }
         if (snap.phase === 'playing' && mutation.isOnPlatform && !mutation.gameOver) {
           // Toggle direction
           mutation.directionIndex = (mutation.directionIndex + 1) % DIRECTIONS.length;
@@ -1005,17 +1095,33 @@ const GameUI: React.FC = () => {
   // Menu Screen
   if (snap.phase === 'menu') {
     return (
-      <Html fullscreen>
+      <FullscreenOverlay>
         <div
-          className="fixed inset-0 flex flex-col items-center justify-center"
           style={{
-            background: 'linear-gradient(180deg, #0a0a15 0%, #1a1a2e 50%, #0f0f1a 100%)',
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding:
+              'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+            // Keep the maze visible behind the menu
+            background:
+              'linear-gradient(180deg, rgba(10,10,21,0.45) 0%, rgba(26,26,46,0.55) 50%, rgba(15,15,26,0.45) 100%)',
             fontFamily: '"Geist", system-ui, sans-serif',
+            overflow: 'hidden',
+            textAlign: 'center',
           }}
         >
           <h1
-            className="text-8xl md:text-9xl font-black mb-2 tracking-tighter"
             style={{
+              fontSize: 'clamp(4rem, 12vw, 8rem)',
+              fontWeight: 900,
+              marginBottom: '0.5rem',
+              letterSpacing: '-0.05em',
               background: 'linear-gradient(135deg, #00ffff, #ff00ff, #00ffff)',
               backgroundSize: '200% 200%',
               backgroundClip: 'text',
@@ -1028,11 +1134,22 @@ const GameUI: React.FC = () => {
             APEX
           </h1>
           
-          <p className="text-white/50 text-lg mb-8 tracking-widest uppercase">
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1.1rem', marginBottom: '2rem', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             Tap to Turn. Stay on the Path.
           </p>
           
-          <div className="grid grid-cols-3 gap-3 mb-8 max-w-2xl px-4">
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '12px',
+              marginBottom: '2rem',
+              width: 'min(92vw, 760px)',
+              maxHeight: 'min(52vh, 520px)',
+              overflowY: 'auto',
+              padding: '0 0.5rem',
+            }}
+          >
             {(Object.keys(MODE_INFO) as GameMode[]).map((mode) => {
               const info = MODE_INFO[mode];
               const isSelected = snap.mode === mode;
@@ -1042,40 +1159,46 @@ const GameUI: React.FC = () => {
                 <button
                   key={mode}
                   onClick={() => apexState.setMode(mode)}
-                  className={`relative p-4 rounded-xl border-2 transition-all duration-300 ${
-                    isSelected
-                      ? 'border-white/60 bg-white/10 scale-105'
-                      : 'border-white/20 bg-white/5 hover:border-white/40'
-                  }`}
+                  style={{
+                    position: 'relative',
+                    padding: '1rem',
+                    borderRadius: '12px',
+                    border: isSelected ? '2px solid rgba(255,255,255,0.6)' : '2px solid rgba(255,255,255,0.2)',
+                    background: isSelected ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
+                    transform: isSelected ? 'scale(1.05)' : 'scale(1)',
+                    transition: 'all 0.3s',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
                 >
-                  <div className="text-lg font-bold mb-1" style={{ color: info.color }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '4px', color: info.color }}>
                     {info.name}
                   </div>
-                  <div className="text-white/50 text-xs mb-2">{info.description}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.75rem', marginBottom: '8px' }}>{info.description}</div>
                   {highScore > 0 && (
-                    <div className="text-white/40 text-xs">Best: {highScore.toLocaleString()}</div>
-                  )}
-                  {isSelected && (
-                    <div
-                      className="absolute inset-0 rounded-xl opacity-20"
-                      style={{ background: `radial-gradient(circle at center, ${info.color}, transparent)` }}
-                    />
+                    <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem' }}>Best: {highScore.toLocaleString()}</div>
                   )}
                 </button>
               );
             })}
           </div>
           
-          <div className="flex gap-3 mb-8">
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px', marginBottom: '2rem' }}>
             {(['easy', 'normal', 'hard'] as const).map((d) => (
               <button
                 key={d}
                 onClick={() => apexState.setDifficulty(d)}
-                className={`px-5 py-2 rounded-lg border transition-all ${
-                  snap.difficulty === d
-                    ? 'border-cyan-400 bg-cyan-400/20 text-cyan-400'
-                    : 'border-white/20 text-white/50 hover:border-white/40'
-                }`}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '8px',
+                  border: snap.difficulty === d ? '1px solid #22d3ee' : '1px solid rgba(255,255,255,0.2)',
+                  background: snap.difficulty === d ? 'rgba(34,211,238,0.2)' : 'transparent',
+                  color: snap.difficulty === d ? '#22d3ee' : 'rgba(255,255,255,0.5)',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  textTransform: 'uppercase',
+                  fontWeight: 500,
+                }}
               >
                 {d.toUpperCase()}
               </button>
@@ -1087,17 +1210,23 @@ const GameUI: React.FC = () => {
               apexState.reset();
               apexState.startGame();
             }}
-            className="px-16 py-5 text-2xl font-bold rounded-2xl transition-all duration-300 hover:scale-105 active:scale-95"
             style={{
+              padding: '1.25rem 4rem',
+              fontSize: '1.5rem',
+              fontWeight: 700,
+              borderRadius: '1rem',
+              border: 'none',
               background: `linear-gradient(135deg, ${MODE_INFO[snap.mode].color}, #ff00ff)`,
               color: '#000',
               boxShadow: `0 0 60px ${MODE_INFO[snap.mode].color}40`,
+              cursor: 'pointer',
+              transition: 'all 0.3s',
             }}
           >
             START GAME
           </button>
           
-          <div className="mt-10 text-white/30 text-sm text-center">
+          <div style={{ marginTop: '2.5rem', color: 'rgba(255,255,255,0.3)', fontSize: '0.875rem', textAlign: 'center' }}>
             <p>Tap / Space / Click to change direction</p>
           </div>
           
@@ -1109,7 +1238,7 @@ const GameUI: React.FC = () => {
             }
           `}</style>
         </div>
-      </Html>
+      </FullscreenOverlay>
     );
   }
   
@@ -1118,40 +1247,56 @@ const GameUI: React.FC = () => {
     const isNewHighScore = snap.score >= snap.highScores[snap.mode] && snap.score > 0;
     
     return (
-      <Html fullscreen>
+      <FullscreenOverlay>
         <div
-          className="fixed inset-0 flex flex-col items-center justify-center"
           style={{
-            background: 'rgba(10, 10, 21, 0.95)',
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding:
+              'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+            background: 'rgba(10, 10, 21, 0.75)',
             fontFamily: '"Geist", system-ui, sans-serif',
+            overflow: 'hidden',
+            textAlign: 'center',
           }}
         >
           <h1
-            className="text-6xl md:text-7xl font-black mb-6"
-            style={{ color: '#ff2190', textShadow: '0 0 40px rgba(255, 33, 144, 0.6)' }}
+            style={{
+              fontSize: 'clamp(3rem, 10vw, 5rem)',
+              fontWeight: 900,
+              marginBottom: '1.5rem',
+              color: '#ff2190',
+              textShadow: '0 0 40px rgba(255, 33, 144, 0.6)',
+            }}
           >
             GAME OVER
           </h1>
           
           {isNewHighScore && (
-            <div className="text-cyan-400 text-xl mb-4 animate-pulse">NEW HIGH SCORE!</div>
+            <div style={{ color: '#22d3ee', fontSize: '1.25rem', marginBottom: '1rem', animation: 'pulse 2s infinite' }}>NEW HIGH SCORE!</div>
           )}
           
-          <div className="text-6xl font-bold text-white mb-2">{snap.score.toLocaleString()}</div>
-          <div className="text-white/40 mb-8">{MODE_INFO[snap.mode].name} Mode</div>
+          <div style={{ fontSize: '3.5rem', fontWeight: 700, color: '#fff', marginBottom: '0.5rem' }}>{snap.score.toLocaleString()}</div>
+          <div style={{ color: 'rgba(255,255,255,0.4)', marginBottom: '2rem' }}>{MODE_INFO[snap.mode].name} Mode</div>
           
-          <div className="flex gap-8 mb-8 text-center">
+          <div style={{ display: 'flex', gap: '3rem', marginBottom: '2rem', textAlign: 'center' }}>
             <div>
-              <div className="text-white/40 text-sm">Gems</div>
-              <div className="text-2xl text-white">{snap.gems}</div>
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>Gems</div>
+              <div style={{ fontSize: '1.5rem', color: '#fff' }}>{snap.gems}</div>
             </div>
             <div>
-              <div className="text-white/40 text-sm">Level</div>
-              <div className="text-2xl text-white">{snap.level}</div>
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>Level</div>
+              <div style={{ fontSize: '1.5rem', color: '#fff' }}>{snap.level}</div>
             </div>
             <div>
-              <div className="text-white/40 text-sm">Best Combo</div>
-              <div className="text-2xl text-white">x{snap.bestCombo}</div>
+              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>Best Combo</div>
+              <div style={{ fontSize: '1.5rem', color: '#fff' }}>x{snap.bestCombo}</div>
             </div>
           </div>
           
@@ -1160,17 +1305,43 @@ const GameUI: React.FC = () => {
               apexState.reset();
               apexState.startGame();
             }}
-            className="px-12 py-4 text-xl font-bold rounded-xl transition-all hover:scale-105"
-            style={{ background: 'linear-gradient(135deg, #00ffff, #ff00ff)', color: '#000' }}
+            style={{
+              padding: '1rem 3rem',
+              fontSize: '1.25rem',
+              fontWeight: 700,
+              borderRadius: '12px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #00ffff, #ff00ff)',
+              color: '#000',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
           >
             PLAY AGAIN
           </button>
           
-          <button onClick={() => apexState.reset()} className="mt-4 text-white/40 hover:text-white/60 transition-colors">
+          <button
+            onClick={() => apexState.reset()}
+            style={{
+              marginTop: '1rem',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer',
+              transition: 'color 0.2s',
+            }}
+          >
             Back to Menu
           </button>
+          
+          <style>{`
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.5; }
+            }
+          `}</style>
         </div>
-      </Html>
+      </FullscreenOverlay>
     );
   }
   
@@ -1178,18 +1349,21 @@ const GameUI: React.FC = () => {
   const theme = THEMES[snap.currentTheme];
   
   return (
-    <Html fullscreen>
-      <div className="fixed inset-0 pointer-events-none" style={{ fontFamily: '"Geist Mono", monospace' }}>
-        <div className="absolute top-6 left-6">
-          <div className="text-white/40 text-xs uppercase tracking-widest mb-1">Score</div>
-          <div className="text-4xl font-bold text-white">{snap.score.toLocaleString()}</div>
+    <FullscreenOverlay>
+      <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', fontFamily: '"Geist Mono", monospace' }}>
+        <div style={{ position: 'absolute', top: '1.5rem', left: '1.5rem' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>Score</div>
+          <div style={{ fontSize: '2.25rem', fontWeight: 700, color: '#fff' }}>{snap.score.toLocaleString()}</div>
         </div>
         
         {snap.combo > 1 && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2">
+          <div style={{ position: 'absolute', top: '1.5rem', left: '50%', transform: 'translateX(-50%)' }}>
             <div
-              className="px-4 py-2 rounded-full text-xl font-bold"
               style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '9999px',
+                fontSize: '1.25rem',
+                fontWeight: 700,
                 background: snap.comboMultiplier >= 3 ? 'linear-gradient(135deg, #f39c12, #e74c3c)' :
                            snap.comboMultiplier >= 2 ? 'linear-gradient(135deg, #6c5ce7, #fd79a8)' :
                            'linear-gradient(135deg, #00ffff, #0088ff)',
@@ -1201,26 +1375,32 @@ const GameUI: React.FC = () => {
           </div>
         )}
         
-        <div className="absolute top-6 right-6 text-right">
-          <div className="text-white/40 text-xs uppercase tracking-widest mb-1">Level</div>
-          <div className="text-2xl font-bold" style={{ color: theme.accent }}>{snap.level}</div>
-          <div className="text-white/60 text-sm mt-2">{snap.gems} gems</div>
+        <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', textAlign: 'right' }}>
+          <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '4px' }}>Level</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: theme.accent }}>{snap.level}</div>
+          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.875rem', marginTop: '0.5rem' }}>{snap.gems} gems</div>
         </div>
         
         {snap.powerUp !== 'none' && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+          <div style={{ position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)' }}>
             <div
-              className="px-4 py-2 rounded-full flex items-center gap-2"
               style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '9999px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
                 background: snap.powerUp === 'shield' ? '#00ff8840' : snap.powerUp === 'magnet' ? '#ff00ff40' : '#ffcc0040',
                 border: `2px solid ${snap.powerUp === 'shield' ? '#00ff88' : snap.powerUp === 'magnet' ? '#ff00ff' : '#ffcc00'}`,
               }}
             >
-              <span className="text-white font-bold uppercase">{snap.powerUp}</span>
-              <div className="w-16 h-2 rounded-full bg-white/20 overflow-hidden">
+              <span style={{ color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>{snap.powerUp}</span>
+              <div style={{ width: '4rem', height: '0.5rem', borderRadius: '9999px', background: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}>
                 <div
-                  className="h-full rounded-full transition-all duration-100"
                   style={{
+                    height: '100%',
+                    borderRadius: '9999px',
+                    transition: 'all 0.1s',
                     width: `${(snap.powerUpTimer / POWERUP_DURATION) * 100}%`,
                     background: snap.powerUp === 'shield' ? '#00ff88' : snap.powerUp === 'magnet' ? '#ff00ff' : '#ffcc00',
                   }}
@@ -1230,10 +1410,14 @@ const GameUI: React.FC = () => {
           </div>
         )}
         
-        <div className="absolute bottom-6 left-6">
+        <div style={{ position: 'absolute', bottom: '1.5rem', left: '1.5rem' }}>
           <div
-            className="px-3 py-1 rounded-full text-xs uppercase tracking-wider"
             style={{
+              padding: '0.25rem 0.75rem',
+              borderRadius: '9999px',
+              fontSize: '0.75rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
               background: `${MODE_INFO[snap.mode].color}20`,
               border: `1px solid ${MODE_INFO[snap.mode].color}40`,
               color: MODE_INFO[snap.mode].color,
@@ -1243,7 +1427,7 @@ const GameUI: React.FC = () => {
           </div>
         </div>
       </div>
-    </Html>
+    </FullscreenOverlay>
   );
 };
 
@@ -1258,17 +1442,47 @@ interface ApexProps {
 const Apex: React.FC<ApexProps> = ({ soundsOn = true }) => {
   const snap = useSnapshot(apexState);
   const { scene, camera } = useThree();
+  const lookAtRef = useRef(
+    new THREE.Vector3(-(CAMERA_OFFSET_X - CAMERA_OFFSET_Z), 0, 0)
+  );
   
-  useEffect(() => {
-    const theme = THEMES[snap.currentTheme];
-    scene.background = new THREE.Color(theme.bg);
-  }, [snap.currentTheme, scene]);
-  
-  useEffect(() => {
-    // Initial camera position (sphere starts at origin)
-    camera.position.set(-CAMERA_OFFSET_X, CAMERA_OFFSET_Y, CAMERA_OFFSET_Z);
-    camera.lookAt(-(CAMERA_OFFSET_X - CAMERA_OFFSET_Z), 0, 0);
+  // Camera setup matching original ZigZag exactly
+  const setupCamera = useCallback(() => {
+    const spherePos = mutation.spherePos;
+    camera.position.set(
+      spherePos.x - CAMERA_OFFSET_X,
+      spherePos.y + CAMERA_OFFSET_Y,
+      spherePos.z + CAMERA_OFFSET_Z
+    );
+    camera.lookAt(lookAtRef.current);
   }, [camera]);
+  
+  useEffect(() => {
+    const prevBackground = scene.background;
+    scene.background = new THREE.Color(PATH_EDGE_COLOR);
+    return () => {
+      scene.background = prevBackground;
+    };
+  }, [scene]);
+  
+  // Initial camera setup
+  useEffect(() => {
+    setupCamera();
+  }, [setupCamera]);
+  
+  // Reset camera when game starts or returns to menu
+  useEffect(() => {
+    if (snap.phase === 'playing' || snap.phase === 'menu') {
+      // Small delay to ensure mutation.spherePos is reset
+      setTimeout(() => setupCamera(), 0);
+    }
+  }, [snap.phase, setupCamera]);
+
+  useEffect(() => {
+    if (snap.phase === 'menu') {
+      setTimeout(() => setupCamera(), 0);
+    }
+  }, [snap.mode, snap.phase, setupCamera]);
   
   useEffect(() => {
     return () => {
@@ -1279,18 +1493,16 @@ const Apex: React.FC<ApexProps> = ({ soundsOn = true }) => {
   // Lighting matching original ZigZag
   return (
     <>
+      <ApexCamera />
       <ambientLight intensity={2.5} />
       <directionalLight position={[15, 30, 10]} intensity={3.5} castShadow shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <fog attach="fog" args={[THEMES[snap.currentTheme].bg, 30, 80]} />
+      <fog attach="fog" args={[PATH_EDGE_COLOR, 30, 80]} />
       
       <Ground />
-      {snap.phase === 'playing' && (
-        <>
-          <Sphere />
-          <TileSystem />
-          <GemSystem />
-        </>
-      )}
+      {/* Keep the maze visible on the start menu too */}
+      <TileSystem />
+      <GemSystem />
+      <Sphere />
       <InputHandler />
       <GameUI />
     </>

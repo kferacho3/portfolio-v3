@@ -49,8 +49,11 @@ export type SkyBlitzMode = 'UfoMode' | 'RunnerManMode';
 
 /**
  * React Pong game modes
+ * - SoloPaddle: Classic free-form paddle mode
+ * - SoloWalls: Wall bounce mode
+ * - WallMode: Curve Catch 3D - capture and release against opposing wall
  */
-export type ReactPongMode = 'SoloPaddle' | 'SoloWalls';
+export type ReactPongMode = 'SoloPaddle' | 'SoloWalls' | 'WallMode';
 
 /**
  * Shape Shifter grid sizes

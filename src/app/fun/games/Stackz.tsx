@@ -816,6 +816,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
         <planeGeometry args={[30, 30]} />
         <meshStandardMaterial color="#1a1a2e" />
       </mesh>
+      <gridHelper args={[30, 30, '#333333', '#222222']} position={[0, -0.49, 0]} />
 
       {/* Spawn indicator line - follows stack height */}
       <mesh position={[0, stackHeight + SPAWN_OFFSET, -1]} rotation={[0, 0, 0]}>

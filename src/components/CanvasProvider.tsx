@@ -46,7 +46,7 @@ const CanvasProvider: React.FC<CanvasProviderProps> = ({ children }) => {
         gl.shadowMap.enabled = true;
         gl.shadowMap.type = THREE.PCFSoftShadowMap;
       }}
-      className="w-full h-screen"
+      className="r3f-canvas"
       style={{ touchAction: 'none' }}
     >
       <SheetProvider sheet={sheet}>

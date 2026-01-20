@@ -44,8 +44,9 @@ export const ANIMATION_DURATIONS = {
  * Orbit controls settings
  */
 export const ORBIT_SETTINGS = {
-  autoSpeed: 0.6,
+  autoSpeed: 0.25,
   rampDuration: 1.35,
+  oscillationSpeed: 0.6,
 } as const;
 
 /**
@@ -94,8 +95,9 @@ export type ThemeKey = keyof typeof GAME_THEMES;
 
 /**
  * Scene background colors
+ * Note: Most backgrounds are now handled by ArcadeWorldFX based on theme fog colors
  */
 export const SCENE_BACKGROUNDS = {
-  dark: 0x000000,
-  light: 0x1a1a1a,
+  dark: 0x05070f,  // Dark navy, not pure black - matches default fog
+  light: 0x1a1a2e,
 } as const;

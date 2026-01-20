@@ -26,25 +26,55 @@ type GLTFResult = GLTF & {
 
 interface AlienProps extends GroupProps {
   color?: string;
+  emissiveIntensity?: number;
 }
 
-export function Alien({ color = 'red', ...props }: AlienProps) {
-  const { nodes, materials } = useGLTF('/fun/models/alien.glb') as GLTFResult;
+const DEFAULT_ROTATION: [number, number, number] = [0, -Math.PI / 2, 0];
+const TARGET_HEIGHT = 1;
 
-  // Clone and color the material using useMemo for performance optimization
-  const clonedMaterial = useMemo(() => {
+export function Alien({
+  color = 'red',
+  emissiveIntensity = 0.35,
+  rotation,
+  scale,
+  ...props
+}: AlienProps) {
+  const { nodes, materials } = useGLTF('/fun/models/alien.glb') as GLTFResult;
+  const geometry = nodes.Object_2.geometry;
+
+  const baseScale = useMemo(() => {
+    geometry.computeBoundingBox();
+    const size = new THREE.Vector3();
+    geometry.boundingBox?.getSize(size);
+    const height = size.y || 1;
+    return TARGET_HEIGHT / height;
+  }, [geometry]);
+
+  const resolvedScale = useMemo(() => {
+    if (scale == null) return baseScale;
+    if (typeof scale === 'number') return scale * baseScale;
+    if (Array.isArray(scale)) {
+      return [scale[0] * baseScale, scale[1] * baseScale, scale[2] * baseScale] as [number, number, number];
+    }
+    if (scale instanceof THREE.Vector3) {
+      return scale.clone().multiplyScalar(baseScale);
+    }
+    return baseScale;
+  }, [scale, baseScale]);
+
+  // Clone and color the material
+  const coloredMaterial = useMemo(() => {
     const mat = materials['Scene_-_Root'].clone() as THREE.MeshStandardMaterial;
     mat.color.set(color);
+    mat.emissive.set(color);
+    mat.emissiveIntensity = emissiveIntensity;
+    mat.needsUpdate = true;
     return mat;
-  }, [color, materials]);
+  }, [color, emissiveIntensity, materials]);
 
   return (
-    <group {...props} dispose={null} scale={0.4}>
-      <mesh
-        geometry={nodes.Object_2.geometry}
-        material={clonedMaterial}
-        rotation={[0, Math.PI / 2, 0]}
-      />
+    <group {...props} rotation={rotation ?? DEFAULT_ROTATION} scale={resolvedScale} dispose={null}>
+      <mesh geometry={geometry} material={coloredMaterial} />
     </group>
   );
 }

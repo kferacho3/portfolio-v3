@@ -8,6 +8,13 @@ export interface Project {
   link: string;
   description: string;
   highlights?: string[];
+  featureTabs?: Array<{
+    key: string;
+    label: string;
+    description: string;
+    ctaLabel: string;
+    ctaHref?: string;
+  }>;
   techStack: string[];
   frameworks: string[];
 }
@@ -25,6 +32,36 @@ export const featuredWebsites: Project[] = [
     link: 'https://zomtech.com',
     description:
       'Lead frontend and UI engineering across the product. Built the app shell and component architecture, delivered responsive UX from mobile to desktop, and orchestrated complex API integrations with authenticated workflows and synchronized state.',
+    featureTabs: [
+      {
+        key: 'planning',
+        label: 'Proactive Planning',
+        description:
+          "Zom continuously monitors client situations and surfaces routine check-ins and tax-aware opportunities before they're missed.",
+        ctaLabel: 'Solutions for Planning',
+      },
+      {
+        key: 'meetings',
+        label: 'Live Meetings',
+        description:
+          'Meeting agendas are built automatically from live client context, with CRM updates handled in the background as conversations happen.',
+        ctaLabel: 'Solutions for Meetings',
+      },
+      {
+        key: 'research',
+        label: 'Instant Research',
+        description:
+          'Market information and firm ETF or holding-level insights are available in one place, without switching systems or losing focus.',
+        ctaLabel: 'Solutions for Research',
+      },
+      {
+        key: 'risk',
+        label: 'Hedging & Risk Awareness',
+        description:
+          'Zom flags market movements that matter and maps risk directly to affected clients so outreach happens with intent, not reaction.',
+        ctaLabel: 'Solutions for Risk',
+      },
+    ],
     highlights: [
       'Owned the design system and reusable component library for the core UI.',
       'Integrated secure authentication, role-based routing, and session handling.',

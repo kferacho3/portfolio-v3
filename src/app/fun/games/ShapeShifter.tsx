@@ -9,11 +9,10 @@ import {
   Icosahedron,
   Octahedron,
   Sphere,
-  Sparkles,
   Torus,
   TorusKnot,
 } from '@react-three/drei';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { ThreeEvent, useFrame, useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
@@ -68,18 +67,6 @@ export const shapeShifterState = proxy({
 
 type ShapeType = 'box' | 'sphere' | 'dodecahedron' | 'cone' | 'torus' | 'torusknot' | 'octahedron' | 'icosahedron';
 
-// Drei shape components for reliable raycasting
-const SHAPE_COMPONENTS = {
-  box: Box,
-  sphere: Sphere,
-  dodecahedron: Dodecahedron,
-  cone: Cone,
-  torus: Torus,
-  torusknot: TorusKnot,
-  octahedron: Octahedron,
-  icosahedron: Icosahedron,
-};
-
 const SHAPE_TYPES: ShapeType[] = ['box', 'sphere', 'dodecahedron', 'cone', 'torus', 'torusknot', 'octahedron', 'icosahedron'];
 
 // Vibrant color palette
@@ -98,101 +85,110 @@ const getRandomShapeType = () => SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TY
 const getRandomColor = () => SHAPE_COLORS[Math.floor(Math.random() * SHAPE_COLORS.length)];
 
 // ═══════════════════════════════════════════════════════════════════════════
-// INDIVIDUAL SHAPE COMPONENT - Using drei components for reliable clicking
+// INDIVIDUAL SHAPE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface ShapeProps {
-  index: number;
   position: [number, number, number];
   color: string;
   shapeType: ShapeType;
-  onClick: () => void;
-  onPointerOver: () => void;
-  onPointerOut: () => void;
   isPulsing: boolean;
   isHovered: boolean;
   isSelected: boolean;
   gridSize: number;
   scale: number;
+  isClickable: boolean;
 }
 
 const Shape: React.FC<ShapeProps> = ({
   position,
   color,
   shapeType,
-  onClick,
-  onPointerOver,
-  onPointerOut,
   isPulsing,
   isHovered,
   isSelected,
   gridSize,
   scale,
+  isClickable,
 }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const visualRef = useRef<THREE.Group>(null);
   
   // Get base scale based on grid size
   const baseScale = useMemo(() => {
-    if (gridSize === 3) return 0.5;
-    if (gridSize === 4) return 0.35;
-    if (gridSize === 5) return 0.25;
-    return 0.5;
+    if (gridSize === 3) return 0.8;
+    if (gridSize === 4) return 0.6;
+    if (gridSize === 5) return 0.5;
+    return 0.8;
   }, [gridSize]);
 
   // Calculate final scale with effects
   const finalScale = useMemo(() => {
     let s = scale * baseScale;
-    if (isPulsing) s *= 1.3;
-    else if (isSelected) s *= 1.15;
-    else if (isHovered) s *= 1.05;
+    if (isPulsing) s *= 1.4;
+    else if (isSelected) s *= 1.2;
+    else if (isHovered && isClickable) s *= 1.1;
     return s;
-  }, [scale, baseScale, isPulsing, isSelected, isHovered]);
+  }, [scale, baseScale, isPulsing, isSelected, isHovered, isClickable]);
 
-  // Gentle rotation
+  // Gentle rotation - only rotate the visual group
   useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y += 0.005;
-      meshRef.current.rotation.x += 0.002;
+    if (visualRef.current) {
+      visualRef.current.rotation.y += 0.008;
+      visualRef.current.rotation.x += 0.003;
     }
   });
 
-  // Get the drei component for this shape type
-  const ShapeComponent = SHAPE_COMPONENTS[shapeType];
-
   // Calculate emissive intensity based on state
-  const emissiveIntensity = isPulsing ? 0.8 : isSelected ? 0.4 : isHovered ? 0.2 : 0;
+  const emissiveIntensity = isPulsing ? 1.0 : isSelected ? 0.5 : (isHovered && isClickable) ? 0.3 : 0.1;
+
+  // Material for the shape
+  const material = useMemo(() => (
+    <meshStandardMaterial 
+      color={color} 
+      emissive={color}
+      emissiveIntensity={emissiveIntensity}
+      metalness={0.3}
+      roughness={0.4}
+    />
+  ), [color, emissiveIntensity]);
+
+  // Render the appropriate shape (visual only, no event handlers)
+  const renderShape = () => {
+    switch (shapeType) {
+      case 'box':
+        return <Box args={[1, 1, 1]}>{material}</Box>;
+      case 'sphere':
+        return <Sphere args={[0.6, 32, 32]}>{material}</Sphere>;
+      case 'dodecahedron':
+        return <Dodecahedron args={[0.6]}>{material}</Dodecahedron>;
+      case 'cone':
+        return <Cone args={[0.5, 1, 32]}>{material}</Cone>;
+      case 'torus':
+        return <Torus args={[0.4, 0.2, 16, 32]}>{material}</Torus>;
+      case 'torusknot':
+        return <TorusKnot args={[0.35, 0.12, 64, 16]}>{material}</TorusKnot>;
+      case 'octahedron':
+        return <Octahedron args={[0.6]}>{material}</Octahedron>;
+      case 'icosahedron':
+        return <Icosahedron args={[0.6]}>{material}</Icosahedron>;
+      default:
+        return <Box args={[1, 1, 1]}>{material}</Box>;
+    }
+  };
 
   return (
     <group position={position} scale={finalScale}>
-      <mesh
-        ref={meshRef}
-        onClick={onClick}
-        onPointerOver={onPointerOver}
-        onPointerOut={onPointerOut}
-      >
-        <ShapeComponent>
-          <meshStandardMaterial 
-            color={color} 
-            emissive={color}
-            emissiveIntensity={emissiveIntensity}
-            metalness={0.3}
-            roughness={0.4}
-          />
-        </ShapeComponent>
-      </mesh>
+      {/* Visual shape - rotates independently */}
+      <group ref={visualRef}>
+        {renderShape()}
+      </group>
     </group>
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GAME CORE COMPONENT
+// GAME GRID ITEM INTERFACE
 // ═══════════════════════════════════════════════════════════════════════════
-
-interface ShapeShiftCoreProps {
-  gridSizeProp: number;
-  modeProp: string;
-  onModeChange: (mode: string, size: number) => void;
-}
 
 interface GridItem {
   shapeType: ShapeType;
@@ -200,25 +196,49 @@ interface GridItem {
   index: number;
 }
 
-const ShapeShiftCore: React.FC<ShapeShiftCoreProps> = ({ onModeChange }) => {
-  const snap = useSnapshot(shapeShifterState);
-  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN SHAPESHIFTER COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════
 
+interface ShapeShifterProps {
+  soundsOn?: boolean;
+}
+
+const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
+  const snap = useSnapshot(shapeShifterState);
+  const { camera, scene, size } = useThree();
+  
   // Game state
   const [grid, setGrid] = useState<GridItem[]>([]);
   const [animatingEntries, setAnimatingEntries] = useState<Set<number>>(new Set());
   const [pulseSequence, setPulseSequence] = useState<number[]>([]);
   const [userSequence, setUserSequence] = useState<number[]>([]);
-  const [isShowingSequence, setIsShowingSequence] = useState(false);
   const [currentPulseIndex, setCurrentPulseIndex] = useState(-1);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set());
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [gamePhase, setGamePhase] = useState<'idle' | 'showing' | 'input' | 'checking'>('idle');
   const [showResult, setShowResult] = useState<'success' | 'fail' | null>(null);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  const [gameKey, setGameKey] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const sequenceTimersRef = useRef<NodeJS.Timeout[]>([]);
+
+  // Set up camera and scene - adjust camera based on viewport
+  useEffect(() => {
+    // Set background
+    scene.background = new THREE.Color('#0f0f23');
+    
+    // Calculate camera distance based on aspect ratio for proper centering
+    const aspect = size.width / size.height;
+    const cameraZ = aspect < 1 ? 14 : 10; // Further back on narrow screens
+    camera.position.set(0, 0, cameraZ);
+    camera.lookAt(0, 0, 0);
+  }, [camera, scene, size]);
 
   // Generate grid
-  const generateGrid = useCallback((size: number): GridItem[] => {
-    return Array(size ** 2)
+  const generateGrid = useCallback((gridSizeParam: number): GridItem[] => {
+    return Array(gridSizeParam ** 2)
       .fill(null)
       .map((_, index) => ({
         shapeType: getRandomShapeType(),
@@ -228,9 +248,9 @@ const ShapeShiftCore: React.FC<ShapeShiftCoreProps> = ({ onModeChange }) => {
   }, []);
 
   // Generate sequence
-  const generateSequence = useCallback((wave: number, size: number): number[] => {
+  const generateSequence = useCallback((wave: number, gridSizeParam: number): number[] => {
     const sequenceLength = wave + 2;
-    const maxIndex = size ** 2;
+    const maxIndex = gridSizeParam ** 2;
     const usedIndices = new Set<number>();
     const sequence: number[] = [];
 
@@ -245,88 +265,121 @@ const ShapeShiftCore: React.FC<ShapeShiftCoreProps> = ({ onModeChange }) => {
     return sequence;
   }, []);
 
-  // Animate grid entry
-  const animateGridEntry = useCallback((size: number) => {
-    const newGrid = generateGrid(size);
+  // Clear all timers
+  const clearAllTimers = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    sequenceTimersRef.current.forEach(timer => clearTimeout(timer));
+    sequenceTimersRef.current = [];
+  }, []);
+
+  // Start game / initialize
+  const startGame = useCallback((gridSizeParam: number) => {
+    clearAllTimers();
+
+    const newGrid = generateGrid(gridSizeParam);
     const allIndices = new Set(newGrid.map((_, i) => i));
-    setAnimatingEntries(allIndices);
+    
     setGrid(newGrid);
-
-    // Stagger the entry animation
-    newGrid.forEach((_, i) => {
-      setTimeout(() => {
-        setAnimatingEntries(prev => {
-          const next = new Set(prev);
-          next.delete(i);
-          return next;
-        });
-      }, i * 80 + 100);
-    });
-
-    // After all entries complete, start showing sequence
-    setTimeout(() => {
-      setGamePhase('showing');
-    }, newGrid.length * 80 + 600);
-  }, [generateGrid]);
-
-  // Reset game
-  const resetGame = useCallback((newGridSize = 3) => {
-    shapeShifterState.reset(newGridSize);
-    setSpeedMultiplier(1);
-    setGrid([]);
+    setAnimatingEntries(allIndices);
     setUserSequence([]);
     setSelectedIndices(new Set());
     setCurrentPulseIndex(-1);
     setShowResult(null);
     setGamePhase('idle');
-    
-    const newSequence = generateSequence(1, newGridSize);
+    setIsInitialized(true);
+
+    // Stagger entry animations
+    newGrid.forEach((_, i) => {
+      const entryTimer = setTimeout(() => {
+        setAnimatingEntries(prev => {
+          const next = new Set(prev);
+          next.delete(i);
+          return next;
+        });
+      }, i * 50 + 100);
+      sequenceTimersRef.current.push(entryTimer);
+    });
+
+    // Generate sequence for current wave
+    const newSequence = generateSequence(shapeShifterState.wave, gridSizeParam);
     setPulseSequence(newSequence);
-    
-    animateGridEntry(newGridSize);
-  }, [animateGridEntry, generateSequence]);
 
-  // Initialize game
+    // Start showing sequence after entries complete
+    const showTimer = setTimeout(() => {
+      setGamePhase('showing');
+    }, newGrid.length * 50 + 600);
+    timerRef.current = showTimer;
+  }, [generateGrid, generateSequence, clearAllTimers]);
+
+  // Initialize on mount and when gameKey changes
   useEffect(() => {
-    resetGame(shapeShifterState.gridSize);
-  }, []);
-
-  // Show sequence animation
-  useEffect(() => {
-    if (gamePhase !== 'showing' || pulseSequence.length === 0) return;
-
-    setCurrentPulseIndex(-1);
+    startGame(shapeShifterState.gridSize);
     
-    const showNextPulse = (index: number) => {
-      if (index >= pulseSequence.length) {
-        // Sequence complete, switch to input phase
-        setTimeout(() => {
-          setCurrentPulseIndex(-1);
-          setGamePhase('input');
-        }, 400);
-        return;
-      }
-
-      setCurrentPulseIndex(pulseSequence[index]);
-      
-      const pulseDelay = Math.max(300, 600 / speedMultiplier);
-      setTimeout(() => {
-        setCurrentPulseIndex(-1);
-        setTimeout(() => showNextPulse(index + 1), 100);
-      }, pulseDelay);
+    return () => {
+      clearAllTimers();
+      document.body.style.cursor = 'auto';
     };
+  }, [gameKey, startGame, clearAllTimers]);
 
-    // Start showing sequence after a short delay
-    setTimeout(() => showNextPulse(0), 500);
-  }, [gamePhase, pulseSequence, speedMultiplier]);
+  useEffect(() => {
+    if (gamePhase !== 'input') {
+      setHoveredIndex(null);
+      document.body.style.cursor = 'auto';
+    }
+  }, [gamePhase]);
+
+  // Show sequence animation - using refs to avoid stale closures
+  const pulseSequenceRef = useRef(pulseSequence);
+  pulseSequenceRef.current = pulseSequence;
+  
+  const speedMultiplierRef = useRef(speedMultiplier);
+  speedMultiplierRef.current = speedMultiplier;
+
+  useEffect(() => {
+    if (gamePhase !== 'showing') return;
+    if (pulseSequenceRef.current.length === 0) return;
+
+    const sequence = pulseSequenceRef.current;
+    const pulseDelay = Math.max(350, 600 / speedMultiplierRef.current);
+    const gapDelay = 150;
+    
+    let timeoutIds: NodeJS.Timeout[] = [];
+    let totalDelay = 400; // Initial delay before starting
+
+    // Schedule all pulses
+    sequence.forEach((shapeIndex, i) => {
+      // Turn on pulse
+      const onTimer = setTimeout(() => {
+        setCurrentPulseIndex(shapeIndex);
+      }, totalDelay);
+      timeoutIds.push(onTimer);
+      
+      // Turn off pulse
+      const offTimer = setTimeout(() => {
+        setCurrentPulseIndex(-1);
+      }, totalDelay + pulseDelay);
+      timeoutIds.push(offTimer);
+      
+      totalDelay += pulseDelay + gapDelay;
+    });
+
+    // Transition to input phase after sequence completes
+    const inputTimer = setTimeout(() => {
+      setGamePhase('input');
+    }, totalDelay + 200);
+    timeoutIds.push(inputTimer);
+
+    return () => {
+      timeoutIds.forEach(id => clearTimeout(id));
+    };
+  }, [gamePhase]);
 
   // Handle shape click
   const handleShapeClick = useCallback((index: number) => {
-    console.log('Shape clicked:', index, 'gamePhase:', gamePhase);
-    if (gamePhase !== 'input') {
-      console.log('Click ignored - not in input phase');
-      return;
-    }
+    if (gamePhase !== 'input') return;
 
     // Visual feedback
     setSelectedIndices(prev => new Set(prev).add(index));
@@ -336,235 +389,303 @@ const ShapeShiftCore: React.FC<ShapeShiftCoreProps> = ({ onModeChange }) => {
         next.delete(index);
         return next;
       });
-    }, 300);
+    }, 200);
 
-    const newUserSequence = [...userSequence, index];
-    setUserSequence(newUserSequence);
-
-    // Check if this click is correct so far
-    const currentIndex = newUserSequence.length - 1;
-    if (pulseSequence[currentIndex] !== index) {
-      // Wrong! Game over
-      setGamePhase('checking');
-      setShowResult('fail');
-      setTimeout(() => {
-        resetGame(shapeShifterState.gridSize);
-      }, 1500);
-      return;
-    }
-
-    // Check if sequence complete
-    if (newUserSequence.length === pulseSequence.length) {
-      // Success!
-      setGamePhase('checking');
-      setShowResult('success');
+    setUserSequence(prev => {
+      const newUserSequence = [...prev, index];
       
-      setTimeout(() => {
-        shapeShifterState.incrementWave();
-        shapeShifterState.incrementScore(pulseSequence.length * 10 + shapeShifterState.wave * 5);
+      // Check if correct
+      const currentIdx = newUserSequence.length - 1;
+      if (pulseSequence[currentIdx] !== index) {
+        // Wrong!
+        setGamePhase('checking');
+        setShowResult('fail');
+        setTimeout(() => {
+          shapeShifterState.reset(shapeShifterState.gridSize);
+          setSpeedMultiplier(1);
+          setGameKey(k => k + 1);
+        }, 1500);
+        return newUserSequence;
+      }
 
-        // Increase difficulty
-        let newGridSize = shapeShifterState.gridSize;
-        if (shapeShifterState.mode === 'normal' && shapeShifterState.wave % 10 === 0 && newGridSize < 5) {
-          newGridSize += 1;
-          shapeShifterState.setGridSize(newGridSize);
-        }
+      // Check if sequence complete
+      if (newUserSequence.length === pulseSequence.length) {
+        // Success!
+        setGamePhase('checking');
+        setShowResult('success');
+        
+        setTimeout(() => {
+          shapeShifterState.incrementWave();
+          shapeShifterState.incrementScore(pulseSequence.length * 10 + shapeShifterState.wave * 5);
 
-        // Speed up slightly every 5 waves
-        if (shapeShifterState.wave % 5 === 0) {
-          setSpeedMultiplier(prev => Math.min(prev * 1.1, 3));
-        }
+          // Increase grid size in normal mode every 10 waves
+          let newGridSize = shapeShifterState.gridSize;
+          if (shapeShifterState.mode === 'normal' && shapeShifterState.wave % 10 === 0 && newGridSize < 5) {
+            newGridSize += 1;
+            shapeShifterState.setGridSize(newGridSize);
+          }
 
-        // Generate new sequence
-        const newSequence = generateSequence(shapeShifterState.wave, newGridSize);
-        setPulseSequence(newSequence);
-        setUserSequence([]);
-        setShowResult(null);
+          // Speed up every 5 waves
+          if (shapeShifterState.wave % 5 === 0) {
+            setSpeedMultiplier(prev => Math.min(prev * 1.1, 2.5));
+          }
 
-        // Regenerate grid if size changed
-        if (newGridSize !== grid.length ** 0.5) {
-          animateGridEntry(newGridSize);
-        } else {
-          setGamePhase('showing');
-        }
-      }, 1000);
-    }
-  }, [gamePhase, userSequence, pulseSequence, grid.length, generateSequence, resetGame, animateGridEntry]);
+          // Generate new sequence
+          const newSequence = generateSequence(shapeShifterState.wave, newGridSize);
+          setPulseSequence(newSequence);
+          setUserSequence([]);
+          setShowResult(null);
 
-  // Handle hover
-  const handleShapeHover = useCallback((index: number, isHovering: boolean) => {
-    if (gamePhase !== 'input') {
-      setHoveredIndex(null);
-      return;
-    }
-    setHoveredIndex(isHovering ? index : null);
-  }, [gamePhase]);
+          // Regenerate grid if size changed, otherwise just show new sequence
+          if (newGridSize !== shapeShifterState.gridSize) {
+            setGameKey(k => k + 1);
+          } else {
+            setGamePhase('showing');
+          }
+        }, 1000);
+      }
+      
+      return newUserSequence;
+    });
+  }, [gamePhase, pulseSequence, generateSequence]);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.key === 'r' || event.key === 'R') {
-        resetGame(shapeShifterState.gridSize);
+        shapeShifterState.reset(shapeShifterState.gridSize);
+        setSpeedMultiplier(1);
+        setGameKey(k => k + 1);
       }
     };
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [resetGame]);
+  }, []);
 
-  // Grid position calculations
-  const gridSize = Math.sqrt(grid.length) || snap.gridSize;
-  const spacing = gridSize === 3 ? 2.8 : gridSize === 4 ? 2.2 : 1.8;
-  const offset = ((gridSize - 1) * spacing) / 2;
+  // Handle mode change
+  const handleModeChange = useCallback((newMode: 'normal' | 'casual', newGridSize: number) => {
+    shapeShifterState.setMode(newMode);
+    shapeShifterState.setGridSize(newGridSize);
+    shapeShifterState.reset(newGridSize);
+    setSpeedMultiplier(1);
+    setGameKey(k => k + 1);
+  }, []);
+
+  // Grid calculations - compute based on actual grid length
+  const currentGridSize = grid.length > 0 ? Math.sqrt(grid.length) : snap.gridSize;
+  const spacing = currentGridSize === 3 ? 2.2 : currentGridSize === 4 ? 1.8 : 1.5;
+  const offset = ((currentGridSize - 1) * spacing) / 2;
+  const planeSize = currentGridSize * spacing;
+  const hitRadius = spacing * 0.5;
+
+  const getGridIndexFromPoint = useCallback((x: number, y: number) => {
+    const col = Math.round((x + offset) / spacing);
+    const row = Math.round((offset - y) / spacing);
+
+    if (col < 0 || col >= currentGridSize || row < 0 || row >= currentGridSize) {
+      return null;
+    }
+
+    const centerX = col * spacing - offset;
+    const centerY = (currentGridSize - 1 - row) * spacing - offset;
+    const dx = x - centerX;
+    const dy = y - centerY;
+
+    if (Math.sqrt(dx * dx + dy * dy) > hitRadius) {
+      return null;
+    }
+
+    return row * currentGridSize + col;
+  }, [currentGridSize, hitRadius, offset, spacing]);
+
+  const handleGridPointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    if (gamePhase !== 'input') return;
+
+    const nextIndex = getGridIndexFromPoint(e.point.x, e.point.y);
+    setHoveredIndex(prev => (prev === nextIndex ? prev : nextIndex));
+    document.body.style.cursor = nextIndex !== null ? 'pointer' : 'auto';
+  }, [gamePhase, getGridIndexFromPoint]);
+
+  const handleGridPointerOut = useCallback((e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    setHoveredIndex(null);
+    document.body.style.cursor = 'auto';
+  }, []);
+
+  const handleGridPointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    if (gamePhase !== 'input') return;
+
+    const index = getGridIndexFromPoint(e.point.x, e.point.y);
+    if (index !== null) {
+      handleShapeClick(index);
+    }
+  }, [gamePhase, getGridIndexFromPoint, handleShapeClick]);
+
+  // Don't render until initialized
+  if (!isInitialized) return null;
 
   return (
     <>
-      {/* Grid of shapes - centered */}
-      <group position={[1, 1, 0]}>
+      {/* Lighting */}
+      <ambientLight intensity={0.8} />
+      <pointLight position={[10, 10, 10]} intensity={1.2} />
+      <pointLight position={[-10, -10, 10]} intensity={0.6} />
+      
+      {/* Grid of shapes - centered at origin */}
+      <group position={[0, 0, 0]}>
+        {/* Interaction plane for consistent hover/click detection */}
+        <mesh
+          onPointerMove={handleGridPointerMove}
+          onPointerOut={handleGridPointerOut}
+          onPointerDown={handleGridPointerDown}
+          renderOrder={-2}
+        >
+          <planeGeometry args={[planeSize, planeSize]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {grid.map((item, i) => {
-          const row = Math.floor(i / gridSize);
-          const col = i % gridSize;
+          const row = Math.floor(i / currentGridSize);
+          const col = i % currentGridSize;
           const x = col * spacing - offset;
-          const y = (gridSize - 1 - row) * spacing - offset;
-          // Calculate entry scale - 0 while animating, 1 when done
+          const y = (currentGridSize - 1 - row) * spacing - offset;
           const entryScale = animatingEntries.has(i) ? 0 : 1;
 
           return (
             <Shape
-              key={`${item.index}-${snap.wave}`}
-              index={item.index}
+              key={`shape-${item.index}-${gameKey}`}
               position={[x, y, 0]}
               color={item.color}
               shapeType={item.shapeType}
-              onClick={() => handleShapeClick(item.index)}
-              onPointerOver={() => handleShapeHover(item.index, true)}
-              onPointerOut={() => handleShapeHover(item.index, false)}
               isPulsing={currentPulseIndex === item.index}
               isHovered={hoveredIndex === item.index}
               isSelected={selectedIndices.has(item.index)}
-              gridSize={gridSize}
+              gridSize={currentGridSize}
               scale={entryScale}
+              isClickable={gamePhase === 'input'}
             />
           );
         })}
       </group>
 
-      {/* Result feedback overlay - positioned to not block clicks */}
+      {/* Result feedback - centered in 3D space */}
       {showResult && (
-        <Html center position={[0, 0, 1]} style={{ pointerEvents: 'none' }}>
-          <div className={`text-6xl font-bold ${showResult === 'success' ? 'text-green-400' : 'text-red-400'} animate-pulse`}>
+        <Html center position={[0, 0, 2]} style={{ pointerEvents: 'none' }}>
+          <div style={{
+            fontSize: '5rem',
+            fontWeight: 'bold',
+            color: showResult === 'success' ? '#4ade80' : '#f87171',
+            textShadow: `0 0 40px ${showResult === 'success' ? '#4ade80' : '#f87171'}`,
+          }}>
             {showResult === 'success' ? '✓' : '✗'}
           </div>
         </Html>
       )}
 
-      {/* Phase indicator - positioned below grid */}
-      {gamePhase === 'showing' && (
-        <Html center position={[0, -4.5, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="text-white/80 text-lg font-medium animate-pulse whitespace-nowrap">
-            Watch the sequence...
+      {/* Phase indicator below grid */}
+      {(gamePhase === 'showing' || gamePhase === 'input') && (
+        <Html center position={[0, -offset - 1.8, 0]} style={{ pointerEvents: 'none' }}>
+          <div style={{
+            color: 'rgba(255, 255, 255, 0.9)',
+            fontSize: '1.1rem',
+            fontWeight: 500,
+            fontFamily: 'system-ui, sans-serif',
+            whiteSpace: 'nowrap',
+            textShadow: '0 2px 10px rgba(0,0,0,0.5)',
+          }}>
+            {gamePhase === 'showing' ? 'Watch the sequence...' : `Your turn! (${userSequence.length}/${pulseSequence.length})`}
           </div>
         </Html>
       )}
 
-      {gamePhase === 'input' && (
-        <Html center position={[0, -4.5, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="text-white/80 text-lg font-medium whitespace-nowrap">
-            Your turn! ({userSequence.length}/{pulseSequence.length})
-          </div>
-        </Html>
-      )}
+      {/* HUD - Top stats - positioned via screen coordinates */}
+      <Html
+        position={[0, offset + 2, 0]}
+        center
+        style={{ pointerEvents: 'none' }}
+        zIndexRange={[0, 0]}
+      >
+        <div style={{
+          color: 'white',
+          fontSize: '1rem',
+          background: 'rgba(15, 23, 42, 0.85)',
+          backdropFilter: 'blur(8px)',
+          padding: '0.5rem 1rem',
+          borderRadius: '0.5rem',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          whiteSpace: 'nowrap',
+          fontFamily: 'system-ui, sans-serif',
+          pointerEvents: 'none',
+        }}>
+          <span style={{ marginRight: '0.8rem' }}>Wave: <strong style={{ color: '#22d3ee' }}>{snap.wave}</strong></span>
+          <span style={{ marginRight: '0.8rem' }}>Score: <strong style={{ color: '#4ade80' }}>{snap.score}</strong></span>
+          <span>Best: <strong style={{ color: '#facc15' }}>{snap.bestScore}</strong></span>
+        </div>
+      </Html>
+
+      {/* Bottom controls - positioned below grid in world space */}
+      <Html
+        position={[0, -offset - 3, 0]}
+        center
+        style={{ pointerEvents: 'none' }}
+        zIndexRange={[0, 0]}
+      >
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+          fontFamily: 'system-ui, sans-serif',
+          whiteSpace: 'nowrap',
+        }}>
+          {/* Grid Size Selector (Casual Mode Only) */}
+          {snap.mode === 'casual' && (
+            <div style={{ display: 'flex', gap: '0.3rem', pointerEvents: 'auto' }}>
+              {[3, 4, 5].map((gridSizeOption) => (
+                <button
+                  key={gridSizeOption}
+                  onClick={() => handleModeChange('casual', gridSizeOption)}
+                  style={{
+                    padding: '0.3rem 0.6rem',
+                    borderRadius: '0.4rem',
+                    fontSize: '0.75rem',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    border: 'none',
+                    background: snap.gridSize === gridSizeOption ? '#06b6d4' : 'rgba(30, 41, 59, 0.9)',
+                    color: snap.gridSize === gridSizeOption ? 'white' : 'rgba(255, 255, 255, 0.7)',
+                  }}
+                >
+                  {gridSizeOption}x{gridSizeOption}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Mode Toggle */}
+          <button
+            onClick={() => handleModeChange(snap.mode === 'normal' ? 'casual' : 'normal', snap.mode === 'normal' ? snap.gridSize : 3)}
+            style={{
+              background: 'linear-gradient(135deg, #0891b2, #2563eb)',
+              color: 'white',
+              padding: '0.35rem 0.75rem',
+              borderRadius: '0.4rem',
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: 'none',
+              pointerEvents: 'auto',
+            }}
+          >
+            {snap.mode === 'normal' ? 'Casual' : 'Normal'} Mode
+          </button>
+
+          <span style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '0.65rem' }}>
+            Press R to restart
+          </span>
+        </div>
+      </Html>
     </>
-  );
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MAIN COMPONENT - Renders its own Canvas for proper event handling
-// ═══════════════════════════════════════════════════════════════════════════
-
-interface ShapeShifterProps {
-  soundsOn?: boolean;
-}
-
-const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
-  const [key, setKey] = useState<number>(0);
-  const [mode, setMode] = useState<string>('normal');
-  const [gridSize, setGridSize] = useState<number>(3);
-  const snap = useSnapshot(shapeShifterState);
-
-  const handleModeChange = useCallback((newMode: string, newGridSize: number) => {
-    shapeShifterState.setMode(newMode as 'normal' | 'casual');
-    shapeShifterState.setGridSize(newGridSize);
-    setMode(newMode);
-    setGridSize(newGridSize);
-    setKey((prevKey) => prevKey + 1);
-  }, []);
-
-  // Render using Html fullscreen to escape parent Canvas and create our own
-  return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div className="fixed inset-0 pointer-events-auto">
-        {/* HUD - positioned above canvas */}
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="text-white text-lg bg-slate-900/80 backdrop-blur-sm px-6 py-3 rounded-xl border border-white/10 shadow-lg whitespace-nowrap">
-            <span className="mr-4">Wave: <strong className="text-cyan-400">{snap.wave}</strong></span>
-            <span className="mr-4">Score: <strong className="text-green-400">{snap.score}</strong></span>
-            <span>Best: <strong className="text-yellow-400">{snap.bestScore}</strong></span>
-          </div>
-        </div>
-
-        {/* Mode controls at bottom */}
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
-          <div className="flex items-center gap-4">
-            {/* Grid Size Selector (Casual Mode Only) */}
-            {snap.mode === 'casual' && (
-              <div className="flex gap-2">
-                {[3, 4, 5].map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => handleModeChange('casual', size)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      gridSize === size
-                        ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30'
-                        : 'bg-slate-800/80 text-white/70 hover:bg-slate-700/80'
-                    }`}
-                  >
-                    {size}x{size}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Mode Toggle Button */}
-            <button
-              onClick={() => {
-                if (snap.mode === 'normal') {
-                  handleModeChange('casual', gridSize);
-                } else {
-                  handleModeChange('normal', 3);
-                }
-              }}
-              className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-lg hover:shadow-cyan-500/20"
-            >
-              {snap.mode === 'normal' ? 'Casual' : 'Normal'} Mode
-            </button>
-
-            <span className="text-white/50 text-xs ml-2">Press R to restart</span>
-          </div>
-        </div>
-
-        {/* Own Canvas for proper event handling - like the working JS version */}
-        <Canvas
-          camera={{ position: [0, 0, 15], fov: 50 }}
-          style={{ background: 'linear-gradient(to bottom, #0f0f23, #1a1a2e)' }}
-        >
-          <ambientLight intensity={0.6} />
-          <pointLight position={[10, 10, 10]} intensity={1} />
-          <pointLight position={[-10, -10, 10]} intensity={0.5} />
-          <Sparkles count={40} scale={[20, 20, 20]} color="#ffffff" opacity={0.4} speed={0.3} />
-          <ShapeShiftCore key={key} gridSizeProp={gridSize} modeProp={mode} onModeChange={handleModeChange} />
-        </Canvas>
-      </div>
-    </Html>
   );
 };
 

@@ -93,7 +93,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'reactpong',
     title: 'React Pong',
-    description: 'Solo pong with momentum, reactive walls, and streak bonuses.',
+    description: 'Free Form: Solo pong with momentum and streak bonuses. Wall Mode: Capture and release against an evolving wall in this 10-level tournament!',
     accent: '#22d3ee',
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png',
     hotkey: '8',
@@ -237,9 +237,9 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Ice rows drift sideways, subways are fast, wildlife wander. Boost pads auto-hop forward; logs carry you.',
   },
   reactpong: {
-    controls: 'Mouse to move paddle',
-    objective: 'Solo pong with momentum effects. Build streaks for bonus points.',
-    tips: 'Watch the ball speed increase. Center hits are more controlled.',
+    controls: 'Free Form: Mouse to move paddle | Wall Mode: Mouse to move plane, Click to release, Shift to stabilize',
+    objective: 'Free Form: Solo pong with momentum effects. Build streaks for bonus points. | Wall Mode: Capture the ball and release it back at the opposing wall. Beat 10 levels to become champion!',
+    tips: 'Free Form: Watch the ball speed increase. Center hits are more controlled. | Wall Mode: Track the ball\'s trajectory early. Flick for spin. Hold click to charge shots.',
   },
   spinblock: {
     controls: 'A/D to spin arena • Space for power-ups',

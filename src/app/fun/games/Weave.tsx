@@ -750,6 +750,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       <ambientLight intensity={0.15} />
       <pointLight position={[0, 0, 8]} intensity={0.4} />
 
+      <BackgroundGrid />
       <DangerZone />
       <OrbitRing radius={PLAYER_ORBIT_RADIUS} color={currentColor} />
       <LivesDisplay lives={snap.lives} maxLives={snap.maxLives} />

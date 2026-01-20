@@ -20,6 +20,16 @@ type ModalProps = {
 };
 
 function ProjectModal({ project, onClose }: ModalProps) {
+  const featureTabs = project.featureTabs ?? [];
+  const [activeFeatureKey, setActiveFeatureKey] = useState<string>(
+    featureTabs[0]?.key ?? ''
+  );
+
+  useEffect(() => {
+    setActiveFeatureKey(featureTabs[0]?.key ?? '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id]);
+
   useEffect(() => {
     const { overflow } = document.body.style;
     document.body.style.overflow = 'hidden';
@@ -41,6 +51,8 @@ function ProjectModal({ project, onClose }: ModalProps) {
 
   const titleId = `project-dialog-title-${project.id}`;
   const descId = `project-dialog-desc-${project.id}`;
+  const activeFeature =
+    featureTabs.find((t) => t.key === activeFeatureKey) ?? featureTabs[0];
 
   return createPortal(
     <AnimatePresence>
@@ -117,6 +129,72 @@ function ProjectModal({ project, onClose }: ModalProps) {
                   ))}
                 </ul>
               </div>
+            )}
+
+            {featureTabs.length > 0 && activeFeature && (
+              <section aria-label="How Advisors Work">
+                <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+                  Fiduciary Solutions
+                </p>
+                <h4 className="mt-3 text-2xl font-bold text-foreground">
+                  How Advisors Work
+                </h4>
+
+                <div
+                  role="tablist"
+                  aria-label="Advisor workflow tabs"
+                  className="mt-5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                >
+                  {featureTabs.map((tab) => {
+                    const isActive = tab.key === activeFeature.key;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        onClick={() => setActiveFeatureKey(tab.key)}
+                        className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-semibold transition sm:text-sm ${
+                          isActive
+                            ? 'bg-white text-slate-900 shadow-[0_8px_30px_rgba(255,255,255,0.2)]'
+                            : 'border border-white/10 bg-white/5 text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-6 grid gap-3 md:grid-cols-[1.2fr_0.8fr] md:items-start">
+                  <div>
+                    <h5 className="text-xl font-semibold text-foreground">
+                      {activeFeature.label}
+                    </h5>
+                    <p className="mt-2 text-muted-foreground leading-relaxed">
+                      {activeFeature.description}
+                    </p>
+                  </div>
+                  <div className="md:justify-self-end">
+                    {activeFeature.ctaHref ? (
+                      <a
+                        href={activeFeature.ctaHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground"
+                      >
+                        {activeFeature.ctaLabel}
+                        <span aria-hidden>›</span>
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-2 text-sm font-medium text-foreground/90">
+                        {activeFeature.ctaLabel}
+                        <span aria-hidden>›</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </section>
             )}
 
             <div className="grid gap-8 md:grid-cols-2">

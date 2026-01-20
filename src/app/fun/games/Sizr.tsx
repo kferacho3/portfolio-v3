@@ -495,6 +495,7 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
       ))}
 
       {/* Ground reference */}
+      <gridHelper args={[20, 20, '#333333', '#222222']} position={[0, -3.5, 0]} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.5, 0]} receiveShadow>
         <planeGeometry args={[20, 20]} />
         <meshStandardMaterial color="#1a1a2e" />

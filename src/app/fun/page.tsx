@@ -7,20 +7,19 @@
 'use client';
 
 import { OrbitControls } from '@react-three/drei';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import { easeCubicInOut } from 'd3-ease';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Color, Group, Vector3 } from 'three';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Group, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import CanvasProvider from '../../components/CanvasProvider';
-import { ThemeContext } from '../../contexts/ThemeContext';
 import AnimatedCamera from './components/AnimatedCamera';
 import { RachosArcade, GameCard } from './components/RachosArcade';
 import ArcadeWorldFX from './components/ArcadeWorldFX';
 import { ArcadeDeck } from './components/shell';
 import { GAME_CARDS, TOTAL_GAMES } from './config/games';
-import { ORBIT_SETTINGS, SCENE_BACKGROUNDS } from './config/themes';
+import { ORBIT_SETTINGS } from './config/themes';
 import { useArcadeStore } from './store';
 import {
   useGameState,
@@ -58,9 +57,10 @@ const ArcadeOrbitControls: React.FC<{ active: boolean; target: Vector3 }> = ({
     const elapsed = clock.elapsedTime - rampStartRef.current;
     const t = Math.min(elapsed / ORBIT_SETTINGS.rampDuration, 1);
     const eased = easeCubicInOut(t);
+    const oscillation = Math.sin(clock.elapsedTime * ORBIT_SETTINGS.oscillationSpeed);
 
     controls.autoRotate = true;
-    controls.autoRotateSpeed = ORBIT_SETTINGS.autoSpeed * eased;
+    controls.autoRotateSpeed = ORBIT_SETTINGS.autoSpeed * eased * oscillation;
   });
 
   return (
@@ -95,8 +95,6 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
   onSelectGame,
   onLaunchGame,
 }) => {
-  const { scene } = useThree();
-  const { theme } = useContext(ThemeContext);
   const arcadeRef = useRef<Group>(null);
 
   const [animationComplete, setAnimationComplete] = useState(false);
@@ -122,12 +120,7 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
 
   const orbitTarget = useMemo(() => new Vector3(...arcadeFocus), [arcadeFocus]);
 
-  // Scene background
-  useEffect(() => {
-    scene.background = new Color(
-      theme === 'dark' ? SCENE_BACKGROUNDS.dark : SCENE_BACKGROUNDS.light
-    );
-  }, [scene, theme]);
+  // Note: Scene background is handled by ArcadeWorldFX for consistency across all games
 
   // Calculate camera positions
   useEffect(() => {

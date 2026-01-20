@@ -494,6 +494,7 @@ const GameScene: React.FC<{
         <planeGeometry args={[40, 40]} />
         <meshStandardMaterial color="#0a0f1a" />
       </mesh>
+      <gridHelper args={[40, 40, '#1a2535', '#1a2535']} position={[0, -0.49, 0]} />
 
       {/* Spawn zone indicator - wider */}
       <mesh position={[0, 14, -2]}>

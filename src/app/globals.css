@@ -39,14 +39,16 @@ body {
      e.g. <body class="min-h-screen bg-cloud-aqua dark:bg-dark-cloud"> */
 }
 
-/* Canvas sits behind everything but is now transparent
-   so the body gradient is visible */
-canvas {
-  position: absolute;
-  inset: 0;
+/* R3F root canvas wrapper: keep full-viewport without forcing nested canvases */
+.r3f-canvas {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  z-index: -1;
+  z-index: 0;
   background: transparent;
 }
 

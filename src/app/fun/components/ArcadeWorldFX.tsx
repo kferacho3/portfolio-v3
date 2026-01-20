@@ -90,15 +90,26 @@ const makeTheme = (overrides: Partial<GameFXTheme>): GameFXTheme => ({
 
 const GAME_THEMES: Record<string, GameFXTheme> = {
   home: makeTheme({
-    palette: ['#39FF14', '#00D9FF', '#FF5F1F'],
+    palette: ['#45f5a6', '#ff9b4a', '#9b6bff'],
     shaderPresets: ['Neon', 'Holographic'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.7, chromatic: 0.0016, saturation: 0.08 },
+    stars: true,
+    fog: { color: '#05060f', near: 12, far: 140 },
+    lights: {
+      ambient: 0.55,
+      keyIntensity: 1.05,
+      fillIntensity: 0.7,
+      rimIntensity: 0.95,
+      keyColor: '#ffe7c8',
+      fillColor: '#45f5a6',
+      rimColor: '#9b6bff',
+    },
+    post: { bloom: 0.75, chromatic: 0.0016, saturation: 0.12 },
   }),
   geochrome: makeTheme({
     palette: ['#60a5fa', '#38bdf8', '#22d3ee'],
     shaderPresets: ['Neon', 'CircuitTraces'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.55, chromatic: 0.0012 },
   }),
   shapeshifter: makeTheme({
@@ -116,13 +127,13 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   dropper: makeTheme({
     palette: ['#f59e0b', '#f97316', '#facc15'],
     shaderPresets: ['InkSplatter', 'GoldGilded'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.6, chromatic: 0.001 },
   }),
   stackz: makeTheme({
     palette: ['#f97316', '#fb7185', '#facc15'],
     shaderPresets: ['TopographicRings', 'SilverMercury'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.55, chromatic: 0.001 },
   }),
   sizr: makeTheme({
@@ -134,7 +145,7 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   pinball: makeTheme({
     palette: ['#38bdf8', '#22d3ee', '#f472b6'],
     shaderPresets: ['Glass', 'GoldLiquid'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.7, chromatic: 0.0014 },
   }),
   rollette: makeTheme({
@@ -159,13 +170,14 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   reactpong: makeTheme({
     palette: ['#60a5fa', '#22d3ee', '#e2e8f0'],
     shaderPresets: ['Normal', 'CrystalGeode'],
-    backdropStyle: 'aurora',
-    post: { bloom: 0.45, chromatic: 0.0008, saturation: 0.02, tiltShift: 0.12 },
+    backdropStyle: 'none',
+    stars: false,
+    post: { bloom: 0.45, chromatic: 0.0008, saturation: 0.02 },
   }),
   spinblock: makeTheme({
     palette: ['#f59e0b', '#f97316', '#f43f5e'],
     shaderPresets: ['MagmaCore', 'SilverChrome'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.75, chromatic: 0.0013 },
   }),
   museum: makeTheme({
@@ -183,7 +195,7 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   rolletteClassic: makeTheme({
     palette: ['#fb7185', '#fda4af', '#f43f5e'],
     shaderPresets: ['DiamondRainbow'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.6, chromatic: 0.0012, noise: 0.03 },
   }),
   skyblitzClassic: makeTheme({
@@ -195,13 +207,13 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   dropperClassic: makeTheme({
     palette: ['#f59e0b', '#fbbf24', '#f97316'],
     shaderPresets: ['InkSplatter', 'GoldGilded'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.6, chromatic: 0.0011, noise: 0.03 },
   }),
   stackzCatchClassic: makeTheme({
     palette: ['#f97316', '#fb7185', '#facc15'],
     shaderPresets: ['TopographicRings', 'SilverMercury'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.6, chromatic: 0.0011, noise: 0.03 },
   }),
   gyro: makeTheme({
@@ -219,7 +231,7 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   forma: makeTheme({
     palette: ['#34d399', '#22c55e', '#facc15'],
     shaderPresets: ['Glass', 'VoronoiStainedGlass'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.6, chromatic: 0.001 },
   }),
   weave: makeTheme({
@@ -231,25 +243,27 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
   pave: makeTheme({
     palette: ['#f97316', '#38bdf8', '#facc15'],
     shaderPresets: ['TopographicRings', 'GlitchMosaic'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'grid',
     post: { bloom: 0.65, chromatic: 0.0011 },
   }),
   voidrunner: makeTheme({
     palette: ['#0ea5e9', '#7c3aed', '#f43f5e'],
     shaderPresets: ['PlasmaFlow', 'MagmaCore'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'none',
+    stars: false,
     post: { bloom: 0.9, chromatic: 0.0019, saturation: 0.1 },
   }),
   gravityrush: makeTheme({
     palette: ['#38bdf8', '#22c55e', '#facc15'],
     shaderPresets: ['CrystalGeode', 'GoldGilded'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'none',
+    stars: false,
     post: { bloom: 0.75, chromatic: 0.0014 },
   }),
   apex: makeTheme({
     palette: ['#f472b6', '#a855f7', '#22d3ee'],
     shaderPresets: ['SilverChrome', 'DiamondRainbow'],
-    backdropStyle: 'aurora',
+    backdropStyle: 'none',
     post: { bloom: 0.8, chromatic: 0.0018 },
   }),
 };
@@ -435,7 +449,37 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     gameId === 'skyblitzClassic' && skyBlitzClassicSnap.graphicsMode === 'classic';
   const fluxHopBoost = gameId === 'fluxhop' && fluxHopSnap.nearMiss ? 1.35 : 1;
 
+  // Games that manage their own scene.background - don't override
+  const gamesWithOwnBackground = [
+    'voidrunner',
+    'gravityrush',
+    'apex',
+    'weave',
+    'prism',
+    'gyro',
+    'pave',
+    'reactpong',
+    'forma',
+  ];
+  const shouldSetSceneFX = !gamesWithOwnBackground.includes(gameId);
+  const gamesWithoutBackdrop = ['voidrunner', 'gravityrush', 'apex'];
+  const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
+
+  // Set scene background color based on fog color (or a default dark color)
   useEffect(() => {
+    if (!shouldSetSceneFX) return;
+    
+    const prevBackground = scene.background;
+    const bgColor = theme.fog?.color ?? '#05070f';
+    scene.background = new THREE.Color(bgColor);
+    return () => {
+      scene.background = prevBackground;
+    };
+  }, [scene, theme.fog, shouldSetSceneFX]);
+
+  useEffect(() => {
+    if (!shouldSetSceneFX) return;
+
     const prevFog = scene.fog;
     if (theme.fog) {
       scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
@@ -445,7 +489,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     return () => {
       scene.fog = prevFog;
     };
-  }, [scene, theme.fog]);
+  }, [scene, theme.fog, shouldSetSceneFX]);
 
   const chromaticOffset = useMemo(
     () =>
@@ -495,8 +539,8 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
       )}
 
-      <BackdropPlane style={theme.backdropStyle} palette={theme.palette} />
-      {envMap && (
+      {showBackdrop && <BackdropPlane style={theme.backdropStyle} palette={theme.palette} />}
+      {showBackdrop && envMap && (
         <BackdropCluster gameId={gameId} theme={theme} envMap={envMap} isMobile={isMobile} />
       )}
 

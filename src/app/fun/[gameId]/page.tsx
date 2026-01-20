@@ -166,7 +166,13 @@ export default function GamePage({ params }: GamePageProps) {
     // Reset game-specific state
     switch (gameId) {
       case 'spinblock': spinBlockState.reset(); break;
-      case 'reactpong': reactPongState.reset(); break;
+      case 'reactpong': 
+        if (reactPongState.mode === 'WallMode') {
+          reactPongState.resetWallMode();
+        } else {
+          reactPongState.reset();
+        }
+        break;
       case 'skyblitz': skyBlitzState.reset(); break;
       case 'dropper': dropperState.reset(); break;
       case 'stackz': stackzState.reset(); break;
@@ -202,8 +208,8 @@ export default function GamePage({ params }: GamePageProps) {
       setSkyBlitzMode(mode as 'UfoMode' | 'RunnerManMode');
       skyBlitzState.setMode(mode as 'UfoMode' | 'RunnerManMode');
     } else if (gameId === 'reactpong') {
-      setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls');
-      reactPongState.setMode(mode as 'SoloPaddle' | 'SoloWalls');
+      setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls' | 'WallMode');
+      reactPongState.setMode(mode as 'SoloPaddle' | 'SoloWalls' | 'WallMode');
     }
   };
 
@@ -294,7 +300,7 @@ export default function GamePage({ params }: GamePageProps) {
   const modeOptions = gameId === 'skyblitz' 
     ? ['UfoMode', 'RunnerManMode'] 
     : gameId === 'reactpong' 
-      ? ['SoloPaddle', 'SoloWalls'] 
+      ? ['SoloPaddle', 'WallMode'] 
       : [];
   const currentMode = gameId === 'skyblitz' 
     ? skyBlitzMode 
