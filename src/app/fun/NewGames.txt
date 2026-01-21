@@ -1,0 +1,2177 @@
+NEW GAMES — “BEST VERSION” SPECS (built from the skeletons below)
+
+This file is a build bible: each game has a tight addictive loop, a difficulty ramp, and explicit pseudo-code/state that fits your existing arcade patterns (R3F scene + Valtio `state.reset()` + restart remount).
+
+Global design rules (what makes these “one-more-run”):
+- Always give the player a “save” tool (cooldown ability) so runs end from compounding mistakes, not one cheap hit.
+- Use a COMBO WINDOW (timer) instead of “must be perfect forever”. Missing a beat drops combo, it doesn’t hard-fail.
+- Use FAIR SPAWNS: donut around player, reject near hazards, bias spawns toward current flow direction.
+- Use MICRO EVENTS every ~20–30s: small rule changes that force adaptation without new controls.
+- Use RECOVERABLE PENALTIES (debt/instability/heat) rather than nuking score.
+
+Integration checklist (when you decide to ship a game):
+- Add `GameId` in `src/app/fun/store/types/arcade.ts`
+- Add card + rules + hotkey in `src/app/fun/config/games.ts`
+- Import + switch-case in `src/app/fun/[gameId]/page.tsx`
+- Optional: add to `HUD_GAMES` and wire score/reset in the page switch.
+
+------------------------------------------------------------------------------
+
+GAME 1 — POLARITY (id: polarity, hotkey: C)
+Pitch: Flip charge at the last instant to “whip” around pylons. The best runs are basically controlled pinball.
+
+Controls:
+- WASD/Arrows: roll
+- Space: flip charge (+ / -) (edge-trigger)
+- Click: pulse (escape + combo-save) (cooldown)
+
+Core loop (what the player repeats):
+1) Slingshot past a pylon with correct polarity timing
+2) Grab ion clusters in quick succession (combo window)
+3) Choose risk: go near spikes for “graze” points or play safe and lose multiplier potential
+
+Addictive glue systems (V2):
+- Combo window: `comboTime` counts down; collecting extends it.
+- Flow bias spawns: ions spawn “ahead” of velocity so it feels authored.
+- Instability meter: collecting mismatched ions adds instability; high instability briefly inverts steering or stuns (short).
+- Near-miss scoring: passing within `nearMissR` of a spike without hitting awards points + comboTime.
+- Event deck (every 25s): 1 active modifier that lasts 8–10s.
+  - “Polarity Storm”: 2 random pylons flip charge.
+  - “Superconductor Zone”: a circle on ground gives +magnetStrength and +scoreMultiplier.
+  - “Ion Bloom”: spawn 6-10 ions in an arc (chase moment).
+
+Scoring (simple but deep):
+- base = {matchIon: 18, mismatchIon: 6, graze: 10, pylonWhip: 12}
+- comboMult = 1 + comboCount * 0.12 (cap at 3.0)
+- zoneMult = inZone ? 1.6 : 1.0
+- finalPoints = round(base * comboMult * zoneMult)
+
+Pseudo-code (state + tick):
+
+state:
+  score, highScore
+  health, maxHealth
+  charge (+1/-1)
+  comboCount, comboTime, comboTimeMax
+  pulseCd, pulseCdMax
+  instability (0..100)
+  difficultyLevel, elapsed
+  zone: {center, radius, endsAt} | null
+  event: {type, endsAt} | null
+
+tick(dt):
+  elapsed += dt
+  comboTime = max(0, comboTime - dt)
+  if comboTime == 0: comboCount = 0
+  pulseCd = max(0, pulseCd - dt)
+  decay instability slightly (e.g. instability -= 6*dt)
+  if elapsed crosses nextEventTime: startRandomEvent()
+  if zone active and now > endsAt: relocateZone()
+
+onCollectIon(kind):
+  match = (charge == + and kind==plus) || (charge == - and kind==minus)
+  comboCount += 1
+  comboTime = min(comboTimeMax, comboTime + (match ? 0.55 : 0.18))
+  score += points(matchIon or mismatchIon) * comboMult * zoneMult
+  if !match:
+     instability += 16
+     health -= 4
+     if instability > 75: apply “wobble controls” for 1.2s
+
+onNearMissSpike():
+  score += points(graze) * comboMult
+  comboTime = min(comboTimeMax, comboTime + 0.22)
+
+spawnIonDonut(playerPos, playerVel):
+  forward = normalize(playerVel) or cameraForward
+  for attempts in 1..30:
+    angle = random around forwardCone (±60deg)
+    r = rand(min=7, max=24)
+    p = playerPos + rotate(forward, angle) * r
+    if insideArena(p) and farFromSpikes(p, 3.2): return p
+  return randomArenaPoint()
+
+------------------------------------------------------------------------------
+
+1) fun/games/Polarity.tsx
+'use client';
+
+/**
+ * Polarity (Skeleton)
+ * You are a charged ball. Flip polarity (Space) and use magnets to slingshot into ions.
+ *
+ * Controls:
+ *  - WASD / Arrow keys: roll
+ *  - Space: flip charge (+/-)
+ *  - Click: pulse (small outward impulse) with cooldown
+ *
+ * TODO (next):
+ *  - Combo timer + near-miss scoring
+ *  - Better spawn logic (donut around player)
+ *  - Magnet pylon variants + zone multiplier
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Sky, Stars } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import { Physics, usePlane, useSphere, useCylinder } from '@react-three/cannon';
+import * as THREE from 'three';
+import { proxy, useSnapshot } from 'valtio';
+
+type Charge = 1 | -1;
+type IonKind = 'plus' | 'minus';
+
+const ARENA = 44;
+const HALF = ARENA / 2;
+const PLAYER_RADIUS = 1.1;
+
+const MAGNET_K = 240; // tuning constant
+const MAGNET_MIN_R2 = 6; // prevents infinite forces
+
+const ION_COUNT = 18;
+const SPIKE_COUNT = 10;
+
+const randRange = (min: number, max: number) => min + Math.random() * (max - min);
+
+const randomPosXZ = (minDist = 0): [number, number, number] => {
+  // Spawn in a square, optionally avoiding near center
+  for (let i = 0; i < 30; i++) {
+    const x = randRange(-HALF + 2, HALF - 2);
+    const z = randRange(-HALF + 2, HALF - 2);
+    if (minDist > 0 && Math.hypot(x, z) < minDist) continue;
+    return [x, 0.9, z];
+  }
+  return [randRange(-HALF + 2, HALF - 2), 0.9, randRange(-HALF + 2, HALF - 2)];
+};
+
+export const polarityState = proxy({
+  score: 0,
+  highScore: 0,
+  health: 100,
+  combo: 0,
+
+  charge: 1 as Charge,
+
+  pulseCd: 0,
+  pulseCdMax: 1.5,
+
+  gameOver: false,
+
+  reset: () => {
+    polarityState.score = 0;
+    polarityState.health = 100;
+    polarityState.combo = 0;
+    polarityState.charge = 1;
+    polarityState.pulseCd = 0;
+    polarityState.gameOver = false;
+  },
+
+  addScore: (pts: number) => {
+    polarityState.score += pts;
+    if (polarityState.score > polarityState.highScore) polarityState.highScore = polarityState.score;
+  },
+
+  takeDamage: (dmg: number) => {
+    if (polarityState.gameOver) return;
+    polarityState.combo = 0;
+    polarityState.health = Math.max(0, polarityState.health - dmg);
+    if (polarityState.health <= 0) polarityState.gameOver = true;
+  },
+
+  flip: () => {
+    polarityState.charge = polarityState.charge === 1 ? -1 : 1;
+  },
+
+  tick: (dt: number) => {
+    polarityState.pulseCd = Math.max(0, polarityState.pulseCd - dt);
+  },
+});
+
+const HUD: React.FC = () => {
+  const s = useSnapshot(polarityState);
+  return (
+    <Html>
+      <div className="absolute top-4 left-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow">
+        <div className="text-lg font-semibold">Polarity</div>
+        <div className="text-sm">Score: {s.score}</div>
+        <div className="text-sm">Health: {Math.round(s.health)}%</div>
+        <div className="text-sm">
+          Charge: <span className={s.charge === 1 ? 'text-cyan-300' : 'text-pink-300'}>{s.charge === 1 ? '+' : '-'}</span>
+        </div>
+        <div className="text-xs text-white/70 mt-1">Space: flip • Click: pulse</div>
+        {s.gameOver && <div className="text-red-400 text-sm mt-1">Game Over</div>}
+      </div>
+    </Html>
+  );
+};
+
+const Ground: React.FC = () => {
+  const [ref] = usePlane(() => ({ rotation: [-Math.PI / 2, 0, 0], position: [0, 0, 0] }));
+  return (
+    <mesh ref={ref} receiveShadow>
+      <planeGeometry args={[ARENA, ARENA]} />
+      <meshStandardMaterial color="#0b1220" />
+    </mesh>
+  );
+};
+
+type Magnet = { id: string; pos: THREE.Vector3; charge: Charge };
+
+const MagnetPylon: React.FC<{ m: Magnet }> = ({ m }) => {
+  const color = m.charge === 1 ? '#22d3ee' : '#fb7185';
+  return (
+    <group position={[m.pos.x, 0, m.pos.z]}>
+      <mesh castShadow>
+        <cylinderGeometry args={[0.6, 0.8, 2.2, 12]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.25} />
+      </mesh>
+      <mesh position={[0, 1.35, 0]}>
+        <sphereGeometry args={[0.25, 16, 16]} />
+        <meshStandardMaterial color="#ffffff" emissive={color} emissiveIntensity={0.6} />
+      </mesh>
+    </group>
+  );
+};
+
+type IonData = { id: string; kind: IonKind; position: [number, number, number] };
+
+const Ion: React.FC<{
+  ion: IonData;
+  onCollect: (id: string, kind: IonKind) => void;
+}> = ({ ion, onCollect }) => {
+  const [ref, api] = useSphere(() => ({
+    args: [0.35],
+    position: ion.position,
+    type: 'Static',
+    isTrigger: true,
+    onCollide: (e) => {
+      if (e.body?.userData?.type === 'player') onCollect(ion.id, ion.kind);
+    },
+  }));
+
+  useEffect(() => {
+    api.position.set(ion.position[0], ion.position[1], ion.position[2]);
+  }, [api, ion.position]);
+
+  const color = ion.kind === 'plus' ? '#22d3ee' : '#fb7185';
+
+  return (
+    <mesh ref={ref} castShadow>
+      <sphereGeometry args={[0.35, 18, 18]} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.45} />
+    </mesh>
+  );
+};
+
+type SpikeData = { id: string; position: [number, number, number] };
+
+const Spike: React.FC<{ spike: SpikeData; onHit: (id: string) => void }> = ({ spike, onHit }) => {
+  const [ref, api] = useCylinder(() => ({
+    args: [0.1, 0.9, 1.4, 6],
+    position: spike.position,
+    type: 'Static',
+    isTrigger: true,
+    onCollide: (e) => {
+      if (e.body?.userData?.type === 'player') onHit(spike.id);
+    },
+  }));
+
+  useEffect(() => {
+    api.position.set(spike.position[0], spike.position[1], spike.position[2]);
+  }, [api, spike.position]);
+
+  return (
+    <mesh ref={ref} castShadow>
+      <coneGeometry args={[0.9, 1.6, 8]} />
+      <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.3} />
+    </mesh>
+  );
+};
+
+const Player: React.FC<{ magnets: Magnet[] }> = ({ magnets }) => {
+  const { camera } = useThree();
+  const [ref, api] = useSphere(() => ({
+    mass: 1.2,
+    args: [PLAYER_RADIUS],
+    position: [0, PLAYER_RADIUS + 0.2, 0],
+    linearDamping: 0.35,
+    angularDamping: 0.55,
+    material: { restitution: 0.35, friction: 0.8 },
+    userData: { type: 'player' },
+  }));
+
+  const keysDown = useRef<Record<string, boolean>>({});
+  const pointerDown = useRef(false);
+  const spaceLatch = useRef(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      keysDown.current[k] = true;
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      keysDown.current[k] = false;
+    };
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 0) pointerDown.current = true;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button === 0) pointerDown.current = false;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+  }, []);
+
+  useFrame((state, dt) => {
+    polarityState.tick(dt);
+    if (!ref.current) return;
+
+    // Space flip (edge-triggered)
+    const space = !!keysDown.current[' '] || !!keysDown.current['space'];
+    if (space && !spaceLatch.current) {
+      polarityState.flip();
+      spaceLatch.current = true;
+    }
+    if (!space) spaceLatch.current = false;
+
+    // Click pulse (edge-triggered, cooldown)
+    if (pointerDown.current && polarityState.pulseCd <= 0 && !polarityState.gameOver) {
+      polarityState.pulseCd = polarityState.pulseCdMax;
+
+      // Simple pulse: boost current pointer direction + small upward hop
+      const dir = new THREE.Vector3(state.pointer.x, 0, -state.pointer.y);
+      if (dir.lengthSq() < 0.01) dir.set(0, 0, -1);
+      dir.normalize();
+      api.applyImpulse([dir.x * 3.5, 1.2, dir.z * 3.5], [0, 0, 0]);
+    }
+
+    // Input force
+    const ix =
+      (keysDown.current['d'] || keysDown.current['arrowright'] ? 1 : 0) -
+      (keysDown.current['a'] || keysDown.current['arrowleft'] ? 1 : 0);
+    const iz =
+      (keysDown.current['s'] || keysDown.current['arrowdown'] ? 1 : 0) -
+      (keysDown.current['w'] || keysDown.current['arrowup'] ? 1 : 0);
+
+    const input = new THREE.Vector3(ix, 0, iz);
+    if (input.lengthSq() > 0) input.normalize();
+
+    const baseForce = 55;
+    const steerForce = new THREE.Vector3(state.pointer.x * 22, 0, -state.pointer.y * 22);
+
+    // Magnet force
+    const p = ref.current.getWorldPosition(new THREE.Vector3());
+    const magnetForce = new THREE.Vector3();
+    for (const m of magnets) {
+      const dir = m.pos.clone().sub(p); // player -> magnet
+      const r2 = Math.max(dir.lengthSq(), MAGNET_MIN_R2);
+      dir.normalize();
+
+      // sign = - (qPlayer*qMag): opposite charges attract (sign +1), same repel (sign -1)
+      const sign = -(polarityState.charge * m.charge);
+      const f = (MAGNET_K / r2) * sign;
+
+      magnetForce.addScaledVector(dir, f);
+    }
+    magnetForce.y = 0;
+
+    if (!polarityState.gameOver) {
+      const fx = input.x * baseForce + steerForce.x + magnetForce.x;
+      const fz = input.z * baseForce + steerForce.z + magnetForce.z;
+      api.applyForce([fx, 0, fz], [0, 0, 0]);
+    }
+
+    // Camera follow
+    camera.position.lerp(new THREE.Vector3(p.x, p.y + 10, p.z + 14), 0.08);
+    camera.lookAt(p);
+
+    // Clamp in arena
+    const clampedX = THREE.MathUtils.clamp(p.x, -HALF + 1.2, HALF - 1.2);
+    const clampedZ = THREE.MathUtils.clamp(p.z, -HALF + 1.2, HALF - 1.2);
+    if (clampedX !== p.x || clampedZ !== p.z) {
+      api.position.set(clampedX, p.y, clampedZ);
+    }
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <sphereGeometry args={[PLAYER_RADIUS, 28, 28]} />
+      <meshStandardMaterial
+        color={polarityState.charge === 1 ? '#22d3ee' : '#fb7185'}
+        emissive={polarityState.charge === 1 ? '#22d3ee' : '#fb7185'}
+        emissiveIntensity={0.15}
+      />
+    </mesh>
+  );
+};
+
+const Polarity: React.FC = () => {
+  const magnets = useMemo<Magnet[]>(
+    () => [
+      { id: 'm1', pos: new THREE.Vector3(-12, 0, -10), charge: 1 },
+      { id: 'm2', pos: new THREE.Vector3(10, 0, -12), charge: -1 },
+      { id: 'm3', pos: new THREE.Vector3(-10, 0, 12), charge: -1 },
+      { id: 'm4', pos: new THREE.Vector3(12, 0, 10), charge: 1 },
+      { id: 'm5', pos: new THREE.Vector3(0, 0, 0), charge: -1 },
+    ],
+    []
+  );
+
+  const [ions, setIons] = useState<IonData[]>(
+    Array.from({ length: ION_COUNT }).map((_, i) => ({
+      id: `ion-${i}-${Math.random().toString(36).slice(2, 7)}`,
+      kind: Math.random() < 0.5 ? 'plus' : 'minus',
+      position: randomPosXZ(6),
+    }))
+  );
+
+  const [spikes, setSpikes] = useState<SpikeData[]>(
+    Array.from({ length: SPIKE_COUNT }).map((_, i) => ({
+      id: `spike-${i}-${Math.random().toString(36).slice(2, 7)}`,
+      position: randomPosXZ(8),
+    }))
+  );
+
+  const onCollectIon = useCallback((id: string, kind: IonKind) => {
+    if (polarityState.gameOver) return;
+
+    // Basic scoring: match charge = big, mismatch = small + tiny damage
+    const match = (polarityState.charge === 1 && kind === 'plus') || (polarityState.charge === -1 && kind === 'minus');
+    polarityState.combo += 1;
+    polarityState.addScore(match ? 20 + polarityState.combo * 2 : 6);
+
+    if (!match) polarityState.takeDamage(4);
+
+    setIons((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, kind: Math.random() < 0.5 ? 'plus' : 'minus', position: randomPosXZ(6) } : it))
+    );
+  }, []);
+
+  const onHitSpike = useCallback((id: string) => {
+    if (polarityState.gameOver) return;
+    polarityState.takeDamage(12);
+    setSpikes((prev) => prev.map((s) => (s.id === id ? { ...s, position: randomPosXZ(10) } : s)));
+  }, []);
+
+  return (
+    <>
+      <HUD />
+      <Sky />
+      <Stars radius={220} depth={60} count={1200} factor={4} saturation={0} fade />
+      <ambientLight intensity={0.35} />
+      <spotLight position={[18, 26, 14]} angle={0.28} intensity={1.1} castShadow />
+
+      <Physics gravity={[0, -22, 0]}>
+        <Ground />
+        <Player magnets={magnets} />
+
+        {magnets.map((m) => (
+          <MagnetPylon key={m.id} m={m} />
+        ))}
+
+        {ions.map((ion) => (
+          <Ion key={ion.id} ion={ion} onCollect={onCollectIon} />
+        ))}
+
+        {spikes.map((spike) => (
+          <Spike key={spike.id} spike={spike} onHit={onHitSpike} />
+        ))}
+      </Physics>
+    </>
+  );
+};
+
+export default Polarity;
+
+------------------------------------------------------------------------------
+
+GAME 2 — TETHER DRIFT (id: tetherdrift, hotkey: T)
+Pitch: “Hold to orbit, release to rocket.” Your score comes from chaining gates in a planned route while lasers punish hesitation.
+
+Controls:
+- Hold Click: tether to nearest pylon (auto-select)
+- Release: detach with tangent velocity
+- WASD: while tethered = reel-in/out + orbit speed; while free = small thrusters
+- Space: boost (small) OR airbrake (choose one; boost is more arcade)
+
+Core loop:
+1) Tether → swing → release through Gate 1
+2) Immediately choose next pylon to tether (route planning)
+3) Chain gates before the chain timer expires
+
+Addictive glue (V2):
+- Constellations: spawn 3–7 gates as an ordered path (A→B→C...). Only next gate is “active”.
+- Chain timer: collecting active gate adds time; missing or hitting laser breaks chain.
+- “Perfect release” bonus: if your release angle lines up with the next gate (dot product threshold), award a burst of points + slow-mo flash (0.2s).
+- Heat meter: speed builds heat; too hot = slight drift instability until you cool by tethering (encourages alternation).
+- Event deck (every 28s):
+  - “Twin Lasers” (2 sweep bars opposite phase)
+  - “Shock Pylon” (1 pylon emits a pulse that forcibly detaches you if you tether it)
+  - “Low Gravity” (free-flight becomes floaty for 8s)
+
+Scoring:
+- gatePoints = 25 + chain*6
+- perfectReleaseBonus = 35
+- chainMult = 1 + min(chain, 18)*0.08
+
+Pseudo-code (constellation path):
+
+constellation:
+  gates: Vector3[]
+  activeIndex: number
+  chain: number
+  chainTime: number
+
+newConstellation():
+  n = randInt(3..7)
+  gates = []
+  base = playerPos
+  dir = normalize(playerVel) or randomDir()
+  for i in 1..n:
+    base = spawnGateDonut(base, dir, min=10, max=22, avoidLasers=true)
+    gates.push(base)
+    dir = normalize(base - previousBase)
+  activeIndex = 0
+  chainTime = 2.4
+
+onGatePass(idx):
+  if idx != activeIndex: breakChain(); return
+  chain += 1
+  chainTime = min(3.0, chainTime + 0.55)
+  score += (25 + chain*6) * (1 + chain*0.08)
+  activeIndex += 1
+  if activeIndex == gates.length: newConstellation()
+
+laserDamage(dt):
+  if touchingLaser:
+    health -= 20*dt
+    chain = 0
+
+------------------------------------------------------------------------------
+
+2) fun/games/TetherDrift.tsx
+'use client';
+
+/**
+ * Tether Drift (Skeleton)
+ * Click+hold to tether to nearest pylon and orbit; release to fling.
+ *
+ * Controls:
+ *  - WASD: thrusters (minor influence)
+ *  - Hold Click: tether to nearest pylon
+ *  - Release Click: detach and fling
+ *  - Space: boost (small impulse, cooldown)
+ *
+ * TODO (next):
+ *  - Ring constellations + ordered gates
+ *  - Laser sweep patterns + difficulty ramp
+ *  - Better tether dynamics (rope length adjust, swing energy conservation)
+ */
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Sky, Stars, Torus } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { proxy, useSnapshot } from 'valtio';
+
+type Pylon = { id: string; pos: THREE.Vector3 };
+
+const ARENA = 52;
+const HALF = ARENA / 2;
+
+const clampArena = (p: THREE.Vector3) => {
+  p.x = THREE.MathUtils.clamp(p.x, -HALF + 1.5, HALF - 1.5);
+  p.z = THREE.MathUtils.clamp(p.z, -HALF + 1.5, HALF - 1.5);
+};
+
+const randomGatePos = (): THREE.Vector3 => new THREE.Vector3(
+  THREE.MathUtils.randFloat(-HALF + 6, HALF - 6),
+  1.2,
+  THREE.MathUtils.randFloat(-HALF + 6, HALF - 6)
+);
+
+export const tetherDriftState = proxy({
+  score: 0,
+  highScore: 0,
+  health: 100,
+  chain: 0,
+  gameOver: false,
+
+  reset: () => {
+    tetherDriftState.score = 0;
+    tetherDriftState.health = 100;
+    tetherDriftState.chain = 0;
+    tetherDriftState.gameOver = false;
+  },
+
+  addScore: (pts: number) => {
+    tetherDriftState.score += pts;
+    if (tetherDriftState.score > tetherDriftState.highScore) tetherDriftState.highScore = tetherDriftState.score;
+  },
+
+  damage: (d: number) => {
+    tetherDriftState.chain = 0;
+    tetherDriftState.health = Math.max(0, tetherDriftState.health - d);
+    if (tetherDriftState.health <= 0) tetherDriftState.gameOver = true;
+  },
+});
+
+const HUD: React.FC = () => {
+  const s = useSnapshot(tetherDriftState);
+  return (
+    <Html>
+      <div className="absolute top-4 left-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow">
+        <div className="text-lg font-semibold">Tether Drift</div>
+        <div className="text-sm">Score: {s.score}</div>
+        <div className="text-sm">Health: {Math.round(s.health)}%</div>
+        <div className="text-sm">Chain: {s.chain}</div>
+        <div className="text-xs text-white/70 mt-1">Hold Click: tether • Release: fling • Space: boost</div>
+        {s.gameOver && <div className="text-red-400 text-sm mt-1">Game Over</div>}
+      </div>
+    </Html>
+  );
+};
+
+const Ground: React.FC = () => (
+  <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+    <planeGeometry args={[ARENA, ARENA]} />
+    <meshStandardMaterial color="#0b1220" />
+  </mesh>
+);
+
+const PylonMesh: React.FC<{ p: Pylon }> = ({ p }) => (
+  <group position={[p.pos.x, 0, p.pos.z]}>
+    <mesh castShadow>
+      <cylinderGeometry args={[0.6, 0.8, 3.2, 12]} />
+      <meshStandardMaterial color="#a78bfa" emissive="#7c3aed" emissiveIntensity={0.18} />
+    </mesh>
+    <mesh position={[0, 2.0, 0]}>
+      <sphereGeometry args={[0.25, 16, 16]} />
+      <meshStandardMaterial color="#ffffff" emissive="#a78bfa" emissiveIntensity={0.5} />
+    </mesh>
+  </group>
+);
+
+const Gate: React.FC<{ pos: THREE.Vector3; active?: boolean }> = ({ pos, active = false }) => (
+  <Torus position={[pos.x, pos.y, pos.z]} args={[1.4, 0.25, 14, 28]} rotation={[Math.PI / 2, 0, 0]}>
+    <meshStandardMaterial
+      color={active ? '#22d3ee' : '#facc15'}
+      emissive={active ? '#22d3ee' : '#f59e0b'}
+      emissiveIntensity={active ? 0.6 : 0.3}
+    />
+  </Torus>
+);
+
+const Laser: React.FC<{ angle: number }> = ({ angle }) => {
+  // A long thin bar rotating around center
+  const len = ARENA * 0.9;
+  return (
+    <mesh position={[0, 1.0, 0]} rotation={[0, angle, 0]}>
+      <boxGeometry args={[len, 0.2, 0.55]} />
+      <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.35} />
+    </mesh>
+  );
+};
+
+const TetherDrift: React.FC = () => {
+  const { camera } = useThree();
+
+  const pylons = useMemo<Pylon[]>(
+    () => [
+      { id: 'p1', pos: new THREE.Vector3(-18, 0, -16) },
+      { id: 'p2', pos: new THREE.Vector3(18, 0, -14) },
+      { id: 'p3', pos: new THREE.Vector3(-16, 0, 18) },
+      { id: 'p4', pos: new THREE.Vector3(16, 0, 16) },
+      { id: 'p5', pos: new THREE.Vector3(0, 0, 0) },
+    ],
+    []
+  );
+
+  // Kinematic player
+  const playerMesh = useRef<THREE.Mesh | null>(null);
+  const pos = useRef(new THREE.Vector3(0, 1.2, 10));
+  const vel = useRef(new THREE.Vector3(0, 0, -6));
+
+  const tethered = useRef(false);
+  const anchor = useRef<Pylon | null>(null);
+  const ropeR = useRef(10);
+  const angVel = useRef(1.8);
+
+  const keysDown = useRef<Record<string, boolean>>({});
+  const pointerDown = useRef(false);
+  const boostCd = useRef(0);
+
+  const [gatePos, setGatePos] = useState<THREE.Vector3>(() => randomGatePos());
+  const laserAngle = useRef(0);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = true);
+    const onKeyUp = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = false);
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 0) pointerDown.current = true;
+    };
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button === 0) pointerDown.current = false;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+  }, []);
+
+  const findNearestPylon = useCallback((): Pylon => {
+    let best = pylons[0];
+    let bestD = Infinity;
+    for (const p of pylons) {
+      const d = p.pos.distanceToSquared(pos.current);
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return best;
+  }, [pylons]);
+
+  useFrame((_, dt) => {
+    if (tetherDriftState.gameOver) dt = 0;
+
+    boostCd.current = Math.max(0, boostCd.current - dt);
+
+    // Tether state transitions
+    if (pointerDown.current && !tethered.current && !tetherDriftState.gameOver) {
+      tethered.current = true;
+      anchor.current = findNearestPylon();
+      ropeR.current = pos.current.distanceTo(anchor.current.pos);
+      ropeR.current = THREE.MathUtils.clamp(ropeR.current, 6, 16);
+      // Set angular velocity based on current movement direction
+      angVel.current = 2.2;
+    }
+
+    if (!pointerDown.current && tethered.current) {
+      // Detach: fling tangent
+      const a = anchor.current;
+      if (a) {
+        const off = pos.current.clone().sub(a.pos);
+        off.y = 0;
+        off.normalize();
+        const tangent = new THREE.Vector3(-off.z, 0, off.x); // 90° in XZ
+        vel.current.copy(tangent.multiplyScalar(angVel.current * ropeR.current * 0.55));
+      }
+      tethered.current = false;
+      anchor.current = null;
+    }
+
+    // Boost (space)
+    const space = keysDown.current[' '] || keysDown.current['space'];
+    if (space && boostCd.current <= 0 && !tetherDriftState.gameOver) {
+      boostCd.current = 1.25;
+      const fwd = vel.current.clone();
+      if (fwd.lengthSq() < 0.01) fwd.set(0, 0, -1);
+      fwd.normalize();
+      vel.current.addScaledVector(fwd, 8);
+      tetherDriftState.addScore(5);
+    }
+
+    // Controls
+    const ix =
+      (keysDown.current['d'] || keysDown.current['arrowright'] ? 1 : 0) -
+      (keysDown.current['a'] || keysDown.current['arrowleft'] ? 1 : 0);
+    const iz =
+      (keysDown.current['s'] || keysDown.current['arrowdown'] ? 1 : 0) -
+      (keysDown.current['w'] || keysDown.current['arrowup'] ? 1 : 0);
+
+    if (tethered.current && anchor.current) {
+      // Orbit dynamics (simple)
+      const a = anchor.current;
+      const off = pos.current.clone().sub(a.pos);
+      off.y = 0;
+
+      // A/D: speed orbit, W/S: widen or tighten slightly
+      angVel.current += ix * 1.4 * dt;
+      angVel.current = THREE.MathUtils.clamp(angVel.current, 0.8, 6);
+
+      ropeR.current += iz * 5.5 * dt; // W makes smaller radius if iz negative
+      ropeR.current = THREE.MathUtils.clamp(ropeR.current, 5.5, 18);
+
+      // Rotate offset around Y
+      const rot = new THREE.Matrix4().makeRotationY(angVel.current * dt);
+      off.applyMatrix4(rot).setLength(ropeR.current);
+
+      pos.current.copy(a.pos).add(off);
+      clampArena(pos.current);
+      // small damping
+      vel.current.multiplyScalar(0.985);
+    } else {
+      // Free flight
+      const thr = new THREE.Vector3(ix, 0, iz);
+      if (thr.lengthSq() > 0) thr.normalize();
+      vel.current.addScaledVector(thr, 16 * dt);
+      vel.current.multiplyScalar(0.985);
+      pos.current.addScaledVector(vel.current, dt);
+      clampArena(pos.current);
+    }
+
+    // Gate collect
+    if (!tetherDriftState.gameOver) {
+      const dGate = pos.current.distanceTo(gatePos);
+      if (dGate < 1.65) {
+        tetherDriftState.chain += 1;
+        tetherDriftState.addScore(25 + tetherDriftState.chain * 6);
+        setGatePos(randomGatePos());
+      }
+    }
+
+    // Laser sweep + collision (distance to rotating line)
+    laserAngle.current += dt * 0.85;
+    const a = laserAngle.current;
+    // line normal for line through origin at angle a: n = (sin(a), 0, -cos(a))
+    const distToLine = Math.abs(Math.sin(a) * pos.current.x - Math.cos(a) * pos.current.z);
+    const nearLaser = distToLine < 0.55 && Math.abs(pos.current.y - 1.0) < 1.5;
+    if (nearLaser && !tetherDriftState.gameOver) {
+      tetherDriftState.damage(18 * dt); // continuous damage while touching
+    }
+
+    // Camera follow
+    camera.position.lerp(new THREE.Vector3(pos.current.x, pos.current.y + 11, pos.current.z + 16), 0.08);
+    camera.lookAt(pos.current);
+
+    // Apply to mesh
+    if (playerMesh.current) {
+      playerMesh.current.position.copy(pos.current);
+    }
+  });
+
+  return (
+    <>
+      <HUD />
+      <Sky />
+      <Stars radius={240} depth={60} count={1100} factor={4} saturation={0} fade />
+      <ambientLight intensity={0.35} />
+      <spotLight position={[20, 28, 16]} angle={0.28} intensity={1.15} castShadow />
+
+      <Ground />
+      {pylons.map((p) => (
+        <PylonMesh key={p.id} p={p} />
+      ))}
+
+      <Gate pos={gatePos} active />
+      <Laser angle={laserAngle.current} />
+
+      <mesh ref={playerMesh} castShadow>
+        <sphereGeometry args={[1.1, 28, 28]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.18} />
+      </mesh>
+    </>
+  );
+};
+
+export default TetherDrift;
+
+------------------------------------------------------------------------------
+
+GAME 3 — TRACE (id: trace, hotkey: Z)
+Pitch: Tron/Snake, but the trail “arms” after a delay. Every second you survive, the game becomes more your own trap.
+
+Controls:
+- A/D or ←/→: steer
+- W/S: speed trim (optional; can remove for purity)
+- Space: Phase (ghost) 0.6s, cooldown
+
+Core loop:
+1) Turn while your trail is still “soft”
+2) Collect shards to refresh phase / extend combo window
+3) Survive the tightening hardening time as your pathing space collapses
+
+Addictive glue (V2):
+- Solidify ramp: `solidifyMs` shrinks from ~650ms to ~260ms over 90–120 seconds.
+- Shards: collecting gives score + (a) phase cooldown reduction or (b) +phase charge.
+- “Cut corners” scoring: driving close to SOLID trail without touching gives graze points.
+- Phase economy: instead of pure cooldown, make it “charges”: max 2, shards refill 1.
+- Event deck (every 22s):
+  - “Mirror”: controls invert for 6s (high tension, short)
+  - “Soft Storm”: trail solidifies slower for 7s (recovery window)
+  - “Overclock”: speed increases +15% for 8s (more points multiplier)
+
+Scoring:
+- survival tick: +1 per segment placed
+- shard: +40
+- graze: +8 (but capped per second)
+- multiplier: 1 + (comboCount*0.1), comboCount increments on shard/graze chains
+
+Pseudo-code (spatial hash so it scales):
+
+gridCellSize = 2.0
+hashKey(x,z) = `${floor(x/cell)}:${floor(z/cell)}`
+bucket: Map<key, SegmentIndex[]>
+
+onAddSegment(seg):
+  key = hashKey(seg.x, seg.z)
+  bucket[key].push(segIndex)
+
+checkCollision(playerPos):
+  if phaseActive: return false
+  keys = neighbor 3x3 cells around player
+  for seg in bucket[keys]:
+    if seg.isSolid(now) and dist(playerPos, seg) < hitR: return true
+
+grazeDetect(playerPos):
+  if phaseActive: return
+  for seg near player:
+    if seg.isSolid and hitR < dist < grazeR:
+      if timeSinceLastGraze > 0.12s:
+         score += 8 * comboMult
+         comboTime += 0.12
+
+NOTE: Your current skeleton uses `useCallback` but doesn’t import it; if you ever paste it into TSX, add `useCallback` to the React import.
+
+------------------------------------------------------------------------------
+
+3) fun/games/Trace.tsx
+'use client';
+
+/**
+ * Trace (Skeleton)
+ * Tron/Snake-style: you move constantly and leave a trail that hardens after a short delay.
+ *
+ * Controls:
+ *  - A/D or Left/Right: steer
+ *  - W/S: speed trim
+ *  - Space: phase (temporary ghost), cooldown
+ *
+ * TODO (next):
+ *  - Shards pickups that refresh phase
+ *  - Difficulty ramp: speed up + solidify delay shrinks
+ *  - Spatial hashing for trail collisions (for huge segment counts)
+ */
+
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Html, Sky, Stars } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { proxy, useSnapshot } from 'valtio';
+
+const ARENA = 60;
+const HALF = ARENA / 2;
+
+const PLAYER_R = 1.05;
+const SEG_SPACING = 0.7;
+const MAX_SEGS = 650;
+
+export const traceState = proxy({
+  score: 0,
+  highScore: 0,
+  gameOver: false,
+
+  phaseTime: 0,
+  phaseCd: 0,
+
+  reset: () => {
+    traceState.score = 0;
+    traceState.gameOver = false;
+    traceState.phaseTime = 0;
+    traceState.phaseCd = 0;
+  },
+
+  addScore: (pts: number) => {
+    traceState.score += pts;
+    if (traceState.score > traceState.highScore) traceState.highScore = traceState.score;
+  },
+});
+
+const HUD: React.FC = () => {
+  const s = useSnapshot(traceState);
+  return (
+    <Html>
+      <div className="absolute top-4 left-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow">
+        <div className="text-lg font-semibold">Trace</div>
+        <div className="text-sm">Score: {s.score}</div>
+        <div className="text-sm">Phase: {s.phaseTime > 0 ? 'ACTIVE' : s.phaseCd > 0 ? 'cooldown' : 'ready'}</div>
+        <div className="text-xs text-white/70 mt-1">A/D steer • Space phase</div>
+        {s.gameOver && <div className="text-red-400 text-sm mt-1">Game Over</div>}
+      </div>
+    </Html>
+  );
+};
+
+type Segment = { x: number; z: number; t: number };
+
+const Trace: React.FC = () => {
+  const { camera } = useThree();
+
+  const playerMesh = useRef<THREE.Mesh | null>(null);
+  const trailMesh = useRef<THREE.InstancedMesh | null>(null);
+
+  const keysDown = useRef<Record<string, boolean>>({});
+  const spaceLatch = useRef(false);
+
+  const pos = useRef(new THREE.Vector3(0, 1.0, 12));
+  const heading = useRef(Math.PI); // facing -Z
+  const speed = useRef(14);
+
+  const lastSegPos = useRef(new THREE.Vector3(pos.current.x, 0, pos.current.z));
+  const segs = useRef<Segment[]>([]);
+  const tmpObj = useMemo(() => new THREE.Object3D(), []);
+
+  const solidifyMs = useRef(520); // TODO: ramp down with time
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = true);
+    const onKeyUp = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  const rebuildInstances = useCallback(() => {
+    const inst = trailMesh.current;
+    if (!inst) return;
+
+    const now = performance.now();
+    const s = segs.current;
+
+    inst.count = Math.min(s.length, MAX_SEGS);
+    for (let i = 0; i < inst.count; i++) {
+      const seg = s[i];
+      const isSolid = now - seg.t >= solidifyMs.current;
+
+      tmpObj.position.set(seg.x, 0.5, seg.z);
+      tmpObj.rotation.set(0, 0, 0);
+      tmpObj.scale.set(0.55, 1.0, 0.55);
+
+      // If not solid yet, shrink (visual cue)
+      if (!isSolid) tmpObj.scale.multiplyScalar(0.55);
+
+      tmpObj.updateMatrix();
+      inst.setMatrixAt(i, tmpObj.matrix);
+    }
+    inst.instanceMatrix.needsUpdate = true;
+  }, [tmpObj]);
+
+  useFrame((_, dt) => {
+    if (traceState.gameOver) dt = 0;
+
+    // Phase timers
+    traceState.phaseTime = Math.max(0, traceState.phaseTime - dt);
+    traceState.phaseCd = Math.max(0, traceState.phaseCd - dt);
+
+    // Controls
+    const left = keysDown.current['a'] || keysDown.current['arrowleft'];
+    const right = keysDown.current['d'] || keysDown.current['arrowright'];
+    const up = keysDown.current['w'] || keysDown.current['arrowup'];
+    const down = keysDown.current['s'] || keysDown.current['arrowdown'];
+
+    const turn = (right ? 1 : 0) - (left ? 1 : 0);
+    heading.current += turn * 3.0 * dt;
+
+    if (up) speed.current = THREE.MathUtils.clamp(speed.current + 18 * dt, 10, 28);
+    if (down) speed.current = THREE.MathUtils.clamp(speed.current - 18 * dt, 10, 28);
+
+    const space = !!keysDown.current[' '] || !!keysDown.current['space'];
+    if (space && !spaceLatch.current && traceState.phaseCd <= 0 && !traceState.gameOver) {
+      traceState.phaseTime = 0.6;
+      traceState.phaseCd = 3.0;
+      spaceLatch.current = true;
+    }
+    if (!space) spaceLatch.current = false;
+
+    // Move
+    const vx = Math.cos(heading.current) * speed.current;
+    const vz = Math.sin(heading.current) * speed.current;
+    pos.current.x += vx * dt;
+    pos.current.z += vz * dt;
+
+    // Bounce off walls (unless phase active? keep bounce for now)
+    if (pos.current.x < -HALF + PLAYER_R) {
+      pos.current.x = -HALF + PLAYER_R;
+      heading.current = Math.PI - heading.current;
+    }
+    if (pos.current.x > HALF - PLAYER_R) {
+      pos.current.x = HALF - PLAYER_R;
+      heading.current = Math.PI - heading.current;
+    }
+    if (pos.current.z < -HALF + PLAYER_R) {
+      pos.current.z = -HALF + PLAYER_R;
+      heading.current = -heading.current;
+    }
+    if (pos.current.z > HALF - PLAYER_R) {
+      pos.current.z = HALF - PLAYER_R;
+      heading.current = -heading.current;
+    }
+
+    // Trail spawn
+    const d = lastSegPos.current.distanceTo(new THREE.Vector3(pos.current.x, 0, pos.current.z));
+    if (d >= SEG_SPACING && !traceState.gameOver) {
+      segs.current.unshift({ x: pos.current.x, z: pos.current.z, t: performance.now() });
+      lastSegPos.current.set(pos.current.x, 0, pos.current.z);
+
+      if (segs.current.length > MAX_SEGS) segs.current.pop();
+
+      traceState.addScore(1);
+      rebuildInstances();
+    }
+
+    // Collision with solid trail
+    if (traceState.phaseTime <= 0 && !traceState.gameOver) {
+      const now = performance.now();
+      // Skip the newest ~10 segments (avoid instant self-collision)
+      for (let i = 12; i < segs.current.length; i++) {
+        const seg = segs.current[i];
+        if (now - seg.t < solidifyMs.current) continue;
+        const dist = Math.hypot(pos.current.x - seg.x, pos.current.z - seg.z);
+        if (dist < PLAYER_R * 0.75) {
+          traceState.gameOver = true;
+          break;
+        }
+      }
+    }
+
+    // Camera follow
+    camera.position.lerp(new THREE.Vector3(pos.current.x, 22, pos.current.z + 18), 0.08);
+    camera.lookAt(pos.current.x, 0, pos.current.z);
+
+    // Apply to mesh
+    if (playerMesh.current) {
+      playerMesh.current.position.set(pos.current.x, 1.05, pos.current.z);
+    }
+  });
+
+  return (
+    <>
+      <HUD />
+      <Sky />
+      <Stars radius={240} depth={60} count={1400} factor={4} saturation={0} fade />
+      <ambientLight intensity={0.35} />
+      <spotLight position={[18, 32, 14]} angle={0.3} intensity={1.1} castShadow />
+
+      {/* Ground */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[ARENA, ARENA]} />
+        <meshStandardMaterial color="#070b12" />
+      </mesh>
+
+      {/* Trail instanced boxes */}
+      <instancedMesh ref={trailMesh} args={[undefined as any, undefined as any, MAX_SEGS]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.18} />
+      </instancedMesh>
+
+      {/* Player */}
+      <mesh ref={playerMesh} castShadow>
+        <sphereGeometry args={[PLAYER_R, 28, 28]} />
+        <meshStandardMaterial
+          color={traceState.phaseTime > 0 ? '#a78bfa' : '#facc15'}
+          emissive={traceState.phaseTime > 0 ? '#7c3aed' : '#f59e0b'}
+          emissiveIntensity={0.18}
+        />
+      </mesh>
+    </>
+  );
+};
+
+export default Trace;
+
+------------------------------------------------------------------------------
+
+GAME 4 — FLIPBOX (id: flipbox, hotkey: Q)
+Pitch: You’re inside a cube. You don’t move; GRAVITY moves. Snap gravity to traverse faces and steal cores before the cube fills with danger.
+
+Controls:
+- WASD: aim gravity direction
+- Space: snap gravity
+- Optional: Shift = brake (high damping)
+
+Core loop:
+1) Snap gravity to reach a core on a face
+2) Every core collected adds one new hazard / modifier tile inside the cube
+3) Decide: short safe snaps vs risky long rolls to keep a “perfect chain” alive
+
+Addictive glue (V2):
+- Perfect chain: if you collect a core within `perfectWindow` seconds of last snap, chain++ and points multiply.
+- Hazard growth: each core adds 1 of: tumbling block, spike cluster, “crack wall” zone (damaging), or a moving laser plane.
+- Core “clusters”: sometimes spawn 3 mini-cores on same face (chase moment).
+- Event deck (every 30s):
+  - “Axis Lock”: only 2 directions allowed for 8s (forces improvisation)
+  - “Heavy”: gravity magnitude increases (faster, riskier)
+  - “Sticky”: brake effectiveness increases; encourages precision
+
+Scoring:
+- core: 60 base
+- chainMult = 1 + min(chain, 12)*0.12
+- wallBonk penalty: small health drain (already in skeleton), but don’t zero chain unless hard hit
+
+Pseudo-code (6-direction gravity + snap FX):
+
+aimDir from last WASD pressed:
+  forward/back/left/right/up/down (you can add up/down with E/Shift later)
+
+onSnap():
+  gravity = unitVector(aimDir) * gravityMag
+  snapChainTime = 0.9s
+  if within chainTime: chain++
+  else chain = 0
+  cameraShake(0.08)
+  pulseRingFX()
+
+onCoreCollect():
+  score += 60 * chainMult
+  spawnHazard()
+  maybeSpawnCluster(20% chance)
+
+spawnHazard():
+  pick type weighted by difficulty
+  place away from current ball position (minDist)
+
+------------------------------------------------------------------------------
+
+4) fun/games/FlipBox.tsx
+'use client';
+
+/**
+ * FlipBox (Skeleton)
+ * You are a ball inside a cube. Aim gravity with WASD, press Space to snap gravity.
+ *
+ * Controls:
+ *  - WASD: aim gravity direction (left/right/forward/back)
+ *  - Space: commit gravity snap
+ *
+ * TODO (next):
+ *  - Cores on faces + hazards that tumble on each snap
+ *  - Snap FX (screen shake, pulse ring)
+ *  - Multiple gravity modes (include up/down later)
+ */
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Sky, Stars } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { proxy, useSnapshot } from 'valtio';
+
+const BOX = 26;
+const HALF = BOX / 2;
+const BALL_R = 1.05;
+
+type Dir = 'left' | 'right' | 'forward' | 'back';
+
+export const flipBoxState = proxy({
+  score: 0,
+  highScore: 0,
+  health: 100,
+  gameOver: false,
+
+  reset: () => {
+    flipBoxState.score = 0;
+    flipBoxState.health = 100;
+    flipBoxState.gameOver = false;
+  },
+
+  addScore: (pts: number) => {
+    flipBoxState.score += pts;
+    if (flipBoxState.score > flipBoxState.highScore) flipBoxState.highScore = flipBoxState.score;
+  },
+
+  damage: (d: number) => {
+    flipBoxState.health = Math.max(0, flipBoxState.health - d);
+    if (flipBoxState.health <= 0) flipBoxState.gameOver = true;
+  },
+});
+
+const HUD: React.FC<{ aim: Dir }> = ({ aim }) => {
+  const s = useSnapshot(flipBoxState);
+  return (
+    <Html>
+      <div className="absolute top-4 left-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow">
+        <div className="text-lg font-semibold">FlipBox</div>
+        <div className="text-sm">Score: {s.score}</div>
+        <div className="text-sm">Health: {Math.round(s.health)}%</div>
+        <div className="text-sm">Aim: {aim}</div>
+        <div className="text-xs text-white/70 mt-1">WASD aim • Space snap gravity</div>
+        {s.gameOver && <div className="text-red-400 text-sm mt-1">Game Over</div>}
+      </div>
+    </Html>
+  );
+};
+
+const randomCoreOnFace = (): THREE.Vector3 => {
+  // Pick a random face and position core on it
+  const face = Math.floor(Math.random() * 4); // only 4 lateral faces for skeleton
+  const u = THREE.MathUtils.randFloat(-HALF + 3, HALF - 3);
+  const v = THREE.MathUtils.randFloat(-HALF + 3, HALF - 3);
+
+  switch (face) {
+    case 0: return new THREE.Vector3(-HALF + 1.2, u, v);
+    case 1: return new THREE.Vector3(HALF - 1.2, u, v);
+    case 2: return new THREE.Vector3(u, v, -HALF + 1.2);
+    default: return new THREE.Vector3(u, v, HALF - 1.2);
+  }
+};
+
+const FlipBox: React.FC = () => {
+  const { camera } = useThree();
+
+  const keysDown = useRef<Record<string, boolean>>({});
+  const spaceLatch = useRef(false);
+
+  const ballMesh = useRef<THREE.Mesh | null>(null);
+
+  const pos = useRef(new THREE.Vector3(0, 0, 0));
+  const vel = useRef(new THREE.Vector3(0, 0, 0));
+
+  const gravity = useRef(new THREE.Vector3(0, -18, 0));
+  const aim = useRef<Dir>('forward');
+
+  const [corePos, setCorePos] = useState<THREE.Vector3>(() => randomCoreOnFace());
+
+  const obstacles = useMemo(() => {
+    // A few floating blocks (simple hazards)
+    return [
+      new THREE.Vector3(-4, 0, 2),
+      new THREE.Vector3(5, 3, -2),
+      new THREE.Vector3(2, -5, 4),
+    ];
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = true);
+    const onKeyUp = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  useFrame((_, dt) => {
+    if (flipBoxState.gameOver) dt = 0;
+
+    // Aim gravity with WASD
+    const w = keysDown.current['w'] || keysDown.current['arrowup'];
+    const s = keysDown.current['s'] || keysDown.current['arrowdown'];
+    const a = keysDown.current['a'] || keysDown.current['arrowleft'];
+    const d = keysDown.current['d'] || keysDown.current['arrowright'];
+
+    if (w) aim.current = 'forward';
+    if (s) aim.current = 'back';
+    if (a) aim.current = 'left';
+    if (d) aim.current = 'right';
+
+    // Snap gravity on Space (edge)
+    const space = keysDown.current[' '] || keysDown.current['space'];
+    if (space && !spaceLatch.current && !flipBoxState.gameOver) {
+      spaceLatch.current = true;
+
+      const g = new THREE.Vector3(0, 0, 0);
+      if (aim.current === 'forward') g.set(0, 0, -22);
+      if (aim.current === 'back') g.set(0, 0, 22);
+      if (aim.current === 'left') g.set(-22, 0, 0);
+      if (aim.current === 'right') g.set(22, 0, 0);
+      gravity.current.copy(g);
+
+      // Small snap bonus (feels good)
+      flipBoxState.addScore(2);
+    }
+    if (!space) spaceLatch.current = false;
+
+    // Integrate custom physics
+    vel.current.addScaledVector(gravity.current, dt);
+    vel.current.multiplyScalar(0.995); // damping
+    pos.current.addScaledVector(vel.current, dt);
+
+    // Collide with cube walls (reflect velocity)
+    const min = -HALF + BALL_R;
+    const max = HALF - BALL_R;
+
+    if (pos.current.x < min) { pos.current.x = min; vel.current.x *= -0.55; flipBoxState.damage(0.2); }
+    if (pos.current.x > max) { pos.current.x = max; vel.current.x *= -0.55; flipBoxState.damage(0.2); }
+    if (pos.current.y < min) { pos.current.y = min; vel.current.y *= -0.55; flipBoxState.damage(0.2); }
+    if (pos.current.y > max) { pos.current.y = max; vel.current.y *= -0.55; flipBoxState.damage(0.2); }
+    if (pos.current.z < min) { pos.current.z = min; vel.current.z *= -0.55; flipBoxState.damage(0.2); }
+    if (pos.current.z > max) { pos.current.z = max; vel.current.z *= -0.55; flipBoxState.damage(0.2); }
+
+    // Core collect (distance check)
+    if (!flipBoxState.gameOver && pos.current.distanceTo(corePos) < 1.7) {
+      flipBoxState.addScore(50);
+      setCorePos(randomCoreOnFace());
+    }
+
+    // Obstacle hits
+    for (const o of obstacles) {
+      if (pos.current.distanceTo(o) < 1.65) {
+        flipBoxState.damage(15 * dt);
+      }
+    }
+
+    // Camera (outside cube)
+    camera.position.lerp(new THREE.Vector3(pos.current.x + 22, pos.current.y + 18, pos.current.z + 22), 0.06);
+    camera.lookAt(pos.current);
+
+    // Apply to mesh
+    if (ballMesh.current) {
+      ballMesh.current.position.copy(pos.current);
+    }
+  });
+
+  return (
+    <>
+      <HUD aim={aim.current} />
+      <Sky />
+      <Stars radius={240} depth={60} count={1100} factor={4} saturation={0} fade />
+      <ambientLight intensity={0.35} />
+      <spotLight position={[30, 30, 30]} angle={0.25} intensity={1.15} castShadow />
+
+      {/* Cube boundary */}
+      <mesh>
+        <boxGeometry args={[BOX, BOX, BOX]} />
+        <meshStandardMaterial color="#111827" transparent opacity={0.08} wireframe />
+      </mesh>
+
+      {/* Core */}
+      <mesh position={[corePos.x, corePos.y, corePos.z]}>
+        <boxGeometry args={[1.1, 1.1, 1.1]} />
+        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.55} />
+      </mesh>
+
+      {/* Obstacles */}
+      {obstacles.map((o, idx) => (
+        <mesh key={idx} position={[o.x, o.y, o.z]}>
+          <boxGeometry args={[2.2, 2.2, 2.2]} />
+          <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.2} />
+        </mesh>
+      ))}
+
+      {/* Ball */}
+      <mesh ref={ballMesh} castShadow>
+        <sphereGeometry args={[BALL_R, 28, 28]} />
+        <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.12} />
+      </mesh>
+    </>
+  );
+};
+
+export default FlipBox;
+
+------------------------------------------------------------------------------
+
+GAME 5 — PORTAL PUNCH (id: portalpunch, hotkey: O)
+Pitch: Place two portals to route yourself through targets. The meta is inventing efficient routes under pressure.
+
+Controls:
+- WASD/Arrows: roll
+- LMB: place Portal A
+- RMB: place Portal B
+- Space: dash (cooldown)
+- Optional: E = clear portals
+
+Core loop:
+1) Place portals to “warp” into a target line
+2) Chain target hits with minimal driving (portal chain multiplier)
+3) Avoid anti-portal hazards that punish sloppy placement
+
+Addictive glue (V2):
+- Portal chain multiplier: each successful teleport that leads to a target hit within `hitWindow` increases chain.
+- Portal energy: teleports drain energy; energy refills by hitting targets without crashing. Forces planning (no infinite portal spam).
+- Anti-loop protection: after teleport, invuln/re-entry cooldown + small random exit offset along portal normal.
+- Hazards:
+  - “Null zones” (circles) where portals can’t be placed
+  - Laser lines that break chain but don’t insta-kill (recoverable)
+- Event deck (every 26s):
+  - “Double Targets”: two targets active at once for 8s (route optimization moment)
+  - “Portal Drift”: portals slowly slide (mild) for 7s (chaos)
+
+Scoring:
+- target: 50 base
+- teleport: +5 (already)
+- chainMult = 1 + min(chain, 25)*0.06
+- targetPoints = 50 * chainMult + speedBonus (based on ball speed)
+
+Pseudo-code (energy + chain contract):
+
+state:
+  chain, chainTime
+  portalEnergy (0..100)
+  lastTeleportAt, teleportCooldown
+
+onTeleport():
+  if portalEnergy < 15: noTeleport
+  portalEnergy -= 15
+  chainTime = 1.4
+  chain += 1
+
+onTargetHit():
+  if chainTime > 0: chain += 1
+  else chain = 0
+  portalEnergy = min(100, portalEnergy + 22)
+  score += 50 * (1 + chain*0.06) + clamp(speed*2, 0, 40)
+
+tick(dt):
+  chainTime -= dt
+  if chainTime <= 0: chain = 0
+  portalEnergy += 6*dt (slow regen)
+
+------------------------------------------------------------------------------
+
+5) fun/games/PortalPunch.tsx
+'use client';
+
+/**
+ * Portal Punch (Skeleton)
+ * Place two portals (LMB/RMB). Teleport to build speed and hit targets.
+ *
+ * Controls:
+ *  - WASD / Arrow keys: roll
+ *  - Left Click: place Portal A
+ *  - Right Click: place Portal B
+ *  - Space: dash
+ *
+ * TODO (next):
+ *  - Portal chain multiplier + invuln window
+ *  - Target patterns + hazards (lasers)
+ *  - Better portal placement validity checks
+ */
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Sky, Stars } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import { Physics, usePlane, useSphere } from '@react-three/cannon';
+import * as THREE from 'three';
+import { proxy, useSnapshot } from 'valtio';
+
+const ARENA = 46;
+const HALF = ARENA / 2;
+const BALL_R = 1.1;
+
+type Portal = { a: THREE.Vector3 | null; b: THREE.Vector3 | null };
+
+export const portalPunchState = proxy({
+  score: 0,
+  highScore: 0,
+  chain: 0,
+  gameOver: false,
+
+  reset: () => {
+    portalPunchState.score = 0;
+    portalPunchState.chain = 0;
+    portalPunchState.gameOver = false;
+  },
+
+  addScore: (pts: number) => {
+    portalPunchState.score += pts;
+    if (portalPunchState.score > portalPunchState.highScore) portalPunchState.highScore = portalPunchState.score;
+  },
+});
+
+const HUD: React.FC = () => {
+  const s = useSnapshot(portalPunchState);
+  return (
+    <Html>
+      <div className="absolute top-4 left-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow">
+        <div className="text-lg font-semibold">Portal Punch</div>
+        <div className="text-sm">Score: {s.score}</div>
+        <div className="text-sm">Chain: {s.chain}</div>
+        <div className="text-xs text-white/70 mt-1">LMB Portal A • RMB Portal B • Space dash</div>
+      </div>
+    </Html>
+  );
+};
+
+const Ground: React.FC = () => {
+  const [ref] = usePlane(() => ({ rotation: [-Math.PI / 2, 0, 0], position: [0, 0, 0] }));
+  return (
+    <mesh ref={ref} receiveShadow>
+      <planeGeometry args={[ARENA, ARENA]} />
+      <meshStandardMaterial color="#0b1220" />
+    </mesh>
+  );
+};
+
+const PortalMarker: React.FC<{ p: THREE.Vector3; color: string }> = ({ p, color }) => (
+  <group position={[p.x, 0.02, p.z]}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[1.2, 1.75, 32]} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
+    </mesh>
+    <mesh position={[0, 0.35, 0]}>
+      <torusGeometry args={[0.9, 0.12, 12, 24]} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.25} />
+    </mesh>
+  </group>
+);
+
+type Target = { id: string; pos: THREE.Vector3 };
+
+const TargetOrb: React.FC<{ t: Target }> = ({ t }) => (
+  <mesh position={[t.pos.x, 1.1, t.pos.z]} castShadow>
+    <sphereGeometry args={[0.6, 18, 18]} />
+    <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.4} />
+  </mesh>
+);
+
+const Player: React.FC<{ portals: Portal; targetsRef: React.MutableRefObject<Target[]>; respawnTarget: (id: string) => void }> = ({
+  portals,
+  targetsRef,
+  respawnTarget,
+}) => {
+  const { camera } = useThree();
+
+  const [ref, api] = useSphere(() => ({
+    mass: 1.2,
+    args: [BALL_R],
+    position: [0, BALL_R + 0.2, 10],
+    linearDamping: 0.35,
+    angularDamping: 0.55,
+    material: { restitution: 0.35, friction: 0.9 },
+    userData: { type: 'player' },
+  }));
+
+  const keysDown = useRef<Record<string, boolean>>({});
+  const dashCd = useRef(0);
+  const teleportCd = useRef(0);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = true);
+    const onKeyUp = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  useFrame((state, dt) => {
+    dashCd.current = Math.max(0, dashCd.current - dt);
+    teleportCd.current = Math.max(0, teleportCd.current - dt);
+
+    if (!ref.current) return;
+    const p = ref.current.getWorldPosition(new THREE.Vector3());
+
+    // movement
+    const ix =
+      (keysDown.current['d'] || keysDown.current['arrowright'] ? 1 : 0) -
+      (keysDown.current['a'] || keysDown.current['arrowleft'] ? 1 : 0);
+    const iz =
+      (keysDown.current['s'] || keysDown.current['arrowdown'] ? 1 : 0) -
+      (keysDown.current['w'] || keysDown.current['arrowup'] ? 1 : 0);
+
+    const input = new THREE.Vector3(ix, 0, iz);
+    if (input.lengthSq() > 0) input.normalize();
+
+    if (!portalPunchState.gameOver) {
+      api.applyForce([input.x * 65 + state.pointer.x * 16, 0, input.z * 65 + -state.pointer.y * 16], [0, 0, 0]);
+    }
+
+    // dash
+    const space = keysDown.current[' '] || keysDown.current['space'];
+    if (space && dashCd.current <= 0 && !portalPunchState.gameOver) {
+      dashCd.current = 1.0;
+      const dir = new THREE.Vector3(state.pointer.x, 0, -state.pointer.y);
+      if (dir.lengthSq() < 0.02) dir.copy(input);
+      if (dir.lengthSq() < 0.02) dir.set(0, 0, -1);
+      dir.normalize();
+      api.applyImpulse([dir.x * 6.5, 0.6, dir.z * 6.5], [0, 0, 0]);
+    }
+
+    // portal teleport
+    const a = portals.a;
+    const b = portals.b;
+    const r = 1.5;
+    if (a && b && teleportCd.current <= 0 && !portalPunchState.gameOver) {
+      const da = Math.hypot(p.x - a.x, p.z - a.z);
+      const db = Math.hypot(p.x - b.x, p.z - b.z);
+
+      if (da < r) {
+        teleportCd.current = 0.35;
+        api.position.set(b.x, p.y, b.z);
+        portalPunchState.chain += 1;
+        portalPunchState.addScore(5);
+      } else if (db < r) {
+        teleportCd.current = 0.35;
+        api.position.set(a.x, p.y, a.z);
+        portalPunchState.chain += 1;
+        portalPunchState.addScore(5);
+      }
+    }
+
+    // target hits (manual distance checks)
+    for (const t of targetsRef.current) {
+      const d = Math.hypot(p.x - t.pos.x, p.z - t.pos.z);
+      if (d < 1.35) {
+        portalPunchState.addScore(50 + portalPunchState.chain * 3);
+        respawnTarget(t.id);
+        break;
+      }
+    }
+
+    // clamp arena
+    const cx = THREE.MathUtils.clamp(p.x, -HALF + 1.4, HALF - 1.4);
+    const cz = THREE.MathUtils.clamp(p.z, -HALF + 1.4, HALF - 1.4);
+    if (cx !== p.x || cz !== p.z) api.position.set(cx, p.y, cz);
+
+    // camera
+    camera.position.lerp(new THREE.Vector3(p.x, p.y + 10, p.z + 14), 0.08);
+    camera.lookAt(p);
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <sphereGeometry args={[BALL_R, 28, 28]} />
+      <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.12} />
+    </mesh>
+  );
+};
+
+const PortalPlacementController: React.FC<{ portalsRef: React.MutableRefObject<Portal>; setPortals: React.Dispatch<React.SetStateAction<Portal>> }> = ({
+  portalsRef,
+  setPortals,
+}) => {
+  const { camera } = useThree();
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => {
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+    const onPointerDown = (e: PointerEvent) => {
+      // Build NDC
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera({ x, y } as any, camera);
+      if (raycaster.ray.intersectPlane(plane, tmp)) {
+        const px = THREE.MathUtils.clamp(tmp.x, -HALF + 2, HALF - 2);
+        const pz = THREE.MathUtils.clamp(tmp.z, -HALF + 2, HALF - 2);
+        const p = new THREE.Vector3(px, 0, pz);
+
+        setPortals((prev) => {
+          const next: Portal = { ...prev };
+          if (e.button === 2) next.b = p; // RMB
+          else next.a = p; // LMB
+          portalsRef.current = next;
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [camera, plane, raycaster, tmp, setPortals, portalsRef]);
+
+  return null;
+};
+
+const PortalPunch: React.FC = () => {
+  const [portals, setPortals] = useState<Portal>({ a: null, b: null });
+  const portalsRef = useRef<Portal>(portals);
+
+  const targetsRef = useRef<Target[]>(
+    Array.from({ length: 7 }).map((_, i) => ({
+      id: `t-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      pos: new THREE.Vector3(
+        THREE.MathUtils.randFloat(-HALF + 4, HALF - 4),
+        0,
+        THREE.MathUtils.randFloat(-HALF + 4, HALF - 4)
+      ),
+    }))
+  );
+
+  const respawnTarget = useCallback((id: string) => {
+    targetsRef.current = targetsRef.current.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            pos: new THREE.Vector3(
+              THREE.MathUtils.randFloat(-HALF + 4, HALF - 4),
+              0,
+              THREE.MathUtils.randFloat(-HALF + 4, HALF - 4)
+            ),
+          }
+        : t
+    );
+  }, []);
+
+  return (
+    <>
+      <HUD />
+      <Sky />
+      <Stars radius={240} depth={60} count={1100} factor={4} saturation={0} fade />
+      <ambientLight intensity={0.35} />
+      <spotLight position={[18, 26, 14]} angle={0.28} intensity={1.1} castShadow />
+
+      <PortalPlacementController portalsRef={portalsRef} setPortals={setPortals} />
+
+      <Physics gravity={[0, -22, 0]}>
+        <Ground />
+
+        {portals.a && <PortalMarker p={portals.a} color="#22d3ee" />}
+        {portals.b && <PortalMarker p={portals.b} color="#fb7185" />}
+
+        {targetsRef.current.map((t) => (
+          <TargetOrb key={t.id} t={t} />
+        ))}
+
+        <Player portals={portalsRef.current} targetsRef={targetsRef} respawnTarget={respawnTarget} />
+      </Physics>
+    </>
+  );
+};
+
+export default PortalPunch;
+
+------------------------------------------------------------------------------
+
+GAME 6 — CONVEYOR CHAOS (id: conveyorchaos, hotkey: E)
+Pitch: A fast “live puzzle”: click to rotate belts and route yourself to the goal before the board kills you.
+
+Controls:
+- Click: rotate belt tile 90°
+- WASD: nudge (small)
+- Space: reverse ALL belts briefly (cooldown) (panic button)
+
+Core loop:
+1) Read the current belt flow
+2) Rotate 2–4 tiles ahead to route into the glowing goal pad
+3) Deliver before timer expires → level up → board becomes meaner
+
+Addictive glue (V2):
+- Goal timer: starts at ~12s, ramps down to 6s (cap). Delivering with time left gives bonus.
+- Delivery chain: consecutive deliveries without falling/being crushed build a multiplier.
+- Tile types (low-poly, easy):
+  - Belt (dir)
+  - Booster (dir, stronger force, adds points if you ride it cleanly)
+  - Bumper (pushes sideways when touched)
+  - Hole (damage + respawn with chain break)
+  - Crusher (periodically slams: dangerous when active)
+  - Switch tile (rotates itself every few seconds; chaos)
+- Events (every 24s):
+  - “Blackout”: arrows dim for 6s (skill test)
+  - “Overdrive”: belts +20% speed for 8s (+score multiplier)
+
+Scoring:
+- delivery: 100 base + timeBonus
+- chainMult = 1 + min(chain, 10)*0.15
+- reverse used: small score penalty (encourages skill), but don’t punish too hard
+
+Pseudo-code (board + hazards):
+
+tile:
+  kind: belt|booster|bumper|hole|crusher|switch
+  dir: N/E/S/W
+  phase: for crusher/switch (time accumulator)
+
+tick(dt):
+  goalTime -= dt
+  if goalTime <= 0: damage/chainBreak + relocateGoal()
+  for each crusher: update phase; if slamActive and player in tile: damage big
+  for each switch: if phase crosses interval: rotate dir
+
+playerForces():
+  tile = tileAt(playerPos)
+  force = dirVec(tile.dir) * beltStrength(kind)
+  if reverseActive: force *= -1
+  apply to velocity (kinematic) or applyForce (physics)
+
+onDelivery():
+  chain += 1
+  score += (100 + round(goalTime*12)) * chainMult
+  level += 1
+  goalTime = max(6, 12 - level*0.35)
+  mutateBoard(addHazard=true, addSpecial=true)
+
+------------------------------------------------------------------------------
+
+6) fun/games/ConveyorChaos.tsx
+'use client';
+
+/**
+ * Conveyor Chaos (Skeleton)
+ * You are a ball on a belt grid. Click tiles to rotate belts and route yourself to the goal.
+ *
+ * Controls:
+ *  - WASD: nudge (small)
+ *  - Click: rotate belt tile 90°
+ *  - Space: reverse belts briefly (cooldown)  [skeleton includes toggle]
+ *
+ * TODO (next):
+ *  - Tile types: boosters, crushers, holes, bumpers
+ *  - Goal timer + level ramp
+ *  - Nice arrow/flow FX
+ */
+
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Sky, Stars } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import { proxy, useSnapshot } from 'valtio';
+
+const GRID = 10;
+const TILE = 3.2;
+const ARENA = GRID * TILE;
+const HALF = ARENA / 2;
+
+type Dir = 0 | 1 | 2 | 3; // 0=N,1=E,2=S,3=W
+
+const dirVec = (d: Dir) => {
+  switch (d) {
+    case 0: return new THREE.Vector3(0, 0, -1);
+    case 1: return new THREE.Vector3(1, 0, 0);
+    case 2: return new THREE.Vector3(0, 0, 1);
+    default: return new THREE.Vector3(-1, 0, 0);
+  }
+};
+
+export const conveyorChaosState = proxy({
+  score: 0,
+  highScore: 0,
+  level: 1,
+  gameOver: false,
+
+  reset: () => {
+    conveyorChaosState.score = 0;
+    conveyorChaosState.level = 1;
+    conveyorChaosState.gameOver = false;
+  },
+
+  addScore: (pts: number) => {
+    conveyorChaosState.score += pts;
+    if (conveyorChaosState.score > conveyorChaosState.highScore) conveyorChaosState.highScore = conveyorChaosState.score;
+  },
+});
+
+const HUD: React.FC<{ reverseTime: number }> = ({ reverseTime }) => {
+  const s = useSnapshot(conveyorChaosState);
+  return (
+    <Html>
+      <div className="absolute top-4 left-4 rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow">
+        <div className="text-lg font-semibold">Conveyor Chaos</div>
+        <div className="text-sm">Score: {s.score}</div>
+        <div className="text-sm">Level: {s.level}</div>
+        <div className="text-sm">Reverse: {reverseTime > 0 ? 'ACTIVE' : 'ready'}</div>
+        <div className="text-xs text-white/70 mt-1">Click rotate tiles • Space reverse</div>
+      </div>
+    </Html>
+  );
+};
+
+const tileCenter = (ix: number, iz: number) => {
+  const x = -HALF + TILE / 2 + ix * TILE;
+  const z = -HALF + TILE / 2 + iz * TILE;
+  return new THREE.Vector3(x, 0, z);
+};
+
+const clampArena = (p: THREE.Vector3) => {
+  p.x = THREE.MathUtils.clamp(p.x, -HALF + 1.2, HALF - 1.2);
+  p.z = THREE.MathUtils.clamp(p.z, -HALF + 1.2, HALF - 1.2);
+};
+
+const ConveyorChaos: React.FC = () => {
+  const { camera } = useThree();
+
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+
+  const keysDown = useRef<Record<string, boolean>>({});
+  const spaceLatch = useRef(false);
+
+  const playerMesh = useRef<THREE.Mesh | null>(null);
+  const pos = useRef(new THREE.Vector3(0, 1.1, 0));
+  const vel = useRef(new THREE.Vector3(0, 0, 0));
+
+  // Belt directions (Dir per tile)
+  const [belts, setBelts] = useState<Dir[]>(
+    Array.from({ length: GRID * GRID }).map(() => (Math.floor(Math.random() * 4) as Dir))
+  );
+
+  // Goal tile index
+  const [goal, setGoal] = useState<{ ix: number; iz: number }>(() => ({
+    ix: Math.floor(Math.random() * GRID),
+    iz: Math.floor(Math.random() * GRID),
+  }));
+
+  const reverseTime = useRef(0);
+  const reverseCd = useRef(0);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = true);
+    const onKeyUp = (e: KeyboardEvent) => (keysDown.current[e.key.toLowerCase()] = false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, []);
+
+  // Tile click rotate
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera({ x, y } as any, camera);
+
+      if (raycaster.ray.intersectPlane(plane, tmp)) {
+        const ix = Math.floor((tmp.x + HALF) / TILE);
+        const iz = Math.floor((tmp.z + HALF) / TILE);
+        if (ix < 0 || ix >= GRID || iz < 0 || iz >= GRID) return;
+
+        const idx = iz * GRID + ix;
+        setBelts((prev) => {
+          const next = [...prev];
+          next[idx] = (((next[idx] + 1) % 4) as Dir);
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [camera, plane, raycaster, tmp]);
+
+  useFrame((_, dt) => {
+    reverseTime.current = Math.max(0, reverseTime.current - dt);
+    reverseCd.current = Math.max(0, reverseCd.current - dt);
+
+    // Space reverse belts (edge)
+    const space = keysDown.current[' '] || keysDown.current['space'];
+    if (space && !spaceLatch.current && reverseCd.current <= 0) {
+      reverseCd.current = 3.5;
+      reverseTime.current = 1.35;
+      spaceLatch.current = true;
+    }
+    if (!space) spaceLatch.current = false;
+
+    // Find tile under player
+    const ix = Math.floor((pos.current.x + HALF) / TILE);
+    const iz = Math.floor((pos.current.z + HALF) / TILE);
+
+    let beltForce = new THREE.Vector3(0, 0, 0);
+    if (ix >= 0 && ix < GRID && iz >= 0 && iz < GRID) {
+      const d = belts[iz * GRID + ix];
+      beltForce = dirVec(d).multiplyScalar(11);
+      if (reverseTime.current > 0) beltForce.multiplyScalar(-1);
+    }
+
+    // WASD nudge
+    const nx =
+      (keysDown.current['d'] || keysDown.current['arrowright'] ? 1 : 0) -
+      (keysDown.current['a'] || keysDown.current['arrowleft'] ? 1 : 0);
+    const nz =
+      (keysDown.current['s'] || keysDown.current['arrowdown'] ? 1 : 0) -
+      (keysDown.current['w'] || keysDown.current['arrowup'] ? 1 : 0);
+
+    const nudge = new THREE.Vector3(nx, 0, nz);
+    if (nudge.lengthSq() > 0) nudge.normalize().multiplyScalar(8);
+
+    // Integrate
+    vel.current.addScaledVector(beltForce, dt);
+    vel.current.addScaledVector(nudge, dt);
+    vel.current.multiplyScalar(0.985);
+    pos.current.addScaledVector(vel.current, dt);
+    clampArena(pos.current);
+
+    // Goal check
+    const gCenter = tileCenter(goal.ix, goal.iz);
+    if (Math.hypot(pos.current.x - gCenter.x, pos.current.z - gCenter.z) < 1.25) {
+      conveyorChaosState.level += 1;
+      conveyorChaosState.addScore(100);
+
+      setGoal({
+        ix: Math.floor(Math.random() * GRID),
+        iz: Math.floor(Math.random() * GRID),
+      });
+
+      // Small difficulty ramp: randomize a few belts
+      setBelts((prev) => {
+        const next = [...prev];
+        for (let i = 0; i < 6; i++) {
+          const k = Math.floor(Math.random() * next.length);
+          next[k] = (Math.floor(Math.random() * 4) as Dir);
+        }
+        return next;
+      });
+    }
+
+    // Camera
+    camera.position.lerp(new THREE.Vector3(pos.current.x, 22, pos.current.z + 18), 0.08);
+    camera.lookAt(pos.current.x, 0, pos.current.z);
+
+    // Apply to mesh
+    if (playerMesh.current) playerMesh.current.position.copy(pos.current);
+  });
+
+  return (
+    <>
+      <HUD reverseTime={reverseTime.current} />
+      <Sky />
+      <Stars radius={240} depth={60} count={1200} factor={4} saturation={0} fade />
+      <ambientLight intensity={0.35} />
+      <spotLight position={[18, 30, 14]} angle={0.28} intensity={1.1} castShadow />
+
+      {/* Board tiles */}
+      <group position={[0, 0, 0]}>
+        {Array.from({ length: GRID * GRID }).map((_, idx) => {
+          const ix = idx % GRID;
+          const iz = Math.floor(idx / GRID);
+          const c = tileCenter(ix, iz);
+          const d = belts[idx];
+
+          const arrowDir = dirVec(d);
+          const rotY = Math.atan2(arrowDir.x, arrowDir.z); // rotate arrow toward direction
+
+          const isGoal = ix === goal.ix && iz === goal.iz;
+
+          return (
+            <group key={idx} position={[c.x, 0, c.z]}>
+              <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+                <planeGeometry args={[TILE * 0.98, TILE * 0.98]} />
+                <meshStandardMaterial color={isGoal ? '#22d3ee' : '#111827'} emissive={isGoal ? '#22d3ee' : '#000000'} emissiveIntensity={isGoal ? 0.18 : 0} />
+              </mesh>
+
+              {/* Arrow indicator */}
+              <mesh position={[0, 0.05, 0]} rotation={[0, rotY, 0]}>
+                <boxGeometry args={[0.35, 0.1, 1.2]} />
+                <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.12} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+
+      {/* Player */}
+      <mesh ref={playerMesh} castShadow>
+        <sphereGeometry args={[1.1, 28, 28]} />
+        <meshStandardMaterial color="#a78bfa" emissive="#7c3aed" emissiveIntensity={0.14} />
+      </mesh>
+    </>
+  );
+};
+
+export default ConveyorChaos;

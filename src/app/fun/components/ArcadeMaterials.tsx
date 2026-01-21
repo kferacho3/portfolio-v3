@@ -779,11 +779,14 @@ export const AuroraBackdropMaterial: React.FC<{
   colorB?: string;
   colorC?: string;
   intensity?: number;
+  mode?: 'dark' | 'light';
 }> = ({
-  colorA = '#39FF14',
-  colorB = '#00D9FF',
-  colorC = '#FF5F1F',
-  intensity = 1,
+  // default: deep matte nebula (no bright aura)
+  colorA = '#05050a',
+  colorB = '#1b0a33',
+  colorC = '#081226',
+  intensity = 0.55,
+  mode = 'dark',
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const uniforms = useMemo(
@@ -793,8 +796,9 @@ export const AuroraBackdropMaterial: React.FC<{
       uColorB: { value: new THREE.Color(colorB) },
       uColorC: { value: new THREE.Color(colorC) },
       uIntensity: { value: intensity },
+      uLightMode: { value: mode === 'light' ? 1 : 0 },
     }),
-    [colorA, colorB, colorC, intensity]
+    [colorA, colorB, colorC, intensity, mode]
   );
 
   useFrame(({ clock }) => {
@@ -820,28 +824,131 @@ export const AuroraBackdropMaterial: React.FC<{
         uniform vec3 uColorB;
         uniform vec3 uColorC;
         uniform float uIntensity;
+        uniform float uLightMode;
         varying vec2 vUv;
 
-        float band(float x, float freq, float speed) {
-          return sin(x * freq + uTime * speed) * 0.5 + 0.5;
+        float hash21(vec2 p) {
+          p = fract(p * vec2(234.34, 435.345));
+          p += dot(p, p + 34.345);
+          return fract(p.x * p.y);
+        }
+
+        float noise2(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          float a = hash21(i);
+          float b = hash21(i + vec2(1.0, 0.0));
+          float c = hash21(i + vec2(0.0, 1.0));
+          float d = hash21(i + vec2(1.0, 1.0));
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.55;
+          mat2 m = mat2(0.8, -0.6, 0.6, 0.8);
+          for (int i = 0; i < 5; i++) {
+            v += a * noise2(p);
+            p = m * p * 2.02 + 13.7;
+            a *= 0.5;
+          }
+          return v;
+        }
+
+        vec3 darken(vec3 c) {
+          // force "only dark colors": clamp energy + compress highlights
+          c = pow(max(c, 0.0), vec3(1.35));
+          return clamp(c * 0.28 + vec3(0.01, 0.01, 0.015), 0.0, 0.28);
+        }
+
+        vec3 softenLight(vec3 c) {
+          // light-mode palette: pastelize + keep matte (no neon)
+          c = clamp(c, 0.0, 1.0);
+          c = mix(c, vec3(1.0), 0.7);
+          c = mix(c, vec3(dot(c, vec3(0.299, 0.587, 0.114))), 0.18); // slight desat
+          return clamp(c, 0.78, 0.98);
         }
 
         void main() {
-          float wave = band(vUv.x, 8.0, 0.6);
-          float sweep = smoothstep(0.05, 0.85, vUv.y + wave * 0.2);
-          float glow = band(vUv.y, 6.0, 0.4) * 0.4 + 0.6;
+          vec2 uv = vUv * 2.0 - 1.0;
+          float r = length(uv);
 
-          vec3 col = mix(uColorA, uColorB, sweep);
-          col = mix(col, uColorC, smoothstep(0.6, 1.0, sweep));
-          col *= glow * uIntensity;
+          // slow nebula drift
+          vec2 p = uv * 1.15;
+          p.x += uTime * 0.015;
+          p.y -= uTime * 0.01;
 
-          float alpha = smoothstep(0.05, 0.75, sweep);
-          gl_FragColor = vec4(col, alpha);
+          // main cloud field
+          float n1 = fbm(p * 1.6);
+          float n2 = fbm(p * 3.2 + n1 * 0.75);
+          float clouds = smoothstep(0.42, 0.92, n1 * 0.65 + n2 * 0.55);
+
+          // "clouds around": concentrate at edges
+          float edge = smoothstep(0.35, 0.98, r);
+          float edgeClouds = smoothstep(0.25, 0.95, fbm(p * 2.25 + 9.0)) * edge;
+
+          float mask = clamp(clouds * 0.55 + edgeClouds * 0.9, 0.0, 1.0);
+
+          // subtle vignette to keep it matte
+          float vignette = 1.0 - smoothstep(0.2, 1.15, r);
+
+          float t = fbm(p * 0.9 + 2.0);
+
+          if (uLightMode > 0.5) {
+            // LIGHT MODE: light blue/yellow/pink with a SILVER aura + clouds around
+            vec3 blue = softenLight(uColorA);
+            vec3 yellow = softenLight(uColorB);
+            vec3 pink = softenLight(uColorC);
+            vec3 silver = vec3(0.92, 0.93, 0.95);
+
+            vec3 base = vec3(0.975, 0.975, 0.99);
+
+            // hue bands so all three colors show up
+            float ang = atan(uv.y, uv.x);
+            float band = 0.5 + 0.5 * sin(ang * 1.6 + uTime * 0.06);
+            float band2 = 0.5 + 0.5 * sin(ang * 2.3 - uTime * 0.05 + 1.7);
+
+            vec3 tint = mix(blue, pink, smoothstep(0.15, 0.85, band));
+            tint = mix(tint, yellow, smoothstep(0.35, 0.95, band2) * 0.55);
+            tint = mix(tint, silver, 0.22);
+
+            // clouds: stronger around edges
+            float edgeMask = smoothstep(0.38, 1.08, r);
+            float cloudMix = mask * (0.35 + 0.75 * edgeMask);
+
+            // silver aura ring (soft, not neon)
+            float halo = smoothstep(0.55, 1.15, r) * (1.0 - smoothstep(0.92, 1.28, r));
+            halo *= (0.45 + 0.55 * smoothstep(0.0, 1.0, fbm(p * 1.35 + 22.0)));
+
+            vec3 col = base;
+            col = mix(col, tint, cloudMix * (0.34 * uIntensity));
+            col += silver * halo * (0.22 * uIntensity);
+            col = mix(col, base, (1.0 - vignette) * 0.06);
+
+            gl_FragColor = vec4(col, clamp(0.98 * uIntensity, 0.0, 1.0));
+          } else {
+            // DARK MODE: deep matte nebula (only dark colors)
+            vec3 a = darken(uColorA);
+            vec3 b = darken(uColorB);
+            vec3 c = darken(uColorC);
+
+            vec3 base = vec3(0.01, 0.01, 0.015);
+            vec3 tint = mix(b, c, smoothstep(0.25, 0.85, t));
+            tint = mix(tint, a, 0.25);
+
+            vec3 col = base;
+            col += tint * mask * (0.55 * uIntensity);
+            col = mix(col, base, (1.0 - vignette) * 0.25);
+
+            float alpha = clamp(0.85 * uIntensity + mask * 0.25, 0.0, 1.0);
+            gl_FragColor = vec4(col, alpha);
+          }
         }
       `}
       transparent
       depthWrite={false}
-      blending={THREE.AdditiveBlending}
+      blending={THREE.NormalBlending}
     />
   );
 };

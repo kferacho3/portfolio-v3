@@ -35,7 +35,14 @@ export type GameId =
   // Endless runners
   | 'voidrunner'
   | 'gravityrush'
-  | 'apex';
+  | 'apex'
+  // New arcade games
+  | 'polarity'
+  | 'tetherdrift'
+  | 'trace'
+  | 'flipbox'
+  | 'portalpunch'
+  | 'conveyorchaos';
 
 /**
  * Game type including home state

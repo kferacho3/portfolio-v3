@@ -28,33 +28,39 @@ import { GAME_CARDS, shouldShowHUD, getGameCard } from '../config/games';
 import type { GameId } from '../store/types';
 import { useSnapshot } from 'valtio';
 
-// Game imports
-import Dropper, { dropperState } from '../games/Dropper';
-import FlappyBird from '../games/FlappyBird';
-import FluxHop, { fluxHopState } from '../games/FluxHop';
-import GeoChrome from '../games/GeoChrome';
-import Pinball from '../games/Pinball3D';
-import ReactPong, { reactPongState } from '../games/ReactPong';
-import Rollette from '../games/Rollette';
-import ShapeShifter, { shapeShifterState } from '../games/ShapeShifter';
-import SkyBlitz, { skyBlitzState } from '../games/SkyBlitz';
-import SpinBlock, { spinBlockState } from '../games/SpinBlock';
-import Stackz, { stackzState } from '../games/Stackz';
-import Sizr, { sizrState } from '../games/Sizr';
-import ProjectMuseum from '../games/ProjectMuseum';
-import Gyro, { gyroState } from '../games/Gyro';
-import Prism, { prismState } from '../games/Prism';
-import Forma, { formaState } from '../games/Forma';
-import Weave, { weaveState } from '../games/Weave';
-import Pave, { paveState } from '../games/Pave';
-import VoidRunner, { voidRunnerState } from '../games/VoidRunner';
-import GravityRush, { gravityRushState } from '../games/GravityRush';
-import Apex, { apexState } from '../games/Apex';
+// Game imports - using folder-based structure
+import Dropper, { dropperState } from '../games/dropper';
+import FlappyBird from '../games/flappybird';
+import FluxHop, { fluxHopState } from '../games/fluxhop';
+import GeoChrome from '../games/geochrome';
+import Pinball from '../games/pinball';
+import ReactPong, { reactPongState } from '../games/reactpong';
+import Rollette from '../games/rollette';
+import ShapeShifter, { shapeShifterState } from '../games/shapeshifter';
+import SkyBlitz, { skyBlitzState } from '../games/skyblitz';
+import SpinBlock, { spinBlockState } from '../games/spinblock';
+import Stackz, { stackzState } from '../games/stackz';
+import Sizr, { sizrState } from '../games/sizr';
+import ProjectMuseum from '../games/museum';
+import Gyro, { gyroState } from '../games/gyro';
+import Prism, { prismState } from '../games/prism';
+import Forma, { formaState } from '../games/forma';
+import Weave, { weaveState } from '../games/weave';
+import Pave, { paveState } from '../games/pave';
+import VoidRunner, { voidRunnerState } from '../games/voidrunner';
+import GravityRush, { gravityRushState } from '../games/gravityrush';
+import Apex, { apexState } from '../games/apex';
+import Polarity, { polarityState } from '../games/polarity';
+import TetherDrift, { tetherDriftState } from '../games/tetherdrift';
+import Trace, { traceState } from '../games/trace';
+import FlipBox, { flipBoxState } from '../games/flipbox';
+import PortalPunch, { portalPunchState } from '../games/portalpunch';
+import ConveyorChaos, { conveyorChaosState } from '../games/conveyorchaos';
 // Classic ports
-import RolletteClassic, { rolletteClassicState } from '../games/RolletteClassic';
-import SkyBlitzClassic, { skyBlitzClassicState } from '../games/SkyBlitzClassic';
-import DropperClassic, { dropperClassicState } from '../games/DropperClassic';
-import StackzCatchClassic, { stackzCatchClassicState } from '../games/StackzCatchClassic';
+import RolletteClassic, { rolletteClassicState } from '../games/rolletteClassic';
+import SkyBlitzClassic, { skyBlitzClassicState } from '../games/skyblitzClassic';
+import DropperClassic, { dropperClassicState } from '../games/dropperClassic';
+import StackzCatchClassic, { stackzCatchClassicState } from '../games/stackzCatchClassic';
 
 // Valid game IDs for static generation
 const VALID_GAME_IDS: GameId[] = [
@@ -79,6 +85,12 @@ const VALID_GAME_IDS: GameId[] = [
   'voidrunner',
   'gravityrush',
   'apex',
+  'polarity',
+  'tetherdrift',
+  'trace',
+  'flipbox',
+  'portalpunch',
+  'conveyorchaos',
   'rolletteClassic',
   'skyblitzClassic',
   'dropperClassic',
@@ -187,6 +199,12 @@ export default function GamePage({ params }: GamePageProps) {
       case 'voidrunner': voidRunnerState.reset(); break;
       case 'gravityrush': gravityRushState.reset(); break;
       case 'apex': apexState.reset(); break;
+      case 'polarity': polarityState.reset(); break;
+      case 'tetherdrift': tetherDriftState.reset(); break;
+      case 'trace': traceState.reset(); break;
+      case 'flipbox': flipBoxState.reset(); break;
+      case 'portalpunch': portalPunchState.reset(); break;
+      case 'conveyorchaos': conveyorChaosState.reset(); break;
       case 'rolletteClassic': rolletteClassicState.reset(); break;
       case 'skyblitzClassic': skyBlitzClassicState.reset(); break;
       case 'dropperClassic': dropperClassicState.reset(); break;
@@ -277,6 +295,18 @@ export default function GamePage({ params }: GamePageProps) {
         return <GravityRush key={`gravityrush-${restartSeed}`} soundsOn={soundsOn} />;
       case 'apex':
         return <Apex key={`apex-${restartSeed}`} soundsOn={soundsOn} />;
+      case 'polarity':
+        return <Polarity />;
+      case 'tetherdrift':
+        return <TetherDrift />;
+      case 'trace':
+        return <Trace />;
+      case 'flipbox':
+        return <FlipBox />;
+      case 'portalpunch':
+        return <PortalPunch />;
+      case 'conveyorchaos':
+        return <ConveyorChaos />;
       case 'rolletteClassic':
         return <RolletteClassic key={`rolletteClassic-${restartSeed}`} soundsOn={soundsOn} />;
       case 'skyblitzClassic':
@@ -366,4 +396,3 @@ export default function GamePage({ params }: GamePageProps) {
     </>
   );
 }
-

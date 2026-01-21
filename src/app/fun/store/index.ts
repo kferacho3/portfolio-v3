@@ -16,12 +16,13 @@ import type {
   ReactPongMode,
   ShapeShifterMode,
 } from './types';
+import { GAME_CARDS } from '../config/games';
 
 /**
  * Total number of games in the arcade
  * Used for carousel navigation
  */
-const TOTAL_GAMES = 21;
+const TOTAL_GAMES = GAME_CARDS.length;
 
 /**
  * Games that should be excluded from random selection
@@ -53,6 +54,12 @@ const ALL_GAME_IDS: GameId[] = [
   'voidrunner',
   'gravityrush',
   'apex',
+  'polarity',
+  'tetherdrift',
+  'trace',
+  'flipbox',
+  'portalpunch',
+  'conveyorchaos',
 ];
 
 /**

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useContext, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Environment, Stars } from '@react-three/drei';
@@ -23,9 +23,10 @@ import {
   AuroraBackdropMaterial,
   PulseGridMaterial,
 } from './ArcadeMaterials';
-import { reactPongState } from '../games/ReactPong';
-import { skyBlitzClassicState } from '../games/SkyBlitzClassic';
-import { fluxHopState } from '../games/FluxHop';
+import { reactPongState } from '../games/reactpong';
+import { skyBlitzClassicState } from '../games/skyblitzClassic';
+import { fluxHopState } from '../games/fluxhop';
+import { ThemeContext } from '../../../contexts/ThemeContext';
 
 type BackdropStyle = 'aurora' | 'grid' | 'none';
 
@@ -81,20 +82,26 @@ const DEFAULT_THEME: GameFXTheme = {
   },
 };
 
-const makeTheme = (overrides: Partial<GameFXTheme>): GameFXTheme => ({
+type GameFXThemeOverrides = Partial<Omit<GameFXTheme, 'lights' | 'post'>> & {
+  lights?: Partial<GameFXTheme['lights']>;
+  post?: Partial<GameFXTheme['post']>;
+};
+
+const makeTheme = (overrides: GameFXThemeOverrides): GameFXTheme => ({
   ...DEFAULT_THEME,
   ...overrides,
-  lights: { ...DEFAULT_THEME.lights, ...overrides.lights },
-  post: { ...DEFAULT_THEME.post, ...overrides.post },
+  lights: { ...DEFAULT_THEME.lights, ...(overrides.lights || {}) },
+  post: { ...DEFAULT_THEME.post, ...(overrides.post || {}) },
 });
 
 const GAME_THEMES: Record<string, GameFXTheme> = {
   home: makeTheme({
-    palette: ['#45f5a6', '#ff9b4a', '#9b6bff'],
-    shaderPresets: ['Neon', 'Holographic'],
+    // Deep space + nebula palette
+    palette: ['#160a2e', '#2b1b6a', '#22d3ee'],
+    shaderPresets: ['NebulaSwirl', 'PlasmaFlow'],
     backdropStyle: 'aurora',
     stars: true,
-    fog: { color: '#05060f', near: 12, far: 140 },
+    fog: { color: '#040012', near: 10, far: 150 },
     lights: {
       ambient: 0.55,
       keyIntensity: 1.05,
@@ -104,13 +111,13 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
       fillColor: '#45f5a6',
       rimColor: '#9b6bff',
     },
-    post: { bloom: 0.75, chromatic: 0.0016, saturation: 0.12 },
+    post: { bloom: 0.75, chromatic: 0.0016, vignette: 0.55, noise: 0.02, saturation: 0.12 },
   }),
   geochrome: makeTheme({
     palette: ['#60a5fa', '#38bdf8', '#22d3ee'],
     shaderPresets: ['Neon', 'CircuitTraces'],
-    backdropStyle: 'grid',
-    post: { bloom: 0.55, chromatic: 0.0012 },
+    backdropStyle: 'aurora',
+    post: { bloom: 0.55, chromatic: 0.0012, vignette: 0.55, noise: 0.02, saturation: 0.05 },
   }),
   shapeshifter: makeTheme({
     palette: ['#a78bfa', '#f472b6', '#f59e0b'],
@@ -391,7 +398,9 @@ const BackdropCluster: React.FC<{
 const BackdropPlane: React.FC<{
   style: BackdropStyle;
   palette: [string, string, string];
-}> = ({ style, palette }) => {
+  intensity?: number;
+  mode?: 'dark' | 'light';
+}> = ({ style, palette, intensity = 0.65, mode = 'dark' }) => {
   const planeRef = useRef<THREE.Mesh>(null);
   const forwardRef = useRef(new THREE.Vector3());
 
@@ -408,7 +417,13 @@ const BackdropPlane: React.FC<{
     <mesh ref={planeRef} renderOrder={-10} frustumCulled={false}>
       <planeGeometry args={[140, 140]} />
       {style === 'aurora' ? (
-        <AuroraBackdropMaterial colorA={palette[0]} colorB={palette[1]} colorC={palette[2]} intensity={1.15} />
+        <AuroraBackdropMaterial
+          colorA={palette[0]}
+          colorB={palette[1]}
+          colorC={palette[2]}
+          intensity={intensity}
+          mode={mode}
+        />
       ) : (
         <PulseGridMaterial gridColor={palette[0]} glowColor={palette[2]} density={16} />
       )}
@@ -436,6 +451,8 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { scene, size } = useThree();
   const envMap = useEnvMap();
   const theme = GAME_THEMES[gameId] ?? DEFAULT_THEME;
+  const { theme: uiTheme } = useContext(ThemeContext);
+  const isLightMode = uiTheme === 'light';
   const isMobile = size.width < 768;
   const qualityScale = isMobile ? 0.65 : 1;
 
@@ -464,24 +481,37 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const shouldSetSceneFX = !gamesWithOwnBackground.includes(gameId);
   const gamesWithoutBackdrop = ['voidrunner', 'gravityrush', 'apex'];
   const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
+  const showBackdropCluster = showBackdrop && !!envMap && !isLightMode;
+
+  const backdropPalette = useMemo<[string, string, string]>(() => {
+    // Keep dark mode "only dark colors". Light mode gets a soft cloudy pastel nebula.
+    return isLightMode
+      ? ['#93c5fd', '#fde68a', '#fbcfe8'] // light blue / yellow / pink
+      : ['#02020a', '#160a2e', '#081226'];
+  }, [isLightMode]);
 
   // Set scene background color based on fog color (or a default dark color)
   useEffect(() => {
     if (!shouldSetSceneFX) return;
     
     const prevBackground = scene.background;
-    const bgColor = theme.fog?.color ?? '#05070f';
+    const bgColor = isLightMode ? '#f6f7ff' : (theme.fog?.color ?? '#05070f');
     scene.background = new THREE.Color(bgColor);
     return () => {
       scene.background = prevBackground;
     };
-  }, [scene, theme.fog, shouldSetSceneFX]);
+  }, [scene, theme.fog, shouldSetSceneFX, isLightMode]);
 
   useEffect(() => {
     if (!shouldSetSceneFX) return;
 
     const prevFog = scene.fog;
-    if (theme.fog) {
+    if (isLightMode) {
+      // Light mode: gentle atmospheric depth without dark vignette fog.
+      const near = theme.fog?.near ?? 14;
+      const far = theme.fog?.far ?? 180;
+      scene.fog = new THREE.Fog('#f6f7ff', near, far * 1.25);
+    } else if (theme.fog) {
       scene.fog = new THREE.Fog(theme.fog.color, theme.fog.near, theme.fog.far);
     } else {
       scene.fog = null;
@@ -489,45 +519,69 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     return () => {
       scene.fog = prevFog;
     };
-  }, [scene, theme.fog, shouldSetSceneFX]);
+  }, [scene, theme.fog, shouldSetSceneFX, isLightMode]);
 
   const chromaticOffset = useMemo(
     () =>
       new THREE.Vector2(
-        theme.post.chromatic * qualityScale * fluxHopBoost,
-        theme.post.chromatic * qualityScale * fluxHopBoost
+        (isLightMode ? 0.00035 : theme.post.chromatic) * qualityScale * fluxHopBoost,
+        (isLightMode ? 0.00035 : theme.post.chromatic) * qualityScale * fluxHopBoost
       ),
-    [theme.post.chromatic, qualityScale, fluxHopBoost]
+    [theme.post.chromatic, qualityScale, fluxHopBoost, isLightMode]
   );
 
-  const bloomIntensity = theme.post.bloom * qualityScale * (useClassicSkyFx ? 1.15 : 1) * fluxHopBoost;
-  const noiseOpacity = theme.post.noise * (useClassicSkyFx ? 1.25 : 1) * qualityScale * (fluxHopBoost > 1 ? 1.2 : 1);
-  const vignetteDarkness = theme.post.vignette * (useClassicSkyFx ? 1.1 : 1) * (fluxHopBoost > 1 ? 1.05 : 1);
-  const saturation = theme.post.saturation + (useClassicSkyFx ? 0.03 : 0);
+  const bloomIntensity =
+    (isLightMode ? 0.38 : theme.post.bloom) *
+    qualityScale *
+    (useClassicSkyFx ? 1.15 : 1) *
+    fluxHopBoost;
+  const noiseOpacity =
+    (isLightMode ? 0.012 : theme.post.noise) *
+    (useClassicSkyFx ? 1.25 : 1) *
+    qualityScale *
+    (fluxHopBoost > 1 ? 1.2 : 1);
+  const vignetteDarkness =
+    (isLightMode ? 0.08 : theme.post.vignette) *
+    (useClassicSkyFx ? 1.1 : 1) *
+    (fluxHopBoost > 1 ? 1.05 : 1);
+  const saturation = (isLightMode ? 0.06 : theme.post.saturation) + (useClassicSkyFx ? 0.03 : 0);
+
+  const lights = useMemo(() => {
+    if (!isLightMode) return theme.lights;
+    return {
+      ambient: 0.95,
+      keyIntensity: 1.05,
+      fillIntensity: 0.55,
+      rimIntensity: 0.25,
+      keyColor: '#ffffff',
+      fillColor: '#c7d2fe',
+      rimColor: '#64748b',
+    };
+  }, [isLightMode, theme.lights]);
 
   return (
     <>
       {envMap && <Environment map={envMap} background={false} />}
 
-      <ambientLight intensity={theme.lights.ambient * qualityScale} color={theme.lights.fillColor} />
+      <ambientLight intensity={lights.ambient * qualityScale} color={lights.fillColor} />
       <directionalLight
         position={[6, 10, 4]}
-        intensity={theme.lights.keyIntensity * qualityScale}
-        color={theme.lights.keyColor}
+        intensity={lights.keyIntensity * qualityScale}
+        color={lights.keyColor}
         castShadow={false}
       />
       <pointLight
         position={[-8, 4, -6]}
-        intensity={theme.lights.rimIntensity * qualityScale}
-        color={theme.lights.rimColor}
+        intensity={lights.rimIntensity * qualityScale}
+        color={lights.rimColor}
       />
       <pointLight
         position={[8, -4, 6]}
-        intensity={theme.lights.fillIntensity * qualityScale}
-        color={theme.lights.fillColor}
+        intensity={lights.fillIntensity * qualityScale}
+        color={lights.fillColor}
       />
 
-      {theme.stars && (
+      {theme.stars && !isLightMode && (
         <Stars
           radius={300}
           depth={60}
@@ -539,10 +593,15 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
       )}
 
-      {showBackdrop && <BackdropPlane style={theme.backdropStyle} palette={theme.palette} />}
-      {showBackdrop && envMap && (
-        <BackdropCluster gameId={gameId} theme={theme} envMap={envMap} isMobile={isMobile} />
+      {showBackdrop && (
+        <BackdropPlane
+          style={theme.backdropStyle}
+          palette={backdropPalette}
+          intensity={isLightMode ? 0.85 : 0.65}
+          mode={isLightMode ? 'light' : 'dark'}
+        />
       )}
+      {showBackdropCluster && <BackdropCluster gameId={gameId} theme={theme} envMap={envMap} isMobile={isMobile} />}
 
       <EffectComposer disableNormalPass multisampling={0}>
         <HueSaturation saturation={saturation} />

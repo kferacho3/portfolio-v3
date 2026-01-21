@@ -180,6 +180,55 @@ export const GAME_CARDS: GameCard[] = [
     poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Apex.webp',
     hotkey: 'A',
   },
+  // New arcade games
+  {
+    id: 'polarity',
+    title: 'Polarity',
+    description: 'Flip charge, slingshot pylons, and collect ions in a high-speed arena.',
+    accent: '#22d3ee',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Polarity.webp',
+    hotkey: 'C',
+  },
+  {
+    id: 'tetherdrift',
+    title: 'Tether Drift',
+    description: 'Swing on tethers, chain gates, and dodge laser events.',
+    accent: '#a78bfa',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/TetherDrift.webp',
+    hotkey: 'T',
+  },
+  {
+    id: 'trace',
+    title: 'Trace',
+    description: 'Draw a neon trail, phase through walls, and survive the solidify storm.',
+    accent: '#facc15',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Trace.webp',
+    hotkey: 'Z',
+  },
+  {
+    id: 'flipbox',
+    title: 'Flip Box',
+    description: 'Invert gravity, collect cores, and survive shifting hazards.',
+    accent: '#38bdf8',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/FlipBox.webp',
+    hotkey: 'Q',
+  },
+  {
+    id: 'portalpunch',
+    title: 'Portal Punch',
+    description: 'Place portals to warp and punch targets while keeping integrity high.',
+    accent: '#fb7185',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PortalPunch.webp',
+    hotkey: 'O',
+  },
+  {
+    id: 'conveyorchaos',
+    title: 'Conveyor Chaos',
+    description: 'Rotate conveyors to build a path to the goal under pressure.',
+    accent: '#fb923c',
+    poster: 'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ConveyorChaos.webp',
+    hotkey: 'E',
+  },
 ];
 
 /**
@@ -290,6 +339,36 @@ export const GAME_RULES: Record<string, GameRules> = {
     objective: 'Stay on the path. Collect gems. Don\'t fall. 6 unique modes with different path patterns.',
     tips: 'Try different modes: Classic for sharp turns, Curved for flow, Spiral for hypnotic patterns, Zen for no death.',
   },
+  polarity: {
+    controls: 'WASD/Arrows to roll • Space to flip • Click to pulse • Shift to stabilize',
+    objective: 'Flip charge to sling past pylons, collect ions, and avoid spikes while chaining combos.',
+    tips: 'Time flips near pylons and use pulse to recover bad lines.',
+  },
+  tetherdrift: {
+    controls: 'Hold Click to tether • Release to fling • WASD adjust • Space boost • Shift brake',
+    objective: 'Swing between pylons, chain gates, and dodge event hazards.',
+    tips: 'Release at the right angle for speed and chain bonuses.',
+  },
+  trace: {
+    controls: 'A/D steer • W/S speed • Space phase • E purge',
+    objective: 'Carve a trail, collect shards, and survive as segments solidify.',
+    tips: 'Phase through tight gaps and purge before you seal yourself in.',
+  },
+  flipbox: {
+    controls: 'WASD aim • Space snap • Shift brake • E focus',
+    objective: 'Flip gravity to catch cores and avoid hazards as the box shifts.',
+    tips: 'Brake during dense hazard waves. Snap to keep your line clean.',
+  },
+  portalpunch: {
+    controls: 'WASD roll • Space dash • LMB portal A • RMB portal B • E clear',
+    objective: 'Use portals to punch targets and restore integrity while avoiding hazards.',
+    tips: 'Chain portal hits to refill integrity. Clear portals before they trap you.',
+  },
+  conveyorchaos: {
+    controls: 'Click rotate tile • Right click back • Shift 180 • WASD nudge • Space reverse • E override',
+    objective: 'Route conveyors to the goal before time runs out and events scramble the grid.',
+    tips: 'Use reversals sparingly. Override can rescue a broken path.',
+  },
 };
 
 /**
@@ -320,6 +399,13 @@ export const KEY_TO_GAME: Record<string, GameType> = {
   v: 'voidrunner',
   y: 'gravityrush',
   a: 'apex',
+  // New arcade games
+  c: 'polarity',
+  t: 'tetherdrift',
+  z: 'trace',
+  q: 'flipbox',
+  o: 'portalpunch',
+  e: 'conveyorchaos',
 };
 
 /**

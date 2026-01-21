@@ -12,27 +12,27 @@ import type { GameId } from '../store/types';
 
 // Import game state reset functions
 // These will be called when restarting games
-import { dropperState } from '../games/Dropper';
-import { reactPongState } from '../games/ReactPong';
-import { spinBlockState } from '../games/SpinBlock';
-import { stackzState } from '../games/Stackz';
-import { sizrState } from '../games/Sizr';
-import { shapeShifterState } from '../games/ShapeShifter';
-import { skyBlitzState } from '../games/SkyBlitz';
-import { fluxHopState } from '../games/FluxHop';
-import { gyroState } from '../games/Gyro';
-import { prismState } from '../games/Prism';
-import { formaState } from '../games/Forma';
-import { weaveState } from '../games/Weave';
-import { paveState } from '../games/Pave';
-import { voidRunnerState } from '../games/VoidRunner';
-import { gravityRushState } from '../games/GravityRush';
-import { apexState } from '../games/Apex';
+import { dropperState } from '../games/dropper';
+import { reactPongState } from '../games/reactpong';
+import { spinBlockState } from '../games/spinblock';
+import { stackzState } from '../games/stackz';
+import { sizrState } from '../games/sizr';
+import { shapeShifterState } from '../games/shapeshifter';
+import { skyBlitzState } from '../games/skyblitz';
+import { fluxHopState } from '../games/fluxhop';
+import { gyroState } from '../games/gyro';
+import { prismState } from '../games/prism';
+import { formaState } from '../games/forma';
+import { weaveState } from '../games/weave';
+import { paveState } from '../games/pave';
+import { voidRunnerState } from '../games/voidrunner';
+import { gravityRushState } from '../games/gravityrush';
+import { apexState } from '../games/apex';
 // Classic ports
-import { rolletteClassicState } from '../games/RolletteClassic';
-import { skyBlitzClassicState } from '../games/SkyBlitzClassic';
-import { dropperClassicState } from '../games/DropperClassic';
-import { stackzCatchClassicState } from '../games/StackzCatchClassic';
+import { rolletteClassicState } from '../games/rolletteClassic';
+import { skyBlitzClassicState } from '../games/skyblitzClassic';
+import { dropperClassicState } from '../games/dropperClassic';
+import { stackzCatchClassicState } from '../games/stackzCatchClassic';
 
 /**
  * Map of game IDs to their Valtio state reset functions

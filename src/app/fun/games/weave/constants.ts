@@ -1,0 +1,25 @@
+export const PLAYER_ORBIT_RADIUS = 3.5;
+export const PLAYER_SIZE = 0.22;
+export const PLAYER_HITBOX = 0.12;
+export const BASE_PLAYER_SPEED = 3.8;
+export const BASE_ARM_SPEED = 0.6;
+export const ARM_WIDTH = 0.08;
+export const INNER_SAFE_RADIUS = 0.8;
+export const OUTER_RADIUS = 5.5;
+export const ORB_SPAWN_INTERVAL = 1.5;
+export const ORB_LIFETIME = 4.0;
+export const ORB_SIZE = 0.18;
+export const ORB_COLLECT_RADIUS = 0.4;
+export const INVINCIBILITY_TIME = 1.5;
+export const LEVEL_UP_ORBS = 8;
+export const MULTI_LASER_MIN_DURATION = 10;
+export const MULTI_LASER_MAX_DURATION = 15;
+export const MULTI_LASER_COOLDOWN_MIN = 18;
+export const MULTI_LASER_COOLDOWN_MAX = 28;
+
+export const NEON_COLORS = ['#00ffff', '#ff00ff', '#00ff88', '#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+export const ARM_COLOR = '#ff3366';
+export const ARM_GLOW = '#ff0044';
+export const ORB_COLOR = '#00ffff';
+export const ORB_GLOW = '#00ddff';
+export const BONUS_ORB_COLOR = '#feca57';

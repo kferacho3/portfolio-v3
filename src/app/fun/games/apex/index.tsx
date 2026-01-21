@@ -6,7 +6,7 @@
  */
 'use client';
 
-export { default } from '../Apex';
+export { default } from './Apex';
 export { apexState } from './state';
 export * from './types';
 export * from './constants';

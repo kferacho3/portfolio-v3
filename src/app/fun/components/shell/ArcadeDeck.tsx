@@ -71,14 +71,14 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
 
           {/* Main content */}
           <div className="relative flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
               <NavigationButton
                 direction="prev"
                 onClick={handleSelectPrevious}
               />
               
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-semibold text-white md:text-xl">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="text-lg font-semibold text-white md:text-xl truncate">
                   {selectedGame.title}
                 </span>
                 <InfoButton
@@ -93,7 +93,9 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
               />
             </div>
 
-            <LaunchButton onClick={handleLaunchSelected} />
+            <div className="flex-shrink-0">
+              <LaunchButton onClick={handleLaunchSelected} />
+            </div>
           </div>
 
           {/* Info panel */}
@@ -115,7 +117,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
 };
 
 /**
- * Navigation button (prev/next)
+ * Navigation button (prev/next) - Fixed position and styling
  */
 const NavigationButton: React.FC<{
   direction: 'prev' | 'next';
@@ -124,14 +126,15 @@ const NavigationButton: React.FC<{
   <button
     onClick={onClick}
     aria-label={direction === 'prev' ? 'Previous game' : 'Next game'}
-    className="flex h-10 w-10 items-center justify-center rounded-full border text-sm text-white/80 transition hover:text-white"
+    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border text-base font-semibold text-white/90 transition-all hover:scale-110 hover:text-white hover:bg-white/10 active:scale-95"
     style={{
       borderColor: 'var(--arcade-stroke)',
-      background: 'rgba(10, 12, 18, 0.6)',
+      background: 'rgba(10, 12, 18, 0.7)',
       fontFamily: '"Geist Mono", monospace',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
     }}
   >
-    {direction === 'prev' ? '\u2190' : '\u2192'}
+    {direction === 'prev' ? '←' : '→'}
   </button>
 );
 

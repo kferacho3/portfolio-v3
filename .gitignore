@@ -34,3 +34,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Excluded directories (user request)
+public/fun/r3f-gravity-ball-main/
+public/fun/resources/
+public/fun/zigzag-main/
+public/fun/cuberun-main/
+src/app/Fun(JavaScript)/
+zom-ai/
