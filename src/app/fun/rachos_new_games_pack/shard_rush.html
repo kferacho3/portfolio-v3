@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Shard Rush (Prototype)</title>
+  <style>
+    :root{
+      --bg:#0a0d14;
+      --panel:rgba(10,12,18,.55);
+      --stroke:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.86);
+      --muted:rgba(255,255,255,.55);
+      --accent:#54a0ff;
+      --good:#2aff9f;
+      --bad:#ff3b5c;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    canvas{width:100%;height:100%;display:block;}
+    .hud{
+      position:fixed;left:16px;top:16px;z-index:10;
+      color:var(--text);background:var(--panel);border:1px solid var(--stroke);
+      border-radius:16px;padding:10px 12px;backdrop-filter: blur(14px);
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      min-width:200px;
+      user-select:none;
+    }
+    .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:6px}
+    .row:first-child{margin-top:0}
+    .label{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);}
+    .value{font-weight:800;font-size:14px;}
+    .pill{
+      margin-top:10px;
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;
+      background:rgba(0,0,0,.25);
+      font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;
+    }
+    .kbd{display:inline-block;border:1px solid rgba(255,255,255,.22);border-bottom-color:rgba(255,255,255,.14);
+      padding:1px 6px;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;color:rgba(255,255,255,.72);
+      background:rgba(0,0,0,.25);
+    }
+    .centerOverlay{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+      background:radial-gradient(1200px 800px at 50% 40%, rgba(84,160,255,.10), transparent 60%),
+                 radial-gradient(900px 700px at 20% 10%, rgba(255,59,92,.08), transparent 55%),
+                 rgba(0,0,0,.28);
+      backdrop-filter: blur(4px);
+      user-select:none;
+    }
+    .modal{
+      width:min(560px, calc(100vw - 32px));
+      background:rgba(10,12,18,.72);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:22px;
+      padding:18px 18px 14px;
+      box-shadow:0 28px 90px rgba(0,0,0,.55);
+      color:var(--text);
+    }
+    .modal h1{margin:0;font-size:28px;letter-spacing:.06em;}
+    .modal p{margin:10px 0 0;color:var(--muted);line-height:1.5}
+    .btnRow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px}
+    .btn{
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.16);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.86);
+      padding:10px 12px;border-radius:14px;
+      font-weight:800;font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+      transition:transform .08s ease, filter .15s ease, background .15s ease;
+    }
+    .btn.primary{
+      border-color: rgba(84,160,255,.55);
+      background: linear-gradient(135deg, rgba(84,160,255,.95), rgba(255,59,92,.75));
+      color:#0b0d12;
+    }
+    .btn:active{transform:scale(.98)}
+    .tiny{font-size:10px;color:rgba(255,255,255,.45);margin-top:10px}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="hud">
+    <div class="row"><div class="label">Distance</div><div class="value" id="dist">0</div></div>
+    <div class="row"><div class="label">Shards</div><div class="value" id="ammo">25</div></div>
+    <div class="row"><div class="label">Combo</div><div class="value" id="combo">x1</div></div>
+    <div class="pill">
+      Move <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span>
+      · Shoot <span class="kbd">Click</span> / <span class="kbd">Space</span>
+      · Pause <span class="kbd">P</span>
+    </div>
+  </div>
+
+  <div class="centerOverlay" id="overlay">
+    <div class="modal">
+      <h1>Shard Rush</h1>
+      <p>
+        Smash‑Hit‑inspired corridor sprint. Drift through a glass tunnel, break panels,
+        keep your <b>shards</b> above zero. Hit streaks build <b>combo</b> and refill ammo.
+      </p>
+      <p>
+        Tip: you don’t have to break everything—just don’t collide.
+      </p>
+      <div class="btnRow">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="resetBestBtn">Reset Best</button>
+      </div>
+      <div class="tiny" id="bestLine">Best: 0</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utils / Audio
+  // ─────────────────────────────────────────────────────────────────────────
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const randi=(a,b)=>Math.floor(rand(a,b+1));
+
+  let audioCtx=null;
+  function beep(freq=440,dur=0.06,type='sine',vol=0.05){
+    if(!audioCtx) return;
+    const t0=audioCtx.currentTime;
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t0);
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(vol,t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Canvas
+  // ─────────────────────────────────────────────────────────────────────────
+  const canvas=document.getElementById('c');
+  const ctx=canvas.getContext('2d');
+  function resize(){
+    const dpr=Math.min(2, window.devicePixelRatio||1);
+    canvas.width=Math.floor(window.innerWidth*dpr);
+    canvas.height=Math.floor(window.innerHeight*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Input
+  const keys=Object.create(null);
+  window.addEventListener('keydown',(e)=>{
+    keys[e.code]=true;
+    if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  },{passive:false});
+  window.addEventListener('keyup',(e)=>{ keys[e.code]=false; });
+
+  let pointer={x:window.innerWidth/2,y:window.innerHeight/2,down:false};
+  canvas.addEventListener('pointerdown',(e)=>{ pointer.down=true; pointer.x=e.clientX; pointer.y=e.clientY; canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointermove',(e)=>{ pointer.x=e.clientX; pointer.y=e.clientY; });
+  canvas.addEventListener('pointerup',()=>{ pointer.down=false; });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Mini 3D
+  // ─────────────────────────────────────────────────────────────────────────
+  const polys=[];
+  const cam={x:0,y:0,z:-10, pitch:0.0}; // looking straight
+  function rotX(y,z,a){ const c=Math.cos(a), s=Math.sin(a); return [y*c - z*s, z*c + y*s]; }
+  function project(x,y,z){
+    const rx=x-cam.x;
+    let ry=y-cam.y;
+    let rz=z-cam.z;
+    [ry,rz]=rotX(ry,rz,cam.pitch);
+    const fov=560;
+    const p=fov/(rz||0.0001);
+    return {x: rx*p + window.innerWidth/2, y: -ry*p + window.innerHeight/2, z: rz, p};
+  }
+  function pushQuad(a,b,c,d,color,alpha=1){ polys.push({pts:[a,b,c,d],color,alpha}); }
+  function drawCube(cx,cy,cz,s,colA,colB){
+    const x0=cx-s, x1=cx+s, y0=cy-s, y1=cy+s, z0=cz-s, z1=cz+s;
+    const p000={x:x0,y:y0,z:z0}, p001={x:x0,y:y0,z:z1}, p010={x:x0,y:y1,z:z0}, p011={x:x0,y:y1,z:z1};
+    const p100={x:x1,y:y0,z:z0}, p101={x:x1,y:y0,z:z1}, p110={x:x1,y:y1,z:z0}, p111={x:x1,y:y1,z:z1};
+    pushQuad(p001,p101,p111,p011,colA,1);
+    pushQuad(p000,p100,p110,p010,colB,1);
+    pushQuad(p000,p001,p011,p010,colB,1);
+    pushQuad(p100,p101,p111,p110,colB,1);
+    pushQuad(p010,p110,p111,p011,colA,1);
+    pushQuad(p000,p100,p101,p001,colB,1);
+  }
+  function flush(){
+    polys.sort((a,b)=>{
+      const za=a.pts.reduce((s,p)=>s+project(p.x,p.y,p.z).z,0)/a.pts.length;
+      const zb=b.pts.reduce((s,p)=>s+project(p.x,p.y,p.z).z,0)/b.pts.length;
+      return zb-za;
+    });
+    for(const poly of polys){
+      const pts=poly.pts.map(p=>project(p.x,p.y,p.z));
+      if(pts.some(v=>v.z<=0.1)) continue;
+      ctx.globalAlpha=poly.alpha;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x,pts[0].y);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+      ctx.closePath();
+      ctx.fillStyle=poly.color;
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    polys.length=0;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Game
+  // ─────────────────────────────────────────────────────────────────────────
+  const hudDist=document.getElementById('dist');
+  const hudAmmo=document.getElementById('ammo');
+  const hudCombo=document.getElementById('combo');
+  const overlay=document.getElementById('overlay');
+  const bestLine=document.getElementById('bestLine');
+
+  const LS_BEST='shard_rush_best_v1';
+  let best=Number(localStorage.getItem(LS_BEST)||'0')||0;
+  bestLine.textContent=`Best: ${best}`;
+
+  const game={
+    running:false, paused:false,
+    time:0, dist:0, speed:9,
+    ammo:25,
+    combo:1,
+    comboTimer:0,
+    hits:0,
+  };
+
+  const player={
+    x:0, y:0,
+    vx:0, vy:0,
+    r:0.28,
+  };
+
+  const shots=[];
+  const panels=[];
+  const particles=[];
+
+  function reset(){
+    game.time=0; game.dist=0; game.speed=9;
+    game.ammo=25; game.combo=1; game.comboTimer=0; game.hits=0;
+    player.x=0; player.y=0; player.vx=0; player.vy=0;
+    shots.length=0; panels.length=0; particles.length=0;
+    // seed panels
+    let z=16;
+    for(let i=0;i<6;i++){ spawnPanel(z); z+=rand(10,14); }
+  }
+
+  function spawnPanel(z){
+    const cols=5, rows=3;
+    const blockSize=0.8;
+    const gap=0.06;
+    const blocks=[];
+    // ensure at least one open cell near center
+    const safeCol=randi(1,3);
+    const safeRow=randi(1,1);
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        if(c===safeCol && r===safeRow) continue; // hole
+        // random holes too
+        if(Math.random()<0.20) continue;
+        const x=(c-(cols-1)/2)*(blockSize+gap);
+        const y=(r-(rows-1)/2)*(blockSize+gap);
+        const crystal=Math.random()<0.08;
+        blocks.push({x,y,z, s:blockSize*0.5, alive:true, crystal});
+      }
+    }
+    panels.push({z, blocks, cleared:false, safe:{x:(safeCol-(cols-1)/2)*(blockSize+gap), y:(safeRow-(rows-1)/2)*(blockSize+gap)}});
+  }
+
+  function shatter(x,y,z, count=10){
+    for(let i=0;i<count;i++){
+      particles.push({
+        x,y,z,
+        vx:rand(-1.5,1.5),
+        vy:rand(-1.5,1.5),
+        vz:rand(-2.5,-0.5),
+        t:0,
+        life:rand(0.4,0.9),
+      });
+    }
+  }
+
+  function fire(){
+    if(!game.running || game.paused) return;
+    if(game.ammo<=0) return;
+    game.ammo-=1;
+    // Aim toward pointer (screen -> world, rough)
+    const nx=(pointer.x/window.innerWidth - 0.5)*2;
+    const ny=(pointer.y/window.innerHeight - 0.5)*-2;
+    const dirX=clamp(nx, -0.8, 0.8);
+    const dirY=clamp(ny, -0.6, 0.6);
+    shots.push({
+      x:player.x, y:player.y, z:0.6,
+      vx:dirX*6,
+      vy:dirY*6,
+      vz:18,
+      r:0.12,
+      t:0,
+    });
+    beep(520,0.05,'square',0.05);
+  }
+
+  window.addEventListener('keydown',(e)=>{
+    if(e.code==='Space'){ fire(); }
+    if(e.code==='KeyP' && game.running){ game.paused=!game.paused; }
+    if(e.code==='KeyR' && game.running){ reset(); }
+  });
+  canvas.addEventListener('pointerdown',()=>{ fire(); });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Loop
+  // ─────────────────────────────────────────────────────────────────────────
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    if(game.running && !game.paused) step(dt);
+    render(dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function step(dt){
+    game.time += dt;
+    const level = clamp(game.dist/250, 0, 1.2);
+    game.speed = lerp(9, 16, level);
+
+    // Move player (strafe)
+    const up=keys['KeyW']||keys['ArrowUp'];
+    const down=keys['KeyS']||keys['ArrowDown'];
+    const left=keys['KeyA']||keys['ArrowLeft'];
+    const right=keys['KeyD']||keys['ArrowRight'];
+    let ax=(right?1:0)-(left?1:0);
+    let ay=(up?1:0)-(down?1:0);
+
+    // pointer drift: if holding, move toward pointer
+    if(pointer.down){
+      const nx=(pointer.x/window.innerWidth - 0.5)*2;
+      const ny=(pointer.y/window.innerHeight - 0.5)*-2;
+      ax += clamp(nx*1.4, -1, 1);
+      ay += clamp(ny*1.1, -1, 1);
+    }
+
+    const accel=18, friction=10, max=3.0;
+    player.vx += ax*accel*dt;
+    player.vy += ay*accel*dt;
+    player.vx -= player.vx*friction*dt;
+    player.vy -= player.vy*friction*dt;
+    player.x += player.vx*dt;
+    player.y += player.vy*dt;
+    player.x = clamp(player.x, -2.4, 2.4);
+    player.y = clamp(player.y, -1.6, 1.6);
+
+    // advance distance
+    game.dist += game.speed*dt;
+    best = Math.max(best, Math.floor(game.dist));
+    localStorage.setItem(LS_BEST, String(best));
+
+    // Update shots
+    for(const s of shots){
+      s.t += dt;
+      s.x += s.vx*dt;
+      s.y += s.vy*dt;
+      s.z += s.vz*dt;
+    }
+    // cull shots
+    for(let i=shots.length-1;i>=0;i--){
+      if(shots[i].z>60 || Math.abs(shots[i].x)>10 || Math.abs(shots[i].y)>10) shots.splice(i,1);
+    }
+
+    // Move panels toward player by reducing z
+    for(const p of panels){
+      p.z -= game.speed*dt;
+      for(const b of p.blocks) b.z = p.z;
+    }
+
+    // Collisions: shots vs blocks
+    for(const p of panels){
+      if(p.cleared) continue;
+      let aliveCount=0;
+      for(const b of p.blocks){
+        if(!b.alive) continue;
+        aliveCount++;
+        for(const s of shots){
+          // simple sphere vs cube center check
+          const dx=s.x-b.x, dy=s.y-b.y, dz=s.z-b.z;
+          if(Math.abs(dz) < (b.s + s.r) && Math.abs(dx) < (b.s + s.r) && Math.abs(dy) < (b.s + s.r)){
+            b.alive=false;
+            // ammo reward
+            const gain = b.crystal ? 4 : 1;
+            game.ammo += gain;
+            game.hits += 1;
+            // combo
+            if(game.comboTimer>0){
+              game.combo = clamp(game.combo+1, 1, 30);
+            } else {
+              game.combo = 1;
+            }
+            game.comboTimer = 1.25;
+            beep(b.crystal?920:720,0.05,'triangle',0.05);
+            shatter(b.x,b.y,b.z, b.crystal?16:10);
+            // remove shot
+            s.z = 999;
+          }
+        }
+      }
+      if(aliveCount===0){
+        p.cleared=true;
+        game.ammo += 3;
+        beep(1060,0.07,'square',0.05);
+      }
+    }
+
+    // Combo timer decay
+    if(game.comboTimer>0){
+      game.comboTimer -= dt;
+      if(game.comboTimer<=0){
+        game.combo = Math.max(1, Math.floor(game.combo*0.5));
+      }
+    }
+
+    // Collision: player vs blocks when panels get close
+    for(const p of panels){
+      if(p.z > 1.0) continue;
+      if(p.cleared) continue;
+
+      for(const b of p.blocks){
+        if(!b.alive) continue;
+        const dx=player.x-b.x, dy=player.y-b.y;
+        const hit = (Math.abs(dx) < (player.r + b.s)) && (Math.abs(dy) < (player.r + b.s));
+        if(hit){
+          endRun();
+          return;
+        }
+      }
+    }
+
+    // spawn new panels
+    // remove passed panels
+    for(let i=panels.length-1;i>=0;i--){
+      if(panels[i].z < -8){
+        panels.splice(i,1);
+      }
+    }
+    // ensure enough ahead
+    let farZ = 0;
+    for(const p of panels) farZ = Math.max(farZ, p.z);
+    while(panels.length<7){
+      farZ = farZ || 16;
+      spawnPanel(farZ + rand(10,14));
+      farZ += rand(10,14);
+    }
+
+    // Particles
+    for(const part of particles){
+      part.t += dt;
+      part.x += part.vx*dt;
+      part.y += part.vy*dt;
+      part.z += part.vz*dt;
+      part.vz += -3.5*dt;
+    }
+    for(let i=particles.length-1;i>=0;i--){
+      if(particles[i].t > particles[i].life) particles.splice(i,1);
+    }
+
+    // Ammo loss if very low? (keeps pressure)
+    if(game.ammo<=0){
+      endRun();
+    }
+  }
+
+  function endRun(){
+    game.running=false;
+    overlay.style.display='flex';
+    const modal=document.querySelector('.modal');
+    modal.querySelector('h1').textContent='Run Over';
+    modal.querySelectorAll('p')[0].innerHTML = `Distance: <b>${Math.floor(game.dist)}</b><br/>Hits: <b>${game.hits}</b> · Best: <b>${best}</b>`;
+    beep(140,0.12,'sawtooth',0.05);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+  function render(dt){
+    const w=window.innerWidth, h=window.innerHeight;
+
+    const t=clamp(game.dist/600,0,1);
+    const hue=lerp(200, 12, t);
+    const hue2=(hue+40)%360;
+    const grd=ctx.createLinearGradient(0,0,0,h);
+    grd.addColorStop(0, `hsl(${hue} 70% 16%)`);
+    grd.addColorStop(0.6, `hsl(${hue2} 60% 10%)`);
+    grd.addColorStop(1, '#07080c');
+    ctx.fillStyle=grd;
+    ctx.fillRect(0,0,w,h);
+
+    // corridor rails
+    const L=-2.8, R=2.8, B=-2.0, T=2.0;
+    const far=48;
+
+    pushQuad({x:L,y:B,z:0.5},{x:R,y:B,z:0.5},{x:R,y:B,z:far},{x:L,y:B,z:far}, 'rgba(255,255,255,0.04)'); // floor
+    pushQuad({x:L,y:T,z:far},{x:R,y:T,z:far},{x:R,y:T,z:0.5},{x:L,y:T,z:0.5}, 'rgba(255,255,255,0.03)'); // ceiling
+    pushQuad({x:L,y:B,z:far},{x:L,y:T,z:far},{x:L,y:T,z:0.5},{x:L,y:B,z:0.5}, 'rgba(255,255,255,0.03)'); // left
+    pushQuad({x:R,y:B,z:0.5},{x:R,y:T,z:0.5},{x:R,y:T,z:far},{x:R,y:B,z:far}, 'rgba(255,255,255,0.02)'); // right
+
+    // panels + blocks
+    for(const p of panels){
+      if(p.z>far+6) continue;
+      const glassA = `hsla(${lerp(210, 20, t)} 85% 70% / 0.08)`;
+      const glassB = `hsla(${lerp(210, 20, t)} 85% 70% / 0.12)`;
+
+      // panel frame
+      pushQuad({x:L,y:B,z:p.z},{x:R,y:B,z:p.z},{x:R,y:T,z:p.z},{x:L,y:T,z:p.z}, glassA, 1);
+
+      for(const b of p.blocks){
+        if(!b.alive) continue;
+        const colA = b.crystal ? 'rgba(42,255,159,0.55)' : glassB;
+        const colB = b.crystal ? 'rgba(42,255,159,0.35)' : 'rgba(0,0,0,0.18)';
+        drawCube(b.x,b.y,b.z,b.s, colA, colB);
+      }
+    }
+
+    // shots
+    for(const s of shots){
+      if(s.z>80) continue;
+      drawCube(s.x,s.y,s.z,0.10,'rgba(255,255,255,0.55)','rgba(0,0,0,0.18)');
+    }
+
+    // particles
+    for(const part of particles){
+      const life=1 - part.t/part.life;
+      const col=`rgba(255,255,255,${0.35*life})`;
+      drawCube(part.x,part.y,part.z,0.04,col,'rgba(0,0,0,0.1)');
+    }
+
+    // player reticle (a small ring)
+    // draw in screen space
+    ctx.save();
+    const aim = project(player.x, player.y, 0.6);
+    ctx.strokeStyle='rgba(255,255,255,0.55)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc(aim.x, aim.y, 10, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+
+    flush();
+
+    // HUD
+    hudDist.textContent = Math.floor(game.dist).toString();
+    hudAmmo.textContent = String(game.ammo);
+    hudCombo.textContent = 'x'+game.combo;
+
+    // Ammo bar
+    ctx.save();
+    ctx.globalAlpha=0.9;
+    ctx.fillStyle='rgba(255,255,255,0.12)';
+    ctx.fillRect(16, 142, 200, 6);
+    const frac = clamp(game.ammo/40,0,1);
+    ctx.fillStyle = frac>0.25 ? 'rgba(84,160,255,0.9)' : 'rgba(255,59,92,0.9)';
+    ctx.fillRect(16, 142, 200*frac, 6);
+    ctx.restore();
+
+    if(game.paused && game.running){
+      ctx.save();
+      ctx.fillStyle='rgba(0,0,0,0.45)';
+      ctx.fillRect(0,0,w,h);
+      ctx.fillStyle='rgba(255,255,255,0.9)';
+      ctx.font='800 42px ui-sans-serif,system-ui';
+      ctx.textAlign='center';
+      ctx.fillText('Paused', w/2, h/2 - 10);
+      ctx.font='500 14px ui-sans-serif,system-ui';
+      ctx.fillStyle='rgba(255,255,255,0.6)';
+      ctx.fillText('Press P to resume', w/2, h/2 + 24);
+      ctx.restore();
+    }
+  }
+
+  // Overlay actions
+  function start(){
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    reset();
+    game.running=true; game.paused=false;
+    overlay.style.display='none';
+  }
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('resetBestBtn').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_BEST); best=0; bestLine.textContent=`Best: ${best}`;
+  });
+
+})();
+</script>
+</body>
+</html>

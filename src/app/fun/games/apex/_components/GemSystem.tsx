@@ -144,7 +144,7 @@ const GemPickupFX: React.FC<PickupFx & { onDone: (id: number) => void }> = ({ id
         <icosahedronGeometry args={[0.08, 0]} />
         <meshBasicMaterial ref={sparkMatRef} color={color} transparent opacity={0.9} depthWrite={false} />
       </mesh>
-      <Html transform distanceFactor={10}>
+      <Html transform distanceFactor={10} style={{ pointerEvents: 'none' }}>
         <div
           style={{
             fontFamily: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
@@ -156,7 +156,6 @@ const GemPickupFX: React.FC<PickupFx & { onDone: (id: number) => void }> = ({ id
             transform: 'translate(-50%, -60%)',
             userSelect: 'none',
             whiteSpace: 'nowrap',
-            pointerEvents: 'none',
           }}
         >
           {label}
@@ -172,9 +171,8 @@ const GemSystem: React.FC = () => {
   const phase = snap.phase;
   const powerUp = snap.powerUp;
   const gemsCollected = snap.gems;
-  const arenaKey = snap.arena ?? 'classic';
-  const preset = ARENA_PRESETS[arenaKey] ?? ARENA_PRESETS.classic;
-  const arenaTheme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme ?? 'neon']), [preset, snap.currentTheme]);
+  const preset = ARENA_PRESETS[snap.arena];
+  const arenaTheme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
   void phase;
   void powerUp;
   void gemsCollected;
@@ -241,8 +239,8 @@ const GemSystem: React.FC = () => {
     const baseGemColor = mixHex(tierColor, arenaTheme.gemHex, 0.35);
     const fxColor = baseGemColor;
 
-    const nextGemCount = (mutation.gems ?? []).length;
-    const nextPowerUpCount = (mutation.powerUps ?? []).length;
+    const nextGemCount = mutation.gems.length;
+    const nextPowerUpCount = mutation.powerUps.length;
     let needsRender = false;
     if (nextGemCount !== countsRef.current.gems || nextPowerUpCount !== countsRef.current.powerUps) {
       countsRef.current.gems = nextGemCount;
@@ -252,7 +250,7 @@ const GemSystem: React.FC = () => {
 
     const spawnedFx: PickupFx[] = [];
 
-    for (const gem of mutation.gems ?? []) {
+    for (const gem of mutation.gems) {
       if (gem.collected) continue;
 
       if (gem.absorbing === undefined) gem.absorbing = false;
@@ -370,8 +368,8 @@ const GemSystem: React.FC = () => {
   });
 
   const theme = arenaTheme;
-  const visibleGems = (mutation.gems ?? []).filter((g) => !g.collected);
-  const visiblePowerUps = (mutation.powerUps ?? []).filter((p) => !p.collected);
+  const visibleGems = mutation.gems.filter((g) => !g.collected);
+  const visiblePowerUps = mutation.powerUps.filter((p) => !p.collected);
   const scoreTier = scoreTierRef.current;
   const tierColor = GEM_SCORE_COLORS[scoreTier % GEM_SCORE_COLORS.length];
   const baseGemColor = mixHex(tierColor, theme.gemHex, 0.35);

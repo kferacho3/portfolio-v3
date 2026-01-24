@@ -27,10 +27,10 @@ export const ACHIEVEMENTS = [
 
 export const WALL_MODE_LEVELS = [
   // Level 1-2: Beginner - Plain wall, predictable rebounds
-  { level: 1, streakGoal: 10, baseSpeed: 10, speedMultiplier: 1.05, captureZoneSize: 2.5, wallType: 'plain' as const, hasMovingPanels: false, hasTargetZones: false, hasHazardZones: false },
-  { level: 2, streakGoal: 15, baseSpeed: 10, speedMultiplier: 1.06, captureZoneSize: 2.4, wallType: 'plain' as const, hasMovingPanels: false, hasTargetZones: false, hasHazardZones: false },
+  { level: 1, streakGoal: 10, baseSpeed: 11, speedMultiplier: 1.05, captureZoneSize: 2.5, wallType: 'plain' as const, hasMovingPanels: false, hasTargetZones: false, hasHazardZones: false },
+  { level: 2, streakGoal: 15, baseSpeed: 11, speedMultiplier: 1.06, captureZoneSize: 2.4, wallType: 'plain' as const, hasMovingPanels: false, hasTargetZones: false, hasHazardZones: false },
   // Level 3-5: Intermediate - Wall zones with speed/spin/bounce effects
-  { level: 3, streakGoal: 18, baseSpeed: 11, speedMultiplier: 1.06, captureZoneSize: 2.3, wallType: 'zones' as const, hasMovingPanels: false, hasTargetZones: false, hasHazardZones: false },
+  { level: 3, streakGoal: 18, baseSpeed: 12, speedMultiplier: 1.06, captureZoneSize: 2.3, wallType: 'zones' as const, hasMovingPanels: false, hasTargetZones: false, hasHazardZones: false },
   { level: 4, streakGoal: 20, baseSpeed: 12, speedMultiplier: 1.07, captureZoneSize: 2.2, wallType: 'zones' as const, hasMovingPanels: false, hasTargetZones: true, hasHazardZones: false },
   { level: 5, streakGoal: 22, baseSpeed: 13, speedMultiplier: 1.07, captureZoneSize: 2.1, wallType: 'zones' as const, hasMovingPanels: false, hasTargetZones: true, hasHazardZones: false },
   // Level 6-10: Advanced - Moving panels, target zones, hazard zones
@@ -72,11 +72,11 @@ export const SPACE_PADDLE_HEIGHT = 2;
 export const CPU_PADDLE_SPEED_BASE = 0.15;
 
 export const WALL_MODE_WIDTH = 16;
-export const WALL_MODE_HEIGHT = 10;
+export const WALL_MODE_HEIGHT = 12;
 export const WALL_MODE_DEPTH = 18;
 export const WALL_MODE_WALL_Z = -WALL_MODE_DEPTH / 2;
 export const WALL_MODE_PLAYER_Z = WALL_MODE_DEPTH / 2 - 1;
 export const WALL_MODE_BALL_OFFSET = 0.8;
 export const WALL_MODE_PADDLE_WIDTH_MULTIPLIER = 1.2;
-export const WALL_MODE_PADDLE_HEIGHT_RATIO = 0.8;
+export const WALL_MODE_PADDLE_HEIGHT_RATIO = 0.95;
 export const WALL_MODE_PADDLE_EDGE_INSET = 0.25; // keep paddle from visually clipping into bounds

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useLayoutEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useSnapshot } from 'valtio';
 import {
   ARENA_KEYS,
@@ -21,29 +21,10 @@ const GameUI: React.FC = () => {
     apexState.loadHighScores();
   }, []);
 
-  // Inject styles to avoid R3F interpreting style tag
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') return;
-    const styleId = 'apex-ui-animations';
-    if (document.getElementById(styleId)) return;
-    const styleEl = document.createElement('style');
-    styleEl.id = styleId;
-    styleEl.textContent = `
-      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-      @keyframes gradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-    `;
-    document.head.appendChild(styleEl);
-    return () => {
-      const el = document.getElementById(styleId);
-      if (el) el.remove();
-    };
-  }, []);
-
-  const selectedMode = MODE_INFO[snap.mode ?? 'classic'];
-  const selectedModeBest = snap.highScores[snap.mode ?? 'classic'];
-  const arenaKey = snap.arena ?? 'classic';
-  const selectedArena = ARENA_PRESETS[arenaKey] ?? ARENA_PRESETS.classic;
-  const selectedSkin = PLAYER_SKIN_INFO[snap.playerSkin ?? 'classic'] ?? PLAYER_SKIN_INFO.classic;
+  const selectedMode = MODE_INFO[snap.mode];
+  const selectedModeBest = snap.highScores[snap.mode];
+  const selectedArena = ARENA_PRESETS[snap.arena];
+  const selectedSkin = PLAYER_SKIN_INFO[snap.playerSkin] ?? PLAYER_SKIN_INFO.classic;
   const arenaTheme = useMemo(
     () => getArenaTheme(selectedArena, THEMES[snap.currentTheme]),
     [selectedArena, snap.currentTheme]
@@ -441,14 +422,21 @@ const GameUI: React.FC = () => {
             </div>
           </div>
 
+          <style>{`
+            @keyframes gradient {
+              0% { background-position: 0% 50%; }
+              50% { background-position: 100% 50%; }
+              100% { background-position: 0% 50%; }
+            }
+
+          `}</style>
         </div>
       </FullscreenOverlay>
     );
   }
 
   if (snap.phase === 'gameover') {
-    const currentMode = snap.mode ?? 'classic';
-    const isNewHighScore = snap.score >= (snap.highScores[currentMode] ?? 0) && snap.score > 0;
+    const isNewHighScore = snap.score >= snap.highScores[snap.mode] && snap.score > 0;
 
     return (
       <FullscreenOverlay>
@@ -542,6 +530,13 @@ const GameUI: React.FC = () => {
           >
             Back to Menu
           </button>
+
+          <style>{`
+            @keyframes pulse {
+              0%, 100% { opacity: 1; }
+              50% { opacity: 0.5; }
+            }
+          `}</style>
         </div>
       </FullscreenOverlay>
     );
@@ -588,7 +583,7 @@ const GameUI: React.FC = () => {
             Best
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
-            {(snap.highScores[snap.mode ?? 'classic'] ?? 0).toLocaleString()}
+            {snap.highScores[snap.mode].toLocaleString()}
           </div>
         </div>
 

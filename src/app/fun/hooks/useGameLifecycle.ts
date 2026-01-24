@@ -28,6 +28,15 @@ import { paveState } from '../games/pave';
 import { voidRunnerState } from '../games/voidrunner';
 import { gravityRushState } from '../games/gravityrush';
 import { apexState } from '../games/apex';
+import { onePathState } from '../games/onepath';
+import { slowMoState } from '../games/slowmo';
+import { bouncerState } from '../games/bouncer';
+import { knotHopState } from '../games/knothop';
+import { octaSurgeState } from '../games/octasurge';
+import { prismJumpState } from '../games/prismjump';
+import { oscillateState } from '../games/oscillate';
+import { branchFlipState } from '../games/branch-flip';
+import { growthState } from '../games/growth';
 // Classic ports
 import { rolletteClassicState } from '../games/rolletteClassic';
 import { skyBlitzClassicState } from '../games/skyblitzClassic';
@@ -52,8 +61,21 @@ const GAME_STATE_RESETTERS: Partial<Record<GameId, () => void>> = {
   weave: () => weaveState.reset(),
   pave: () => paveState.reset(),
   voidrunner: () => voidRunnerState.reset(),
-  gravityrush: () => gravityRushState.reset(),
   apex: () => apexState.reset(),
+  onepath: () => onePathState.retry(),
+  slowmo: () => slowMoState.backToMenu(),
+  bouncer: () => {
+    bouncerState.phase = 'menu';
+  },
+  prismjump: () => prismJumpState.backToMenu(),
+  octasurge: () => {
+    octaSurgeState.phase = 'menu';
+  },
+  knothop: () => {
+    knotHopState.phase = 'menu';
+  },
+  oscillate: () => oscillateState.retry(),
+  growth: () => growthState.reset(),
   // Classic ports
   rolletteClassic: () => rolletteClassicState.reset(),
   skyblitzClassic: () => skyBlitzClassicState.reset(),
@@ -71,7 +93,6 @@ const REMOUNT_GAMES: GameId[] = [
   'flappybird',
   'museum',
   'voidrunner',
-  'gravityrush',
   'apex',
 ];
 

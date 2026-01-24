@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Branch Flip (Prototype)</title>
+  <style>
+    :root{
+      --bg:#0b0d12;
+      --panel:rgba(10,12,18,.55);
+      --stroke:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.86);
+      --muted:rgba(255,255,255,.55);
+      --accent:#54a0ff;
+      --good:#2aff9f;
+      --bad:#ff3b5c;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    canvas{width:100%;height:100%;display:block;}
+    .hud{
+      position:fixed;left:16px;top:16px;z-index:10;
+      color:var(--text);background:var(--panel);border:1px solid var(--stroke);
+      border-radius:16px;padding:10px 12px;backdrop-filter: blur(14px);
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      min-width:220px;
+      user-select:none;
+    }
+    .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:6px}
+    .row:first-child{margin-top:0}
+    .label{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);}
+    .value{font-weight:800;font-size:14px;}
+    .pill{
+      margin-top:10px;
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;
+      background:rgba(0,0,0,.25);
+      font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;
+    }
+    .kbd{display:inline-block;border:1px solid rgba(255,255,255,.22);border-bottom-color:rgba(255,255,255,.14);
+      padding:1px 6px;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;color:rgba(255,255,255,.72);
+      background:rgba(0,0,0,.25);
+    }
+    .centerOverlay{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+      background:radial-gradient(1200px 800px at 50% 40%, rgba(84,160,255,.10), transparent 60%),
+                 radial-gradient(900px 700px at 20% 10%, rgba(255,209,102,.08), transparent 55%),
+                 rgba(0,0,0,.28);
+      backdrop-filter: blur(4px);
+      user-select:none;
+    }
+    .modal{
+      width:min(560px, calc(100vw - 32px));
+      background:rgba(10,12,18,.72);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:22px;
+      padding:18px 18px 14px;
+      box-shadow:0 28px 90px rgba(0,0,0,.55);
+      color:var(--text);
+    }
+    .modal h1{margin:0;font-size:28px;letter-spacing:.06em;}
+    .modal p{margin:10px 0 0;color:var(--muted);line-height:1.5}
+    .btnRow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px}
+    .btn{
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.16);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.86);
+      padding:10px 12px;border-radius:14px;
+      font-weight:800;font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+      transition:transform .08s ease, filter .15s ease, background .15s ease;
+    }
+    .btn.primary{
+      border-color: rgba(84,160,255,.55);
+      background: linear-gradient(135deg, rgba(84,160,255,.95), rgba(255,209,102,.75));
+      color:#0b0d12;
+    }
+    .btn:active{transform:scale(.98)}
+    .tiny{font-size:10px;color:rgba(255,255,255,.45);margin-top:10px}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="hud">
+    <div class="row"><div class="label">Tiles</div><div class="value" id="score">0</div></div>
+    <div class="row"><div class="label">Gems</div><div class="value" id="gems">0</div></div>
+    <div class="row"><div class="label">Speed</div><div class="value" id="spd">1.0x</div></div>
+    <div class="pill">
+      Flip <span class="kbd">Click</span>/<span class="kbd">Space</span> · Pause <span class="kbd">P</span> · Restart <span class="kbd">R</span>
+    </div>
+  </div>
+
+  <div class="centerOverlay" id="overlay">
+    <div class="modal">
+      <h1>Branch Flip</h1>
+      <p>
+        Zig‑zag / The‑Branch‑style runner. The path turns—tap to flip your direction at the corner.
+        Miss a turn and you fall.
+      </p>
+      <p>
+        Collect gems for score and cosmetics (stubbed). Speed ramps. “One more run” guaranteed.
+      </p>
+      <div class="btnRow">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="resetBestBtn">Reset Best</button>
+      </div>
+      <div class="tiny" id="bestLine">Best: 0</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utils / Audio
+  // ─────────────────────────────────────────────────────────────────────────
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const randi=(a,b)=>Math.floor(rand(a,b+1));
+
+  let audioCtx=null;
+  function beep(freq=440,dur=0.06,type='sine',vol=0.05){
+    if(!audioCtx) return;
+    const t0=audioCtx.currentTime;
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t0);
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(vol,t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }
+
+  // Canvas
+  const canvas=document.getElementById('c');
+  const ctx=canvas.getContext('2d');
+  function resize(){
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    canvas.width=Math.floor(window.innerWidth*dpr);
+    canvas.height=Math.floor(window.innerHeight*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // HUD
+  const hudScore=document.getElementById('score');
+  const hudGems=document.getElementById('gems');
+  const hudSpd=document.getElementById('spd');
+  const overlay=document.getElementById('overlay');
+  const bestLine=document.getElementById('bestLine');
+
+  const LS_BEST='branch_flip_best_v1';
+  let best=Number(localStorage.getItem(LS_BEST)||'0')||0;
+  bestLine.textContent=`Best: ${best}`;
+
+  // Input
+  const keys=Object.create(null);
+  window.addEventListener('keydown',(e)=>{
+    keys[e.code]=true;
+    if(e.code==='Space') e.preventDefault();
+  },{passive:false});
+  window.addEventListener('keyup',(e)=>{ keys[e.code]=false; });
+
+  canvas.addEventListener('pointerdown',(e)=>{ flip(); canvas.setPointerCapture(e.pointerId); });
+
+  // Mini 3D (yaw + pitch)
+  const polys=[];
+  const cam={x:0,y:4.2,z:-9.5, yaw:0.8, pitch:0.62}; // diagonal view
+  function rotY(x,z,a){
+    const c=Math.cos(a), s=Math.sin(a);
+    return [x*c + z*s, z*c - x*s];
+  }
+  function rotX(y,z,a){
+    const c=Math.cos(a), s=Math.sin(a);
+    return [y*c - z*s, z*c + y*s];
+  }
+  function project(x,y,z){
+    let rx=x-cam.x, ry=y-cam.y, rz=z-cam.z;
+    [rx,rz]=rotY(rx,rz,cam.yaw);
+    [ry,rz]=rotX(ry,rz,cam.pitch);
+    const fov=560;
+    const p=fov/(rz||0.0001);
+    return {x: rx*p + window.innerWidth/2, y: -ry*p + window.innerHeight/2 + 80, z: rz};
+  }
+  function pushQuad(a,b,c,d,color,alpha=1){ polys.push({pts:[a,b,c,d],color,alpha}); }
+  function drawCube(cx,cy,cz,sx,sy,sz,colA,colB){
+    const x0=cx-sx, x1=cx+sx, y0=cy-sy, y1=cy+sy, z0=cz-sz, z1=cz+sz;
+    const p000={x:x0,y:y0,z:z0}, p001={x:x0,y:y0,z:z1}, p010={x:x0,y:y1,z:z0}, p011={x:x0,y:y1,z:z1};
+    const p100={x:x1,y:y0,z:z0}, p101={x:x1,y:y0,z:z1}, p110={x:x1,y:y1,z:z0}, p111={x:x1,y:y1,z:z1};
+    pushQuad(p001,p101,p111,p011,colA,1);
+    pushQuad(p000,p100,p110,p010,colB,1);
+    pushQuad(p000,p001,p011,p010,colB,1);
+    pushQuad(p100,p101,p111,p110,colB,1);
+    pushQuad(p010,p110,p111,p011,colA,1);
+    pushQuad(p000,p100,p101,p001,colB,1);
+  }
+  function flush(){
+    polys.sort((a,b)=>{
+      const za=a.pts.reduce((s,p)=>s+project(p.x,p.y,p.z).z,0)/a.pts.length;
+      const zb=b.pts.reduce((s,p)=>s+project(p.x,p.y,p.z).z,0)/b.pts.length;
+      return zb-za;
+    });
+    for(const poly of polys){
+      const pts=poly.pts.map(p=>project(p.x,p.y,p.z));
+      if(pts.some(v=>v.z<=0.1)) continue;
+      ctx.globalAlpha=poly.alpha;
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x,pts[0].y);
+      for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x,pts[i].y);
+      ctx.closePath();
+      ctx.fillStyle=poly.color;
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    polys.length=0;
+  }
+
+  // Game state
+  const game={
+    running:false,
+    paused:false,
+    time:0,
+    score:0,
+    gems:0,
+    speed:4.8,
+    dir:0, // 0 -> +x, 1 -> +z
+    falling:false,
+    fallT:0,
+    shake:0,
+  };
+
+  const tiles=[]; // {x,z, gem:boolean, id}
+  const tileIndexByKey=new Map();
+
+  const player={
+    x:0, y:0.35, z:0,
+    tileKey:'0_0',
+  };
+
+  function keyFor(x,z){ return x+'_'+z; }
+
+  function addTile(x,z){
+    const k=keyFor(x,z);
+    if(tileIndexByKey.has(k)) return;
+    const gem = Math.random() < 0.22;
+    const t={x,z, gem, taken:false, id:Math.random().toString(36).slice(2)};
+    tiles.push(t);
+    tileIndexByKey.set(k, tiles.length-1);
+  }
+
+  function seed(){
+    tiles.length=0;
+    tileIndexByKey.clear();
+    // start line
+    let x=0, z=0;
+    addTile(x,z);
+    let dir=0;
+    for(let i=0;i<40;i++){
+      if(Math.random()<0.32) dir = 1-dir;
+      if(dir===0) x++; else z++;
+      addTile(x,z);
+    }
+  }
+
+  function extend(){
+    // extend from last tile
+    const last=tiles[tiles.length-1];
+    let x=last.x, z=last.z;
+    // continue randomly
+    let dir = (Math.random()<0.5)?0:1;
+    for(let i=0;i<28;i++){
+      if(Math.random()<0.33) dir = 1-dir;
+      if(dir===0) x++; else z++;
+      addTile(x,z);
+    }
+  }
+
+  function reset(){
+    game.time=0; game.score=0; game.gems=0; game.speed=4.8; game.dir=0; game.falling=false; game.fallT=0; game.shake=0;
+    player.x=0; player.z=0; player.y=0.35; player.tileKey=keyFor(0,0);
+    seed();
+  }
+
+  function flip(){
+    if(!game.running || game.paused || game.falling) return;
+    game.dir = 1 - game.dir;
+    beep(360,0.04,'sine',0.03);
+  }
+
+  window.addEventListener('keydown',(e)=>{
+    if(e.code==='Space'){ flip(); }
+    if(e.code==='KeyP' && game.running){ game.paused=!game.paused; }
+    if(e.code==='KeyR' && game.running){ reset(); }
+  });
+
+  function endRun(){
+    game.running=false;
+    overlay.style.display='flex';
+    const modal=document.querySelector('.modal');
+    modal.querySelector('h1').textContent='Fell Off';
+    modal.querySelectorAll('p')[0].innerHTML = `Tiles: <b>${game.score}</b><br/>Gems: <b>${game.gems}</b> · Best: <b>${best}</b>`;
+    beep(160,0.12,'sawtooth',0.05);
+  }
+
+  // Loop
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    if(game.running && !game.paused) step(dt);
+    render(dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function step(dt){
+    game.time += dt;
+
+    if(game.shake>0) game.shake=Math.max(0, game.shake - dt*2.0);
+
+    // speed ramps with score
+    const target = 4.8 + Math.min(6.8, game.score*0.028);
+    game.speed = lerp(game.speed, target, 1 - Math.pow(0.001, dt));
+
+    if(game.falling){
+      game.fallT += dt;
+      player.y -= dt*6.0;
+      if(game.fallT > 0.55) endRun();
+      return;
+    }
+
+    // advance along current dir
+    // We'll move in continuous space, but snap at tile boundaries (grid size 1)
+    const stepDist = game.speed*dt;
+    if(game.dir===0) player.x += stepDist; else player.z += stepDist;
+
+    // Determine which tile player should now be on (round down)
+    const tx = Math.round(player.x);
+    const tz = Math.round(player.z);
+    const k = keyFor(tx,tz);
+
+    // if player's center moved beyond half tile without tile below, fall
+    const within = Math.abs(player.x - tx) < 0.52 && Math.abs(player.z - tz) < 0.52;
+
+    if(within){
+      if(tileIndexByKey.has(k)){
+        // on tile
+        player.tileKey = k;
+        const t = tiles[tileIndexByKey.get(k)];
+        if(t.gem && !t.taken){
+          t.taken=true;
+          game.gems += 1;
+          game.score += 2;
+          game.shake = Math.max(game.shake, 0.12);
+          beep(980,0.05,'triangle',0.05);
+        }
+      } else {
+        // no tile
+        game.falling=true;
+        game.fallT=0;
+        game.shake = Math.max(game.shake, 0.18);
+        beep(200,0.08,'sawtooth',0.05);
+        return;
+      }
+    }
+
+    // score updates roughly per tile passed
+    const baseScore = tileIndexByKey.size;
+    game.score = Math.max(game.score, (game.gems*2) + Math.floor((player.x + player.z)));
+    best = Math.max(best, game.score);
+    localStorage.setItem(LS_BEST, String(best));
+
+    // extend and cull old tiles
+    const far = player.x + player.z + 40;
+    const lastTile = tiles[tiles.length-1];
+    if(lastTile.x + lastTile.z < far) extend();
+
+    // cull tiles far behind for performance
+    const behind = player.x + player.z - 20;
+    for(let i=0;i<tiles.length;i++){
+      const t=tiles[i];
+      if(t.x + t.z < behind){
+        const k=keyFor(t.x,t.z);
+        tileIndexByKey.delete(k);
+        // mark removed (we keep array but skip rendering)
+        t.removed=true;
+      } else break;
+    }
+  }
+
+  // Render
+  function render(dt){
+    const w=window.innerWidth, h=window.innerHeight;
+
+    // background gradient
+    const t=clamp(game.score/350,0,1);
+    const hue=lerp(200, 40, t);
+    const grd=ctx.createLinearGradient(0,0,0,h);
+    grd.addColorStop(0, `hsl(${hue} 65% 16%)`);
+    grd.addColorStop(0.6, `hsl(${(hue+45)%360} 55% 10%)`);
+    grd.addColorStop(1, '#07080c');
+    ctx.fillStyle=grd;
+    ctx.fillRect(0,0,w,h);
+
+    if(game.shake>0){
+      ctx.save();
+      ctx.translate(rand(-game.shake,game.shake)*10, rand(-game.shake,game.shake)*10);
+    }
+
+    // camera follows player a bit
+    cam.x = player.x - 2.0;
+    cam.z = player.z - 8.0;
+    cam.y = 4.2;
+
+    // draw tiles (visible window)
+    const focus = player.x + player.z;
+    for(const t0 of tiles){
+      if(t0.removed) continue;
+      const d = (t0.x + t0.z) - focus;
+      if(d < -22 || d > 55) continue;
+
+      const colTop = 'rgba(255,255,255,0.14)';
+      const colSide = 'rgba(0,0,0,0.18)';
+      drawCube(t0.x, 0, t0.z, 0.5, 0.12, 0.5, colTop, colSide);
+
+      // gem
+      if(t0.gem && !t0.taken){
+        const bob = Math.sin(game.time*2 + (t0.x+t0.z))*0.08;
+        drawCube(t0.x, 0.38 + bob, t0.z, 0.10, 0.10, 0.10, 'rgba(255,209,102,0.85)', 'rgba(0,0,0,0.18)');
+      }
+    }
+
+    // player
+    const ballA = `rgba(84,160,255,0.65)`;
+    const ballB = `rgba(0,0,0,0.20)`;
+    drawCube(player.x, player.y, player.z, 0.18, 0.18, 0.18, ballA, ballB);
+
+    flush();
+
+    if(game.shake>0) ctx.restore();
+
+    // HUD update
+    hudScore.textContent=String(game.score);
+    hudGems.textContent=String(game.gems);
+    hudSpd.textContent = (game.speed/4.8).toFixed(1)+'x';
+
+    if(game.paused && game.running){
+      ctx.save();
+      ctx.fillStyle='rgba(0,0,0,0.45)';
+      ctx.fillRect(0,0,w,h);
+      ctx.fillStyle='rgba(255,255,255,0.9)';
+      ctx.font='800 42px ui-sans-serif,system-ui';
+      ctx.textAlign='center';
+      ctx.fillText('Paused', w/2, h/2 - 10);
+      ctx.font='500 14px ui-sans-serif,system-ui';
+      ctx.fillStyle='rgba(255,255,255,0.6)';
+      ctx.fillText('Press P to resume', w/2, h/2 + 24);
+      ctx.restore();
+    }
+
+    // subtle direction indicator
+    ctx.save();
+    ctx.fillStyle='rgba(255,255,255,0.55)';
+    ctx.font='700 12px ui-monospace, monospace';
+    ctx.textAlign='right';
+    ctx.fillText('DIR: ' + (game.dir===0?'+X':'+Z'), w-16, 22);
+    ctx.restore();
+  }
+
+  // Overlay actions
+  function start(){
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    reset();
+    game.running=true;
+    game.paused=false;
+    overlay.style.display='none';
+  }
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('resetBestBtn').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_BEST); best=0; bestLine.textContent=`Best: ${best}`;
+  });
+
+})();
+</script>
+</body>
+</html>

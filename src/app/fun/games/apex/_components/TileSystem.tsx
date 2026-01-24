@@ -29,44 +29,10 @@ import {
   TILE_SIZE,
   getArenaTheme,
 } from '../constants';
-import type { ArenaVoxelPattern } from '../constants';
 import { apexState, mutation } from '../state';
 import type { GameMode, GemType, PowerUpType, TileData } from '../types';
 import { generateCurvedTiles, generateTileForMode, resetCurvePathCache } from '../utils/pathGeneration';
-
-const GLSL_COMMON = `
-float saturate(float x) {
-  return clamp(x, 0.0, 1.0);
-}
-
-float hash11(float p) {
-  p = fract(p * 0.1031);
-  p *= p + 33.33;
-  p *= p + p;
-  return fract(p);
-}
-
-float hash21(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
-vec2 hash22(vec2 p) {
-  return vec2(hash21(p), hash21(p + 17.0));
-}
-
-float noise2(vec2 p) {
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float a = hash21(i);
-  float b = hash21(i + vec2(1.0, 0.0));
-  float c = hash21(i + vec2(0.0, 1.0));
-  float d = hash21(i + vec2(1.0, 1.0));
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-}
-`;
+import type { ArenaVoxelPattern } from '../constants';
 
 const applyTopShader = (
   material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial,
@@ -80,28 +46,32 @@ const applyTopShader = (
     shader.uniforms.uAccent = { value: new THREE.Color(theme.accent) };
     shader.uniforms.uSecondary = { value: theme.tile.clone() };
     shader.uniforms.uGlow = { value: theme.glow.clone() };
-    shader.uniforms.uWorldScale = { value: preset.worldScale ?? 0.65 };
+    shader.uniforms.uWorldScale = { value: preset.worldScale ?? 1 };
 
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
-      `#include <common>
-varying vec3 vWorldPos;`
-    );
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <common>',
-      `#include <common>
-varying vec3 vWorldPos;`
+      `
+        #include <common>
+        varying vec3 vWorldPos;
+      `
     );
     shader.vertexShader = shader.vertexShader.replace(
       '#include <begin_vertex>',
       `
-      #include <begin_vertex>
-      #ifdef USE_INSTANCING
-        vec4 worldPosition = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
-      #else
-        vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
-      #endif
-      vWorldPos = worldPosition.xyz;
+        #include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec4 worldPosition = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
+        #else
+          vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
+        #endif
+        vWorldPos = worldPosition.xyz;
+      `
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `
+        #include <common>
+        varying vec3 vWorldPos;
       `
     );
 
@@ -140,213 +110,166 @@ varying vec3 vWorldPos;`
             diffuseColor.rgb = mix(diffuseColor.rgb, patchColor, 0.45);
             emissiveColor += uAccent * seam * 0.35;
           `;
-        case 'zigzag':
+        case 'trailPulse':
           return `
-            vec2 uv = vUv * 8.0;
-            float zig = step(0.5, fract(uv.x + uv.y));
-            float stripe = 1.0 - smoothstep(0.46, 0.5, abs(fract(uv.x * 0.5) - 0.5));
-            vec3 base = mix(uSecondary, uAccent, zig * 0.55);
-            diffuseColor.rgb = mix(base, uGlow, stripe * 0.25);
-            emissiveColor += uGlow * (stripe * 0.25 + zig * 0.05);
+            vec2 uv = vUv;
+            float center = 1.0 - smoothstep(0.02, 0.08, abs(uv.x - 0.5));
+            float dash = smoothstep(0.1, 0.48, abs(fract(uv.y * 6.0 + uTime * 0.35) - 0.5));
+            float pulse = 0.5 + 0.5 * sin(uTime * 2.0 + uv.y * 16.0);
+            float line = center * (1.0 - dash) * (0.55 + 0.45 * pulse);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.25);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, line * 0.45);
+            emissiveColor += uGlow * line * 0.6;
           `;
-        case 'biome':
+        case 'trailChevron':
+          return `
+            vec2 uv = vUv * vec2(2.2, 6.0);
+            float row = floor(uv.y);
+            float flip = step(0.5, mod(row, 2.0));
+            vec2 fuv = fract(uv);
+            fuv.x = mix(fuv.x, 1.0 - fuv.x, flip);
+            float chevron = smoothstep(0.45, 0.2, abs(fuv.x - 0.5) + abs(fuv.y - 0.5));
+            float center = 1.0 - smoothstep(0.15, 0.4, abs(vUv.x - 0.5));
+            float arrow = chevron * center;
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.3);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, arrow * 0.55);
+            emissiveColor += uGlow * arrow * 0.5;
+          `;
+        case 'trailDash':
+          return `
+            vec2 uv = vUv;
+            float mid = 1.0 - smoothstep(0.03, 0.1, abs(uv.x - 0.5));
+            float dash = step(0.55, fract(uv.y * 8.0 + uTime * 0.4));
+            float rail = smoothstep(0.46, 0.5, abs(uv.x - 0.5));
+            float glow = mid * dash;
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.2);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, glow * 0.4);
+            emissiveColor += uGlow * (glow * 0.6 + rail * 0.15);
+          `;
+        case 'ripple':
           return `
             vec2 wuv = vWorldPos.xz * uWorldScale;
-            float n = 0.0;
-            n += 0.55 * sin(wuv.x * 3.1 + uTime * 0.15) * sin(wuv.y * 3.7 - uTime * 0.12);
-            n += 0.25 * sin(wuv.x * 9.2 - uTime * 0.10);
-            n += 0.20 * sin(wuv.y * 10.8 + uTime * 0.08);
-            n = 0.5 + 0.5 * n;
-            float blades = abs(sin(wuv.x * 42.0)) * abs(sin(wuv.y * 39.0));
-            blades = pow(blades, 3.0);
-            vec2 tuv = vUv - 0.5;
-            float edge = smoothstep(0.36, 0.5, max(abs(tuv.x), abs(tuv.y)));
-            vec3 grass = mix(uSecondary, uAccent, 0.25 + 0.35 * n);
-            grass += uGlow * blades * 0.08;
-            vec3 dirt = mix(vec3(0.20, 0.12, 0.06), vec3(0.12, 0.08, 0.04), n);
-            diffuseColor.rgb = mix(grass, dirt, edge * 0.85);
-            emissiveColor += uGlow * (0.05 + 0.10 * blades) * (1.0 - edge);
+            float d = length(wuv);
+            float waves = 0.5 + 0.5 * sin(d * 12.0 - uTime * 1.2);
+            float ring = smoothstep(0.15, 0.5, waves);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.35 + waves * 0.15);
+            emissiveColor += uGlow * ring * 0.35;
           `;
-        case 'kintsugi':
-          return `
-            vec2 p = (vWorldPos.xz * uWorldScale) * 2.2;
-            vec2 g = floor(p);
-            vec2 f = fract(p);
-            float F1 = 10.0;
-            float F2 = 10.0;
-            for (int j = -1; j <= 1; j++) {
-              for (int i = -1; i <= 1; i++) {
-                vec2 o = vec2(float(i), float(j));
-                vec2 r = hash22(g + o);
-                vec2 d = o + r - f;
-                float dist = dot(d, d);
-                if (dist < F1) {
-                  F2 = F1;
-                  F1 = dist;
-                } else if (dist < F2) {
-                  F2 = dist;
-                }
-              }
-            }
-            float edge = smoothstep(0.02, 0.08, sqrt(F2) - sqrt(F1));
-            vec3 ceramic = mix(uSecondary, vec3(0.95), 0.55);
-            vec3 gold = uAccent;
-            diffuseColor.rgb = mix(ceramic, gold, edge * 0.75);
-            emissiveColor += gold * edge * 0.55;
-          `;
-        case 'circuit':
-          return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 4.0;
-            vec2 gv = abs(fract(wuv) - 0.5);
-            float grid = 1.0 - smoothstep(0.46, 0.5, max(gv.x, gv.y));
-            float line = 1.0 - smoothstep(0.48, 0.5, min(gv.x, gv.y));
-            float cell = hash21(floor(wuv));
-            float trace = line * step(0.35, cell);
-            float node = smoothstep(0.12, 0.0, length(fract(wuv) - 0.5)) * step(0.55, cell);
-            vec3 base = mix(uSecondary, vec3(0.05, 0.08, 0.12), 0.4);
-            diffuseColor.rgb = mix(base, uAccent, trace * 0.6 + node * 0.7);
-            emissiveColor += uGlow * (trace * 0.4 + node * 0.6 + grid * 0.1);
-          `;
-        case 'truchet':
-          return `
-            vec2 uv = vWorldPos.xz * uWorldScale * 1.6;
-            vec2 cell = floor(uv);
-            vec2 f = fract(uv);
-            float r = hash21(cell);
-            if (r < 0.5) {
-              f.x = 1.0 - f.x;
-            }
-            float w = 0.06;
-            float a = abs(length(f - vec2(0.0, 0.0)) - 0.5);
-            float b = abs(length(f - vec2(1.0, 1.0)) - 0.5);
-            float arc = 1.0 - smoothstep(w, w + 0.015, min(a, b));
-            diffuseColor.rgb = mix(uSecondary, uAccent, arc * 0.55);
-            emissiveColor += uGlow * arc * 0.35;
-          `;
-        case 'quasicrystal':
-          return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 1.8;
-            float sum = 0.0;
-            sum += sin(dot(wuv, vec2(1.0, 0.0)) * 2.6);
-            sum += sin(dot(wuv, vec2(0.309, 0.951)) * 2.6);
-            sum += sin(dot(wuv, vec2(-0.809, 0.588)) * 2.6);
-            sum += sin(dot(wuv, vec2(-0.809, -0.588)) * 2.6);
-            sum += sin(dot(wuv, vec2(0.309, -0.951)) * 2.6);
-            float waves = sum / 5.0;
-            float band = smoothstep(0.1, 0.35, abs(waves));
-            diffuseColor.rgb = mix(diffuseColor.rgb, mix(uSecondary, uAccent, band * 0.6), 0.65);
-            emissiveColor += uGlow * band * 0.35;
-          `;
-        case 'honeycomb':
-          return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 2.4;
-            float l1 = abs(fract(wuv.x) - 0.5);
-            float l2 = abs(fract(wuv.x * 0.5 + wuv.y * 0.8660254) - 0.5);
-            float l3 = abs(fract(-wuv.x * 0.5 + wuv.y * 0.8660254) - 0.5);
-            float line = min(min(l1, l2), l3);
-            float edge = 1.0 - smoothstep(0.06, 0.1, line);
-            float center = 1.0 - smoothstep(0.22, 0.28, max(max(l1, l2), l3));
-            diffuseColor.rgb = mix(uSecondary, uAccent, center * 0.35);
-            emissiveColor += uGlow * (edge * 0.35 + center * 0.15);
-          `;
-        case 'starwork':
-          return `
-            vec2 p = vWorldPos.xz * uWorldScale;
-            float r = length(p);
-            float a = atan(p.y, p.x);
-            float star = abs(cos(a * 4.0 + uTime * 0.08));
-            float petal = smoothstep(0.2, 0.65, star);
-            float ring = 1.0 - smoothstep(0.02, 0.05, abs(fract(r * 2.6) - 0.5));
-            float motif = clamp(petal + ring * 0.6, 0.0, 1.0);
-            diffuseColor.rgb = mix(uSecondary, uAccent, motif * 0.5);
-            emissiveColor += uGlow * (motif * 0.3 + ring * 0.2);
-          `;
-        case 'topographic':
-          return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 1.4;
-            float h = 0.0;
-            h += 0.6 * noise2(wuv);
-            h += 0.3 * noise2(wuv * 2.3);
-            h += 0.1 * noise2(wuv * 4.7);
-            float bands = abs(fract(h * 6.0) - 0.5);
-            float contour = 1.0 - smoothstep(0.45, 0.5, bands);
-            float major = 1.0 - smoothstep(0.48, 0.5, abs(fract(h * 2.0) - 0.5));
-            diffuseColor.rgb = mix(uSecondary, uAccent, contour * 0.3);
-            emissiveColor += uGlow * (contour * 0.25 + major * 0.35);
-          `;
-        case 'lava':
-          return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 1.6;
-            float n = 0.0;
-            n += 0.6 * noise2(wuv);
-            n += 0.3 * noise2(wuv * 2.5 + uTime * 0.05);
-            n += 0.1 * noise2(wuv * 4.5 - uTime * 0.03);
-            float band = abs(fract(n * 3.5) - 0.5);
-            float magma = 1.0 - smoothstep(0.08, 0.18, band);
-            vec3 rock = mix(uSecondary, vec3(0.05, 0.05, 0.08), 0.45);
-            diffuseColor.rgb = mix(rock, uAccent, magma);
-            emissiveColor += uGlow * magma * 0.7;
-          `;
-        case 'origami':
-          return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 1.8;
-            float diag1 = abs(fract((wuv.x + wuv.y) * 0.5) - 0.5);
-            float diag2 = abs(fract((wuv.x - wuv.y) * 0.5) - 0.5);
-            float fold = 1.0 - smoothstep(0.42, 0.48, min(diag1, diag2));
-            float facet = step(0.5, fract(floor(wuv.x) + floor(wuv.y)));
-            vec3 base = mix(uSecondary, vec3(0.95), facet * 0.35);
-            diffuseColor.rgb = mix(base, uAccent, fold * 0.3);
-            emissiveColor += uGlow * fold * 0.35;
-          `;
-        case 'obsidian':
+        case 'crossWeave':
           return `
             vec2 uv = vUv * 6.0;
-            float seam = 1.0 - smoothstep(0.48, 0.5, max(abs(fract(uv.x) - 0.5), abs(fract(uv.y) - 0.5)));
-            float fres = pow(1.0 - saturate(dot(normalize(normal), normalize(vViewPosition))), 3.0);
-            vec3 base = mix(uSecondary, vec3(0.02, 0.02, 0.04), 0.6);
-            diffuseColor.rgb = mix(base, uAccent, seam * 0.1 + fres * 0.35);
-            emissiveColor += uGlow * (seam * 0.15 + fres * 0.25);
+            vec2 cell = abs(fract(uv) - 0.5);
+            float warp = smoothstep(0.46, 0.5, cell.x);
+            float weft = smoothstep(0.46, 0.5, cell.y);
+            float weave = max(warp, weft);
+            float alt = step(0.5, fract(floor(uv.x) * 0.5 + floor(uv.y) * 0.25));
+            vec3 weaveColor = mix(uSecondary, uAccent, alt * 0.5);
+            diffuseColor.rgb = mix(diffuseColor.rgb, weaveColor, weave * 0.55);
+            emissiveColor += uGlow * weave * 0.25;
           `;
-        case 'stainedglass':
+        case 'radialSpokes':
           return `
-            vec2 p = vWorldPos.xz * uWorldScale * 2.0;
-            vec2 g = floor(p);
-            vec2 f = fract(p);
-            float F1 = 10.0;
-            float F2 = 10.0;
-            vec2 cellId = vec2(0.0);
-            for (int j = -1; j <= 1; j++) {
-              for (int i = -1; i <= 1; i++) {
-                vec2 o = vec2(float(i), float(j));
-                vec2 r = hash22(g + o);
-                vec2 d = o + r - f;
-                float dist = dot(d, d);
-                if (dist < F1) {
-                  F2 = F1;
-                  F1 = dist;
-                  cellId = g + o;
-                } else if (dist < F2) {
-                  F2 = dist;
-                }
-              }
-            }
-            float edge = smoothstep(0.02, 0.08, sqrt(F2) - sqrt(F1));
-            float hue = hash21(cellId);
-            vec3 cellColor = mix(uSecondary, uAccent, hue);
-            cellColor = mix(cellColor, uGlow, hash21(cellId + 7.1) * 0.35);
-            diffuseColor.rgb = mix(cellColor, vec3(0.03, 0.03, 0.05), edge);
-            emissiveColor += uGlow * edge * 0.35;
+            vec2 uv = vUv - 0.5;
+            float angle = atan(uv.y, uv.x);
+            float spoke = abs(sin(angle * 8.0));
+            float ring = smoothstep(0.2, 0.28, abs(length(uv) - 0.25));
+            float lines = smoothstep(0.75, 0.95, spoke);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.4);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, lines * 0.45);
+            emissiveColor += uGlow * (lines * 0.35 + ring * 0.2);
           `;
-        case 'aurora':
+        case 'diamondTess':
           return `
-            vec2 wuv = vWorldPos.xz * uWorldScale * 1.2;
-            float wave1 = sin(wuv.x * 3.0 + uTime * 0.3);
-            float wave2 = sin(wuv.y * 2.4 - uTime * 0.2);
-            float weave = wave1 * wave2;
-            float threads = pow(abs(sin(wuv.x * 12.0) * sin(wuv.y * 11.0)), 1.6);
-            vec3 base = mix(uSecondary, uAccent, 0.4 + 0.35 * weave);
-            diffuseColor.rgb = mix(diffuseColor.rgb, base, 0.65);
-            emissiveColor += uGlow * (0.2 + 0.4 * threads);
+            vec2 uv = fract(vUv * 4.0) - 0.5;
+            float diamond = 1.0 - smoothstep(0.3, 0.45, abs(uv.x) + abs(uv.y));
+            float frame = smoothstep(0.46, 0.5, max(abs(uv.x), abs(uv.y)));
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.35);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, diamond * 0.55);
+            emissiveColor += uGlow * frame * 0.3;
+          `;
+        case 'spineRidges':
+          return `
+            vec2 uv = vUv * vec2(3.0, 8.0);
+            float wave = sin(uv.y * 2.0 + uTime * 0.4) * 0.15;
+            float ridge = abs(fract(uv.x + wave) - 0.5);
+            float spine = smoothstep(0.45, 0.49, ridge);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.4);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, spine * 0.45);
+            emissiveColor += uGlow * spine * 0.35;
+          `;
+        case 'gridForge':
+          return `
+            vec2 uv = vUv * 6.0;
+            vec2 cell = abs(fract(uv) - 0.5);
+            float grid = smoothstep(0.44, 0.5, max(cell.x, cell.y));
+            float inset = smoothstep(0.12, 0.35, min(cell.x, cell.y));
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.5);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, inset * 0.35);
+            emissiveColor += uGlow * grid * 0.35;
+          `;
+        case 'fracturePlates':
+          return `
+            vec2 uv = vUv * 5.0;
+            vec2 g = floor(uv);
+            vec2 f = fract(uv);
+            float n = fract(sin(dot(g, vec2(127.1, 311.7))) * 43758.5453);
+            float border = 1.0 - smoothstep(0.08, 0.12, min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y)));
+            float crack = smoothstep(0.02, 0.06, abs(f.x - f.y));
+            vec3 plate = mix(uSecondary, uAccent, n * 0.25);
+            diffuseColor.rgb = mix(diffuseColor.rgb, plate, 0.45);
+            emissiveColor += uGlow * (border * 0.2 + crack * 0.35);
+          `;
+        case 'sunkenSteps':
+          return `
+            vec2 uv = vUv * 4.0;
+            float stepper = floor((uv.x + uv.y) * 1.2) / 4.0;
+            float ridge = smoothstep(0.45, 0.5, abs(fract((uv.x + uv.y) * 2.0) - 0.5));
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.35 + stepper * 0.25);
+            emissiveColor += uGlow * ridge * 0.3;
+          `;
+        case 'spiralBloom':
+          return `
+            vec2 uv = vUv - 0.5;
+            float d = length(uv);
+            float ang = atan(uv.y, uv.x);
+            float spiral = sin(ang * 5.0 + d * 10.0 - uTime * 0.5);
+            float bloom = smoothstep(0.0, 0.8, spiral);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.4);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, bloom * 0.45);
+            emissiveColor += uGlow * bloom * 0.35;
+          `;
+        case 'coreRing':
+          return `
+            vec2 uv = vUv - 0.5;
+            float d = length(uv);
+            float ring = smoothstep(0.18, 0.2, d) - smoothstep(0.26, 0.28, d);
+            float core = 1.0 - smoothstep(0.0, 0.1, d);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.35);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, ring * 0.7 + core * 0.35);
+            emissiveColor += uGlow * (ring * 0.5 + core * 0.2);
+          `;
+        case 'grass':
+          return `
+            vec2 wuv = vWorldPos.xz * uWorldScale;
+            float n = 0.5 + 0.5 * sin(wuv.x * 1.6 + uTime * 0.2) * sin(wuv.y * 1.8 - uTime * 0.15);
+            float blades = pow(abs(sin(wuv.x * 8.0)) * abs(sin(wuv.y * 7.5)), 3.0);
+            vec2 local = vUv - 0.5;
+            float edge = smoothstep(0.35, 0.5, max(abs(local.x), abs(local.y)));
+            vec3 grass = mix(uSecondary, uAccent, 0.3 + 0.4 * n);
+            vec3 dirt = mix(vec3(0.18, 0.11, 0.05), vec3(0.1, 0.07, 0.04), n);
+            diffuseColor.rgb = mix(grass, dirt, edge * 0.85);
+            emissiveColor += uGlow * blades * 0.08;
+          `;
+        case 'ice':
+          return `
+            vec2 wuv = vWorldPos.xz * uWorldScale;
+            float frost = 0.5 + 0.5 * sin(wuv.x * 2.2 + uTime * 0.2) * sin(wuv.y * 2.0 - uTime * 0.15);
+            float crack = smoothstep(0.47, 0.5, abs(fract(wuv.x * 2.2 + wuv.y * 1.6) - 0.5));
+            vec2 local = abs(vUv - 0.5);
+            float edge = smoothstep(0.42, 0.5, max(local.x, local.y));
+            diffuseColor.rgb = mix(diffuseColor.rgb, uSecondary, 0.45 + frost * 0.15);
+            diffuseColor.rgb = mix(diffuseColor.rgb, uAccent, crack * 0.35);
+            emissiveColor += uGlow * (crack * 0.35 + edge * 0.1);
           `;
         default:
           return '';
@@ -356,7 +279,6 @@ varying vec3 vWorldPos;`
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <dithering_fragment>',
       `
-        ${GLSL_COMMON}
         ${shaderBody}
         #include <dithering_fragment>
       `
@@ -374,11 +296,6 @@ const hash11 = (n: number) => {
   return 1.0 - ((x * (x * x * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0;
 };
 
-const smoothstep = (edge0: number, edge1: number, x: number) => {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-};
-
 const voxelHeight = (
   tileId: number,
   gx: number,
@@ -390,75 +307,162 @@ const voxelHeight = (
 ) => {
   const idx = gx * 131 + gz * 977 + tileId * 1999;
   const r = Math.abs(hash11(idx));
-  const base = minHeight + (maxHeight - minHeight) * r;
+  const range = Math.max(0, maxHeight - minHeight);
+  if (range <= 0.0001) return minHeight;
+  const base = minHeight + range * r;
   const u = (gx + 0.5) / grid - 0.5;
   const v = (gz + 0.5) / grid - 0.5;
   const d = Math.sqrt(u * u + v * v);
 
+  if (pattern === 'alloy') {
+    const block = (Math.floor(gx / 2) + Math.floor(gz / 2)) % 2;
+    const variance = 0.85 + 0.15 * r;
+    const height = minHeight + range * variance;
+    return height * (block ? 0.92 : 1);
+  }
+
+  if (pattern === 'lattice') {
+    const block = (Math.floor(gx / 2) + Math.floor(gz / 2)) % 2;
+    return base * (block ? 1 : 0.55);
+  }
+
+  if (pattern === 'ridges') {
+    const ridge = gx % 2 === 0 ? 1 : 0.4;
+    return minHeight + range * ridge * (0.9 + 0.1 * r);
+  }
+
+  if (pattern === 'spines') {
+    const spine = Math.max(0, 1 - Math.abs(u) * 3.5);
+    return minHeight + range * Math.pow(spine, 1.4) * (0.8 + 0.2 * r);
+  }
+
+  if (pattern === 'grooves') {
+    const groove = gz % 2 === 0 ? 0.35 : 1;
+    return minHeight + range * groove * (0.85 + 0.15 * r);
+  }
+
+  if (pattern === 'pits') {
+    const pit = Math.min(1, d * 2.4);
+    return minHeight + range * (0.3 + 0.7 * pit);
+  }
+
+  if (pattern === 'weave') {
+    const warp = gx % 2 === 0 ? 1 : 0.6;
+    const weft = gz % 2 === 0 ? 0.75 : 0.45;
+    const weave = gx % 2 === 0 ? weft : warp;
+    return minHeight + range * weave * (0.9 + 0.1 * r);
+  }
+
+  if (pattern === 'spokes') {
+    const angle = Math.atan2(v, u);
+    const spoke = Math.abs(Math.sin(angle * 6));
+    return minHeight + range * (0.4 + 0.6 * spoke);
+  }
+
+  if (pattern === 'diamond') {
+    const diamond = Math.max(0, 1 - (Math.abs(u) + Math.abs(v)) * 2);
+    return minHeight + range * Math.pow(diamond, 1.4);
+  }
+
+  if (pattern === 'plates') {
+    const plate = gx % 3 === 0 || gz % 3 === 0 ? 0.45 : 1;
+    return minHeight + range * plate * (0.85 + 0.15 * r);
+  }
+
+  if (pattern === 'fracture') {
+    const fracture = r < 0.2 ? 0.25 : 0.85 + 0.15 * r;
+    return minHeight + range * fracture;
+  }
+
+  if (pattern === 'steps') {
+    const stepIndex = Math.floor(((gx + gz) / (grid * 2)) * 5);
+    const step = stepIndex / 4;
+    return minHeight + range * step;
+  }
+
+  if (pattern === 'spiral') {
+    const angle = Math.atan2(v, u);
+    const spiral = angle / (Math.PI * 2) + d * 1.2;
+    const wrap = spiral - Math.floor(spiral);
+    return minHeight + range * (0.25 + 0.75 * wrap);
+  }
+
+  if (pattern === 'ring') {
+    const ring = 1 - Math.min(1, Math.abs(d - 0.25) / 0.2);
+    return minHeight + range * Math.max(0, ring);
+  }
+
+  if (pattern === 'tuft') {
+    const tuft = Math.max(0, 1 - d * 2.4);
+    return minHeight + range * Math.pow(tuft, 1.6) * (0.7 + 0.3 * r);
+  }
+
+  if (pattern === 'iceShards') {
+    const shard = Math.pow(r, 2.2);
+    return minHeight + range * (0.35 + 0.65 * shard);
+  }
+
+  const checker = (gx + gz) % 2 === 0 ? 1 : 0.6;
+  return base * checker;
+};
+
+const getVoxelCoverage = (pattern: ArenaVoxelPattern) => {
   switch (pattern) {
-    case 'alloy': {
-      if (minHeight === maxHeight) {
-        return minHeight;
-      }
-      const block = (Math.floor(gx / 2) + Math.floor(gz / 2)) % 2;
-      const variance = 0.85 + 0.15 * r;
-      const height = minHeight + (maxHeight - minHeight) * variance;
-      return height * (block ? 0.92 : 1);
-    }
-    case 'lattice': {
-      const block = (Math.floor(gx / 2) + Math.floor(gz / 2)) % 2;
-      return base * (block ? 1 : 0.55);
-    }
-    case 'quilt': {
-      const checker = (gx + gz) % 2 === 0 ? 1 : 0.6;
-      return base * checker;
-    }
-    case 'tuft': {
-      const peak = Math.max(0, 1 - d * 2.2);
-      const tuft = peak * peak * (0.6 + 0.4 * r);
-      return minHeight + (maxHeight - minHeight) * tuft;
-    }
-    case 'hexCells': {
-      const ax = Math.abs(u);
-      const ay = Math.abs(v);
-      const az = Math.abs(u + v);
-      const edge = Math.max(ax, Math.max(ay, az));
-      const center = Math.max(0, 1 - edge * 1.9);
-      return minHeight + (maxHeight - minHeight) * Math.pow(center, 1.6);
-    }
-    case 'crackInlay': {
-      const seamGrid = gx % 3 === 0 || gz % 3 === 0 ? 1 : 0;
-      const edgeMask = d > 0.35 ? 1 : 0;
-      const seam = Math.max(seamGrid, edgeMask);
-      return minHeight + (maxHeight - minHeight) * (0.25 + 0.75 * seam) * (0.85 + 0.15 * r);
-    }
-    case 'componentGrid': {
-      const chip = gx % 3 === 1 && gz % 3 === 1 ? 1 : 0;
-      const trace = gx % 3 === 1 || gz % 3 === 1 ? 0.6 : 0.25;
-      const level = chip ? 1 : trace;
-      return minHeight + (maxHeight - minHeight) * level * (0.85 + 0.15 * r);
-    }
-    case 'contourSteps': {
-      const h = minHeight + (maxHeight - minHeight) * r;
-      const steps = 5;
-      return Math.round(h * steps) / steps;
-    }
-    case 'foldRidges': {
-      const ridge = 1 - smoothstep(0.0, 0.08, Math.abs(u - v));
-      return minHeight + (maxHeight - minHeight) * ridge;
-    }
-    case 'basaltChunks': {
-      const h = minHeight + (maxHeight - minHeight) * (0.3 + 0.7 * r);
-      const steps = 6;
-      return Math.round(h * steps) / steps;
-    }
-    case 'mandalaRelief': {
-      const ring = Math.abs(Math.sin(d * Math.PI * 6));
-      const relief = Math.max(0, 1 - d * 1.8) * (0.35 + 0.65 * ring);
-      return minHeight + (maxHeight - minHeight) * relief;
-    }
+    case 'alloy':
+      return 0.98;
+    case 'tuft':
+      return 0.55;
+    case 'iceShards':
+      return 0.6;
+    case 'spines':
+      return 0.7;
+    case 'ridges':
+      return 0.78;
+    case 'grooves':
+      return 0.82;
+    case 'pits':
+      return 0.8;
+    case 'weave':
+      return 0.78;
+    case 'spokes':
+      return 0.72;
+    case 'diamond':
+      return 0.8;
+    case 'plates':
+      return 0.88;
+    case 'fracture':
+      return 0.75;
+    case 'steps':
+      return 0.9;
+    case 'spiral':
+      return 0.74;
+    case 'ring':
+      return 0.7;
     default:
-      return base;
+      return 0.72;
+  }
+};
+
+const getVoxelSpanScale = (pattern: ArenaVoxelPattern) => {
+  switch (pattern) {
+    case 'alloy':
+      return 1;
+    case 'tuft':
+    case 'iceShards':
+      return 0.85;
+    case 'steps':
+    case 'plates':
+      return 0.95;
+    case 'grooves':
+      return 0.95;
+    case 'ridges':
+    case 'spines':
+    case 'pits':
+    case 'weave':
+    case 'spiral':
+      return 0.9;
+    default:
+      return 0.9;
   }
 };
 
@@ -466,17 +470,16 @@ const TileSystem: React.FC = () => {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const voxelMeshRef = useRef<THREE.InstancedMesh>(null);
   const snap = useSnapshot(apexState);
-  const arenaKey = snap.arena ?? 'classic';
-  const preset = ARENA_PRESETS[arenaKey] ?? ARENA_PRESETS.classic;
-  const theme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme ?? 'neon']), [preset, snap.currentTheme]);
-  const isZigzag = preset.ground?.kind === 'zigzag';
+  const preset = ARENA_PRESETS[snap.arena];
+  const theme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
+  const isZigzagClassic = preset.key === 'zigzagClassic';
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const voxelDummy = useMemo(() => new THREE.Object3D(), []);
   const clockRef = useRef(0);
 
   const tileGeometry = useMemo(
     () =>
-      isZigzag
+      isZigzagClassic
         ? new THREE.BoxGeometry(TILE_SIZE, TILE_DEPTH, TILE_SIZE)
         : new RoundedBoxGeometry(
             TILE_SIZE,
@@ -485,18 +488,17 @@ const TileSystem: React.FC = () => {
             TILE_CORNER_SEGMENTS,
             TILE_CORNER_RADIUS
           ),
-    [isZigzag]
+    [isZigzagClassic]
   );
   const { sideMaterial, topMaterial, tileMaterials } = useMemo(() => {
     const surface = preset.surface ?? {};
-    const edgeColorSource = preset.palette?.edge ?? theme.bg;
-    const edgeColor = new THREE.Color(edgeColorSource).lerp(theme.tile, THEME_EDGE_BLEND);
+    const edgeColor = new THREE.Color(theme.bg).lerp(theme.tile, THEME_EDGE_BLEND);
     const side = new THREE.MeshStandardMaterial({
       color: edgeColor,
       emissive: edgeColor,
-      emissiveIntensity: surface.sideEmissive ?? (isZigzag ? 0.02 : 0.1),
-      metalness: surface.sideMetalness ?? (isZigzag ? 0.05 : 0.35),
-      roughness: surface.sideRoughness ?? (isZigzag ? 0.95 : 0.85),
+      emissiveIntensity: surface.sideEmissive ?? (isZigzagClassic ? 0.02 : 0.1),
+      metalness: surface.sideMetalness ?? (isZigzagClassic ? 0.05 : 0.35),
+      roughness: surface.sideRoughness ?? (isZigzagClassic ? 0.95 : 0.85),
     });
 
     const topBase = preset.glassTop
@@ -513,10 +515,10 @@ const TileSystem: React.FC = () => {
         })
       : new THREE.MeshStandardMaterial({
           color: theme.tile,
-          emissive: isZigzag ? theme.tile : theme.glow,
-          emissiveIntensity: surface.topEmissive ?? (isZigzag ? 0.03 : 0.5),
-          metalness: surface.topMetalness ?? (isZigzag ? 0.05 : 0.6),
-          roughness: surface.topRoughness ?? (isZigzag ? 0.9 : 0.4),
+          emissive: isZigzagClassic ? theme.tile : theme.glow,
+          emissiveIntensity: surface.topEmissive ?? (isZigzagClassic ? 0.03 : 0.5),
+          metalness: surface.topMetalness ?? (isZigzagClassic ? 0.05 : 0.6),
+          roughness: surface.topRoughness ?? (isZigzagClassic ? 0.9 : 0.4),
         });
 
     applyTopShader(topBase, preset, theme);
@@ -526,7 +528,7 @@ const TileSystem: React.FC = () => {
       topMaterial: topBase,
       tileMaterials: [side, side, topBase, side, side, side],
     };
-  }, [isZigzag, preset, theme]);
+  }, [isZigzagClassic, preset, theme]);
 
   useEffect(() => {
     return () => {
@@ -542,25 +544,10 @@ const TileSystem: React.FC = () => {
       pattern: preset.voxelPattern,
       minHeight: preset.voxelHeight[0],
       maxHeight: preset.voxelHeight[1],
-      coverage: preset.voxelCoverage,
-      spanScale: preset.voxelSpanScale,
     };
   }, [preset]);
 
-  const voxelGeometry = useMemo(() => {
-    // For classic "Voxel Towers" preset, create truly rounded, domed, pill-like geometry
-    // This EXACTLY matches the image: soft, cushion-like voxels with heavily rounded edges
-    // and domed/convex top surfaces - NOT flat tops!
-    if (preset.key === 'classic') {
-      // Use RoundedBoxGeometry with very high corner radius and more segments
-      // This creates the pill-like, heavily rounded appearance from the image
-      // Parameters: width, height, depth, segments, radius
-      // High radius (0.48) makes it almost spherical on corners, creating the domed top effect
-      return new RoundedBoxGeometry(1, 1, 1, 8, 0.48);
-    }
-    // Rounded voxels prevent the surface from reading like a single flat slab.
-    return new RoundedBoxGeometry(1, 1, 1, 2, 0.12);
-  }, [preset.key]);
+  const voxelGeometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const voxelMaterial = useMemo(() => {
     const surface = preset.surface ?? {};
     return new THREE.MeshStandardMaterial({
@@ -591,7 +578,7 @@ const TileSystem: React.FC = () => {
   }, [tileGeometry]);
 
   const addNewTile = useCallback((mode: GameMode) => {
-    const modeSettings = MODE_SETTINGS[mode] ?? MODE_SETTINGS.classic;
+    const modeSettings = MODE_SETTINGS[mode];
 
     const spawnTile = (pos: THREE.Vector3, rotationY: number, scaleX: number, scaleZ: number) => {
       const tile: TileData = {
@@ -704,7 +691,6 @@ const TileSystem: React.FC = () => {
     mutation.zenPhase = 0;
     mutation.activeTileId = null;
     mutation.activeTileY = null;
-    mutation.fallOffTimer = 0;
     resetCurvePathCache();
 
     mutation.spherePos.set(0, SPHERE_RADIUS, 0);
@@ -821,7 +807,7 @@ const TileSystem: React.FC = () => {
 
       const tilesToRemove: number[] = [];
       let platformShouldFall = false;
-      const fallDelay = MODE_SETTINGS[snap.mode ?? 'classic'].fallDelay;
+      const fallDelay = MODE_SETTINGS[snap.mode].fallDelay;
 
       for (const tile of mutation.tiles) {
         if (tile.status === 'active') {
@@ -886,38 +872,8 @@ const TileSystem: React.FC = () => {
       const perTile = grid * grid;
       const maxTiles = maxToRender;
       const maxInstances = maxTiles * perTile;
-      const isAlloy = voxelConfig.pattern === 'alloy';
-      const isAlloyFlat = isAlloy && voxelConfig.minHeight === voxelConfig.maxHeight;
-      const baseCoverage = (() => {
-        switch (voxelConfig.pattern) {
-          case 'alloy':
-            return isAlloyFlat ? 0.9 : 0.92;
-          case 'hexCells':
-            return 0.86;
-          case 'crackInlay':
-            return 0.82;
-          case 'componentGrid':
-            return 0.88;
-          case 'contourSteps':
-            return 0.78;
-          case 'foldRidges':
-            return 0.8;
-          case 'basaltChunks':
-            return 0.9;
-          case 'tuft':
-            return 0.7;
-          case 'mandalaRelief':
-            return 0.74;
-          case 'quilt':
-            return 0.76;
-          default:
-            return 0.72;
-        }
-      })();
-      const coverage = voxelConfig.coverage ?? baseCoverage;
-      const baseSpanScale =
-        voxelConfig.pattern === 'alloy' || voxelConfig.pattern === 'componentGrid' ? 0.96 : 0.9;
-      const spanScale = voxelConfig.spanScale ?? baseSpanScale;
+      const coverage = getVoxelCoverage(voxelConfig.pattern);
+      const spanScale = getVoxelSpanScale(voxelConfig.pattern);
       voxelMeshRef.current.count = maxInstances;
 
       let instanceIndex = 0;

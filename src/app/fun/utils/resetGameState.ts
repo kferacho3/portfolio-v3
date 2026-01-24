@@ -13,7 +13,7 @@ import { formaState } from '../games/forma';
 import { weaveState } from '../games/weave';
 import { paveState } from '../games/pave';
 import { voidRunnerState } from '../games/voidrunner';
-import { gravityRushState } from '../games/gravityrush';
+import { jellyJumpState } from '../games/jellyjump';
 import { apexState } from '../games/apex';
 import { polarityState } from '../games/polarity';
 import { tetherDriftState } from '../games/tetherdrift';
@@ -21,6 +21,21 @@ import { traceState } from '../games/trace';
 import { flipBoxState } from '../games/flipbox';
 import { portalPunchState } from '../games/portalpunch';
 import { conveyorChaosState } from '../games/conveyorchaos';
+import { goUpState } from '../games/goup';
+import { branchFlipState } from '../games/branch-flip';
+import { growthState } from '../games/growth';
+import { stepsState } from '../games/steps';
+import { smashHitState } from '../games/smashhit';
+import { shadesState } from '../games/shades';
+import { twoDotsState } from '../games/twodots';
+import { polyForgeState } from '../games/polyforge';
+import { onePathState } from '../games/onepath';
+import { slowMoState } from '../games/slowmo';
+import { bouncerState } from '../games/bouncer';
+import { knotHopState } from '../games/knothop';
+import { octaSurgeState } from '../games/octasurge';
+import { prismJumpState } from '../games/prismjump';
+import { oscillateState } from '../games/oscillate';
 import { rolletteClassicState } from '../games/rolletteClassic';
 import { skyBlitzClassicState } from '../games/skyblitzClassic';
 import { dropperClassicState } from '../games/dropperClassic';
@@ -74,8 +89,8 @@ export function resetGameState(gameId: GameId): void {
     case 'voidrunner':
       voidRunnerState.reset();
       return;
-    case 'gravityrush':
-      gravityRushState.reset();
+    case 'jellyjump':
+      jellyJumpState.reset();
       return;
     case 'apex':
       apexState.reset();
@@ -97,6 +112,48 @@ export function resetGameState(gameId: GameId): void {
       return;
     case 'conveyorchaos':
       conveyorChaosState.reset();
+      return;
+    case 'goup':
+      goUpState.reset();
+      return;
+    case 'growth':
+      growthState.reset();
+      return;
+    case 'steps':
+      stepsState.reset();
+      return;
+    case 'smashhit':
+      smashHitState.reset();
+      return;
+    case 'shades':
+      shadesState.reset();
+      return;
+    case 'twodots':
+      twoDotsState.reset();
+      return;
+    case 'polyforge':
+      polyForgeState.reset();
+      return;
+    case 'onepath':
+      onePathState.retry();
+      return;
+    case 'slowmo':
+      slowMoState.backToMenu();
+      return;
+    case 'bouncer':
+      bouncerState.phase = 'menu';
+      return;
+    case 'prismjump':
+      prismJumpState.backToMenu();
+      return;
+    case 'octasurge':
+      octaSurgeState.phase = 'menu';
+      return;
+    case 'knothop':
+      knotHopState.phase = 'menu';
+      return;
+    case 'oscillate':
+      oscillateState.retry();
       return;
     case 'rolletteClassic':
       rolletteClassicState.reset();

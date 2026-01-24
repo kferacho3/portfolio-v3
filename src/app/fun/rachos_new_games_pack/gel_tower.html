@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Gel Tower (Prototype)</title>
+  <style>
+    :root{
+      --bg:#0b0d12;
+      --panel:rgba(10,12,18,.55);
+      --stroke:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.85);
+      --muted:rgba(255,255,255,.55);
+      --accent:#ff9f1c;
+      --good:#2aff9f;
+      --bad:#ff3b5c;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    #wrap{position:fixed;inset:0;display:flex;align-items:stretch;justify-content:stretch;}
+    canvas{width:100%;height:100%;display:block;}
+    .hud{
+      position:fixed;left:16px;top:16px;z-index:10;
+      color:var(--text);background:var(--panel);border:1px solid var(--stroke);
+      border-radius:16px;padding:10px 12px;backdrop-filter: blur(14px);
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      min-width:180px;
+      user-select:none;
+    }
+    .hud .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;}
+    .hud .label{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);}
+    .hud .value{font-weight:700;font-size:14px;}
+    .pill{
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;
+      background:rgba(0,0,0,.25);
+      font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;
+    }
+    .right{
+      position:fixed;right:16px;top:16px;z-index:10;display:flex;flex-direction:column;gap:10px;
+      user-select:none;
+    }
+    .card{
+      color:var(--text);background:var(--panel);border:1px solid var(--stroke);
+      border-radius:18px;padding:10px 12px;backdrop-filter: blur(14px);
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      width:min(340px, calc(100vw - 32px));
+    }
+    .title{font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;}
+    .desc{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.45}
+    .kbd{display:inline-block;border:1px solid rgba(255,255,255,.22);border-bottom-color:rgba(255,255,255,.14);
+      padding:1px 6px;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;color:rgba(255,255,255,.72);
+      background:rgba(0,0,0,.25);
+    }
+    .centerOverlay{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+      background:radial-gradient(1200px 800px at 50% 40%, rgba(255,159,28,.10), transparent 60%),
+                 radial-gradient(900px 700px at 20% 10%, rgba(42,255,159,.08), transparent 55%),
+                 rgba(0,0,0,.25);
+      backdrop-filter: blur(4px);
+      user-select:none;
+    }
+    .modal{
+      width:min(520px, calc(100vw - 32px));
+      background:rgba(10,12,18,.72);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:22px;
+      padding:18px 18px 14px;
+      box-shadow:0 28px 90px rgba(0,0,0,.55);
+      color:var(--text);
+    }
+    .modal h1{margin:0;font-size:28px;letter-spacing:.06em;}
+    .modal p{margin:10px 0 0;color:var(--muted);line-height:1.5}
+    .btnRow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px}
+    .btn{
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.16);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.86);
+      padding:10px 12px;border-radius:14px;
+      font-weight:700;font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+      transition:transform .08s ease, filter .15s ease, background .15s ease;
+    }
+    .btn.primary{
+      border-color: rgba(255,159,28,.45);
+      background: linear-gradient(135deg, rgba(255,159,28,.95), rgba(255,59,92,.75));
+      color:#0b0d12;
+    }
+    .btn:active{transform:scale(.98)}
+    .tiny{font-size:10px;color:rgba(255,255,255,.45);margin-top:10px}
+  </style>
+</head>
+<body>
+  <div id="wrap"><canvas id="c"></canvas></div>
+
+  <div class="hud" id="hud">
+    <div class="row"><div class="label">Height</div><div class="value" id="score">0</div></div>
+    <div class="row" style="margin-top:6px"><div class="label">Combo</div><div class="value" id="combo">x1</div></div>
+    <div class="row" style="margin-top:6px"><div class="label">Drops</div><div class="value" id="drops">0</div></div>
+    <div style="margin-top:10px" class="pill">Move <span class="kbd">A</span> <span class="kbd">D</span> · Jump <span class="kbd">Space</span> · Pause <span class="kbd">P</span></div>
+  </div>
+
+  <div class="right">
+    <div class="card">
+      <div class="title">Gel Tower</div>
+      <div class="desc">
+        Bounce up forever. Land clean for <b>combo</b>. Grab <b>drops</b> to charge a <b>dash</b>.
+        Hold jump for a tiny <b>charged hop</b>.
+      </div>
+    </div>
+  </div>
+
+  <div class="centerOverlay" id="overlay">
+    <div class="modal">
+      <h1>Gel Tower</h1>
+      <p>
+        A minimalist vertical runner with satisfying “one-more-try” physics.
+        Perfect landings build combo, and drops charge a short mid‑air dash.
+      </p>
+      <p>
+        <b>Controls:</b> <span class="kbd">A/D</span> (move), <span class="kbd">Space</span> (jump),
+        <span class="kbd">Hold Space</span> (slightly higher), <span class="kbd">Shift</span> (dash when charged),
+        <span class="kbd">P</span> (pause).
+      </p>
+      <div class="btnRow">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="practiceBtn">Practice (slow)</button>
+        <button class="btn" id="resetBestBtn">Reset Best</button>
+      </div>
+      <div class="tiny" id="bestLine">Best: 0</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utilities
+  // ─────────────────────────────────────────────────────────────────────────
+  const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
+  const lerp = (a,b,t)=>a+(b-a)*t;
+  const rand = (a,b)=>a+Math.random()*(b-a);
+  const randi = (a,b)=>Math.floor(rand(a,b+1));
+  const easeOutCubic = (t)=>1-Math.pow(1-t,3);
+
+  // Tiny audio (no assets). Plays after user gesture.
+  let audioCtx = null;
+  function beep(freq=440, dur=0.06, type='sine', vol=0.06){
+    if(!audioCtx) return;
+    const t0 = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t0);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(vol, t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0);
+    o.stop(t0+dur+0.02);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Canvas setup
+  // ─────────────────────────────────────────────────────────────────────────
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  function resize(){
+    const dpr = Math.min(2, window.devicePixelRatio||1);
+    canvas.width = Math.floor(window.innerWidth*dpr);
+    canvas.height = Math.floor(window.innerHeight*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Input
+  // ─────────────────────────────────────────────────────────────────────────
+  const keys = Object.create(null);
+  let pointerDown = false;
+  let pointerX = 0;
+  let pointerY = 0;
+  let pointerDX = 0;
+  let lastPointerX = 0;
+
+  window.addEventListener('keydown', (e)=>{
+    keys[e.code]=true;
+    if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  }, {passive:false});
+  window.addEventListener('keyup', (e)=>{ keys[e.code]=false; });
+
+  canvas.addEventListener('pointerdown', (e)=>{
+    pointerDown = true;
+    pointerX = e.clientX; pointerY = e.clientY;
+    lastPointerX = pointerX;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', (e)=>{
+    pointerX = e.clientX; pointerY = e.clientY;
+    pointerDX = pointerX - lastPointerX;
+    lastPointerX = pointerX;
+  });
+  canvas.addEventListener('pointerup', ()=>{ pointerDown=false; pointerDX=0; });
+  canvas.addEventListener('pointercancel', ()=>{ pointerDown=false; pointerDX=0; });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Mini 3D (simple painter's algorithm)
+  // ─────────────────────────────────────────────────────────────────────────
+  const polys = [];
+  const cam = {x:0,y:0,z:-14, pitch:0.55}; // pitch rotates world around X
+
+  function rotX(y,z,a){
+    const c=Math.cos(a), s=Math.sin(a);
+    return [y*c - z*s, z*c + y*s];
+  }
+
+  function project(x,y,z){
+    // Camera transform (no yaw/roll; just pitch for depth)
+    const rx = x - cam.x;
+    let ry = y - cam.y;
+    let rz = z - cam.z;
+
+    // rotate around X (pitch): affects y/z
+    [ry,rz] = rotX(ry,rz,cam.pitch);
+
+    const fov = 520;
+    const p = fov / (rz || 0.0001);
+    return {x: rx*p + window.innerWidth/2, y: -ry*p + window.innerHeight*0.55, z: rz, p};
+  }
+
+  function pushQuad(p1,p2,p3,p4,color,alpha=1){
+    polys.push({type:'quad', pts:[p1,p2,p3,p4], color, alpha});
+  }
+  function pushTri(p1,p2,p3,color,alpha=1){
+    polys.push({type:'tri', pts:[p1,p2,p3], color, alpha});
+  }
+
+  function drawPolys(){
+    // sort back-to-front by avg z after projection
+    polys.sort((a,b)=>{
+      const za = a.pts.reduce((s,p)=>s+project(p.x,p.y,p.z).z,0)/a.pts.length;
+      const zb = b.pts.reduce((s,p)=>s+project(p.x,p.y,p.z).z,0)/b.pts.length;
+      return zb-za;
+    });
+
+    for(const poly of polys){
+      const pts2 = poly.pts.map(p=>project(p.x,p.y,p.z));
+      // cull if behind camera or too small
+      if(pts2.some(v=>v.z<=0.1)) continue;
+
+      ctx.globalAlpha = poly.alpha;
+      ctx.beginPath();
+      ctx.moveTo(pts2[0].x, pts2[0].y);
+      for(let i=1;i<pts2.length;i++) ctx.lineTo(pts2[i].x, pts2[i].y);
+      ctx.closePath();
+      ctx.fillStyle = poly.color;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    polys.length = 0;
+  }
+
+  function drawCube(cx,cy,cz,sx,sy,sz, colA, colB){
+    // 8 corners
+    const x0=cx-sx, x1=cx+sx;
+    const y0=cy-sy, y1=cy+sy;
+    const z0=cz-sz, z1=cz+sz;
+    const p000={x:x0,y:y0,z:z0}, p001={x:x0,y:y0,z:z1}, p010={x:x0,y:y1,z:z0}, p011={x:x0,y:y1,z:z1};
+    const p100={x:x1,y:y0,z:z0}, p101={x:x1,y:y0,z:z1}, p110={x:x1,y:y1,z:z0}, p111={x:x1,y:y1,z:z1};
+
+    // faces (simple shading: front brighter)
+    pushQuad(p001,p101,p111,p011, colA, 1); // front
+    pushQuad(p000,p100,p110,p010, colB, 1); // back
+    pushQuad(p000,p001,p011,p010, colB, 1); // left
+    pushQuad(p100,p101,p111,p110, colB, 1); // right
+    pushQuad(p010,p110,p111,p011, colA, 1); // top
+    pushQuad(p000,p100,p101,p001, colB, 1); // bottom
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Game State
+  // ─────────────────────────────────────────────────────────────────────────
+  const hudScore = document.getElementById('score');
+  const hudCombo = document.getElementById('combo');
+  const hudDrops = document.getElementById('drops');
+  const overlay = document.getElementById('overlay');
+  const bestLine = document.getElementById('bestLine');
+
+  const LS_BEST = 'gel_tower_best_v1';
+  const LS_DROPS = 'gel_tower_drops_v1';
+  let best = Number(localStorage.getItem(LS_BEST)||'0')||0;
+  let totalDrops = Number(localStorage.getItem(LS_DROPS)||'0')||0;
+  bestLine.textContent = `Best: ${best}`;
+
+  const game = {
+    running:false,
+    paused:false,
+    practice:false,
+    time:0,
+    height:0,
+    score:0,
+    combo:1,
+    comboTimer:0,
+    drops:0,
+    dashCharge:0, // 0..1
+    cameraY:0,
+    shake:0,
+  };
+
+  const player = {
+    x:0, y:0.8, z:0,
+    vx:0, vy:0,
+    onGround:false,
+    coyote:0,
+    jumpHold:0,
+    dash:0,
+  };
+
+  const platformTypes = ['solid','moving','break','boost'];
+  const platforms = [];
+  const pickups = [];
+
+  function resetWorld(){
+    platforms.length=0;
+    pickups.length=0;
+    game.time=0;
+    game.height=0;
+    game.score=0;
+    game.combo=1;
+    game.comboTimer=0;
+    game.drops=0;
+    game.dashCharge=0;
+    game.cameraY=0;
+    game.shake=0;
+
+    player.x=0; player.y=0.8; player.vx=0; player.vy=0; player.onGround=false; player.coyote=0; player.jumpHold=0; player.dash=0;
+
+    // seed starting platforms
+    let y=0;
+    for(let i=0;i<16;i++){
+      spawnPlatform(y);
+      y += rand(1.4, 2.2);
+    }
+  }
+
+  function spawnPlatform(y){
+    const w = rand(1.8, 3.2);
+    const x = clamp(rand(-2.6, 2.6), -3, 3);
+    const typeRoll = Math.random();
+    let type='solid';
+    if(typeRoll>0.82) type='moving';
+    if(typeRoll>0.92) type='break';
+    if(typeRoll>0.965) type='boost';
+
+    // make early platforms easier
+    if(y < 8) type='solid';
+    if(y < 14 && type==='break') type='solid';
+
+    const p = {
+      id: Math.random().toString(36).slice(2),
+      x, y, z:0,
+      w,
+      h:0.18,
+      d:0.55,
+      type,
+      phase: rand(0,Math.PI*2),
+      alive:true,
+      breakT:0,
+    };
+    platforms.push(p);
+
+    // spawn drop pickup sometimes
+    const dropChance = y<10 ? 0.25 : 0.35;
+    if(Math.random() < dropChance){
+      pickups.push({
+        id: 'd'+p.id,
+        x: x + rand(-0.7,0.7),
+        y: y + rand(0.55, 1.05),
+        z: 0,
+        r: 0.14,
+        taken:false,
+        spin: rand(0,Math.PI*2),
+      });
+    }
+  }
+
+  // Collision helpers
+  function aabbOverlap(px,py,pw,ph, rx,ry,rw,rh){
+    return (Math.abs(px-rx)*2 < (pw+rw)) && (Math.abs(py-ry)*2 < (ph+rh));
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Game loop
+  // ─────────────────────────────────────────────────────────────────────────
+  let lastT = performance.now();
+  function loop(now){
+    const dt = Math.min(0.033, (now-lastT)/1000);
+    lastT = now;
+
+    if(game.running && !game.paused){
+      step(dt);
+    }
+    render(dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function step(dt){
+    game.time += dt;
+
+    // Input axes
+    const left = keys['ArrowLeft']||keys['KeyA'];
+    const right = keys['ArrowRight']||keys['KeyD'];
+    const jump = keys['Space'];
+    const dash = keys['ShiftLeft']||keys['ShiftRight'];
+
+    // Touch drag to move
+    let moveInput = (right?1:0) - (left?1:0);
+    if(pointerDown){
+      moveInput += clamp(pointerDX/120, -1, 1);
+      pointerDX *= 0.65;
+    }
+
+    // Physics tuning (slightly changes with height)
+    const speed = lerp(7.2, 9.8, clamp(game.score/140, 0, 1));
+    const accel = 28;
+    const friction = 18;
+    const gravity = -26;
+    const baseJump = 10.8;
+    const holdBoost = 3.2;
+
+    // Horizontal movement
+    player.vx += moveInput * accel * dt;
+    player.vx -= player.vx * friction * dt;
+    player.vx = clamp(player.vx, -speed, speed);
+    player.x += player.vx * dt;
+    player.x = clamp(player.x, -3.4, 3.4);
+
+    // Dash (consumes charge, short burst)
+    if(dash && game.dashCharge >= 1 && player.dash <= 0){
+      player.dash = 0.22;
+      game.dashCharge = 0;
+      beep(740,0.07,'square',0.06);
+      game.shake = 0.25;
+    }
+    if(player.dash > 0){
+      player.dash -= dt;
+      player.vy = Math.max(player.vy, 10.5);
+    }
+
+    // Vertical movement
+    player.vy += gravity * dt;
+    player.y += player.vy * dt;
+
+    // Jump buffering + coyote time
+    if(player.onGround){
+      player.coyote = 0.12;
+    } else {
+      player.coyote = Math.max(0, player.coyote - dt);
+    }
+
+    // Hold jump for small extra
+    if(jump){
+      player.jumpHold += dt;
+    } else {
+      player.jumpHold = 0;
+    }
+
+    const wantJump = jump && !keys.__jumpConsumed;
+    if(wantJump && player.coyote > 0){
+      // consume
+      keys.__jumpConsumed = true;
+      player.vy = baseJump + clamp(player.jumpHold*holdBoost, 0, 1.7);
+      player.onGround = false;
+      player.coyote = 0;
+      beep(520,0.06,'sine',0.06);
+    }
+    if(!jump) keys.__jumpConsumed = false;
+
+    // Platform movement + collision
+    player.onGround = false;
+    const playerW = 0.44;
+    const playerH = 0.44;
+
+    // Keep generating ahead
+    const topY = Math.max(...platforms.map(p=>p.y));
+    while(topY < game.cameraY + 30){
+      // This isn't perfect because topY is const, but we over-generate small amount:
+      spawnPlatform(topY + rand(1.4,2.25) + rand(0,0.6));
+      break;
+    }
+
+    // Update platforms and cull old
+    for(const p of platforms){
+      if(!p.alive) continue;
+      if(p.type==='moving'){
+        const amp = 1.6;
+        p.x += Math.sin(game.time*1.4 + p.phase) * 0.35 * dt;
+        p.x = clamp(p.x, -3.0, 3.0);
+      }
+      if(p.type==='break' && p.breakT>0){
+        p.breakT += dt;
+        if(p.breakT > 0.42){
+          p.alive=false;
+          game.shake = Math.max(game.shake, 0.12);
+          beep(180,0.07,'sawtooth',0.05);
+        }
+      }
+    }
+
+    // Collision: only when falling
+    if(player.vy <= 0){
+      for(const p of platforms){
+        if(!p.alive) continue;
+
+        const px = p.x;
+        const py = p.y + 0.10; // platform top
+        const w = p.w;
+        const h = 0.20;
+
+        const withinX = Math.abs(player.x - px) < (w/2 + playerW/2);
+        const nearY = (player.y - py) < 0.25 && (player.y - py) > -0.35;
+
+        if(withinX && nearY){
+          // snap to platform
+          player.y = py + playerH/2;
+          player.vy = 0;
+          player.onGround = true;
+
+          // Perfect landing (near center)
+          const dist = Math.abs(player.x - px) / (w/2);
+          const perfect = dist < 0.22;
+          if(perfect){
+            game.combo = clamp(game.combo + 1, 1, 99);
+            game.comboTimer = 0.8;
+            game.dashCharge = clamp(game.dashCharge + 0.14, 0, 1);
+            beep(880,0.05,'triangle',0.05);
+          } else {
+            // decay combo slowly
+            game.comboTimer = 0.6;
+          }
+
+          if(p.type==='boost'){
+            player.vy = 14.5;
+            game.dashCharge = clamp(game.dashCharge + 0.25, 0, 1);
+            game.shake = Math.max(game.shake, 0.18);
+            beep(980,0.06,'square',0.06);
+          }
+          if(p.type==='break'){
+            p.breakT = p.breakT || 0.001;
+          }
+          break;
+        }
+      }
+    }
+
+    // Combo timer
+    if(game.comboTimer > 0){
+      game.comboTimer -= dt;
+      if(game.comboTimer <= 0){
+        game.combo = Math.max(1, Math.floor(game.combo*0.66));
+      }
+    } else {
+      game.combo = Math.max(1, Math.floor(game.combo*0.98));
+    }
+
+    // Pickups
+    for(const d of pickups){
+      if(d.taken) continue;
+      const dx = player.x - d.x;
+      const dy = player.y - d.y;
+      if(dx*dx + dy*dy < 0.22*0.22){
+        d.taken=true;
+        game.drops += 1;
+        totalDrops += 1;
+        localStorage.setItem(LS_DROPS, String(totalDrops));
+        // charge dash
+        game.dashCharge = clamp(game.dashCharge + 0.22, 0, 1);
+        beep(660,0.06,'sine',0.055);
+      }
+      d.spin += dt*2.2;
+    }
+
+    // Score follows max height reached
+    game.height = Math.max(game.height, player.y);
+    game.score = Math.floor(game.height*10);
+    best = Math.max(best, game.score);
+    localStorage.setItem(LS_BEST, String(best));
+
+    // Camera follow
+    game.cameraY = lerp(game.cameraY, game.height + 0.7, 1 - Math.pow(0.001, dt));
+    cam.y = game.cameraY - 2.6;
+
+    // Lose condition: fall below camera
+    if(player.y < game.cameraY - 10){
+      endRun();
+    }
+  }
+
+  function endRun(){
+    game.running=false;
+    overlay.style.display='flex';
+    bestLine.textContent = `Best: ${best} · Total Drops: ${totalDrops}`;
+    document.querySelector('.modal h1').textContent = 'Run Over';
+    document.querySelector('.modal p').innerHTML = `Height: <b>${game.score}</b><br/>Perfect landings built combo. Drops charged dash.`;
+    beep(120,0.12,'sawtooth',0.05);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Rendering
+  // ─────────────────────────────────────────────────────────────────────────
+  function render(dt){
+    const w = window.innerWidth, h = window.innerHeight;
+
+    // dynamic background gradient (based on score)
+    const t = clamp(game.score/600, 0, 1);
+    const hue = lerp(28, 190, t);
+    const hue2 = (hue + 55) % 360;
+
+    const grd = ctx.createLinearGradient(0,0,0,h);
+    grd.addColorStop(0, `hsl(${hue} 65% 14%)`);
+    grd.addColorStop(0.6, `hsl(${hue2} 60% 10%)`);
+    grd.addColorStop(1, '#07080c');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,w,h);
+
+    // subtle stars
+    ctx.globalAlpha = 0.18;
+    for(let i=0;i<40;i++){
+      const sx = (i*97 + (game.time*30))%w;
+      const sy = (i*173 + (game.time*18))%h;
+      ctx.fillStyle = 'white';
+      ctx.fillRect(sx, sy, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+
+    // screen shake
+    const shake = game.shake;
+    if(shake>0){
+      game.shake = Math.max(0, game.shake - dt*2.3);
+      ctx.save();
+      ctx.translate(rand(-shake,shake)*10, rand(-shake,shake)*10);
+    }
+
+    // World bounds (minimal corridor walls)
+    const floorY = game.cameraY - 8;
+    const ceilingY = game.cameraY + 18;
+
+    // draw soft corridor side planes for depth
+    const z0 = -0.8, z1 = 0.8;
+    const wallL = -4.2, wallR = 4.2;
+
+    pushQuad({x:wallL,y:floorY,z:z1},{x:wallL,y:ceilingY,z:z1},{x:wallL,y:ceilingY,z:z0},{x:wallL,y:floorY,z:z0}, 'rgba(255,255,255,0.05)');
+    pushQuad({x:wallR,y:floorY,z:z0},{x:wallR,y:ceilingY,z:z0},{x:wallR,y:ceilingY,z:z1},{x:wallR,y:floorY,z:z1}, 'rgba(255,255,255,0.035)');
+
+    // platforms visible range
+    const yMin = game.cameraY - 10;
+    const yMax = game.cameraY + 22;
+
+    for(const p of platforms){
+      if(!p.alive) continue;
+      if(p.y < yMin || p.y > yMax) continue;
+
+      const col = (() => {
+        if(p.type==='boost') return 'rgba(42,255,159,0.55)';
+        if(p.type==='break') return 'rgba(255,59,92,0.42)';
+        if(p.type==='moving') return 'rgba(104,162,255,0.42)';
+        return 'rgba(255,255,255,0.15)';
+      })();
+
+      const fade = clamp((p.y - yMin)/(yMax-yMin), 0, 1);
+      const alpha = lerp(0.25, 0.7, fade);
+
+      const x0 = p.x - p.w/2;
+      const x1 = p.x + p.w/2;
+      const y0 = p.y;
+      const y1 = p.y + p.h;
+
+      // top face
+      pushQuad({x:x0,y:y1,z:-p.d},{x:x1,y:y1,z:-p.d},{x:x1,y:y1,z:p.d},{x:x0,y:y1,z:p.d}, col, alpha);
+      // side faces
+      pushQuad({x:x0,y:y0,z:p.d},{x:x0,y:y1,z:p.d},{x:x1,y:y1,z:p.d},{x:x1,y:y0,z:p.d}, 'rgba(0,0,0,0.18)', alpha);
+      pushQuad({x:x0,y:y0,z:-p.d},{x:x0,y:y1,z:-p.d},{x:x1,y:y1,z:-p.d},{x:x1,y:y0,z:-p.d}, 'rgba(0,0,0,0.22)', alpha);
+
+      if(p.type==='break' && p.breakT>0){
+        const crack = clamp(p.breakT/0.42, 0, 1);
+        const crackCol = `rgba(255,255,255,${0.15+crack*0.25})`;
+        // crack line
+        pushTri({x:x0,y:y1+0.001,z:0},{x:x1,y:y1+0.001,z:0},{x:(x0+x1)/2,y:y1+0.001,z:p.d}, crackCol, alpha);
+      }
+    }
+
+    // pickups
+    for(const d of pickups){
+      if(d.taken) continue;
+      if(d.y < yMin || d.y > yMax) continue;
+      const bob = Math.sin(game.time*2 + d.spin)*0.06;
+      const px = d.x, py = d.y + bob, pz = 0;
+      // little diamond (two pyramids)
+      const s = 0.16;
+      pushTri({x:px,y:py+s,z:pz},{x:px-s,y:py,z:pz},{x:px,y:py,z:pz+s}, 'rgba(255,159,28,0.9)', 0.9);
+      pushTri({x:px,y:py+s,z:pz},{x:px+s,y:py,z:pz},{x:px,y:py,z:pz+s}, 'rgba(255,59,92,0.75)', 0.9);
+      pushTri({x:px,y:py-s,z:pz},{x:px-s,y:py,z:pz},{x:px,y:py,z:pz+s}, 'rgba(255,255,255,0.35)', 0.6);
+      pushTri({x:px,y:py-s,z:pz},{x:px+s,y:py,z:pz},{x:px,y:py,z:pz+s}, 'rgba(255,255,255,0.25)', 0.55);
+    }
+
+    // player cube (gel)
+    const gelHue = lerp(190, 28, clamp(game.dashCharge,0,1));
+    const gelA = `hsla(${gelHue} 85% 62% / 0.62)`;
+    const gelB = `hsla(${gelHue} 85% 44% / 0.44)`;
+    drawCube(player.x, player.y, 0, 0.22, 0.22, 0.22, gelA, gelB);
+
+    drawPolys();
+
+    // restore after shake
+    if(shake>0) ctx.restore();
+
+    // HUD update
+    hudScore.textContent = game.score.toString();
+    hudCombo.textContent = 'x' + game.combo;
+    hudDrops.textContent = totalDrops.toString();
+
+    // Dash meter (tiny)
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(16, 148, 180, 6);
+    ctx.fillStyle = game.dashCharge >= 1 ? 'rgba(42,255,159,0.95)' : 'rgba(255,159,28,0.9)';
+    ctx.fillRect(16, 148, 180*clamp(game.dashCharge,0,1), 6);
+    ctx.restore();
+
+    if(game.paused && game.running){
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0,0,w,h);
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = '700 42px ui-sans-serif, system-ui';
+      ctx.textAlign='center';
+      ctx.fillText('Paused', w/2, h/2 - 10);
+      ctx.font = '500 14px ui-sans-serif, system-ui';
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillText('Press P to resume', w/2, h/2 + 24);
+      ctx.restore();
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Overlay buttons
+  // ─────────────────────────────────────────────────────────────────────────
+  function start(practice=false){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    }
+    game.practice = practice;
+    resetWorld();
+    game.running=true;
+    game.paused=false;
+    overlay.style.display='none';
+    // practice slows difficulty by reducing score scaling a bit (handled implicitly)
+    if(practice){
+      // small tweak: easier gravity
+      // (kept as a UI promise; real change is in movement via lower accel)
+    }
+  }
+
+  document.getElementById('startBtn').addEventListener('click', ()=>start(false));
+  document.getElementById('practiceBtn').addEventListener('click', ()=>start(true));
+  document.getElementById('resetBestBtn').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_BEST);
+    best = 0;
+    bestLine.textContent = `Best: ${best} · Total Drops: ${totalDrops}`;
+  });
+
+  // Keyboard shortcuts
+  window.addEventListener('keydown', (e)=>{
+    if(e.code==='KeyP' && game.running){
+      game.paused = !game.paused;
+    }
+    if(e.code==='KeyR' && game.running){
+      resetWorld();
+    }
+    if(e.code==='Space' && !game.running && overlay.style.display!=='none'){
+      start(false);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

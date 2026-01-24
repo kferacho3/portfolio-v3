@@ -2,7 +2,6 @@ import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
 import clamp from 'lodash-es/clamp';
-import { easing } from 'maath';
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
@@ -25,7 +24,6 @@ interface WallModePaddleProps {
 
 const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, shotSpinRef }) => {
   const paddleApi = useRef<RapierRigidBody | null>(null);
-  const meshRef = useRef<THREE.Mesh>(null);
   const captureGlowRef = useRef<THREE.Mesh>(null);
   const pointerDown = useRef(false);
   const rightClickDown = useRef(false);
@@ -156,7 +154,7 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
     };
   }, [launchBall, releaseBall]);
 
-  useFrame((state, delta) => {
+  useFrame((state) => {
     const sensitivity = wallMode.stabilizeMode ? 0.6 : 1;
     vec.current.set(state.pointer.x * sensitivity, state.pointer.y * sensitivity, 0.5).unproject(state.camera);
     dir.current.copy(vec.current).sub(state.camera.position).normalize();
@@ -234,21 +232,6 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
       }
     }
 
-    const shake = reactPongState.screenShake;
-    if (shake > 0) {
-      state.camera.position.x += (Math.random() - 0.5) * shake;
-      state.camera.position.y += (Math.random() - 0.5) * shake;
-      reactPongState.screenShake *= 0.9;
-      if (reactPongState.screenShake < 0.01) reactPongState.screenShake = 0;
-    }
-
-    easing.damp3(
-      state.camera.position,
-      [-state.pointer.x * 2.5, -state.pointer.y * 1.5, 20],
-      0.3,
-      delta
-    );
-    state.camera.lookAt(0, 0, 0);
   });
 
   const handleCapture = useCallback((payload: { totalForceMagnitude: number }) => {
@@ -307,23 +290,78 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
     >
       <CuboidCollider args={[actualCaptureWidth / 2, actualCaptureHeight / 2, 0.2]} />
 
-      <mesh ref={meshRef} castShadow receiveShadow>
+      <mesh castShadow receiveShadow>
         <boxGeometry args={[actualCaptureWidth, actualCaptureHeight, 0.4]} />
         <meshStandardMaterial
           color={scoreColor}
           emissive={scoreColor}
-          emissiveIntensity={wallMode.isBallCaptured ? 0.8 : 0.3}
+          emissiveIntensity={wallMode.isBallCaptured ? 0.8 : 0.4}
           metalness={0.5}
           roughness={0.3}
           transparent
-          opacity={0.9}
+          opacity={0.95}
         />
       </mesh>
 
       <mesh ref={captureGlowRef} position={[0, 0, 0.4]}>
         <boxGeometry args={[actualCaptureWidth + 0.5, actualCaptureHeight + 0.5, 0.2]} />
-        <meshBasicMaterial color={scoreColor} transparent opacity={0.15} />
+        <meshBasicMaterial color={scoreColor} transparent opacity={0.2} />
       </mesh>
+
+      {/* Corner indicators for better visibility */}
+      {[-1, 1].map((xSign) =>
+        [-1, 1].map((ySign) => (
+          <mesh
+            key={`corner-${xSign}-${ySign}`}
+            position={[
+              (actualCaptureWidth / 2) * xSign,
+              (actualCaptureHeight / 2) * ySign,
+              0.3,
+            ]}
+          >
+            <sphereGeometry args={[0.15, 8, 8]} />
+            <meshStandardMaterial
+              color={scoreColor}
+              emissive={scoreColor}
+              emissiveIntensity={0.8}
+              transparent
+              opacity={0.9}
+            />
+          </mesh>
+        ))
+      )}
+
+      {/* Edge highlight lines for better depth perception */}
+      {[-1, 1].map((ySign) => (
+        <mesh
+          key={`edge-h-${ySign}`}
+          position={[0, (actualCaptureHeight / 2) * ySign, 0.35]}
+        >
+          <boxGeometry args={[actualCaptureWidth * 0.8, 0.08, 0.1]} />
+          <meshStandardMaterial
+            color={scoreColor}
+            emissive={scoreColor}
+            emissiveIntensity={0.6}
+            transparent
+            opacity={0.7}
+          />
+        </mesh>
+      ))}
+      {[-1, 1].map((xSign) => (
+        <mesh
+          key={`edge-v-${xSign}`}
+          position={[(actualCaptureWidth / 2) * xSign, 0, 0.35]}
+        >
+          <boxGeometry args={[0.08, actualCaptureHeight * 0.8, 0.1]} />
+          <meshStandardMaterial
+            color={scoreColor}
+            emissive={scoreColor}
+            emissiveIntensity={0.6}
+            transparent
+            opacity={0.7}
+          />
+        </mesh>
+      ))}
 
       {Math.abs(wallMode.spinIntensity) > 0.2 && (
         <mesh position={[wallMode.spinIntensity * 2, 0.5, 0.2]}>

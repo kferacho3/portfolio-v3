@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Poly Pulse (Prototype)</title>
+  <style>
+    :root{
+      --bg:#0b0d12;
+      --panel:rgba(10,12,18,.55);
+      --stroke:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.86);
+      --muted:rgba(255,255,255,.55);
+      --accent:#a66cff;
+      --good:#2aff9f;
+      --bad:#ff3b5c;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    canvas{width:100%;height:100%;display:block;}
+    .hud{
+      position:fixed;left:16px;top:16px;z-index:10;
+      color:var(--text);background:var(--panel);border:1px solid var(--stroke);
+      border-radius:16px;padding:10px 12px;backdrop-filter: blur(14px);
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      min-width:220px;
+      user-select:none;
+    }
+    .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:6px}
+    .row:first-child{margin-top:0}
+    .label{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);}
+    .value{font-weight:800;font-size:14px;}
+    .pill{
+      margin-top:10px;
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;
+      background:rgba(0,0,0,.25);
+      font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;
+    }
+    .kbd{display:inline-block;border:1px solid rgba(255,255,255,.22);border-bottom-color:rgba(255,255,255,.14);
+      padding:1px 6px;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;color:rgba(255,255,255,.72);
+      background:rgba(0,0,0,.25);
+    }
+    .centerOverlay{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+      background:radial-gradient(1200px 800px at 50% 40%, rgba(166,108,255,.12), transparent 60%),
+                 radial-gradient(900px 700px at 20% 10%, rgba(255,209,102,.08), transparent 55%),
+                 rgba(0,0,0,.28);
+      backdrop-filter: blur(4px);
+      user-select:none;
+    }
+    .modal{
+      width:min(560px, calc(100vw - 32px));
+      background:rgba(10,12,18,.72);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:22px;
+      padding:18px 18px 14px;
+      box-shadow:0 28px 90px rgba(0,0,0,.55);
+      color:var(--text);
+    }
+    .modal h1{margin:0;font-size:28px;letter-spacing:.06em;}
+    .modal p{margin:10px 0 0;color:var(--muted);line-height:1.5}
+    .btnRow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px}
+    .btn{
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.16);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.86);
+      padding:10px 12px;border-radius:14px;
+      font-weight:800;font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+      transition:transform .08s ease, filter .15s ease, background .15s ease;
+    }
+    .btn.primary{
+      border-color: rgba(166,108,255,.55);
+      background: linear-gradient(135deg, rgba(166,108,255,.95), rgba(255,209,102,.75));
+      color:#0b0d12;
+    }
+    .btn:active{transform:scale(.98)}
+    .tiny{font-size:10px;color:rgba(255,255,255,.45);margin-top:10px}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="hud">
+    <div class="row"><div class="label">Score</div><div class="value" id="score">0</div></div>
+    <div class="row"><div class="label">Level</div><div class="value" id="lvl">1</div></div>
+    <div class="row"><div class="label">Perfect</div><div class="value" id="perf">0</div></div>
+    <div class="pill">
+      Fire <span class="kbd">Click</span>/<span class="kbd">Space</span> · Don’t hit a painted face · Restart <span class="kbd">R</span>
+    </div>
+  </div>
+
+  <div class="centerOverlay" id="overlay">
+    <div class="modal">
+      <h1>Poly Pulse</h1>
+      <p>
+        Poly‑forge vibes in a clean timing loop. A polygon spins. Each shot “paints” one face.
+        Paint every face <b>exactly once</b> to level up. Hit a painted face and it shatters.
+      </p>
+      <p>
+        Go for <b>perfect hits</b> (near the face center) for extra score and satisfying feedback.
+      </p>
+      <div class="btnRow">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="resetBestBtn">Reset Best</button>
+      </div>
+      <div class="tiny" id="bestLine">Best: 0</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utils / Audio
+  // ─────────────────────────────────────────────────────────────────────────
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const randi=(a,b)=>Math.floor(rand(a,b+1));
+  const TAU=Math.PI*2;
+
+  let audioCtx=null;
+  function beep(freq=440,dur=0.06,type='sine',vol=0.05){
+    if(!audioCtx) return;
+    const t0=audioCtx.currentTime;
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t0);
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(vol,t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }
+
+  // Canvas
+  const canvas=document.getElementById('c');
+  const ctx=canvas.getContext('2d');
+  function resize(){
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    canvas.width=Math.floor(window.innerWidth*dpr);
+    canvas.height=Math.floor(window.innerHeight*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // HUD
+  const hudScore=document.getElementById('score');
+  const hudLvl=document.getElementById('lvl');
+  const hudPerf=document.getElementById('perf');
+  const overlay=document.getElementById('overlay');
+  const bestLine=document.getElementById('bestLine');
+
+  const LS_BEST='poly_pulse_best_v1';
+  let best=Number(localStorage.getItem(LS_BEST)||'0')||0;
+  bestLine.textContent=`Best: ${best}`;
+
+  // Input
+  const keys=Object.create(null);
+  window.addEventListener('keydown',(e)=>{
+    keys[e.code]=true;
+    if(e.code==='Space') e.preventDefault();
+  },{passive:false});
+  window.addEventListener('keyup',(e)=>{ keys[e.code]=false; });
+
+  let pointerDown=false;
+  canvas.addEventListener('pointerdown',(e)=>{ pointerDown=true; fire(); canvas.setPointerCapture(e.pointerId); });
+  canvas.addEventListener('pointerup',()=>{ pointerDown=false; });
+
+  // Game state
+  const game={
+    running:false,
+    time:0,
+    score:0,
+    level:1,
+    perfect:0,
+    flash:0,
+    shake:0,
+    // polygon
+    sides:6,
+    rot:0,
+    omega:1.8,
+    dir:1,
+    hit:[],
+    lastFace:-1,
+    colorStep:0,
+  };
+
+  const particles=[];
+
+  function resetPolygon(){
+    game.sides = randi(4, 9);
+    // occasional triangle for intensity
+    if(Math.random()<0.12) game.sides = 3;
+    game.hit = Array.from({length:game.sides}, ()=>false);
+    game.lastFace = -1;
+    game.rot = rand(0,TAU);
+    game.dir = Math.random()<0.5 ? 1 : -1;
+    const base = lerp(1.9, 3.8, clamp(game.level/18,0,1));
+    game.omega = base * game.dir;
+  }
+
+  function reset(){
+    game.time=0; game.score=0; game.level=1; game.perfect=0; game.flash=0; game.shake=0; game.colorStep=0;
+    resetPolygon();
+    particles.length=0;
+  }
+
+  function faceIndexAtPointer(){
+    // pointer is fixed at top
+    const pointerAngle = -Math.PI/2;
+    const faceAngle = TAU / game.sides;
+
+    // normalize relative angle between 0..TAU
+    let rel = pointerAngle - game.rot;
+    rel = ((rel % TAU) + TAU) % TAU;
+
+    const idx = Math.floor(rel / faceAngle);
+    return clamp(idx, 0, game.sides-1);
+  }
+
+  function faceCenterAngle(idx){
+    const faceAngle = TAU / game.sides;
+    return game.rot + (idx + 0.5)*faceAngle;
+  }
+
+  function spawnBurst(angle, radius){
+    for(let i=0;i<18;i++){
+      const a = angle + rand(-0.35,0.35);
+      const sp = rand(2.0, 6.0);
+      particles.push({
+        x: Math.cos(a)*radius,
+        y: Math.sin(a)*radius,
+        vx: Math.cos(a)*sp,
+        vy: Math.sin(a)*sp,
+        t:0,
+        life:rand(0.35,0.75),
+      });
+    }
+  }
+
+  function fire(){
+    if(!game.running) return;
+
+    const idx = faceIndexAtPointer();
+    const already = game.hit[idx];
+
+    // perfect window: pointer close to face center
+    const pointerAngle = -Math.PI/2;
+    const centerA = faceCenterAngle(idx);
+    let d = pointerAngle - centerA;
+    d = ((d+Math.PI) % TAU) - Math.PI;
+    const perfect = Math.abs(d) < (TAU/game.sides)*0.12;
+
+    if(already){
+      // fail
+      game.flash = 0.45;
+      game.shake = 0.22;
+      beep(160,0.12,'sawtooth',0.05);
+      endRun();
+      return;
+    }
+
+    // paint face
+    game.hit[idx]=true;
+    game.score += perfect ? 40 : 20;
+    if(perfect){ game.perfect += 1; game.score += 10; }
+
+    game.colorStep += 1;
+
+    // burst
+    const radius = polyRadius();
+    const a = faceCenterAngle(idx);
+    spawnBurst(a, radius*0.95);
+
+    beep(perfect?980:720,0.06,'triangle',0.05);
+    if(perfect) beep(1180,0.05,'triangle',0.045);
+
+    // level up check
+    if(game.hit.every(Boolean)){
+      game.level += 1;
+      game.score += 80;
+      game.flash = 0.25;
+      game.shake = 0.18;
+      beep(520,0.07,'square',0.06);
+      resetPolygon();
+    }
+
+    best = Math.max(best, game.score);
+    localStorage.setItem(LS_BEST, String(best));
+  }
+
+  function endRun(){
+    game.running=false;
+    overlay.style.display='flex';
+    const modal=document.querySelector('.modal');
+    modal.querySelector('h1').textContent='Shattered';
+    modal.querySelectorAll('p')[0].innerHTML = `Score: <b>${game.score}</b><br/>Level: <b>${game.level}</b> · Perfect: <b>${game.perfect}</b> · Best: <b>${best}</b>`;
+  }
+
+  // Main loop
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    if(game.running) step(dt);
+    render(dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function step(dt){
+    game.time += dt;
+    game.rot += game.omega*dt;
+
+    // ramp: speed increases slowly each level
+    const targetOmega = lerp(1.8, 5.2, clamp((game.level-1)/22,0,1)) * game.dir;
+    game.omega = lerp(game.omega, targetOmega, 1 - Math.pow(0.0001, dt));
+
+    // micro-jitter flips
+    if(Math.random() < dt*0.10 && game.level>6){
+      game.dir *= -1;
+      game.omega *= -1;
+      beep(260,0.03,'sine',0.02);
+    }
+
+    // flash/shake decay
+    if(game.flash>0) game.flash = Math.max(0, game.flash - dt*1.6);
+    if(game.shake>0) game.shake = Math.max(0, game.shake - dt*2.0);
+
+    for(const p of particles){
+      p.t += dt;
+      p.x += p.vx*dt;
+      p.y += p.vy*dt;
+      p.vx *= (1 - dt*2.8);
+      p.vy *= (1 - dt*2.8);
+    }
+    for(let i=particles.length-1;i>=0;i--){
+      if(particles[i].t > particles[i].life) particles.splice(i,1);
+    }
+
+    // keyboard fire
+    if(keys['Space'] && !keys.__spaceConsumed){
+      keys.__spaceConsumed=true;
+      fire();
+    }
+    if(!keys['Space']) keys.__spaceConsumed=false;
+
+    if(keys['KeyR']) reset();
+  }
+
+  function polyRadius(){
+    const minDim=Math.min(window.innerWidth, window.innerHeight);
+    return minDim*0.22;
+  }
+
+  // Render
+  function render(dt){
+    const w=window.innerWidth, h=window.innerHeight;
+
+    // background gradient
+    const t = clamp((game.level-1)/18,0,1);
+    const hue = lerp(210, 40, t);
+    const grd=ctx.createLinearGradient(0,0,0,h);
+    grd.addColorStop(0, `hsl(${hue} 60% 14%)`);
+    grd.addColorStop(0.6, `hsl(${(hue+55)%360} 55% 10%)`);
+    grd.addColorStop(1, '#07080c');
+    ctx.fillStyle=grd;
+    ctx.fillRect(0,0,w,h);
+
+    // shake
+    if(game.shake>0){
+      ctx.save();
+      ctx.translate(rand(-game.shake,game.shake)*10, rand(-game.shake,game.shake)*10);
+    }
+
+    const cx=w/2, cy=h/2+20;
+    const radius=polyRadius();
+    const faceA = TAU / game.sides;
+
+    // polygon faces
+    for(let i=0;i<game.sides;i++){
+      const a0 = game.rot + i*faceA;
+      const a1 = game.rot + (i+1)*faceA;
+      const ax0 = cx + Math.cos(a0)*radius;
+      const ay0 = cy + Math.sin(a0)*radius;
+      const ax1 = cx + Math.cos(a1)*radius;
+      const ay1 = cy + Math.sin(a1)*radius;
+
+      // base palette
+      const baseHue = (game.colorStep*34 + i*18) % 360;
+      const painted = game.hit[i];
+
+      const fill = painted
+        ? `hsla(${baseHue} 85% 62% / 0.82)`
+        : `hsla(${baseHue} 40% 55% / 0.18)`;
+
+      const stroke = painted ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.10)';
+
+      ctx.beginPath();
+      ctx.moveTo(cx,cy);
+      ctx.lineTo(ax0,ay0);
+      ctx.lineTo(ax1,ay1);
+      ctx.closePath();
+      ctx.fillStyle=fill;
+      ctx.fill();
+      ctx.strokeStyle=stroke;
+      ctx.lineWidth=2;
+      ctx.stroke();
+    }
+
+    // inner glow
+    ctx.save();
+    ctx.globalAlpha=0.65;
+    const glow=ctx.createRadialGradient(cx,cy, radius*0.1, cx,cy, radius*1.1);
+    glow.addColorStop(0,'rgba(255,255,255,0.10)');
+    glow.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=glow;
+    ctx.beginPath();
+    ctx.arc(cx,cy,radius*1.05,0,TAU);
+    ctx.fill();
+    ctx.restore();
+
+    // pointer arrow
+    ctx.save();
+    ctx.translate(cx, cy - radius - 24);
+    ctx.fillStyle='rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(-14, 22);
+    ctx.lineTo(14, 22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // particles (screen space)
+    for(const p of particles){
+      const life=1 - p.t/p.life;
+      ctx.globalAlpha = 0.55*life;
+      ctx.fillStyle='rgba(255,255,255,0.85)';
+      ctx.fillRect(cx + p.x, cy + p.y, 2, 2);
+    }
+    ctx.globalAlpha=1;
+
+    if(game.shake>0) ctx.restore();
+
+    // flash overlay
+    if(game.flash>0){
+      ctx.save();
+      ctx.globalAlpha = game.flash;
+      ctx.fillStyle='white';
+      ctx.fillRect(0,0,w,h);
+      ctx.restore();
+    }
+
+    // HUD update
+    hudScore.textContent=String(game.score);
+    hudLvl.textContent=String(game.level);
+    hudPerf.textContent=String(game.perfect);
+
+    // progress ring
+    const done = game.hit.filter(Boolean).length;
+    const frac = done / game.sides;
+    ctx.save();
+    ctx.strokeStyle='rgba(255,255,255,0.12)';
+    ctx.lineWidth=10;
+    ctx.beginPath();
+    ctx.arc(cx,cy, radius*1.18, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle='rgba(166,108,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(cx,cy, radius*1.18, -Math.PI/2, -Math.PI/2 + TAU*frac);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Overlay actions
+  function start(){
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    reset();
+    game.running=true;
+    overlay.style.display='none';
+  }
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('resetBestBtn').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_BEST); best=0; bestLine.textContent=`Best: ${best}`;
+  });
+
+})();
+</script>
+</body>
+</html>

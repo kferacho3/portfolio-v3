@@ -1,4 +1,9 @@
-import { WALL_MODE_COMBO_MULTIPLIERS, WALL_MODE_LEVELS } from '../constants';
+import {
+  WALL_MODE_COMBO_MULTIPLIERS,
+  WALL_MODE_HEIGHT,
+  WALL_MODE_LEVELS,
+  WALL_MODE_WIDTH,
+} from '../constants';
 import type { PowerupType, WallModeState, WallZone } from '../types';
 import type { ReactPongState } from '../state';
 
@@ -54,8 +59,8 @@ export const generateWallZones = (state: ReactPongState) => {
     return;
   }
 
-  const wallWidth = 16;
-  const wallHeight = 8;
+  const wallWidth = Math.max(6, WALL_MODE_WIDTH - 2);
+  const wallHeight = Math.max(4, WALL_MODE_HEIGHT - 2);
 
   if (config.wallType === 'zones' || config.wallType === 'advanced' || config.wallType === 'chaos') {
     zones.push({
@@ -87,7 +92,11 @@ export const generateWallZones = (state: ReactPongState) => {
     zones.push({
       id: 'target-1',
       type: 'target',
-      position: [Math.random() * wallWidth / 2 - wallWidth / 4, Math.random() * wallHeight / 2 - wallHeight / 4, 0],
+      position: [
+        Math.random() * wallWidth / 2 - wallWidth / 4,
+        Math.random() * wallHeight / 2 - wallHeight / 4,
+        0,
+      ],
       size: [1.5, 1.5],
       effect: 100,
     });
@@ -97,7 +106,11 @@ export const generateWallZones = (state: ReactPongState) => {
     zones.push({
       id: 'hazard-1',
       type: 'hazard',
-      position: [Math.random() > 0.5 ? wallWidth / 3 : -wallWidth / 3, Math.random() * 2 - 1, 0],
+      position: [
+        Math.random() > 0.5 ? wallWidth / 3 : -wallWidth / 3,
+        Math.random() * (wallHeight / 3) - wallHeight / 6,
+        0,
+      ],
       size: [2, 2],
       effect: 2,
     });
@@ -197,7 +210,11 @@ export const wallModeHitWall = (state: ReactPongState, zoneType?: string, isPerf
     const powerupTypes: PowerupType[] = ['slowmo', 'widen', 'magnet', 'shield', 'curveBoost'];
     state.wallMode.availablePowerup = {
       type: powerupTypes[Math.floor(Math.random() * powerupTypes.length)],
-      position: [(Math.random() - 0.5) * 12, (Math.random() - 0.5) * 6, 0],
+      position: [
+        (Math.random() - 0.5) * (WALL_MODE_WIDTH - 4),
+        (Math.random() - 0.5) * (WALL_MODE_HEIGHT - 4),
+        0,
+      ],
     };
   }
 

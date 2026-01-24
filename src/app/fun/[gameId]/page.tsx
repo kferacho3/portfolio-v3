@@ -48,7 +48,6 @@ import Forma, { formaState } from '../games/forma';
 import Weave, { weaveState } from '../games/weave';
 import Pave, { paveState } from '../games/pave';
 import VoidRunner, { voidRunnerState } from '../games/voidrunner';
-import GravityRush, { gravityRushState } from '../games/gravityrush';
 import Apex, { apexState } from '../games/apex';
 import Polarity, { polarityState } from '../games/polarity';
 import TetherDrift, { tetherDriftState } from '../games/tetherdrift';
@@ -56,6 +55,21 @@ import Trace, { traceState } from '../games/trace';
 import FlipBox, { flipBoxState } from '../games/flipbox';
 import PortalPunch, { portalPunchState } from '../games/portalpunch';
 import ConveyorChaos, { conveyorChaosState } from '../games/conveyorchaos';
+import JellyJump, { jellyJumpState } from '../games/jellyjump';
+import GoUp, { goUpState } from '../games/goup';
+import Growth, { growthState } from '../games/growth';
+import Steps, { stepsState } from '../games/steps';
+import SmashHit, { smashHitState } from '../games/smashhit';
+import Shades, { shadesState } from '../games/shades';
+import TwoDots, { twoDotsState } from '../games/twodots';
+import PolyForge, { polyForgeState } from '../games/polyforge';
+import OnePath, { onePathState } from '../games/onepath';
+import SlowMo, { slowMoState } from '../games/slowmo';
+import Bouncer, { bouncerState } from '../games/bouncer';
+import KnotHop, { knotHopState } from '../games/knothop';
+import OctaSurge, { octaSurgeState } from '../games/octasurge';
+import PrismJump, { prismJumpState } from '../games/prismjump';
+import Oscillate, { oscillateState } from '../games/oscillate';
 // Classic ports
 import RolletteClassic, { rolletteClassicState } from '../games/rolletteClassic';
 import SkyBlitzClassic, { skyBlitzClassicState } from '../games/skyblitzClassic';
@@ -83,7 +97,6 @@ const VALID_GAME_IDS: GameId[] = [
   'weave',
   'pave',
   'voidrunner',
-  'gravityrush',
   'apex',
   'polarity',
   'tetherdrift',
@@ -91,6 +104,21 @@ const VALID_GAME_IDS: GameId[] = [
   'flipbox',
   'portalpunch',
   'conveyorchaos',
+  'jellyjump',
+  'goup',
+  'growth',
+  'steps',
+  'smashhit',
+  'shades',
+  'twodots',
+  'polyforge',
+  'onepath',
+  'slowmo',
+  'bouncer',
+  'prismjump',
+  'octasurge',
+  'knothop',
+  'oscillate',
   'rolletteClassic',
   'skyblitzClassic',
   'dropperClassic',
@@ -197,7 +225,6 @@ export default function GamePage({ params }: GamePageProps) {
       case 'weave': weaveState.reset(); break;
       case 'pave': paveState.reset(); break;
       case 'voidrunner': voidRunnerState.reset(); break;
-      case 'gravityrush': gravityRushState.reset(); break;
       case 'apex': apexState.reset(); break;
       case 'polarity': polarityState.reset(); break;
       case 'tetherdrift': tetherDriftState.reset(); break;
@@ -205,6 +232,33 @@ export default function GamePage({ params }: GamePageProps) {
       case 'flipbox': flipBoxState.reset(); break;
       case 'portalpunch': portalPunchState.reset(); break;
       case 'conveyorchaos': conveyorChaosState.reset(); break;
+      case 'jellyjump': jellyJumpState.reset(); break;
+      case 'goup': goUpState.reset(); break;
+      case 'growth': growthState.reset(); break;
+      case 'steps': stepsState.reset(); break;
+      case 'smashhit': smashHitState.reset(); break;
+      case 'shades': shadesState.reset(); break;
+      case 'twodots': twoDotsState.reset(); break;
+      case 'polyforge': polyForgeState.reset(); break;
+      case 'onepath': onePathState.retry(); break;
+      case 'slowmo': 
+        slowMoState.backToMenu();
+        break;
+      case 'bouncer': 
+        bouncerState.phase = 'menu';
+        break;
+      case 'prismjump':
+        prismJumpState.backToMenu();
+        break;
+      case 'octasurge':
+        octaSurgeState.phase = 'menu';
+        break;
+      case 'knothop':
+        knotHopState.phase = 'menu';
+        break;
+      case 'oscillate':
+        oscillateState.retry();
+        break;
       case 'rolletteClassic': rolletteClassicState.reset(); break;
       case 'skyblitzClassic': skyBlitzClassicState.reset(); break;
       case 'dropperClassic': dropperClassicState.reset(); break;
@@ -291,8 +345,6 @@ export default function GamePage({ params }: GamePageProps) {
         return <Pave key={`pave-${restartSeed}`} soundsOn={soundsOn} />;
       case 'voidrunner':
         return <VoidRunner key={`voidrunner-${restartSeed}`} soundsOn={soundsOn} />;
-      case 'gravityrush':
-        return <GravityRush key={`gravityrush-${restartSeed}`} soundsOn={soundsOn} />;
       case 'apex':
         return <Apex key={`apex-${restartSeed}`} soundsOn={soundsOn} />;
       case 'polarity':
@@ -307,6 +359,36 @@ export default function GamePage({ params }: GamePageProps) {
         return <PortalPunch />;
       case 'conveyorchaos':
         return <ConveyorChaos />;
+      case 'jellyjump':
+        return <JellyJump />;
+      case 'goup':
+        return <GoUp />;
+      case 'growth':
+        return <Growth />;
+      case 'steps':
+        return <Steps />;
+      case 'smashhit':
+        return <SmashHit />;
+      case 'shades':
+        return <Shades />;
+      case 'twodots':
+        return <TwoDots />;
+      case 'polyforge':
+        return <PolyForge />;
+      case 'onepath':
+        return <OnePath key={`onepath-${restartSeed}`} />;
+      case 'slowmo':
+        return <SlowMo key={`slowmo-${restartSeed}`} />;
+      case 'bouncer':
+        return <Bouncer key={`bouncer-${restartSeed}`} />;
+      case 'prismjump':
+        return <PrismJump key={`prismjump-${restartSeed}`} />;
+      case 'octasurge':
+        return <OctaSurge key={`octasurge-${restartSeed}`} />;
+      case 'knothop':
+        return <KnotHop key={`knothop-${restartSeed}`} />;
+      case 'oscillate':
+        return <Oscillate key={`oscillate-${restartSeed}`} />;
       case 'rolletteClassic':
         return <RolletteClassic key={`rolletteClassic-${restartSeed}`} soundsOn={soundsOn} />;
       case 'skyblitzClassic':

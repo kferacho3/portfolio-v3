@@ -34,15 +34,29 @@ export type GameId =
   | 'pave'
   // Endless runners
   | 'voidrunner'
-  | 'gravityrush'
   | 'apex'
+  | 'growth'
   // New arcade games
   | 'polarity'
   | 'tetherdrift'
   | 'trace'
   | 'flipbox'
   | 'portalpunch'
-  | 'conveyorchaos';
+  | 'conveyorchaos'
+  | 'jellyjump'
+  | 'goup'
+  | 'steps'
+  | 'smashhit'
+  | 'shades'
+  | 'twodots'
+  | 'polyforge'
+  | 'onepath'
+  | 'slowmo'
+  | 'bouncer'
+  | 'prismjump'
+  | 'octasurge'
+  | 'knothop'
+  | 'oscillate';
 
 /**
  * Game type including home state

@@ -1,10 +1,16 @@
 import { Text } from '@react-three/drei';
 import React from 'react';
 import { useSnapshot } from 'valtio';
+import { WALL_MODE_HEIGHT, WALL_MODE_WIDTH } from '../../constants';
 import { reactPongState } from '../../state';
 
 const WallModeUI: React.FC = () => {
   const { wallMode, score, highScore } = useSnapshot(reactPongState);
+  const halfWidth = WALL_MODE_WIDTH / 2;
+  const halfHeight = WALL_MODE_HEIGHT / 2;
+  const uiInset = 0.8;
+  const uiTop = halfHeight + 0.4;
+  const uiSub = halfHeight - 0.3;
   const instructionsText = `Curve Catch 3D Instructions
 Click your plane-paddle to launch the ball at the opposing wall. Move your mouse to control the plane and catch the ball when it rebounds back. After you capture it, release it back toward the wall to keep the rally alive.
 
@@ -23,7 +29,7 @@ Only add heavy spin when you're in control. Spin is a weapon and a trap.`;
   return (
     <>
       <Text
-        position={[-7, 6, 0]}
+        position={[-halfWidth + uiInset, uiTop, 0]}
         fontSize={0.5}
         color="#ff4444"
         anchorX="left"
@@ -35,7 +41,7 @@ Only add heavy spin when you're in control. Spin is a weapon and a trap.`;
       </Text>
 
       <Text
-        position={[0, 10, 0]}
+        position={[0, halfHeight + 0.9, 0]}
         fontSize={0.6}
         color="#ffffff"
         anchorX="center"
@@ -47,7 +53,7 @@ Only add heavy spin when you're in control. Spin is a weapon and a trap.`;
       </Text>
 
       <Text
-        position={[7, 6, 0]}
+        position={[halfWidth - uiInset, uiTop, 0]}
         fontSize={0.5}
         color="#00d4ff"
         anchorX="right"
@@ -59,7 +65,7 @@ Only add heavy spin when you're in control. Spin is a weapon and a trap.`;
       </Text>
 
       <Text
-        position={[7, 5, 0]}
+        position={[halfWidth - uiInset, uiSub, 0]}
         fontSize={0.3}
         color="#888888"
         anchorX="right"
@@ -69,7 +75,7 @@ Only add heavy spin when you're in control. Spin is a weapon and a trap.`;
       </Text>
 
       <Text
-        position={[-7, 5, 0]}
+        position={[-halfWidth + uiInset, uiSub, 0]}
         fontSize={0.3}
         color="#ffaa00"
         anchorX="left"

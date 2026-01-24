@@ -2,59 +2,162 @@
  * Apex Constants and Configuration
  */
 import * as THREE from 'three';
-import type {
-  ThemeColors,
-  ThemeKey,
-  ArenaPresetKey,
-  PlayerSkin,
-  GameMode,
-  GemType,
-  ArenaShaderKind,
-  ArenaVoxelPattern,
-} from './types';
-export type { ArenaShaderKind, ArenaVoxelPattern } from './types';
+import type { ArenaPresetKey, GameMode, GemType, ModeSettings, PlayerSkin, ThemeColors, ThemeKey } from './types';
 
-// Grid dimensions (matching original ZigZag)
-export const TILE_SIZE = 1.35;
-export const TILE_DEPTH = 4;
-export const SPHERE_RADIUS = 0.26;
+export const TILE_SIZE = 1.25;
+export const TILE_DEPTH = 3.6;
+export const SPHERE_RADIUS = 0.24;
+export const TILE_CORNER_RADIUS = TILE_SIZE * 0.18;
+export const TILE_CORNER_SEGMENTS = 2;
 export const MAX_TILES = 300;
 
-// Platform dimensions
 export const PLATFORM_WIDTH = 8;
 export const PLATFORM_LENGTH = 8;
 export const PLATFORM_TILE_COUNT = PLATFORM_WIDTH * PLATFORM_LENGTH;
 
-// Path generation
-export const LOOKAHEAD_DISTANCE = 40;
-export const MAX_DIVERGENCE = 3;
+export const LOOKAHEAD_DISTANCE = 38;
+export const MAX_DIVERGENCE = 4;
 
-// Tile falling
-export const FALL_DELAY = 0.75;
+export const FALL_DELAY = 0.7;
 export const REMOVAL_Y = -40;
-export const GRAVITY = 16;
+export const GRAVITY = 18;
 
-// Speed settings
-export const INITIAL_SPEED = 5.75;
-export const SPEED_INCREMENT = 0.012;
-export const SPEED_LIMIT = 10;
+export const INITIAL_SPEED = 6.1;
+export const SPEED_INCREMENT = 0.015;
+export const SPEED_LIMIT = 12;
+export const LEVEL_DISTANCE = 210;
+export const INITIAL_TILE_BATCH = 36;
 
-// Gem settings
 export const GEM_RADIUS = 0.35;
 export const GEM_HEIGHT = GEM_RADIUS * 1.5;
 export const GEM_SPAWN_CHANCE = 0.2;
 export const GEM_HEIGHT_OFFSET = TILE_DEPTH / 2 + GEM_HEIGHT;
+export const SPECIAL_GEM_CHANCE = 0.08;
+export const SPECIAL_GEM_TYPES = ['prism', 'fractal', 'nova'] as const;
+export const GEM_SCORE_STEP = 100;
+export const GEM_SCORE_COLORS = ['#ff44eb', '#22d3ee', '#f59e0b', '#a78bfa', '#34d399', '#fb7185'];
+export const GEM_SCORE_MULTIPLIER_STEP = 0.12;
+export const GEM_SCORE_MULTIPLIER_CAP = 8;
+export const GEM_BASE_POINTS: Record<GemType, number> = {
+  normal: 20,
+  prism: 45,
+  fractal: 65,
+  nova: 90,
+};
 
-// Power-up settings
 export const POWERUP_SPAWN_CHANCE = 0.05;
 export const POWERUP_DURATION = 5;
+export const POWERUP_HEIGHT_OFFSET = 0.3;
 
-// Camera settings
-export const CAMERA_OFFSET_X = 19.05;
-export const CAMERA_OFFSET_Y = 12;
-export const CAMERA_OFFSET_Z = 15;
+export const CAMERA_OFFSET_X = 18.2;
+export const CAMERA_OFFSET_Y = 11.2;
+export const CAMERA_OFFSET_Z = 14.2;
+export const CAMERA_ZOOM_MOBILE = 42;
+export const CAMERA_ZOOM_DESKTOP = 70;
+export const CAMERA_FAR = 70;
 
-// Theme definitions
+export const MODE_SETTINGS: Record<GameMode, ModeSettings> = {
+  classic: {
+    speedMultiplier: 1,
+    scoreMultiplier: 1,
+    speedIncrementMultiplier: 1,
+    speedLimitMultiplier: 1,
+    gemSpawnChance: GEM_SPAWN_CHANCE,
+    powerUpChance: POWERUP_SPAWN_CHANCE,
+    fallDelay: FALL_DELAY,
+  },
+  curved: {
+    speedMultiplier: 1.05,
+    scoreMultiplier: 1.1,
+    speedIncrementMultiplier: 1.05,
+    speedLimitMultiplier: 1.05,
+    gemSpawnChance: GEM_SPAWN_CHANCE * 1.1,
+    powerUpChance: POWERUP_SPAWN_CHANCE * 1.1,
+    fallDelay: FALL_DELAY * 1.05,
+  },
+  spiral: {
+    speedMultiplier: 1.05,
+    scoreMultiplier: 1.15,
+    speedIncrementMultiplier: 1.1,
+    speedLimitMultiplier: 1.1,
+    gemSpawnChance: GEM_SPAWN_CHANCE * 1.15,
+    powerUpChance: POWERUP_SPAWN_CHANCE * 1.1,
+    fallDelay: FALL_DELAY * 0.95,
+  },
+  gravity: {
+    speedMultiplier: 1,
+    scoreMultiplier: 1.2,
+    speedIncrementMultiplier: 1,
+    speedLimitMultiplier: 1.05,
+    gemSpawnChance: GEM_SPAWN_CHANCE * 1.05,
+    powerUpChance: POWERUP_SPAWN_CHANCE * 1.15,
+    fallDelay: FALL_DELAY * 1.1,
+  },
+  speedrush: {
+    speedMultiplier: 1.5,
+    scoreMultiplier: 2,
+    speedIncrementMultiplier: 1.4,
+    speedLimitMultiplier: 1.3,
+    gemSpawnChance: GEM_SPAWN_CHANCE * 1.2,
+    powerUpChance: POWERUP_SPAWN_CHANCE * 1.2,
+    fallDelay: FALL_DELAY * 0.8,
+  },
+  zen: {
+    speedMultiplier: 0.85,
+    scoreMultiplier: 0.75,
+    speedIncrementMultiplier: 0.55,
+    speedLimitMultiplier: 0.85,
+    gemSpawnChance: GEM_SPAWN_CHANCE * 1.4,
+    powerUpChance: POWERUP_SPAWN_CHANCE * 1.4,
+    fallDelay: FALL_DELAY * 1.6,
+  },
+};
+
+export const CLASSIC_TURN_CHANCE = 0.5;
+
+export const CURVE_BASE_CURVATURE = 0.9;
+export const CURVE_SPRING = 3.5;
+export const CURVE_DAMPING = 1.4;
+export const CURVE_FORWARD_BIAS = 0.35;
+export const CURVE_MAX_YAW = 0.9;
+export const CURVE_CENTER_PULL = 0.35;
+export const CURVE_SEGMENT_RANGE: [number, number] = [10, 22];
+export const CURVE_SEGMENT_SHORT_RANGE: [number, number] = [5, 9];
+export const CURVE_BOUNDARY_SOFT = TILE_SIZE * 5.8;
+export const CURVE_BOUNDARY_HARD = TILE_SIZE * 7.2;
+export const CURVE_BOUNDARY_GAIN = 1.4;
+export const CURVE_SELF_INTERSECTION_DISTANCE = TILE_SIZE * 0.9;
+export const CURVE_TILE_STEP = TILE_SIZE * 0.82;
+export const CURVE_LANE_OFFSET = TILE_SIZE * 0.65;
+export const CURVE_LANE_DAMPING = 9;
+export const CURVE_TILE_STRETCH = 1.5;
+
+export const SPIRAL_TURN_RATE = 1;
+export const SPIRAL_INWARD_DRIFT = 0.35;
+export const SPIRAL_OUTWARD_DRIFT = 0.25;
+export const SPIRAL_OUTER_PULL = 1.35;
+export const SPIRAL_FORWARD_DRIFT = 0.22;
+export const SPIRAL_MIN_RADIUS = TILE_SIZE * 3.5;
+export const SPIRAL_MAX_RADIUS = TILE_SIZE * 10.5;
+export const SPIRAL_SWITCH_RANGE: [number, number] = [12, 22];
+
+export const GRAVITY_WAVE_AMPLITUDE = 0.65;
+export const GRAVITY_WAVE_FREQUENCY = 0.65;
+export const GRAVITY_WAVE_HEIGHT_MULTIPLIER = 0.8;
+export const GRAVITY_TURN_BASE = 0.45;
+export const GRAVITY_TURN_SWING = 0.25;
+
+export const SPEEDRUSH_FORWARD_CHANCE = 0.6;
+
+export const ZEN_TURN_BASE = 0.2;
+export const ZEN_TURN_SWING = 0.18;
+export const ZEN_WAVE_STEP = 0.08;
+
+export const THEME_EDGE_BLEND = 0.25;
+
+export const PATH_TOP_COLOR = '#4fd1ff';
+export const PATH_EDGE_COLOR = '#0b0414';
+
 export const THEMES: Record<ThemeKey, ThemeColors> = {
   neon: {
     name: 'Neon',
@@ -110,14 +213,44 @@ export const THEMES: Record<ThemeKey, ThemeColors> = {
 
 export const THEME_KEYS = Object.keys(THEMES) as ThemeKey[];
 
-// Directions (matching original ZigZag)
-export const DIRECTIONS = [
-  new THREE.Vector3(0, 0, -1),  // Forward (-Z)
-  new THREE.Vector3(1, 0, 0),   // Right (+X)
-];
-
-// Arena presets
-export type ArenaGroundKind = 'solid' | Exclude<ArenaShaderKind, 'none'>;
+export type ArenaShaderKind =
+  | 'none'
+  | 'alloy'
+  | 'prismatic'
+  | 'quilt'
+  | 'trailPulse'
+  | 'trailChevron'
+  | 'trailDash'
+  | 'ripple'
+  | 'crossWeave'
+  | 'radialSpokes'
+  | 'diamondTess'
+  | 'spineRidges'
+  | 'gridForge'
+  | 'fracturePlates'
+  | 'sunkenSteps'
+  | 'spiralBloom'
+  | 'coreRing'
+  | 'grass'
+  | 'ice';
+export type ArenaVoxelPattern =
+  | 'quilt'
+  | 'lattice'
+  | 'alloy'
+  | 'ridges'
+  | 'spines'
+  | 'grooves'
+  | 'pits'
+  | 'weave'
+  | 'spokes'
+  | 'diamond'
+  | 'plates'
+  | 'fracture'
+  | 'steps'
+  | 'spiral'
+  | 'ring'
+  | 'tuft'
+  | 'iceShards';
 
 export type ArenaPalette = {
   tile: string;
@@ -128,151 +261,419 @@ export type ArenaPalette = {
   edge?: string;
 };
 
+export type ArenaFog = {
+  near: number;
+  far: number;
+  color?: string;
+};
+
+export type ArenaLights = {
+  ambient: number;
+  directional: number;
+  directionalColor?: string;
+  directionalPosition?: [number, number, number];
+};
+
+export type ArenaGround = {
+  kind: 'solid' | 'alloy' | 'quilt' | 'prismatic' | 'zigzag' | 'trail' | 'ripple' | 'grid' | 'grass' | 'ice';
+  color?: string;
+  accent?: string;
+};
+
 export type ArenaSurface = {
-  topEmissive?: number;
   topMetalness?: number;
   topRoughness?: number;
-  sideEmissive?: number;
+  topEmissive?: number;
   sideMetalness?: number;
   sideRoughness?: number;
+  sideEmissive?: number;
 };
 
 export type ArenaPreset = {
   key: ArenaPresetKey;
   name: string;
   description: string;
-  shader?: ArenaShaderKind;
-  ground?: {
-    kind: ArenaGroundKind;
-    color?: string;
-    accent?: string;
-  };
-  palette?: ArenaPalette;
-  surface?: ArenaSurface;
-  worldScale?: number;
-  glassTop?: boolean;
+  accent: string;
+  shader: ArenaShaderKind;
   voxelPattern?: ArenaVoxelPattern;
-  voxelGrid?: number;
+  voxelGrid?: 4 | 6;
   voxelHeight?: [number, number];
-  voxelCoverage?: number;
-  voxelSpanScale?: number;
+  glassTop?: boolean;
+  worldScale?: number;
+  palette?: ArenaPalette;
+  usePalette?: boolean;
+  fog?: ArenaFog;
+  lights?: ArenaLights;
+  ground?: ArenaGround;
+  surface?: ArenaSurface;
 };
 
 export const ARENA_PRESETS: Record<ArenaPresetKey, ArenaPreset> = {
   classic: {
     key: 'classic',
-    name: 'Classic',
-    description: 'Rounded voxel towers with soft neon glow.',
-    shader: 'none',
-    ground: { kind: 'solid' },
-    palette: {
-      tile: '#2dd4bf',
-      gem: '#a78bfa',
-      glow: '#5eead4',
-      bg: '#0b1020',
-      accent: '#38bdf8',
-      edge: '#0f1b2d',
-    },
-    worldScale: 0.65,
+    name: 'Classic Alloy',
+    description: 'Voxel alloy tiles with brushed seams.',
+    accent: '#22d3ee',
+    shader: 'alloy',
     voxelPattern: 'alloy',
     voxelGrid: 6,
-    voxelHeight: [0.8, 0.8],
-    voxelCoverage: 1,
-    voxelSpanScale: 0.98,
-    surface: { topEmissive: 0.18, topMetalness: 0.12, topRoughness: 0.75 },
+    voxelHeight: [0.08, 0.22],
+    palette: {
+      tile: '#3fd4ff',
+      gem: '#fb7185',
+      glow: '#22d3ee',
+      bg: '#04070d',
+      accent: '#22d3ee',
+      edge: '#0b1d2c',
+    },
+    fog: { near: 24, far: 72, color: '#04070d' },
+    lights: { ambient: 2.2, directional: 3.6, directionalColor: '#b7f9ff' },
+    ground: { kind: 'alloy', color: '#04070d', accent: '#22d3ee' },
+    surface: {
+      topMetalness: 0.85,
+      topRoughness: 0.25,
+      topEmissive: 0.15,
+      sideMetalness: 0.55,
+      sideRoughness: 0.6,
+      sideEmissive: 0.05,
+    },
   },
   zigzagClassic: {
     key: 'zigzagClassic',
     name: 'Zigzag Classic',
-    description: 'Bright minimal zigzag runway.',
-    shader: 'zigzag',
-    ground: { kind: 'zigzag' },
+    description: 'Bright, minimal zigzag runway.',
+    accent: '#fd44e9',
+    shader: 'none',
     palette: {
-      tile: '#22d3ee',
-      gem: '#f472b6',
-      glow: '#38bdf8',
-      bg: '#05070f',
-      accent: '#f472b6',
-      edge: '#0b1d2c',
+      tile: '#57b4e6',
+      gem: '#ff44eb',
+      glow: '#6fd2ff',
+      bg: '#ffffff',
+      accent: '#fd44e9',
+      edge: '#0b82c8',
     },
-    worldScale: 0.65,
-  },
-  zigzagPulse: {
-    key: 'zigzagPulse',
-    name: 'Zigzag Pulse',
-    description: 'Reactive zigzag with neon pulse accents.',
-    shader: 'zigzag',
-    ground: { kind: 'zigzag' },
-    palette: {
-      tile: '#60a5fa',
-      gem: '#facc15',
-      glow: '#f472b6',
-      bg: '#0b0a15',
-      accent: '#f472b6',
-      edge: '#111827',
+    fog: { near: 38, far: 92, color: '#ffffff' },
+    lights: { ambient: 2.8, directional: 3.2, directionalColor: '#ffffff' },
+    ground: { kind: 'zigzag', color: '#ffffff', accent: '#007acc' },
+    surface: {
+      topMetalness: 0.05,
+      topRoughness: 0.95,
+      topEmissive: 0.02,
+      sideMetalness: 0.1,
+      sideRoughness: 0.9,
+      sideEmissive: 0.02,
     },
-    worldScale: 0.65,
-  },
-  zigzagNoir: {
-    key: 'zigzagNoir',
-    name: 'Zigzag Noir',
-    description: 'Dark zigzag with icy cyan seams.',
-    shader: 'zigzag',
-    ground: { kind: 'zigzag' },
-    palette: {
-      tile: '#111827',
-      gem: '#22d3ee',
-      glow: '#38bdf8',
-      bg: '#030308',
-      accent: '#22d3ee',
-      edge: '#0b1020',
-    },
-    worldScale: 0.65,
   },
   voxelQuilt: {
     key: 'voxelQuilt',
     name: 'Voxel Quilt',
-    description: 'Soft quilted tiles with raised micro blocks.',
+    description: 'Micro-voxel mosaic with stitched glow.',
+    accent: '#3b82f6',
     shader: 'quilt',
-    ground: { kind: 'quilt' },
-    palette: {
-      tile: '#f472b6',
-      gem: '#38bdf8',
-      glow: '#a78bfa',
-      bg: '#12081f',
-      accent: '#f472b6',
-      edge: '#2a0f2f',
-    },
-    worldScale: 0.65,
     voxelPattern: 'quilt',
-    voxelGrid: 6,
-    voxelHeight: [0.08, 0.26],
+    voxelGrid: 4,
+    voxelHeight: [0.08, 0.32],
+    palette: {
+      tile: '#4f8dff',
+      gem: '#7dd3fc',
+      glow: '#60a5fa',
+      bg: '#050b1a',
+      accent: '#3b82f6',
+      edge: '#142a4b',
+    },
+    fog: { near: 26, far: 70, color: '#050b1a' },
+    lights: { ambient: 2.2, directional: 3.1, directionalColor: '#9bd0ff' },
+    ground: { kind: 'quilt', color: '#081428', accent: '#3b82f6' },
+    surface: {
+      topMetalness: 0.35,
+      topRoughness: 0.65,
+      topEmissive: 0.35,
+      sideMetalness: 0.3,
+      sideRoughness: 0.8,
+      sideEmissive: 0.08,
+    },
   },
   prismaticLattice: {
     key: 'prismaticLattice',
     name: 'Prismatic Lattice',
-    description: 'Faceted lattice with prismatic glow.',
+    description: 'Facet lattice with chroma glints.',
+    accent: '#a78bfa',
     shader: 'prismatic',
-    ground: { kind: 'prismatic' },
-    palette: {
-      tile: '#7c3aed',
-      gem: '#22d3ee',
-      glow: '#a78bfa',
-      bg: '#05020f',
-      accent: '#7c3aed',
-      edge: '#1b1032',
-    },
-    worldScale: 0.65,
     voxelPattern: 'lattice',
     voxelGrid: 6,
-    voxelHeight: [0.07, 0.22],
+    voxelHeight: [0.04, 0.22],
+    palette: {
+      tile: '#b794ff',
+      gem: '#7dd3fc',
+      glow: '#a78bfa',
+      bg: '#12081f',
+      accent: '#a78bfa',
+      edge: '#24103d',
+    },
+    fog: { near: 24, far: 68, color: '#12081f' },
+    lights: { ambient: 2.3, directional: 3.4, directionalColor: '#d6c5ff' },
+    ground: { kind: 'prismatic', color: '#140a22', accent: '#a78bfa' },
+    surface: {
+      topMetalness: 0.5,
+      topRoughness: 0.35,
+      topEmissive: 0.4,
+      sideMetalness: 0.35,
+      sideRoughness: 0.65,
+      sideEmissive: 0.1,
+    },
   },
-  verdantQuilt: {
-    key: 'verdantQuilt',
-    name: 'Verdant Quilt',
-    description: 'Grass blades, soil edges, and dew shimmer.',
-    shader: 'biome',
-    ground: { kind: 'biome' },
+  trailPulse: {
+    key: 'trailPulse',
+    name: 'Trail Pulse',
+    description: 'Pulsing centerline with speed streaks.',
+    accent: '#22d3ee',
+    shader: 'trailPulse',
+    voxelPattern: 'ridges',
+    voxelGrid: 6,
+    voxelHeight: [0.04, 0.18],
+    ground: { kind: 'trail' },
+    surface: {
+      topMetalness: 0.4,
+      topRoughness: 0.35,
+      topEmissive: 0.45,
+      sideMetalness: 0.25,
+      sideRoughness: 0.7,
+      sideEmissive: 0.08,
+    },
+  },
+  trailChevron: {
+    key: 'trailChevron',
+    name: 'Trail Chevron',
+    description: 'Chevron arrows guide the sprint.',
+    accent: '#f97316',
+    shader: 'trailChevron',
+    voxelPattern: 'spines',
+    voxelGrid: 6,
+    voxelHeight: [0.05, 0.22],
+    ground: { kind: 'trail' },
+    surface: {
+      topMetalness: 0.5,
+      topRoughness: 0.3,
+      topEmissive: 0.4,
+      sideMetalness: 0.3,
+      sideRoughness: 0.65,
+      sideEmissive: 0.08,
+    },
+  },
+  trailDash: {
+    key: 'trailDash',
+    name: 'Trail Dashline',
+    description: 'Dashed markers with soft rails.',
+    accent: '#a78bfa',
+    shader: 'trailDash',
+    voxelPattern: 'grooves',
+    voxelGrid: 6,
+    voxelHeight: [0.03, 0.16],
+    ground: { kind: 'trail' },
+    surface: {
+      topMetalness: 0.45,
+      topRoughness: 0.35,
+      topEmissive: 0.35,
+      sideMetalness: 0.28,
+      sideRoughness: 0.7,
+      sideEmissive: 0.06,
+    },
+  },
+  rippleField: {
+    key: 'rippleField',
+    name: 'Ripple Field',
+    description: 'Concentric ripples and basin pits.',
+    accent: '#38bdf8',
+    shader: 'ripple',
+    voxelPattern: 'pits',
+    voxelGrid: 4,
+    voxelHeight: [0.04, 0.2],
+    worldScale: 0.9,
+    ground: { kind: 'ripple' },
+    surface: {
+      topMetalness: 0.25,
+      topRoughness: 0.55,
+      topEmissive: 0.25,
+      sideMetalness: 0.2,
+      sideRoughness: 0.75,
+      sideEmissive: 0.05,
+    },
+  },
+  crossWeave: {
+    key: 'crossWeave',
+    name: 'Cross Weave',
+    description: 'Interlocked threads with woven glow.',
+    accent: '#f59e0b',
+    shader: 'crossWeave',
+    voxelPattern: 'weave',
+    voxelGrid: 6,
+    voxelHeight: [0.04, 0.2],
+    surface: {
+      topMetalness: 0.3,
+      topRoughness: 0.6,
+      topEmissive: 0.3,
+      sideMetalness: 0.2,
+      sideRoughness: 0.8,
+      sideEmissive: 0.06,
+    },
+  },
+  radialSpokes: {
+    key: 'radialSpokes',
+    name: 'Radial Spokes',
+    description: 'Spoked rotors and radial inlays.',
+    accent: '#22c55e',
+    shader: 'radialSpokes',
+    voxelPattern: 'spokes',
+    voxelGrid: 4,
+    voxelHeight: [0.05, 0.24],
+    surface: {
+      topMetalness: 0.5,
+      topRoughness: 0.35,
+      topEmissive: 0.35,
+      sideMetalness: 0.3,
+      sideRoughness: 0.7,
+      sideEmissive: 0.08,
+    },
+  },
+  diamondTess: {
+    key: 'diamondTess',
+    name: 'Diamond Tess',
+    description: 'Diamond tesserae with glassy facets.',
+    accent: '#e879f9',
+    shader: 'diamondTess',
+    voxelPattern: 'diamond',
+    voxelGrid: 6,
+    voxelHeight: [0.04, 0.2],
+    glassTop: true,
+    surface: {
+      topMetalness: 0.2,
+      topRoughness: 0.2,
+      topEmissive: 0.45,
+      sideMetalness: 0.25,
+      sideRoughness: 0.65,
+      sideEmissive: 0.08,
+    },
+  },
+  spineRidges: {
+    key: 'spineRidges',
+    name: 'Spine Ridges',
+    description: 'Raised spines and sine ridges.',
+    accent: '#0ea5e9',
+    shader: 'spineRidges',
+    voxelPattern: 'ridges',
+    voxelGrid: 6,
+    voxelHeight: [0.06, 0.26],
+    surface: {
+      topMetalness: 0.55,
+      topRoughness: 0.35,
+      topEmissive: 0.3,
+      sideMetalness: 0.3,
+      sideRoughness: 0.7,
+      sideEmissive: 0.08,
+    },
+  },
+  gridForge: {
+    key: 'gridForge',
+    name: 'Grid Forge',
+    description: 'Forged grids with inset cells.',
+    accent: '#f43f5e',
+    shader: 'gridForge',
+    voxelPattern: 'plates',
+    voxelGrid: 4,
+    voxelHeight: [0.04, 0.18],
+    ground: { kind: 'grid' },
+    surface: {
+      topMetalness: 0.6,
+      topRoughness: 0.3,
+      topEmissive: 0.3,
+      sideMetalness: 0.35,
+      sideRoughness: 0.65,
+      sideEmissive: 0.08,
+    },
+  },
+  fracturePlates: {
+    key: 'fracturePlates',
+    name: 'Fracture Plates',
+    description: 'Shattered plates with glowing seams.',
+    accent: '#f97316',
+    shader: 'fracturePlates',
+    voxelPattern: 'fracture',
+    voxelGrid: 6,
+    voxelHeight: [0.02, 0.2],
+    surface: {
+      topMetalness: 0.4,
+      topRoughness: 0.55,
+      topEmissive: 0.35,
+      sideMetalness: 0.25,
+      sideRoughness: 0.8,
+      sideEmissive: 0.08,
+    },
+  },
+  sunkenSteps: {
+    key: 'sunkenSteps',
+    name: 'Sunken Steps',
+    description: 'Tiered terraces and stepped drops.',
+    accent: '#06b6d4',
+    shader: 'sunkenSteps',
+    voxelPattern: 'steps',
+    voxelGrid: 4,
+    voxelHeight: [0.02, 0.24],
+    surface: {
+      topMetalness: 0.25,
+      topRoughness: 0.7,
+      topEmissive: 0.2,
+      sideMetalness: 0.15,
+      sideRoughness: 0.85,
+      sideEmissive: 0.05,
+    },
+  },
+  spiralBloom: {
+    key: 'spiralBloom',
+    name: 'Spiral Bloom',
+    description: 'Spiraling petals and rotating halos.',
+    accent: '#a3e635',
+    shader: 'spiralBloom',
+    voxelPattern: 'spiral',
+    voxelGrid: 6,
+    voxelHeight: [0.03, 0.2],
+    surface: {
+      topMetalness: 0.45,
+      topRoughness: 0.35,
+      topEmissive: 0.35,
+      sideMetalness: 0.3,
+      sideRoughness: 0.7,
+      sideEmissive: 0.08,
+    },
+  },
+  coreRing: {
+    key: 'coreRing',
+    name: 'Core Ring',
+    description: 'Concentric rings with core glow.',
+    accent: '#14b8a6',
+    shader: 'coreRing',
+    voxelPattern: 'ring',
+    voxelGrid: 4,
+    voxelHeight: [0.05, 0.2],
+    surface: {
+      topMetalness: 0.5,
+      topRoughness: 0.35,
+      topEmissive: 0.35,
+      sideMetalness: 0.3,
+      sideRoughness: 0.7,
+      sideEmissive: 0.08,
+    },
+  },
+  grasslands: {
+    key: 'grasslands',
+    name: 'Grasslands',
+    description: 'Soft grass tufts with soil edges.',
+    accent: '#22c55e',
+    shader: 'grass',
+    voxelPattern: 'tuft',
+    voxelGrid: 6,
+    voxelHeight: [0.03, 0.16],
+    worldScale: 0.45,
+    usePalette: true,
     palette: {
       tile: '#2ee77a',
       gem: '#7dd3fc',
@@ -281,720 +682,232 @@ export const ARENA_PRESETS: Record<ArenaPresetKey, ArenaPreset> = {
       accent: '#7cf7d4',
       edge: '#3b250f',
     },
-    worldScale: 0.6,
-    voxelPattern: 'tuft',
-    voxelGrid: 6,
-    voxelHeight: [0.08, 0.32],
-    voxelCoverage: 0.78,
-  },
-  kintsugiPorcelain: {
-    key: 'kintsugiPorcelain',
-    name: 'Kintsugi Porcelain',
-    description: 'Porcelain tiles with gold fracture seams.',
-    shader: 'kintsugi',
-    ground: { kind: 'solid' },
-    palette: {
-      tile: '#f7f4ee',
-      gem: '#ff44eb',
-      glow: '#ffd166',
-      bg: '#07070a',
-      accent: '#ffd166',
-      edge: '#c9c2b6',
+    ground: { kind: 'grass', color: '#24160c', accent: '#7cf7d4' },
+    surface: {
+      topMetalness: 0.05,
+      topRoughness: 0.9,
+      topEmissive: 0.08,
+      sideMetalness: 0.05,
+      sideRoughness: 0.95,
+      sideEmissive: 0.02,
     },
-    worldScale: 0.7,
-    voxelPattern: 'crackInlay',
+  },
+  iceway: {
+    key: 'iceway',
+    name: 'Iceway',
+    description: 'Frozen plates with crystalline seams.',
+    accent: '#38bdf8',
+    shader: 'ice',
+    voxelPattern: 'iceShards',
     voxelGrid: 6,
-    voxelHeight: [0.05, 0.2],
-  },
-  circuitCathedral: {
-    key: 'circuitCathedral',
-    name: 'Circuit Cathedral',
-    description: 'Sacred circuitry with glowing tracework.',
-    shader: 'circuit',
-    ground: { kind: 'circuit' },
-    palette: {
-      tile: '#0b1220',
-      gem: '#fb7185',
-      glow: '#22d3ee',
-      bg: '#050913',
-      accent: '#22d3ee',
-      edge: '#0b1d2c',
-    },
-    worldScale: 0.6,
-    voxelPattern: 'componentGrid',
-    voxelGrid: 6,
-    voxelHeight: [0.06, 0.24],
-  },
-  truchetLabyrinth: {
-    key: 'truchetLabyrinth',
-    name: 'Truchet Labyrinth',
-    description: 'World-space Truchet arcs that connect across tiles.',
-    shader: 'truchet',
-    ground: { kind: 'truchet' },
-    palette: {
-      tile: '#1de9b6',
-      gem: '#a78bfa',
-      glow: '#00ffff',
-      bg: '#05020a',
-      accent: '#ff44eb',
-      edge: '#0b0b14',
-    },
-    worldScale: 0.65,
-  },
-  quasicrystalEcho: {
-    key: 'quasicrystalEcho',
-    name: 'Quasicrystal Echo',
-    description: 'Wave interference creates quasi-tiling bands.',
-    shader: 'quasicrystal',
-    ground: { kind: 'quasicrystal' },
-    palette: {
-      tile: '#6c5ce7',
-      gem: '#fd79a8',
-      glow: '#a78bfa',
-      bg: '#060314',
-      accent: '#ff44eb',
-      edge: '#120824',
-    },
-    worldScale: 0.7,
-    voxelPattern: 'contourSteps',
-    voxelGrid: 6,
-    voxelHeight: [0.06, 0.26],
-  },
-  honeycombPrism: {
-    key: 'honeycombPrism',
-    name: 'Honeycomb Prism',
-    description: 'Hex cells with prismatic glow and depth.',
-    shader: 'honeycomb',
-    ground: { kind: 'honeycomb' },
-    palette: {
-      tile: '#b794ff',
-      gem: '#7dd3fc',
-      glow: '#a78bfa',
-      bg: '#12081f',
-      accent: '#a78bfa',
-      edge: '#2a1035',
-    },
-    worldScale: 0.65,
-    voxelPattern: 'hexCells',
-    voxelGrid: 6,
-    voxelHeight: [0.05, 0.22],
-  },
-  arcticHexglass: {
-    key: 'arcticHexglass',
-    name: 'Arctic Hexglass',
-    description: 'Frosted hexes with translucent glassy tops.',
-    shader: 'honeycomb',
-    ground: { kind: 'solid' },
+    voxelHeight: [0.04, 0.22],
+    glassTop: true,
+    worldScale: 0.55,
+    usePalette: true,
     palette: {
       tile: '#bff6ff',
       gem: '#60a5fa',
       glow: '#7dd3fc',
       bg: '#041018',
       accent: '#38bdf8',
-      edge: '#0b2233',
+      edge: '#11324a',
     },
-    worldScale: 0.65,
-    glassTop: true,
-    voxelPattern: 'basaltChunks',
-    voxelGrid: 6,
-    voxelHeight: [0.05, 0.2],
-  },
-  zelligeStarwork: {
-    key: 'zelligeStarwork',
-    name: 'Starwork Zellige',
-    description: 'Geometric stars with glowing grout lines.',
-    shader: 'starwork',
-    ground: { kind: 'starwork' },
-    palette: {
-      tile: '#1f2937',
-      gem: '#f59e0b',
-      glow: '#22d3ee',
-      bg: '#05070f',
-      accent: '#f59e0b',
-      edge: '#101827',
+    ground: { kind: 'ice', color: '#041018', accent: '#38bdf8' },
+    surface: {
+      topMetalness: 0.1,
+      topRoughness: 0.2,
+      topEmissive: 0.25,
+      sideMetalness: 0.1,
+      sideRoughness: 0.85,
+      sideEmissive: 0.05,
     },
-    worldScale: 0.8,
-    voxelPattern: 'crackInlay',
-    voxelGrid: 6,
-    voxelHeight: [0.04, 0.16],
-  },
-  kaleidoMandala: {
-    key: 'kaleidoMandala',
-    name: 'Kaleido Mandala',
-    description: 'Kaleidoscopic mandalas with rhythmic symmetry.',
-    shader: 'starwork',
-    ground: { kind: 'aurora' },
-    palette: {
-      tile: '#1b103a',
-      gem: '#f472b6',
-      glow: '#22d3ee',
-      bg: '#05010d',
-      accent: '#f59e0b',
-      edge: '#0e0a1f',
-    },
-    worldScale: 0.75,
-    voxelPattern: 'mandalaRelief',
-    voxelGrid: 6,
-    voxelHeight: [0.05, 0.2],
-  },
-  topographicAtlas: {
-    key: 'topographicAtlas',
-    name: 'Topographic Atlas',
-    description: 'Contour lines and elevation bands across tiles.',
-    shader: 'topographic',
-    ground: { kind: 'topographic' },
-    palette: {
-      tile: '#34d399',
-      gem: '#22d3ee',
-      glow: '#a7f3d0',
-      bg: '#03120c',
-      accent: '#60a5fa',
-      edge: '#0b1f16',
-    },
-    worldScale: 0.7,
-    voxelPattern: 'contourSteps',
-    voxelGrid: 6,
-    voxelHeight: [0.06, 0.24],
-  },
-  lavaRift: {
-    key: 'lavaRift',
-    name: 'Basalt Lava Rift',
-    description: 'Cracked basalt with molten glow.',
-    shader: 'lava',
-    ground: { kind: 'lava' },
-    palette: {
-      tile: '#1b1b22',
-      gem: '#fb7185',
-      glow: '#f97316',
-      bg: '#050408',
-      accent: '#f97316',
-      edge: '#0f0f14',
-    },
-    worldScale: 0.7,
-    voxelPattern: 'basaltChunks',
-    voxelGrid: 6,
-    voxelHeight: [0.08, 0.28],
-  },
-  obsidianMirror: {
-    key: 'obsidianMirror',
-    name: 'Obsidian Mirror',
-    description: 'Near-black glass with iridescent seams.',
-    shader: 'obsidian',
-    ground: { kind: 'solid' },
-    palette: {
-      tile: '#0b0b10',
-      gem: '#22d3ee',
-      glow: '#7c3aed',
-      bg: '#050506',
-      accent: '#22d3ee',
-      edge: '#111827',
-    },
-    worldScale: 0.65,
-    glassTop: true,
-    surface: { topEmissive: 0.2, topMetalness: 0.6, topRoughness: 0.08 },
-  },
-  stainedGlassRose: {
-    key: 'stainedGlassRose',
-    name: 'Stained Glass Rose',
-    description: 'Jewel-tone panes with leaded lines.',
-    shader: 'stainedglass',
-    ground: { kind: 'solid' },
-    palette: {
-      tile: '#0f172a',
-      gem: '#f43f5e',
-      glow: '#f59e0b',
-      bg: '#02030a',
-      accent: '#f59e0b',
-      edge: '#111827',
-    },
-    worldScale: 0.75,
-    voxelPattern: 'crackInlay',
-    voxelGrid: 6,
-    voxelHeight: [0.05, 0.18],
-  },
-  origamiFoldfield: {
-    key: 'origamiFoldfield',
-    name: 'Origami Foldfield',
-    description: 'Paper folds with crisp diagonal seams.',
-    shader: 'origami',
-    ground: { kind: 'origami' },
-    palette: {
-      tile: '#f8fafc',
-      gem: '#f472b6',
-      glow: '#22d3ee',
-      bg: '#120b1b',
-      accent: '#f472b6',
-      edge: '#d0d7e2',
-    },
-    worldScale: 0.7,
-    voxelPattern: 'foldRidges',
-    voxelGrid: 6,
-    voxelHeight: [0.04, 0.18],
-  },
-  auroraWeave: {
-    key: 'auroraWeave',
-    name: 'Aurora Weave',
-    description: 'Shimmering threads in a woven lightfield.',
-    shader: 'aurora',
-    ground: { kind: 'aurora' },
-    palette: {
-      tile: '#5eead4',
-      gem: '#f472b6',
-      glow: '#a855f7',
-      bg: '#040312',
-      accent: '#5eead4',
-      edge: '#0b0b2a',
-    },
-    worldScale: 0.6,
   },
 };
 
 export const ARENA_KEYS = Object.keys(ARENA_PRESETS) as ArenaPresetKey[];
 
-// Mode info
-export const MODE_INFO: Record<GameMode, { name: string; description: string; color: string }> = {
-  classic: { name: 'Classic', description: 'Standard ZigZag gameplay', color: '#22d3ee' },
-  curved: { name: 'Curved', description: 'Smooth curved paths', color: '#38bdf8' },
-  spiral: { name: 'Spiral', description: 'Spiral path patterns', color: '#a78bfa' },
-  gravity: { name: 'Gravity', description: 'Gravity-defying paths', color: '#60a5fa' },
-  speedrush: { name: 'Speed Rush', description: 'High-speed challenge', color: '#f97316' },
-  zen: { name: 'Zen', description: 'Relaxed gameplay', color: '#34d399' },
+export const getArenaTheme = (preset: ArenaPreset, baseTheme: ThemeColors): ThemeColors => {
+  if (!preset.usePalette || !preset.palette) return baseTheme;
+
+  const palette = preset.palette;
+  return {
+    name: `${baseTheme.name} • ${preset.name}`,
+    tile: new THREE.Color(palette.tile),
+    tileHex: palette.tile,
+    gem: new THREE.Color(palette.gem),
+    gemHex: palette.gem,
+    glow: new THREE.Color(palette.glow ?? palette.accent),
+    bg: palette.bg,
+    accent: palette.accent,
+  };
 };
 
-// Player skin info
-export type PlayerSkinInfo = {
-  name: string;
-  description: string;
-  gemType: GemType;
-  color: string;
-  accent: string;
-};
+export const getArenaFog = (preset: ArenaPreset, theme: ThemeColors) => ({
+  color: theme.bg,
+  near: preset.fog?.near ?? 30,
+  far: preset.fog?.far ?? 80,
+});
 
-export const PLAYER_SKIN_INFO: Record<PlayerSkin, PlayerSkinInfo> = {
+export const getArenaLights = (preset: ArenaPreset) => ({
+  ambient: preset.lights?.ambient ?? 2.5,
+  directional: preset.lights?.directional ?? 3.5,
+  directionalColor: preset.lights?.directionalColor ?? '#ffffff',
+  directionalPosition: preset.lights?.directionalPosition ?? ([15, 30, 10] as [number, number, number]),
+});
+
+export const DIRECTIONS = [
+  new THREE.Vector3(0, 0, -1),
+  new THREE.Vector3(1, 0, 0),
+];
+
+export const PLAYER_SKIN_INFO: Record<
+  PlayerSkin,
+  { name: string; color: string; accent: string; description: string }
+> = {
   classic: {
     name: 'Classic',
-    description: 'The original sphere with clean neon glow.',
-    gemType: 'normal',
-    color: '#e2e8f0',
+    color: '#d1d5db',
     accent: '#22d3ee',
+    description: 'Polished chrome',
   },
-  prism: {
-    name: 'Prism Core',
-    description: 'Crystalline facets with a cold glow.',
-    gemType: 'prism',
-    color: '#7dd3fc',
-    accent: '#a78bfa',
-  },
+  prism: { name: 'Prism', color: '#9ae6ff', accent: '#60a5fa', description: 'Glass refraction' },
   prismflare: {
     name: 'Prism Flare',
-    description: 'Octa flare with sharp glints.',
-    gemType: 'prism',
-    color: '#93c5fd',
-    accent: '#c4b5fd',
+    color: '#b7f0ff',
+    accent: '#38bdf8',
+    description: 'Radiant shards',
   },
   prismshift: {
     name: 'Prism Shift',
-    description: 'Tetra edges for aggressive turns.',
-    gemType: 'prism',
-    color: '#60a5fa',
-    accent: '#a78bfa',
+    color: '#c4f4ff',
+    accent: '#22d3ee',
+    description: 'Spectral shift',
   },
   prismhalo: {
     name: 'Prism Halo',
-    description: 'Orbiting ring with soft refraction.',
-    gemType: 'prism',
-    color: '#7dd3fc',
-    accent: '#22d3ee',
+    color: '#b3f0ff',
+    accent: '#38bdf8',
+    description: 'Orbital arc',
   },
   prismglint: {
     name: 'Prism Glint',
-    description: 'Multi-faceted sparkle at speed.',
-    gemType: 'prism',
-    color: '#a5b4fc',
-    accent: '#c4b5fd',
+    color: '#a2e6ff',
+    accent: '#0ea5e9',
+    description: 'Sharp gleam',
   },
   prismedge: {
     name: 'Prism Edge',
-    description: 'Hard-edged prism with bite.',
-    gemType: 'prism',
-    color: '#60a5fa',
-    accent: '#38bdf8',
+    color: '#c3f4ff',
+    accent: '#22d3ee',
+    description: 'Cut facets',
   },
   prismvibe: {
     name: 'Prism Vibe',
-    description: 'High-energy tetra pulse.',
-    gemType: 'prism',
-    color: '#7dd3fc',
-    accent: '#f472b6',
+    color: '#d1f7ff',
+    accent: '#60a5fa',
+    description: 'Wave crystal',
   },
   prismflux: {
     name: 'Prism Flux',
-    description: 'Bold cubic planes with shimmer.',
-    gemType: 'prism',
-    color: '#38bdf8',
-    accent: '#a78bfa',
-  },
-  prismstellate: {
-    name: 'Prism Stellate',
-    description: 'Stellated prism spikes.',
-    gemType: 'prism',
-    color: '#93c5fd',
-    accent: '#f472b6',
-  },
-  prismcage: {
-    name: 'Prism Cage',
-    description: 'Geodesic cage silhouette.',
-    gemType: 'prism',
-    color: '#7dd3fc',
-    accent: '#22d3ee',
-  },
-  prismorbitx: {
-    name: 'Orbit Crossring',
-    description: 'Crossed orbits with airy motion.',
-    gemType: 'prism',
-    color: '#60a5fa',
-    accent: '#38bdf8',
-  },
-  prismlens: {
-    name: 'Superlens',
-    description: 'Supershape lens with glassy tone.',
-    gemType: 'prism',
-    color: '#bae6fd',
+    color: '#aee7ff',
     accent: '#7dd3fc',
+    description: 'Charged glass',
   },
-  prismhelixtube: {
-    name: 'Helix Tube',
-    description: 'Twisting tube with neon sheen.',
-    gemType: 'prism',
-    color: '#7dd3fc',
-    accent: '#a78bfa',
-  },
-  fractal: {
-    name: 'Fractal Knot',
-    description: 'Classic torus knot entropy.',
-    gemType: 'fractal',
-    color: '#c4b5fd',
-    accent: '#f472b6',
-  },
+  fractal: { name: 'Fractal', color: '#e9d5ff', accent: '#c084fc', description: 'Faceted bloom' },
   fractalcrown: {
     name: 'Fractal Crown',
-    description: 'Tighter knot with crown-like tension.',
-    gemType: 'fractal',
-    color: '#d8b4fe',
-    accent: '#fb7185',
+    color: '#f5d0fe',
+    accent: '#a855f7',
+    description: 'Knot lattice',
   },
   fractalsurge: {
     name: 'Fractal Surge',
-    description: 'Compact knot with fast shimmer.',
-    gemType: 'fractal',
-    color: '#a78bfa',
-    accent: '#f472b6',
+    color: '#e0e7ff',
+    accent: '#818cf8',
+    description: 'Recursive flare',
   },
   fractalrune: {
     name: 'Fractal Rune',
-    description: 'Runic torus outline.',
-    gemType: 'fractal',
-    color: '#c4b5fd',
-    accent: '#38bdf8',
+    color: '#ede9fe',
+    accent: '#a855f7',
+    description: 'Glyph weave',
   },
   fractalspire: {
     name: 'Fractal Spire',
-    description: 'Needle cone with sharp edge.',
-    gemType: 'fractal',
-    color: '#a78bfa',
-    accent: '#f59e0b',
+    color: '#e9d5ff',
+    accent: '#c084fc',
+    description: 'Spiked lattice',
   },
   fractalshard: {
     name: 'Fractal Shard',
-    description: 'Jagged tetra shard.',
-    gemType: 'fractal',
-    color: '#c4b5fd',
-    accent: '#fb7185',
+    color: '#e0e7ff',
+    accent: '#818cf8',
+    description: 'Shattered bloom',
   },
   fractalwarp: {
     name: 'Fractal Warp',
-    description: 'Warped icosa surface.',
-    gemType: 'fractal',
-    color: '#94a3b8',
-    accent: '#a78bfa',
+    color: '#f3e8ff',
+    accent: '#d946ef',
+    description: 'Warped knot',
   },
   fractalshade: {
     name: 'Fractal Shade',
-    description: 'Dense dodeca shade.',
-    gemType: 'fractal',
-    color: '#a78bfa',
-    accent: '#22d3ee',
+    color: '#ddd6fe',
+    accent: '#8b5cf6',
+    description: 'Shadowed mesh',
   },
-  fractalsupershape: {
-    name: 'Supershape',
-    description: 'Superformula with spiked edges.',
-    gemType: 'fractal',
-    color: '#d8b4fe',
-    accent: '#f472b6',
-  },
-  fractalasteroid: {
-    name: 'Fractal Asteroid',
-    description: 'Displaced rock with noisy ridges.',
-    gemType: 'fractal',
-    color: '#cbd5f5',
-    accent: '#f97316',
-  },
-  fractalsierpinski: {
-    name: 'Sierpinski Tetra',
-    description: 'Recursive tetra shell.',
-    gemType: 'fractal',
-    color: '#a78bfa',
-    accent: '#f59e0b',
-  },
-  fractalmenger: {
-    name: 'Menger Core',
-    description: 'Recursive cube lattice.',
-    gemType: 'fractal',
-    color: '#94a3b8',
-    accent: '#f472b6',
-  },
-  fractallissajous: {
-    name: 'Lissajous Knot',
-    description: 'Tube knot with harmonic loops.',
-    gemType: 'fractal',
-    color: '#c4b5fd',
-    accent: '#38bdf8',
-  },
-  nova: {
-    name: 'Nova Core',
-    description: 'Radiant dodeca nucleus.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#fb7185',
-  },
+  nova: { name: 'Nova', color: '#fecaca', accent: '#fb7185', description: 'Solar core' },
   novapulse: {
     name: 'Nova Pulse',
-    description: 'Pulsing icosa shell.',
-    gemType: 'nova',
-    color: '#fb923c',
-    accent: '#facc15',
+    color: '#ffd1d1',
+    accent: '#f97316',
+    description: 'Ignition bloom',
   },
   novabloom: {
     name: 'Nova Bloom',
-    description: 'Blooming octa glow.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#f472b6',
+    color: '#ffe4e6',
+    accent: '#fb7185',
+    description: 'Starburst shell',
   },
   novacore: {
-    name: 'Nova Core+',
-    description: 'Larger core with heavy glow.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#fb7185',
+    name: 'Nova Core',
+    color: '#ffd1d1',
+    accent: '#f97316',
+    description: 'Hot nucleus',
   },
   novaflare: {
     name: 'Nova Flare',
-    description: 'Flare cone with hot streaks.',
-    gemType: 'nova',
-    color: '#fb923c',
-    accent: '#f97316',
+    color: '#fecaca',
+    accent: '#fb7185',
+    description: 'Solar flare',
   },
   novastorm: {
     name: 'Nova Storm',
-    description: 'Stormy icosa with sharp edges.',
-    gemType: 'nova',
-    color: '#f59e0b',
+    color: '#ffe4e6',
     accent: '#fb7185',
+    description: 'Charged storm',
   },
   novaspike: {
     name: 'Nova Spike',
-    description: 'Spiked cylinder silhouette.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#facc15',
+    color: '#fed7aa',
+    accent: '#f97316',
+    description: 'Ignition spike',
   },
   novaring: {
     name: 'Nova Ring',
-    description: 'Focused ring of heat.',
-    gemType: 'nova',
-    color: '#fb923c',
-    accent: '#fb7185',
-  },
-  novacorona: {
-    name: 'Corona',
-    description: 'Hot corona with radial spikes.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#f59e0b',
-  },
-  novapulsar: {
-    name: 'Pulsar',
-    description: 'Stretched core with bands.',
-    gemType: 'nova',
-    color: '#f59e0b',
-    accent: '#fb7185',
-  },
-  novaeclipse: {
-    name: 'Eclipse Ring',
-    description: 'Core + ring eclipse.',
-    gemType: 'nova',
-    color: '#fb923c',
-    accent: '#f472b6',
-  },
-  novacomet: {
-    name: 'Comet',
-    description: 'Lathed comet with tail.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#fb7185',
-  },
-  novaflareburst: {
-    name: 'Flareburst',
-    description: 'Starburst supershape.',
-    gemType: 'nova',
-    color: '#f97316',
-    accent: '#facc15',
+    color: '#ffe8d6',
+    accent: '#fb923c',
+    description: 'Orbital ring',
   },
 };
 
 export const PLAYER_SKIN_KEYS = Object.keys(PLAYER_SKIN_INFO) as PlayerSkin[];
 
-// Gem score colors
-export const GEM_SCORE_COLORS = ['#00ffff', '#00ff88', '#ff6b6b', '#feca57', '#6c5ce7'];
-export const GEM_SCORE_STEP = 5;
-
-// Helper function to get arena theme
-export const getArenaTheme = (preset: ArenaPreset, baseTheme: ThemeColors): ThemeColors => {
-  const palette = preset.palette;
-  if (!palette) {
-    if (!preset.ground?.color && !preset.ground?.accent) {
-      return baseTheme;
-    }
-    return {
-      ...baseTheme,
-      bg: preset.ground?.color ?? baseTheme.bg,
-      accent: preset.ground?.accent ?? baseTheme.accent,
-    };
-  }
-
-  const tileHex = palette.tile ?? baseTheme.tileHex;
-  const gemHex = palette.gem ?? baseTheme.gemHex;
-  const glowHex = palette.glow ?? palette.accent;
-  const bg = palette.bg ?? baseTheme.bg;
-  const accent = palette.accent ?? baseTheme.accent;
-
-  return {
-    name: `${baseTheme.name} - ${preset.name}`,
-    tile: new THREE.Color(tileHex),
-    tileHex,
-    gem: new THREE.Color(gemHex),
-    gemHex,
-    glow: glowHex ? new THREE.Color(glowHex) : baseTheme.glow.clone(),
-    bg,
-    accent,
-  };
+export const MODE_INFO: Record<GameMode, { name: string; description: string; color: string }> = {
+  classic: { name: 'Classic', description: 'Sharp 90° turns. Pure skill.', color: '#00ffff' },
+  curved: { name: 'Curved', description: 'Flowing wave patterns.', color: '#ff6b6b' },
+  spiral: { name: 'Spiral', description: 'Hypnotic inward spiral.', color: '#6c5ce7' },
+  gravity: { name: 'Gravity', description: 'World-bending shifts.', color: '#00ff88' },
+  speedrush: { name: 'Speed Rush', description: '1.5x speed. 2x points.', color: '#f39c12' },
+  zen: { name: 'Zen', description: 'No death. Pure flow.', color: '#48dbfb' },
 };
-
-// Mode settings for each game mode
-export type ModeSettings = {
-  gemSpawnChance: number;
-  powerUpChance: number;
-  fallDelay: number;
-  speedIncrementMultiplier: number;
-  speedLimitMultiplier: number;
-};
-
-export const MODE_SETTINGS: Record<GameMode, ModeSettings> = {
-  classic: {
-    gemSpawnChance: 0.2,
-    powerUpChance: 0.05,
-    fallDelay: 0.75,
-    speedIncrementMultiplier: 1.0,
-    speedLimitMultiplier: 1.0,
-  },
-  curved: {
-    gemSpawnChance: 0.2,
-    powerUpChance: 0.05,
-    fallDelay: 0.75,
-    speedIncrementMultiplier: 1.0,
-    speedLimitMultiplier: 1.0,
-  },
-  spiral: {
-    gemSpawnChance: 0.2,
-    powerUpChance: 0.05,
-    fallDelay: 0.75,
-    speedIncrementMultiplier: 1.0,
-    speedLimitMultiplier: 1.0,
-  },
-  gravity: {
-    gemSpawnChance: 0.25,
-    powerUpChance: 0.06,
-    fallDelay: 0.6,
-    speedIncrementMultiplier: 1.2,
-    speedLimitMultiplier: 1.1,
-  },
-  speedrush: {
-    gemSpawnChance: 0.15,
-    powerUpChance: 0.08,
-    fallDelay: 0.5,
-    speedIncrementMultiplier: 1.5,
-    speedLimitMultiplier: 1.3,
-  },
-  zen: {
-    gemSpawnChance: 0.3,
-    powerUpChance: 0.04,
-    fallDelay: 1.0,
-    speedIncrementMultiplier: 0.8,
-    speedLimitMultiplier: 0.9,
-  },
-};
-
-// Additional constants
-export const LEVEL_DISTANCE = 25;
-export const CURVE_TILE_STRETCH = 1.2;
-export const INITIAL_TILE_BATCH = 20;
-export const POWERUP_HEIGHT_OFFSET = 0.1;
-export const SPECIAL_GEM_CHANCE = 0.15;
-export const SPECIAL_GEM_TYPES: GemType[] = ['prism', 'fractal', 'nova'];
-export const THEME_EDGE_BLEND = 0.3;
-export const TILE_CORNER_RADIUS = 0.08;
-export const TILE_CORNER_SEGMENTS = 8;
-
-// Curve mode constants
-export const CURVE_LANE_OFFSET = 0.6;
-export const CURVE_LANE_DAMPING = 8;
-export const CURVE_BOUNDARY_SOFT = 4.5;
-export const CURVE_BOUNDARY_HARD = 6.0;
-export const CURVE_BOUNDARY_GAIN = 0.15;
-export const CURVE_BASE_CURVATURE = 0.08;
-
-// Spiral mode constants
-export const SPIRAL_FORWARD_DRIFT = 0.12;
-export const SPIRAL_INWARD_DRIFT = 0.08;
-export const SPIRAL_MAX_RADIUS = 5.5;
-export const SPIRAL_MIN_RADIUS = 2.0;
-export const SPIRAL_OUTWARD_DRIFT = 0.1;
-export const SPIRAL_OUTER_PULL = 1.5;
-export const SPIRAL_SWITCH_RANGE: [number, number] = [8, 15];
-export const SPIRAL_TURN_RATE = 0.04;
-
-// Gravity/Zen mode constants
-export const GRAVITY_WAVE_FREQUENCY = 0.8;
-export const GRAVITY_WAVE_AMPLITUDE = 0.4;
-export const GRAVITY_WAVE_HEIGHT_MULTIPLIER = 1.2;
-export const GRAVITY_TURN_BASE = 0.3;
-export const GRAVITY_TURN_SWING = 0.4;
-export const ZEN_WAVE_STEP = 0.3;
-export const ZEN_TURN_BASE = 0.2;
-export const ZEN_TURN_SWING = 0.3;
-
-// Classic mode constants
-export const CLASSIC_TURN_CHANCE = 0.4;
-export const SPEEDRUSH_FORWARD_CHANCE = 0.3;
-
-// Curve mode advanced constants
-export const CURVE_CENTER_PULL = 0.15;
-export const CURVE_DAMPING = 12;
-export const CURVE_FORWARD_BIAS = 0.85;
-export const CURVE_MAX_YAW = Math.PI / 3;
-export const CURVE_SEGMENT_RANGE: [number, number] = [12, 25];
-export const CURVE_SEGMENT_SHORT_RANGE: [number, number] = [6, 12];
-export const CURVE_SELF_INTERSECTION_DISTANCE = 2.5;
-export const CURVE_SPRING = 0.08;
-export const CURVE_TILE_STEP = TILE_SIZE;

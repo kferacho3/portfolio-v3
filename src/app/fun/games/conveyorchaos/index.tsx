@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Html, Sky, Stars } from '@react-three/drei';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
@@ -9,6 +9,7 @@ import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/s
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { conveyorChaosState } from './state';
+import { ThemeContext } from '../../../../contexts/ThemeContext';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -99,6 +100,164 @@ function pickGoalTile(tiles: Tile[]): { ix: number; iz: number } {
   }
   return { ix: START_TILE.ix, iz: START_TILE.iz };
 }
+
+// Custom background shader material for sphere
+const SwirlBackgroundMaterial: React.FC<{ isLightMode: boolean }> = ({ isLightMode }) => {
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uLightMode: { value: isLightMode ? 1 : 0 },
+    }),
+    [isLightMode]
+  );
+
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
+    }
+  });
+
+  return (
+    <shaderMaterial
+      ref={materialRef}
+      uniforms={uniforms}
+      side={THREE.BackSide}
+      vertexShader={/* glsl */ `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `}
+      fragmentShader={/* glsl */ `
+        uniform float uTime;
+        uniform float uLightMode;
+        varying vec3 vWorldPosition;
+
+        float hash21(vec2 p) {
+          p = fract(p * vec2(234.34, 435.345));
+          p += dot(p, p + 34.345);
+          return fract(p.x * p.y);
+        }
+
+        float noise2(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          float a = hash21(i);
+          float b = hash21(i + vec2(1.0, 0.0));
+          float c = hash21(i + vec2(0.0, 1.0));
+          float d = hash21(i + vec2(1.0, 1.0));
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.5;
+          mat2 m = mat2(0.8, -0.6, 0.6, 0.8);
+          for (int i = 0; i < 4; i++) {
+            v += a * noise2(p);
+            p = m * p * 2.0;
+            a *= 0.5;
+          }
+          return v;
+        }
+
+        void main() {
+          // Convert world position to spherical coordinates for UV mapping
+          vec3 dir = normalize(vWorldPosition);
+          float u = 0.5 + atan(dir.z, dir.x) / (2.0 * 3.14159);
+          float v = 0.5 - asin(dir.y) / 3.14159;
+          vec2 uv = vec2(u, v);
+          
+          // Create swirl pattern based on position
+          vec2 center = vec2(0.5, 0.5);
+          vec2 pos = uv - center;
+          float angle = atan(pos.y, pos.x);
+          float radius = length(pos);
+          
+          if (uLightMode > 0.5) {
+            // LIGHT MODE: Swirl of light colors (yellow, blue, pink) with mostly light silver/white
+            vec3 yellow = vec3(1.0, 0.96, 0.8);
+            vec3 blue = vec3(0.8, 0.88, 1.0);
+            vec3 pink = vec3(1.0, 0.88, 0.92);
+            vec3 silver = vec3(0.96, 0.97, 0.99);
+            vec3 white = vec3(0.99, 0.995, 1.0);
+            
+            // Create multiple swirling layers
+            float swirl1 = angle + radius * 4.0 + uTime * 0.25;
+            float swirl2 = angle * 1.5 + radius * 3.0 - uTime * 0.2;
+            float swirl3 = angle * 2.0 + radius * 5.0 + uTime * 0.3;
+            
+            float wave1 = sin(swirl1) * 0.5 + 0.5;
+            float wave2 = sin(swirl2) * 0.5 + 0.5;
+            float wave3 = sin(swirl3) * 0.5 + 0.5;
+            
+            // Add noise for organic texture
+            vec2 noisePos = uv * 5.0 + vec2(uTime * 0.08, uTime * 0.06);
+            float noise = fbm(noisePos) * 0.25;
+            
+            // Mix colors in swirl pattern - create flowing bands
+            vec3 color = mix(blue, yellow, wave1);
+            color = mix(color, pink, wave2 * 0.5);
+            color = mix(color, silver, wave3 * 0.7);
+            
+            // Blend with white/silver base (mostly light)
+            color = mix(white, color, 0.2 + noise * 0.15);
+            
+            // Add subtle radial gradient for depth
+            float radial = smoothstep(0.6, 0.0, radius);
+            color = mix(white, color, radial * 0.3);
+            
+            // Ensure it stays light
+            color = mix(vec3(0.95, 0.96, 0.98), color, 0.4);
+            
+            gl_FragColor = vec4(color, 1.0);
+          } else {
+            // DARK MODE: Deep abyss black x purple x dark colors but predominantly black
+            vec3 black = vec3(0.0, 0.0, 0.01);
+            vec3 deepPurple = vec3(0.06, 0.01, 0.12);
+            vec3 darkPurple = vec3(0.1, 0.03, 0.15);
+            vec3 darkBlue = vec3(0.01, 0.02, 0.1);
+            vec3 darkViolet = vec3(0.08, 0.02, 0.18);
+            
+            // Subtle swirling dark nebula
+            float swirl1 = angle + radius * 3.0 + uTime * 0.12;
+            float swirl2 = angle * 1.3 + radius * 2.5 - uTime * 0.1;
+            float swirl3 = angle * 0.7 + radius * 4.0 + uTime * 0.08;
+            
+            float wave1 = sin(swirl1) * 0.5 + 0.5;
+            float wave2 = sin(swirl2) * 0.5 + 0.5;
+            float wave3 = sin(swirl3) * 0.5 + 0.5;
+            
+            // Add noise for depth
+            vec2 noisePos = uv * 4.0 + vec2(uTime * 0.04, uTime * 0.03);
+            float noise = fbm(noisePos) * 0.12;
+            
+            // Mix dark colors subtly
+            vec3 color = mix(deepPurple, darkPurple, wave1);
+            color = mix(color, darkViolet, wave2 * 0.4);
+            color = mix(color, darkBlue, wave3 * 0.3);
+            
+            // Blend with black base (predominantly black - 85%+ black)
+            color = mix(black, color, 0.12 + noise * 0.08);
+            
+            // Add very subtle radial gradient
+            float radial = smoothstep(0.5, 0.0, radius);
+            color = mix(black, color, radial * 0.15);
+            
+            // Ensure it stays very dark
+            color = max(black, color);
+            
+            gl_FragColor = vec4(color, 1.0);
+          }
+        }
+      `}
+    />
+  );
+};
 
 const ConveyorHUD: React.FC = () => {
   const s = useSnapshot(conveyorChaosState);
@@ -221,8 +380,10 @@ const ConveyorHUD: React.FC = () => {
 };
 
 const ConveyorChaos: React.FC = () => {
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
   const { paused } = useGameUIState();
+  const { theme } = useContext(ThemeContext);
+  const isLightMode = theme === 'light';
 
   const inputRef = useInputRef({
     enabled: !paused,
@@ -451,14 +612,14 @@ const ConveyorChaos: React.FC = () => {
     }
 
     // Bumper: push sideways once per frame (simple)
-    if (effectiveKind === 'bumper') {
+    if (effectiveKind === 'bumper' && tile) {
       const push = dirVec(((tile.dir + 1) % 4) as Dir).multiplyScalar(10);
       velRef.current.addScaledVector(push, step);
       conveyorChaosState.addScore(0);
     }
 
     // Crusher: slams periodically; if active and you’re on it, fail
-    if (effectiveKind === 'crusher') {
+    if (effectiveKind === 'crusher' && tile) {
       tile.phase += step;
       const slam = (Math.sin(tile.phase * 2.4) + 1) * 0.5; // 0..1
       if (slam > 0.92) {
@@ -491,6 +652,15 @@ const ConveyorChaos: React.FC = () => {
     clearFrameInput(inputRef);
   });
 
+  // Set scene background based on theme
+  useEffect(() => {
+    if (isLightMode) {
+      scene.background = new THREE.Color(0xf8f9fa);
+    } else {
+      scene.background = new THREE.Color(0x000000);
+    }
+  }, [scene, isLightMode]);
+
   const showArrows = conveyorChaosState.event !== 'Blackout';
   const arrowEmissive = showArrows ? 0.12 : 0.02;
   const goalEmissive = showArrows ? 0.18 : 0.08;
@@ -498,11 +668,15 @@ const ConveyorChaos: React.FC = () => {
   return (
     <>
       <ConveyorHUD />
-      <Sky />
-      <fog attach="fog" args={['#0a1220', 45, 120]} />
-      <Stars radius={240} depth={60} count={1300} factor={4} saturation={0} fade />
-      <ambientLight intensity={0.36} />
-      <directionalLight position={[18, 30, 14]} intensity={1.1} castShadow />
+      {/* Custom background sphere */}
+      <mesh>
+        <sphereGeometry args={[200, 64, 64]} />
+        <SwirlBackgroundMaterial isLightMode={isLightMode} />
+      </mesh>
+      <fog attach="fog" args={[isLightMode ? '#f0f2f5' : '#000000', 45, 120]} />
+      {!isLightMode && <Stars radius={240} depth={60} count={1300} factor={4} saturation={0} fade />}
+      <ambientLight intensity={isLightMode ? 0.8 : 0.36} />
+      <directionalLight position={[18, 30, 14]} intensity={isLightMode ? 1.3 : 1.1} castShadow />
 
       {/* Board tiles */}
       <group position={[0, 0, 0]}>

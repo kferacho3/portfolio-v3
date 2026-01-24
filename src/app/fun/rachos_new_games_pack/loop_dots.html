@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+  <title>Loop Dots (Prototype)</title>
+  <style>
+    :root{
+      --bg:#0b0d12;
+      --panel:rgba(10,12,18,.55);
+      --stroke:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.86);
+      --muted:rgba(255,255,255,.55);
+      --accent:#ffd166;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    canvas{width:100%;height:100%;display:block;}
+    .hud{
+      position:fixed;left:16px;top:16px;z-index:10;
+      color:var(--text);background:var(--panel);border:1px solid var(--stroke);
+      border-radius:16px;padding:10px 12px;backdrop-filter: blur(14px);
+      box-shadow:0 18px 40px rgba(0,0,0,.35);
+      min-width:220px;
+      user-select:none;
+    }
+    .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-top:6px}
+    .row:first-child{margin-top:0}
+    .label{font-size:10px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);}
+    .value{font-weight:800;font-size:14px;}
+    .pill{
+      margin-top:10px;
+      display:inline-flex;align-items:center;gap:8px;
+      border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;
+      background:rgba(0,0,0,.25);
+      font-size:11px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;
+    }
+    .kbd{display:inline-block;border:1px solid rgba(255,255,255,.22);border-bottom-color:rgba(255,255,255,.14);
+      padding:1px 6px;border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:11px;color:rgba(255,255,255,.72);
+      background:rgba(0,0,0,.25);
+    }
+    .centerOverlay{
+      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;
+      background:radial-gradient(1200px 800px at 50% 40%, rgba(255,209,102,.10), transparent 60%),
+                 radial-gradient(900px 700px at 20% 10%, rgba(42,255,159,.07), transparent 55%),
+                 rgba(0,0,0,.28);
+      backdrop-filter: blur(4px);
+      user-select:none;
+    }
+    .modal{
+      width:min(560px, calc(100vw - 32px));
+      background:rgba(10,12,18,.72);
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:22px;
+      padding:18px 18px 14px;
+      box-shadow:0 28px 90px rgba(0,0,0,.55);
+      color:var(--text);
+    }
+    .modal h1{margin:0;font-size:28px;letter-spacing:.06em;}
+    .modal p{margin:10px 0 0;color:var(--muted);line-height:1.5}
+    .btnRow{margin-top:14px;display:flex;flex-wrap:wrap;gap:10px}
+    .btn{
+      cursor:pointer;
+      border:1px solid rgba(255,255,255,.16);
+      background:rgba(255,255,255,.06);
+      color:rgba(255,255,255,.86);
+      padding:10px 12px;border-radius:14px;
+      font-weight:800;font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+      transition:transform .08s ease, filter .15s ease, background .15s ease;
+    }
+    .btn.primary{
+      border-color: rgba(255,209,102,.55);
+      background: linear-gradient(135deg, rgba(255,209,102,.95), rgba(42,255,159,.75));
+      color:#0b0d12;
+    }
+    .btn:active{transform:scale(.98)}
+    .tiny{font-size:10px;color:rgba(255,255,255,.45);margin-top:10px}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="hud">
+    <div class="row"><div class="label">Score</div><div class="value" id="score">0</div></div>
+    <div class="row"><div class="label">Moves</div><div class="value" id="moves">25</div></div>
+    <div class="row"><div class="label">Loop Streak</div><div class="value" id="streak">0</div></div>
+    <div class="pill">
+      Drag to connect · Make a loop to clear <b>all</b> of that color · Restart <span class="kbd">R</span>
+    </div>
+  </div>
+
+  <div class="centerOverlay" id="overlay">
+    <div class="modal">
+      <h1>Loop Dots</h1>
+      <p>
+        A cozy, Two‑Dots‑inspired puzzle. Connect adjacent dots of the same color.
+        <b>Close a loop</b> to clear every dot of that color and build a streak multiplier.
+      </p>
+      <p>
+        25 moves. Aim for loop clears and chain reactions.
+      </p>
+      <div class="btnRow">
+        <button class="btn primary" id="startBtn">Start</button>
+        <button class="btn" id="resetBestBtn">Reset Best</button>
+      </div>
+      <div class="tiny" id="bestLine">Best: 0</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utils / Audio
+  // ─────────────────────────────────────────────────────────────────────────
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const randi=(a,b)=>Math.floor(rand(a,b+1));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+
+  let audioCtx=null;
+  function beep(freq=440,dur=0.06,type='sine',vol=0.05){
+    if(!audioCtx) return;
+    const t0=audioCtx.currentTime;
+    const o=audioCtx.createOscillator();
+    const g=audioCtx.createGain();
+    o.type=type; o.frequency.setValueAtTime(freq,t0);
+    g.gain.setValueAtTime(0,t0);
+    g.gain.linearRampToValueAtTime(vol,t0+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0+dur+0.02);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Canvas
+  // ─────────────────────────────────────────────────────────────────────────
+  const canvas=document.getElementById('c');
+  const ctx=canvas.getContext('2d');
+  function resize(){
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    canvas.width=Math.floor(window.innerWidth*dpr);
+    canvas.height=Math.floor(window.innerHeight*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Game State
+  // ─────────────────────────────────────────────────────────────────────────
+  const hudScore=document.getElementById('score');
+  const hudMoves=document.getElementById('moves');
+  const hudStreak=document.getElementById('streak');
+  const overlay=document.getElementById('overlay');
+  const bestLine=document.getElementById('bestLine');
+
+  const LS_BEST='loop_dots_best_v1';
+  let best=Number(localStorage.getItem(LS_BEST)||'0')||0;
+  bestLine.textContent = `Best: ${best}`;
+
+  const COLORS=[
+    {name:'Sun',   fill:'#ffd166'},
+    {name:'Mint',  fill:'#2aff9f'},
+    {name:'Ocean', fill:'#54a0ff'},
+    {name:'Rose',  fill:'#ff3b5c'},
+    {name:'Grape', fill:'#a66cff'},
+  ];
+
+  const game={
+    running:false,
+    time:0,
+    score:0,
+    moves:25,
+    loopStreak:0,
+    flash:0,
+    shake:0,
+  };
+
+  const board={
+    cols:7,
+    rows:7,
+    cells:[], // [row][col] -> color index
+  };
+
+  const drag={
+    active:false,
+    path:[], // list of {c,r}
+    color:-1,
+    isLoop:false,
+    lastCell:null,
+  };
+
+  function newBoard(){
+    board.cells = Array.from({length:board.rows}, () =>
+      Array.from({length:board.cols}, () => randi(0, COLORS.length-1))
+    );
+  }
+
+  function reset(){
+    game.time=0; game.score=0; game.moves=25; game.loopStreak=0; game.flash=0; game.shake=0;
+    drag.active=false; drag.path=[]; drag.color=-1; drag.isLoop=false; drag.lastCell=null;
+    newBoard();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Input (pointer drag)
+  // ─────────────────────────────────────────────────────────────────────────
+  let pointer={x:0,y:0,down:false};
+  canvas.addEventListener('pointerdown',(e)=>{
+    pointer.down=true;
+    pointer.x=e.clientX; pointer.y=e.clientY;
+    if(game.running) beginDrag(pointer.x,pointer.y);
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove',(e)=>{
+    pointer.x=e.clientX; pointer.y=e.clientY;
+    if(game.running && drag.active) updateDrag(pointer.x,pointer.y);
+  });
+  canvas.addEventListener('pointerup',()=>{
+    pointer.down=false;
+    if(game.running && drag.active) endDrag();
+  });
+  canvas.addEventListener('pointercancel',()=>{
+    pointer.down=false;
+    if(game.running && drag.active) endDrag();
+  });
+
+  window.addEventListener('keydown',(e)=>{
+    if(e.code==='KeyR' && game.running){ reset(); }
+    if(e.code==='Space' && !game.running && overlay.style.display!=='none'){ start(); }
+  });
+
+  function boardLayout(){
+    const w=window.innerWidth, h=window.innerHeight;
+    const size = Math.min(w, h) * 0.72;
+    const cell = size / Math.max(board.cols, board.rows);
+    const x0 = (w - size)/2;
+    const y0 = (h - size)/2 + 20;
+    return {size, cell, x0, y0};
+  }
+
+  function cellAt(x,y){
+    const {cell,x0,y0,size}=boardLayout();
+    if(x<x0 || y<y0 || x>x0+size || y>y0+size) return null;
+    const c = Math.floor((x - x0)/cell);
+    const r = Math.floor((y - y0)/cell);
+    if(c<0||r<0||c>=board.cols||r>=board.rows) return null;
+    return {c,r};
+  }
+
+  function sameCell(a,b){ return a && b && a.c===b.c && a.r===b.r; }
+  function adjacent(a,b){
+    if(!a||!b) return false;
+    const dc=Math.abs(a.c-b.c), dr=Math.abs(a.r-b.r);
+    return (dc+dr===1);
+  }
+
+  function beginDrag(x,y){
+    const cellPos=cellAt(x,y);
+    if(!cellPos) return;
+    drag.active=true;
+    drag.path=[cellPos];
+    drag.lastCell=cellPos;
+    drag.color=board.cells[cellPos.r][cellPos.c];
+    drag.isLoop=false;
+    beep(420,0.04,'sine',0.04);
+  }
+
+  function updateDrag(x,y){
+    const cellPos=cellAt(x,y);
+    if(!cellPos) return;
+
+    const last = drag.lastCell;
+    if(sameCell(cellPos,last)) return;
+    if(!adjacent(cellPos,last)) return;
+
+    const cellColor = board.cells[cellPos.r][cellPos.c];
+    if(cellColor !== drag.color) return;
+
+    // backtracking allowed (undo)
+    const path = drag.path;
+    const prev = path.length>=2 ? path[path.length-2] : null;
+    if(prev && sameCell(cellPos, prev)){
+      path.pop();
+      drag.lastCell = cellPos;
+      drag.isLoop = false;
+      return;
+    }
+
+    // loop detection: revisit ANY cell in path (not just start)
+    const idx = path.findIndex(p=>sameCell(p, cellPos));
+    if(idx !== -1 && path.length - idx >= 3){
+      drag.isLoop = true;
+      // keep path until the revisited cell to show closure
+      path.push(cellPos);
+      drag.lastCell = cellPos;
+      return;
+    }
+
+    // normal extension
+    path.push(cellPos);
+    drag.lastCell = cellPos;
+  }
+
+  function endDrag(){
+    drag.active=false;
+
+    if(game.moves<=0){
+      drag.path=[]; drag.color=-1; drag.isLoop=false;
+      return;
+    }
+
+    const path = drag.path;
+    if(path.length < 2){
+      drag.path=[]; drag.color=-1; drag.isLoop=false;
+      return;
+    }
+
+    // consume move
+    game.moves -= 1;
+
+    const cleared = [];
+    const color = drag.color;
+
+    if(drag.isLoop){
+      // clear all of that color
+      for(let r=0;r<board.rows;r++){
+        for(let c=0;c<board.cols;c++){
+          if(board.cells[r][c]===color){
+            cleared.push({c,r});
+            board.cells[r][c] = -1;
+          }
+        }
+      }
+      game.loopStreak += 1;
+      game.flash = 0.35;
+      game.shake = 0.18;
+      beep(760,0.06,'triangle',0.05);
+      beep(980,0.06,'triangle',0.05);
+    } else {
+      // clear selected path
+      for(const p of path){
+        const k = p.r+'_'+p.c;
+        // dedupe
+        if(!cleared.some(q=>q.r===p.r && q.c===p.c)){
+          cleared.push({c:p.c,r:p.r});
+        }
+      }
+      for(const p of cleared){
+        board.cells[p.r][p.c] = -1;
+      }
+      // streak resets if not loop
+      game.loopStreak = 0;
+      beep(520,0.05,'sine',0.045);
+    }
+
+    // score
+    const mult = drag.isLoop ? (2 + Math.min(6, game.loopStreak)) : 1;
+    game.score += cleared.length * 10 * mult;
+
+    // collapse + refill
+    collapseBoard();
+
+    // best
+    best = Math.max(best, game.score);
+    localStorage.setItem(LS_BEST, String(best));
+
+    drag.path=[]; drag.color=-1; drag.isLoop=false;
+
+    // end conditions
+    if(game.moves<=0){
+      endRun();
+    }
+  }
+
+  function collapseBoard(){
+    // gravity down: for each column, pull non-empty cells down
+    for(let c=0;c<board.cols;c++){
+      const col=[];
+      for(let r=board.rows-1;r>=0;r--){
+        const v=board.cells[r][c];
+        if(v!==-1) col.push(v);
+      }
+      // refill
+      while(col.length < board.rows){
+        col.push(randi(0, COLORS.length-1));
+      }
+      // write back
+      for(let r=board.rows-1, i=0;r>=0;r--,i++){
+        board.cells[r][c] = col[i];
+      }
+    }
+  }
+
+  function endRun(){
+    game.running=false;
+    overlay.style.display='flex';
+    const modal=document.querySelector('.modal');
+    modal.querySelector('h1').textContent='Out of Moves';
+    modal.querySelectorAll('p')[0].innerHTML = `Score: <b>${game.score}</b><br/>Best: <b>${best}</b>`;
+    beep(160,0.12,'sawtooth',0.05);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Loop
+  // ─────────────────────────────────────────────────────────────────────────
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.033,(now-last)/1000);
+    last=now;
+    if(game.running) step(dt);
+    render(dt);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  function step(dt){
+    game.time += dt;
+    if(game.flash>0) game.flash = Math.max(0, game.flash - dt*1.6);
+    if(game.shake>0) game.shake = Math.max(0, game.shake - dt*2.0);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
+  function render(dt){
+    const w=window.innerWidth, h=window.innerHeight;
+
+    // background
+    const grd=ctx.createLinearGradient(0,0,0,h);
+    grd.addColorStop(0,'#10151f');
+    grd.addColorStop(0.6,'#0b0d12');
+    grd.addColorStop(1,'#07080c');
+    ctx.fillStyle=grd;
+    ctx.fillRect(0,0,w,h);
+
+    // board panel
+    const {cell,x0,y0,size}=boardLayout();
+    const pad=cell*0.3;
+    const r=18;
+
+    if(game.shake>0){
+      ctx.save();
+      ctx.translate(rand(-game.shake,game.shake)*10, rand(-game.shake,game.shake)*10);
+    }
+
+    // panel
+    ctx.fillStyle='rgba(255,255,255,0.06)';
+    roundRect(ctx,x0-pad,y0-pad,size+pad*2,size+pad*2,r);
+    ctx.fill();
+
+    // subtle grid
+    ctx.strokeStyle='rgba(255,255,255,0.06)';
+    ctx.lineWidth=1;
+    for(let i=1;i<board.cols;i++){
+      const gx=x0+i*cell;
+      ctx.beginPath(); ctx.moveTo(gx,y0); ctx.lineTo(gx,y0+size); ctx.stroke();
+    }
+    for(let i=1;i<board.rows;i++){
+      const gy=y0+i*cell;
+      ctx.beginPath(); ctx.moveTo(x0,gy); ctx.lineTo(x0+size,gy); ctx.stroke();
+    }
+
+    // dots
+    for(let r0=0;r0<board.rows;r0++){
+      for(let c0=0;c0<board.cols;c0++){
+        const col=board.cells[r0][c0];
+        const cx=x0 + c0*cell + cell/2;
+        const cy=y0 + r0*cell + cell/2;
+        const rad=cell*0.26;
+
+        const base = col>=0 ? COLORS[col].fill : 'rgba(0,0,0,0)';
+        ctx.beginPath();
+        ctx.arc(cx,cy,rad,0,Math.PI*2);
+        ctx.fillStyle=base;
+        ctx.fill();
+
+        // highlight if in path
+        if(drag.active && drag.path.some(p=>p.c===c0 && p.r===r0)){
+          ctx.lineWidth=4;
+          ctx.strokeStyle='rgba(255,255,255,0.7)';
+          ctx.stroke();
+        } else {
+          ctx.lineWidth=2;
+          ctx.strokeStyle='rgba(0,0,0,0.15)';
+          ctx.stroke();
+        }
+      }
+    }
+
+    // draw path line
+    if(drag.active && drag.path.length>0){
+      ctx.lineWidth=8;
+      ctx.lineCap='round';
+      ctx.lineJoin='round';
+      const col = drag.color>=0 ? COLORS[drag.color].fill : '#fff';
+      ctx.strokeStyle = drag.isLoop ? 'rgba(255,255,255,0.85)' : col;
+      ctx.beginPath();
+      for(let i=0;i<drag.path.length;i++){
+        const p=drag.path[i];
+        const px=x0 + p.c*cell + cell/2;
+        const py=y0 + p.r*cell + cell/2;
+        if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+      }
+      ctx.stroke();
+    }
+
+    if(game.shake>0) ctx.restore();
+
+    // flash overlay
+    if(game.flash>0){
+      ctx.save();
+      ctx.globalAlpha = game.flash;
+      ctx.fillStyle='white';
+      ctx.fillRect(0,0,w,h);
+      ctx.restore();
+    }
+
+    // HUD
+    hudScore.textContent = String(game.score);
+    hudMoves.textContent = String(game.moves);
+    hudStreak.textContent = String(game.loopStreak);
+
+    // End hints
+    if(game.running && game.moves<=3){
+      ctx.save();
+      ctx.textAlign='center';
+      ctx.fillStyle='rgba(255,255,255,0.55)';
+      ctx.font='700 12px ui-sans-serif,system-ui';
+      ctx.fillText('Low moves — go for a loop!', w/2, y0 - 20);
+      ctx.restore();
+    }
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    const rr=Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  // Overlay actions
+  function start(){
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    reset();
+    game.running=true;
+    overlay.style.display='none';
+  }
+  document.getElementById('startBtn').addEventListener('click', start);
+  document.getElementById('resetBestBtn').addEventListener('click', ()=>{
+    localStorage.removeItem(LS_BEST); best=0; bestLine.textContent=`Best: ${best}`;
+  });
+
+})();
+</script>
+</body>
+</html>
