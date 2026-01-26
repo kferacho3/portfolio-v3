@@ -7,9 +7,9 @@ import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@re
 import { Physics, usePlane, useSphere, useBox } from '@react-three/cannon';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
-import { useGameUIState } from '../../store/selectors';
-import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '@/app/fun/components/shell/ArcadeHudPanel';
+import { useGameUIState } from '@/app/fun/store/selectors';
+import { clearFrameInput, useInputRef } from '@/app/fun/hooks/useInput';
 import { portalPunchState } from './state';
 
 // ═══════════════════════════════════════════════════════════════════════════

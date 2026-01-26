@@ -7,9 +7,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Physics, useBox, usePlane, useSphere } from '@react-three/cannon';
 import { useSnapshot } from 'valtio';
-import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
-import { useGameUIState } from '../../store/selectors';
-import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '@/app/fun/components/shell/ArcadeHudPanel';
+import { useGameUIState } from '@/app/fun/store/selectors';
+import { clearFrameInput, useInputRef } from '@/app/fun/hooks/useInput';
 import { polarityState, type PolarityCharge, type PolarityEvent } from './state';
 
 // ═══════════════════════════════════════════════════════════════════════════

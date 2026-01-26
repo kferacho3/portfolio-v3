@@ -6,11 +6,11 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
-import { useGameUIState } from '../../store/selectors';
-import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '@/app/fun/components/shell/ArcadeHudPanel';
+import { useGameUIState } from '@/app/fun/store/selectors';
+import { clearFrameInput, useInputRef } from '@/app/fun/hooks/useInput';
 import { conveyorChaosState } from './state';
-import { ThemeContext } from '../../../../contexts/ThemeContext';
+import { ThemeContext } from '@/contexts/ThemeContext';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS
