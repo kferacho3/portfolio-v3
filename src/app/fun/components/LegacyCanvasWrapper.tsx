@@ -5,7 +5,7 @@ import React, { Suspense } from 'react';
 
 // Dynamically import legacy games with no SSR to avoid hydration issues
 // These games have their own Canvas and physics providers
-const legacyGames: Record<string, React.ComponentType> = {
+const legacyGames: Record<string, React.ComponentType<any>> = {
   rollette: dynamic(() => import('../../Fun(JavaScript)/Games/Rollette'), { ssr: false }),
   skyblitz: dynamic(() => import('../../Fun(JavaScript)/Games/SkyBlitz'), { ssr: false }),
   reactpong: dynamic(() => import('../../Fun(JavaScript)/Games/ReactPong'), { ssr: false }),
