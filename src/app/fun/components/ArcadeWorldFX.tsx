@@ -649,8 +649,8 @@ const useEnvMap = (shouldLoad: boolean) => {
     );
 
     return () => {
-      // Cleanup on unmount
-      if (envMap && !shouldLoad) {
+      // Cleanup on unmount or when deps change
+      if (envMap) {
         envMap.dispose();
       }
     };
