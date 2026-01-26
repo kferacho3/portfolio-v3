@@ -146,13 +146,6 @@ export default function SectionTwo() {
       aria-labelledby="skills-title"
       className="relative w-full px-3 py-12 sm:px-4 sm:py-14 md:px-8 md:py-16 lg:px-12"
     >
-      {/* Smooth top fade - blends with previous section */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-transparent via-transparent to-transparent dark:from-[#0a0a0f]/80 dark:via-transparent" />
-      
-      {/* Smooth bottom fade - blends with next section */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-transparent via-transparent to-transparent dark:from-[#0a0a0f]/60 dark:via-transparent" />
-      
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(57,255,20,0.08),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(148,0,211,0.05),transparent_60%)] dark:bg-[radial-gradient(ellipse_at_top,rgba(57,255,20,0.12),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(148,0,211,0.08),transparent_60%)] opacity-70" />
 
       <motion.div
         className="relative z-10 mx-auto max-w-5xl text-center"

@@ -1431,19 +1431,59 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const { position: targetPosition, scale: targetScale } =
     getPositionAndScale();
 
-  /* entrance spring with scale animation from 0 to 1 */
-  const [{ pos, scl }] = useSpring(() => ({
-    from: {
-      pos: [0, 8, 0] as [number, number, number],
-      scl: [0, 0, 0] as [number, number, number],
+  /* Track mesh initialization stages */
+  const hasNormalizedRef = useRef(false);
+  const [isMeshReady, setIsMeshReady] = useState(false);      // Mesh normalized, can show
+  const [isDropComplete, setIsDropComplete] = useState(false); // Drop-in done, wait then scale
+  const [shouldScaleDown, setShouldScaleDown] = useState(false); // Time to scale down
+
+  /* Entrance animation config */
+  const ENTRANCE_SCALE_FROM = 1.35; // Start 35% larger
+  const ENTRANCE_SCALE_TO = 1.0;    // Scale to normal
+  const SCALE_DELAY_MS = 400;       // Wait 0.4 seconds after drop before scaling (faster)
+  
+  /* DROP-IN position animation - starts when mesh is ready */
+  const [{ dropY }] = useSpring(() => ({
+    dropY: isMeshReady ? 0 : 5, // Drop from above
+    config: { 
+      mass: 1.2, 
+      tension: 120, 
+      friction: 20,
     },
-    to: {
-      pos: targetPosition,
-      scl: [targetScale, targetScale, targetScale] as [number, number, number],
+    onRest: () => {
+      if (isMeshReady && !isDropComplete) {
+        setIsDropComplete(true);
+        // Wait 1.5 seconds, then trigger scale animation
+        setTimeout(() => {
+          setShouldScaleDown(true);
+        }, SCALE_DELAY_MS);
+      }
     },
-    config: { mass: 1, tension: 180, friction: 24 },
-    onRest: onAnimationComplete,
-  }));
+  }), [isMeshReady, isDropComplete]);
+  
+  /* SCALE animation - only triggers after delay */
+  const [{ entranceScale }] = useSpring(() => ({
+    entranceScale: shouldScaleDown ? ENTRANCE_SCALE_TO : ENTRANCE_SCALE_FROM,
+    config: { 
+      mass: 1.2, 
+      tension: 120, 
+      friction: 22,
+    }, // Faster, snappier scale animation
+    onRest: shouldScaleDown ? onAnimationComplete : undefined,
+  }), [shouldScaleDown, onAnimationComplete]);
+  
+  /* Animated scale for the 3D SHAPE ONLY (not icons) */
+  const shapeEntranceScale = entranceScale.to((s) => {
+    return [s, s, s] as [number, number, number];
+  });
+  
+  /* Animated position for drop-in */
+  const shapeDropPosition = dropY.to((y) => {
+    return [targetPosition[0], targetPosition[1] + y, targetPosition[2]] as [number, number, number];
+  });
+  
+  /* Static scale for the outer group (includes icons) */
+  const outerScale: [number, number, number] = [targetScale, targetScale, targetScale];
 
   /* shape morph spring */
   const [shapeScale, shapeApi] = useSpring(() => ({
@@ -2257,6 +2297,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
           /* enlarge invisible hover shell by 10 % (if you have it) */
           if (hoverShellRef.current)
             hoverShellRef.current.scale.setScalar(TARGET_R * 1.05);
+          
+          /* Trigger entrance animation AFTER normalization is done */
+          if (!hasNormalizedRef.current) {
+            hasNormalizedRef.current = true;
+            // Now mesh is normalized - make visible and start drop-in
+            requestAnimationFrame(() => {
+              setIsMeshReady(true);
+            });
+          }
         }
       }
     },
@@ -2852,109 +2901,119 @@ export default function Background3D({ onAnimationComplete }: Props) {
             color="#0080ff"
           />
 
-          {/* Main shape group */}
-          <a.group
-            scale={scl as unknown as [number, number, number]}
-            position={pos as unknown as [number, number, number]}
-          >
-            <group ref={spinGroupRef}>
-              {/* Additional scroll-based transform wrapper */}
-              <a.group
-                position={scrollPos as unknown as [number, number, number]}
-                scale={scrollScale as unknown as [number, number, number]}
-              >
-                {/* Floating animation wrapper */}
-                <Float
-                  speed={isMobileView ? 1.5 : 2}
-                  rotationIntensity={isMobileView ? 0.3 : 0.5}
-                  floatIntensity={isMobileView ? 0.3 : 0.5}
-                  floatingRange={[-0.1, 0.1]}
+          {/* Main group - static scale (includes icons) */}
+          <group scale={outerScale}>
+            {/* 3D SHAPE with drop-in + scale animations */}
+            <a.group
+              position={shapeDropPosition as unknown as [number, number, number]}
+              visible={isMeshReady}
+            >
+              <group ref={spinGroupRef}>
+                {/* Scroll-based transform wrapper */}
+                <a.group
+                  position={scrollPos as unknown as [number, number, number]}
+                  scale={scrollScale as unknown as [number, number, number]}
                 >
-                  {/* Inner morph spring */}
-                  <a.group
-                    scale={
-                      shapeScale.scale as unknown as [number, number, number]
-                    }
+                  {/* Floating animation wrapper */}
+                  <Float
+                    speed={isMobileView ? 1.5 : 2}
+                    rotationIntensity={isMobileView ? 0.3 : 0.5}
+                    floatIntensity={isMobileView ? 0.3 : 0.5}
+                    floatingRange={[-0.1, 0.1]}
                   >
-                    {hdr && (
-                      <CubeCamera
-                        resolution={isMobileView ? 256 : 512}
-                        frames={1}
-                        envMap={hdr}
+                    {/* ENTRANCE SCALE - smooth scale down animation */}
+                    <a.group
+                      scale={shapeEntranceScale as unknown as [number, number, number]}
+                    >
+                      {/* Inner morph spring (for shape changes on click) */}
+                      <a.group
+                        scale={
+                          shapeScale.scale as unknown as [number, number, number]
+                        }
                       >
-                        {(envMap) => (
-                          <>
-                            <e.mesh
-                              raycast={() => null} // ← NEW
-                              ref={(m: THREE.Mesh | null) => {
-                                meshRef.current = m;
-                                if (m) handleMeshRef(m);
-                              }}
-                              theatreKey="Background3DMesh"
-                              castShadow
-                              receiveShadow
-                            >
-                              {makeGeometry(shape)}
-                              {materialFns[materialIndex](envMap)}
-                            </e.mesh>
+                        {hdr && (
+                          <CubeCamera
+                            resolution={isMobileView ? 256 : 512}
+                            frames={1}
+                            envMap={hdr}
+                          >
+                            {(envMap) => (
+                              <>
+                                <e.mesh
+                                  raycast={() => null}
+                                  ref={(m: THREE.Mesh | null) => {
+                                    meshRef.current = m;
+                                    if (m) handleMeshRef(m);
+                                  }}
+                                  theatreKey="Background3DMesh"
+                                  castShadow
+                                  receiveShadow
+                                >
+                                  {makeGeometry(shape)}
+                                  {materialFns[materialIndex](envMap)}
+                                </e.mesh>
 
-                            {/* Invisible hover / click shell – same radius for every shape */}
-                            <mesh
-                              ref={hoverShellRef}
-                              visible={false}
-                              onPointerEnter={
-                                isMobileView ? undefined : handlePointerEnter
-                              }
-                              onPointerLeave={
-                                isMobileView ? undefined : handlePointerLeave
-                              }
-                              onPointerDown={onPointerDownMesh}
-                              onClick={handleModelClick}
-                            >
-                              <sphereGeometry args={[1, 32, 32]} />
-                              <meshBasicMaterial transparent opacity={0} />
-                            </mesh>
-                          </>
+                                {/* Invisible hover / click shell */}
+                                <mesh
+                                  ref={hoverShellRef}
+                                  visible={false}
+                                  onPointerEnter={
+                                    isMobileView ? undefined : handlePointerEnter
+                                  }
+                                  onPointerLeave={
+                                    isMobileView ? undefined : handlePointerLeave
+                                  }
+                                  onPointerDown={onPointerDownMesh}
+                                  onClick={handleModelClick}
+                                >
+                                  <sphereGeometry args={[1, 32, 32]} />
+                                  <meshBasicMaterial transparent opacity={0} />
+                                </mesh>
+                              </>
+                            )}
+                          </CubeCamera>
                         )}
-                      </CubeCamera>
-                    )}
-                  </a.group>
-                </Float>
-              </a.group>
-            </group>
-            {/* Tech icons orbiting around the shape */}
-            <Suspense fallback={null}>
-              {iconPositions.map((p, i) => (
-                <Float
-                  key={i}
-                  speed={isMobileView ? 1.5 : 2}
-                  rotationIntensity={0.15}
-                  floatIntensity={0.15}
-                  floatingRange={[-0.03, 0.03]}
-                >
-                  <mesh
-                    position={p}
-                    ref={(el) => {
-                      iconRefs.current[i] = el;
-                    }}
+                      </a.group>
+                    </a.group>
+                  </Float>
+                </a.group>
+              </group>
+            </a.group>
+            {/* Tech icons - static position, NOT affected by drop-in or scale */}
+            <group position={targetPosition}>
+              <Suspense fallback={null}>
+                {iconPositions.map((p, i) => (
+                  <Float
+                    key={i}
+                    speed={isMobileView ? 1.5 : 2}
+                    rotationIntensity={0.15}
+                    floatIntensity={0.15}
+                    floatingRange={[-0.03, 0.03]}
                   >
-                    <planeGeometry
-                      args={[
-                        isMobileView ? 0.22 : 0.28, // Smaller icons - more subtle
-                        isMobileView ? 0.22 : 0.28,
-                      ]}
-                    />
-                    <meshBasicMaterial
-                      map={iconTextures[i]}
-                      transparent
-                      opacity={0.5} // Much more subtle - background elements
-                      side={THREE.DoubleSide}
-                    />
-                  </mesh>
-                </Float>
-              ))}
-            </Suspense>
-          </a.group>
+                    <mesh
+                      position={p}
+                      ref={(el) => {
+                        iconRefs.current[i] = el;
+                      }}
+                    >
+                      <planeGeometry
+                        args={[
+                          isMobileView ? 0.22 : 0.28,
+                          isMobileView ? 0.22 : 0.28,
+                        ]}
+                      />
+                      <meshBasicMaterial
+                        map={iconTextures[i]}
+                        transparent
+                        opacity={0.5}
+                        side={THREE.DoubleSide}
+                      />
+                    </mesh>
+                  </Float>
+                ))}
+              </Suspense>
+            </group>
+          </group>
         </EGroup>
       </CameraRig>
 

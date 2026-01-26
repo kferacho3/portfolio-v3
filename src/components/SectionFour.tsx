@@ -145,15 +145,8 @@ function SectionFour() {
     <section
       id="contact"
       aria-labelledby="contact-title"
-      className="relative min-h-screen overflow-hidden py-12 px-4 sm:py-16 sm:px-6 lg:px-8"
+      className="relative min-h-screen py-12 px-4 sm:py-16 sm:px-6 lg:px-8"
     >
-      {/* Smooth top fade */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-transparent via-transparent to-transparent dark:from-[#0a0a0f]/60 dark:via-transparent" />
-      
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 right-[-10%] h-72 w-72 rounded-full bg-gradient-to-br from-[#39FF14]/10 via-[#9400D3]/08 to-[#FFA500]/10 dark:from-[#39FF14]/25 dark:via-[#9400D3]/20 dark:to-[#FFA500]/25 blur-3xl" />
-        <div className="absolute bottom-[-10%] left-[-5%] h-64 w-64 rounded-full bg-gradient-to-br from-[#39FF14]/08 via-[#9400D3]/08 to-[#FFA500]/08 dark:from-[#39FF14]/20 dark:via-[#9400D3]/20 dark:to-[#FFA500]/20 blur-3xl" />
-      </div>
 
       <div className="relative max-w-7xl mx-auto">
         <motion.div

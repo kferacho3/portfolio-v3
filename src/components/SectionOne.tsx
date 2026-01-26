@@ -71,7 +71,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
     <section
       id="home"
       aria-labelledby="hero-title"
-      className="relative flex h-screen w-full flex-col items-center justify-between overflow-hidden"
+      className="relative flex h-screen w-full flex-col items-center justify-between"
     >
       {/* ═══════════════════════════════════════════════════════════════════
           TOP: Eyebrow text positioned above the 3D model

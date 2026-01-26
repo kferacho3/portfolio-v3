@@ -818,17 +818,17 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
           radialModulation={false}
           modulationOffset={0}
         />
-        {useTiltShift && !isMobile && (
+        {useTiltShift && !isMobile ? (
           <TiltShift2 blur={theme.post.tiltShift ?? 0.12} />
-        )}
-        {theme.post.dof && !isMobile && (
+        ) : null}
+        {theme.post.dof && !isMobile ? (
           <DepthOfField
             focusDistance={theme.post.dof.focusDistance}
             focalLength={theme.post.dof.focalLength}
             bokehScale={theme.post.dof.bokehScale}
             height={480}
           />
-        )}
+        ) : null}
         <Noise opacity={noiseOpacity} />
         <Vignette eskil={false} offset={0.1} darkness={vignetteDarkness} />
       </EffectComposer>

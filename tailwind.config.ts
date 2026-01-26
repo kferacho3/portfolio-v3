@@ -40,12 +40,12 @@ const config: Config = {
 
       /* ---------- NEW background gradients ---------- */
       backgroundImage: {
-        /* Light-mode: cloudy-white ➜ aqua-blue */
+        /* Light-mode: smooth radial gradient (no squared edges) */
         'cloud-aqua':
-          'linear-gradient(140deg, #f1f5f9 0%, #e2f8ff 35%, #c9f2ff 70%, #b2ecff 100%)',
+          'radial-gradient(ellipse at center, #f1f5f9 0%, #e2f8ff 40%, #c9f2ff 80%, #b2ecff 100%)',
 
-        /* Dark-mode: deep space gradient */
-        'dark-cloud': 'linear-gradient(145deg, #050508 0%, #0a0a12 25%, #0d0d18 50%, #0a0a0f 100%)',
+        /* Dark-mode: smooth radial gradient (no squared edges) */
+        'dark-cloud': 'radial-gradient(ellipse at center, #050508 0%, #0a0a12 30%, #0d0d18 70%, #0a0a0f 100%)',
       },
 
       /* ---------- Custom animations ---------- */
