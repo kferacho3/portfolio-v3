@@ -663,17 +663,17 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { scene, size } = useThree();
   const theme = GAME_THEMES[gameId] ?? DEFAULT_THEME;
   const isMobile = size.width < 768;
-  
-  // Only load env map if backdrop cluster is needed
-  const showBackdropCluster = useMemo(() => {
-    const gamesWithoutBackdrop = ['voidrunner', 'apex'];
-    const shouldShow = !gamesWithoutBackdrop.includes(gameId);
-    return shouldShow;
-  }, [gameId]);
-  
-  const envMap = useEnvMap(showBackdropCluster && !isMobile);
   const { theme: uiTheme } = useContext(ThemeContext);
   const isLightMode = uiTheme === 'light';
+
+  // Determine if backdrop should be shown (used for env map loading decision)
+  const gamesWithoutBackdrop = ['voidrunner', 'apex'];
+  const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
+  
+  // Only load env map if backdrop cluster is needed and not on mobile/light mode
+  const shouldLoadEnvMap = showBackdrop && !isMobile && !isLightMode;
+  const envMap = useEnvMap(shouldLoadEnvMap);
+  
   const qualityScale = isMobile ? 0.65 : 1;
 
   const reactPongSnap = useSnapshot(reactPongState);
@@ -712,8 +712,6 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     'prismjump',
   ];
   const shouldSetSceneFX = !gamesWithOwnBackground.includes(gameId);
-  const gamesWithoutBackdrop = ['voidrunner', 'apex'];
-  const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
   const showBackdropCluster = showBackdrop && !!envMap && !isLightMode;
 
   const backdropPalette = useMemo<[string, string, string]>(() => {
