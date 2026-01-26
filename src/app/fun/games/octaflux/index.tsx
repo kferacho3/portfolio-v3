@@ -166,13 +166,21 @@ export default function OctaFlux() {
     const delta = Math.min(0.033, Math.max(0.001, dt));
 
     w.elapsed += delta;
-    w.speed = Math.min(GAME.maxSpeed, GAME.baseSpeed + w.elapsed * GAME.speedRamp);
+    w.speed = Math.min(
+      GAME.maxSpeed,
+      GAME.baseSpeed + w.elapsed * GAME.speedRamp
+    );
     w.distance += w.speed * delta;
 
     const difficulty = Math.min(1.5, w.elapsed / 70);
-    const hazard = Math.min(0.8, GAME.baseHazard + difficulty * GAME.hazardRamp);
+    const hazard = Math.min(
+      0.8,
+      GAME.baseHazard + difficulty * GAME.hazardRamp
+    );
 
-    octaFluxState.score = Math.floor(w.distance * 0.35 + octaFluxState.runGems * 40);
+    octaFluxState.score = Math.floor(
+      w.distance * 0.35 + octaFluxState.runGems * 40
+    );
 
     // Palette swap
     const paletteIndex = Math.floor(w.elapsed / 12) % PALETTES.length;
@@ -184,8 +192,12 @@ export default function OctaFlux() {
     }
 
     // Rotation controls
-    const keyLeft = input.current.keysDown.has('arrowleft') || input.current.keysDown.has('a');
-    const keyRight = input.current.keysDown.has('arrowright') || input.current.keysDown.has('d');
+    const keyLeft =
+      input.current.keysDown.has('arrowleft') ||
+      input.current.keysDown.has('a');
+    const keyRight =
+      input.current.keysDown.has('arrowright') ||
+      input.current.keysDown.has('d');
 
     if (keyLeft) w.worldRot += GAME.keyRotationSpeed * delta;
     if (keyRight) w.worldRot -= GAME.keyRotationSpeed * delta;
@@ -288,7 +300,8 @@ export default function OctaFlux() {
         ref.rotation.y += delta * 1.8;
         const gemMesh = ref.children[0] as THREE.Object3D | undefined;
         if (gemMesh) {
-          gemMesh.position.y = geom.apothem - 0.8 + Math.sin((w.elapsed + i) * 2.1) * 0.08;
+          gemMesh.position.y =
+            geom.apothem - 0.8 + Math.sin((w.elapsed + i) * 2.1) * 0.08;
         }
       }
     }
@@ -296,12 +309,16 @@ export default function OctaFlux() {
     endFrame();
   });
 
-  const faces = useMemo(() => Array.from({ length: GAME.faces }, (_, i) => i), []);
+  const faces = useMemo(
+    () => Array.from({ length: GAME.faces }, (_, i) => i),
+    []
+  );
   const rings = useMemo(() => Array.from({ length: 28 }, (_, i) => i), []);
 
   const rider = useMemo(
-    () => RIDER_SKINS.find((r) => r.id === snap.selectedRider) ?? RIDER_SKINS[0],
-    [snap.selectedRider],
+    () =>
+      RIDER_SKINS.find((r) => r.id === snap.selectedRider) ?? RIDER_SKINS[0],
+    [snap.selectedRider]
   );
 
   return (
@@ -349,9 +366,18 @@ export default function OctaFlux() {
             }}
             geometry={geom.ringGeo}
             rotation={[Math.PI / 2, 0, 0]}
-            position={[0, 0, -GAME.tunnelLength + (i / rings.length) * GAME.tunnelLength]}
+            position={[
+              0,
+              0,
+              -GAME.tunnelLength + (i / rings.length) * GAME.tunnelLength,
+            ]}
           >
-            <meshBasicMaterial color={'white'} wireframe transparent opacity={0.2} />
+            <meshBasicMaterial
+              color={'white'}
+              wireframe
+              transparent
+              opacity={0.2}
+            />
           </mesh>
         ))}
 
@@ -368,12 +394,31 @@ export default function OctaFlux() {
               }}
               position={[0, 0, 0]}
             >
-              <mesh position={[0, geom.apothem - 0.4, 0]} geometry={geom.bumpGeo} castShadow receiveShadow>
-                <meshStandardMaterial color={'#0B1020'} emissive={'#020411'} roughness={0.55} metalness={0.1} />
+              <mesh
+                position={[0, geom.apothem - 0.4, 0]}
+                geometry={geom.bumpGeo}
+                castShadow
+                receiveShadow
+              >
+                <meshStandardMaterial
+                  color={'#0B1020'}
+                  emissive={'#020411'}
+                  roughness={0.55}
+                  metalness={0.1}
+                />
               </mesh>
 
-              <mesh position={[0, geom.apothem + 0.01, 0]} rotation={[Math.PI / 2, 0, 0]} geometry={geom.holeGeo}>
-                <meshBasicMaterial color={'#000000'} transparent opacity={0.55} side={THREE.DoubleSide} />
+              <mesh
+                position={[0, geom.apothem + 0.01, 0]}
+                rotation={[Math.PI / 2, 0, 0]}
+                geometry={geom.holeGeo}
+              >
+                <meshBasicMaterial
+                  color={'#000000'}
+                  transparent
+                  opacity={0.55}
+                  side={THREE.DoubleSide}
+                />
               </mesh>
             </group>
           );
@@ -392,8 +437,16 @@ export default function OctaFlux() {
               }}
               position={[0, 0, 0]}
             >
-              <mesh position={[0, geom.apothem - 0.8, 0]} geometry={geom.gemGeo}>
-                <meshStandardMaterial color={'#22D3EE'} emissive={'#22D3EE'} emissiveIntensity={0.75} roughness={0.2} />
+              <mesh
+                position={[0, geom.apothem - 0.8, 0]}
+                geometry={geom.gemGeo}
+              >
+                <meshStandardMaterial
+                  color={'#22D3EE'}
+                  emissive={'#22D3EE'}
+                  emissiveIntensity={0.75}
+                  roughness={0.2}
+                />
               </mesh>
             </group>
           );
@@ -412,15 +465,30 @@ export default function OctaFlux() {
           }
           scale={rider.shape === 'capsule' ? [1, 1.6, 1] : [1, 1, 1]}
         >
-          <meshStandardMaterial color={rider.color} roughness={0.25} emissive={rider.emissive} />
+          <meshStandardMaterial
+            color={rider.color}
+            roughness={0.25}
+            emissive={rider.emissive}
+          />
         </mesh>
         <mesh geometry={geom.riderCore} position={[0, 0.16, 0]}>
-          <meshStandardMaterial color={'#FFFFFF'} roughness={0.18} emissive={'#111111'} />
+          <meshStandardMaterial
+            color={'#FFFFFF'}
+            roughness={0.18}
+            emissive={'#111111'}
+          />
         </mesh>
       </group>
 
       {/* Subtle stars */}
-      <Stars radius={90} depth={80} count={1200} factor={2} saturation={0} fade />
+      <Stars
+        radius={90}
+        depth={80}
+        count={1200}
+        factor={2}
+        saturation={0}
+        fade
+      />
     </group>
   );
 }

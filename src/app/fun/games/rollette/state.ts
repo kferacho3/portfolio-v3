@@ -15,7 +15,8 @@ import {
 } from './constants';
 import type { PyramidType, RingColor, Vec3 } from './types';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 export const rolletteState = proxy({
   score: 0,
@@ -105,7 +106,8 @@ export const rolletteState = proxy({
     } else {
       rolletteState.score += points;
     }
-    if (rolletteState.score > rolletteState.highScore) rolletteState.highScore = rolletteState.score;
+    if (rolletteState.score > rolletteState.highScore)
+      rolletteState.highScore = rolletteState.score;
   },
 
   addDebt: (amount: number) => {
@@ -124,7 +126,11 @@ export const rolletteState = proxy({
       return;
     }
 
-    rolletteState.health = clamp(rolletteState.health - amount, 0, rolletteState.maxHealth);
+    rolletteState.health = clamp(
+      rolletteState.health - amount,
+      0,
+      rolletteState.maxHealth
+    );
     rolletteState.combo = 0;
     rolletteState.comboTimer = 0;
     rolletteState.starChain = 0;
@@ -136,12 +142,19 @@ export const rolletteState = proxy({
 
   heal: (amount: number) => {
     if (!Number.isFinite(amount) || amount <= 0) return;
-    rolletteState.health = clamp(rolletteState.health + amount, 0, rolletteState.maxHealth);
+    rolletteState.health = clamp(
+      rolletteState.health + amount,
+      0,
+      rolletteState.maxHealth
+    );
   },
 
   refillDash: (fraction: number) => {
     if (!Number.isFinite(fraction) || fraction <= 0) return;
-    rolletteState.dashCooldown = Math.max(0, rolletteState.dashCooldown - rolletteState.dashCooldownMax * fraction);
+    rolletteState.dashCooldown = Math.max(
+      0,
+      rolletteState.dashCooldown - rolletteState.dashCooldownMax * fraction
+    );
   },
 
   hitRing: (color: RingColor, inZone: boolean) => {
@@ -176,8 +189,14 @@ export const rolletteState = proxy({
   },
 
   activateMultiplier: (mult: number, time: number) => {
-    rolletteState.bonusMultiplier = Math.max(rolletteState.bonusMultiplier, mult);
-    rolletteState.bonusMultiplierTime = Math.max(rolletteState.bonusMultiplierTime, time);
+    rolletteState.bonusMultiplier = Math.max(
+      rolletteState.bonusMultiplier,
+      mult
+    );
+    rolletteState.bonusMultiplierTime = Math.max(
+      rolletteState.bonusMultiplierTime,
+      time
+    );
     rolletteState.setToast(`MULTIPLIER x${rolletteState.bonusMultiplier}`);
   },
 
@@ -202,14 +221,19 @@ export const rolletteState = proxy({
     rolletteState.toastTime = Math.max(0, rolletteState.toastTime - dt);
 
     if (rolletteState.bonusMultiplierTime > 0) {
-      rolletteState.bonusMultiplierTime = Math.max(0, rolletteState.bonusMultiplierTime - dt);
-      if (rolletteState.bonusMultiplierTime === 0) rolletteState.bonusMultiplier = 1;
+      rolletteState.bonusMultiplierTime = Math.max(
+        0,
+        rolletteState.bonusMultiplierTime - dt
+      );
+      if (rolletteState.bonusMultiplierTime === 0)
+        rolletteState.bonusMultiplier = 1;
     }
 
     rolletteState.zoneSinceMove += dt;
     rolletteState.zoneTimeLeft = Math.max(0, rolletteState.zoneTimeLeft - dt);
     const t = 1 - clamp(rolletteState.zoneTimeLeft / ZONE_DURATION_S, 0, 1);
-    rolletteState.zoneRadius = ZONE_RADIUS_START + (ZONE_RADIUS_END - ZONE_RADIUS_START) * t;
+    rolletteState.zoneRadius =
+      ZONE_RADIUS_START + (ZONE_RADIUS_END - ZONE_RADIUS_START) * t;
 
     if (rolletteState.zoneSinceMove >= ZONE_INTERVAL_S) {
       rolletteState.zoneSinceMove = 0;
@@ -223,4 +247,3 @@ export const rolletteState = proxy({
     rolletteState.difficultyLevel = Math.max(1, nextLevel);
   },
 });
-

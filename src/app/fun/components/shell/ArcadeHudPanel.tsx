@@ -48,7 +48,13 @@ export const ArcadeHudPill: React.FC<{
         ? 'border-rose-300/30 text-rose-200 bg-rose-500/15'
         : 'border-white/10 text-white/70 bg-white/5';
 
-  return <span className={`inline-flex items-center rounded-full border px-2 py-[3px] text-[9px] uppercase tracking-[0.24em] ${styles}`}>{label}</span>;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-2 py-[3px] text-[9px] uppercase tracking-[0.24em] ${styles}`}
+    >
+      {label}
+    </span>
+  );
 };
 
 export default ArcadeHudShell;

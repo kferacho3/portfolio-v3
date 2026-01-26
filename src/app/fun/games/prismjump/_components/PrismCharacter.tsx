@@ -14,7 +14,7 @@ export function PrismCharacter({
 }) {
   const def = useMemo(
     () => CHARACTERS.find((c) => c.id === characterId) ?? CHARACTERS[0],
-    [characterId],
+    [characterId]
   );
 
   const matProps = {
@@ -33,7 +33,11 @@ export function PrismCharacter({
   switch (def.kind) {
     case 'box':
       return (
-        <RoundedBox args={[0.74 * s, 0.74 * s, 0.74 * s]} radius={0.08 * s} smoothness={4}>
+        <RoundedBox
+          args={[0.74 * s, 0.74 * s, 0.74 * s]}
+          radius={0.08 * s}
+          smoothness={4}
+        >
           <meshStandardMaterial {...matProps} />
         </RoundedBox>
       );
@@ -138,7 +142,11 @@ export function PrismCharacter({
           </mesh>
           <mesh position={[0, 0.64, 0.23]}>
             <sphereGeometry args={[0.07, 12, 12]} />
-            <meshStandardMaterial emissive={'#FFFFFF'} emissiveIntensity={0.85} color={'#111111'} />
+            <meshStandardMaterial
+              emissive={'#FFFFFF'}
+              emissiveIntensity={0.85}
+              color={'#111111'}
+            />
           </mesh>
         </group>
       );
@@ -170,7 +178,11 @@ export function PrismCharacter({
           </mesh>
           <mesh position={[0, -0.42, 0]}>
             <coneGeometry args={[0.18, 0.22, 12]} />
-            <meshStandardMaterial emissive={'#22D3EE'} emissiveIntensity={0.8} color={'#0B1020'} />
+            <meshStandardMaterial
+              emissive={'#22D3EE'}
+              emissiveIntensity={0.8}
+              color={'#0B1020'}
+            />
           </mesh>
         </group>
       );

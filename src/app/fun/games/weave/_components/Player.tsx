@@ -35,7 +35,11 @@ const Player: React.FC<{
       <Trail width={0.4} length={6} color={color} attenuation={(t) => t * t}>
         <mesh ref={meshRef}>
           <octahedronGeometry args={[PLAYER_SIZE]} />
-          <meshStandardMaterial color={displayColor} emissive={displayColor} emissiveIntensity={isHit ? 1.5 : 0.8} />
+          <meshStandardMaterial
+            color={displayColor}
+            emissive={displayColor}
+            emissiveIntensity={isHit ? 1.5 : 0.8}
+          />
         </mesh>
       </Trail>
       <pointLight color={color} intensity={1.2} distance={2.5} />

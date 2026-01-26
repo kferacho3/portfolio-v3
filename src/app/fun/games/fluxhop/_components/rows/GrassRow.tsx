@@ -30,7 +30,8 @@ const Trees: React.FC<{ trees: TreeData[] }> = ({ trees }) => {
       trunkRef.current?.setMatrixAt(index, dummy.matrix);
 
       dummy.position.set(tree.tileIndex * TILE_SIZE, 0.9, 0);
-      const scaleMultiplier = tree.type === 'crystal' ? 0.6 : tree.type === 'pine' ? 0.7 : 1;
+      const scaleMultiplier =
+        tree.type === 'crystal' ? 0.6 : tree.type === 'pine' ? 0.7 : 1;
       dummy.scale.set(scaleMultiplier, tree.height, scaleMultiplier);
       dummy.updateMatrix();
       crownRef.current?.setMatrixAt(index, dummy.matrix);
@@ -46,11 +47,19 @@ const Trees: React.FC<{ trees: TreeData[] }> = ({ trees }) => {
 
   return (
     <>
-      <instancedMesh ref={trunkRef} args={[undefined, undefined, trees.length]} castShadow>
+      <instancedMesh
+        ref={trunkRef}
+        args={[undefined, undefined, trees.length]}
+        castShadow
+      >
         <boxGeometry args={[0.2, 0.5, 0.2]} />
         <meshStandardMaterial color="#2a1a0a" roughness={0.9} />
       </instancedMesh>
-      <instancedMesh ref={crownRef} args={[undefined, undefined, trees.length]} castShadow>
+      <instancedMesh
+        ref={crownRef}
+        args={[undefined, undefined, trees.length]}
+        castShadow
+      >
         <boxGeometry args={[0.7, 0.6, 0.7]} />
         <meshStandardMaterial
           color={crownColor}
@@ -69,19 +78,30 @@ const BoostPad: React.FC<{ tileIndex: number }> = ({ tileIndex }) => {
   useFrame(({ clock }) => {
     if (meshRef.current) {
       const pulse = 0.6 + 0.4 * Math.sin(clock.elapsedTime * 4);
-      (meshRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = pulse;
+      (
+        meshRef.current.material as THREE.MeshStandardMaterial
+      ).emissiveIntensity = pulse;
     }
   });
 
   return (
     <mesh ref={meshRef} position={[tileIndex * TILE_SIZE, 0.08, 0]} castShadow>
       <boxGeometry args={[TILE_SIZE * 0.6, 0.1, TILE_SIZE * 0.6]} />
-      <meshStandardMaterial color={BOOST_COLOR} emissive={BOOST_COLOR} emissiveIntensity={0.8} roughness={0.3} metalness={0.5} />
+      <meshStandardMaterial
+        color={BOOST_COLOR}
+        emissive={BOOST_COLOR}
+        emissiveIntensity={0.8}
+        roughness={0.3}
+        metalness={0.5}
+      />
     </mesh>
   );
 };
 
-const GrassRow: React.FC<{ rowIndex: number; data: GrassRowData }> = ({ rowIndex, data }) => {
+const GrassRow: React.FC<{ rowIndex: number; data: GrassRowData }> = ({
+  rowIndex,
+  data,
+}) => {
   const colorIndex = Math.abs(rowIndex) % GRASS_COLORS.length;
   const color = GRASS_COLORS[colorIndex];
 
@@ -93,10 +113,18 @@ const GrassRow: React.FC<{ rowIndex: number; data: GrassRowData }> = ({ rowIndex
       </mesh>
       <mesh position={[0, 0.01, TILE_SIZE * 0.45]}>
         <boxGeometry args={[ROW_WIDTH + TILE_SIZE * 2, 0.02, 0.02]} />
-        <meshStandardMaterial color={GRASS_ACCENT} emissive={GRASS_ACCENT} emissiveIntensity={0.2} transparent opacity={0.4} />
+        <meshStandardMaterial
+          color={GRASS_ACCENT}
+          emissive={GRASS_ACCENT}
+          emissiveIntensity={0.2}
+          transparent
+          opacity={0.4}
+        />
       </mesh>
       <Trees trees={data.trees} />
-      {typeof data.boostTile === 'number' && <BoostPad tileIndex={data.boostTile} />}
+      {typeof data.boostTile === 'number' && (
+        <BoostPad tileIndex={data.boostTile} />
+      )}
     </group>
   );
 };

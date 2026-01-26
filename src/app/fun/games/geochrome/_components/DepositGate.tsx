@@ -71,7 +71,11 @@ const DepositGateComponent: React.FC<DepositGateComponentProps> = ({
         />
       </group>
 
-      <pointLight color={isMatching ? '#00ff88' : deposit.color} intensity={isMatching ? 3 : 1} distance={20} />
+      <pointLight
+        color={isMatching ? '#00ff88' : deposit.color}
+        intensity={isMatching ? 3 : 1}
+        distance={20}
+      />
     </group>
   );
 };

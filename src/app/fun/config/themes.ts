@@ -1,6 +1,6 @@
 /**
  * Theme Configuration
- * 
+ *
  * Shared color themes and visual styles for the arcade.
  */
 
@@ -10,8 +10,10 @@
 export const ARCADE_PANEL_STYLES = {
   fontFamily: '"Geist", sans-serif',
   monoFontFamily: '"Geist Mono", monospace',
-  surface: 'linear-gradient(135deg, rgba(15, 17, 22, 0.94), rgba(22, 26, 36, 0.96))',
-  panel: 'linear-gradient(135deg, rgba(22, 26, 36, 0.96), rgba(12, 14, 22, 0.94))',
+  surface:
+    'linear-gradient(135deg, rgba(15, 17, 22, 0.94), rgba(22, 26, 36, 0.96))',
+  panel:
+    'linear-gradient(135deg, rgba(22, 26, 36, 0.96), rgba(12, 14, 22, 0.94))',
   stroke: 'rgba(255, 255, 255, 0.14)',
   glow: 'rgba(255, 180, 102, 0.35)',
   radius: '22px',
@@ -107,6 +109,6 @@ export type ThemeKey = keyof typeof GAME_THEMES;
  * Note: Most backgrounds are now handled by ArcadeWorldFX based on theme fog colors
  */
 export const SCENE_BACKGROUNDS = {
-  dark: 0x05070f,  // Dark navy, not pure black - matches default fog
+  dark: 0x05070f, // Dark navy, not pure black - matches default fog
   light: 0x1a1a2e,
 } as const;

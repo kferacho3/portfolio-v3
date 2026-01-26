@@ -50,28 +50,25 @@ export function useInteraction(
     [setGrabbing, setCanvasCursor]
   );
 
-  const onPointerMove = useCallback(
-    (e: PointerEvent) => {
-      if (!isDragging.current) return;
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    if (!isDragging.current) return;
 
-      const current = new THREE.Vector2(e.clientX, e.clientY);
-      const delta = current.sub(lastPointer.current);
-      
-      // Update cursor velocity
-      cursorVelocity.current.copy(delta).multiplyScalar(0.1);
-      
-      // Accumulate drag intensity
-      const elapsed = (performance.now() - dragStartTime.current) / 1000;
-      const velocityMag = delta.length();
-      dragIntensity.current = Math.min(
-        1,
-        dragIntensity.current + velocityMag * 0.002 + elapsed * 0.1
-      );
+    const current = new THREE.Vector2(e.clientX, e.clientY);
+    const delta = current.sub(lastPointer.current);
 
-      lastPointer.current.set(e.clientX, e.clientY);
-    },
-    []
-  );
+    // Update cursor velocity
+    cursorVelocity.current.copy(delta).multiplyScalar(0.1);
+
+    // Accumulate drag intensity
+    const elapsed = (performance.now() - dragStartTime.current) / 1000;
+    const velocityMag = delta.length();
+    dragIntensity.current = Math.min(
+      1,
+      dragIntensity.current + velocityMag * 0.002 + elapsed * 0.1
+    );
+
+    lastPointer.current.set(e.clientX, e.clientY);
+  }, []);
 
   const onPointerUp = useCallback(() => {
     isDragging.current = false;

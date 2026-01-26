@@ -35,10 +35,15 @@ const Apex: React.FC<ApexProps> = ({ soundsOn = true }) => {
   const snap = useSnapshot(apexState);
   const { scene, camera } = useThree();
   const preset = ARENA_PRESETS[snap.arena];
-  const theme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
+  const theme = useMemo(
+    () => getArenaTheme(preset, THEMES[snap.currentTheme]),
+    [preset, snap.currentTheme]
+  );
   const fog = useMemo(() => getArenaFog(preset, theme), [preset, theme]);
   const lights = useMemo(() => getArenaLights(preset), [preset]);
-  const lookAtRef = useRef(new THREE.Vector3(-(CAMERA_OFFSET_X - CAMERA_OFFSET_Z), 0, 0));
+  const lookAtRef = useRef(
+    new THREE.Vector3(-(CAMERA_OFFSET_X - CAMERA_OFFSET_Z), 0, 0)
+  );
 
   const setupCamera = useCallback(() => {
     const spherePos = mutation.spherePos;

@@ -1,12 +1,22 @@
-'use client'
+'use client';
 
-import { useFrame } from '@react-three/fiber'
-import * as THREE from 'three'
-import { Html, OrthographicCamera } from '@react-three/drei'
-import { useEffect, useMemo, useRef } from 'react'
-import { proxy, useSnapshot } from 'valtio'
-import { useInputRef, clearFrameInput } from '../../hooks/useInput'
-import { BALL_SKINS, state as persistState, load, save, addStars, setHighScore, unlockBall, setSelectedBall, canUnlockBall } from './state'
+import { useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
+import { Html, OrthographicCamera } from '@react-three/drei';
+import { useEffect, useMemo, useRef } from 'react';
+import { proxy, useSnapshot } from 'valtio';
+import { useInputRef, clearFrameInput } from '../../hooks/useInput';
+import {
+  BALL_SKINS,
+  state as persistState,
+  load,
+  save,
+  addStars,
+  setHighScore,
+  unlockBall,
+  setSelectedBall,
+  canUnlockBall,
+} from './state';
 
 // -----------------------------
 // Runtime (per-run) state
@@ -16,73 +26,73 @@ const run = proxy({
   slow: false,
   speed: 4.2,
   starsThisRun: 0,
-})
+});
 
 // -----------------------------
 // Constants (tuned to feel like a Ketchapp-ish one-tapper)
 // -----------------------------
-const TRACK_WIDTH = 2.6
-const TRACK_THICK = 0.12
-const RAIL_WIDTH = 0.22
-const SEG_LEN = 6
-const SEG_COUNT = 26
+const TRACK_WIDTH = 2.6;
+const TRACK_THICK = 0.12;
+const RAIL_WIDTH = 0.22;
+const SEG_LEN = 6;
+const SEG_COUNT = 26;
 
-const BALL_RADIUS = 0.25
-const BALL_BOUNCE_SPEED = 2.65 // lateral speed
+const BALL_RADIUS = 0.25;
+const BALL_BOUNCE_SPEED = 2.65; // lateral speed
 
-const BASE_SPEED = 4.2
-const SPEED_RAMP = 0.045 // speed added per point
+const BASE_SPEED = 4.2;
+const SPEED_RAMP = 0.045; // speed added per point
 
-const SLOW_TARGET = 0.26 // time scale while holding
-const SLOW_LERP = 9.5
+const SLOW_TARGET = 0.26; // time scale while holding
+const SLOW_LERP = 9.5;
 
-const OBST_COUNT = 28
-const OBST_THICK = 0.38
-const OBST_HEIGHT = 0.36
+const OBST_COUNT = 28;
+const OBST_THICK = 0.38;
+const OBST_HEIGHT = 0.36;
 
-const LOOK_AHEAD = 4.8
-const RESPAWN_BEHIND = 8
+const LOOK_AHEAD = 4.8;
+const RESPAWN_BEHIND = 8;
 
-const OBST_COLORS = ['#ff6b6b', '#ffe4b8', '#b6ffcc', '#cfd4dc']
+const OBST_COLORS = ['#ff6b6b', '#ffe4b8', '#b6ffcc', '#cfd4dc'];
 
-type ObstacleKind = 'side' | 'center'
+type ObstacleKind = 'side' | 'center';
 
 type Obstacle = {
-  id: number
-  z: number
-  kind: ObstacleKind
-  side: -1 | 1 // only for side obstacles
-  lenX: number
-  color: string
-  hasStar: boolean
-  hasGift: boolean
-  passed: boolean
-  starCollected: boolean
-  giftCollected: boolean
-}
+  id: number;
+  z: number;
+  kind: ObstacleKind;
+  side: -1 | 1; // only for side obstacles
+  lenX: number;
+  color: string;
+  hasStar: boolean;
+  hasGift: boolean;
+  passed: boolean;
+  starCollected: boolean;
+  giftCollected: boolean;
+};
 
 function rand(min: number, max: number) {
-  return min + Math.random() * (max - min)
+  return min + Math.random() * (max - min);
 }
 
 function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
 function makeObstacle(id: number, z: number): Obstacle {
-  const kind: ObstacleKind = Math.random() < 0.86 ? 'side' : 'center'
-  const side: -1 | 1 = Math.random() < 0.5 ? -1 : 1
-  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06
+  const kind: ObstacleKind = Math.random() < 0.86 ? 'side' : 'center';
+  const side: -1 | 1 = Math.random() < 0.5 ? -1 : 1;
+  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
 
   // Side blocks: from edge toward center. Center blocks: centered, forcing you to be on an edge.
   const lenX =
     kind === 'side'
       ? rand(laneHalf * 0.55, laneHalf * 1.22)
-      : rand(laneHalf * 0.55, laneHalf * 0.9)
+      : rand(laneHalf * 0.55, laneHalf * 0.9);
 
   // Pickups: mostly stars, occasionally gifts.
-  const hasGift = Math.random() < 0.07
-  const hasStar = !hasGift && Math.random() < 0.35
+  const hasGift = Math.random() < 0.07;
+  const hasStar = !hasGift && Math.random() < 0.35;
 
   return {
     id,
@@ -96,65 +106,68 @@ function makeObstacle(id: number, z: number): Obstacle {
     passed: false,
     starCollected: false,
     giftCollected: false,
-  }
+  };
 }
 
 function obstacleXRange(o: Obstacle) {
-  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06
+  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
   if (o.kind === 'center') {
-    const xMin = -o.lenX / 2
-    const xMax = o.lenX / 2
-    return { xMin, xMax }
+    const xMin = -o.lenX / 2;
+    const xMax = o.lenX / 2;
+    return { xMin, xMax };
   }
   if (o.side === -1) {
-    const xMin = -laneHalf
-    const xMax = -laneHalf + o.lenX
-    return { xMin, xMax }
+    const xMin = -laneHalf;
+    const xMax = -laneHalf + o.lenX;
+    return { xMin, xMax };
   }
-  const xMax = laneHalf
-  const xMin = laneHalf - o.lenX
-  return { xMin, xMax }
+  const xMax = laneHalf;
+  const xMin = laneHalf - o.lenX;
+  return { xMin, xMax };
 }
 
 function pickupX(o: Obstacle) {
   // Keep pickups tempting but not always free.
-  if (o.kind === 'center') return 0
+  if (o.kind === 'center') return 0;
   // Put stars/gifts a bit away from the obstacle to encourage timing.
-  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06
-  return o.side === -1 ? laneHalf * 0.45 : -laneHalf * 0.45
+  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
+  return o.side === -1 ? laneHalf * 0.45 : -laneHalf * 0.45;
 }
 
 // -----------------------------
 // Scene
 // -----------------------------
 function SlowMoScene() {
-  const snap = useSnapshot(persistState)
-  const inputRef = useInputRef({ preventDefault: [' ', 'Space'] })
+  const snap = useSnapshot(persistState);
+  const inputRef = useInputRef({ preventDefault: [' ', 'Space'] });
 
-  const cameraRef = useRef<THREE.OrthographicCamera>(null!)
-  const ballRef = useRef<THREE.Mesh>(null!)
-  const shadowRef = useRef<THREE.Mesh>(null!)
-  const slowRingRef = useRef<THREE.Mesh>(null!)
+  const cameraRef = useRef<THREE.OrthographicCamera>(null!);
+  const ballRef = useRef<THREE.Mesh>(null!);
+  const shadowRef = useRef<THREE.Mesh>(null!);
+  const slowRingRef = useRef<THREE.Mesh>(null!);
 
-  const segmentGroupRefs = useRef<(THREE.Group | null)[]>([])
-  const obstacleGroupRefs = useRef<(THREE.Group | null)[]>([])
-  const obstacleMeshRefs = useRef<(THREE.Mesh | null)[]>([])
-  const starRefs = useRef<(THREE.Mesh | null)[]>([])
-  const giftRefs = useRef<(THREE.Mesh | null)[]>([])
+  const segmentGroupRefs = useRef<(THREE.Group | null)[]>([]);
+  const obstacleGroupRefs = useRef<(THREE.Group | null)[]>([]);
+  const obstacleMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const starRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const giftRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   const segments = useMemo(() => {
-    return Array.from({ length: SEG_COUNT }, (_, i) => ({ id: i, z: i * SEG_LEN }))
-  }, [])
+    return Array.from({ length: SEG_COUNT }, (_, i) => ({
+      id: i,
+      z: i * SEG_LEN,
+    }));
+  }, []);
 
   const obstacles = useMemo(() => {
-    const arr: Obstacle[] = []
-    let z = 7
+    const arr: Obstacle[] = [];
+    let z = 7;
     for (let i = 0; i < OBST_COUNT; i++) {
-      z += rand(2.4, 4.1)
-      arr.push(makeObstacle(i, z))
+      z += rand(2.4, 4.1);
+      arr.push(makeObstacle(i, z));
     }
-    return arr
-  }, [])
+    return arr;
+  }, []);
 
   const world = useRef({
     x: -1,
@@ -163,227 +176,247 @@ function SlowMoScene() {
     vx: BALL_BOUNCE_SPEED,
     timeScale: 1,
     farZ: 0,
-  })
+  });
 
   // (re)start run
   useEffect(() => {
-    if (snap.phase !== 'playing') return
+    if (snap.phase !== 'playing') return;
 
-    load()
+    load();
 
     // reset runtime
-    run.score = 0
-    run.slow = false
-    run.speed = BASE_SPEED
-    run.starsThisRun = 0
+    run.score = 0;
+    run.slow = false;
+    run.speed = BASE_SPEED;
+    run.starsThisRun = 0;
 
-    world.current.x = -((TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06) - BALL_RADIUS)
-    world.current.z = 0
-    world.current.renderZ = 0
-    world.current.vx = BALL_BOUNCE_SPEED
-    world.current.timeScale = 1
+    world.current.x = -(TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06 - BALL_RADIUS);
+    world.current.z = 0;
+    world.current.renderZ = 0;
+    world.current.vx = BALL_BOUNCE_SPEED;
+    world.current.timeScale = 1;
 
     // reset track
     segments.forEach((seg, i) => {
-      seg.z = i * SEG_LEN
-    })
+      seg.z = i * SEG_LEN;
+    });
 
     // reset obstacles
-    let z = 7
+    let z = 7;
     for (let i = 0; i < obstacles.length; i++) {
-      z += rand(2.4, 4.1)
-      const o = obstacles[i]
-      const fresh = makeObstacle(o.id, z)
-      Object.assign(o, fresh)
+      z += rand(2.4, 4.1);
+      const o = obstacles[i];
+      const fresh = makeObstacle(o.id, z);
+      Object.assign(o, fresh);
     }
-    world.current.farZ = z
+    world.current.farZ = z;
 
     // apply visuals to meshes after a tick
     requestAnimationFrame(() => {
       for (let i = 0; i < obstacles.length; i++) {
-        syncObstacleVisual(i)
+        syncObstacleVisual(i);
       }
-    })
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap.phase])
+  }, [snap.phase]);
 
   function syncObstacleVisual(i: number, zOffset = 0) {
-    const o = obstacles[i]
-    const group = obstacleGroupRefs.current[i]
-    const block = obstacleMeshRefs.current[i]
-    const star = starRefs.current[i]
-    const gift = giftRefs.current[i]
-    if (!group || !block) return
+    const o = obstacles[i];
+    const group = obstacleGroupRefs.current[i];
+    const block = obstacleMeshRefs.current[i];
+    const star = starRefs.current[i];
+    const gift = giftRefs.current[i];
+    if (!group || !block) return;
 
-    group.position.set(0, 0, o.z + zOffset)
+    group.position.set(0, 0, o.z + zOffset);
 
     // Block size/position
-    const { xMin, xMax } = obstacleXRange(o)
-    const lenX = xMax - xMin
-    const x = (xMin + xMax) / 2
+    const { xMin, xMax } = obstacleXRange(o);
+    const lenX = xMax - xMin;
+    const x = (xMin + xMax) / 2;
 
-    block.position.set(x, OBST_HEIGHT / 2, 0)
-    block.scale.set(lenX, OBST_HEIGHT, OBST_THICK)
+    block.position.set(x, OBST_HEIGHT / 2, 0);
+    block.scale.set(lenX, OBST_HEIGHT, OBST_THICK);
 
-    const mat = block.material as THREE.MeshStandardMaterial
-    mat.color.set(o.color)
+    const mat = block.material as THREE.MeshStandardMaterial;
+    mat.color.set(o.color);
 
     // Pickup positions
     if (star) {
-      star.visible = o.hasStar && !o.starCollected
-      star.position.set(pickupX(o), 0.45, 0)
+      star.visible = o.hasStar && !o.starCollected;
+      star.position.set(pickupX(o), 0.45, 0);
     }
     if (gift) {
-      gift.visible = o.hasGift && !o.giftCollected
-      gift.position.set(pickupX(o), 0.42, 0)
+      gift.visible = o.hasGift && !o.giftCollected;
+      gift.position.set(pickupX(o), 0.42, 0);
     }
   }
 
   useFrame((_r3f, delta) => {
-    const input = inputRef.current
-    const cam = cameraRef.current
+    const input = inputRef.current;
+    const cam = cameraRef.current;
 
     if (snap.phase !== 'playing') {
       // Keep camera looking at track so menu/finish screens show the scene
-      const lx = world.current.x
-      const lz = Math.max(0, world.current.renderZ) + LOOK_AHEAD
-      cam.position.set(lx + 4.6, 5.5, lz - 4.6)
-      cam.lookAt(lx, 0, lz)
-      clearFrameInput(inputRef)
-      return
+      const lx = world.current.x;
+      const lz = Math.max(0, world.current.renderZ) + LOOK_AHEAD;
+      cam.position.set(lx + 4.6, 5.5, lz - 4.6);
+      cam.lookAt(lx, 0, lz);
+      clearFrameInput(inputRef);
+      return;
     }
 
     // Smooth time scale: hold to slow (mouse/touch or spacebar)
     const spaceHeld =
       input.keysDown.has(' ') ||
       input.keysDown.has('space') ||
-      input.keysDown.has('spacebar')
-    const target = input.pointerDown || spaceHeld ? SLOW_TARGET : 1
-    world.current.timeScale = THREE.MathUtils.lerp(world.current.timeScale, target, 1 - Math.exp(-SLOW_LERP * delta))
-    const worldDt = delta * world.current.timeScale
+      input.keysDown.has('spacebar');
+    const target = input.pointerDown || spaceHeld ? SLOW_TARGET : 1;
+    world.current.timeScale = THREE.MathUtils.lerp(
+      world.current.timeScale,
+      target,
+      1 - Math.exp(-SLOW_LERP * delta)
+    );
+    const worldDt = delta * world.current.timeScale;
 
-    run.slow = world.current.timeScale < 0.85
+    run.slow = world.current.timeScale < 0.85;
 
     // Speed ramps with score (feels like "leveling")
-    run.speed = BASE_SPEED + run.score * SPEED_RAMP
+    run.speed = BASE_SPEED + run.score * SPEED_RAMP;
 
     // Forward gameplay progress (constant speed) vs. visual forward motion (time-scaled).
-    world.current.z += run.speed * delta
-    world.current.renderZ += run.speed * worldDt
-    const zOffset = world.current.renderZ - world.current.z
+    world.current.z += run.speed * delta;
+    world.current.renderZ += run.speed * worldDt;
+    const zOffset = world.current.renderZ - world.current.z;
 
     // Bounce sideways (time-scaled so slow-mo affects the lateral motion only).
-    const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06
-    const bound = laneHalf - BALL_RADIUS
-    world.current.x += world.current.vx * worldDt
+    const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
+    const bound = laneHalf - BALL_RADIUS;
+    world.current.x += world.current.vx * worldDt;
     if (world.current.x > bound) {
-      world.current.x = bound
-      world.current.vx *= -1
+      world.current.x = bound;
+      world.current.vx *= -1;
     }
     if (world.current.x < -bound) {
-      world.current.x = -bound
-      world.current.vx *= -1
+      world.current.x = -bound;
+      world.current.vx *= -1;
     }
 
     // Update ball + shadow + slow ring
-    ballRef.current.position.set(world.current.x, BALL_RADIUS + 0.02, world.current.renderZ)
-    shadowRef.current.position.set(world.current.x, 0.01, world.current.renderZ)
-    slowRingRef.current.position.set(world.current.x, BALL_RADIUS + 0.02, world.current.renderZ)
-    slowRingRef.current.scale.setScalar(run.slow ? 1.15 : 0.95)
-    ;(slowRingRef.current.material as THREE.MeshBasicMaterial).opacity = run.slow ? 0.35 : 0.15
+    ballRef.current.position.set(
+      world.current.x,
+      BALL_RADIUS + 0.02,
+      world.current.renderZ
+    );
+    shadowRef.current.position.set(
+      world.current.x,
+      0.01,
+      world.current.renderZ
+    );
+    slowRingRef.current.position.set(
+      world.current.x,
+      BALL_RADIUS + 0.02,
+      world.current.renderZ
+    );
+    slowRingRef.current.scale.setScalar(run.slow ? 1.15 : 0.95);
+    (slowRingRef.current.material as THREE.MeshBasicMaterial).opacity = run.slow
+      ? 0.35
+      : 0.15;
 
     // Camera follow
-    cam.position.set(world.current.x + 4.6, 5.5, world.current.renderZ - 4.6)
-    cam.lookAt(world.current.x, 0.0, world.current.renderZ + LOOK_AHEAD)
+    cam.position.set(world.current.x + 4.6, 5.5, world.current.renderZ - 4.6);
+    cam.lookAt(world.current.x, 0.0, world.current.renderZ + LOOK_AHEAD);
 
     // Recycle track segments
     for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]
+      const seg = segments[i];
       if (seg.z < world.current.z - SEG_LEN) {
-        seg.z += SEG_COUNT * SEG_LEN
+        seg.z += SEG_COUNT * SEG_LEN;
       }
-      const g = segmentGroupRefs.current[i]
-      if (g) g.position.z = seg.z + zOffset
+      const g = segmentGroupRefs.current[i];
+      if (g) g.position.z = seg.z + zOffset;
     }
 
     // Obstacle logic
     for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i]
+      const o = obstacles[i];
 
       // score when passed
       if (!o.passed && world.current.z > o.z + 0.8) {
-        o.passed = true
-        run.score += 1
+        o.passed = true;
+        run.score += 1;
       }
 
       // pickups (stars)
       if (o.hasStar && !o.starCollected) {
-        const dx = Math.abs(world.current.x - pickupX(o))
-        const dz = Math.abs(world.current.z - o.z)
+        const dx = Math.abs(world.current.x - pickupX(o));
+        const dz = Math.abs(world.current.z - o.z);
         if (dx < 0.38 && dz < 0.55) {
-          o.starCollected = true
-          run.starsThisRun += 1
-          addStars(1)
-          save()
-          const star = starRefs.current[i]
-          if (star) star.visible = false
+          o.starCollected = true;
+          run.starsThisRun += 1;
+          addStars(1);
+          save();
+          const star = starRefs.current[i];
+          if (star) star.visible = false;
         }
       }
       if (o.hasGift && !o.giftCollected) {
-        const dx = Math.abs(world.current.x - pickupX(o))
-        const dz = Math.abs(world.current.z - o.z)
+        const dx = Math.abs(world.current.x - pickupX(o));
+        const dz = Math.abs(world.current.z - o.z);
         if (dx < 0.42 && dz < 0.6) {
-          o.giftCollected = true
-          const bonus = Math.floor(rand(4, 8))
-          run.starsThisRun += bonus
-          addStars(bonus)
-          save()
-          const gift = giftRefs.current[i]
-          if (gift) gift.visible = false
+          o.giftCollected = true;
+          const bonus = Math.floor(rand(4, 8));
+          run.starsThisRun += bonus;
+          addStars(bonus);
+          save();
+          const gift = giftRefs.current[i];
+          if (gift) gift.visible = false;
         }
       }
 
       // collision
-      const dz = Math.abs(world.current.z - o.z)
-      if (dz < (OBST_THICK / 2 + BALL_RADIUS * 0.95)) {
-        const { xMin, xMax } = obstacleXRange(o)
-        const inX = world.current.x + BALL_RADIUS > xMin && world.current.x - BALL_RADIUS < xMax
+      const dz = Math.abs(world.current.z - o.z);
+      if (dz < OBST_THICK / 2 + BALL_RADIUS * 0.95) {
+        const { xMin, xMax } = obstacleXRange(o);
+        const inX =
+          world.current.x + BALL_RADIUS > xMin &&
+          world.current.x - BALL_RADIUS < xMax;
         if (inX) {
           // finish run
-          setHighScore(run.score)
-          save()
-          persistState.finish()
-          return
+          setHighScore(run.score);
+          save();
+          persistState.finish();
+          return;
         }
       }
 
       // Recycle obstacles behind
       if (o.z < world.current.z - RESPAWN_BEHIND) {
-        world.current.farZ += rand(2.25, 4.0)
-        const fresh = makeObstacle(o.id, world.current.farZ)
-        Object.assign(o, fresh)
-        syncObstacleVisual(i, zOffset)
+        world.current.farZ += rand(2.25, 4.0);
+        const fresh = makeObstacle(o.id, world.current.farZ);
+        Object.assign(o, fresh);
+        syncObstacleVisual(i, zOffset);
       }
 
       // Keep visuals synced (position only)
-      const g = obstacleGroupRefs.current[i]
-      if (g) g.position.z = o.z + zOffset
+      const g = obstacleGroupRefs.current[i];
+      if (g) g.position.z = o.z + zOffset;
 
-      const star = starRefs.current[i]
+      const star = starRefs.current[i];
       if (star && star.visible) {
-        star.rotation.y += delta * 3.2
-        star.rotation.x += delta * 2.2
+        star.rotation.y += delta * 3.2;
+        star.rotation.x += delta * 2.2;
       }
-      const gift = giftRefs.current[i]
+      const gift = giftRefs.current[i];
       if (gift && gift.visible) {
-        gift.rotation.y += delta * 1.6
+        gift.rotation.y += delta * 1.6;
       }
     }
-    
-    clearFrameInput(inputRef)
-  })
 
-  const ballColor = useSnapshot(persistState).selectedBall
+    clearFrameInput(inputRef);
+  });
+
+  const ballColor = useSnapshot(persistState).selectedBall;
 
   return (
     <>
@@ -406,7 +439,7 @@ function SlowMoScene() {
         <group
           key={seg.id}
           ref={(el) => {
-            segmentGroupRefs.current[i] = el
+            segmentGroupRefs.current[i] = el;
           }}
           position={[0, 0, seg.z]}
         >
@@ -417,19 +450,36 @@ function SlowMoScene() {
           </mesh>
 
           {/* Rails */}
-          <mesh position={[-(TRACK_WIDTH / 2 - RAIL_WIDTH / 2), TRACK_THICK * 0.15, SEG_LEN / 2]}>
+          <mesh
+            position={[
+              -(TRACK_WIDTH / 2 - RAIL_WIDTH / 2),
+              TRACK_THICK * 0.15,
+              SEG_LEN / 2,
+            ]}
+          >
             <boxGeometry args={[RAIL_WIDTH, TRACK_THICK * 1.15, SEG_LEN]} />
             <meshStandardMaterial color="#34d3c7" roughness={0.55} />
           </mesh>
-          <mesh position={[TRACK_WIDTH / 2 - RAIL_WIDTH / 2, TRACK_THICK * 0.15, SEG_LEN / 2]}>
+          <mesh
+            position={[
+              TRACK_WIDTH / 2 - RAIL_WIDTH / 2,
+              TRACK_THICK * 0.15,
+              SEG_LEN / 2,
+            ]}
+          >
             <boxGeometry args={[RAIL_WIDTH, TRACK_THICK * 1.15, SEG_LEN]} />
             <meshStandardMaterial color="#34d3c7" roughness={0.55} />
           </mesh>
 
           {/* subtle stripe every other segment */}
           {seg.id % 2 === 0 && (
-            <mesh position={[0, 0.001, SEG_LEN / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-              <planeGeometry args={[TRACK_WIDTH - RAIL_WIDTH * 2 - 0.12, 0.14]} />
+            <mesh
+              position={[0, 0.001, SEG_LEN / 2]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
+              <planeGeometry
+                args={[TRACK_WIDTH - RAIL_WIDTH * 2 - 0.12, 0.14]}
+              />
               <meshBasicMaterial color="#ffffff" opacity={0.18} transparent />
             </mesh>
           )}
@@ -441,13 +491,13 @@ function SlowMoScene() {
         <group
           key={o.id}
           ref={(el) => {
-            obstacleGroupRefs.current[i] = el
+            obstacleGroupRefs.current[i] = el;
           }}
           position={[0, 0, o.z]}
         >
           <mesh
             ref={(el) => {
-              obstacleMeshRefs.current[i] = el
+              obstacleMeshRefs.current[i] = el;
             }}
             position={[0, OBST_HEIGHT / 2, 0]}
             scale={[o.lenX, OBST_HEIGHT, OBST_THICK]}
@@ -461,25 +511,33 @@ function SlowMoScene() {
           {/* Star */}
           <mesh
             ref={(el) => {
-              starRefs.current[i] = el
+              starRefs.current[i] = el;
             }}
             visible={o.hasStar && !o.starCollected}
             position={[pickupX(o), 0.45, 0]}
           >
             <octahedronGeometry args={[0.18, 0]} />
-            <meshStandardMaterial color="#ffd36a" roughness={0.25} metalness={0.2} />
+            <meshStandardMaterial
+              color="#ffd36a"
+              roughness={0.25}
+              metalness={0.2}
+            />
           </mesh>
 
           {/* Gift */}
           <mesh
             ref={(el) => {
-              giftRefs.current[i] = el
+              giftRefs.current[i] = el;
             }}
             visible={o.hasGift && !o.giftCollected}
             position={[pickupX(o), 0.42, 0]}
           >
             <boxGeometry args={[0.22, 0.22, 0.22]} />
-            <meshStandardMaterial color="#ffffff" roughness={0.2} metalness={0.1} />
+            <meshStandardMaterial
+              color="#ffffff"
+              roughness={0.2}
+              metalness={0.1}
+            />
           </mesh>
         </group>
       ))}
@@ -487,59 +545,79 @@ function SlowMoScene() {
       {/* Ball */}
       <mesh ref={ballRef} position={[0, BALL_RADIUS, 0]}>
         <sphereGeometry args={[BALL_RADIUS, 28, 28]} />
-        <meshStandardMaterial color={BALL_SKINS[ballColor]?.color ?? '#ffffff'} roughness={0.25} metalness={0.05} />
+        <meshStandardMaterial
+          color={BALL_SKINS[ballColor]?.color ?? '#ffffff'}
+          roughness={0.25}
+          metalness={0.05}
+        />
       </mesh>
 
       {/* Shadow */}
-      <mesh ref={shadowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
+      <mesh
+        ref={shadowRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.01, 0]}
+      >
         <circleGeometry args={[BALL_RADIUS * 1.15, 20]} />
         <meshBasicMaterial color="#000000" opacity={0.22} transparent />
       </mesh>
 
       {/* Slow ring */}
-      <mesh ref={slowRingRef} rotation={[Math.PI / 2, 0, 0]} position={[0, BALL_RADIUS + 0.02, 0]}>
+      <mesh
+        ref={slowRingRef}
+        rotation={[Math.PI / 2, 0, 0]}
+        position={[0, BALL_RADIUS + 0.02, 0]}
+      >
         <torusGeometry args={[BALL_RADIUS * 0.9, 0.05, 12, 32]} />
         <meshBasicMaterial color="#b6ffcc" opacity={0.15} transparent />
       </mesh>
     </>
-  )
+  );
 }
 
 // -----------------------------
 // HUD / Overlay
 // -----------------------------
 function SlowMoOverlay() {
-  const snap = useSnapshot(persistState)
-  const s = useSnapshot(persistState)
-  const r = useSnapshot(run)
+  const snap = useSnapshot(persistState);
+  const s = useSnapshot(persistState);
+  const r = useSnapshot(run);
 
-  const canUnlock = (id: number) => canUnlockBall(id)
+  const canUnlock = (id: number) => canUnlockBall(id);
 
   const handleTapStart = () => {
-    if (snap.phase === 'menu') persistState.start()
-  }
+    if (snap.phase === 'menu') persistState.start();
+  };
 
   const handleReplay = () => {
-    if (snap.phase === 'finish') persistState.start()
-  }
+    if (snap.phase === 'finish') persistState.start();
+  };
 
   const handleBackToMenu = () => {
-    if (snap.phase === 'finish') persistState.backToMenu()
-  }
+    if (snap.phase === 'finish') persistState.backToMenu();
+  };
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none">
       {/* Top HUD */}
       {snap.phase === 'playing' && (
         <div className="absolute top-4 left-0 right-0 flex items-center justify-center">
-          <div className="px-5 py-2 rounded-full bg-black/25 text-white font-bold text-4xl tracking-wide">{r.score}</div>
+          <div className="px-5 py-2 rounded-full bg-black/25 text-white font-bold text-4xl tracking-wide">
+            {r.score}
+          </div>
         </div>
       )}
 
       {snap.phase === 'playing' && (
         <div className="absolute top-4 right-4 flex items-center gap-2">
-          <div className="px-3 py-2 rounded-full bg-black/25 text-white font-semibold">★ {s.stars}</div>
-          {r.slow && <div className="px-3 py-2 rounded-full bg-white/20 text-white font-semibold">SLOW</div>}
+          <div className="px-3 py-2 rounded-full bg-black/25 text-white font-semibold">
+            ★ {s.stars}
+          </div>
+          {r.slow && (
+            <div className="px-3 py-2 rounded-full bg-white/20 text-white font-semibold">
+              SLOW
+            </div>
+          )}
         </div>
       )}
 
@@ -548,7 +626,12 @@ function SlowMoOverlay() {
         <div
           className="absolute inset-0 flex flex-col items-center justify-between p-6 pointer-events-auto cursor-pointer"
           onClick={handleTapStart}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTapStart(); } }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleTapStart();
+            }
+          }}
           role="button"
           tabIndex={0}
           aria-label="Tap to start"
@@ -556,23 +639,33 @@ function SlowMoOverlay() {
           <div />
 
           <div className="flex flex-col items-center gap-3 text-center">
-            <div className="text-6xl font-black text-white drop-shadow">SlowMo</div>
-            <div className="text-white/90 text-lg max-w-sm">
-              Hold to slow time. Let the ball bounce into the safe lane, then release.
+            <div className="text-6xl font-black text-white drop-shadow">
+              SlowMo
             </div>
-            <div className="text-white/80 text-sm">Collect ★ to unlock new balls.</div>
-            <div className="text-white/70 text-xs">Inspired by “Slow Mo” (Ketchapp & WildBeep).</div>
+            <div className="text-white/90 text-lg max-w-sm">
+              Hold to slow time. Let the ball bounce into the safe lane, then
+              release.
+            </div>
+            <div className="text-white/80 text-sm">
+              Collect ★ to unlock new balls.
+            </div>
+            <div className="text-white/70 text-xs">
+              Inspired by “Slow Mo” (Ketchapp & WildBeep).
+            </div>
           </div>
 
-          <div className="w-full max-w-md flex flex-col gap-4" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="w-full max-w-md flex flex-col gap-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Ball picker */}
             <div className="bg-black/25 rounded-2xl p-4">
               <div className="text-white font-semibold mb-3">Balls</div>
               <div className="flex gap-2 flex-wrap">
                 {BALL_SKINS.map((b) => {
-                  const unlocked = s.unlockedBallIds.includes(b.id)
-                  const selected = s.selectedBall === b.id
-                  const afford = canUnlock(b.id)
+                  const unlocked = s.unlockedBallIds.includes(b.id);
+                  const selected = s.selectedBall === b.id;
+                  const afford = canUnlock(b.id);
 
                   return (
                     <button
@@ -581,14 +674,14 @@ function SlowMoOverlay() {
                       style={{ background: b.color }}
                       onClick={() => {
                         if (unlocked) {
-                          setSelectedBall(b.id)
-                          save()
-                          return
+                          setSelectedBall(b.id);
+                          save();
+                          return;
                         }
                         if (afford) {
-                          unlockBall(b.id)
-                          setSelectedBall(b.id)
-                          save()
+                          unlockBall(b.id);
+                          setSelectedBall(b.id);
+                          save();
                         }
                       }}
                       title={unlocked ? b.name : `${b.name} — ${b.cost}★`}
@@ -599,13 +692,15 @@ function SlowMoOverlay() {
                         </div>
                       )}
                     </button>
-                  )
+                  );
                 })}
               </div>
               <div className="text-white/80 text-sm mt-3">Stars: {s.stars}</div>
             </div>
 
-            <div className="text-center text-white/90 font-semibold">TAP TO START</div>
+            <div className="text-center text-white/90 font-semibold">
+              TAP TO START
+            </div>
           </div>
         </div>
       )}
@@ -613,8 +708,12 @@ function SlowMoOverlay() {
       {/* Game Over */}
       {snap.phase === 'finish' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
-          <div className="text-white text-5xl font-black drop-shadow">Game Over</div>
-          <div className="text-white/90 text-xl font-bold">Score: {r.score}</div>
+          <div className="text-white text-5xl font-black drop-shadow">
+            Game Over
+          </div>
+          <div className="text-white/90 text-xl font-bold">
+            Score: {r.score}
+          </div>
           <div className="text-white/70">Best: {s.highScore}</div>
           <div className="text-white/80">★ +{r.starsThisRun} this run</div>
 
@@ -639,15 +738,15 @@ function SlowMoOverlay() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
-export { state as slowMoState } from './state'
+export { state as slowMoState } from './state';
 
 export default function SlowMo() {
   useEffect(() => {
-    load()
-  }, [])
+    load();
+  }, []);
 
   return (
     <>
@@ -658,5 +757,5 @@ export default function SlowMo() {
         </div>
       </Html>
     </>
-  )
+  );
 }

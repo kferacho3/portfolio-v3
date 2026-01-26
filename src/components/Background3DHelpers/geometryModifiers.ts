@@ -23,23 +23,28 @@ export type Axis = 'x' | 'y' | 'z';
 /**
  * Get axis index from axis name
  */
-const axisIndex = (axis: Axis): number => ({ x: 0, y: 1, z: 2 }[axis]);
+const axisIndex = (axis: Axis): number => ({ x: 0, y: 1, z: 2 })[axis];
 
 /**
  * Get two perpendicular axes given a primary axis
  */
 const perpAxes = (axis: Axis): [Axis, Axis] => {
   switch (axis) {
-    case 'x': return ['y', 'z'];
-    case 'y': return ['x', 'z'];
-    case 'z': return ['x', 'y'];
+    case 'x':
+      return ['y', 'z'];
+    case 'y':
+      return ['x', 'z'];
+    case 'z':
+      return ['x', 'y'];
   }
 };
 
 /**
  * Safely get position attribute from geometry
  */
-const getPositionAttr = (geometry: THREE.BufferGeometry): THREE.BufferAttribute | null => {
+const getPositionAttr = (
+  geometry: THREE.BufferGeometry
+): THREE.BufferAttribute | null => {
   const attr = geometry.getAttribute('position');
   return attr instanceof THREE.BufferAttribute ? attr : null;
 };
@@ -67,39 +72,39 @@ export function twist(
   geometry.computeBoundingBox();
   const bbox = geometry.boundingBox!;
   const c = center ?? bbox.getCenter(new THREE.Vector3());
-  
+
   const ai = axisIndex(axis);
   const [perpA, perpB] = perpAxes(axis);
   const pAi = axisIndex(perpA);
   const pBi = axisIndex(perpB);
-  
+
   const extent = bbox.max.getComponent(ai) - bbox.min.getComponent(ai);
   if (extent < 0.001) return geometry; // Flat geometry, no twist possible
 
   const positions = posAttr.array;
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     // Get position relative to center
     const pa = positions[i + pAi] - c.getComponent(pAi);
     const pb = positions[i + pBi] - c.getComponent(pBi);
     const axisPos = positions[i + ai] - c.getComponent(ai);
-    
+
     // Calculate twist angle based on position along axis
     const t = (axisPos - bbox.min.getComponent(ai)) / extent;
     const angle = amount * (t - 0.5); // Center the twist
-    
+
     // Rotate in the perpendicular plane
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    
+
     positions[i + pAi] = pa * cos - pb * sin + c.getComponent(pAi);
     positions[i + pBi] = pa * sin + pb * cos + c.getComponent(pBi);
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -121,51 +126,52 @@ export function bend(
   direction: Axis = 'y'
 ): THREE.BufferGeometry {
   if (axis === direction) return geometry;
-  
+
   const posAttr = getPositionAttr(geometry);
   if (!posAttr) return geometry;
 
   geometry.computeBoundingBox();
   const bbox = geometry.boundingBox!;
-  
+
   const ai = axisIndex(axis);
   const di = axisIndex(direction);
-  
+
   const extent = bbox.max.getComponent(ai) - bbox.min.getComponent(ai);
   if (extent < 0.001 || Math.abs(amount) < 0.001) return geometry;
 
   const positions = posAttr.array;
-  const centerAxis = (bbox.min.getComponent(ai) + bbox.max.getComponent(ai)) / 2;
-  
+  const centerAxis =
+    (bbox.min.getComponent(ai) + bbox.max.getComponent(ai)) / 2;
+
   // Calculate bend radius (larger amount = tighter bend)
   const radius = extent / (amount * 2);
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const axisPos = positions[i + ai];
     const dirPos = positions[i + di];
-    
+
     // Normalize position along axis to [-1, 1]
     const t = (axisPos - centerAxis) / (extent / 2);
-    
+
     // Calculate bend angle
     const angle = t * amount;
-    
+
     // Apply circular bend
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    
+
     // New position on bent curve
     const newAxisPos = radius * sin;
     const offset = radius * (1 - cos);
-    
+
     positions[i + ai] = newAxisPos + centerAxis;
     positions[i + di] = dirPos + offset * Math.sign(amount);
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -191,42 +197,44 @@ export function taper(
 
   geometry.computeBoundingBox();
   const bbox = geometry.boundingBox!;
-  
+
   const ai = axisIndex(axis);
   const [perpA, perpB] = perpAxes(axis);
   const pAi = axisIndex(perpA);
   const pBi = axisIndex(perpB);
-  
+
   const min = bbox.min.getComponent(ai);
   const max = bbox.max.getComponent(ai);
   const extent = max - min;
-  
+
   if (extent < 0.001) return geometry;
 
   const positions = posAttr.array;
   const center = bbox.getCenter(new THREE.Vector3());
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const axisPos = positions[i + ai];
-    
+
     // Calculate taper factor (0 at one end, 1 at the other)
     let t = (axisPos - min) / extent;
     if (reverse) t = 1 - t;
-    
+
     // Scale factor: 1 at start, (1 - amount) at end
     const scale = 1 - amount * t;
-    
+
     // Apply scaling to perpendicular axes (relative to center)
-    positions[i + pAi] = center.getComponent(pAi) + 
+    positions[i + pAi] =
+      center.getComponent(pAi) +
       (positions[i + pAi] - center.getComponent(pAi)) * scale;
-    positions[i + pBi] = center.getComponent(pBi) + 
+    positions[i + pBi] =
+      center.getComponent(pBi) +
       (positions[i + pBi] - center.getComponent(pBi)) * scale;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -246,44 +254,44 @@ export function kaleidoFold(
   axis: Axis = 'z'
 ): THREE.BufferGeometry {
   if (wedges < 2) return geometry;
-  
+
   const posAttr = getPositionAttr(geometry);
   if (!posAttr) return geometry;
 
   const [perpA, perpB] = perpAxes(axis);
   const pAi = axisIndex(perpA);
   const pBi = axisIndex(perpB);
-  
+
   const positions = posAttr.array;
   const wedgeAngle = (Math.PI * 2) / wedges;
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const a = positions[i + pAi];
     const b = positions[i + pBi];
-    
+
     // Convert to polar
     let angle = Math.atan2(b, a);
     const radius = Math.hypot(a, b);
-    
+
     // Fold into first wedge
     if (angle < 0) angle += Math.PI * 2;
     const wedgeIndex = Math.floor(angle / wedgeAngle);
     let localAngle = angle - wedgeIndex * wedgeAngle;
-    
+
     // Mirror odd wedges
     if (wedgeIndex % 2 === 1) {
       localAngle = wedgeAngle - localAngle;
     }
-    
+
     // Convert back to Cartesian
     positions[i + pAi] = radius * Math.cos(localAngle);
     positions[i + pBi] = radius * Math.sin(localAngle);
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -303,25 +311,25 @@ export function quantize(
   axes: Axis[] = ['x', 'y', 'z']
 ): THREE.BufferGeometry {
   if (steps < 1) return geometry;
-  
+
   const posAttr = getPositionAttr(geometry);
   if (!posAttr) return geometry;
 
   const positions = posAttr.array;
   const stepSize = 1 / steps;
-  
+
   const axisIndices = axes.map(axisIndex);
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     for (const ai of axisIndices) {
       positions[i + ai] = Math.round(positions[i + ai] / stepSize) * stepSize;
     }
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -344,7 +352,7 @@ export function simplexPrewarp(
 ): THREE.BufferGeometry {
   const posAttr = getPositionAttr(geometry);
   const normAttr = geometry.getAttribute('normal');
-  
+
   if (!posAttr) return geometry;
 
   // Create seeded noise with a simple seeded random
@@ -358,36 +366,38 @@ export function simplexPrewarp(
   const positions = posAttr.array;
   const hasNormals = normAttr && normAttr instanceof THREE.BufferAttribute;
   const normals = hasNormals ? (normAttr as THREE.BufferAttribute).array : null;
-  
+
   const tmp = new THREE.Vector3();
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const x = positions[i];
     const y = positions[i + 1];
     const z = positions[i + 2];
-    
+
     // Multi-octave noise for more organic look
     const n1 = noise3D(x * scale, y * scale, z * scale);
-    const n2 = noise3D(x * scale * 2 + 100, y * scale * 2 + 100, z * scale * 2 + 100) * 0.5;
+    const n2 =
+      noise3D(x * scale * 2 + 100, y * scale * 2 + 100, z * scale * 2 + 100) *
+      0.5;
     const n = n1 + n2;
-    
+
     // Get displacement direction
     if (normals) {
       tmp.set(normals[i], normals[i + 1], normals[i + 2]);
     } else {
       tmp.set(x, y, z).normalize();
     }
-    
+
     // Apply displacement
     positions[i] += tmp.x * n * strength;
     positions[i + 1] += tmp.y * n * strength;
     positions[i + 2] += tmp.z * n * strength;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -412,35 +422,35 @@ export function spherify(
   geometry.computeBoundingSphere();
   const targetR = radius ?? geometry.boundingSphere!.radius;
   const center = geometry.boundingSphere!.center;
-  
+
   const positions = posAttr.array;
   const tmp = new THREE.Vector3();
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     tmp.set(
       positions[i] - center.x,
       positions[i + 1] - center.y,
       positions[i + 2] - center.z
     );
-    
+
     const currentR = tmp.length();
     if (currentR < 0.0001) continue;
-    
+
     // Calculate spherical position
     const spherePos = tmp.clone().normalize().multiplyScalar(targetR);
-    
+
     // Blend between original and spherical
     tmp.lerp(spherePos, amount);
-    
+
     positions[i] = tmp.x + center.x;
     positions[i + 1] = tmp.y + center.y;
     positions[i + 2] = tmp.z + center.z;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -459,7 +469,7 @@ export function inflate(
 ): THREE.BufferGeometry {
   const posAttr = getPositionAttr(geometry);
   if (!posAttr) return geometry;
-  
+
   // Ensure we have normals
   geometry.computeVertexNormals();
   const normAttr = geometry.getAttribute('normal') as THREE.BufferAttribute;
@@ -467,17 +477,17 @@ export function inflate(
 
   const positions = posAttr.array;
   const normals = normAttr.array;
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     positions[i] += normals[i] * amount;
     positions[i + 1] += normals[i + 1] * amount;
     positions[i + 2] += normals[i + 2] * amount;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -501,33 +511,33 @@ export function wave(
   direction: Axis = 'y'
 ): THREE.BufferGeometry {
   if (axis === direction) return geometry;
-  
+
   const posAttr = getPositionAttr(geometry);
   if (!posAttr) return geometry;
 
   geometry.computeBoundingBox();
   const bbox = geometry.boundingBox!;
-  
+
   const ai = axisIndex(axis);
   const di = axisIndex(direction);
-  
+
   const min = bbox.min.getComponent(ai);
   const extent = bbox.max.getComponent(ai) - min;
-  
+
   if (extent < 0.001) return geometry;
 
   const positions = posAttr.array;
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const t = (positions[i + ai] - min) / extent;
     const wave = Math.sin(t * Math.PI * 2 * frequency) * amplitude;
     positions[i + di] += wave;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -549,32 +559,32 @@ export function skew(
   amount: number = 0.3
 ): THREE.BufferGeometry {
   if (axis === shearAxis) return geometry;
-  
+
   const posAttr = getPositionAttr(geometry);
   if (!posAttr) return geometry;
 
   geometry.computeBoundingBox();
   const bbox = geometry.boundingBox!;
-  
+
   const ai = axisIndex(axis);
   const si = axisIndex(shearAxis);
-  
+
   const center = (bbox.min.getComponent(ai) + bbox.max.getComponent(ai)) / 2;
   const extent = bbox.max.getComponent(ai) - bbox.min.getComponent(ai);
-  
+
   if (extent < 0.001) return geometry;
 
   const positions = posAttr.array;
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const t = (positions[i + ai] - center) / (extent / 2);
     positions[i + si] += t * amount;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -602,28 +612,28 @@ export function radialWave(
   const pAi = axisIndex(perpA);
   const pBi = axisIndex(perpB);
   const ai = axisIndex(axis);
-  
+
   geometry.computeBoundingSphere();
   const center = geometry.boundingSphere!.center;
   const radius = geometry.boundingSphere!.radius;
 
   const positions = posAttr.array;
-  
+
   for (let i = 0; i < positions.length; i += 3) {
     const dx = positions[i + pAi] - center.getComponent(pAi);
     const dy = positions[i + pBi] - center.getComponent(pBi);
     const dist = Math.hypot(dx, dy);
-    
+
     const normalizedDist = dist / radius;
     const wave = Math.sin(normalizedDist * Math.PI * 2 * frequency) * amplitude;
-    
+
     positions[i + ai] += wave * (1 - normalizedDist * 0.5); // Fade toward edges
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -631,7 +641,9 @@ export function radialWave(
    MODIFIER CHAIN - Apply multiple modifiers in sequence
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type ModifierFn = (geometry: THREE.BufferGeometry) => THREE.BufferGeometry;
+export type ModifierFn = (
+  geometry: THREE.BufferGeometry
+) => THREE.BufferGeometry;
 
 /**
  * Apply a chain of modifier functions to geometry
@@ -681,8 +693,5 @@ export function twistedPreset(
   twistAmount: number = Math.PI,
   taperAmount: number = 0.3
 ): ModifierFn[] {
-  return [
-    (g) => twist(g, 'y', twistAmount),
-    (g) => taper(g, 'y', taperAmount),
-  ];
+  return [(g) => twist(g, 'y', twistAmount), (g) => taper(g, 'y', taperAmount)];
 }

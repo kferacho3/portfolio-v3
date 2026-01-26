@@ -10,7 +10,8 @@ const LaserArm: React.FC<{ arm: LaserArmType }> = ({ arm }) => {
   useFrame(({ clock }) => {
     if (glowRef.current) {
       const t = clock.getElapsedTime();
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.04 * Math.sin(t * 8);
+      (glowRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.12 + 0.04 * Math.sin(t * 8);
     }
   });
 
@@ -22,7 +23,11 @@ const LaserArm: React.FC<{ arm: LaserArmType }> = ({ arm }) => {
     <group rotation={[0, 0, arm.angle]}>
       <mesh position={[armCenter, 0, 0]}>
         <boxGeometry args={[armLength, visualWidth, 0.04]} />
-        <meshStandardMaterial color={arm.color} emissive={arm.color} emissiveIntensity={1.5} />
+        <meshStandardMaterial
+          color={arm.color}
+          emissive={arm.color}
+          emissiveIntensity={1.5}
+        />
       </mesh>
       <mesh ref={glowRef} position={[armCenter, 0, -0.02]}>
         <boxGeometry args={[armLength, visualWidth * 3, 0.02]} />

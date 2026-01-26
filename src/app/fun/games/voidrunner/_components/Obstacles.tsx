@@ -82,7 +82,8 @@ const Obstacles: React.FC = () => {
       if (isPlaying) {
         if (cube.z - playerZ > 50) {
           const spacing =
-            DIFFICULTY_SETTINGS[voidRunnerState.difficulty].obstacleSpacing * mutation.spacingScalar;
+            DIFFICULTY_SETTINGS[voidRunnerState.difficulty].obstacleSpacing *
+            mutation.spacingScalar;
           cube.z = playerZ - PLANE_SIZE + randomInRange(-200, 0) * spacing;
           cube.x = randomInRange(negativeBound, positiveBound);
         }
@@ -123,7 +124,11 @@ const Obstacles: React.FC = () => {
   });
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, CUBE_AMOUNT]} frustumCulled={false}>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, CUBE_AMOUNT]}
+      frustumCulled={false}
+    >
       <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
       <meshBasicMaterial ref={materialRef} color={COLORS[0].three} />
     </instancedMesh>

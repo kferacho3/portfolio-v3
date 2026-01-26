@@ -1,101 +1,107 @@
-'use client'
+'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { PerspectiveCamera } from '@react-three/drei'
-import * as THREE from 'three'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
 
-import { SeededRandom } from '../../utils/seededRandom'
-import { clearFrameInput, useInputRef } from '../../hooks/useInput'
+import { SeededRandom } from '../../utils/seededRandom';
+import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
-type GameStatus = 'menu' | 'playing' | 'gameover'
+type GameStatus = 'menu' | 'playing' | 'gameover';
 
-type SegHazard = 'none' | 'ground' | 'ceiling'
+type SegHazard = 'none' | 'ground' | 'ceiling';
 
 type Segment = {
-  z: number
-  height: number
-  gap: boolean
-  hazard: SegHazard
-}
+  z: number;
+  height: number;
+  gap: boolean;
+  hazard: SegHazard;
+};
 
-const STORAGE_KEY = 'fun_slipstream_best_v1'
+const STORAGE_KEY = 'fun_slipstream_best_v1';
 
-const SEG_LEN = 2.4
-const LOOK_AHEAD = 22
-const SPEED = 6.0
-const BALL_R = 0.24
+const SEG_LEN = 2.4;
+const LOOK_AHEAD = 22;
+const SPEED = 6.0;
+const BALL_R = 0.24;
 
-const WORLD_W = 5.0
+const WORLD_W = 5.0;
 
 function hashSeed(baseSeed: number, i: number): number {
   // Deterministic 32-bit mix.
-  let x = (baseSeed ^ (i * 0x9e3779b1)) >>> 0
-  x ^= x >>> 16
-  x = Math.imul(x, 0x7feb352d) >>> 0
-  x ^= x >>> 15
-  x = Math.imul(x, 0x846ca68b) >>> 0
-  x ^= x >>> 16
-  return x >>> 0
+  let x = (baseSeed ^ (i * 0x9e3779b1)) >>> 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d) >>> 0;
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b) >>> 0;
+  x ^= x >>> 16;
+  return x >>> 0;
 }
 
 function getSegment(baseSeed: number, index: number, out?: Segment): Segment {
-  const r = new SeededRandom(hashSeed(baseSeed, index))
-  const z = index * SEG_LEN
+  const r = new SeededRandom(hashSeed(baseSeed, index));
+  const z = index * SEG_LEN;
 
   // Gaps start showing up after the player has settled into the rhythm.
-  const gap = index > 4 ? r.bool(0.18) : false
+  const gap = index > 4 ? r.bool(0.18) : false;
 
   // Height offsets are subtle: the skill is *state switching*, not platforming.
-  const height = gap ? 0 : r.float(-0.35, 0.55)
+  const height = gap ? 0 : r.float(-0.35, 0.55);
 
-  let hazard: SegHazard = 'none'
+  let hazard: SegHazard = 'none';
   if (!gap && index > 2) {
-    const roll = r.float(0, 1)
-    if (roll < 0.28) hazard = 'ground'
-    else if (roll < 0.56) hazard = 'ceiling'
+    const roll = r.float(0, 1);
+    if (roll < 0.28) hazard = 'ground';
+    else if (roll < 0.56) hazard = 'ceiling';
   }
 
-  const seg = out ?? ({ z, height, gap, hazard } as Segment)
-  seg.z = z
-  seg.height = height
-  seg.gap = gap
-  seg.hazard = hazard
-  return seg
+  const seg = out ?? ({ z, height, gap, hazard } as Segment);
+  seg.z = z;
+  seg.height = height;
+  seg.gap = gap;
+  seg.hazard = hazard;
+  return seg;
 }
 
 export default function Slipstream() {
-  const [status, setStatus] = useState<GameStatus>('menu')
-  const [score, setScore] = useState(0)
-  const [best, setBest] = useState(0)
-  const [seed, setSeed] = useState(() => (Date.now() >>> 0))
+  const [status, setStatus] = useState<GameStatus>('menu');
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [seed, setSeed] = useState(() => Date.now() >>> 0);
 
   useEffect(() => {
     try {
-      const v = Number(window.localStorage.getItem(STORAGE_KEY) ?? 0)
-      if (Number.isFinite(v)) setBest(v)
+      const v = Number(window.localStorage.getItem(STORAGE_KEY) ?? 0);
+      if (Number.isFinite(v)) setBest(v);
     } catch {}
-  }, [])
+  }, []);
 
   const start = useCallback(() => {
-    setScore(0)
-    setSeed((Date.now() >>> 0) ^ ((Math.random() * 1e9) | 0))
-    setStatus('playing')
-  }, [])
+    setScore(0);
+    setSeed((Date.now() >>> 0) ^ ((Math.random() * 1e9) | 0));
+    setStatus('playing');
+  }, []);
 
   const onGameOver = useCallback(
     (finalScore: number) => {
-      setStatus('gameover')
+      setStatus('gameover');
       setBest((b) => {
-        const next = Math.max(b, finalScore)
+        const next = Math.max(b, finalScore);
         try {
-          window.localStorage.setItem(STORAGE_KEY, String(next))
+          window.localStorage.setItem(STORAGE_KEY, String(next));
         } catch {}
-        return next
-      })
+        return next;
+      });
     },
     [setBest]
-  )
+  );
 
   return (
     <div className="relative w-full h-full select-none">
@@ -118,10 +124,16 @@ export default function Slipstream() {
 
       {/* HUD */}
       <div className="absolute inset-x-0 top-0 flex items-start justify-between p-4 pointer-events-none">
-        <div className="text-white/90 font-semibold tracking-wide">Slipstream</div>
+        <div className="text-white/90 font-semibold tracking-wide">
+          Slipstream
+        </div>
         <div className="flex items-center gap-4">
-          <div className="text-white/40 text-xs">Tap or Space: toggle Ground / Glide</div>
-          <div className="text-white/90 font-semibold tabular-nums">{score}</div>
+          <div className="text-white/40 text-xs">
+            Tap or Space: toggle Ground / Glide
+          </div>
+          <div className="text-white/90 font-semibold tabular-nums">
+            {score}
+          </div>
         </div>
       </div>
 
@@ -130,14 +142,17 @@ export default function Slipstream() {
           <div className="w-[92%] max-w-md bg-black/55 backdrop-blur-md border border-white/10 text-white rounded-xl p-5 shadow-xl">
             <div className="text-xl font-bold tracking-tight">Slipstream</div>
             <div className="mt-2 text-sm text-white/80 leading-relaxed">
-              <span className="text-white">Tap or press Space</span> to toggle between{' '}
-              <span className="text-white">GROUND</span> and <span className="text-white">GLIDE</span>.
-              Ground is safe under ceilings; Glide is safe over spikes & gaps. One wrong toggle and you’re gone.
+              <span className="text-white">Tap or press Space</span> to toggle
+              between <span className="text-white">GROUND</span> and{' '}
+              <span className="text-white">GLIDE</span>. Ground is safe under
+              ceilings; Glide is safe over spikes & gaps. One wrong toggle and
+              you’re gone.
             </div>
 
             {status === 'gameover' && (
               <div className="mt-3 text-sm text-white/85">
-                Score: <span className="font-semibold">{score}</span> · Best: <span className="font-semibold">{best}</span>
+                Score: <span className="font-semibold">{score}</span> · Best:{' '}
+                <span className="font-semibold">{best}</span>
               </div>
             )}
 
@@ -159,7 +174,7 @@ export default function Slipstream() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function SlipstreamScene({
@@ -168,21 +183,27 @@ function SlipstreamScene({
   onScore,
   onGameOver,
 }: {
-  seed: number
-  status: GameStatus
-  onScore: (value: number | ((prev: number) => number)) => void
-  onGameOver: (score: number) => void
+  seed: number;
+  status: GameStatus;
+  onScore: (value: number | ((prev: number) => number)) => void;
+  onGameOver: (score: number) => void;
 }) {
-  const input = useInputRef({ enabled: status === 'playing', preventDefault: [' ', 'Space'] })
+  const input = useInputRef({
+    enabled: status === 'playing',
+    preventDefault: [' ', 'Space'],
+  });
 
-  const { camera } = useThree()
-  const ballRef = useRef<THREE.Mesh>(null)
-  const shieldRef = useRef<THREE.Mesh>(null)
-  const camPos = useRef(new THREE.Vector3(0, 5.5, 9))
-  const camLook = useRef(new THREE.Vector3(0, 0, -4))
+  const { camera } = useThree();
+  const ballRef = useRef<THREE.Mesh>(null);
+  const shieldRef = useRef<THREE.Mesh>(null);
+  const camPos = useRef(new THREE.Vector3(0, 5.5, 9));
+  const camLook = useRef(new THREE.Vector3(0, 0, -4));
 
-  const tmpSeg = useMemo(() => ({ z: 0, height: 0, gap: false, hazard: 'none' as SegHazard }), [])
-  const tmpPos = useMemo(() => new THREE.Vector3(), [])
+  const tmpSeg = useMemo(
+    () => ({ z: 0, height: 0, gap: false, hazard: 'none' as SegHazard }),
+    []
+  );
+  const tmpPos = useMemo(() => new THREE.Vector3(), []);
 
   const sim = useRef({
     z: 0,
@@ -191,134 +212,142 @@ function SlipstreamScene({
     glideY: 0.4,
     score: 0,
     dead: false,
-  })
+  });
 
-  const [segIndex, setSegIndex] = useState(0)
+  const [segIndex, setSegIndex] = useState(0);
 
   const reset = useCallback(() => {
-    sim.current.z = 0
-    sim.current.y = 0.4
-    sim.current.mode = 'ground'
-    sim.current.glideY = 0.4
-    sim.current.score = 0
-    sim.current.dead = false
-    setSegIndex(0)
-    onScore(0)
-    camPos.current.set(0, 5.5, 9)
-    camLook.current.set(0, 0, -4)
-  }, [onScore])
+    sim.current.z = 0;
+    sim.current.y = 0.4;
+    sim.current.mode = 'ground';
+    sim.current.glideY = 0.4;
+    sim.current.score = 0;
+    sim.current.dead = false;
+    setSegIndex(0);
+    onScore(0);
+    camPos.current.set(0, 5.5, 9);
+    camLook.current.set(0, 0, -4);
+  }, [onScore]);
 
   useEffect(() => {
-    if (status === 'playing') reset()
-  }, [status, seed, reset])
+    if (status === 'playing') reset();
+  }, [status, seed, reset]);
 
   const visibleSegments = useMemo(() => {
-    const base = Math.max(0, segIndex - 2)
-    const out: Segment[] = []
+    const base = Math.max(0, segIndex - 2);
+    const out: Segment[] = [];
     for (let i = base; i < base + LOOK_AHEAD; i++) {
-      out.push(getSegment(seed, i))
+      out.push(getSegment(seed, i));
     }
-    return out
-  }, [seed, segIndex])
+    return out;
+  }, [seed, segIndex]);
 
   useFrame((_state, dt) => {
-    dt = Math.min(dt, 1 / 30)
+    dt = Math.min(dt, 1 / 30);
 
     if (status !== 'playing') {
-      clearFrameInput(input.current)
-      return
+      clearFrameInput(input.current);
+      return;
     }
 
-    const s = sim.current
+    const s = sim.current;
 
     // Input: toggle mode (tap or Space).
-    const just = input.current.justPressed
+    const just = input.current.justPressed;
     const toggle =
-      input.current.pointerJustDown || (just && (just.has(' ') || just.has('space')))
+      input.current.pointerJustDown ||
+      (just && (just.has(' ') || just.has('space')));
     if (toggle) {
       if (s.mode === 'ground') {
-        s.mode = 'glide'
-        s.glideY = s.y
+        s.mode = 'glide';
+        s.glideY = s.y;
       } else {
         // Attempt to snap back to ground. If there is no ground, you crash.
-        const i = Math.floor(s.z / SEG_LEN)
-        const seg = getSegment(seed, i, tmpSeg)
+        const i = Math.floor(s.z / SEG_LEN);
+        const seg = getSegment(seed, i, tmpSeg);
         if (seg.gap) {
-          s.dead = true
+          s.dead = true;
         } else {
-          s.mode = 'ground'
+          s.mode = 'ground';
         }
       }
     }
 
     // Advance.
-    s.z += SPEED * dt
+    s.z += SPEED * dt;
 
-    const i = Math.floor(s.z / SEG_LEN)
-    if (i !== segIndex) setSegIndex(i)
+    const i = Math.floor(s.z / SEG_LEN);
+    if (i !== segIndex) setSegIndex(i);
 
     // Score: segments cleared.
     if (i > s.score) {
-      s.score = i
-      onScore(i)
+      s.score = i;
+      onScore(i);
     }
 
-    const seg = getSegment(seed, i, tmpSeg)
+    const seg = getSegment(seed, i, tmpSeg);
 
     // Resolve vertical position.
-    const groundY = -0.65 + seg.height + BALL_R
+    const groundY = -0.65 + seg.height + BALL_R;
 
     if (s.mode === 'ground') {
-      if (seg.gap) s.dead = true
+      if (seg.gap) s.dead = true;
       // Smoothly approach ground height.
-      s.y += (groundY - s.y) * (1 - Math.exp(-12 * dt))
+      s.y += (groundY - s.y) * (1 - Math.exp(-12 * dt));
     } else {
       // Glide holds altitude.
-      s.y = s.glideY
+      s.y = s.glideY;
     }
 
     // Collisions.
     // - Ground hazard hits only when grounded.
     if (!seg.gap && seg.hazard === 'ground' && s.mode === 'ground') {
       // Ground spike top.
-      const spikeTop = groundY + 0.55
-      if (s.y - BALL_R <= spikeTop) s.dead = true
+      const spikeTop = groundY + 0.55;
+      if (s.y - BALL_R <= spikeTop) s.dead = true;
     }
 
     // - Ceiling hazard hits only when gliding.
     if (!seg.gap && seg.hazard === 'ceiling' && s.mode === 'glide') {
-      const ceilBottom = 1.0
-      if (s.y + BALL_R >= ceilBottom) s.dead = true
+      const ceilBottom = 1.0;
+      if (s.y + BALL_R >= ceilBottom) s.dead = true;
     }
 
     // Update meshes.
     if (ballRef.current) {
-      ballRef.current.position.set(0, s.y, -s.z)
+      ballRef.current.position.set(0, s.y, -s.z);
     }
 
     if (shieldRef.current) {
       // A subtle halo indicating current mode.
-      shieldRef.current.position.set(0, s.y, -s.z)
-      const scale = s.mode === 'glide' ? 1.22 : 1.05
-      shieldRef.current.scale.setScalar(scale)
-      ;(shieldRef.current.material as THREE.MeshStandardMaterial).opacity = s.mode === 'glide' ? 0.28 : 0.12
+      shieldRef.current.position.set(0, s.y, -s.z);
+      const scale = s.mode === 'glide' ? 1.22 : 1.05;
+      shieldRef.current.scale.setScalar(scale);
+      (shieldRef.current.material as THREE.MeshStandardMaterial).opacity =
+        s.mode === 'glide' ? 0.28 : 0.12;
     }
 
     // Camera follow: smooth Z + Y, look ahead of player
-    const targetY = 5.5 + (s.y - 0.4) * 0.35
-    const targetZ = 9 - s.z
-    const lookZ = -s.z - 5
-    camPos.current.lerp(new THREE.Vector3(0, targetY, targetZ), 1 - Math.exp(-8 * dt))
-    camLook.current.lerp(new THREE.Vector3(0, s.y * 0.6, lookZ), 1 - Math.exp(-8 * dt))
-    camera.position.copy(camPos.current)
-    camera.lookAt(camLook.current)
+    const targetY = 5.5 + (s.y - 0.4) * 0.35;
+    const targetZ = 9 - s.z;
+    const lookZ = -s.z - 5;
+    camPos.current.lerp(
+      new THREE.Vector3(0, targetY, targetZ),
+      1 - Math.exp(-8 * dt)
+    );
+    camLook.current.lerp(
+      new THREE.Vector3(0, s.y * 0.6, lookZ),
+      1 - Math.exp(-8 * dt)
+    );
+    camera.position.copy(camPos.current);
+    camera.lookAt(camLook.current);
 
-    clearFrameInput(input.current)
+    clearFrameInput(input.current);
 
     if (s.dead) {
-      onGameOver(s.score)
+      onGameOver(s.score);
     }
-  })
+  });
 
   return (
     <group>
@@ -340,11 +369,11 @@ function SlipstreamScene({
 
       {/* Segments */}
       {visibleSegments.map((seg, idx) => {
-        const local = idx + Math.max(0, segIndex - 2)
+        const local = idx + Math.max(0, segIndex - 2);
         // Recompute deterministic segment (avoids stale memo for map key ordering).
-        const s = getSegment(seed, local)
-        const z = -s.z
-        const y = -0.95 + s.height
+        const s = getSegment(seed, local);
+        const z = -s.z;
+        const y = -0.95 + s.height;
         return (
           <group key={local}>
             {!s.gap && (
@@ -366,7 +395,11 @@ function SlipstreamScene({
             {!s.gap && s.hazard === 'ceiling' && (
               <mesh position={[0, 1.25, z]}>
                 <boxGeometry args={[2.2, 0.5, 0.9]} />
-                <meshStandardMaterial color="#61dafb" roughness={0.35} metalness={0.15} />
+                <meshStandardMaterial
+                  color="#61dafb"
+                  roughness={0.35}
+                  metalness={0.15}
+                />
               </mesh>
             )}
 
@@ -374,17 +407,25 @@ function SlipstreamScene({
             {s.gap && (
               <mesh position={[0, -1.05, z]}>
                 <boxGeometry args={[WORLD_W, 0.12, SEG_LEN * 0.98]} />
-                <meshStandardMaterial color="#05070f" emissive="#05070f" emissiveIntensity={1} />
+                <meshStandardMaterial
+                  color="#05070f"
+                  emissive="#05070f"
+                  emissiveIntensity={1}
+                />
               </mesh>
             )}
           </group>
-        )
+        );
       })}
 
       {/* Player */}
       <mesh ref={ballRef}>
         <sphereGeometry args={[BALL_R, 18, 18]} />
-        <meshStandardMaterial color="#f5f7ff" roughness={0.25} metalness={0.2} />
+        <meshStandardMaterial
+          color="#f5f7ff"
+          roughness={0.25}
+          metalness={0.2}
+        />
       </mesh>
       <mesh ref={shieldRef}>
         <torusGeometry args={[BALL_R * 1.4, 0.06, 8, 18]} />
@@ -405,5 +446,5 @@ function SlipstreamScene({
         <meshStandardMaterial color="#ffffff" transparent opacity={0.08} />
       </mesh>
     </group>
-  )
+  );
 }

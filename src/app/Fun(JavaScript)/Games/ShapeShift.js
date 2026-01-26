@@ -1,15 +1,33 @@
 import { a, useSprings } from '@react-spring/three';
-import { Box, Cone, Dodecahedron, Sparkles, Sphere, Torus, TorusKnot } from '@react-three/drei';
+import {
+  Box,
+  Cone,
+  Dodecahedron,
+  Sparkles,
+  Sphere,
+  Torus,
+  TorusKnot,
+} from '@react-three/drei';
 import { Canvas } from '@react-three/fiber';
 import React, { useEffect, useState } from 'react';
 import styled from 'styled-components';
 
 const shapes = [Box, Sphere, Dodecahedron, Cone, Torus, TorusKnot];
-const roygbivColors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
+const roygbivColors = [
+  '#FF0000',
+  '#FF7F00',
+  '#FFFF00',
+  '#00FF00',
+  '#0000FF',
+  '#4B0082',
+  '#9400D3',
+];
 
 const getRandomShape = () => shapes[Math.floor(Math.random() * shapes.length)];
-const getRoygbivColor = () => roygbivColors[Math.floor(Math.random() * shapes.length)];
-const getRandomColor = () => '#' + Math.floor(Math.random() * 16777215).toString(16); // Random hex color
+const getRoygbivColor = () =>
+  roygbivColors[Math.floor(Math.random() * shapes.length)];
+const getRandomColor = () =>
+  '#' + Math.floor(Math.random() * 16777215).toString(16); // Random hex color
 
 const GridButton = styled.button`
   position: fixed;
@@ -67,7 +85,19 @@ const HUD = styled.div`
   gap: 20px;
 `;
 
-const Shape = ({ position, color, shape: ShapeComponent, onClick, onPointerOver, onPointerOut, jiggleScale, hoverScale, pulseScale, initialScale, gridSize }) => {
+const Shape = ({
+  position,
+  color,
+  shape: ShapeComponent,
+  onClick,
+  onPointerOver,
+  onPointerOut,
+  jiggleScale,
+  hoverScale,
+  pulseScale,
+  initialScale,
+  gridSize,
+}) => {
   const getScale = (size) => {
     if (size === 3) return 0.5;
     if (size === 4) return 0.35;
@@ -116,34 +146,43 @@ const ShapeShift = ({ gridSizeProp, modeProp, onModeChange }) => {
   const [bestScore, setBestScore] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState(null);
 
-  const [springs, setSprings] = useSprings(gridSize * gridSize, index => ({
+  const [springs, setSprings] = useSprings(gridSize * gridSize, (index) => ({
     scale: [0, 0, 0],
     config: { duration: 300 },
   }));
 
-  const [jiggleSprings, setJiggleSprings] = useSprings(gridSize * gridSize, index => ({
-    scale: [1, 1, 1],
-    config: { tension: 300, friction: 10 },
-  }));
+  const [jiggleSprings, setJiggleSprings] = useSprings(
+    gridSize * gridSize,
+    (index) => ({
+      scale: [1, 1, 1],
+      config: { tension: 300, friction: 10 },
+    })
+  );
 
-  const [hoverSprings, setHoverSprings] = useSprings(gridSize * gridSize, index => ({
-    scale: [1, 1, 1],
-    config: { tension: 300, friction: 10 },
-  }));
+  const [hoverSprings, setHoverSprings] = useSprings(
+    gridSize * gridSize,
+    (index) => ({
+      scale: [1, 1, 1],
+      config: { tension: 300, friction: 10 },
+    })
+  );
 
-  const [pulseSprings, setPulseSprings] = useSprings(gridSize * gridSize, index => ({
-    scale: [1, 1, 1],
-    config: { duration: 330 },
-  }));
+  const [pulseSprings, setPulseSprings] = useSprings(
+    gridSize * gridSize,
+    (index) => ({
+      scale: [1, 1, 1],
+      config: { duration: 330 },
+    })
+  );
 
   useEffect(() => {
-    setJiggleSprings(index => ({
+    setJiggleSprings((index) => ({
       scale: clickedIndex === index ? [1.1, 1.1, 1.1] : [1, 1, 1],
     }));
   }, [clickedIndex]);
 
   useEffect(() => {
-    setHoverSprings(index => ({
+    setHoverSprings((index) => ({
       scale: hoveredIndex === index ? [1.02, 1.02, 1.02] : [1, 1, 1],
     }));
   }, [hoveredIndex]);
@@ -152,16 +191,23 @@ const ShapeShift = ({ gridSizeProp, modeProp, onModeChange }) => {
     const animatePulses = () => {
       setIsAnimating(true);
       pulseSequence.forEach((item, i) => {
-        setTimeout(() => {
-          setPulseSprings(index => index === item.index ? { scale: [1.2, 1.2, 1.2] } : {});
-          setTimeout(() => {
-            setPulseSprings(index => index === item.index ? { scale: [1, 1, 1] } : {});
-            if (i === pulseSequence.length - 1) {
-              setIsAnimating(false);
-              setShowPulse(false); // Reset showPulse to false after one cycle
-            }
-          }, 330); // 0.33 seconds
-        }, i * 660 / speedMultiplier); // Speed multiplier for faster pulses every 30 waves
+        setTimeout(
+          () => {
+            setPulseSprings((index) =>
+              index === item.index ? { scale: [1.2, 1.2, 1.2] } : {}
+            );
+            setTimeout(() => {
+              setPulseSprings((index) =>
+                index === item.index ? { scale: [1, 1, 1] } : {}
+              );
+              if (i === pulseSequence.length - 1) {
+                setIsAnimating(false);
+                setShowPulse(false); // Reset showPulse to false after one cycle
+              }
+            }, 330); // 0.33 seconds
+          },
+          (i * 660) / speedMultiplier
+        ); // Speed multiplier for faster pulses every 30 waves
       });
     };
 
@@ -199,8 +245,8 @@ const ShapeShift = ({ gridSizeProp, modeProp, onModeChange }) => {
     setSprings(() => ({ scale: [0, 0, 0] }));
     newGrid.forEach((item, i) => {
       setTimeout(() => {
-        setGrid(prev => [...prev, item]);
-        setSprings(index => index === i ? { scale: [1, 1, 1] } : {});
+        setGrid((prev) => [...prev, item]);
+        setSprings((index) => (index === i ? { scale: [1, 1, 1] } : {}));
         if (i === newGrid.length - 1) {
           setTimeout(() => setShowPulse(true), 500); // Start pulsing after all shapes have loaded and a small delay
         }
@@ -258,8 +304,14 @@ const ShapeShift = ({ gridSizeProp, modeProp, onModeChange }) => {
   }, [wave, mode]);
 
   useEffect(() => {
-    if (userSequence.length === pulseSequence.length && userSequence.length > 0) {
-      if (JSON.stringify(userSequence) === JSON.stringify(pulseSequence.map((p) => p.index))) {
+    if (
+      userSequence.length === pulseSequence.length &&
+      userSequence.length > 0
+    ) {
+      if (
+        JSON.stringify(userSequence) ===
+        JSON.stringify(pulseSequence.map((p) => p.index))
+      ) {
         setTimeout(() => {
           setWave((prevWave) => {
             const newWave = prevWave + 1;
@@ -353,28 +405,41 @@ const Game = () => {
   const handleModeChange = (newMode, newGridSize) => {
     setMode(newMode);
     setGridSize(newGridSize);
-    setKey(prevKey => prevKey + 1); // Force re-render
+    setKey((prevKey) => prevKey + 1); // Force re-render
   };
 
   return (
     <>
-      <GridButton onClick={() => {
-        if (mode === 'normal') {
-          handleModeChange('casual', gridSize);
-        } else {
-          handleModeChange('normal', 3);
-        }
-      }}>
+      <GridButton
+        onClick={() => {
+          if (mode === 'normal') {
+            handleModeChange('casual', gridSize);
+          } else {
+            handleModeChange('normal', 3);
+          }
+        }}
+      >
         Switch to {mode === 'normal' ? 'Casual' : 'Normal'} Mode
       </GridButton>
       {mode === 'casual' && (
         <GridButton2>
-          <ModeButton onClick={() => handleModeChange('casual', 3)}>Casual 3x3</ModeButton>
-          <ModeButton onClick={() => handleModeChange('casual', 4)}>Casual 4x4</ModeButton>
-          <ModeButton onClick={() => handleModeChange('casual', 5)}>Casual 5x5</ModeButton>
+          <ModeButton onClick={() => handleModeChange('casual', 3)}>
+            Casual 3x3
+          </ModeButton>
+          <ModeButton onClick={() => handleModeChange('casual', 4)}>
+            Casual 4x4
+          </ModeButton>
+          <ModeButton onClick={() => handleModeChange('casual', 5)}>
+            Casual 5x5
+          </ModeButton>
         </GridButton2>
       )}
-      <ShapeShift key={key} gridSizeProp={gridSize} modeProp={mode} onModeChange={handleModeChange} />
+      <ShapeShift
+        key={key}
+        gridSizeProp={gridSize}
+        modeProp={mode}
+        onModeChange={handleModeChange}
+      />
     </>
   );
 };

@@ -1,14 +1,14 @@
 // src/components/myRoom/groupConstants.ts
 export const goldGroups = [
-    'BunnyEarsCactus',
-    'KitchenSet',
-    'PuzzleShelf',
-    'Arcade',
-    'LightUpSpeakers',
-  ];
-  
-  export const redGroups = ['RoomDisplayOne', 'RoomDisplayTwo'];
-  
+  'BunnyEarsCactus',
+  'KitchenSet',
+  'PuzzleShelf',
+  'Arcade',
+  'LightUpSpeakers',
+];
+
+export const redGroups = ['RoomDisplayOne', 'RoomDisplayTwo'];
+
 export const whiteGroups = [
   'TVMonitor',
   'MonitorScreen',
@@ -28,21 +28,20 @@ export const closetGroups = [
   'DVDPlayer',
   'CableBox',
 ];
-  
-  export const meBitsGroups = [
-    'MeBitEnderman',
-    'MeBitFatty',
-    'MeBitRobot',
-    'MeBitSanta',
-    'MeBitCar',
-    'MeBitUFO',
-    'MeBitPlant',
-    'MeBitBoat',
-    'MeBitCthulu',
-    'MeBitBalloon',
-    'MeSubBit',
-    'MeBitHelmet',
-    'MeBitTerranium',
-    'MeBitChandelier',
-  ];
-  
+
+export const meBitsGroups = [
+  'MeBitEnderman',
+  'MeBitFatty',
+  'MeBitRobot',
+  'MeBitSanta',
+  'MeBitCar',
+  'MeBitUFO',
+  'MeBitPlant',
+  'MeBitBoat',
+  'MeBitCthulu',
+  'MeBitBalloon',
+  'MeSubBit',
+  'MeBitHelmet',
+  'MeBitTerranium',
+  'MeBitChandelier',
+];

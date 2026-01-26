@@ -39,15 +39,63 @@ export const GAME = {
 };
 
 export const BALL_SKINS: BallSkin[] = [
-  { id: 'midnight', name: 'Midnight', color: '#0B0F1A', roughness: 0.15, metalness: 0.1 },
-  { id: 'neon', name: 'Neon', color: '#22D3EE', emissive: '#01262B', roughness: 0.22 },
-  { id: 'flare', name: 'Flare', color: '#F97316', emissive: '#2B1200', roughness: 0.28 },
-  { id: 'violet', name: 'Violet', color: '#A78BFA', emissive: '#12062B', roughness: 0.25 },
-  { id: 'mint', name: 'Mint', color: '#34D399', emissive: '#012B1A', roughness: 0.22 },
-  { id: 'rose', name: 'Rose', color: '#FB7185', emissive: '#2B020B', roughness: 0.24 },
-  { id: 'candy', name: 'Candy', color: '#F472B6', emissive: '#2B0012', roughness: 0.22 },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    color: '#0B0F1A',
+    roughness: 0.15,
+    metalness: 0.1,
+  },
+  {
+    id: 'neon',
+    name: 'Neon',
+    color: '#22D3EE',
+    emissive: '#01262B',
+    roughness: 0.22,
+  },
+  {
+    id: 'flare',
+    name: 'Flare',
+    color: '#F97316',
+    emissive: '#2B1200',
+    roughness: 0.28,
+  },
+  {
+    id: 'violet',
+    name: 'Violet',
+    color: '#A78BFA',
+    emissive: '#12062B',
+    roughness: 0.25,
+  },
+  {
+    id: 'mint',
+    name: 'Mint',
+    color: '#34D399',
+    emissive: '#012B1A',
+    roughness: 0.22,
+  },
+  {
+    id: 'rose',
+    name: 'Rose',
+    color: '#FB7185',
+    emissive: '#2B020B',
+    roughness: 0.24,
+  },
+  {
+    id: 'candy',
+    name: 'Candy',
+    color: '#F472B6',
+    emissive: '#2B0012',
+    roughness: 0.22,
+  },
   { id: 'glacier', name: 'Glacier', color: '#E5E7EB', roughness: 0.3 },
-  { id: 'gold', name: 'Gold', color: '#FBBF24', roughness: 0.25, metalness: 0.9 },
+  {
+    id: 'gold',
+    name: 'Gold',
+    color: '#FBBF24',
+    roughness: 0.25,
+    metalness: 0.9,
+  },
 ];
 
 export const PLATFORM_THEMES: PlatformTheme[] = [

@@ -646,9 +646,7 @@ function Scene() {
     onePathState.fail();
   }
 
-  function hitWall(
-    wall: OnePathLevel['segments'][number]['walls']['neg']
-  ) {
+  function hitWall(wall: OnePathLevel['segments'][number]['walls']['neg']) {
     if (wall.broken || wall.unbreakable) return;
     wall.hp -= 1;
     if (wall.hp <= 0) {

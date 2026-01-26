@@ -29,25 +29,37 @@ const CrittersLane: React.FC<{
     if (!meshRef.current || data.critters.length === 0) return;
     meshRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     if (!meshRef.current.instanceColor) {
-      meshRef.current.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(data.critters.length * 3), 3);
+      meshRef.current.instanceColor = new THREE.InstancedBufferAttribute(
+        new Float32Array(data.critters.length * 3),
+        3
+      );
     }
     data.critters.forEach((critter, index) => {
       meshRef.current?.setColorAt(index, new THREE.Color(critter.color));
     });
-    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    if (meshRef.current.instanceColor)
+      meshRef.current.instanceColor.needsUpdate = true;
   }, [data.critters]);
 
   useFrame((state, delta) => {
-    if (fluxHopState.status !== 'running' || !meshRef.current || data.critters.length === 0) return;
+    if (
+      fluxHopState.status !== 'running' ||
+      !meshRef.current ||
+      data.critters.length === 0
+    )
+      return;
     const time = state.clock.elapsedTime;
     const player = playerRef.current;
 
     data.critters.forEach((critter, index) => {
-      const pace = data.speed * (0.7 + 0.3 * Math.sin(time * 1.4 + critter.bobOffset));
+      const pace =
+        data.speed * (0.7 + 0.3 * Math.sin(time * 1.4 + critter.bobOffset));
       critter.x += pace * data.direction * delta;
       const wrapOffset = critter.length + TILE_SIZE * 2.4;
-      if (data.direction === 1 && critter.x > MAX_X + wrapOffset) critter.x = MIN_X - wrapOffset;
-      else if (data.direction === -1 && critter.x < MIN_X - wrapOffset) critter.x = MAX_X + wrapOffset;
+      if (data.direction === 1 && critter.x > MAX_X + wrapOffset)
+        critter.x = MIN_X - wrapOffset;
+      else if (data.direction === -1 && critter.x < MIN_X - wrapOffset)
+        critter.x = MAX_X + wrapOffset;
 
       const bob = 0.05 * Math.sin(time * 4 + critter.bobOffset);
       dummy.position.set(critter.x, CRITTER_Y + bob, 0);
@@ -73,9 +85,18 @@ const CrittersLane: React.FC<{
   if (data.critters.length === 0) return null;
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, data.critters.length]} castShadow>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, data.critters.length]}
+      castShadow
+    >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#ffffff" roughness={0.5} metalness={0.1} vertexColors />
+      <meshStandardMaterial
+        color="#ffffff"
+        roughness={0.5}
+        metalness={0.1}
+        vertexColors
+      />
     </instancedMesh>
   );
 };
@@ -94,9 +115,20 @@ const WildlifeRow: React.FC<{
       </mesh>
       <mesh position={[0, 0.06, 0]}>
         <boxGeometry args={[ROW_WIDTH * 0.8, 0.04, TILE_SIZE * 0.35]} />
-        <meshStandardMaterial color={NEON_GREEN} emissive={NEON_GREEN} emissiveIntensity={0.15} transparent opacity={0.4} />
+        <meshStandardMaterial
+          color={NEON_GREEN}
+          emissive={NEON_GREEN}
+          emissiveIntensity={0.15}
+          transparent
+          opacity={0.4}
+        />
       </mesh>
-      <CrittersLane rowIndex={rowIndex} data={data} playerRef={playerRef} onHit={onHit} />
+      <CrittersLane
+        rowIndex={rowIndex}
+        data={data}
+        playerRef={playerRef}
+        onHit={onHit}
+      />
     </group>
   );
 };

@@ -12,7 +12,11 @@ interface HazardComponentProps {
   onHit: () => void;
 }
 
-const HazardComponent: React.FC<HazardComponentProps> = ({ hazard, playerPosition, onHit }) => {
+const HazardComponent: React.FC<HazardComponentProps> = ({
+  hazard,
+  playerPosition,
+  onHit,
+}) => {
   const meshRef = useRef<THREE.Group>(null);
   const lastHitTime = useRef(0);
 
@@ -34,7 +38,11 @@ const HazardComponent: React.FC<HazardComponentProps> = ({ hazard, playerPositio
     pos.normalize().multiplyScalar(WORLD_RADIUS);
 
     if (Math.random() < 0.01) {
-      hazard.velocity.set((Math.random() - 0.5) * 0.03, (Math.random() - 0.5) * 0.03, (Math.random() - 0.5) * 0.03);
+      hazard.velocity.set(
+        (Math.random() - 0.5) * 0.03,
+        (Math.random() - 0.5) * 0.03,
+        (Math.random() - 0.5) * 0.03
+      );
     }
 
     if (playerPosition.distanceTo(pos) < HAZARD_RADIUS) {
@@ -51,7 +59,13 @@ const HazardComponent: React.FC<HazardComponentProps> = ({ hazard, playerPositio
       case 'spike':
         return (
           <Octahedron args={[1.5]}>
-            <meshStandardMaterial color="#ff3366" emissive="#ff0044" emissiveIntensity={0.8} metalness={0.8} roughness={0.2} />
+            <meshStandardMaterial
+              color="#ff3366"
+              emissive="#ff0044"
+              emissiveIntensity={0.8}
+              metalness={0.8}
+              roughness={0.2}
+            />
           </Octahedron>
         );
       case 'orb':
@@ -63,13 +77,23 @@ const HazardComponent: React.FC<HazardComponentProps> = ({ hazard, playerPositio
       case 'ring':
         return (
           <Torus args={[1.2, 0.4, 16, 32]}>
-            <meshStandardMaterial color="#ff2200" emissive="#ff4400" emissiveIntensity={0.6} />
+            <meshStandardMaterial
+              color="#ff2200"
+              emissive="#ff4400"
+              emissiveIntensity={0.6}
+            />
           </Torus>
         );
       case 'pulse':
         return (
           <Icosahedron args={[1]}>
-            <meshStandardMaterial color="#ff0066" emissive="#ff0088" emissiveIntensity={1} transparent opacity={0.8} />
+            <meshStandardMaterial
+              color="#ff0066"
+              emissive="#ff0088"
+              emissiveIntensity={1}
+              transparent
+              opacity={0.8}
+            />
           </Icosahedron>
         );
       default:

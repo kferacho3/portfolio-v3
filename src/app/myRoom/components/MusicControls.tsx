@@ -10,45 +10,56 @@ interface MusicControlProps {
 }
 
 // Memoized bar component to prevent unnecessary re-renders
-const VisualizerBar = memo(({ 
-  baseHeight, 
-  speed, 
-  index, 
-  isPlaying 
-}: { 
-  baseHeight: number; 
-  speed: number; 
-  index: number; 
-  isPlaying: boolean 
-}) => (
-  <motion.div
-    className={`w-[5px] rounded-full ${
-      isPlaying
-        ? 'bg-gradient-to-t from-[#39FF14] via-[#9400D3] to-[#FFA500]'
-        : 'bg-gradient-to-t from-slate-600 to-slate-500'
-    }`}
-    animate={{
-      height: isPlaying
-        ? [baseHeight, baseHeight * 2.5, baseHeight * 1.5, baseHeight * 3, baseHeight]
-        : [6, 8, 6],
-      opacity: isPlaying ? 1 : 0.5,
-    }}
-    transition={{
-      duration: speed,
-      repeat: Infinity,
-      delay: index * 0.05,
-      ease: 'easeInOut',
-    }}
-    style={{
-      boxShadow: isPlaying
-        ? `0 0 6px ${index < 3 ? '#39FF14' : index < 6 ? '#9400D3' : '#FFA500'}50`
-        : 'none',
-    }}
-  />
-));
+const VisualizerBar = memo(
+  ({
+    baseHeight,
+    speed,
+    index,
+    isPlaying,
+  }: {
+    baseHeight: number;
+    speed: number;
+    index: number;
+    isPlaying: boolean;
+  }) => (
+    <motion.div
+      className={`w-[5px] rounded-full ${
+        isPlaying
+          ? 'bg-gradient-to-t from-[#39FF14] via-[#9400D3] to-[#FFA500]'
+          : 'bg-gradient-to-t from-slate-600 to-slate-500'
+      }`}
+      animate={{
+        height: isPlaying
+          ? [
+              baseHeight,
+              baseHeight * 2.5,
+              baseHeight * 1.5,
+              baseHeight * 3,
+              baseHeight,
+            ]
+          : [6, 8, 6],
+        opacity: isPlaying ? 1 : 0.5,
+      }}
+      transition={{
+        duration: speed,
+        repeat: Infinity,
+        delay: index * 0.05,
+        ease: 'easeInOut',
+      }}
+      style={{
+        boxShadow: isPlaying
+          ? `0 0 6px ${index < 3 ? '#39FF14' : index < 6 ? '#9400D3' : '#FFA500'}50`
+          : 'none',
+      }}
+    />
+  )
+);
 VisualizerBar.displayName = 'VisualizerBar';
 
-const MusicControl: React.FC<MusicControlProps> = ({ isPlaying, togglePlay }) => {
+const MusicControl: React.FC<MusicControlProps> = ({
+  isPlaying,
+  togglePlay,
+}) => {
   // Reduced number of bars (8 instead of 12) for better performance
   const bars = useMemo(
     () =>
@@ -123,7 +134,11 @@ const MusicControl: React.FC<MusicControlProps> = ({ isPlaying, togglePlay }) =>
                 scale: isPlaying ? [1, 1.2, 1] : 1,
                 opacity: isPlaying ? [1, 0.6, 1] : 0.5,
               }}
-              transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{
+                duration: 1.2,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
               style={{ boxShadow: isPlaying ? '0 0 6px #39FF14' : 'none' }}
             />
             <span
@@ -150,8 +165,18 @@ const MusicControl: React.FC<MusicControlProps> = ({ isPlaying, togglePlay }) =>
             transition={{ duration: 0.25 }}
           >
             <span className="text-[10px] text-white/40 flex items-center gap-1.5">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M9 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
               </svg>
               Click to make the room dance!
             </span>

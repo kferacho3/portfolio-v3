@@ -1,6 +1,6 @@
 /**
  * Game State Type Definitions
- * 
+ *
  * Types for individual game states and HUD data.
  */
 
@@ -105,7 +105,8 @@ export interface GameStateWithHealth extends BaseGameState {
 /**
  * Extended game state with modes
  */
-export interface GameStateWithModes<T extends string = string> extends BaseGameState {
+export interface GameStateWithModes<T extends string = string>
+  extends BaseGameState {
   mode: T;
   setMode: (mode: T) => void;
 }

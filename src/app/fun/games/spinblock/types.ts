@@ -1,4 +1,10 @@
-export type SpinBlockBoardSize = 'xs' | 'small' | 'medium' | 'large' | 'xlarge' | 'xxl';
+export type SpinBlockBoardSize =
+  | 'xs'
+  | 'small'
+  | 'medium'
+  | 'large'
+  | 'xlarge'
+  | 'xxl';
 
 export type SpinBlockBoardPreset = {
   id: SpinBlockBoardSize;

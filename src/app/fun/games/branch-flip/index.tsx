@@ -94,7 +94,8 @@ const SIDE_DIRS = [
   new THREE.Vector2(0, -1),
 ];
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
 
 const BranchFlip: React.FC = () => {
   const snap = useSnapshot(branchFlipState);
@@ -145,8 +146,10 @@ const BranchFlip: React.FC = () => {
         gemMeshRef.current?.setMatrixAt(i, w.dummy.matrix);
       }
       tileMeshRef.current.instanceMatrix.needsUpdate = true;
-      branchMeshRef.current?.instanceMatrix.needsUpdate && (branchMeshRef.current.instanceMatrix.needsUpdate = true);
-      gemMeshRef.current?.instanceMatrix.needsUpdate && (gemMeshRef.current.instanceMatrix.needsUpdate = true);
+      branchMeshRef.current?.instanceMatrix.needsUpdate &&
+        (branchMeshRef.current.instanceMatrix.needsUpdate = true);
+      gemMeshRef.current?.instanceMatrix.needsUpdate &&
+        (gemMeshRef.current.instanceMatrix.needsUpdate = true);
     }
   };
 
@@ -173,7 +176,10 @@ const BranchFlip: React.FC = () => {
     w.dummy.scale.set(1, clamp(growth, 0.001, 1), 1);
     w.dummy.updateMatrix();
     branchMeshRef.current.setMatrixAt(segment.instanceId, w.dummy.matrix);
-    branchMeshRef.current.setColorAt(segment.instanceId, new THREE.Color(theme.tileSide));
+    branchMeshRef.current.setColorAt(
+      segment.instanceId,
+      new THREE.Color(theme.tileSide)
+    );
   };
 
   const addSegment = () => {
@@ -187,11 +193,13 @@ const BranchFlip: React.FC = () => {
     }
 
     const difficulty = clamp(index / 160, 0, 1);
-    const branchChance = BRANCH_CHANCE_MIN + (BRANCH_CHANCE_MAX - BRANCH_CHANCE_MIN) * difficulty;
+    const branchChance =
+      BRANCH_CHANCE_MIN + (BRANCH_CHANCE_MAX - BRANCH_CHANCE_MIN) * difficulty;
     const hasBranch = index > 6 && w.rng.bool(branchChance);
     const branchSide = hasBranch ? w.rng.int(0, 3) : null;
 
-    const hasGem = index > 4 && w.rng.bool(GEM_CHANCE) && branchSide !== w.rotationIndex;
+    const hasGem =
+      index > 4 && w.rng.bool(GEM_CHANCE) && branchSide !== w.rotationIndex;
     const gemSide = w.rng.int(0, 3);
 
     const themeIndex = Math.floor(index / 40) % THEMES.length;
@@ -219,7 +227,10 @@ const BranchFlip: React.FC = () => {
       w.dummy.scale.set(1, 1, 1);
       w.dummy.updateMatrix();
       tileMeshRef.current.setMatrixAt(instanceId, w.dummy.matrix);
-      tileMeshRef.current.setColorAt(instanceId, new THREE.Color(theme.tileTop));
+      tileMeshRef.current.setColorAt(
+        instanceId,
+        new THREE.Color(theme.tileTop)
+      );
     }
 
     segment.branchGrowth = 0.02;
@@ -242,12 +253,18 @@ const BranchFlip: React.FC = () => {
       }
     }
 
-    tileMeshRef.current?.instanceMatrix.needsUpdate && (tileMeshRef.current.instanceMatrix.needsUpdate = true);
-    tileMeshRef.current?.instanceColor && (tileMeshRef.current.instanceColor.needsUpdate = true);
-    branchMeshRef.current?.instanceMatrix.needsUpdate && (branchMeshRef.current.instanceMatrix.needsUpdate = true);
-    branchMeshRef.current?.instanceColor && (branchMeshRef.current.instanceColor.needsUpdate = true);
-    gemMeshRef.current?.instanceMatrix.needsUpdate && (gemMeshRef.current.instanceMatrix.needsUpdate = true);
-    gemMeshRef.current?.instanceColor && (gemMeshRef.current.instanceColor.needsUpdate = true);
+    tileMeshRef.current?.instanceMatrix.needsUpdate &&
+      (tileMeshRef.current.instanceMatrix.needsUpdate = true);
+    tileMeshRef.current?.instanceColor &&
+      (tileMeshRef.current.instanceColor.needsUpdate = true);
+    branchMeshRef.current?.instanceMatrix.needsUpdate &&
+      (branchMeshRef.current.instanceMatrix.needsUpdate = true);
+    branchMeshRef.current?.instanceColor &&
+      (branchMeshRef.current.instanceColor.needsUpdate = true);
+    gemMeshRef.current?.instanceMatrix.needsUpdate &&
+      (gemMeshRef.current.instanceMatrix.needsUpdate = true);
+    gemMeshRef.current?.instanceColor &&
+      (gemMeshRef.current.instanceColor.needsUpdate = true);
 
     w.nextIndex += 1;
   };
@@ -312,7 +329,9 @@ const BranchFlip: React.FC = () => {
 
     if (snap.phase === 'playing') {
       w.time += dt;
-      w.rotation = w.rotation + (w.targetRotation - w.rotation) * Math.min(1, dt * ROTATE_SMOOTH);
+      w.rotation =
+        w.rotation +
+        (w.targetRotation - w.rotation) * Math.min(1, dt * ROTATE_SMOOTH);
       if (worldRef.current) {
         worldRef.current.rotation.x = w.rotation;
       }
@@ -329,7 +348,9 @@ const BranchFlip: React.FC = () => {
         ? clamp((w.time - blockingSegment.spawnTime) / BRANCH_GROW_TIME, 0, 1)
         : 0;
       const isBlocked =
-        !!blockingSegment && blockingSegment.branchSide === w.rotationIndex && blockingGrowth > BRANCH_BLOCK_THRESHOLD;
+        !!blockingSegment &&
+        blockingSegment.branchSide === w.rotationIndex &&
+        blockingGrowth > BRANCH_BLOCK_THRESHOLD;
 
       if (!isBlocked) {
         w.playerX += branchFlipState.speed * dt;
@@ -440,27 +461,53 @@ const BranchFlip: React.FC = () => {
       <directionalLight position={[6, 8, 6]} intensity={0.9} />
 
       <group ref={worldRef}>
-        <instancedMesh ref={tileMeshRef} args={[undefined, undefined, MAX_SEGMENTS]} castShadow receiveShadow>
+        <instancedMesh
+          ref={tileMeshRef}
+          args={[undefined, undefined, MAX_SEGMENTS]}
+          castShadow
+          receiveShadow
+        >
           <boxGeometry args={[TILE_SIZE, TILE_HEIGHT, TILE_SIZE]} />
           <meshStandardMaterial vertexColors roughness={0.6} metalness={0.05} />
         </instancedMesh>
 
-        <instancedMesh ref={branchMeshRef} args={[undefined, undefined, MAX_SEGMENTS]} castShadow receiveShadow>
+        <instancedMesh
+          ref={branchMeshRef}
+          args={[undefined, undefined, MAX_SEGMENTS]}
+          castShadow
+          receiveShadow
+        >
           <boxGeometry args={[TILE_SIZE, BRANCH_LENGTH, TILE_SIZE]} />
-          <meshStandardMaterial vertexColors roughness={0.55} metalness={0.05} />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.55}
+            metalness={0.05}
+          />
         </instancedMesh>
 
-        <instancedMesh ref={gemMeshRef} args={[undefined, undefined, MAX_SEGMENTS]}>
+        <instancedMesh
+          ref={gemMeshRef}
+          args={[undefined, undefined, MAX_SEGMENTS]}
+        >
           <octahedronGeometry args={[0.24, 0]} />
-          <meshStandardMaterial vertexColors roughness={0.3} metalness={0.2} emissiveIntensity={0.35} />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.3}
+            metalness={0.2}
+            emissiveIntensity={0.35}
+          />
         </instancedMesh>
         <group ref={playerRef}>
           <mesh>
-            <boxGeometry args={[PLAYER_SIZE * 0.9, PLAYER_SIZE * 0.9, PLAYER_SIZE * 0.9]} />
+            <boxGeometry
+              args={[PLAYER_SIZE * 0.9, PLAYER_SIZE * 0.9, PLAYER_SIZE * 0.9]}
+            />
             <meshStandardMaterial color={'#e25b4c'} roughness={0.5} />
           </mesh>
           <mesh position={[0, -PLAYER_SIZE * 0.55, 0]}>
-            <boxGeometry args={[PLAYER_SIZE * 0.8, PLAYER_SIZE * 0.2, PLAYER_SIZE * 0.8]} />
+            <boxGeometry
+              args={[PLAYER_SIZE * 0.8, PLAYER_SIZE * 0.2, PLAYER_SIZE * 0.8]}
+            />
             <meshStandardMaterial color={'#2b2b2b'} roughness={0.7} />
           </mesh>
         </group>
@@ -480,7 +527,9 @@ const BranchFlip: React.FC = () => {
           <div style={{ fontSize: 14, opacity: 0.8 }}>GROWTH</div>
           <div style={{ fontSize: 28, fontWeight: 800 }}>{scoreDisplay}</div>
           <div style={{ fontSize: 13, opacity: 0.85 }}>Gems: {snap.gems}</div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>Best: {snap.bestScore}</div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
+            Best: {snap.bestScore}
+          </div>
         </div>
 
         {(snap.phase === 'menu' || snap.phase === 'gameover') && (
@@ -505,8 +554,16 @@ const BranchFlip: React.FC = () => {
               }}
             >
               <div style={{ fontSize: 30, fontWeight: 900 }}>Growth</div>
-              <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85, lineHeight: 1.4 }}>
-                Stay on the branch as long as you can. Tap to rotate the world and keep Mike safe.
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  opacity: 0.85,
+                  lineHeight: 1.4,
+                }}
+              >
+                Stay on the branch as long as you can. Tap to rotate the world
+                and keep Mike safe.
               </div>
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
                 Collect gems to unlock new characters.
@@ -516,7 +573,9 @@ const BranchFlip: React.FC = () => {
                   Run over • Score: {scoreDisplay}
                 </div>
               )}
-              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>Tap / Space to start</div>
+              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
+                Tap / Space to start
+              </div>
             </div>
           </div>
         )}

@@ -48,7 +48,9 @@ export { weaveState } from './state';
 export * from './constants';
 export * from './types';
 
-const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true }) => {
+const Weave: React.FC<{ soundsOn?: boolean }> = ({
+  soundsOn: _soundsOn = true,
+}) => {
   const snap = useSnapshot(weaveState);
   const { camera, scene } = useThree();
 
@@ -82,51 +84,57 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
     scene.background = new THREE.Color('#08080f');
   }, [camera, scene]);
 
-  const generateArms = useCallback((level: number, armCountOverride?: number, baseAngle = 0) => {
-    const armCount = Math.max(1, Math.min(armCountOverride ?? 1, 4));
-    const newArms: LaserArmType[] = [];
-    const baseSpeed = BASE_ARM_SPEED * (1 + (level - 1) * 0.08);
-    const rotationDirection = rotationDirectionRef.current;
+  const generateArms = useCallback(
+    (level: number, armCountOverride?: number, baseAngle = 0) => {
+      const armCount = Math.max(1, Math.min(armCountOverride ?? 1, 4));
+      const newArms: LaserArmType[] = [];
+      const baseSpeed = BASE_ARM_SPEED * (1 + (level - 1) * 0.08);
+      const rotationDirection = rotationDirectionRef.current;
 
-    for (let i = 0; i < armCount; i++) {
-      const angleOffset = (i / armCount) * Math.PI * 2;
-      const speedVariation = 0.95 + Math.random() * 0.1;
+      for (let i = 0; i < armCount; i++) {
+        const angleOffset = (i / armCount) * Math.PI * 2;
+        const speedVariation = 0.95 + Math.random() * 0.1;
 
-      newArms.push({
-        id: `arm-${i}`,
-        angle: baseAngle + angleOffset,
-        speed: baseSpeed * rotationDirection * speedVariation,
-        length: OUTER_RADIUS,
-        color: ARM_COLOR,
-      });
-    }
+        newArms.push({
+          id: `arm-${i}`,
+          angle: baseAngle + angleOffset,
+          speed: baseSpeed * rotationDirection * speedVariation,
+          length: OUTER_RADIUS,
+          color: ARM_COLOR,
+        });
+      }
 
-    return newArms;
-  }, []);
+      return newArms;
+    },
+    []
+  );
 
   useEffect(() => {
     setLaserCount(1);
     setArms(generateArms(1, 1, 0));
   }, [generateArms]);
 
-  const spawnParticles = useCallback((x: number, y: number, color: string, count: number) => {
-    const newParticles: Particle[] = [];
-    for (let i = 0; i < count; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 1 + Math.random() * 2;
-      newParticles.push({
-        id: `p-${Date.now()}-${i}`,
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        color,
-        size: 0.05 + Math.random() * 0.08,
-      });
-    }
-    setParticles((prev) => [...prev, ...newParticles]);
-  }, []);
+  const spawnParticles = useCallback(
+    (x: number, y: number, color: string, count: number) => {
+      const newParticles: Particle[] = [];
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 2;
+        newParticles.push({
+          id: `p-${Date.now()}-${i}`,
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          color,
+          size: 0.05 + Math.random() * 0.08,
+        });
+      }
+      setParticles((prev) => [...prev, ...newParticles]);
+    },
+    []
+  );
 
   const resetRun = useCallback(() => {
     weaveState.reset();
@@ -159,7 +167,13 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
       }
 
       if (!gameStarted) {
-        if (key === ' ' || lower === 'a' || lower === 'd' || key === 'ArrowLeft' || key === 'ArrowRight') {
+        if (
+          key === ' ' ||
+          lower === 'a' ||
+          lower === 'd' ||
+          key === 'ArrowLeft' ||
+          key === 'ArrowRight'
+        ) {
           e.preventDefault();
           setGameStarted(true);
         }
@@ -168,15 +182,24 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
 
       if (key === ' ') {
         e.preventDefault();
-        if (snap.controlScheme === 'keyboard' || snap.controlScheme === 'hybrid') {
-          const next = playerDirection.current === 0 ? -lastNonZeroDirection.current : playerDirection.current * -1;
+        if (
+          snap.controlScheme === 'keyboard' ||
+          snap.controlScheme === 'hybrid'
+        ) {
+          const next =
+            playerDirection.current === 0
+              ? -lastNonZeroDirection.current
+              : playerDirection.current * -1;
           playerDirection.current = next;
           lastNonZeroDirection.current = next as 1 | -1;
         }
         return;
       }
 
-      if (snap.controlScheme === 'keyboard' || snap.controlScheme === 'hybrid') {
+      if (
+        snap.controlScheme === 'keyboard' ||
+        snap.controlScheme === 'hybrid'
+      ) {
         if (key === 'ArrowLeft' || lower === 'a') {
           playerDirection.current = 1;
           lastNonZeroDirection.current = 1;
@@ -190,7 +213,10 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key;
       const lower = key.toLowerCase();
-      if (snap.controlScheme === 'keyboard' || snap.controlScheme === 'hybrid') {
+      if (
+        snap.controlScheme === 'keyboard' ||
+        snap.controlScheme === 'hybrid'
+      ) {
         if (key === 'ArrowLeft' || lower === 'a') {
           if (playerDirection.current === 1) playerDirection.current = 0;
         } else if (key === 'ArrowRight' || lower === 'd') {
@@ -274,7 +300,9 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
     const allow4 = t >= 180;
 
     const startBurst = (count: number, label: string) => {
-      const duration = MULTI_LASER_MIN_DURATION + Math.random() * (MULTI_LASER_MAX_DURATION - MULTI_LASER_MIN_DURATION);
+      const duration =
+        MULTI_LASER_MIN_DURATION +
+        Math.random() * (MULTI_LASER_MAX_DURATION - MULTI_LASER_MIN_DURATION);
       burstEndsAt.current = t + duration;
       setLaserCount(count);
       const baseAngle = arms[0]?.angle ?? 0;
@@ -282,7 +310,8 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
       setLaserBurstLabel(label);
       window.setTimeout(() => setLaserBurstLabel(null), 1200);
       const cooldown =
-        MULTI_LASER_COOLDOWN_MIN + Math.random() * (MULTI_LASER_COOLDOWN_MAX - MULTI_LASER_COOLDOWN_MIN);
+        MULTI_LASER_COOLDOWN_MIN +
+        Math.random() * (MULTI_LASER_COOLDOWN_MAX - MULTI_LASER_COOLDOWN_MIN);
       nextBurstAt.current = t + duration + cooldown;
     };
 
@@ -295,7 +324,14 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
     } else if (!burstEndsAt.current && t >= nextBurstAt.current) {
       const max = allow4 ? 4 : allow3 ? 3 : 2;
       const count = 2 + Math.floor(Math.random() * (max - 1));
-      startBurst(count, count === 2 ? 'DUAL LASERS' : count === 3 ? 'TRIPLE LASERS' : 'QUAD LASERS');
+      startBurst(
+        count,
+        count === 2
+          ? 'DUAL LASERS'
+          : count === 3
+            ? 'TRIPLE LASERS'
+            : 'QUAD LASERS'
+      );
     } else if (burstEndsAt.current && t >= burstEndsAt.current) {
       burstEndsAt.current = null;
       setLaserCount(1);
@@ -315,7 +351,9 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
 
     const playerSpeed = BASE_PLAYER_SPEED * (1 + snap.level * 0.08);
     if (playerDirection.current !== 0) {
-      setPlayerAngle((prev) => prev + playerDirection.current * playerSpeed * delta);
+      setPlayerAngle(
+        (prev) => prev + playerDirection.current * playerSpeed * delta
+      );
     }
 
     const levelSpeedMultiplier = 1 + (snap.level - 1) * 0.05;
@@ -348,7 +386,10 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
       }
     }
 
-    if (gameTime.current - lastOrbSpawn.current > ORB_SPAWN_INTERVAL / (1 + snap.level * 0.1)) {
+    if (
+      gameTime.current - lastOrbSpawn.current >
+      ORB_SPAWN_INTERVAL / (1 + snap.level * 0.1)
+    ) {
       lastOrbSpawn.current = gameTime.current;
 
       let safeAngle = Math.random() * Math.PI * 2;
@@ -356,7 +397,8 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
       while (attempts < 10) {
         let isSafe = true;
         for (const arm of arms) {
-          const armAngle = ((arm.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+          const armAngle =
+            ((arm.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
           let diff = Math.abs(safeAngle - armAngle);
           if (diff > Math.PI) diff = Math.PI * 2 - diff;
           if (diff < 0.5) {
@@ -420,7 +462,10 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
             const baseAngle = arms[0]?.angle ?? 0;
             setArms(generateArms(weaveState.level, laserCount, baseAngle));
 
-            if (weaveState.level % 3 === 0 && weaveState.lives < weaveState.maxLives) {
+            if (
+              weaveState.level % 3 === 0 &&
+              weaveState.lives < weaveState.maxLives
+            ) {
               weaveState.lives += 1;
             }
           }
@@ -468,7 +513,12 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true })
 
       <ParticleEffect particles={particles} />
 
-      <Player angle={playerAngle} color={currentColor} isHit={isHit} invincible={snap.invincible} />
+      <Player
+        angle={playerAngle}
+        color={currentColor}
+        isHit={isHit}
+        invincible={snap.invincible}
+      />
 
       <WeaveHUD
         score={snap.score}

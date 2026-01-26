@@ -1,6 +1,6 @@
 /**
  * VoidRunner Game
- * 
+ *
  * Synthwave endless runner inspired by Cuberun.
  * Dodge cubes, level up, chase high scores.
  */

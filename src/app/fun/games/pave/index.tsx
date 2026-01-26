@@ -1,6 +1,6 @@
 /**
  * Pave.tsx (Shape Shifter Rush)
- * 
+ *
  * Infinite shape-matching runner
  * Cycle through shapes to match and collect oncoming shapes
  * Features: lives, obstacles, power-ups, combo system, and themed worlds
@@ -9,7 +9,13 @@
 
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 
@@ -56,7 +62,7 @@ export const paveState = proxy({
   // World
   distance: 0,
   world: 0,
-  
+
   reset() {
     this.score = 0;
     this.lives = 3;
@@ -76,14 +82,14 @@ export const paveState = proxy({
     this.distance = 0;
     this.world = 0;
   },
-  
+
   cycleShape(direction: 1 | -1) {
     const shapes: ShapeType[] = ['triangle', 'square', 'pentagon', 'hexagon'];
     const currentIndex = shapes.indexOf(this.currentShape);
     const newIndex = (currentIndex + direction + shapes.length) % shapes.length;
     this.currentShape = shapes[newIndex];
   },
-  
+
   loseLife() {
     if (this.hasShield) {
       this.hasShield = false;
@@ -97,12 +103,14 @@ export const paveState = proxy({
         this.highScore = this.score;
         try {
           localStorage.setItem('pave-highscore', String(this.score));
-        } catch (e) { /* ignore */ }
+        } catch (e) {
+          /* ignore */
+        }
       }
     }
     return this.lives <= 0;
   },
-  
+
   collectShape(isMatch: boolean) {
     if (isMatch) {
       const basePoints = 10;
@@ -116,7 +124,7 @@ export const paveState = proxy({
       this.loseLife();
     }
   },
-  
+
   activatePowerUp(type: PowerUpType) {
     switch (type) {
       case 'shield':
@@ -140,12 +148,14 @@ export const paveState = proxy({
         break;
     }
   },
-  
+
   loadHighScore() {
     try {
       const saved = localStorage.getItem('pave-highscore');
       if (saved) this.highScore = parseInt(saved, 10);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   },
 });
 
@@ -180,7 +190,12 @@ const WORLDS = [
   { name: 'Crystal Cave', bg: '#0a1628', ground: '#162447', accent: '#48dbfb' },
   { name: 'Lava Fields', bg: '#1a0800', ground: '#2a1000', accent: '#ff6600' },
   { name: 'Void Space', bg: '#050510', ground: '#0a0a20', accent: '#9b59b6' },
-  { name: 'Emerald Forest', bg: '#0a1a0a', ground: '#102010', accent: '#00ff66' },
+  {
+    name: 'Emerald Forest',
+    bg: '#0a1a0a',
+    ground: '#102010',
+    accent: '#00ff66',
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -189,14 +204,22 @@ const WORLDS = [
 
 class SeededRandom {
   private seed: number;
-  constructor(seed: number) { this.seed = seed; }
+  constructor(seed: number) {
+    this.seed = seed;
+  }
   next(): number {
     this.seed = (this.seed * 1103515245 + 12345) & 0x7fffffff;
     return this.seed / 0x7fffffff;
   }
-  range(min: number, max: number): number { return min + this.next() * (max - min); }
-  int(min: number, max: number): number { return Math.floor(this.range(min, max + 1)); }
-  pick<T>(arr: T[]): T { return arr[Math.floor(this.next() * arr.length)]; }
+  range(min: number, max: number): number {
+    return min + this.next() * (max - min);
+  }
+  int(min: number, max: number): number {
+    return Math.floor(this.range(min, max + 1));
+  }
+  pick<T>(arr: T[]): T {
+    return arr[Math.floor(this.next() * arr.length)];
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -218,9 +241,19 @@ const ShapeMesh: React.FC<{
       case 'square':
         return new THREE.BoxGeometry(1 * scale, 1 * scale, 1 * scale);
       case 'pentagon':
-        return new THREE.CylinderGeometry(0.8 * scale, 0.8 * scale, 0.5 * scale, 5);
+        return new THREE.CylinderGeometry(
+          0.8 * scale,
+          0.8 * scale,
+          0.5 * scale,
+          5
+        );
       case 'hexagon':
-        return new THREE.CylinderGeometry(0.8 * scale, 0.8 * scale, 0.5 * scale, 6);
+        return new THREE.CylinderGeometry(
+          0.8 * scale,
+          0.8 * scale,
+          0.5 * scale,
+          6
+        );
       default:
         return new THREE.BoxGeometry(1 * scale, 1 * scale, 1 * scale);
     }
@@ -269,12 +302,17 @@ const Player: React.FC<{
     <group ref={groupRef} position={[LANES[lane], 1, 0]}>
       <ShapeMesh shape={shape} color={SHAPE_COLORS[shape]} scale={1.2} />
       <pointLight color={SHAPE_COLORS[shape]} intensity={2} distance={8} />
-      
+
       {/* Shield effect */}
       {hasShield && (
         <mesh ref={shieldRef}>
           <icosahedronGeometry args={[1.8, 1]} />
-          <meshBasicMaterial color="#00ff88" transparent opacity={0.25} wireframe />
+          <meshBasicMaterial
+            color="#00ff88"
+            transparent
+            opacity={0.25}
+            wireframe
+          />
         </mesh>
       )}
     </group>
@@ -293,9 +331,9 @@ const CollectibleEntity: React.FC<{
 
   useFrame((state, delta) => {
     if (!groupRef.current || entity.collected) return;
-    
+
     groupRef.current.rotation.y += delta * 2;
-    
+
     // Magnet effect for matching shapes
     if (hasMagnet && entity.type === 'shape' && entity.shape === playerShape) {
       const targetX = LANES[playerLane];
@@ -305,7 +343,7 @@ const CollectibleEntity: React.FC<{
         delta * 3
       );
     }
-    
+
     // Bobbing animation
     const bob = Math.sin(state.clock.elapsedTime * 3 + entity.id) * 0.2;
     groupRef.current.position.y = 1 + bob;
@@ -325,7 +363,11 @@ const CollectibleEntity: React.FC<{
       <>
         <mesh>
           <octahedronGeometry args={[0.8]} />
-          <meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={0.8} />
+          <meshStandardMaterial
+            color="#ff0000"
+            emissive="#ff0000"
+            emissiveIntensity={0.8}
+          />
         </mesh>
         <pointLight color="#ff0000" intensity={1} distance={4} />
       </>
@@ -336,7 +378,11 @@ const CollectibleEntity: React.FC<{
       <>
         <mesh>
           <dodecahedronGeometry args={[0.6]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.8} />
+          <meshStandardMaterial
+            color={color}
+            emissive={color}
+            emissiveIntensity={0.8}
+          />
         </mesh>
         <mesh>
           <torusGeometry args={[0.9, 0.05, 8, 32]} />
@@ -355,7 +401,10 @@ const CollectibleEntity: React.FC<{
 };
 
 // Ground with scrolling grid
-const Ground: React.FC<{ color: string; accentColor: string }> = ({ color, accentColor }) => {
+const Ground: React.FC<{ color: string; accentColor: string }> = ({
+  color,
+  accentColor,
+}) => {
   const materialRef = useRef<THREE.MeshStandardMaterial>(null);
 
   return (
@@ -388,10 +437,14 @@ const GameHUD: React.FC = () => {
 
   const getShapeIcon = (shape: ShapeType) => {
     switch (shape) {
-      case 'triangle': return '△';
-      case 'square': return '□';
-      case 'pentagon': return '⬠';
-      case 'hexagon': return '⬡';
+      case 'triangle':
+        return '△';
+      case 'square':
+        return '□';
+      case 'pentagon':
+        return '⬠';
+      case 'hexagon':
+        return '⬡';
     }
   };
 
@@ -403,9 +456,12 @@ const GameHUD: React.FC = () => {
   if (snap.gameOver) {
     return (
       <Html fullscreen>
-        <div 
+        <div
           className="fixed inset-0 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.9)', fontFamily: '"Geist", system-ui, sans-serif' }}
+          style={{
+            background: 'rgba(0,0,0,0.9)',
+            fontFamily: '"Geist", system-ui, sans-serif',
+          }}
         >
           <div className="text-center">
             <h1 className="text-6xl font-bold text-white mb-4">GAME OVER</h1>
@@ -418,9 +474,13 @@ const GameHUD: React.FC = () => {
               <p>Distance: {Math.floor(snap.distance)}m</p>
             </div>
             {snap.score >= snap.highScore && snap.score > 0 && (
-              <div className="text-yellow-400 text-lg mb-4 animate-pulse">NEW HIGH SCORE!</div>
+              <div className="text-yellow-400 text-lg mb-4 animate-pulse">
+                NEW HIGH SCORE!
+              </div>
             )}
-            <p className="text-white/40 mb-6">Best: {snap.highScore.toLocaleString()}</p>
+            <p className="text-white/40 mb-6">
+              Best: {snap.highScore.toLocaleString()}
+            </p>
             <button
               onClick={() => paveState.reset()}
               className="px-8 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 text-white font-bold rounded-xl hover:scale-105 transition-transform"
@@ -440,10 +500,16 @@ const GameHUD: React.FC = () => {
         {/* Score & Lives */}
         <div className="absolute top-4 left-4">
           <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3">
-            <div className="text-white text-3xl font-bold">{snap.score.toLocaleString()}</div>
-            <div className="text-white/60 text-sm">Distance: {Math.floor(snap.distance)}m</div>
+            <div className="text-white text-3xl font-bold">
+              {snap.score.toLocaleString()}
+            </div>
+            <div className="text-white/60 text-sm">
+              Distance: {Math.floor(snap.distance)}m
+            </div>
             {snap.combo > 0 && (
-              <div className="text-cyan-400 text-sm">Combo: x{snap.combo + 1}</div>
+              <div className="text-cyan-400 text-sm">
+                Combo: x{snap.combo + 1}
+              </div>
             )}
           </div>
         </div>
@@ -475,7 +541,7 @@ const GameHUD: React.FC = () => {
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
           <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-8 py-4 flex flex-col items-center">
             <div className="text-white/40 text-xs mb-2">YOUR SHAPE</div>
-            <div 
+            <div
               className="text-6xl"
               style={{ color: SHAPE_COLORS[snap.currentShape] }}
             >
@@ -520,11 +586,11 @@ const GameHUD: React.FC = () => {
 
         {/* Mobile controls */}
         <div className="absolute bottom-0 left-0 right-0 h-1/3 flex pointer-events-auto md:hidden">
-          <div 
+          <div
             className="flex-1"
             onTouchStart={() => paveState.cycleShape(-1)}
           />
-          <div 
+          <div
             className="flex-1"
             onTouchStart={() => paveState.cycleShape(1)}
           />
@@ -544,7 +610,7 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
   const [playerLane, setPlayerLane] = useState(1); // 0, 1, 2 for left, center, right
   const [entities, setEntities] = useState<Entity[]>([]);
-  
+
   const rngRef = useRef(new SeededRandom(Date.now()));
   const entityIdRef = useRef(0);
   const nextSpawnTime = useRef(0); // Time until next spawn
@@ -610,7 +676,7 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         e.preventDefault();
         paveState.cycleShape(1);
       }
-      
+
       // Alternative shape cycling with W/S or Up/Down
       if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') {
         paveState.cycleShape(-1);
@@ -630,7 +696,10 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
     // Calculate speed
     const speedMultiplier = paveState.hasSlowMo ? 0.5 : 1;
-    const difficultySpeed = Math.min(MAX_SPEED, BASE_SPEED + snap.distance * 0.01);
+    const difficultySpeed = Math.min(
+      MAX_SPEED,
+      BASE_SPEED + snap.distance * 0.01
+    );
     gameSpeedRef.current = difficultySpeed * speedMultiplier;
 
     // Update distance
@@ -662,13 +731,15 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
     // Move entities toward player
     setEntities((prev) => {
-      return prev.map((entity) => {
-        if (entity.collected) return entity;
-        
-        const newZ = entity.position.z + gameSpeedRef.current * delta;
-        entity.position.z = newZ;
-        return entity;
-      }).filter((entity) => entity.position.z < 10); // Remove passed entities
+      return prev
+        .map((entity) => {
+          if (entity.collected) return entity;
+
+          const newZ = entity.position.z + gameSpeedRef.current * delta;
+          entity.position.z = newZ;
+          return entity;
+        })
+        .filter((entity) => entity.position.z < 10); // Remove passed entities
     });
 
     // Check collisions
@@ -681,7 +752,7 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
         const dist = Math.sqrt(
           (entity.position.x - playerX) ** 2 +
-          (entity.position.z - playerZ) ** 2
+            (entity.position.z - playerZ) ** 2
         );
 
         if (dist < COLLECTION_DISTANCE) {
@@ -703,19 +774,22 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
     // Spawn new entities continuously
     nextSpawnTime.current -= delta;
-    
+
     if (nextSpawnTime.current <= 0) {
       // Calculate spawn interval (gets faster as game progresses)
       const baseInterval = 0.8;
       const minInterval = 0.3;
-      const spawnInterval = Math.max(minInterval, baseInterval - snap.distance * 0.0005);
+      const spawnInterval = Math.max(
+        minInterval,
+        baseInterval - snap.distance * 0.0005
+      );
       nextSpawnTime.current = spawnInterval + rngRef.current.range(-0.2, 0.2);
-      
+
       const lane = rngRef.current.int(0, 2);
       const rand = rngRef.current.next();
-      
+
       let newEntity: Entity;
-      
+
       // Spawn probabilities (obstacles get more common over time)
       const obstacleChance = Math.min(0.2, 0.05 + snap.distance * 0.0002);
       const powerUpChance = 0.05;
@@ -731,7 +805,13 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         };
       } else if (rand < obstacleChance + powerUpChance) {
         // Spawn power-up
-        const powerUps: PowerUpType[] = ['shield', 'magnet', 'slow', 'doublePoints', 'extraLife'];
+        const powerUps: PowerUpType[] = [
+          'shield',
+          'magnet',
+          'slow',
+          'doublePoints',
+          'extraLife',
+        ];
         newEntity = {
           id: entityIdRef.current++,
           type: 'powerup',
@@ -756,7 +836,11 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     }
 
     // Camera position
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, LANES[playerLane] * 0.3, delta * 3);
+    camera.position.x = THREE.MathUtils.lerp(
+      camera.position.x,
+      LANES[playerLane] * 0.3,
+      delta * 3
+    );
   });
 
   return (

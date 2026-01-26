@@ -4,7 +4,10 @@ import { useFrame } from '@react-three/fiber';
 import React, { useMemo } from 'react';
 import * as THREE from 'three';
 
-export const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({ accentA, accentB }) => {
+export const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({
+  accentA,
+  accentB,
+}) => {
   const mat = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {

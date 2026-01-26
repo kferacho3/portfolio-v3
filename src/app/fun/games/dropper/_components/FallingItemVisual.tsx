@@ -3,11 +3,11 @@ import React, { useCallback, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { FallingItem } from '../types';
 
-const FallingItemVisual: React.FC<{ item: FallingItem; magnetX?: number; hasMagnet: boolean }> = ({
-  item,
-  magnetX = 0,
-  hasMagnet,
-}) => {
+const FallingItemVisual: React.FC<{
+  item: FallingItem;
+  magnetX?: number;
+  hasMagnet: boolean;
+}> = ({ item, magnetX = 0, hasMagnet }) => {
   const groupRef = useRef<THREE.Group>(null);
   const materialRef = useRef<THREE.MeshPhysicalMaterial>(null);
   const timeRef = useRef(Math.random() * 100);
@@ -20,10 +20,19 @@ const FallingItemVisual: React.FC<{ item: FallingItem; magnetX?: number; hasMagn
     groupRef.current.rotation.y += delta * 2.5;
     groupRef.current.rotation.x += delta * 1.2;
 
-    if (hasMagnet && !item.config.isDangerous && !item.collected && item.y < 8) {
+    if (
+      hasMagnet &&
+      !item.config.isDangerous &&
+      !item.collected &&
+      item.y < 8
+    ) {
       const pullStrength = 0.15;
       const targetX = magnetX;
-      currentX.current = THREE.MathUtils.lerp(currentX.current, targetX, pullStrength);
+      currentX.current = THREE.MathUtils.lerp(
+        currentX.current,
+        targetX,
+        pullStrength
+      );
       groupRef.current.position.x = currentX.current;
     } else {
       currentX.current = item.x;
@@ -36,8 +45,12 @@ const FallingItemVisual: React.FC<{ item: FallingItem; magnetX?: number; hasMagn
       materialRef.current.emissive.setHSL(hue / 360, 0.9, 0.35);
     }
 
-    if (materialRef.current && (item.config.isRare || item.config.isDangerous || item.config.isPowerUp)) {
-      materialRef.current.emissiveIntensity = 0.4 + 0.35 * Math.sin(timeRef.current * 5);
+    if (
+      materialRef.current &&
+      (item.config.isRare || item.config.isDangerous || item.config.isPowerUp)
+    ) {
+      materialRef.current.emissiveIntensity =
+        0.4 + 0.35 * Math.sin(timeRef.current * 5);
     }
   });
 
@@ -75,31 +88,50 @@ const FallingItemVisual: React.FC<{ item: FallingItem; magnetX?: number; hasMagn
   }, [item.config.emissive, item.config.isPowerUp, item.type]);
 
   return (
-    <group ref={groupRef} position={[item.x, item.y, 0]} scale={item.visualScale}>
+    <group
+      ref={groupRef}
+      position={[item.x, item.y, 0]}
+      scale={item.visualScale}
+    >
       <mesh castShadow>
         {renderShape()}
         <meshPhysicalMaterial
           ref={materialRef}
           color={item.config.color}
-          metalness={item.config.isRare ? 0.9 : item.config.isPowerUp ? 0.5 : 0.4}
+          metalness={
+            item.config.isRare ? 0.9 : item.config.isPowerUp ? 0.5 : 0.4
+          }
           roughness={item.config.isRare ? 0.1 : 0.3}
           emissive={item.config.emissive}
-          emissiveIntensity={item.config.isRare || item.config.isPowerUp ? 0.5 : 0.25}
+          emissiveIntensity={
+            item.config.isRare || item.config.isPowerUp ? 0.5 : 0.25
+          }
           clearcoat={item.config.isRare ? 1.0 : 0.6}
         />
       </mesh>
 
-      {(item.config.isRare || item.config.isDangerous || item.config.isPowerUp) && (
+      {(item.config.isRare ||
+        item.config.isDangerous ||
+        item.config.isPowerUp) && (
         <mesh scale={1.6}>
           {renderShape()}
-          <meshBasicMaterial color={glowColor} transparent opacity={0.25} side={THREE.BackSide} />
+          <meshBasicMaterial
+            color={glowColor}
+            transparent
+            opacity={0.25}
+            side={THREE.BackSide}
+          />
         </mesh>
       )}
 
       {item.config.isRare && (
         <mesh position={[0, 1, 0]}>
           <coneGeometry args={[0.18, 1.5, 8]} />
-          <meshBasicMaterial color={item.config.emissive} transparent opacity={0.5} />
+          <meshBasicMaterial
+            color={item.config.emissive}
+            transparent
+            opacity={0.5}
+          />
         </mesh>
       )}
 

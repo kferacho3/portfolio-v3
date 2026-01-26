@@ -9,11 +9,22 @@ const ProjectMuseum: React.FC = () => {
 
   return (
     <>
-      <Stars radius={120} depth={60} count={1200} factor={4} saturation={0} fade />
+      <Stars
+        radius={120}
+        depth={60}
+        count={1200}
+        factor={4}
+        saturation={0}
+        fade
+      />
       <Float speed={1} rotationIntensity={0.2} floatIntensity={0.4}>
         <mesh position={[0, 1.5, -6]}>
           <torusKnotGeometry args={[1.2, 0.35, 120, 18]} />
-          <meshStandardMaterial color="#7dd3fc" metalness={0.6} roughness={0.2} />
+          <meshStandardMaterial
+            color="#7dd3fc"
+            metalness={0.6}
+            roughness={0.2}
+          />
         </mesh>
       </Float>
       <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -28,7 +39,8 @@ const ProjectMuseum: React.FC = () => {
                   Featured Builds & Systems
                 </h2>
                 <p className="mt-2 text-sm text-white/70">
-                  A quick tour of recent work, focused on frontend systems, UI engineering, and complex integrations.
+                  A quick tour of recent work, focused on frontend systems, UI
+                  engineering, and complex integrations.
                 </p>
               </div>
               <span className="rounded-full border border-white/20 px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white/60">
@@ -41,7 +53,9 @@ const ProjectMuseum: React.FC = () => {
                   key={project.id}
                   className="rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-white/30"
                 >
-                  <div className="text-sm font-semibold text-white">{project.title}</div>
+                  <div className="text-sm font-semibold text-white">
+                    {project.title}
+                  </div>
                   <p className="mt-2 text-xs leading-relaxed text-white/70">
                     {project.description}
                   </p>

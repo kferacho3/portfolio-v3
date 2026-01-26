@@ -14,8 +14,9 @@ const WallModeCameraSetup: React.FC = () => {
     const verticalFov = THREE.MathUtils.degToRad(targetFov);
     const fitHeight = WALL_MODE_HEIGHT * 1.2;
     const fitWidth = WALL_MODE_WIDTH * 1.1;
-    const distanceForHeight = (fitHeight / 2) / Math.tan(verticalFov / 2);
-    const distanceForWidth = (fitWidth / 2) / (Math.tan(verticalFov / 2) * aspect);
+    const distanceForHeight = fitHeight / 2 / Math.tan(verticalFov / 2);
+    const distanceForWidth =
+      fitWidth / 2 / (Math.tan(verticalFov / 2) * aspect);
     const distance = Math.max(distanceForHeight, distanceForWidth);
     return new THREE.Vector3(0, 0, distance + 2);
   }, [size.width, size.height, targetFov]);

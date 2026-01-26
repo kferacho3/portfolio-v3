@@ -13,7 +13,7 @@ export const LowPolyGroundVisual: React.FC<{ tint: string }> = ({ tint }) => {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       const ridge = Math.sin(x * 0.22) * Math.cos(z * 0.2) * 0.12;
-      const bowl = -Math.hypot(x, z) / (ARENA * 0.7) * 0.5;
+      const bowl = (-Math.hypot(x, z) / (ARENA * 0.7)) * 0.5;
       pos.setY(i, -0.03 + ridge + bowl);
     }
     pos.needsUpdate = true;
@@ -22,7 +22,12 @@ export const LowPolyGroundVisual: React.FC<{ tint: string }> = ({ tint }) => {
   }, []);
   return (
     <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color={tint} roughness={0.95} metalness={0.05} flatShading />
+      <meshStandardMaterial
+        color={tint}
+        roughness={0.95}
+        metalness={0.05}
+        flatShading
+      />
     </mesh>
   );
 };

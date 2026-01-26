@@ -10,7 +10,9 @@ const ModeSelector: React.FC = () => {
     <Html fullscreen style={{ pointerEvents: 'none' }}>
       <div className="absolute top-4 left-4 z-50 pointer-events-auto">
         <div className="bg-slate-950/80 backdrop-blur-sm rounded-xl border border-white/10 px-4 py-3">
-          <div className="text-xs uppercase tracking-wider text-white/60 mb-2">Mode</div>
+          <div className="text-xs uppercase tracking-wider text-white/60 mb-2">
+            Mode
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => skyBlitzClassicState.setMode('UfoMode')}
@@ -33,7 +35,9 @@ const ModeSelector: React.FC = () => {
               Runner Mode
             </button>
           </div>
-          <div className="mt-3 text-xs uppercase tracking-wider text-white/60 mb-2">Graphics</div>
+          <div className="mt-3 text-xs uppercase tracking-wider text-white/60 mb-2">
+            Graphics
+          </div>
           <div className="flex gap-2">
             <button
               onClick={() => skyBlitzClassicState.setGraphicsMode('clean')}

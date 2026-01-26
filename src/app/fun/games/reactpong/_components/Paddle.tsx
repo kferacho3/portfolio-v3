@@ -1,6 +1,10 @@
 import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { CylinderCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  CylinderCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import clamp from 'lodash-es/clamp';
 import { easing } from 'maath';
 import React, { useCallback, useRef } from 'react';
@@ -23,31 +27,48 @@ const Paddle: React.FC<PaddleProps> = ({ scoreColor }) => {
   const quaternion = useRef(new THREE.Quaternion());
   const euler = useRef(new THREE.Euler());
 
-  const contactForce = useCallback((payload: { totalForceMagnitude: number }) => {
-    if (payload.totalForceMagnitude > 500) {
-      const pos = paddleApi.current?.translation();
-      reactPongState.pong(
-        payload.totalForceMagnitude / 100,
-        'paddle',
-        pos ? [pos.x, pos.y, pos.z] : undefined
-      );
-      if (model.current) {
-        model.current.position.y = -payload.totalForceMagnitude / 10000;
+  const contactForce = useCallback(
+    (payload: { totalForceMagnitude: number }) => {
+      if (payload.totalForceMagnitude > 500) {
+        const pos = paddleApi.current?.translation();
+        reactPongState.pong(
+          payload.totalForceMagnitude / 100,
+          'paddle',
+          pos ? [pos.x, pos.y, pos.z] : undefined
+        );
+        if (model.current) {
+          model.current.position.y = -payload.totalForceMagnitude / 10000;
+        }
       }
-    }
-  }, []);
+    },
+    []
+  );
 
   useFrame((state, delta) => {
-    vec.current.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
+    vec.current
+      .set(state.pointer.x, state.pointer.y, 0.5)
+      .unproject(state.camera);
     dir.current.copy(vec.current).sub(state.camera.position).normalize();
     vec.current.add(dir.current.multiplyScalar(state.camera.position.length()));
 
     const arenaWidth = 20;
     const arenaHeight = 10;
-    const clampedX = clamp(vec.current.x, -arenaWidth / 2 + 2, arenaWidth / 2 - 2);
-    const clampedY = clamp(vec.current.y, -arenaHeight / 2 + 1, arenaHeight / 2 - 1);
+    const clampedX = clamp(
+      vec.current.x,
+      -arenaWidth / 2 + 2,
+      arenaWidth / 2 - 2
+    );
+    const clampedY = clamp(
+      vec.current.y,
+      -arenaHeight / 2 + 1,
+      arenaHeight / 2 - 1
+    );
 
-    paddleApi.current?.setNextKinematicTranslation({ x: clampedX, y: clampedY, z: 0 });
+    paddleApi.current?.setNextKinematicTranslation({
+      x: clampedX,
+      y: clampedY,
+      z: 0,
+    });
 
     const rotationAngle = (state.pointer.x * Math.PI) / 10;
     euler.current.set(0, 0, rotationAngle);

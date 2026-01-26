@@ -35,6 +35,11 @@ export default class GameText {
 
   resetText() {
     this.p5.textSize(20);
-    return this.p5.text('Play Again?', 0, CANVAS_HEIGHT / 2 + 140, CANVAS_WIDTH);
+    return this.p5.text(
+      'Play Again?',
+      0,
+      CANVAS_HEIGHT / 2 + 140,
+      CANVAS_WIDTH
+    );
   }
 }

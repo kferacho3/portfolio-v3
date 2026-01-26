@@ -16,15 +16,31 @@ const WorldSurface: React.FC = () => {
   return (
     <group>
       <Sphere ref={meshRef} args={[WORLD_RADIUS - 0.5, 128, 128]}>
-        <meshStandardMaterial color="#0a0a1a" metalness={0.2} roughness={0.8} side={THREE.BackSide} />
+        <meshStandardMaterial
+          color="#0a0a1a"
+          metalness={0.2}
+          roughness={0.8}
+          side={THREE.BackSide}
+        />
       </Sphere>
 
       <Sphere args={[WORLD_RADIUS - 0.3, 48, 48]}>
-        <meshBasicMaterial color="#1a1a3a" wireframe transparent opacity={0.3} side={THREE.BackSide} />
+        <meshBasicMaterial
+          color="#1a1a3a"
+          wireframe
+          transparent
+          opacity={0.3}
+          side={THREE.BackSide}
+        />
       </Sphere>
 
       <Sphere args={[WORLD_RADIUS - 2, 32, 32]}>
-        <meshBasicMaterial color="#0f0f2f" transparent opacity={0.5} side={THREE.BackSide} />
+        <meshBasicMaterial
+          color="#0f0f2f"
+          transparent
+          opacity={0.5}
+          side={THREE.BackSide}
+        />
       </Sphere>
     </group>
   );

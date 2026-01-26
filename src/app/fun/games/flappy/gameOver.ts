@@ -27,6 +27,16 @@ export default class GameO {
   }
 
   draw() {
-    this.p5.image(this.image, this.sX, this.sY, this.w, this.h, this.x, this.y, this.w, this.h);
+    this.p5.image(
+      this.image,
+      this.sX,
+      this.sY,
+      this.w,
+      this.h,
+      this.x,
+      this.y,
+      this.w,
+      this.h
+    );
   }
 }

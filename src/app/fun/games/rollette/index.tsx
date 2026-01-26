@@ -11,7 +11,10 @@ export { rolletteState } from './state';
 
 const BEST_SCORE_KEY = 'rollette_overdrive_best_v1';
 
-const RolletteOverdrive: React.FC<{ soundsOn?: boolean; paused?: boolean }> = ({ soundsOn = true, paused }) => {
+const RolletteOverdrive: React.FC<{ soundsOn?: boolean; paused?: boolean }> = ({
+  soundsOn = true,
+  paused,
+}) => {
   const { gl } = useThree();
   const damageFlashRef = useRef(0);
   const shieldLightRef = useRef<THREE.PointLight>(null);
@@ -33,7 +36,12 @@ const RolletteOverdrive: React.FC<{ soundsOn?: boolean; paused?: boolean }> = ({
     <>
       <HudLayer paused={paused} />
       <DamageVignette intensityRef={damageFlashRef} />
-      <RolletteWorld soundsOn={soundsOn} paused={paused} damageFlashRef={damageFlashRef} shieldLightRef={shieldLightRef} />
+      <RolletteWorld
+        soundsOn={soundsOn}
+        paused={paused}
+        damageFlashRef={damageFlashRef}
+        shieldLightRef={shieldLightRef}
+      />
     </>
   );
 };

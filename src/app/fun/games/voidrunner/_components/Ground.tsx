@@ -34,7 +34,10 @@ const Ground: React.FC = () => {
     const playerZ = mutation.playerZ;
 
     if (Math.round(playerZ) + PLANE_SIZE * moveCounter.current + 10 < -10) {
-      if (moveCounter.current === 1 || Math.abs(playerZ) - Math.abs(lastMove.current) <= 10) {
+      if (
+        moveCounter.current === 1 ||
+        Math.abs(playerZ) - Math.abs(lastMove.current) <= 10
+      ) {
         if (moveCounter.current % LEVEL_SIZE === 0) {
           voidRunnerState.incrementLevel();
         }

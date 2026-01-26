@@ -1,13 +1,19 @@
 // @ts-nocheck
 /**
  * RolletteClassic.tsx
- * 
+ *
  * Full port of legacy Rollette.js with Cannon physics and all object types.
  * Designed to work within the shared CanvasProvider.
  */
 'use client';
 
-import { Physics, useBox, useCylinder, usePlane, useSphere } from '@react-three/cannon';
+import {
+  Physics,
+  useBox,
+  useCylinder,
+  usePlane,
+  useSphere,
+} from '@react-three/cannon';
 import {
   Dodecahedron,
   Html,
@@ -19,7 +25,13 @@ import {
   TorusKnot,
 } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 
@@ -212,20 +224,32 @@ const PlayerSphere: React.FC<{
 
     if (!ref.current) return;
     const currentPosition = ref.current.getWorldPosition(new THREE.Vector3());
-    playerPositionRef.current = [currentPosition.x, currentPosition.y, currentPosition.z];
+    playerPositionRef.current = [
+      currentPosition.x,
+      currentPosition.y,
+      currentPosition.z,
+    ];
 
     // Camera follow
     camera.position.lerp(
-      new THREE.Vector3(currentPosition.x, currentPosition.y + 5, currentPosition.z + 10),
+      new THREE.Vector3(
+        currentPosition.x,
+        currentPosition.y + 5,
+        currentPosition.z + 10
+      ),
       0.1
     );
     camera.lookAt(currentPosition);
 
     // Boundary corrections
-    if (currentPosition.x < -HALF_GROUND_SIZE) api.position.set(-HALF_GROUND_SIZE, currentPosition.y, currentPosition.z);
-    if (currentPosition.x > HALF_GROUND_SIZE) api.position.set(HALF_GROUND_SIZE, currentPosition.y, currentPosition.z);
-    if (currentPosition.z < -HALF_GROUND_SIZE) api.position.set(currentPosition.x, currentPosition.y, -HALF_GROUND_SIZE);
-    if (currentPosition.z > HALF_GROUND_SIZE) api.position.set(currentPosition.x, currentPosition.y, HALF_GROUND_SIZE);
+    if (currentPosition.x < -HALF_GROUND_SIZE)
+      api.position.set(-HALF_GROUND_SIZE, currentPosition.y, currentPosition.z);
+    if (currentPosition.x > HALF_GROUND_SIZE)
+      api.position.set(HALF_GROUND_SIZE, currentPosition.y, currentPosition.z);
+    if (currentPosition.z < -HALF_GROUND_SIZE)
+      api.position.set(currentPosition.x, currentPosition.y, -HALF_GROUND_SIZE);
+    if (currentPosition.z > HALF_GROUND_SIZE)
+      api.position.set(currentPosition.x, currentPosition.y, HALF_GROUND_SIZE);
   });
 
   return (
@@ -404,13 +428,26 @@ const TorusKnotItem: React.FC<{
   }));
 
   const isClear = color === 'clear';
-  const displayColor = color === 'rainbow' ? getRandomColor() : color === 'random' ? getRandomColor() : 'white';
+  const displayColor =
+    color === 'rainbow'
+      ? getRandomColor()
+      : color === 'random'
+        ? getRandomColor()
+        : 'white';
 
   return (
     <TorusKnot ref={ref} args={[0.5, 0.3, 100, 16]} position={initialPosition}>
       <meshStandardMaterial
         color={displayColor}
-        {...(isClear ? { transmission: 1, roughness: 0, thickness: 3, envMapIntensity: 4, clearcoat: 1.0 } : {})}
+        {...(isClear
+          ? {
+              transmission: 1,
+              roughness: 0,
+              thickness: 3,
+              envMapIntensity: 4,
+              clearcoat: 1.0,
+            }
+          : {})}
       />
     </TorusKnot>
   );
@@ -440,8 +477,19 @@ const MovingBlock: React.FC<{
   });
 
   return (
-    <RoundedBox ref={ref} args={[3, 1.5, 4]} radius={0.4} smoothness={10} position={initialPosition}>
-      <meshPhysicalMaterial transmission={1} roughness={0} thickness={3} envMapIntensity={4} />
+    <RoundedBox
+      ref={ref}
+      args={[3, 1.5, 4]}
+      radius={0.4}
+      smoothness={10}
+      position={initialPosition}
+    >
+      <meshPhysicalMaterial
+        transmission={1}
+        roughness={0}
+        thickness={3}
+        envMapIntensity={4}
+      />
     </RoundedBox>
   );
 };
@@ -451,7 +499,7 @@ const TeleportingStar: React.FC<{
   onHit: (hitCount: number) => void;
 }> = ({ onHit }) => {
   const hitCountRef = useRef(1);
-  
+
   const [ref, api] = useBox(() => ({
     mass: 1,
     position: [0, 5, 0],
@@ -465,12 +513,15 @@ const TeleportingStar: React.FC<{
     },
   }));
 
-  const vertices = useMemo(() => [
-    new THREE.Vector3(1, 1, 1),
-    new THREE.Vector3(-1, -1, 1),
-    new THREE.Vector3(-1, 1, -1),
-    new THREE.Vector3(1, -1, -1),
-  ], []);
+  const vertices = useMemo(
+    () => [
+      new THREE.Vector3(1, 1, 1),
+      new THREE.Vector3(-1, -1, 1),
+      new THREE.Vector3(-1, 1, -1),
+      new THREE.Vector3(1, -1, -1),
+    ],
+    []
+  );
 
   return (
     <mesh ref={ref} position={generatePosition()}>
@@ -481,7 +532,10 @@ const TeleportingStar: React.FC<{
 };
 
 // HUD Component
-const HUD: React.FC<{ score: number; health: number }> = ({ score, health }) => {
+const HUD: React.FC<{ score: number; health: number }> = ({
+  score,
+  health,
+}) => {
   const getHealthColor = (h: number) => {
     if (h > 66) return '#00FF00';
     if (h > 33) return '#FFFF00';
@@ -492,7 +546,9 @@ const HUD: React.FC<{ score: number; health: number }> = ({ score, health }) => 
     <Html fullscreen style={{ pointerEvents: 'none' }}>
       <div className="absolute top-4 left-4 z-50 pointer-events-auto">
         <div className="bg-slate-950/80 backdrop-blur-sm rounded-xl border border-white/10 px-4 py-3 text-white shadow-lg">
-          <div className="text-lg font-semibold">Score: {score.toLocaleString()}</div>
+          <div className="text-lg font-semibold">
+            Score: {score.toLocaleString()}
+          </div>
           <div className="mt-2">
             <span className="text-sm text-white/70">Health:</span>
             <div className="w-48 bg-white/10 h-3 mt-1 rounded-full overflow-hidden">
@@ -518,7 +574,9 @@ const HUD: React.FC<{ score: number; health: number }> = ({ score, health }) => 
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
-const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
+const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({
+  soundsOn = true,
+}) => {
   const snap = useSnapshot(rolletteClassicState);
   const playerPositionRef = useRef<[number, number, number]>([0, 0.5, 0]);
 
@@ -532,11 +590,20 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
   );
 
   const [pyramids] = useState(() => {
-    const result: Array<{ id: string; position: [number, number, number]; color: string }> = [];
+    const result: Array<{
+      id: string;
+      position: [number, number, number];
+      color: string;
+    }> = [];
     Object.entries(PYRAMID_COUNTS).forEach(([color, count]) => {
       for (let i = 0; i < count; i++) {
-        const actualColor = color === 'red' ? '#FF0000' : color === 'black' ? '#000000' : color;
-        result.push({ id: `pyramid-${color}-${i}`, position: generatePosition(), color: actualColor });
+        const actualColor =
+          color === 'red' ? '#FF0000' : color === 'black' ? '#000000' : color;
+        result.push({
+          id: `pyramid-${color}-${i}`,
+          position: generatePosition(),
+          color: actualColor,
+        });
       }
     });
     return result;
@@ -569,9 +636,17 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
   ]);
 
   const [torusKnots] = useState(() => [
-    { id: 'knot-rainbow', position: generatePosition(), color: 'rainbow' as const },
+    {
+      id: 'knot-rainbow',
+      position: generatePosition(),
+      color: 'rainbow' as const,
+    },
     { id: 'knot-clear', position: generatePosition(), color: 'clear' as const },
-    { id: 'knot-random', position: generatePosition(), color: 'random' as const },
+    {
+      id: 'knot-random',
+      position: generatePosition(),
+      color: 'random' as const,
+    },
   ]);
 
   // Barrier positions
@@ -595,43 +670,70 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
   }, []);
 
   const handleHealthChange = useCallback((delta: number) => {
-    rolletteClassicState.health = Math.min(100, Math.max(0, rolletteClassicState.health + delta));
+    rolletteClassicState.health = Math.min(
+      100,
+      Math.max(0, rolletteClassicState.health + delta)
+    );
     if (rolletteClassicState.health <= 0) {
       rolletteClassicState.gameOver = true;
     }
   }, []);
 
-  const handleRingCollect = useCallback((id: string, points: number) => {
-    handleScoreChange(points);
-  }, [handleScoreChange]);
+  const handleRingCollect = useCallback(
+    (id: string, points: number) => {
+      handleScoreChange(points);
+    },
+    [handleScoreChange]
+  );
 
-  const handlePyramidHit = useCallback((id: string, penalty: number) => {
-    handleScoreChange(penalty);
-  }, [handleScoreChange]);
+  const handlePyramidHit = useCallback(
+    (id: string, penalty: number) => {
+      handleScoreChange(penalty);
+    },
+    [handleScoreChange]
+  );
 
-  const handleDodecaCollect = useCallback((id: string) => {
-    handleScoreChange(25);
-  }, [handleScoreChange]);
+  const handleDodecaCollect = useCallback(
+    (id: string) => {
+      handleScoreChange(25);
+    },
+    [handleScoreChange]
+  );
 
-  const handleSpringHit = useCallback((id: string) => {
-    handleScoreChange(100);
-  }, [handleScoreChange]);
+  const handleSpringHit = useCallback(
+    (id: string) => {
+      handleScoreChange(100);
+    },
+    [handleScoreChange]
+  );
 
-  const handleTetraCollect = useCallback((id: string, health: number) => {
-    handleHealthChange(health);
-  }, [handleHealthChange]);
+  const handleTetraCollect = useCallback(
+    (id: string, health: number) => {
+      handleHealthChange(health);
+    },
+    [handleHealthChange]
+  );
 
-  const handleTorusKnotCollect = useCallback((id: string, points: number) => {
-    handleScoreChange(points);
-  }, [handleScoreChange]);
+  const handleTorusKnotCollect = useCallback(
+    (id: string, points: number) => {
+      handleScoreChange(points);
+    },
+    [handleScoreChange]
+  );
 
-  const handleBlockHit = useCallback((id: string) => {
-    handleScoreChange(500);
-  }, [handleScoreChange]);
+  const handleBlockHit = useCallback(
+    (id: string) => {
+      handleScoreChange(500);
+    },
+    [handleScoreChange]
+  );
 
-  const handleStarHit = useCallback((hitCount: number) => {
-    handleScoreChange(1000 * hitCount);
-  }, [handleScoreChange]);
+  const handleStarHit = useCallback(
+    (hitCount: number) => {
+      handleScoreChange(1000 * hitCount);
+    },
+    [handleScoreChange]
+  );
 
   // Reset handler
   useEffect(() => {
@@ -647,12 +749,20 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
   return (
     <>
       <HUD score={snap.score} health={snap.health} />
-      
+
       <Sky />
-      <Stars radius={300} depth={60} count={10000} factor={7} saturation={0} fade speed={1} />
+      <Stars
+        radius={300}
+        depth={60}
+        count={10000}
+        factor={7}
+        saturation={0}
+        fade
+        speed={1}
+      />
       <ambientLight intensity={0.5} />
       <spotLight position={[100, 100, 100]} angle={0.3} />
-      
+
       <Physics iterations={5} gravity={[0, -20, 0]}>
         <PlayerSphere
           onScoreChange={handleScoreChange}
@@ -660,10 +770,14 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
           playerPositionRef={playerPositionRef}
         />
         <Ground />
-        
+
         {/* Barriers */}
         {barrierPositions.map((position, index) => (
-          <Barrier key={`barrier-${index}`} position={position} dimensions={barrierDimensions[index]} />
+          <Barrier
+            key={`barrier-${index}`}
+            position={position}
+            dimensions={barrierDimensions[index]}
+          />
         ))}
 
         {/* Rings */}
@@ -700,7 +814,12 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
 
         {/* Springs */}
         {springs.map((spring) => (
-          <Spring key={spring.id} id={spring.id} position={spring.position} onHit={handleSpringHit} />
+          <Spring
+            key={spring.id}
+            id={spring.id}
+            position={spring.position}
+            onHit={handleSpringHit}
+          />
         ))}
 
         {/* Health Tetrahedrons */}
@@ -745,7 +864,9 @@ const RolletteClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
           <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 pointer-events-auto">
             <div className="text-center text-white">
               <h1 className="text-4xl font-bold mb-4">Game Over</h1>
-              <p className="text-2xl mb-6">Final Score: {snap.score.toLocaleString()}</p>
+              <p className="text-2xl mb-6">
+                Final Score: {snap.score.toLocaleString()}
+              </p>
               <p className="text-lg text-white/70">Press R to restart</p>
             </div>
           </div>

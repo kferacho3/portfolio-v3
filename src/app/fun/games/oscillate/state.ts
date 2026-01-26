@@ -509,8 +509,7 @@ export const onePathState = proxy({
         if (!isLast) {
           const exitMin = -lenNeg + exitMargin;
           const exitMax = lenPos - exitMargin;
-          exit =
-            exitMax > exitMin ? exitMin + rnd() * (exitMax - exitMin) : 0;
+          exit = exitMax > exitMin ? exitMin + rnd() * (exitMax - exitMin) : 0;
         }
 
         const candidate: OnePathSegment = {
@@ -541,8 +540,7 @@ export const onePathState = proxy({
         if (!isLast) {
           const exitMin = -lenNeg + exitMargin;
           const exitMax = lenPos - exitMargin;
-          exit =
-            exitMax > exitMin ? exitMin + rnd() * (exitMax - exitMin) : 0;
+          exit = exitMax > exitMin ? exitMin + rnd() * (exitMax - exitMin) : 0;
         }
         built = {
           id: `s_${lvl}_${i}`,

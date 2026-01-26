@@ -71,7 +71,7 @@ export const metadata: Metadata = {
       'max-video-preview': -1,
     },
   },
-  icons: { 
+  icons: {
     icon: '/favicon.ico',
     apple: '/logo.png',
   },
@@ -88,7 +88,8 @@ export const metadata: Metadata = {
         name: 'Kamal Feracho',
         alternateName: 'kferacho3',
         jobTitle: 'Full-Stack Engineer',
-        description: 'Full-stack engineer specializing in product-ready UI systems, design systems, and immersive 3D web experiences.',
+        description:
+          'Full-stack engineer specializing in product-ready UI systems, design systems, and immersive 3D web experiences.',
         url: 'https://www.rachocreates.com',
         sameAs: [
           'https://github.com/kferacho3',

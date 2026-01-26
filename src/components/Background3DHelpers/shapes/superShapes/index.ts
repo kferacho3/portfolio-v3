@@ -25,7 +25,7 @@ function superformula(
   n2: number,
   n3: number
 ): number {
-  const mPhi = m * angle / 4;
+  const mPhi = (m * angle) / 4;
   const t1 = Math.pow(Math.abs(Math.cos(mPhi) / a), n2);
   const t2 = Math.pow(Math.abs(Math.sin(mPhi) / b), n3);
   return Math.pow(t1 + t2, -1 / n1);
@@ -53,14 +53,14 @@ export function superShape3DGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const theta = u * Math.PI * 2 - Math.PI;
     const phi = v * Math.PI - Math.PI / 2;
-    
+
     const r1 = superformula(theta, 1, 1, m1, n11, n21, n31);
     const r2 = superformula(phi, 1, 1, m2, n12, n22, n32);
-    
+
     const x = r1 * Math.cos(theta) * r2 * Math.cos(phi);
     const y = r1 * Math.sin(theta) * r2 * Math.cos(phi);
     const z = r2 * Math.sin(phi);
-    
+
     target.set(x * scale, z * scale, y * scale);
   };
 
@@ -85,15 +85,15 @@ export function superToroidGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const theta = u * Math.PI * 2;
     const phi = v * Math.PI * 2;
-    
+
     const r1 = superformula(theta, 1, 1, m, n1, n2, n3);
     const r2 = superformula(phi, 1, 1, m, n1, n2, n3);
-    
+
     const tubeR = minorRadius * r2;
     const x = (majorRadius * r1 + tubeR * Math.cos(phi)) * Math.cos(theta);
     const y = (majorRadius * r1 + tubeR * Math.cos(phi)) * Math.sin(theta);
     const z = tubeR * Math.sin(phi);
-    
+
     target.set(x * scale, z * scale, y * scale);
   };
 
@@ -118,14 +118,14 @@ export function toroidalSuperShapeGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const theta = u * Math.PI * 2;
     const phi = v * Math.PI * 2;
-    
+
     // Apply superformula to minor radius
     const r = superformula(phi, 1, 1, m, n1, n2, n3) * minorRadius;
-    
+
     const x = (majorRadius + r * Math.cos(phi)) * Math.cos(theta);
     const y = (majorRadius + r * Math.cos(phi)) * Math.sin(theta);
     const z = r * Math.sin(phi);
-    
+
     target.set(x * scale, z * scale, y * scale);
   };
 
@@ -142,7 +142,18 @@ export function superShapeVariant1Geometry(
   segments = 64
 ): THREE.BufferGeometry {
   // Star-like shape with 5 points
-  return superShape3DGeometry(5, 0.3, 1.2, 1.2, 5, 0.3, 1.2, 1.2, scale, segments);
+  return superShape3DGeometry(
+    5,
+    0.3,
+    1.2,
+    1.2,
+    5,
+    0.3,
+    1.2,
+    1.2,
+    scale,
+    segments
+  );
 }
 
 /**
@@ -153,7 +164,18 @@ export function superShapeVariant2Geometry(
   segments = 64
 ): THREE.BufferGeometry {
   // Flower-like shape
-  return superShape3DGeometry(7, 0.2, 1.7, 1.7, 7, 0.2, 1.7, 1.7, scale, segments);
+  return superShape3DGeometry(
+    7,
+    0.2,
+    1.7,
+    1.7,
+    7,
+    0.2,
+    1.7,
+    1.7,
+    scale,
+    segments
+  );
 }
 
 /**
@@ -179,16 +201,16 @@ export function superquadricStarGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const theta = u * Math.PI * 2 - Math.PI;
     const phi = v * Math.PI - Math.PI / 2;
-    
-    const c = (val: number, exp: number) => 
+
+    const c = (val: number, exp: number) =>
       Math.sign(Math.cos(val)) * Math.pow(Math.abs(Math.cos(val)), exp);
-    const s = (val: number, exp: number) => 
+    const s = (val: number, exp: number) =>
       Math.sign(Math.sin(val)) * Math.pow(Math.abs(Math.sin(val)), exp);
-    
+
     const x = c(phi, e1) * c(theta, e2);
     const y = c(phi, e1) * s(theta, e2);
     const z = s(phi, e1);
-    
+
     target.set(x * scale, z * scale, y * scale);
   };
 

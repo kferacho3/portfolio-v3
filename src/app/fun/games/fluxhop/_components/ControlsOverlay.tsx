@@ -14,15 +14,27 @@ const ControlsOverlay: React.FC<{
       <div className="fixed left-6 top-6 flex flex-col gap-2 text-white pointer-events-none">
         <div
           className="rounded-xl border border-cyan-400/30 bg-slate-950/80 px-3 py-2 text-xs uppercase tracking-[0.3em]"
-          style={{ fontFamily: '"Geist Mono", monospace', boxShadow: '0 0 20px rgba(0, 255, 247, 0.2)' }}
+          style={{
+            fontFamily: '"Geist Mono", monospace',
+            boxShadow: '0 0 20px rgba(0, 255, 247, 0.2)',
+          }}
         >
-          combo <span className="ml-2 text-base font-semibold text-cyan-400">{combo}</span>
+          combo{' '}
+          <span className="ml-2 text-base font-semibold text-cyan-400">
+            {combo}
+          </span>
         </div>
         <div
           className="rounded-xl border border-pink-400/30 bg-slate-950/80 px-3 py-2 text-xs uppercase tracking-[0.3em]"
-          style={{ fontFamily: '"Geist Mono", monospace', boxShadow: '0 0 20px rgba(255, 0, 255, 0.2)' }}
+          style={{
+            fontFamily: '"Geist Mono", monospace',
+            boxShadow: '0 0 20px rgba(255, 0, 255, 0.2)',
+          }}
         >
-          best <span className="ml-2 text-base font-semibold text-pink-400">{bestCombo}</span>
+          best{' '}
+          <span className="ml-2 text-base font-semibold text-pink-400">
+            {bestCombo}
+          </span>
         </div>
       </div>
 

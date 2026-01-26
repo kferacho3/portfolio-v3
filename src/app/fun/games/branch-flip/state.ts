@@ -2,16 +2,18 @@ import { proxy } from 'valtio';
 import type { BranchFlipGameState, Tile } from './types';
 import { BEST_SCORE_KEY } from './constants';
 
-export const branchFlipState = proxy<BranchFlipGameState & {
-  reset: () => void;
-  startGame: () => void;
-  endGame: () => void;
-  pause: () => void;
-  resume: () => void;
-  flip: () => void;
-  collectGem: () => void;
-  loadBestScore: () => void;
-}>({
+export const branchFlipState = proxy<
+  BranchFlipGameState & {
+    reset: () => void;
+    startGame: () => void;
+    endGame: () => void;
+    pause: () => void;
+    resume: () => void;
+    flip: () => void;
+    collectGem: () => void;
+    loadBestScore: () => void;
+  }
+>({
   phase: 'menu',
   paused: false,
   time: 0,

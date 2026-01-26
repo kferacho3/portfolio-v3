@@ -42,24 +42,36 @@ export const octaFluxState = proxy({
     if (typeof localStorage === 'undefined') return;
 
     octaFluxState.best = safeNumber(localStorage.getItem(STORAGE_KEYS.best), 0);
-    octaFluxState.totalGems = safeNumber(localStorage.getItem(STORAGE_KEYS.gems), 0);
-
-    octaFluxState.unlockedRiders = uniq(
-      safeJSONParse<string[]>(localStorage.getItem(STORAGE_KEYS.unlockedRiders), [DEFAULT_RIDER]).filter((id) =>
-        RIDER_IDS.includes(id),
-      ),
+    octaFluxState.totalGems = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.gems),
+      0
     );
 
-    const selectedRider = localStorage.getItem(STORAGE_KEYS.selectedRider) ?? DEFAULT_RIDER;
-    if (octaFluxState.unlockedRiders.includes(selectedRider)) octaFluxState.selectedRider = selectedRider;
+    octaFluxState.unlockedRiders = uniq(
+      safeJSONParse<string[]>(
+        localStorage.getItem(STORAGE_KEYS.unlockedRiders),
+        [DEFAULT_RIDER]
+      ).filter((id) => RIDER_IDS.includes(id))
+    );
+
+    const selectedRider =
+      localStorage.getItem(STORAGE_KEYS.selectedRider) ?? DEFAULT_RIDER;
+    if (octaFluxState.unlockedRiders.includes(selectedRider))
+      octaFluxState.selectedRider = selectedRider;
   },
 
   save: () => {
     if (typeof localStorage === 'undefined') return;
     localStorage.setItem(STORAGE_KEYS.best, String(octaFluxState.best));
     localStorage.setItem(STORAGE_KEYS.gems, String(octaFluxState.totalGems));
-    localStorage.setItem(STORAGE_KEYS.unlockedRiders, JSON.stringify(octaFluxState.unlockedRiders));
-    localStorage.setItem(STORAGE_KEYS.selectedRider, octaFluxState.selectedRider);
+    localStorage.setItem(
+      STORAGE_KEYS.unlockedRiders,
+      JSON.stringify(octaFluxState.unlockedRiders)
+    );
+    localStorage.setItem(
+      STORAGE_KEYS.selectedRider,
+      octaFluxState.selectedRider
+    );
   },
 
   start: () => {
@@ -92,7 +104,9 @@ export const octaFluxState = proxy({
   unlockRandomRider: () => {
     if (octaFluxState.totalGems < COSTS.rider) return;
 
-    const locked = RIDER_IDS.filter((id) => !octaFluxState.unlockedRiders.includes(id));
+    const locked = RIDER_IDS.filter(
+      (id) => !octaFluxState.unlockedRiders.includes(id)
+    );
     if (locked.length === 0) return;
 
     const id = locked[Math.floor(Math.random() * locked.length)];

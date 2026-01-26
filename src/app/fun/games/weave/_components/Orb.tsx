@@ -1,10 +1,19 @@
 import { useFrame } from '@react-three/fiber';
 import React, { useRef } from 'react';
 import * as THREE from 'three';
-import { BONUS_ORB_COLOR, ORB_COLOR, ORB_GLOW, ORB_LIFETIME, ORB_SIZE } from '../constants';
+import {
+  BONUS_ORB_COLOR,
+  ORB_COLOR,
+  ORB_GLOW,
+  ORB_LIFETIME,
+  ORB_SIZE,
+} from '../constants';
 import type { Orb as OrbType } from '../types';
 
-const Orb: React.FC<{ orb: OrbType; currentTime: number }> = ({ orb, currentTime }) => {
+const Orb: React.FC<{ orb: OrbType; currentTime: number }> = ({
+  orb,
+  currentTime,
+}) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const x = Math.cos(orb.angle) * orb.radius;
   const y = Math.sin(orb.angle) * orb.radius;
@@ -31,7 +40,13 @@ const Orb: React.FC<{ orb: OrbType; currentTime: number }> = ({ orb, currentTime
     <group position={[x, y, 0]}>
       <mesh ref={meshRef}>
         <octahedronGeometry args={[ORB_SIZE]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} transparent opacity={opacity} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.9}
+          transparent
+          opacity={opacity}
+        />
       </mesh>
       <mesh scale={[1.8, 1.8, 1.8]}>
         <sphereGeometry args={[ORB_SIZE, 16, 16]} />

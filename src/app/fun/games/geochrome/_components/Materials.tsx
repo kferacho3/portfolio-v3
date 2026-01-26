@@ -27,7 +27,10 @@ export const IridescentMaterial: React.FC<{ color: string }> = ({ color }) => {
   );
 };
 
-export const NeonGlowMaterial: React.FC<{ color: string; glowColor: string }> = ({ color, glowColor }) => {
+export const NeonGlowMaterial: React.FC<{
+  color: string;
+  glowColor: string;
+}> = ({ color, glowColor }) => {
   const ref = useRef<THREE.ShaderMaterial>(null);
 
   const uniforms = useMemo(
@@ -85,7 +88,9 @@ export const NeonGlowMaterial: React.FC<{ color: string; glowColor: string }> = 
   );
 };
 
-export const HolographicMaterial: React.FC<{ baseColor: string }> = ({ baseColor }) => {
+export const HolographicMaterial: React.FC<{ baseColor: string }> = ({
+  baseColor,
+}) => {
   const ref = useRef<THREE.ShaderMaterial>(null);
 
   const uniforms = useMemo(

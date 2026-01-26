@@ -59,7 +59,7 @@ export const Preloader = styled.div`
 
 export const Ring = styled.div`
   transform-style: preserve-3d;
-  animation: ${spin} ${props => props.animDuration || '4s'} linear infinite;
+  animation: ${spin} ${(props) => props.animDuration || '4s'} linear infinite;
   font-size: 2em;
   position: relative;
   height: 3rem;
@@ -77,14 +77,19 @@ export const Sector = styled.div`
   left: 0;
   text-align: center;
   text-transform: uppercase;
-  transform: ${props => `rotateY(${props.angle}deg) translateZ(${props.radius || '7rem'})`};
+  transform: ${(props) =>
+    `rotateY(${props.angle}deg) translateZ(${props.radius || '7rem'})`};
   display: inline-block;
   width: 100%;
   height: 100%;
 
   &:empty::before {
-    background: linear-gradient(transparent 45%, currentColor 45% 55%, transparent 55%);
-    content: "";
+    background: linear-gradient(
+      transparent 45%,
+      currentColor 45% 55%,
+      transparent 55%
+    );
+    content: '';
     display: inline-block;
     width: 100%;
     height: 100%;
@@ -92,4 +97,3 @@ export const Sector = styled.div`
 `;
 
 // JSX Component
-

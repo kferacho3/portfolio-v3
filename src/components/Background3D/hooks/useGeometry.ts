@@ -3,8 +3,14 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useState, useMemo, useEffect } from 'react';
-import { SHAPES, type ShapeName } from '../../Background3DHelpers/shapeFunctions';
-import { SHAPE_META, pickWeightedRandomShape } from '../../Background3DHelpers/shapeRegistry';
+import {
+  SHAPES,
+  type ShapeName,
+} from '../../Background3DHelpers/shapeFunctions';
+import {
+  SHAPE_META,
+  pickWeightedRandomShape,
+} from '../../Background3DHelpers/shapeRegistry';
 
 /**
  * Shapes that should be excluded on mobile for performance

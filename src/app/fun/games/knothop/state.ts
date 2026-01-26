@@ -1,6 +1,12 @@
 import { proxy } from 'valtio';
 
-import { BALL_SKINS, DEFAULT_BALL, DEFAULT_THEME, PLATFORM_THEMES, STORAGE_KEYS } from './constants';
+import {
+  BALL_SKINS,
+  DEFAULT_BALL,
+  DEFAULT_THEME,
+  PLATFORM_THEMES,
+  STORAGE_KEYS,
+} from './constants';
 import type { KnotHopPhase } from './types';
 
 function safeJSONParse<T>(raw: string | null, fallback: T): T {
@@ -45,26 +51,34 @@ export const knotHopState = proxy({
   load: () => {
     if (typeof window === 'undefined') return;
 
-    knotHopState.best = Number(localStorage.getItem(STORAGE_KEYS.best) ?? '0') || 0;
-    knotHopState.totalGems = Number(localStorage.getItem(STORAGE_KEYS.gems) ?? '0') || 0;
+    knotHopState.best =
+      Number(localStorage.getItem(STORAGE_KEYS.best) ?? '0') || 0;
+    knotHopState.totalGems =
+      Number(localStorage.getItem(STORAGE_KEYS.gems) ?? '0') || 0;
 
     knotHopState.unlockedBalls = uniq(
-      safeJSONParse<string[]>(localStorage.getItem(STORAGE_KEYS.unlockedBalls), [DEFAULT_BALL]).filter((id) =>
-        BALL_IDS.includes(id),
-      ),
+      safeJSONParse<string[]>(
+        localStorage.getItem(STORAGE_KEYS.unlockedBalls),
+        [DEFAULT_BALL]
+      ).filter((id) => BALL_IDS.includes(id))
     );
 
     knotHopState.unlockedThemes = uniq(
-      safeJSONParse<string[]>(localStorage.getItem(STORAGE_KEYS.unlockedThemes), [DEFAULT_THEME]).filter((id) =>
-        THEME_IDS.includes(id),
-      ),
+      safeJSONParse<string[]>(
+        localStorage.getItem(STORAGE_KEYS.unlockedThemes),
+        [DEFAULT_THEME]
+      ).filter((id) => THEME_IDS.includes(id))
     );
 
-    const selectedBall = localStorage.getItem(STORAGE_KEYS.selectedBall) ?? DEFAULT_BALL;
-    if (knotHopState.unlockedBalls.includes(selectedBall)) knotHopState.selectedBall = selectedBall;
+    const selectedBall =
+      localStorage.getItem(STORAGE_KEYS.selectedBall) ?? DEFAULT_BALL;
+    if (knotHopState.unlockedBalls.includes(selectedBall))
+      knotHopState.selectedBall = selectedBall;
 
-    const selectedTheme = localStorage.getItem(STORAGE_KEYS.selectedTheme) ?? DEFAULT_THEME;
-    if (knotHopState.unlockedThemes.includes(selectedTheme)) knotHopState.selectedTheme = selectedTheme;
+    const selectedTheme =
+      localStorage.getItem(STORAGE_KEYS.selectedTheme) ?? DEFAULT_THEME;
+    if (knotHopState.unlockedThemes.includes(selectedTheme))
+      knotHopState.selectedTheme = selectedTheme;
   },
 
   save: () => {
@@ -72,10 +86,19 @@ export const knotHopState = proxy({
 
     localStorage.setItem(STORAGE_KEYS.best, String(knotHopState.best));
     localStorage.setItem(STORAGE_KEYS.gems, String(knotHopState.totalGems));
-    localStorage.setItem(STORAGE_KEYS.unlockedBalls, JSON.stringify(knotHopState.unlockedBalls));
-    localStorage.setItem(STORAGE_KEYS.unlockedThemes, JSON.stringify(knotHopState.unlockedThemes));
+    localStorage.setItem(
+      STORAGE_KEYS.unlockedBalls,
+      JSON.stringify(knotHopState.unlockedBalls)
+    );
+    localStorage.setItem(
+      STORAGE_KEYS.unlockedThemes,
+      JSON.stringify(knotHopState.unlockedThemes)
+    );
     localStorage.setItem(STORAGE_KEYS.selectedBall, knotHopState.selectedBall);
-    localStorage.setItem(STORAGE_KEYS.selectedTheme, knotHopState.selectedTheme);
+    localStorage.setItem(
+      STORAGE_KEYS.selectedTheme,
+      knotHopState.selectedTheme
+    );
   },
 
   start: () => {
@@ -90,7 +113,8 @@ export const knotHopState = proxy({
   end: () => {
     knotHopState.phase = 'gameover';
 
-    if (knotHopState.score > knotHopState.best) knotHopState.best = knotHopState.score;
+    if (knotHopState.score > knotHopState.best)
+      knotHopState.best = knotHopState.score;
 
     knotHopState.totalGems += knotHopState.runGems;
     knotHopState.runGems = 0;
@@ -117,7 +141,9 @@ export const knotHopState = proxy({
   unlockRandomBall: () => {
     if (knotHopState.totalGems < COSTS.ball) return;
 
-    const locked = BALL_IDS.filter((id) => !knotHopState.unlockedBalls.includes(id));
+    const locked = BALL_IDS.filter(
+      (id) => !knotHopState.unlockedBalls.includes(id)
+    );
     if (locked.length === 0) {
       knotHopState.toast = 'All balls unlocked';
       knotHopState.toastUntil = Date.now() + 2000;
@@ -136,7 +162,9 @@ export const knotHopState = proxy({
   unlockRandomTheme: () => {
     if (knotHopState.totalGems < COSTS.theme) return;
 
-    const locked = THEME_IDS.filter((id) => !knotHopState.unlockedThemes.includes(id));
+    const locked = THEME_IDS.filter(
+      (id) => !knotHopState.unlockedThemes.includes(id)
+    );
     if (locked.length === 0) {
       knotHopState.toast = 'All platform colors unlocked';
       knotHopState.toastUntil = Date.now() + 2000;

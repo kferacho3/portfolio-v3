@@ -40,7 +40,19 @@ type PieceDef = {
 
 const PIECES: PieceDef[] = [
   { name: 'Dot', rotations: [[{ x: 0, y: 0 }]] },
-  { name: 'Domino', rotations: [[{ x: 0, y: 0 }, { x: 1, y: 0 }], [{ x: 0, y: 0 }, { x: 0, y: 1 }]] },
+  {
+    name: 'Domino',
+    rotations: [
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      [
+        { x: 0, y: 0 },
+        { x: 0, y: 1 },
+      ],
+    ],
+  },
   {
     name: 'Trio',
     rotations: [
@@ -107,7 +119,10 @@ export default function Shades() {
   const { camera, scene } = useThree();
   const boardW = snap.columns;
   const palette = PALETTES[snap.paletteIndex % PALETTES.length];
-  const level = Math.max(1, 1 + Math.floor(snap.lines / 4) + Math.floor(snap.score / 800));
+  const level = Math.max(
+    1,
+    1 + Math.floor(snap.lines / 4) + Math.floor(snap.score / 800)
+  );
 
   const lockedRef = useRef<THREE.InstancedMesh>(null);
   const pieceRefs = useRef<Array<THREE.Mesh | null>>([null, null, null, null]);
@@ -116,7 +131,8 @@ export default function Shades() {
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
   const idx = (x: number, y: number) => y * boardW + x;
-  const inBounds = (x: number, y: number) => x >= 0 && x < boardW && y >= 0 && y < BOARD_H;
+  const inBounds = (x: number, y: number) =>
+    x >= 0 && x < boardW && y >= 0 && y < BOARD_H;
 
   const world = useRef({
     rng: new SeededRandom(snap.worldSeed),
@@ -157,7 +173,12 @@ export default function Shades() {
       swipeBoost: 0,
       touchStart: null,
       touchMoved: false,
-      prevKeys: { arrowleft: false, arrowright: false, arrowup: false, ' ': false },
+      prevKeys: {
+        arrowleft: false,
+        arrowright: false,
+        arrowup: false,
+        ' ': false,
+      },
     };
 
     spawnPiece();
@@ -255,7 +276,7 @@ export default function Shades() {
         for (let y = 0; y < BOARD_H - 1; y++) {
           const lower = g[idx(x, y)];
           const upper = g[idx(x, y + 1)];
-          
+
           // If both are non-zero and same shade, merge them
           if (lower !== 0 && upper !== 0 && lower === upper) {
             const nextShade = lower + 1;
@@ -595,17 +616,35 @@ export default function Shades() {
       {/* Board backing */}
       <mesh key={`board-${boardW}`} position={[0, 0, -0.2]}>
         <boxGeometry args={[boardW * CELL + 0.8, BOARD_H * CELL + 0.8, 0.2]} />
-        <meshStandardMaterial color={'#0f172a'} roughness={0.9} metalness={0.05} />
+        <meshStandardMaterial
+          color={'#0f172a'}
+          roughness={0.9}
+          metalness={0.05}
+        />
       </mesh>
 
       {/* Trajectory guide */}
-      <mesh ref={guideRef} position={[0, 0, -0.12]} scale={[1, 1, 1]} visible={false}>
+      <mesh
+        ref={guideRef}
+        position={[0, 0, -0.12]}
+        scale={[1, 1, 1]}
+        visible={false}
+      >
         <planeGeometry args={[1, 1]} />
-        <meshStandardMaterial transparent opacity={0.12} roughness={0.9} metalness={0.05} />
+        <meshStandardMaterial
+          transparent
+          opacity={0.12}
+          roughness={0.9}
+          metalness={0.05}
+        />
       </mesh>
 
       {/* Locked blocks */}
-      <instancedMesh key={`locked-${boardW}`} ref={lockedRef} args={[undefined, undefined, boardW * BOARD_H]}>
+      <instancedMesh
+        key={`locked-${boardW}`}
+        ref={lockedRef}
+        args={[undefined, undefined, boardW * BOARD_H]}
+      >
         <boxGeometry args={[CELL * 0.9, CELL * 0.9, BLOCK_Z]} />
         <meshStandardMaterial vertexColors roughness={0.65} metalness={0.08} />
       </instancedMesh>
@@ -620,7 +659,12 @@ export default function Shades() {
           }}
         >
           <boxGeometry args={[CELL * 0.9, CELL * 0.9, BLOCK_Z]} />
-          <meshStandardMaterial transparent opacity={0.25} roughness={0.4} metalness={0.05} />
+          <meshStandardMaterial
+            transparent
+            opacity={0.25}
+            roughness={0.4}
+            metalness={0.05}
+          />
         </mesh>
       ))}
 
@@ -647,26 +691,64 @@ export default function Shades() {
             justifyContent: 'space-between',
             alignItems: 'flex-start',
             padding: 18,
-            fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+            fontFamily:
+              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
             color: 'white',
           }}
         >
-          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', pointerEvents: 'none' }}>
-            <div style={{ fontWeight: 800, letterSpacing: 0.3, opacity: 0.9 }}>SHADES</div>
-            <div style={{ fontSize: 14, opacity: 0.85 }}>Score {snap.score.toLocaleString()}</div>
-            <div style={{ fontSize: 14, opacity: 0.7 }}>Best {snap.best.toLocaleString()}</div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              alignItems: 'baseline',
+              pointerEvents: 'none',
+            }}
+          >
+            <div style={{ fontWeight: 800, letterSpacing: 0.3, opacity: 0.9 }}>
+              SHADES
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.85 }}>
+              Score {snap.score.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 14, opacity: 0.7 }}>
+              Best {snap.best.toLocaleString()}
+            </div>
             <div style={{ fontSize: 14, opacity: 0.7 }}>Level {level}</div>
             <div style={{ fontSize: 14, opacity: 0.7 }}>Lines {snap.lines}</div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: 8,
+            }}
+          >
             <div style={{ fontSize: 12, opacity: 0.6, pointerEvents: 'none' }}>
               Cols {boardW} • {palette.name}
             </div>
             {(snap.phase === 'menu' || snap.phase === 'gameover') && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', pointerEvents: 'auto' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 8,
+                  alignItems: 'flex-end',
+                  pointerEvents: 'auto',
+                }}
+              >
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <div style={{ fontSize: 10, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.8 }}>Columns</div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      opacity: 0.6,
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    Columns
+                  </div>
                   {COLUMN_OPTIONS.map((value) => (
                     <button
                       key={value}
@@ -679,9 +761,18 @@ export default function Shades() {
                         borderRadius: 8,
                         padding: '4px 8px',
                         fontSize: 12,
-                        border: value === boardW ? `1px solid ${palette.accent}` : '1px solid rgba(255,255,255,0.2)',
-                        background: value === boardW ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.25)',
-                        color: value === boardW ? palette.accent : 'rgba(255,255,255,0.7)',
+                        border:
+                          value === boardW
+                            ? `1px solid ${palette.accent}`
+                            : '1px solid rgba(255,255,255,0.2)',
+                        background:
+                          value === boardW
+                            ? 'rgba(255,255,255,0.08)'
+                            : 'rgba(0,0,0,0.25)',
+                        color:
+                          value === boardW
+                            ? palette.accent
+                            : 'rgba(255,255,255,0.7)',
                         cursor: 'pointer',
                       }}
                     >
@@ -693,7 +784,8 @@ export default function Shades() {
                   type="button"
                   onPointerDown={(event) => {
                     event.stopPropagation();
-                    shadesState.paletteIndex = (snap.paletteIndex + 1) % PALETTES.length;
+                    shadesState.paletteIndex =
+                      (snap.paletteIndex + 1) % PALETTES.length;
                   }}
                   style={{
                     borderRadius: 10,
@@ -707,7 +799,9 @@ export default function Shades() {
                 >
                   Refresh colors (C)
                 </button>
-                <div style={{ fontSize: 10, opacity: 0.5 }}>3/4/5 set columns • C cycles colors</div>
+                <div style={{ fontSize: 10, opacity: 0.5 }}>
+                  3/4/5 set columns • C cycles colors
+                </div>
               </div>
             )}
           </div>
@@ -729,18 +823,28 @@ export default function Shades() {
                 pointerEvents: 'none',
               }}
             >
-              <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>Shades</div>
+              <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>
+                Shades
+              </div>
               <div style={{ opacity: 0.9, fontSize: 14, lineHeight: 1.4 }}>
                 <div>1) Drop blocks into the grid.</div>
                 <div>2) Match identical shades to merge into darker ones.</div>
-                <div>3) Clear full rows of the same shade or reach the darkest to clear.</div>
+                <div>
+                  3) Clear full rows of the same shade or reach the darkest to
+                  clear.
+                </div>
               </div>
               <div style={{ opacity: 0.75, fontSize: 13, marginTop: 10 }}>
-                Tap left/right or ← → to move &nbsp; | &nbsp; Swipe down or ↓ to speed drop &nbsp; | &nbsp; Space: Hard drop
+                Tap left/right or ← → to move &nbsp; | &nbsp; Swipe down or ↓ to
+                speed drop &nbsp; | &nbsp; Space: Hard drop
               </div>
-              <div style={{ opacity: 0.6, fontSize: 12, marginTop: 6 }}>↑ rotate (optional)</div>
+              <div style={{ opacity: 0.6, fontSize: 12, marginTop: 6 }}>
+                ↑ rotate (optional)
+              </div>
               <div style={{ opacity: 0.9, fontSize: 13, marginTop: 12 }}>
-                {snap.phase === 'menu' ? 'Click / Space to start' : 'Click / Space to play again'}
+                {snap.phase === 'menu'
+                  ? 'Click / Space to start'
+                  : 'Click / Space to play again'}
               </div>
             </div>
           )}

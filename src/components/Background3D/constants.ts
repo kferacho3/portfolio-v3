@@ -37,7 +37,7 @@ export const PARTICLE_ORBIT_RADIUS = 0.22; // LARGER orbital motion
    ═══════════════════════════════════════════════════════════════════════════ */
 export const MATERIAL_WEIGHTS = {
   // Common (original set 0-4): ~30%
-  common: 0.30,
+  common: 0.3,
   // Phase 4 materials (5-9): ~15%
   phase4: 0.15,
   // Original procedural patterns (10-14): ~12%

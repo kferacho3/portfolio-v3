@@ -7,7 +7,11 @@ export default class GameButton {
   private gameText: { resetText: () => void };
   private image: any;
 
-  constructor(p5: P5Instance, text: { resetText: () => void }, spriteImage: any) {
+  constructor(
+    p5: P5Instance,
+    text: { resetText: () => void },
+    spriteImage: any
+  ) {
     this.p5 = p5;
     this.gameText = text;
     this.image = spriteImage;

@@ -4479,4 +4479,3 @@ export function Model(props: JSX.IntrinsicElements['group']) {
     </group>
   );
 }
-

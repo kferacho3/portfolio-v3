@@ -17,7 +17,16 @@ export const MULTI_LASER_MAX_DURATION = 15;
 export const MULTI_LASER_COOLDOWN_MIN = 18;
 export const MULTI_LASER_COOLDOWN_MAX = 28;
 
-export const NEON_COLORS = ['#00ffff', '#ff00ff', '#00ff88', '#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+export const NEON_COLORS = [
+  '#00ffff',
+  '#ff00ff',
+  '#00ff88',
+  '#ff6b6b',
+  '#feca57',
+  '#48dbfb',
+  '#ff9ff3',
+  '#54a0ff',
+];
 export const ARM_COLOR = '#ff3366';
 export const ARM_GLOW = '#ff0044';
 export const ORB_COLOR = '#00ffff';

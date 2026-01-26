@@ -30,7 +30,11 @@ const Player: React.FC = () => {
       PLAYER_START_Y + CAMERA_OFFSET_Y,
       PLAYER_START_Z + CAMERA_OFFSET_Z
     );
-    camera.lookAt(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z - CAMERA_LOOK_AHEAD);
+    camera.lookAt(
+      PLAYER_START_X,
+      PLAYER_START_Y,
+      PLAYER_START_Z - CAMERA_LOOK_AHEAD
+    );
     camera.fov = CAMERA_FOV;
     camera.updateProjectionMatrix();
   }, [camera]);
@@ -39,7 +43,11 @@ const Player: React.FC = () => {
     if (!playerRef.current) return;
     if (snap.phase === 'menu' || snap.phase === 'playing') {
       const baseYaw = snap.character === 'ufoMini' ? 0 : Math.PI;
-      playerRef.current.position.set(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z);
+      playerRef.current.position.set(
+        PLAYER_START_X,
+        PLAYER_START_Y,
+        PLAYER_START_Z
+      );
       playerRef.current.rotation.set(0, baseYaw, 0);
       mutation.playerZ = PLAYER_START_Z;
       mutation.playerX = PLAYER_START_X;
@@ -76,19 +84,34 @@ const Player: React.FC = () => {
 
       if ((left && right) || (!left && !right)) {
         if (mutation.horizontalVelocity < 0) {
-          mutation.horizontalVelocity = Math.min(0, mutation.horizontalVelocity + accelDelta);
+          mutation.horizontalVelocity = Math.min(
+            0,
+            mutation.horizontalVelocity + accelDelta
+          );
         } else if (mutation.horizontalVelocity > 0) {
-          mutation.horizontalVelocity = Math.max(0, mutation.horizontalVelocity - accelDelta);
+          mutation.horizontalVelocity = Math.max(
+            0,
+            mutation.horizontalVelocity - accelDelta
+          );
         }
       } else if (left) {
-        mutation.horizontalVelocity = Math.max(-0.7, mutation.horizontalVelocity - accelDelta);
+        mutation.horizontalVelocity = Math.max(
+          -0.7,
+          mutation.horizontalVelocity - accelDelta
+        );
       } else if (right) {
-        mutation.horizontalVelocity = Math.min(0.7, mutation.horizontalVelocity + accelDelta);
+        mutation.horizontalVelocity = Math.min(
+          0.7,
+          mutation.horizontalVelocity + accelDelta
+        );
       }
     }
 
     if (mutation.shake > 0) {
-      mutation.shake = Math.max(0, mutation.shake - delta * mutation.shakeDecay);
+      mutation.shake = Math.max(
+        0,
+        mutation.shake - delta * mutation.shakeDecay
+      );
     }
     const wobble = Math.sin(state.clock.elapsedTime * 0.9) * 0.08;
     const shake = mutation.shake;
@@ -101,7 +124,11 @@ const Player: React.FC = () => {
       mesh.position.y + CAMERA_OFFSET_Y + shakeY + wobble * 0.4,
       mesh.position.z + CAMERA_OFFSET_Z + shakeZ
     );
-    camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z - CAMERA_LOOK_AHEAD);
+    camera.lookAt(
+      mesh.position.x,
+      mesh.position.y,
+      mesh.position.z - CAMERA_LOOK_AHEAD
+    );
 
     if (trailRef.current) {
       trailRef.current.position.copy(mesh.position);
@@ -115,21 +142,27 @@ const Player: React.FC = () => {
     const speedDelta = mutation.desiredSpeed - mutation.gameSpeed;
     if (Math.abs(speedDelta) > 0.0001) {
       const accel = speedDelta > 0 ? 0.15 : 0.08;
-      mutation.gameSpeed += Math.sign(speedDelta) * Math.min(Math.abs(speedDelta), delta * accel);
+      mutation.gameSpeed +=
+        Math.sign(speedDelta) * Math.min(Math.abs(speedDelta), delta * accel);
       voidRunnerState.speed = Math.floor(mutation.gameSpeed * 400);
     }
 
     voidRunnerState.score = Math.floor(
-      Math.abs(mesh.position.z) * voidRunnerState.comboMultiplier / 10
+      (Math.abs(mesh.position.z) * voidRunnerState.comboMultiplier) / 10
     );
   });
 
   return (
     <>
-      <group ref={playerRef} position={[PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z]}>
+      <group
+        ref={playerRef}
+        position={[PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z]}
+      >
         {snap.character === 'ufoMini' ? (
           <UfoShip
-            playerRef={playerRef as unknown as React.MutableRefObject<THREE.Group | null>}
+            playerRef={
+              playerRef as unknown as React.MutableRefObject<THREE.Group | null>
+            }
             scale={0.55}
             position={[0, -0.9, 0]}
           />
@@ -148,9 +181,17 @@ const Player: React.FC = () => {
         )}
       </group>
 
-      <mesh ref={trailRef} position={[PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z + 3]}>
+      <mesh
+        ref={trailRef}
+        position={[PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z + 3]}
+      >
         <planeGeometry args={[2, 8]} />
-        <meshBasicMaterial color="#00ffff" transparent opacity={0.3} side={THREE.DoubleSide} />
+        <meshBasicMaterial
+          color="#00ffff"
+          transparent
+          opacity={0.3}
+          side={THREE.DoubleSide}
+        />
       </mesh>
     </>
   );

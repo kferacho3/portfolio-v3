@@ -65,12 +65,12 @@ function factorial(n: number): number {
  */
 function associatedLegendre(l: number, m: number, x: number): number {
   const absM = Math.abs(m);
-  
+
   if (absM > l) return 0;
-  
+
   // Clamp x to avoid numerical issues
   x = Math.max(-1, Math.min(1, x));
-  
+
   // Start with P_m^m
   let pmm = 1;
   if (absM > 0) {
@@ -81,17 +81,17 @@ function associatedLegendre(l: number, m: number, x: number): number {
       fact += 2;
     }
   }
-  
+
   if (l === absM) {
     return pmm;
   }
-  
+
   // P_{m+1}^m
   let pmmp1 = x * (2 * absM + 1) * pmm;
   if (l === absM + 1) {
     return pmmp1;
   }
-  
+
   // Use recurrence to get P_l^m
   let pll = 0;
   for (let ll = absM + 2; ll <= l; ll++) {
@@ -99,7 +99,7 @@ function associatedLegendre(l: number, m: number, x: number): number {
     pmm = pmmp1;
     pmmp1 = pll;
   }
-  
+
   return pll;
 }
 
@@ -107,18 +107,22 @@ function associatedLegendre(l: number, m: number, x: number): number {
  * Spherical harmonic Y_l^m(theta, phi)
  * Returns the real-valued form
  */
-function sphericalHarmonic(l: number, m: number, theta: number, phi: number): number {
+function sphericalHarmonic(
+  l: number,
+  m: number,
+  theta: number,
+  phi: number
+): number {
   // Normalization constant
   const absM = Math.abs(m);
   const norm = Math.sqrt(
-    ((2 * l + 1) * factorial(l - absM)) / 
-    (4 * Math.PI * factorial(l + absM))
+    ((2 * l + 1) * factorial(l - absM)) / (4 * Math.PI * factorial(l + absM))
   );
-  
+
   // Associated Legendre polynomial
   const cosTheta = Math.cos(theta);
   const legendre = associatedLegendre(l, absM, cosTheta);
-  
+
   // Real spherical harmonic
   if (m > 0) {
     return Math.sqrt(2) * norm * legendre * Math.cos(m * phi);
@@ -149,7 +153,9 @@ function seededRandom(seed: number): () => number {
  * Create a spherical harmonic surface geometry
  * The radius at each point is determined by |Y_l^m(θ,φ)|^exponent
  */
-export function sphericalHarmonicGeometry(params: SphericalHarmonicParams = {}): THREE.BufferGeometry {
+export function sphericalHarmonicGeometry(
+  params: SphericalHarmonicParams = {}
+): THREE.BufferGeometry {
   const {
     l = 4,
     m = 3,
@@ -158,30 +164,30 @@ export function sphericalHarmonicGeometry(params: SphericalHarmonicParams = {}):
     scale = 1,
     absolute = true,
   } = params;
-  
+
   // Ensure m is in valid range
   const validM = Math.max(-l, Math.min(l, m));
-  
+
   const geometry = new ParametricGeometry(
     (u: number, v: number, target: THREE.Vector3) => {
-      const theta = v * Math.PI;      // 0 to π (polar angle)
-      const phi = u * Math.PI * 2;    // 0 to 2π (azimuthal angle)
-      
+      const theta = v * Math.PI; // 0 to π (polar angle)
+      const phi = u * Math.PI * 2; // 0 to 2π (azimuthal angle)
+
       // Get spherical harmonic value
       let Y = sphericalHarmonic(l, validM, theta, phi);
-      
+
       // Apply absolute value if requested (creates symmetric shapes)
       if (absolute) {
         Y = Math.abs(Y);
       }
-      
+
       // Apply exponent for shape control
       // Lower exponent = spikier, higher = rounder
       let r = Math.pow(Math.abs(Y) + 0.1, exponent);
-      
+
       // Clamp to prevent extreme values
       r = Math.max(0.1, Math.min(2, r));
-      
+
       // Convert to Cartesian coordinates
       const sinTheta = Math.sin(theta);
       target.set(
@@ -193,10 +199,10 @@ export function sphericalHarmonicGeometry(params: SphericalHarmonicParams = {}):
     resolution,
     resolution
   );
-  
+
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -214,35 +220,35 @@ export function sphericalHarmonicSuperpositionGeometry(
     scale = 1,
     absolute = true,
   } = params;
-  
+
   // Default harmonics if none provided
   const defaultHarmonics = [
     { l: 3, m: 2, amplitude: 1 },
     { l: 4, m: 3, amplitude: 0.5 },
     { l: 2, m: 1, amplitude: 0.3 },
   ];
-  
+
   const harms = harmonics.length > 0 ? harmonics : defaultHarmonics;
-  
+
   const geometry = new ParametricGeometry(
     (u: number, v: number, target: THREE.Vector3) => {
       const theta = v * Math.PI;
       const phi = u * Math.PI * 2;
-      
+
       // Sum all harmonics
       let Y = 0;
       for (const h of harms) {
         const validM = Math.max(-h.l, Math.min(h.l, h.m));
         Y += h.amplitude * sphericalHarmonic(h.l, validM, theta, phi);
       }
-      
+
       if (absolute) {
         Y = Math.abs(Y);
       }
-      
+
       let r = Math.pow(Math.abs(Y) + 0.15, exponent);
       r = Math.max(0.15, Math.min(1.5, r));
-      
+
       const sinTheta = Math.sin(theta);
       target.set(
         r * sinTheta * Math.cos(phi) * scale,
@@ -253,10 +259,10 @@ export function sphericalHarmonicSuperpositionGeometry(
     resolution,
     resolution
   );
-  
+
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -269,7 +275,9 @@ export function sphericalHarmonicSuperpositionGeometry(
  * Create a Fourier blob surface
  * The radius is determined by a sum of sinusoidal harmonics
  */
-export function fourierBlobGeometry(params: FourierParams = {}): THREE.BufferGeometry {
+export function fourierBlobGeometry(
+  params: FourierParams = {}
+): THREE.BufferGeometry {
   const {
     harmonics = 5,
     baseFrequency = 1,
@@ -278,9 +286,9 @@ export function fourierBlobGeometry(params: FourierParams = {}): THREE.BufferGeo
     scale = 1,
     seed = 42,
   } = params;
-  
+
   const random = seededRandom(seed);
-  
+
   // Generate random coefficients
   const coeffs: Array<{
     freqTheta: number;
@@ -289,7 +297,7 @@ export function fourierBlobGeometry(params: FourierParams = {}): THREE.BufferGeo
     phaseTheta: number;
     phasePhi: number;
   }> = [];
-  
+
   for (let i = 0; i < harmonics; i++) {
     const amp = Math.pow(decay, i);
     coeffs.push({
@@ -300,24 +308,26 @@ export function fourierBlobGeometry(params: FourierParams = {}): THREE.BufferGeo
       phasePhi: random() * Math.PI * 2,
     });
   }
-  
+
   const geometry = new ParametricGeometry(
     (u: number, v: number, target: THREE.Vector3) => {
       const theta = v * Math.PI;
       const phi = u * Math.PI * 2;
-      
+
       // Base radius
       let r = 0.5;
-      
+
       // Sum Fourier harmonics
       for (const c of coeffs) {
-        r += c.amplitude * Math.sin(c.freqTheta * theta + c.phaseTheta) * 
-             Math.cos(c.freqPhi * phi + c.phasePhi);
+        r +=
+          c.amplitude *
+          Math.sin(c.freqTheta * theta + c.phaseTheta) *
+          Math.cos(c.freqPhi * phi + c.phasePhi);
       }
-      
+
       // Ensure positive radius
       r = Math.max(0.2, r);
-      
+
       const sinTheta = Math.sin(theta);
       target.set(
         r * sinTheta * Math.cos(phi) * scale,
@@ -328,17 +338,19 @@ export function fourierBlobGeometry(params: FourierParams = {}): THREE.BufferGeo
     resolution,
     resolution
   );
-  
+
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
 /**
  * Create a random Fourier blob with different characteristics each time
  */
-export function randomFourierBlobGeometry(params: Partial<FourierParams> = {}): THREE.BufferGeometry {
+export function randomFourierBlobGeometry(
+  params: Partial<FourierParams> = {}
+): THREE.BufferGeometry {
   return fourierBlobGeometry({
     harmonics: 4 + Math.floor(Math.random() * 4),
     baseFrequency: 0.8 + Math.random() * 0.4,
@@ -370,37 +382,34 @@ export interface WaveFunctionParams {
  * Create a hydrogen-like orbital shape
  * Based on |ψ|² probability density of atomic orbitals
  */
-export function atomicOrbitalGeometry(params: WaveFunctionParams = {}): THREE.BufferGeometry {
-  const {
-    n = 3,
-    l = 2,
-    m = 1,
-    resolution = 64,
-    scale = 1,
-  } = params;
-  
+export function atomicOrbitalGeometry(
+  params: WaveFunctionParams = {}
+): THREE.BufferGeometry {
+  const { n = 3, l = 2, m = 1, resolution = 64, scale = 1 } = params;
+
   // Ensure valid quantum numbers
   const validL = Math.max(0, Math.min(n - 1, l));
   const validM = Math.max(-validL, Math.min(validL, m));
-  
+
   const geometry = new ParametricGeometry(
     (u: number, v: number, target: THREE.Vector3) => {
       const theta = v * Math.PI;
       const phi = u * Math.PI * 2;
-      
+
       // Radial function approximation (simplified)
       // R_nl ~ r^l * exp(-r/(n*a0)) * L_{n-l-1}^{2l+1}(2r/(n*a0))
       // We use a simplified version that captures the orbital shape
-      
+
       // Angular part (spherical harmonic)
       const Y = Math.abs(sphericalHarmonic(validL, validM, theta, phi));
-      
+
       // Simplified radial modulation based on n, l
-      const radialMod = 1 + 0.3 * Math.cos(validL * theta) * Math.sin(n * phi / 2);
-      
+      const radialMod =
+        1 + 0.3 * Math.cos(validL * theta) * Math.sin((n * phi) / 2);
+
       let r = Math.pow(Y + 0.1, 0.4) * radialMod;
       r = Math.max(0.15, Math.min(1.5, r));
-      
+
       const sinTheta = Math.sin(theta);
       target.set(
         r * sinTheta * Math.cos(phi) * scale,
@@ -411,11 +420,11 @@ export function atomicOrbitalGeometry(params: WaveFunctionParams = {}): THREE.Bu
     resolution,
     resolution
   );
-  
+
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   geometry.userData.lowNoise = true;
-  
+
   return geometry;
 }
 
@@ -445,7 +454,9 @@ export interface ToroidalHarmonicParams {
  * Create a toroidal harmonic surface
  * A torus with wave patterns on its surface
  */
-export function toroidalHarmonicGeometry(params: ToroidalHarmonicParams = {}): THREE.BufferGeometry {
+export function toroidalHarmonicGeometry(
+  params: ToroidalHarmonicParams = {}
+): THREE.BufferGeometry {
   const {
     majorRadius = 0.7,
     minorRadius = 0.25,
@@ -455,31 +466,34 @@ export function toroidalHarmonicGeometry(params: ToroidalHarmonicParams = {}): T
     resolution = 64,
     scale = 1,
   } = params;
-  
+
   const geometry = new ParametricGeometry(
     (u: number, v: number, target: THREE.Vector3) => {
-      const theta = u * Math.PI * 2;  // Around the major circle
-      const phi = v * Math.PI * 2;    // Around the minor circle
-      
+      const theta = u * Math.PI * 2; // Around the major circle
+      const phi = v * Math.PI * 2; // Around the minor circle
+
       // Wave modulation of minor radius
-      const wave1 = Math.sin(poloidalWaves * phi) * Math.cos(toroidalWaves * theta);
-      const wave2 = Math.cos(poloidalWaves * phi + Math.PI / 3) * Math.sin(toroidalWaves * theta);
+      const wave1 =
+        Math.sin(poloidalWaves * phi) * Math.cos(toroidalWaves * theta);
+      const wave2 =
+        Math.cos(poloidalWaves * phi + Math.PI / 3) *
+        Math.sin(toroidalWaves * theta);
       const r = minorRadius + amplitude * (wave1 + wave2 * 0.5);
-      
+
       // Torus parametric equations
       const x = (majorRadius + r * Math.cos(phi)) * Math.cos(theta);
       const y = (majorRadius + r * Math.cos(phi)) * Math.sin(theta);
       const z = r * Math.sin(phi);
-      
+
       target.set(x * scale, z * scale, y * scale);
     },
     resolution,
     Math.floor(resolution * 0.6)
   );
-  
+
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -508,7 +522,9 @@ export interface SuperquadricHarmonicParams {
 /**
  * Create a superquadric surface modulated by spherical harmonics
  */
-export function superquadricHarmonicGeometry(params: SuperquadricHarmonicParams = {}): THREE.BufferGeometry {
+export function superquadricHarmonicGeometry(
+  params: SuperquadricHarmonicParams = {}
+): THREE.BufferGeometry {
   const {
     e1 = 0.5,
     e2 = 0.5,
@@ -518,46 +534,42 @@ export function superquadricHarmonicGeometry(params: SuperquadricHarmonicParams 
     resolution = 64,
     scale = 1,
   } = params;
-  
+
   const validM = Math.max(-l, Math.min(l, m));
-  
+
   // Signed power function for superquadrics
   const signedPow = (base: number, exp: number): number => {
     return Math.sign(base) * Math.pow(Math.abs(base), exp);
   };
-  
+
   const geometry = new ParametricGeometry(
     (u: number, v: number, target: THREE.Vector3) => {
-      const theta = (v - 0.5) * Math.PI;  // -π/2 to π/2 (latitude)
-      const phi = u * Math.PI * 2;         // 0 to 2π (longitude)
-      
+      const theta = (v - 0.5) * Math.PI; // -π/2 to π/2 (latitude)
+      const phi = u * Math.PI * 2; // 0 to 2π (longitude)
+
       // Superquadric base shape
       const cosTheta = Math.cos(theta);
       const sinTheta = Math.sin(theta);
       const cosPhi = Math.cos(phi);
       const sinPhi = Math.sin(phi);
-      
+
       let x = signedPow(cosTheta, e1) * signedPow(cosPhi, e2);
       let y = signedPow(cosTheta, e1) * signedPow(sinPhi, e2);
       let z = signedPow(sinTheta, e1);
-      
+
       // Spherical harmonic modulation
       const Y = Math.abs(sphericalHarmonic(l, validM, v * Math.PI, phi));
       const mod = 1 + harmonicInfluence * (Y - 0.5);
-      
-      target.set(
-        x * mod * scale,
-        z * mod * scale,
-        y * mod * scale
-      );
+
+      target.set(x * mod * scale, z * mod * scale, y * mod * scale);
     },
     resolution,
     resolution
   );
-  
+
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -565,7 +577,7 @@ export function superquadricHarmonicGeometry(params: SuperquadricHarmonicParams 
    FACTORY FUNCTIONS
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type HarmonicSurfaceType = 
+export type HarmonicSurfaceType =
   | 'sphericalHarmonic'
   | 'harmonicSuperposition'
   | 'fourierBlob'
@@ -584,7 +596,10 @@ export function createHarmonicSurface(
     case 'sphericalHarmonic':
       return sphericalHarmonicGeometry(params as SphericalHarmonicParams);
     case 'harmonicSuperposition':
-      return sphericalHarmonicSuperpositionGeometry([], params as Omit<SphericalHarmonicParams, 'l' | 'm'>);
+      return sphericalHarmonicSuperpositionGeometry(
+        [],
+        params as Omit<SphericalHarmonicParams, 'l' | 'm'>
+      );
     case 'fourierBlob':
       return fourierBlobGeometry(params as FourierParams);
     case 'atomicOrbital':
@@ -620,7 +635,7 @@ export function randomSphericalHarmonicGeometry(): THREE.BufferGeometry {
   const l = 2 + Math.floor(Math.random() * 6); // 2-7
   const m = Math.floor(Math.random() * (2 * l + 1)) - l; // -l to +l
   const exponent = 0.3 + Math.random() * 0.4; // 0.3-0.7
-  
+
   return sphericalHarmonicGeometry({ l, m, exponent });
 }
 

@@ -33,5 +33,12 @@ export const GemMesh: React.FC<{
     }
   });
 
-  return <mesh ref={ref} geometry={geoms.gem} material={mats.gem as any} castShadow />;
+  return (
+    <mesh
+      ref={ref}
+      geometry={geoms.gem}
+      material={mats.gem as any}
+      castShadow
+    />
+  );
 };

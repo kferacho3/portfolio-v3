@@ -7,10 +7,10 @@ import { goUpState } from '../state';
 import { ARENAS } from '../arenas';
 import type { Arena } from '../types';
 
-export const GoUpMenu: React.FC<{ arena: Arena; onArenaPick: (index: number | 'auto') => void }> = ({
-  arena,
-  onArenaPick,
-}) => {
+export const GoUpMenu: React.FC<{
+  arena: Arena;
+  onArenaPick: (index: number | 'auto') => void;
+}> = ({ arena, onArenaPick }) => {
   const snap = useSnapshot(goUpState);
 
   if (snap.phase !== 'menu' && snap.phase !== 'gameover') return null;
@@ -51,20 +51,49 @@ export const GoUpMenu: React.FC<{ arena: Arena; onArenaPick: (index: number | 'a
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
         >
-          <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: 3 }}>Go Up</div>
-          <div style={{ marginTop: 8, fontSize: 14, opacity: 0.65, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: 3 }}>
+            Go Up
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              fontSize: 14,
+              opacity: 0.65,
+              lineHeight: 1.5,
+            }}
+          >
             Tap to jump • Double-tap for double jump
           </div>
 
-          <div style={{ marginTop: 14, fontSize: 11, letterSpacing: 1.5, opacity: 0.55 }}>ARENAS</div>
-          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          <div
+            style={{
+              marginTop: 14,
+              fontSize: 11,
+              letterSpacing: 1.5,
+              opacity: 0.55,
+            }}
+          >
+            ARENAS
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              justifyContent: 'center',
+            }}
+          >
             <button
               type="button"
               onClick={() => onArenaPick('auto')}
               style={{
                 padding: '8px 14px',
                 borderRadius: 999,
-                border: snap.arenaMode === 'auto' ? '2px solid #111' : '1px solid rgba(0,0,0,0.15)',
+                border:
+                  snap.arenaMode === 'auto'
+                    ? '2px solid #111'
+                    : '1px solid rgba(0,0,0,0.15)',
                 background: 'linear-gradient(135deg, #fff, #f5f5f5)',
                 fontSize: 12,
                 fontWeight: 700,
@@ -75,7 +104,8 @@ export const GoUpMenu: React.FC<{ arena: Arena; onArenaPick: (index: number | 'a
               Auto
             </button>
             {ARENAS.map((option, idx) => {
-              const isSelected = snap.arenaMode === 'fixed' && snap.arenaIndex === idx;
+              const isSelected =
+                snap.arenaMode === 'fixed' && snap.arenaIndex === idx;
               const darkText = option.id === 'ember' || option.id === 'violet';
               return (
                 <button
@@ -85,10 +115,14 @@ export const GoUpMenu: React.FC<{ arena: Arena; onArenaPick: (index: number | 'a
                   style={{
                     padding: '8px 14px',
                     borderRadius: 999,
-                    border: isSelected ? '2px solid #111' : '1px solid rgba(0,0,0,0.15)',
+                    border: isSelected
+                      ? '2px solid #111'
+                      : '1px solid rgba(0,0,0,0.15)',
                     background: `linear-gradient(135deg, ${option.skyTop}, ${option.skyBottom})`,
                     color: darkText ? '#fff' : '#111',
-                    textShadow: darkText ? '0 1px 2px rgba(0,0,0,0.4)' : '0 1px 0 rgba(255,255,255,0.5)',
+                    textShadow: darkText
+                      ? '0 1px 2px rgba(0,0,0,0.4)'
+                      : '0 1px 0 rgba(255,255,255,0.5)',
                     fontSize: 12,
                     fontWeight: 700,
                     letterSpacing: 0.4,
@@ -110,10 +144,15 @@ export const GoUpMenu: React.FC<{ arena: Arena; onArenaPick: (index: number | 'a
                 borderRadius: 14,
               }}
             >
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#c62828' }}>{getCrashMessage()}</div>
-              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700 }}>Score: {snap.score}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#c62828' }}>
+                {getCrashMessage()}
+              </div>
+              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700 }}>
+                Score: {snap.score}
+              </div>
               <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>
-                Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps: {snap.wallsClimbed}
+                Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps:{' '}
+                {snap.wallsClimbed}
               </div>
             </div>
           )}

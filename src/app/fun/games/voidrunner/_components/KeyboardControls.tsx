@@ -8,20 +8,47 @@ const KeyboardControls: React.FC = () => {
       const code = e.code;
 
       const isArrow =
-        code === 'ArrowLeft' || code === 'ArrowRight' || key === 'arrowleft' || key === 'arrowright';
+        code === 'ArrowLeft' ||
+        code === 'ArrowRight' ||
+        key === 'arrowleft' ||
+        key === 'arrowright';
 
-      if (isArrow || code === 'Space' || code === 'Enter' || key === ' ' || key === 'enter') {
+      if (
+        isArrow ||
+        code === 'Space' ||
+        code === 'Enter' ||
+        key === ' ' ||
+        key === 'enter'
+      ) {
         e.preventDefault();
       }
 
-      if (code === 'ArrowLeft' || code === 'KeyA' || key === 'arrowleft' || key === 'a') {
+      if (
+        code === 'ArrowLeft' ||
+        code === 'KeyA' ||
+        key === 'arrowleft' ||
+        key === 'a'
+      ) {
         voidRunnerState.controls.left = true;
       }
-      if (code === 'ArrowRight' || code === 'KeyD' || key === 'arrowright' || key === 'd') {
+      if (
+        code === 'ArrowRight' ||
+        code === 'KeyD' ||
+        key === 'arrowright' ||
+        key === 'd'
+      ) {
         voidRunnerState.controls.right = true;
       }
-      if (code === 'Space' || code === 'Enter' || key === ' ' || key === 'enter') {
-        if (voidRunnerState.phase === 'menu' || voidRunnerState.phase === 'gameover') {
+      if (
+        code === 'Space' ||
+        code === 'Enter' ||
+        key === ' ' ||
+        key === 'enter'
+      ) {
+        if (
+          voidRunnerState.phase === 'menu' ||
+          voidRunnerState.phase === 'gameover'
+        ) {
           voidRunnerState.reset();
           voidRunnerState.startGame();
         }
@@ -37,10 +64,20 @@ const KeyboardControls: React.FC = () => {
       const key = e.key.toLowerCase();
       const code = e.code;
 
-      if (code === 'ArrowLeft' || code === 'KeyA' || key === 'arrowleft' || key === 'a') {
+      if (
+        code === 'ArrowLeft' ||
+        code === 'KeyA' ||
+        key === 'arrowleft' ||
+        key === 'a'
+      ) {
         voidRunnerState.controls.left = false;
       }
-      if (code === 'ArrowRight' || code === 'KeyD' || key === 'arrowright' || key === 'd') {
+      if (
+        code === 'ArrowRight' ||
+        code === 'KeyD' ||
+        key === 'arrowright' ||
+        key === 'd'
+      ) {
         voidRunnerState.controls.right = false;
       }
     };

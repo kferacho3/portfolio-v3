@@ -104,10 +104,7 @@ function ProjectModal({ project, onClose }: ModalProps) {
             </h3>
 
             {project.description && (
-              <p
-                id={descId}
-                className="text-muted-foreground leading-relaxed"
-              >
+              <p id={descId} className="text-muted-foreground leading-relaxed">
                 {project.description}
               </p>
             )}
@@ -276,7 +273,7 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
     >
       <meta itemProp="url" content={project.link} />
       <meta itemProp="keywords" content={buildKeywords(project)} />
-      
+
       {/* Top-bottom layout with full width */}
       <div className="flex flex-col">
         {/* Image section - landscape preview at top, constrained height */}
@@ -478,7 +475,6 @@ export default function SectionThree() {
       aria-labelledby="projects-title"
       className="relative w-full px-4 py-14 sm:px-6 md:px-8 md:py-20 lg:px-12"
     >
-
       <div className="relative z-10 mx-auto max-w-6xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

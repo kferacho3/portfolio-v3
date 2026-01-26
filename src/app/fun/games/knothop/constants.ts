@@ -33,16 +33,70 @@ export const GAME = {
 };
 
 export const BALL_SKINS: BallSkin[] = [
-  { id: 'midnight', name: 'Midnight', color: '#0B0F1A', roughness: 0.15, metalness: 0.1 },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    color: '#0B0F1A',
+    roughness: 0.15,
+    metalness: 0.1,
+  },
   { id: 'cloud', name: 'Cloud', color: '#F3F4F6', roughness: 0.28 },
-  { id: 'neon', name: 'Neon', color: '#22D3EE', emissive: '#01262B', roughness: 0.22 },
-  { id: 'berry', name: 'Berry', color: '#FB7185', emissive: '#2B020B', roughness: 0.22 },
-  { id: 'violet', name: 'Violet', color: '#A78BFA', emissive: '#12062B', roughness: 0.25 },
-  { id: 'azure', name: 'Azure', color: '#60A5FA', emissive: '#06152B', roughness: 0.25 },
-  { id: 'gold', name: 'Gold', color: '#FBBF24', roughness: 0.25, metalness: 0.9 },
-  { id: 'mint', name: 'Mint', color: '#34D399', emissive: '#012B1A', roughness: 0.22 },
-  { id: 'coral', name: 'Coral', color: '#FB923C', emissive: '#2B1200', roughness: 0.24 },
-  { id: 'candy', name: 'Candy', color: '#F472B6', emissive: '#2B0012', roughness: 0.22 },
+  {
+    id: 'neon',
+    name: 'Neon',
+    color: '#22D3EE',
+    emissive: '#01262B',
+    roughness: 0.22,
+  },
+  {
+    id: 'berry',
+    name: 'Berry',
+    color: '#FB7185',
+    emissive: '#2B020B',
+    roughness: 0.22,
+  },
+  {
+    id: 'violet',
+    name: 'Violet',
+    color: '#A78BFA',
+    emissive: '#12062B',
+    roughness: 0.25,
+  },
+  {
+    id: 'azure',
+    name: 'Azure',
+    color: '#60A5FA',
+    emissive: '#06152B',
+    roughness: 0.25,
+  },
+  {
+    id: 'gold',
+    name: 'Gold',
+    color: '#FBBF24',
+    roughness: 0.25,
+    metalness: 0.9,
+  },
+  {
+    id: 'mint',
+    name: 'Mint',
+    color: '#34D399',
+    emissive: '#012B1A',
+    roughness: 0.22,
+  },
+  {
+    id: 'coral',
+    name: 'Coral',
+    color: '#FB923C',
+    emissive: '#2B1200',
+    roughness: 0.24,
+  },
+  {
+    id: 'candy',
+    name: 'Candy',
+    color: '#F472B6',
+    emissive: '#2B0012',
+    roughness: 0.22,
+  },
 ];
 
 export const PLATFORM_THEMES: PlatformTheme[] = [

@@ -54,19 +54,19 @@ export interface UseInputOptions {
 
 /**
  * Unified input hook that normalizes pointer and keyboard input
- * 
+ *
  * Provides consistent input handling between legacy (state.mouse) and
  * modern (state.pointer) R3F APIs, plus keyboard tracking.
- * 
+ *
  * @example
  * ```tsx
  * function Game() {
  *   const input = useInput();
- *   
+ *
  *   useFrame(() => {
  *     // Pointer position is always -1 to 1
  *     player.position.x = input.pointerX * 5;
- *     
+ *
  *     // Check keys
  *     if (input.keysDown.has(' ')) {
  *       jump();
@@ -80,7 +80,7 @@ export interface UseInputOptions {
  */
 export function useInput(options: UseInputOptions = {}): InputState {
   const { useR3FPointer = true, preventDefault = [], enabled = true } = options;
-  
+
   // Use ref for mutable state to avoid re-renders
   const stateRef = useRef<InputStateInternal>({
     pointerX: 0,
@@ -109,12 +109,12 @@ export function useInput(options: UseInputOptions = {}): InputState {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      
+
       // Prevent default for specified keys
       if (preventDefault.includes(key) || preventDefault.includes(e.code)) {
         e.preventDefault();
       }
-      
+
       if (!stateRef.current.keysDown.has(key)) {
         stateRef.current.keysDown.add(key);
         stateRef.current.justPressed.add(key);
@@ -196,12 +196,16 @@ export function useInput(options: UseInputOptions = {}): InputState {
  * Accepts either a ref or the state object directly
  */
 export function clearFrameInput(
-  stateRefOrState: React.MutableRefObject<InputStateInternal> | InputStateInternal | null | undefined
+  stateRefOrState:
+    | React.MutableRefObject<InputStateInternal>
+    | InputStateInternal
+    | null
+    | undefined
 ): void {
   if (!stateRefOrState) return;
-  
+
   let state: InputStateInternal | null = null;
-  
+
   // Check if it's a ref (has .current property) or the state object directly
   if (typeof stateRefOrState === 'object' && 'current' in stateRefOrState) {
     // It's a ref
@@ -209,13 +213,16 @@ export function clearFrameInput(
     if (ref.current && typeof ref.current === 'object') {
       state = ref.current;
     }
-  } else if (typeof stateRefOrState === 'object' && 'justPressed' in stateRefOrState) {
+  } else if (
+    typeof stateRefOrState === 'object' &&
+    'justPressed' in stateRefOrState
+  ) {
     // It's the state object directly
     state = stateRefOrState as InputStateInternal;
   }
-  
+
   if (!state || !state.justPressed || !state.justReleased) return;
-  
+
   state.justPressed.clear();
   state.justReleased.clear();
   state.pointerJustDown = false;
@@ -226,9 +233,11 @@ export function clearFrameInput(
  * Hook for accessing input with frame-based "just pressed" tracking
  * Uses a ref-based approach for better performance in useFrame
  */
-export function useInputRef(options: UseInputOptions = {}): React.MutableRefObject<InputStateInternal> {
+export function useInputRef(
+  options: UseInputOptions = {}
+): React.MutableRefObject<InputStateInternal> {
   const { preventDefault = [], enabled = true } = options;
-  
+
   const stateRef = useRef<InputStateInternal>({
     pointerX: 0,
     pointerY: 0,

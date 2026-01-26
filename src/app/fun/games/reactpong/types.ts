@@ -1,6 +1,11 @@
 export type ReactPongMode = 'SoloPaddle' | 'SoloWalls' | 'WallMode';
 
-export type PowerupType = 'slowmo' | 'widen' | 'magnet' | 'shield' | 'curveBoost';
+export type PowerupType =
+  | 'slowmo'
+  | 'widen'
+  | 'magnet'
+  | 'shield'
+  | 'curveBoost';
 
 export interface ActivePowerup {
   type: PowerupType;
@@ -51,7 +56,13 @@ export interface HitEffect {
 export interface WallModeState {
   lives: number;
   currentLevel: number;
-  gameState: 'ready' | 'playing' | 'captured' | 'levelComplete' | 'gameOver' | 'victory';
+  gameState:
+    | 'ready'
+    | 'playing'
+    | 'captured'
+    | 'levelComplete'
+    | 'gameOver'
+    | 'victory';
   currentSpeed: number;
   maxSpeed: number;
   rallyStreak: number;
@@ -65,7 +76,10 @@ export interface WallModeState {
   currentLevelConfig: (typeof import('./constants').WALL_MODE_LEVELS)[number];
   wallZones: WallZone[];
   activePowerups: ActivePowerup[];
-  availablePowerup: { type: PowerupType; position: [number, number, number] } | null;
+  availablePowerup: {
+    type: PowerupType;
+    position: [number, number, number];
+  } | null;
   stabilizeMode: boolean;
   lastCatchWasPerfect: boolean;
 }

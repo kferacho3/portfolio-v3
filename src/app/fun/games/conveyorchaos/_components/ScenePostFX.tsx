@@ -1,6 +1,12 @@
 'use client';
 
-import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import {
+  Bloom,
+  ChromaticAberration,
+  EffectComposer,
+  Noise,
+  Vignette,
+} from '@react-three/postprocessing';
 import React from 'react';
 import * as THREE from 'three';
 import { clamp } from '../utils';

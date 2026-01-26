@@ -1,6 +1,6 @@
 /**
  * Prism.tsx (Prism Hop Infinite)
- * 
+ *
  * Endless platform-hopping game
  * Jump between floating glass prisms that drift and rotate
  * Features: normal, cracked (breaks), and boost platforms
@@ -9,7 +9,13 @@
 
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 import { SeededRandom } from '../../utils/seededRandom';
@@ -133,17 +139,19 @@ const generatePlatform = (
 ): Platform => {
   const rand = rng.float(0, 1);
   let type: PrismType = 'normal';
-  
+
   // Increase special platform chance with difficulty
   const crackedChance = Math.min(0.25, 0.1 + difficulty * 0.01);
   const boostChance = Math.min(0.15, 0.05 + difficulty * 0.005);
-  
+
   if (rand < crackedChance) type = 'cracked';
   else if (rand < crackedChance + boostChance) type = 'boost';
 
   if (opts?.type) type = opts.type;
 
-  const sides = clampSides(opts?.sides ?? (rng.int(MIN_SIDES, MAX_SIDES) as PlayerShape));
+  const sides = clampSides(
+    opts?.sides ?? (rng.int(MIN_SIDES, MAX_SIDES) as PlayerShape)
+  );
   // Make the platform color communicate the required player shape.
   const baseColor = getShapeColor(sides);
 
@@ -210,16 +218,30 @@ const PrismPlatform: React.FC<{
       {type === 'boost' && (
         <mesh position={[0, 0.3, 0]}>
           <coneGeometry args={[0.2, 0.4, 8]} />
-          <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={0.8} />
+          <meshStandardMaterial
+            color="#00ff88"
+            emissive="#00ff88"
+            emissiveIntensity={0.8}
+          />
         </mesh>
       )}
       {isNext && (
         <>
           <mesh position={[0, 0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[PLATFORM_SIZE * 0.5, PLATFORM_SIZE * 0.7, 24]} />
-            <meshBasicMaterial color={isMatch ? '#00ff88' : '#ff4757'} transparent opacity={0.85} />
+            <ringGeometry
+              args={[PLATFORM_SIZE * 0.5, PLATFORM_SIZE * 0.7, 24]}
+            />
+            <meshBasicMaterial
+              color={isMatch ? '#00ff88' : '#ff4757'}
+              transparent
+              opacity={0.85}
+            />
           </mesh>
-          <Html center position={[0, 0.62, 0]} style={{ pointerEvents: 'none' }}>
+          <Html
+            center
+            position={[0, 0.62, 0]}
+            style={{ pointerEvents: 'none' }}
+          >
             <div className="text-[10px] font-semibold text-white/90 bg-black/60 rounded px-1.5 py-0.5">
               {sides} sides
             </div>
@@ -241,7 +263,12 @@ const Player: React.FC<{
   const trailRef = useRef<THREE.Points>(null);
 
   const geometry = useMemo(() => {
-    return new THREE.CylinderGeometry(PLAYER_SIZE * 1.1, PLAYER_SIZE * 1.1, PLAYER_SIZE * 1.6, clampSides(sides));
+    return new THREE.CylinderGeometry(
+      PLAYER_SIZE * 1.1,
+      PLAYER_SIZE * 1.1,
+      PLAYER_SIZE * 1.6,
+      clampSides(sides)
+    );
   }, [sides]);
 
   useFrame((_, delta) => {
@@ -289,7 +316,12 @@ const Starfield: React.FC = () => {
   return (
     <points>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={200} array={points} itemSize={3} />
+        <bufferAttribute
+          attach="attributes-position"
+          count={200}
+          array={points}
+          itemSize={3}
+        />
       </bufferGeometry>
       <pointsMaterial color="#ffffff" size={0.1} transparent opacity={0.6} />
     </points>
@@ -305,14 +337,20 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const { camera, scene } = useThree();
 
   // Simulation state lives in refs (avoid missed landings due to React render cadence).
-  const playerPosRef = useRef(new THREE.Vector3(0, PLATFORM_HALF_HEIGHT + PLAYER_HALF_HEIGHT, 0));
+  const playerPosRef = useRef(
+    new THREE.Vector3(0, PLATFORM_HALF_HEIGHT + PLAYER_HALF_HEIGHT, 0)
+  );
   const playerVelRef = useRef(new THREE.Vector3(0, 0, 0));
   const isGroundedRef = useRef(true);
   const currentPlatformIndexRef = useRef(0);
 
   // Render state (lightweight, updated each frame from refs)
-  const [playerPos, setPlayerPos] = useState(() => playerPosRef.current.clone());
-  const [playerVel, setPlayerVel] = useState(() => playerVelRef.current.clone());
+  const [playerPos, setPlayerPos] = useState(() =>
+    playerPosRef.current.clone()
+  );
+  const [playerVel, setPlayerVel] = useState(() =>
+    playerVelRef.current.clone()
+  );
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [currentPlatformIndex, setCurrentPlatformIndex] = useState(0);
   const [isGrounded, setIsGrounded] = useState(true);
@@ -351,7 +389,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     for (let i = 0; i < PLATFORM_COUNT; i++) {
       const offsetX = i === 0 ? 0 : rngRef.current.float(-2, 2);
       const offsetY = i === 0 ? 0 : rngRef.current.float(-0.5, 1);
-      
+
       x += PLATFORM_SPACING;
       y = Math.max(0, y + offsetY);
 
@@ -359,7 +397,13 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       // First few are always normal and match the starting player shape.
       const training = i < 3;
       initialPlatforms.push(
-        generatePlatform(rngRef.current, x, y, 0, training ? { sides: 3, type: 'normal' } : undefined)
+        generatePlatform(
+          rngRef.current,
+          x,
+          y,
+          0,
+          training ? { sides: 3, type: 'normal' } : undefined
+        )
       );
     }
 
@@ -382,7 +426,11 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       if (snap.gameOver) {
         if (e.key.toLowerCase() === 'r') {
           prismState.reset();
-          playerPosRef.current.set(0, PLATFORM_HALF_HEIGHT + PLAYER_HALF_HEIGHT, 0);
+          playerPosRef.current.set(
+            0,
+            PLATFORM_HALF_HEIGHT + PLAYER_HALF_HEIGHT,
+            0
+          );
           playerVelRef.current.set(0, 0, 0);
           currentPlatformIndexRef.current = 0;
           isGroundedRef.current = true;
@@ -401,7 +449,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           crackedBreakAt.current = null;
           crackedPlatformId.current = null;
           rngRef.current = new SeededRandom(Date.now());
-          
+
           // Regenerate platforms
           const newPlatforms: Platform[] = [];
           let x = 0;
@@ -410,13 +458,19 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           for (let i = 0; i < PLATFORM_COUNT; i++) {
             const offsetX = i === 0 ? 0 : rngRef.current.float(-2, 2);
             const offsetY = i === 0 ? 0 : rngRef.current.float(-0.5, 1);
-            
+
             x += PLATFORM_SPACING;
             y = Math.max(0, y + offsetY);
 
             const training = i < 3;
             newPlatforms.push(
-              generatePlatform(rngRef.current, x, y, 0, training ? { sides: 3, type: 'normal' } : undefined)
+              generatePlatform(
+                rngRef.current,
+                x,
+                y,
+                0,
+                training ? { sides: 3, type: 'normal' } : undefined
+              )
             );
           }
 
@@ -462,7 +516,8 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         return;
       }
 
-      const isJumpKey = e.code === 'Space' || key === ' ' || e.key === 'Spacebar';
+      const isJumpKey =
+        e.code === 'Space' || key === ' ' || e.key === 'Spacebar';
 
       if (isJumpKey) {
         e.preventDefault();
@@ -499,7 +554,9 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('wheel', handleWheel, { passive: false });
     return () => {
-      window.removeEventListener('keydown', handleKeyDown, { capture: true } as AddEventListenerOptions);
+      window.removeEventListener('keydown', handleKeyDown, {
+        capture: true,
+      } as AddEventListenerOptions);
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('wheel', handleWheel as EventListener);
     };
@@ -521,14 +578,17 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     if (wantsJump && grounded) {
       const currentPlatform = platforms[idx];
       const nextPlatform = platforms[idx + 1];
-      const jumpMultiplier = currentPlatform?.type === 'boost' ? BOOST_MULTIPLIER : 1;
+      const jumpMultiplier =
+        currentPlatform?.type === 'boost' ? BOOST_MULTIPLIER : 1;
       const vY = JUMP_FORCE * jumpMultiplier;
 
       // Aim the forward velocity to actually reach the next platform while descending.
       // Solve y(t) = y0 + vY*t + 0.5*g*t^2 for the target landing height.
       const y0 = newPos.y;
       const targetY =
-        (nextPlatform?.position.y ?? currentPlatform?.position.y ?? 0) + PLATFORM_HALF_HEIGHT + PLAYER_HALF_HEIGHT;
+        (nextPlatform?.position.y ?? currentPlatform?.position.y ?? 0) +
+        PLATFORM_HALF_HEIGHT +
+        PLAYER_HALF_HEIGHT;
       const a = 0.5 * GRAVITY;
       const b = vY;
       const c = y0 - targetY;
@@ -544,7 +604,8 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         if (!Number.isFinite(tLand) || tLand < 0.25) tLand = 0.9;
       }
 
-      const dx = (nextPlatform?.position.x ?? newPos.x + PLATFORM_SPACING) - newPos.x;
+      const dx =
+        (nextPlatform?.position.x ?? newPos.x + PLATFORM_SPACING) - newPos.x;
       const vX = THREE.MathUtils.clamp(dx / tLand, 3.2, 7.2);
 
       newVel.set(vX, vY, 0);
@@ -569,19 +630,30 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       const px = Math.abs(state.pointer.x) < 0.12 ? 0 : state.pointer.x;
       // Keep drift in a range that still allows consistent landings.
       const desiredZ = THREE.MathUtils.clamp(px * 1.6, -1.4, 1.4);
-      newPos.z = THREE.MathUtils.lerp(newPos.z, desiredZ, 1 - Math.pow(0.001, delta));
+      newPos.z = THREE.MathUtils.lerp(
+        newPos.z,
+        desiredZ,
+        1 - Math.pow(0.001, delta)
+      );
     } else {
       // When grounded, stay on the current platform
       const currentPlatform = platforms[currentPlatformIndexRef.current];
       if (currentPlatform) {
-        newPos.y = currentPlatform.position.y + PLATFORM_HALF_HEIGHT + PLAYER_HALF_HEIGHT;
+        newPos.y =
+          currentPlatform.position.y +
+          PLATFORM_HALF_HEIGHT +
+          PLAYER_HALF_HEIGHT;
         // Slowly center lateral drift on platforms so landings feel controllable.
         newPos.z = THREE.MathUtils.lerp(newPos.z, 0, 1 - Math.pow(0.01, delta));
       }
     }
 
     // Cracked platform breaks after a short delay while standing on it.
-    if (isGroundedRef.current && crackedBreakAt.current && now >= crackedBreakAt.current) {
+    if (
+      isGroundedRef.current &&
+      crackedBreakAt.current &&
+      now >= crackedBreakAt.current
+    ) {
       isGroundedRef.current = false;
       setIsGrounded(false);
       newVel.set(0, -5, 0);
@@ -617,7 +689,9 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           Math.sqrt(dx * dx + dz * dz) < PLATFORM_SIZE * 1.05 &&
           newVel.y < 0
         ) {
-          if (clampSides(playerSidesRef.current) !== clampSides(platform.sides)) {
+          if (
+            clampSides(playerSidesRef.current) !== clampSides(platform.sides)
+          ) {
             mismatchedLanding = true;
             mismatchedPlatform = platform;
             break;
@@ -692,13 +766,25 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     prismState.distance = Math.max(prismState.distance, Math.floor(newPos.x));
 
     // Camera follow
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, newPos.x + 5, delta * 3);
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, newPos.y + 5, delta * 2);
+    camera.position.x = THREE.MathUtils.lerp(
+      camera.position.x,
+      newPos.x + 5,
+      delta * 3
+    );
+    camera.position.y = THREE.MathUtils.lerp(
+      camera.position.y,
+      newPos.y + 5,
+      delta * 2
+    );
     camera.lookAt(newPos.x + 3, newPos.y, 0);
 
     // Generate new platforms ahead
     const lastPlatform = platforms[platforms.length - 1];
-    if (lastPlatform && newPos.x > lastPlatform.position.x - PLATFORM_COUNT * PLATFORM_SPACING / 2) {
+    if (
+      lastPlatform &&
+      newPos.x >
+        lastPlatform.position.x - (PLATFORM_COUNT * PLATFORM_SPACING) / 2
+    ) {
       setPlatforms((prev) => {
         // Keep a stable window to avoid index desync.
         let updated = prev;
@@ -706,17 +792,30 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         // Add new platform
         const last = updated[updated.length - 1];
         const newX = last.position.x + PLATFORM_SPACING;
-        const newY = Math.max(0, last.position.y + rngRef.current.float(-0.5, 1));
+        const newY = Math.max(
+          0,
+          last.position.y + rngRef.current.float(-0.5, 1)
+        );
 
-        updated = [...updated, generatePlatform(rngRef.current, newX, newY, prismState.distance)];
+        updated = [
+          ...updated,
+          generatePlatform(rngRef.current, newX, newY, prismState.distance),
+        ];
 
         // Trim old platforms (single-pass) and adjust current index deterministically.
         const cutoffX = newPos.x - 18;
         let removeCount = 0;
-        while (removeCount < updated.length && updated[removeCount].position.x < cutoffX) removeCount += 1;
+        while (
+          removeCount < updated.length &&
+          updated[removeCount].position.x < cutoffX
+        )
+          removeCount += 1;
         if (removeCount > 0) {
           updated = updated.slice(removeCount);
-          currentPlatformIndexRef.current = Math.max(0, currentPlatformIndexRef.current - removeCount);
+          currentPlatformIndexRef.current = Math.max(
+            0,
+            currentPlatformIndexRef.current - removeCount
+          );
           setCurrentPlatformIndex((i) => Math.max(0, i - removeCount));
         }
 
@@ -735,7 +834,11 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       {/* Lighting */}
       <ambientLight intensity={0.4} />
       <directionalLight position={[10, 20, 10]} intensity={0.8} />
-      <pointLight position={[playerPos.x, playerPos.y + 2, 2]} intensity={0.5} color={getShapeColor(playerSides)} />
+      <pointLight
+        position={[playerPos.x, playerPos.y + 2, 2]}
+        intensity={0.5}
+        color={getShapeColor(playerSides)}
+      />
 
       {/* Background */}
       <Starfield />
@@ -764,8 +867,12 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         <div className="absolute top-4 left-4 z-50 pointer-events-auto">
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3 text-white">
             <div className="text-2xl font-bold">{snap.score}</div>
-            <div className="text-xs text-white/60">Distance: {snap.distance}m</div>
-            <div className="text-xs text-white/40">Combo: x{snap.combo + 1}</div>
+            <div className="text-xs text-white/60">
+              Distance: {snap.distance}m
+            </div>
+            <div className="text-xs text-white/40">
+              Combo: x{snap.combo + 1}
+            </div>
           </div>
         </div>
 
@@ -779,7 +886,10 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         <div className="absolute top-4 right-4 z-50 pointer-events-auto">
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-xs">
             <div className="text-white/60">Your Shape</div>
-            <div className="text-sm font-semibold" style={{ color: getShapeColor(playerSides) }}>
+            <div
+              className="text-sm font-semibold"
+              style={{ color: getShapeColor(playerSides) }}
+            >
               {getShapeLabel(playerSides)} ({clampSides(playerSides)})
             </div>
             <div className="mt-1 text-white/60">Next Platform</div>
@@ -793,8 +903,12 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
           <div>Space / Click to jump</div>
-          <div className="text-xs mt-1">3–9 sets sides • Match the platform before landing</div>
-          <div className="text-xs mt-1">Move mouse to drift • Land centered for bonus</div>
+          <div className="text-xs mt-1">
+            3–9 sets sides • Match the platform before landing
+          </div>
+          <div className="text-xs mt-1">
+            Move mouse to drift • Land centered for bonus
+          </div>
         </div>
 
         {!gameStarted && !snap.gameOver && (
@@ -802,15 +916,24 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
             <div className="text-center max-w-md px-8">
               <h1 className="text-5xl font-bold text-white mb-3">PRISM</h1>
               <p className="text-white/70 text-sm leading-relaxed mb-5">
-                Jump forward and land on the next tile.<br />
+                Jump forward and land on the next tile.
+                <br />
                 Before you land, morph your shape to match the tile’s sides.
               </p>
               <div className="text-white/60 text-sm mb-6 space-y-1">
-                <div><span className="text-white">Space / Click</span> to jump</div>
-                <div><span className="text-white">3–9</span> to set sides</div>
-                <div><span className="text-white">Mouse</span> to drift</div>
+                <div>
+                  <span className="text-white">Space / Click</span> to jump
+                </div>
+                <div>
+                  <span className="text-white">3–9</span> to set sides
+                </div>
+                <div>
+                  <span className="text-white">Mouse</span> to drift
+                </div>
               </div>
-              <p className="text-white/50 text-xs animate-pulse">Press Space or click to start</p>
+              <p className="text-white/50 text-xs animate-pulse">
+                Press Space or click to start
+              </p>
             </div>
           </div>
         )}
@@ -820,14 +943,21 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
             <div className="text-center">
               <h1 className="text-5xl font-bold text-white mb-4">GAME OVER</h1>
               <p className="text-3xl text-white/80 mb-2">{snap.score}</p>
-              <p className="text-lg text-white/60 mb-1">Distance: {snap.distance}m</p>
-              <p className="text-lg text-white/60 mb-1">Perfect Landings: {snap.perfectLandings}</p>
+              <p className="text-lg text-white/60 mb-1">
+                Distance: {snap.distance}m
+              </p>
+              <p className="text-lg text-white/60 mb-1">
+                Perfect Landings: {snap.perfectLandings}
+              </p>
               {lastMismatch && (
                 <p className="text-lg text-white/70 mb-1">
-                  Mismatch: {getShapeLabel(lastMismatch.playerSides)} on {getShapeLabel(lastMismatch.platformSides)}
+                  Mismatch: {getShapeLabel(lastMismatch.playerSides)} on{' '}
+                  {getShapeLabel(lastMismatch.platformSides)}
                 </p>
               )}
-              <p className="text-lg text-white/60 mb-6">Best: {snap.highScore}</p>
+              <p className="text-lg text-white/60 mb-6">
+                Best: {snap.highScore}
+              </p>
               <p className="text-white/50">Press R to restart</p>
             </div>
           </div>

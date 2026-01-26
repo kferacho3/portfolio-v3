@@ -12,7 +12,8 @@ const InputHandler: React.FC = () => {
       const target = e.target as HTMLElement | null;
       const activeElement = document.activeElement as HTMLElement | null;
       const isUiEvent = Boolean(
-        target?.closest?.('[data-apex-ui]') || activeElement?.closest?.('[data-apex-ui]')
+        target?.closest?.('[data-apex-ui]') ||
+          activeElement?.closest?.('[data-apex-ui]')
       );
       if (isUiEvent) return;
 
@@ -30,19 +31,25 @@ const InputHandler: React.FC = () => {
       const keyCode = e.type === 'keydown' ? (e as KeyboardEvent).code : '';
       const isAction =
         isPrimaryPointer ||
-        (e.type === 'keydown' && ['Space', 'Enter', 'ArrowUp', 'ArrowDown'].includes(keyCode));
+        (e.type === 'keydown' &&
+          ['Space', 'Enter', 'ArrowUp', 'ArrowDown'].includes(keyCode));
 
       if (isAction) {
         if (e.type === 'keydown') {
           (e as KeyboardEvent).preventDefault();
         }
-        if (snap.phase === 'playing' && mutation.isOnPlatform && !mutation.gameOver) {
+        if (
+          snap.phase === 'playing' &&
+          mutation.isOnPlatform &&
+          !mutation.gameOver
+        ) {
           if (snap.mode === 'curved') {
             mutation.curveDirection *= -1;
           } else if (snap.mode === 'spiral') {
             mutation.spiralDirection *= -1;
           } else {
-            mutation.directionIndex = (mutation.directionIndex + 1) % DIRECTIONS.length;
+            mutation.directionIndex =
+              (mutation.directionIndex + 1) % DIRECTIONS.length;
             mutation.targetDirection.copy(DIRECTIONS[mutation.directionIndex]);
           }
           apexState.addScore(1);
@@ -66,11 +73,20 @@ const InputHandler: React.FC = () => {
         mutation.isOnPlatform &&
         !mutation.gameOver
       ) {
-        if (isSecondaryPointer || (e.type === 'keydown' && ['KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(keyCode))) {
+        if (
+          isSecondaryPointer ||
+          (e.type === 'keydown' &&
+            ['KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(keyCode))
+        ) {
           if (e.type === 'pointerdown') {
             e.preventDefault();
           }
-          mutation.curveLane = keyCode === 'KeyQ' ? -1 : keyCode === 'KeyE' ? 1 : mutation.curveLane * -1;
+          mutation.curveLane =
+            keyCode === 'KeyQ'
+              ? -1
+              : keyCode === 'KeyE'
+                ? 1
+                : mutation.curveLane * -1;
         }
       }
     };

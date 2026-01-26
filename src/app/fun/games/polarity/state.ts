@@ -1,9 +1,14 @@
 import { proxy } from 'valtio';
 
 export type PolarityCharge = 1 | -1;
-export type PolarityEvent = 'PolarityStorm' | 'Superconductor' | 'IonBloom' | null;
+export type PolarityEvent =
+  | 'PolarityStorm'
+  | 'Superconductor'
+  | 'IonBloom'
+  | null;
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 const COMBO_TIME_MAX = 3.25;
 
 export const polarityState = proxy({
@@ -110,7 +115,12 @@ export const polarityState = proxy({
       }
     } else if (this.elapsed >= this.nextEventAt) {
       const roll = Math.random();
-      this.event = roll < 0.34 ? 'PolarityStorm' : roll < 0.67 ? 'Superconductor' : 'IonBloom';
+      this.event =
+        roll < 0.34
+          ? 'PolarityStorm'
+          : roll < 0.67
+            ? 'Superconductor'
+            : 'IonBloom';
       this.eventTime = this.event === 'Superconductor' ? 10 : 8;
       this.nextEventAt = this.elapsed + 25;
     }
@@ -188,7 +198,11 @@ export const polarityState = proxy({
     return true;
   },
 
-  onIonCollected(matchesCharge: boolean, zoneMult: number = 1, resonanceMult: number = 1) {
+  onIonCollected(
+    matchesCharge: boolean,
+    zoneMult: number = 1,
+    resonanceMult: number = 1
+  ) {
     if (this.comboTime > 0) {
       this.combo += 1;
     } else {

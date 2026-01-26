@@ -24,14 +24,19 @@ function loadSave(): GrowthSaveV1 {
   if (typeof window === 'undefined') {
     return { bestScore: 0, bankGems: 0, skin: 0, unlocked: [0] };
   }
-  const saved = safeParse<GrowthSaveV1>(window.localStorage.getItem(STORAGE_KEY));
+  const saved = safeParse<GrowthSaveV1>(
+    window.localStorage.getItem(STORAGE_KEY)
+  );
   if (!saved) return { bestScore: 0, bankGems: 0, skin: 0, unlocked: [0] };
 
   return {
     bestScore: Number.isFinite(saved.bestScore) ? saved.bestScore : 0,
     bankGems: Number.isFinite(saved.bankGems) ? saved.bankGems : 0,
     skin: Number.isFinite(saved.skin) ? saved.skin : 0,
-    unlocked: Array.isArray(saved.unlocked) && saved.unlocked.length ? saved.unlocked : [0],
+    unlocked:
+      Array.isArray(saved.unlocked) && saved.unlocked.length
+        ? saved.unlocked
+        : [0],
   };
 }
 
@@ -68,7 +73,13 @@ export const growthSkins = [
   { id: 18, name: 'Blue', cost: 65, primary: '#3b82f6', accent: '#0f0f10' },
   { id: 19, name: 'Green', cost: 70, primary: '#22c55e', accent: '#0f0f10' },
   { id: 20, name: 'Magenta', cost: 70, primary: '#d946ef', accent: '#1a1a1a' },
-  { id: 21, name: 'Turquoise', cost: 75, primary: '#06b6d4', accent: '#0f0f10' },
+  {
+    id: 21,
+    name: 'Turquoise',
+    cost: 75,
+    primary: '#06b6d4',
+    accent: '#0f0f10',
+  },
   { id: 22, name: 'Gold', cost: 75, primary: '#fbbf24', accent: '#1a1a1a' },
   { id: 23, name: 'Silver', cost: 80, primary: '#94a3b8', accent: '#0f0f10' },
   { id: 24, name: 'Copper', cost: 80, primary: '#b45309', accent: '#1a1a1a' },
@@ -111,7 +122,8 @@ export const growthState = proxy({
 
     // Commit
     growthState.bankGems += growthState.runGems;
-    if (growthState.score > growthState.bestScore) growthState.bestScore = growthState.score;
+    if (growthState.score > growthState.bestScore)
+      growthState.bestScore = growthState.score;
 
     persistSave({
       bestScore: growthState.bestScore,

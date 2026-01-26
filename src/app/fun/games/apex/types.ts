@@ -3,7 +3,13 @@
  */
 import * as THREE from 'three';
 
-export type GameMode = 'classic' | 'curved' | 'spiral' | 'gravity' | 'speedrush' | 'zen';
+export type GameMode =
+  | 'classic'
+  | 'curved'
+  | 'spiral'
+  | 'gravity'
+  | 'speedrush'
+  | 'zen';
 export type PowerUpType = 'none' | 'shield' | 'magnet' | 'slowmo';
 export type TileStatus = 'active' | 'falling' | 'removed';
 export type ThemeKey = 'neon' | 'sunset' | 'forest' | 'galaxy' | 'gold';

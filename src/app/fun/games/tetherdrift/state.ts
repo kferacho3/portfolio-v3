@@ -1,6 +1,7 @@
 import { proxy } from 'valtio';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 export const tetherDriftState = proxy({
   score: 0,
@@ -88,7 +89,9 @@ export const tetherDriftState = proxy({
     const perfectBonus = opts.perfect ? 35 : 0;
     const constellationBonus = opts.constellationDone ? 140 : 0;
     const heatMult = 1 + (this.heat / 100) * 0.75;
-    this.addScore((base + perfectBonus + constellationBonus) * chainMult * heatMult);
+    this.addScore(
+      (base + perfectBonus + constellationBonus) * chainMult * heatMult
+    );
     if (opts.perfect) {
       this.perfectFlash = 0.2;
       this.perfects += 1;

@@ -31,14 +31,14 @@ export interface GeometryRecipe {
   torusTube: number;
   torusRadial: number;
   torusTubular: number;
-  
+
   // Knots
   knotP: number;
   knotQ: number;
   knotTube: number;
   knotTubular: number;
   knot4Factor: number;
-  
+
   // 4D Projections
   rot4D_xy: number;
   rot4D_xz: number;
@@ -47,7 +47,7 @@ export interface GeometryRecipe {
   rot4D_yw: number;
   rot4D_zw: number;
   proj4D_distance: number;
-  
+
   // Strange Attractors
   attractorSteps: number;
   attractorDt: number;
@@ -63,13 +63,13 @@ export interface GeometryRecipe {
   aizawaC: number;
   // Thomas params
   thomasB: number;
-  
+
   // Implicit Surfaces
   isoResolution: number;
   isoBounds: number;
   isoValue: number;
   metaballCount: number;
-  
+
   // Harmonics
   harmonicL: number;
   harmonicM: number;
@@ -77,7 +77,7 @@ export interface GeometryRecipe {
   fourierHarmonics: number;
   fourierDecay: number;
   harmonicSeed: number;
-  
+
   // Links & Polyhedra
   torusLinkP: number;
   torusLinkQ: number;
@@ -87,7 +87,7 @@ export interface GeometryRecipe {
   lissajousNz: number;
   lissajousPhaseX: number;
   lissajousPhaseY: number;
-  
+
   // Superformula
   superM1: number;
   superN11: number;
@@ -148,53 +148,53 @@ function generateRecipe(): GeometryRecipe {
     torusTube: rf(0.15, 0.45),
     torusRadial: ri(8, 40),
     torusTubular: ri(48, 128),
-    
+
     // ═══════════════════ Knots ═══════════════════
     knotP: ri(2, 5),
     knotQ: ri(2, 7),
     knotTube: rf(0.18, 0.38),
     knotTubular: ri(128, 256),
     knot4Factor: rei(2, 1000),
-    
+
     // ═══════════════════ 4D Projections ═══════════════════
     rot4D_xy: rf(0, Math.PI * 2),
     rot4D_xz: rf(0, Math.PI * 2),
-    rot4D_xw: rf(Math.PI / 6, Math.PI / 3),  // Key rotation for 4D effect
+    rot4D_xw: rf(Math.PI / 6, Math.PI / 3), // Key rotation for 4D effect
     rot4D_yz: rf(0, Math.PI * 2),
-    rot4D_yw: rf(Math.PI / 8, Math.PI / 4),  // Key rotation for 4D effect
+    rot4D_yw: rf(Math.PI / 8, Math.PI / 4), // Key rotation for 4D effect
     rot4D_zw: rf(0, Math.PI / 2),
     proj4D_distance: rf(2.0, 3.5),
-    
+
     // ═══════════════════ Strange Attractors ═══════════════════
     attractorSteps: ri(6000, 12000),
     attractorDt: rf(0.003, 0.008),
     attractorScale: rf(0.03, 0.06),
     attractorTubeRadius: rf(0.012, 0.025),
     // Lorenz: classic chaotic system
-    lorenzSigma: rf(9, 11),    // typically 10
-    lorenzRho: rf(26, 30),     // typically 28
-    lorenzBeta: rf(2.4, 3.0),  // typically 8/3 ≈ 2.67
+    lorenzSigma: rf(9, 11), // typically 10
+    lorenzRho: rf(26, 30), // typically 28
+    lorenzBeta: rf(2.4, 3.0), // typically 8/3 ≈ 2.67
     // Aizawa: spiraling attractor
     aizawaA: rf(0.9, 1.0),
     aizawaB: rf(0.65, 0.75),
     aizawaC: rf(0.55, 0.65),
     // Thomas: cyclically symmetric
-    thomasB: rf(0.18, 0.22),   // typically 0.208186
-    
+    thomasB: rf(0.18, 0.22), // typically 0.208186
+
     // ═══════════════════ Implicit Surfaces ═══════════════════
     isoResolution: ri(28, 44),
     isoBounds: rf(1.8, 2.5),
     isoValue: rf(-0.1, 0.1),
     metaballCount: ri(4, 7),
-    
+
     // ═══════════════════ Harmonics ═══════════════════
-    harmonicL: ri(2, 7),                    // Spherical harmonic degree
-    harmonicM: ri(-3, 3),                   // Spherical harmonic order (clamped to [-l, l])
-    harmonicExponent: rf(0.3, 0.6),         // Shape exponent
-    fourierHarmonics: ri(3, 7),             // Number of Fourier harmonics
-    fourierDecay: rf(0.4, 0.6),             // Amplitude decay rate
-    harmonicSeed: ri(0, 10000),             // Random seed for reproducibility
-    
+    harmonicL: ri(2, 7), // Spherical harmonic degree
+    harmonicM: ri(-3, 3), // Spherical harmonic order (clamped to [-l, l])
+    harmonicExponent: rf(0.3, 0.6), // Shape exponent
+    fourierHarmonics: ri(3, 7), // Number of Fourier harmonics
+    fourierDecay: rf(0.4, 0.6), // Amplitude decay rate
+    harmonicSeed: ri(0, 10000), // Random seed for reproducibility
+
     // ═══════════════════ Links & Polyhedra ═══════════════════
     torusLinkP: ri(2, 4),
     torusLinkQ: ri(2, 5),
@@ -204,7 +204,7 @@ function generateRecipe(): GeometryRecipe {
     lissajousNz: ri(3, 7),
     lissajousPhaseX: rf(0, Math.PI),
     lissajousPhaseY: rf(0, Math.PI),
-    
+
     // ═══════════════════ Superformula ═══════════════════
     superM1: rChoice([3, 4, 5, 6, 7, 8]),
     superN11: rf(0.1, 2.0),
@@ -294,7 +294,7 @@ export function getHarmonicParams(recipe: GeometryRecipe) {
   // Clamp m to valid range for l
   const l = recipe.harmonicL;
   const m = Math.max(-l, Math.min(l, recipe.harmonicM));
-  
+
   return {
     l,
     m,

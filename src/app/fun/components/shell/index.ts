@@ -1,6 +1,6 @@
 /**
  * Shell Components Barrel Export
- * 
+ *
  * Arcade shell UI components.
  */
 

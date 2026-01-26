@@ -22,12 +22,31 @@ export const GoUpHUD: React.FC<{ arena: Arena }> = ({ arena }) => {
           top: 16,
           left: 16,
           color: textColor,
-          fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+          fontFamily:
+            'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
           textShadow,
         }}
       >
-        <div style={{ fontSize: 11, opacity: 0.6, letterSpacing: 1.5, fontWeight: 600 }}>GO UP</div>
-        <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: 0.5, marginTop: 2 }}>{snap.score}</div>
+        <div
+          style={{
+            fontSize: 11,
+            opacity: 0.6,
+            letterSpacing: 1.5,
+            fontWeight: 600,
+          }}
+        >
+          GO UP
+        </div>
+        <div
+          style={{
+            fontSize: 36,
+            fontWeight: 800,
+            letterSpacing: 0.5,
+            marginTop: 2,
+          }}
+        >
+          {snap.score}
+        </div>
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
           <span style={{ marginRight: 12 }}>Gems {snap.gems}</span>
           <span>Best {snap.best}</span>

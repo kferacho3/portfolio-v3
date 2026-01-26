@@ -4,7 +4,10 @@ import { useFrame } from '@react-three/fiber';
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-export const PlayerTrail: React.FC<{ target: React.RefObject<THREE.Object3D>; color: string }> = ({ target, color }) => {
+export const PlayerTrail: React.FC<{
+  target: React.RefObject<THREE.Object3D>;
+  color: string;
+}> = ({ target, color }) => {
   const geomRef = useRef<THREE.BufferGeometry | null>(null);
   const attrRef = useRef<THREE.BufferAttribute | null>(null);
   const ring = useMemo(() => new Float32Array(60 * 3), []);

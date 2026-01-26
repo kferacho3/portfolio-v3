@@ -1,6 +1,7 @@
 import { proxy } from 'valtio';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 export type TraceEvent = 'Mirror' | 'SoftStorm' | 'Overclock' | null;
 
@@ -83,8 +84,10 @@ export const traceState = proxy({
       if (this.eventTime <= 0) this.event = null;
     } else if (this.elapsed >= this.nextEventAt) {
       const roll = Math.random();
-      this.event = roll < 0.34 ? 'Mirror' : roll < 0.67 ? 'SoftStorm' : 'Overclock';
-      this.eventTime = this.event === 'Mirror' ? 6 : this.event === 'SoftStorm' ? 7 : 8;
+      this.event =
+        roll < 0.34 ? 'Mirror' : roll < 0.67 ? 'SoftStorm' : 'Overclock';
+      this.eventTime =
+        this.event === 'Mirror' ? 6 : this.event === 'SoftStorm' ? 7 : 8;
       this.nextEventAt = this.elapsed + 22;
     }
   },

@@ -3,7 +3,12 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { jellyJumpState, mutation } from '../state';
-import { PLATFORM_SPACING, PLATFORM_VISIBLE_ABOVE, PLATFORM_VISIBLE_BELOW, OBSTACLE_RADIUS } from '../constants';
+import {
+  PLATFORM_SPACING,
+  PLATFORM_VISIBLE_ABOVE,
+  PLATFORM_VISIBLE_BELOW,
+  OBSTACLE_RADIUS,
+} from '../constants';
 import type { PlatformPattern } from '../types';
 import { getObstaclePosition } from '../utils';
 
@@ -45,7 +50,9 @@ export default function Obstacles({ pattern }: { pattern: PlatformPattern }) {
       dummy.position.set(pos.x, y + 0.35, pos.z);
       dummy.rotation.y = timeS * 2.4;
       dummy.rotation.x = Math.sin(timeS * 3) * 0.3;
-      dummy.scale.setScalar(1 + Math.sin(timeS * 4.5 + obstacle.driftPhase) * 0.12);
+      dummy.scale.setScalar(
+        1 + Math.sin(timeS * 4.5 + obstacle.driftPhase) * 0.12
+      );
       dummy.updateMatrix();
       bombRef.current.setMatrixAt(count, dummy.matrix);
       count += 1;
@@ -58,7 +65,11 @@ export default function Obstacles({ pattern }: { pattern: PlatformPattern }) {
   const maxObstacles = 50;
 
   return (
-    <instancedMesh ref={bombRef} args={[undefined, bombMat, maxObstacles]} frustumCulled={false}>
+    <instancedMesh
+      ref={bombRef}
+      args={[undefined, bombMat, maxObstacles]}
+      frustumCulled={false}
+    >
       <sphereGeometry args={[OBSTACLE_RADIUS, 16, 16]} />
     </instancedMesh>
   );

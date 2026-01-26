@@ -1,17 +1,21 @@
 import React from 'react';
 import { MAX_HEARTS } from '../constants';
 
-const HeartsDisplay: React.FC<{ currentHearts: number; isHurt: boolean; isHealing: boolean }> = ({
-  currentHearts,
-  isHurt,
-  isHealing,
-}) => (
+const HeartsDisplay: React.FC<{
+  currentHearts: number;
+  isHurt: boolean;
+  isHealing: boolean;
+}> = ({ currentHearts, isHurt, isHealing }) => (
   <div className="flex gap-1 items-center flex-wrap max-w-[200px]">
     {Array.from({ length: Math.min(currentHearts, MAX_HEARTS) }).map((_, i) => (
       <div
         key={i}
         className={`transition-all duration-200 ${
-          isHurt ? 'animate-pulse scale-90' : isHealing && i === currentHearts - 1 ? 'animate-bounce scale-125' : ''
+          isHurt
+            ? 'animate-pulse scale-90'
+            : isHealing && i === currentHearts - 1
+              ? 'animate-bounce scale-125'
+              : ''
         }`}
       >
         <svg
@@ -26,7 +30,9 @@ const HeartsDisplay: React.FC<{ currentHearts: number; isHurt: boolean; isHealin
       </div>
     ))}
     {currentHearts > MAX_HEARTS && (
-      <span className="text-red-400 text-sm font-bold ml-1">+{currentHearts - MAX_HEARTS}</span>
+      <span className="text-red-400 text-sm font-bold ml-1">
+        +{currentHearts - MAX_HEARTS}
+      </span>
     )}
   </div>
 );

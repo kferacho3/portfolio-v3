@@ -1,5 +1,11 @@
 import { useFrame } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { reactPongState } from '../../state';
 import {
   SPACE_BALL_RADIUS,
@@ -16,7 +22,9 @@ import SpacePongUI from './SpacePongUI';
 import Tunnel from './Tunnel';
 
 const SpacePongGame: React.FC = () => {
-  const [gameState, setGameState] = useState<'ready' | 'playing' | 'scored' | 'levelComplete' | 'gameOver' | 'victory'>('ready');
+  const [gameState, setGameState] = useState<
+    'ready' | 'playing' | 'scored' | 'levelComplete' | 'gameOver' | 'victory'
+  >('ready');
   const [playerScore, setPlayerScore] = useState(0);
   const [cpuScore, setCpuScore] = useState(0);
   const [lives, setLives] = useState(5);
@@ -83,7 +91,10 @@ const SpacePongGame: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'r' && (gameState === 'gameOver' || gameState === 'victory')) {
+      if (
+        e.key.toLowerCase() === 'r' &&
+        (gameState === 'gameOver' || gameState === 'victory')
+      ) {
         setGameState('ready');
         setPlayerScore(0);
         setCpuScore(0);
@@ -184,7 +195,17 @@ const SpacePongGame: React.FC = () => {
             if (lives > 1) resetBall('toPlayer');
           }, 500);
 
-          return { x: 0, y: 0, z: TUNNEL_DEPTH / 2, vx: 0, vy: 0, vz: 0, spinX: 0, spinY: 0, rotation: 0 };
+          return {
+            x: 0,
+            y: 0,
+            z: TUNNEL_DEPTH / 2,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            spinX: 0,
+            spinY: 0,
+            rotation: 0,
+          };
         }
       }
 
@@ -236,7 +257,17 @@ const SpacePongGame: React.FC = () => {
 
           setTimeout(() => resetBall('toCPU'), 500);
 
-          return { x: 0, y: 0, z: TUNNEL_DEPTH / 2, vx: 0, vy: 0, vz: 0, spinX: 0, spinY: 0, rotation: 0 };
+          return {
+            x: 0,
+            y: 0,
+            z: TUNNEL_DEPTH / 2,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            spinX: 0,
+            spinY: 0,
+            rotation: 0,
+          };
         }
       }
 
@@ -261,9 +292,17 @@ const SpacePongGame: React.FC = () => {
       <SpacePongBall ballState={ball} maxZ={TUNNEL_DEPTH} />
 
       <BallTracker ballState={ball} maxZ={TUNNEL_DEPTH} showPlayerSide={true} />
-      <BallTracker ballState={ball} maxZ={TUNNEL_DEPTH} showPlayerSide={false} />
+      <BallTracker
+        ballState={ball}
+        maxZ={TUNNEL_DEPTH}
+        showPlayerSide={false}
+      />
 
-      <PlayerPaddle position={playerPos} onPositionChange={(x, y) => setPlayerPos({ x, y })} prevPosition={prevPlayerPos} />
+      <PlayerPaddle
+        position={playerPos}
+        onPositionChange={(x, y) => setPlayerPos({ x, y })}
+        prevPosition={prevPlayerPos}
+      />
 
       <CPUPaddle
         position={cpuPos}
@@ -283,7 +322,11 @@ const SpacePongGame: React.FC = () => {
 
       <ambientLight intensity={0.3} />
       <pointLight position={[0, 0, 5]} intensity={1} color="#00aaff" />
-      <pointLight position={[0, 0, -TUNNEL_DEPTH + 5]} intensity={0.5} color="#ff4466" />
+      <pointLight
+        position={[0, 0, -TUNNEL_DEPTH + 5]}
+        intensity={0.5}
+        color="#ff4466"
+      />
     </>
   );
 };

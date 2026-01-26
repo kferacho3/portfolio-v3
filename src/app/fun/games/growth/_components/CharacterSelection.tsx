@@ -28,7 +28,15 @@ export default function CharacterSelection() {
           overflowY: 'auto',
         }}
       >
-        <div style={{ fontSize: 14, fontWeight: 700, opacity: 0.9, marginBottom: 4, textAlign: 'center' }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            opacity: 0.9,
+            marginBottom: 4,
+            textAlign: 'center',
+          }}
+        >
           Choose Character ({snap.bankGems} 💎)
         </div>
         <div
@@ -59,18 +67,30 @@ export default function CharacterSelection() {
                   width: 60,
                   height: 60,
                   borderRadius: 12,
-                  border: isSelected ? '3px solid #fff' : isUnlocked ? '2px solid rgba(255,255,255,0.4)' : '2px solid rgba(255,255,255,0.2)',
+                  border: isSelected
+                    ? '3px solid #fff'
+                    : isUnlocked
+                      ? '2px solid rgba(255,255,255,0.4)'
+                      : '2px solid rgba(255,255,255,0.2)',
                   background: isUnlocked ? skin.primary : 'rgba(0,0,0,0.5)',
                   cursor: isUnlocked || canAfford ? 'pointer' : 'not-allowed',
                   transition: 'all 0.2s',
-                  boxShadow: isSelected ? '0 0 16px rgba(255,255,255,0.6)' : 'none',
+                  boxShadow: isSelected
+                    ? '0 0 16px rgba(255,255,255,0.6)'
+                    : 'none',
                   opacity: isUnlocked ? 1 : 0.5,
                   position: 'relative',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
-                title={isUnlocked ? skin.name : canAfford ? `${skin.name} - ${skin.cost} gems` : `${skin.name} - ${skin.cost} gems (locked)`}
+                title={
+                  isUnlocked
+                    ? skin.name
+                    : canAfford
+                      ? `${skin.name} - ${skin.cost} gems`
+                      : `${skin.name} - ${skin.cost} gems (locked)`
+                }
               >
                 {!isUnlocked && (
                   <div

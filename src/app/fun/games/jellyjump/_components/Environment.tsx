@@ -3,7 +3,11 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { jellyJumpState, mutation } from '../state';
-import { CORRIDOR_BOX_SIZE, CORRIDOR_BOX_Y_OFFSET, PALETTES } from '../constants';
+import {
+  CORRIDOR_BOX_SIZE,
+  CORRIDOR_BOX_Y_OFFSET,
+  PALETTES,
+} from '../constants';
 
 const _bg = new THREE.Color();
 const _white = new THREE.Color('#ffffff');
@@ -35,7 +39,10 @@ export default function Environment() {
     }
   });
 
-  const geometry = useMemo(() => new THREE.BoxGeometry(...CORRIDOR_BOX_SIZE), []);
+  const geometry = useMemo(
+    () => new THREE.BoxGeometry(...CORRIDOR_BOX_SIZE),
+    []
+  );
   const material = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({
       color: '#f4f5f7',
@@ -60,12 +67,21 @@ export default function Environment() {
       <pointLight position={[0, 25, 0]} intensity={1.5} distance={80} />
       <pointLight position={[0, 10, 0]} intensity={0.8} distance={40} />
 
-      <mesh ref={corridorRef} geometry={geometry} material={material} position={[0, CORRIDOR_BOX_Y_OFFSET, 0]} />
+      <mesh
+        ref={corridorRef}
+        geometry={geometry}
+        material={material}
+        position={[0, CORRIDOR_BOX_Y_OFFSET, 0]}
+      />
 
       {/* Soft glow plane at the top for depth */}
       <mesh ref={glowRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 55, 0]}>
         <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color={palette.accent} transparent opacity={0.08} />
+        <meshStandardMaterial
+          color={palette.accent}
+          transparent
+          opacity={0.08}
+        />
       </mesh>
     </group>
   );

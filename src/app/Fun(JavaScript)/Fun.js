@@ -7,7 +7,14 @@ import { TextureLoader } from 'three';
 import Disclaimer from '../../components/Disclaimer/Disclaimer';
 import Arcade from '../../glbFiles/RachoArcade';
 import Personal from '../Personal/Personal';
-import { CarouselButton, CarouselContainer, FunContainer, GameDetail, GameInfo, GameTitle } from './FunElements';
+import {
+  CarouselButton,
+  CarouselContainer,
+  FunContainer,
+  GameDetail,
+  GameInfo,
+  GameTitle,
+} from './FunElements';
 import LoadingAnimation from './GamePreloader/Preloader';
 import Dropper from './Games/Dropper';
 import FlappyBird from './Games/FlappyBird';
@@ -21,106 +28,128 @@ import SpinBlock from './Games/SpinBlock';
 import Stackz from './Games/Stackz';
 
 const textureUrls = [
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ShapeShift.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SkyBlitz.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Dropper.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Stackz.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pinball+3D.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/flappyBird.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SpinBlock.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/GeoChrome.png",
-  "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RachoMuseum.png",
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ShapeShift.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SkyBlitz.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Dropper.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Stackz.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pinball+3D.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/flappyBird.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SpinBlock.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/GeoChrome.png',
+  'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RachoMuseum.png',
 ];
 
-const disclaimerText = 'These games were created for fun and to understand the code better. Some of the games are not fully finished (GeoChrome, SkyBlitz, SpinBlock, Stackz, and Rollette). The Racho Museum is also not fully finished either, but everything has some sort of functionality and playability. These are all works in progress and will eventually become finished products. The primary goal was to improve my skills with processing, drei, fiber, rapier physics, camera controls, player controls, etc. Thank you for your understanding and enjoy the games!';
+const disclaimerText =
+  'These games were created for fun and to understand the code better. Some of the games are not fully finished (GeoChrome, SkyBlitz, SpinBlock, Stackz, and Rollette). The Racho Museum is also not fully finished either, but everything has some sort of functionality and playability. These are all works in progress and will eventually become finished products. The primary goal was to improve my skills with processing, drei, fiber, rapier physics, camera controls, player controls, etc. Thank you for your understanding and enjoy the games!';
 const gamesInfo = [
   {
-    name: "Shape Shift",
-    creator: "ME :D",
-    controls: "Use the mouse to aim and click to shoot at shapes and portals.",
-    howToPlay: "A memory game featuring a grid of various shapes. Memorize the shapes, positions, and colors of a specified order. The grids get larger, making the game more challenging.",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ShapeShift.png",
+    name: 'Shape Shift',
+    creator: 'ME :D',
+    controls: 'Use the mouse to aim and click to shoot at shapes and portals.',
+    howToPlay:
+      'A memory game featuring a grid of various shapes. Memorize the shapes, positions, and colors of a specified order. The grids get larger, making the game more challenging.',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ShapeShift.png',
     gameState: 1,
   },
   {
-    name: "Sky Blitz",
-    creator: "ME :D",
-    controls: "Mouse to navigate. Space to shoot at targets",
-    howToPlay: "Avoid obstacles shoot enemies to score and clear your path through the galaxies!",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SkyBlitz.png",
+    name: 'Sky Blitz',
+    creator: 'ME :D',
+    controls: 'Mouse to navigate. Space to shoot at targets',
+    howToPlay:
+      'Avoid obstacles shoot enemies to score and clear your path through the galaxies!',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SkyBlitz.png',
     gameState: 2,
   },
   {
-    name: "Dropper",
-    creator: "Clone Variation",
-    controls: "Use mouse to guide block catcher to where falling block will land to score and survive!",
-    howToPlay: "Avoid obstacles and reach the bottom",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Dropper.png",
+    name: 'Dropper',
+    creator: 'Clone Variation',
+    controls:
+      'Use mouse to guide block catcher to where falling block will land to score and survive!',
+    howToPlay: 'Avoid obstacles and reach the bottom',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Dropper.png',
     gameState: 3,
   },
   {
-    name: "Stackz",
-    creator: "Clone Variation",
-    controls: "Space to place the block",
-    howToPlay: "Stack blocks as high as you can without toppling",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Stackz.png",
+    name: 'Stackz',
+    creator: 'Clone Variation',
+    controls: 'Space to place the block',
+    howToPlay: 'Stack blocks as high as you can without toppling',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Stackz.png',
     gameState: 4,
   },
   {
-    name: "Pinball 3D",
-    creator: "pmndrs",
-    controls: "Arrow keys to control flippers",
-    howToPlay: "Use flippers to keep the ball in play and hit targets",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pinball+3D.png",
+    name: 'Pinball 3D',
+    creator: 'pmndrs',
+    controls: 'Arrow keys to control flippers',
+    howToPlay: 'Use flippers to keep the ball in play and hit targets',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Pinball+3D.png',
     gameState: 5,
   },
   {
-    name: "Rollette",
-    creator: "ME :D",
-    controls: "Mouse to place bets",
-    howToPlay: "Guide the ball to bounce and hit targets while avoiding red cones and collecting rings!",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png",
+    name: 'Rollette',
+    creator: 'ME :D',
+    controls: 'Mouse to place bets',
+    howToPlay:
+      'Guide the ball to bounce and hit targets while avoiding red cones and collecting rings!',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png',
     gameState: 6,
   },
   {
-    name: "Flappy Bird",
-    creator: "App store classic - Clone",
-    controls: "Space or click to flap",
-    howToPlay: "Navigate the bird through the pipes without touching them",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/flappybird.png",
+    name: 'Flappy Bird',
+    creator: 'App store classic - Clone',
+    controls: 'Space or click to flap',
+    howToPlay: 'Navigate the bird through the pipes without touching them',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/flappybird.png',
     gameState: 7,
   },
   {
-    name: "React Pong",
-    creator: "pmndrs + ME :D",
-    controls: "Use mouse to guide paddle to hit the ball with enough velocity to score. No light hits!",
-    howToPlay: "Solo PingPong but with a twist! Highly reactive and bouncy walls to be careful of! Score bonus points using the walls or by getting hot fire streaks.",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png",
+    name: 'React Pong',
+    creator: 'pmndrs + ME :D',
+    controls:
+      'Use mouse to guide paddle to hit the ball with enough velocity to score. No light hits!',
+    howToPlay:
+      'Solo PingPong but with a twist! Highly reactive and bouncy walls to be careful of! Score bonus points using the walls or by getting hot fire streaks.',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ReactPong.png',
     gameState: 8,
   },
   {
-    name: "Spin Block",
-    creator: "ME :D",
-    controls: "Use mouse to grab block and spin contents to shift the physics.",
-    howToPlay: "Take a Spin on the Block by grabbing the squared arena and shaking things up! Guide the ball(s) around to hit obstacles or score and get powerups. Avoid penalties.",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SpinBlock.png",
+    name: 'Spin Block',
+    creator: 'ME :D',
+    controls: 'Use mouse to grab block and spin contents to shift the physics.',
+    howToPlay:
+      'Take a Spin on the Block by grabbing the squared arena and shaking things up! Guide the ball(s) around to hit obstacles or score and get powerups. Avoid penalties.',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SpinBlock.png',
     gameState: 9,
   },
   {
-    name: "GeoChrome",
-    creator: "ME :D",
-    controls: "Press space to change shape and collect your designated geometries. Use the mouse to guide your shape around.",
-    howToPlay: "Collect shapes and deposit them in their shape deposits while avoiding obstacles.",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/GeoChrome.png",
+    name: 'GeoChrome',
+    creator: 'ME :D',
+    controls:
+      'Press space to change shape and collect your designated geometries. Use the mouse to guide your shape around.',
+    howToPlay:
+      'Collect shapes and deposit them in their shape deposits while avoiding obstacles.',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/GeoChrome.png',
     gameState: 0,
   },
   {
     name: "Racho's Project Museum",
-    creator: "ME :D",
-    howToPlay: "Navigate around my museum of works where I showcase various personal, business, and school-related projects",
-    textureURL: "https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RachoMuseum.png",
+    creator: 'ME :D',
+    howToPlay:
+      'Navigate around my museum of works where I showcase various personal, business, and school-related projects',
+    textureURL:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RachoMuseum.png',
     gameState: 11,
   },
 ];
@@ -154,12 +183,22 @@ const FloatingShape = ({ type, color, ...props }) => {
   return (
     <mesh {...props} ref={meshRef}>
       {geometry}
-      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={0.5}
+      />
     </mesh>
   );
 };
 
-const Fun = ({ setIsArcade, setGameIconState, isOpen2, gameState, setGameState }) => {
+const Fun = ({
+  setIsArcade,
+  setGameIconState,
+  isOpen2,
+  gameState,
+  setGameState,
+}) => {
   setGameIconState(true);
   const [currentGameIndex, setCurrentGameIndex] = useState(0);
 
@@ -232,30 +271,50 @@ const Fun = ({ setIsArcade, setGameIconState, isOpen2, gameState, setGameState }
       case 10:
         return (
           <>
-          <Disclaimer buttonImage={'https://racho-devs.s3.us-east-2.amazonaws.com/Images/GameInstructions2.gif'} disclaimerImage={'https://racho-devs.s3.us-east-2.amazonaws.com/Images/DisclaimerFun.png'} text={disclaimerText} />
-            <CarouselContainer initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }}>
-              <CarouselButton onClick={handlePrev} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+            <Disclaimer
+              buttonImage={
+                'https://racho-devs.s3.us-east-2.amazonaws.com/Images/GameInstructions2.gif'
+              }
+              disclaimerImage={
+                'https://racho-devs.s3.us-east-2.amazonaws.com/Images/DisclaimerFun.png'
+              }
+              text={disclaimerText}
+            />
+            <CarouselContainer
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <CarouselButton
+                onClick={handlePrev}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
                 <GiJoystick size={32} />
               </CarouselButton>
               <GameInfo
-              key={currentGameIndex} // Ensure key is set to trigger re-animation
-              initial={{ x: 100, filter: 'blur(15px)', opacity: 0 }}
-              animate={{ x: 0, filter: 'blur(0px)', opacity: 1 }}
-              exit={{ x: -100, filter: 'blur(15px)', opacity: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              <GameTitle>{currentGame.name}</GameTitle>
-              <GameDetail>
-                <span>CREATOR:</span> {currentGame.creator}
-              </GameDetail>
-              <GameDetail>
-                <span>CONTROLS:</span> {currentGame.controls}
-              </GameDetail>
-              <GameDetail>
-                <span>HOW TO PLAY:</span> {currentGame.howToPlay}
+                key={currentGameIndex} // Ensure key is set to trigger re-animation
+                initial={{ x: 100, filter: 'blur(15px)', opacity: 0 }}
+                animate={{ x: 0, filter: 'blur(0px)', opacity: 1 }}
+                exit={{ x: -100, filter: 'blur(15px)', opacity: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                <GameTitle>{currentGame.name}</GameTitle>
+                <GameDetail>
+                  <span>CREATOR:</span> {currentGame.creator}
+                </GameDetail>
+                <GameDetail>
+                  <span>CONTROLS:</span> {currentGame.controls}
+                </GameDetail>
+                <GameDetail>
+                  <span>HOW TO PLAY:</span> {currentGame.howToPlay}
                 </GameDetail>
               </GameInfo>
-              <CarouselButton onClick={handleNext} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
+              <CarouselButton
+                onClick={handleNext}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
                 <GiSonicShoes size={32} />
               </CarouselButton>
             </CarouselContainer>
@@ -263,16 +322,44 @@ const Fun = ({ setIsArcade, setGameIconState, isOpen2, gameState, setGameState }
               <Suspense fallback={null}>
                 <OrbitControls />
                 <ambientLight intensity={0.5} />
-                <pointLight position={[10, 10, 10]} intensity={1} color="neon green" />
-                <pointLight position={[-10, -10, -10]} intensity={1} color="purple" />
+                <pointLight
+                  position={[10, 10, 10]}
+                  intensity={1}
+                  color="neon green"
+                />
+                <pointLight
+                  position={[-10, -10, -10]}
+                  intensity={1}
+                  color="purple"
+                />
                 <Sparkles color="purple" scale={5} count={20} />
                 <Sparkles color="orange" scale={5} count={20} />
                 <Sparkles color="green" scale={5} count={20} />
-                <FloatingShape type="torusKnot" position={[-5, 2, -5]} color="neon orange" />
-                <FloatingShape type="cube" position={[4, -1, 2]} color="neon purple" />
-                <FloatingShape type="cone" position={[-3, -3, 0]} color="neon green" />
-                <FloatingShape type="dodecahedron" position={[6, 3, -2]} color="neon orange" />
-                <FloatingShape type="sphere" position={[-2, 5, 3]} color="neon purple" />
+                <FloatingShape
+                  type="torusKnot"
+                  position={[-5, 2, -5]}
+                  color="neon orange"
+                />
+                <FloatingShape
+                  type="cube"
+                  position={[4, -1, 2]}
+                  color="neon purple"
+                />
+                <FloatingShape
+                  type="cone"
+                  position={[-3, -3, 0]}
+                  color="neon green"
+                />
+                <FloatingShape
+                  type="dodecahedron"
+                  position={[6, 3, -2]}
+                  color="neon orange"
+                />
+                <FloatingShape
+                  type="sphere"
+                  position={[-2, 5, 3]}
+                  color="neon purple"
+                />
                 <Arcade
                   textureUrls={textureUrls[currentGameIndex]}
                   isOpen2={isOpen2}
@@ -296,20 +383,20 @@ const Fun = ({ setIsArcade, setGameIconState, isOpen2, gameState, setGameState }
   };
 
   const handlePrev = () => {
-    setCurrentGameIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : gamesInfo.length - 1));
+    setCurrentGameIndex((prevIndex) =>
+      prevIndex > 0 ? prevIndex - 1 : gamesInfo.length - 1
+    );
   };
 
   const handleNext = () => {
-    setCurrentGameIndex((prevIndex) => (prevIndex < gamesInfo.length - 1 ? prevIndex + 1 : 0));
+    setCurrentGameIndex((prevIndex) =>
+      prevIndex < gamesInfo.length - 1 ? prevIndex + 1 : 0
+    );
   };
 
   const currentGame = gamesInfo[currentGameIndex];
 
-  return (
-    <FunContainer>
-      {renderGame()}
-    </FunContainer>
-  );
+  return <FunContainer>{renderGame()}</FunContainer>;
 };
 
 export default Fun;

@@ -10,7 +10,9 @@ import { skyBlitzClassicState } from './state';
 export { skyBlitzClassicState } from './state';
 export type { SkyBlitzClassicState } from './types';
 
-const SkyBlitzClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
+const SkyBlitzClassic: React.FC<{ soundsOn?: boolean }> = ({
+  soundsOn = true,
+}) => {
   const snap = useSnapshot(skyBlitzClassicState);
   const [score, setScore] = useState(0);
 
@@ -29,9 +31,17 @@ const SkyBlitzClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) 
   return (
     <>
       {snap.mode === 'UfoMode' ? (
-        <UfoModeClassic score={score} setScore={setScore} graphicsMode={snap.graphicsMode} />
+        <UfoModeClassic
+          score={score}
+          setScore={setScore}
+          graphicsMode={snap.graphicsMode}
+        />
       ) : (
-        <RunnerModeClassic score={score} setScore={setScore} graphicsMode={snap.graphicsMode} />
+        <RunnerModeClassic
+          score={score}
+          setScore={setScore}
+          graphicsMode={snap.graphicsMode}
+        />
       )}
       <ModeSelector />
     </>

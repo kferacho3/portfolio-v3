@@ -65,7 +65,7 @@ function clamp(v: number, a: number, b: number) {
 
 function wrapAngle(a: number) {
   // keep angle in [-PI, PI] to improve numerical stability
-  const w = ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  const w = ((((a + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
   return w;
 }
 
@@ -101,15 +101,24 @@ function makeSegments(): Segment[] {
       gemFace: randInt(4),
       gemActive: Math.random() < 0.45,
       branchGrowth: 0,
-      branchTargetSize: Math.random() * (BRANCH_MAX_SIZE - BRANCH_MIN_SIZE) + BRANCH_MIN_SIZE,
-      branchGrowthSpeed: 1 / (Math.random() * (BRANCH_GROWTH_SPEED_MAX - BRANCH_GROWTH_SPEED_MIN) + BRANCH_GROWTH_SPEED_MIN),
+      branchTargetSize:
+        Math.random() * (BRANCH_MAX_SIZE - BRANCH_MIN_SIZE) + BRANCH_MIN_SIZE,
+      branchGrowthSpeed:
+        1 /
+        (Math.random() * (BRANCH_GROWTH_SPEED_MAX - BRANCH_GROWTH_SPEED_MIN) +
+          BRANCH_GROWTH_SPEED_MIN),
       spawnTime: 0,
     });
   }
   return arr;
 }
 
-function respawnSegment(seg: Segment, newZ: number, difficulty01: number, currentTime: number) {
+function respawnSegment(
+  seg: Segment,
+  newZ: number,
+  difficulty01: number,
+  currentTime: number
+) {
   seg.z = newZ;
 
   // Difficulty ramps with score; keep it fun but fair
@@ -118,7 +127,9 @@ function respawnSegment(seg: Segment, newZ: number, difficulty01: number, curren
 
   // Branches are pre-placed but grow in real-time
   seg.obstacleFace = randInt(4);
-  seg.obstacleKind = (Math.random() < 0.22 + difficulty01 * 0.25 ? 1 : 0) as 0 | 1;
+  seg.obstacleKind = (Math.random() < 0.22 + difficulty01 * 0.25 ? 1 : 0) as
+    | 0
+    | 1;
 
   // Occasionally keep a short break
   if (Math.random() > obstacleChance) {
@@ -134,8 +145,12 @@ function respawnSegment(seg: Segment, newZ: number, difficulty01: number, curren
     seg.branchGrowthSpeed = 1 / (Math.random() * 0.5 + 0.6); // Faster growth (0.6-1.1 seconds)
   } else {
     // Normal growth
-    seg.branchTargetSize = Math.random() * (BRANCH_MAX_SIZE - BRANCH_MIN_SIZE) + BRANCH_MIN_SIZE;
-    seg.branchGrowthSpeed = 1 / (Math.random() * (BRANCH_GROWTH_SPEED_MAX - BRANCH_GROWTH_SPEED_MIN) + BRANCH_GROWTH_SPEED_MIN);
+    seg.branchTargetSize =
+      Math.random() * (BRANCH_MAX_SIZE - BRANCH_MIN_SIZE) + BRANCH_MIN_SIZE;
+    seg.branchGrowthSpeed =
+      1 /
+      (Math.random() * (BRANCH_GROWTH_SPEED_MAX - BRANCH_GROWTH_SPEED_MIN) +
+        BRANCH_GROWTH_SPEED_MIN);
   }
   seg.branchGrowth = 0;
   seg.spawnTime = currentTime;
@@ -144,7 +159,12 @@ function respawnSegment(seg: Segment, newZ: number, difficulty01: number, curren
   seg.gemFace = randInt(4);
 
   // Avoid trivial "gem inside obstacle" too often.
-  if (seg.gemActive && seg.obstacleFace >= 0 && seg.gemFace === seg.obstacleFace && Math.random() < 0.7) {
+  if (
+    seg.gemActive &&
+    seg.obstacleFace >= 0 &&
+    seg.gemFace === seg.obstacleFace &&
+    Math.random() < 0.7
+  ) {
     seg.gemFace = (seg.gemFace + 1 + randInt(3)) & 3;
   }
 }
@@ -156,7 +176,10 @@ function VoxelRunner({ wobble = 0 }: { wobble?: number }) {
   const bob = Math.sin(t * 8) * 0.03;
 
   return (
-    <group position={[0, BEAM_HALF + PLAYER_HOVER + bob, 0]} rotation={[0, 0, wobble]}>
+    <group
+      position={[0, BEAM_HALF + PLAYER_HOVER + bob, 0]}
+      rotation={[0, 0, wobble]}
+    >
       {/* shadow */}
       <mesh position={[0, -0.14, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.22, 24]} />
@@ -166,17 +189,31 @@ function VoxelRunner({ wobble = 0 }: { wobble?: number }) {
       {/* body */}
       <mesh position={[0, 0.12, 0]}>
         <boxGeometry args={[0.32, 0.24, 0.28]} />
-        <meshStandardMaterial color={selectedSkin.accent} roughness={0.65} metalness={0.05} />
+        <meshStandardMaterial
+          color={selectedSkin.accent}
+          roughness={0.65}
+          metalness={0.05}
+        />
       </mesh>
       {/* head */}
       <mesh position={[0, 0.32, 0]}>
         <boxGeometry args={[0.28, 0.22, 0.26]} />
-        <meshStandardMaterial color={selectedSkin.primary} roughness={0.7} metalness={0.02} emissive={selectedSkin.primary} emissiveIntensity={0.2} />
+        <meshStandardMaterial
+          color={selectedSkin.primary}
+          roughness={0.7}
+          metalness={0.02}
+          emissive={selectedSkin.primary}
+          emissiveIntensity={0.2}
+        />
       </mesh>
       {/* little visor stripe */}
       <mesh position={[0, 0.27, 0.15]}>
         <boxGeometry args={[0.26, 0.06, 0.03]} />
-        <meshStandardMaterial color="#f0f0f0" roughness={0.35} metalness={0.05} />
+        <meshStandardMaterial
+          color="#f0f0f0"
+          roughness={0.35}
+          metalness={0.05}
+        />
       </mesh>
     </group>
   );
@@ -225,17 +262,36 @@ function GrowthWorld() {
 
   React.useEffect(() => {
     // Make instancing updates efficient
-    if (beamRef.current) beamRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (pillarRef.current) pillarRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (spikeRef.current) spikeRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (gemRef.current) gemRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (beamRef.current)
+      beamRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (pillarRef.current)
+      pillarRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (spikeRef.current)
+      spikeRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (gemRef.current)
+      gemRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   }, []);
 
   // Initial render of segments - use a separate effect that runs after refs are set
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      if (beamRef.current && pillarRef.current && spikeRef.current && gemRef.current) {
-        updateInstances(tmpObj, tmpObj2, tmpMat, segmentsRef.current, beamRef.current, pillarRef.current, spikeRef.current, gemRef.current, mutation.current.roll);
+      if (
+        beamRef.current &&
+        pillarRef.current &&
+        spikeRef.current &&
+        gemRef.current
+      ) {
+        updateInstances(
+          tmpObj,
+          tmpObj2,
+          tmpMat,
+          segmentsRef.current,
+          beamRef.current,
+          pillarRef.current,
+          spikeRef.current,
+          gemRef.current,
+          mutation.current.roll
+        );
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -266,8 +322,23 @@ function GrowthWorld() {
     if (snap.phase === 'playing') {
       resetRun();
       // Update instances after reset
-      if (beamRef.current && pillarRef.current && spikeRef.current && gemRef.current) {
-        updateInstances(tmpObj, tmpObj2, tmpMat, segmentsRef.current, beamRef.current, pillarRef.current, spikeRef.current, gemRef.current, mutation.current.roll);
+      if (
+        beamRef.current &&
+        pillarRef.current &&
+        spikeRef.current &&
+        gemRef.current
+      ) {
+        updateInstances(
+          tmpObj,
+          tmpObj2,
+          tmpMat,
+          segmentsRef.current,
+          beamRef.current,
+          pillarRef.current,
+          spikeRef.current,
+          gemRef.current,
+          mutation.current.roll
+        );
       }
     }
   }, [snap.phase, resetRun, tmpObj, tmpObj2, tmpMat]);
@@ -280,8 +351,10 @@ function GrowthWorld() {
     const inputState = input.current;
     const tap = inputState.pointerJustDown;
     const spaceDown = inputState.keysDown.has(' ');
-    const leftDown = inputState.keysDown.has('arrowleft') || inputState.keysDown.has('a');
-    const rightDown = inputState.keysDown.has('arrowright') || inputState.keysDown.has('d');
+    const leftDown =
+      inputState.keysDown.has('arrowleft') || inputState.keysDown.has('a');
+    const rightDown =
+      inputState.keysDown.has('arrowright') || inputState.keysDown.has('d');
 
     if (tap || spaceDown) {
       if (growthState.phase === 'menu' || growthState.phase === 'gameover') {
@@ -320,7 +393,17 @@ function GrowthWorld() {
       m.roll = THREE.MathUtils.damp(m.roll, idle, 4.5, dt);
       m.rollTarget = m.roll;
       if (rollGroup.current) rollGroup.current.rotation.z = m.roll;
-      updateInstances(tmpObj, tmpObj2, tmpMat, segmentsRef.current, beamRef.current, pillarRef.current, spikeRef.current, gemRef.current, m.roll);
+      updateInstances(
+        tmpObj,
+        tmpObj2,
+        tmpMat,
+        segmentsRef.current,
+        beamRef.current,
+        pillarRef.current,
+        spikeRef.current,
+        gemRef.current,
+        m.roll
+      );
       clearFrameInput(input);
       return;
     }
@@ -337,7 +420,8 @@ function GrowthWorld() {
     if (rollGroup.current) {
       // Add a tiny "snap" feel
       const kick = m.rollKick;
-      rollGroup.current.rotation.z = m.roll + Math.sin(m.time * 24) * 0.01 * kick;
+      rollGroup.current.rotation.z =
+        m.roll + Math.sin(m.time * 24) * 0.01 * kick;
       m.rollKick = THREE.MathUtils.damp(m.rollKick, 0, 8, dt);
     }
 
@@ -359,12 +443,15 @@ function GrowthWorld() {
     for (let i = 0; i < segs.length; i++) {
       const s = segs[i];
       s.z -= m.speed * dt;
-      
+
       // Grow branches in real-time
       if (s.obstacleFace >= 0 && s.branchGrowth < s.branchTargetSize) {
-        s.branchGrowth = Math.min(s.branchTargetSize, s.branchGrowth + s.branchGrowthSpeed * dt);
+        s.branchGrowth = Math.min(
+          s.branchTargetSize,
+          s.branchGrowth + s.branchGrowthSpeed * dt
+        );
       }
-      
+
       if (s.z < -6) {
         s.z += TRACK_LENGTH;
         respawnSegment(s, s.z, difficulty01, m.time);
@@ -403,11 +490,15 @@ function GrowthWorld() {
       if (seg.obstacleFace >= 0) {
         const isSpike = seg.obstacleKind === 1;
         const growthScale = seg.branchGrowth;
-        if (growthScale > 0.1) { // Only check collision if branch has grown enough
+        if (growthScale > 0.1) {
+          // Only check collision if branch has grown enough
           const obR = (isSpike ? OB_SPIKE_R : OB_PILLAR_R) * growthScale;
           const baseHeight = isSpike ? OB_SPIKE_H : OB_PILLAR_H;
           const currentHeight = baseHeight * growthScale;
-          const obPos = facePos(seg.obstacleFace, BEAM_HALF + currentHeight * 0.5);
+          const obPos = facePos(
+            seg.obstacleFace,
+            BEAM_HALF + currentHeight * 0.5
+          );
           const dx = obPos.x - playerLocalX;
           const dy = obPos.y - playerLocalY;
           const rr = (PLAYER_RADIUS + obR) * (PLAYER_RADIUS + obR);
@@ -420,8 +511,18 @@ function GrowthWorld() {
     }
 
     // Update visuals
-    updateInstances(tmpObj, tmpObj2, tmpMat, segs, beamRef.current, pillarRef.current, spikeRef.current, gemRef.current, m.roll);
-    
+    updateInstances(
+      tmpObj,
+      tmpObj2,
+      tmpMat,
+      segs,
+      beamRef.current,
+      pillarRef.current,
+      spikeRef.current,
+      gemRef.current,
+      m.roll
+    );
+
     // Clear frame input
     clearFrameInput(input);
   });
@@ -445,7 +546,11 @@ function GrowthWorld() {
           frustumCulled={false}
         >
           <boxGeometry args={[BEAM_SIZE, BEAM_SIZE, SEGMENT_LEN]} />
-          <meshStandardMaterial color="#f6e6b6" roughness={0.85} metalness={0.02} />
+          <meshStandardMaterial
+            color="#f6e6b6"
+            roughness={0.85}
+            metalness={0.02}
+          />
         </instancedMesh>
 
         {/* pillars */}
@@ -457,7 +562,11 @@ function GrowthWorld() {
           frustumCulled={false}
         >
           <boxGeometry args={[0.48, OB_PILLAR_H, 0.48]} />
-          <meshStandardMaterial color="#f2b190" roughness={0.8} metalness={0.02} />
+          <meshStandardMaterial
+            color="#f2b190"
+            roughness={0.8}
+            metalness={0.02}
+          />
         </instancedMesh>
 
         {/* spikes */}
@@ -469,7 +578,11 @@ function GrowthWorld() {
           frustumCulled={false}
         >
           <coneGeometry args={[0.32, OB_SPIKE_H, 5]} />
-          <meshStandardMaterial color="#f19b83" roughness={0.78} metalness={0.02} />
+          <meshStandardMaterial
+            color="#f19b83"
+            roughness={0.78}
+            metalness={0.02}
+          />
         </instancedMesh>
 
         {/* gems */}
@@ -480,12 +593,24 @@ function GrowthWorld() {
           frustumCulled={false}
         >
           <octahedronGeometry args={[0.22, 0]} />
-          <meshStandardMaterial color="#ffd15a" roughness={0.25} metalness={0.15} emissive="#ffb300" emissiveIntensity={0.25} />
+          <meshStandardMaterial
+            color="#ffd15a"
+            roughness={0.25}
+            metalness={0.15}
+            emissive="#ffb300"
+            emissiveIntensity={0.25}
+          />
         </instancedMesh>
       </group>
 
       {/* runner (not rolled with the world) */}
-      <VoxelRunner wobble={Math.sin(mutation.current.time * 10) * 0.06 * (growthState.phase === 'playing' ? 1 : 0.3)} />
+      <VoxelRunner
+        wobble={
+          Math.sin(mutation.current.time * 10) *
+          0.06 *
+          (growthState.phase === 'playing' ? 1 : 0.3)
+        }
+      />
 
       {/* Background "floating blocks" for depth */}
       <FloatingBlocks />
@@ -502,7 +627,7 @@ function updateInstances(
   pillars: THREE.InstancedMesh | null,
   spikes: THREE.InstancedMesh | null,
   gems: THREE.InstancedMesh | null,
-  roll: number,
+  roll: number
 ) {
   if (!beam || !pillars || !spikes || !gems) return;
 
@@ -594,12 +719,17 @@ function updateInstances(
 
 function FloatingBlocks() {
   const blocks = React.useMemo(() => {
-    const a: Array<{ pos: [number, number, number]; s: number; r: number }> = [];
+    const a: Array<{ pos: [number, number, number]; s: number; r: number }> =
+      [];
     for (let i = 0; i < 30; i++) {
       const x = (Math.random() - 0.5) * 14;
       const y = (Math.random() - 0.2) * 6 - 2;
       const z = Math.random() * 26 + 6;
-      a.push({ pos: [x, y, z], s: 0.6 + Math.random() * 1.1, r: Math.random() * TAU });
+      a.push({
+        pos: [x, y, z],
+        s: 0.6 + Math.random() * 1.1,
+        r: Math.random() * TAU,
+      });
     }
     return a;
   }, []);
@@ -609,9 +739,23 @@ function FloatingBlocks() {
   return (
     <group>
       {blocks.map((b, i) => (
-        <mesh key={i} position={[b.pos[0], b.pos[1] + Math.sin(t * 0.3 + i) * 0.08, b.pos[2]]} rotation={[0, b.r + t * 0.05, 0]}>
+        <mesh
+          key={i}
+          position={[
+            b.pos[0],
+            b.pos[1] + Math.sin(t * 0.3 + i) * 0.08,
+            b.pos[2],
+          ]}
+          rotation={[0, b.r + t * 0.05, 0]}
+        >
           <boxGeometry args={[b.s, b.s, b.s]} />
-          <meshStandardMaterial color="#f0c7a6" roughness={0.9} metalness={0.02} transparent opacity={0.22} />
+          <meshStandardMaterial
+            color="#f0c7a6"
+            roughness={0.9}
+            metalness={0.02}
+            transparent
+            opacity={0.22}
+          />
         </mesh>
       ))}
     </group>
@@ -623,39 +767,130 @@ function GrowthHud() {
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div style={{ position: 'absolute', left: 16, top: 16, padding: '8px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.35)', color: 'white', fontFamily: 'system-ui' }}>
+      <div
+        style={{
+          position: 'absolute',
+          left: 16,
+          top: 16,
+          padding: '8px 12px',
+          borderRadius: 12,
+          background: 'rgba(0,0,0,0.35)',
+          color: 'white',
+          fontFamily: 'system-ui',
+        }}
+      >
         <div style={{ fontSize: 12, opacity: 0.8 }}>SCORE</div>
         <div style={{ fontSize: 22, fontWeight: 800 }}>{snap.score}</div>
       </div>
 
-      <div style={{ position: 'absolute', right: 16, top: 16, padding: '8px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.35)', color: 'white', fontFamily: 'system-ui' }}>
+      <div
+        style={{
+          position: 'absolute',
+          right: 16,
+          top: 16,
+          padding: '8px 12px',
+          borderRadius: 12,
+          background: 'rgba(0,0,0,0.35)',
+          color: 'white',
+          fontFamily: 'system-ui',
+        }}
+      >
         <div style={{ fontSize: 12, opacity: 0.8 }}>GEMS</div>
         <div style={{ fontSize: 22, fontWeight: 800 }}>{snap.runGems}</div>
       </div>
 
       {(snap.phase === 'menu' || snap.phase === 'gameover') && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 'min(520px, 92vw)', borderRadius: 24, background: 'rgba(0,0,0,0.55)', padding: 24, color: 'white', fontFamily: 'system-ui' }}>
-            <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Growth</div>
-            <div style={{ fontSize: 30, fontWeight: 600 }}>Stay on the branch.</div>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(520px, 92vw)',
+              borderRadius: 24,
+              background: 'rgba(0,0,0,0.55)',
+              padding: 24,
+              color: 'white',
+              fontFamily: 'system-ui',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                opacity: 0.8,
+                marginBottom: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '0.2em',
+              }}
+            >
+              Growth
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 600 }}>
+              Stay on the branch.
+            </div>
             <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85 }}>
-              Space = rotate clockwise • Left Arrow = rotate left • Right Arrow = rotate right<br />
-              Branches grow in real-time—watch for close calls! Collect gems to unlock 31 unique characters.
+              Space = rotate clockwise • Left Arrow = rotate left • Right Arrow
+              = rotate right
+              <br />
+              Branches grow in real-time—watch for close calls! Collect gems to
+              unlock 31 unique characters.
             </div>
 
-            <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.1)', padding: 12 }}>
+            <div
+              style={{
+                marginTop: 20,
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.1)',
+                  padding: 12,
+                }}
+              >
                 <div style={{ fontSize: 12, opacity: 0.8 }}>BEST</div>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>{snap.bestScore}</div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>
+                  {snap.bestScore}
+                </div>
               </div>
-              <div style={{ borderRadius: 16, background: 'rgba(255,255,255,0.1)', padding: 12 }}>
+              <div
+                style={{
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.1)',
+                  padding: 12,
+                }}
+              >
                 <div style={{ fontSize: 12, opacity: 0.8 }}>BANK</div>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>{snap.bankGems}</div>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>
+                  {snap.bankGems}
+                </div>
               </div>
             </div>
 
-            <div style={{ marginTop: 20, textAlign: 'center', fontSize: 14, opacity: 0.9 }}>
-              <div style={{ display: 'inline-block', borderRadius: 9999, background: 'rgba(255,255,255,0.1)', padding: '4px 12px' }}>
+            <div
+              style={{
+                marginTop: 20,
+                textAlign: 'center',
+                fontSize: 14,
+                opacity: 0.9,
+              }}
+            >
+              <div
+                style={{
+                  display: 'inline-block',
+                  borderRadius: 9999,
+                  background: 'rgba(255,255,255,0.1)',
+                  padding: '4px 12px',
+                }}
+              >
                 Tap / Space to {snap.phase === 'gameover' ? 'retry' : 'start'}
               </div>
             </div>
@@ -668,15 +903,16 @@ function GrowthHud() {
 
 export default function Growth() {
   const { scene, camera } = useThree();
-  
+
   React.useEffect(() => {
     scene.fog = new THREE.Fog('#d7c59d', 6, 34);
     camera.position.set(4.8, 5.2, -6.2);
-    camera.fov = 45;
-    camera.near = 0.1;
-    camera.far = 120;
-    camera.lookAt(0, 0.5, 0);
-    camera.updateProjectionMatrix();
+    const perspCamera = camera as THREE.PerspectiveCamera;
+    perspCamera.fov = 45;
+    perspCamera.near = 0.1;
+    perspCamera.far = 120;
+    perspCamera.lookAt(0, 0.5, 0);
+    perspCamera.updateProjectionMatrix();
   }, [scene, camera]);
 
   // Reset game state on mount

@@ -2,7 +2,13 @@ import { Physics, type RapierRigidBody } from '@react-three/rapier';
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { WALL_MODE_BALL_OFFSET, WALL_MODE_HEIGHT, WALL_MODE_PLAYER_Z, WALL_MODE_WALL_Z, WALL_MODE_WIDTH } from '../../constants';
+import {
+  WALL_MODE_BALL_OFFSET,
+  WALL_MODE_HEIGHT,
+  WALL_MODE_PLAYER_Z,
+  WALL_MODE_WALL_Z,
+  WALL_MODE_WIDTH,
+} from '../../constants';
 import { reactPongState } from '../../state';
 import HitParticles from '../HitParticles';
 import ScorePopups from '../ScorePopups';
@@ -18,12 +24,21 @@ interface WallModeArenaProps {
   ballColor: string;
 }
 
-const WallModeArena: React.FC<WallModeArenaProps> = ({ scoreColor, ballColor }) => {
+const WallModeArena: React.FC<WallModeArenaProps> = ({
+  scoreColor,
+  ballColor,
+}) => {
   const { wallMode, scorePopups, hitEffects } = useSnapshot(reactPongState);
   const ballRef = useRef<RapierRigidBody | null>(null);
   const shotSpinRef = useRef({ x: 0, y: 0 });
-  const arenaPlane = useMemo(() => new THREE.PlaneGeometry(WALL_MODE_WIDTH, WALL_MODE_HEIGHT), []);
-  const arenaEdges = useMemo(() => new THREE.EdgesGeometry(arenaPlane), [arenaPlane]);
+  const arenaPlane = useMemo(
+    () => new THREE.PlaneGeometry(WALL_MODE_WIDTH, WALL_MODE_HEIGHT),
+    []
+  );
+  const arenaEdges = useMemo(
+    () => new THREE.EdgesGeometry(arenaPlane),
+    [arenaPlane]
+  );
 
   useEffect(() => {
     return () => {
@@ -34,8 +49,15 @@ const WallModeArena: React.FC<WallModeArenaProps> = ({ scoreColor, ballColor }) 
 
   useEffect(() => {
     if (!ballRef.current) return;
-    if (['ready', 'levelComplete', 'gameOver', 'victory'].includes(wallMode.gameState)) {
-      ballRef.current.setTranslation({ x: 0, y: 0, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET }, true);
+    if (
+      ['ready', 'levelComplete', 'gameOver', 'victory'].includes(
+        wallMode.gameState
+      )
+    ) {
+      ballRef.current.setTranslation(
+        { x: 0, y: 0, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET },
+        true
+      );
       ballRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
       ballRef.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
       shotSpinRef.current = { x: 0, y: 0 };
@@ -46,7 +68,11 @@ const WallModeArena: React.FC<WallModeArenaProps> = ({ scoreColor, ballColor }) 
     <>
       <ambientLight intensity={0.4} />
       <pointLight position={[0, 4, 8]} intensity={0.9} color="#00aaff" />
-      <pointLight position={[0, 0, WALL_MODE_WALL_Z + 3]} intensity={0.7} color="#ff4080" />
+      <pointLight
+        position={[0, 0, WALL_MODE_WALL_Z + 3]}
+        intensity={0.7}
+        color="#ff4080"
+      />
       {/* Additional lighting for better visibility */}
       <pointLight position={[0, -4, 8]} intensity={0.6} color="#00aaff" />
       <spotLight
@@ -87,14 +113,20 @@ const WallModeArena: React.FC<WallModeArenaProps> = ({ scoreColor, ballColor }) 
             ballRef.current = body;
           }}
         />
-        <WallModePaddle ballRef={ballRef} scoreColor={scoreColor} shotSpinRef={shotSpinRef} />
+        <WallModePaddle
+          ballRef={ballRef}
+          scoreColor={scoreColor}
+          shotSpinRef={shotSpinRef}
+        />
         <OpposingWall ballRef={ballRef} />
         <WallModeBounds />
         {wallMode.availablePowerup && (
           <Powerup
             type={wallMode.availablePowerup.type}
             position={wallMode.availablePowerup.position}
-            onCollect={() => reactPongState.collectPowerup(wallMode.availablePowerup!.type)}
+            onCollect={() =>
+              reactPongState.collectPowerup(wallMode.availablePowerup!.type)
+            }
           />
         )}
       </Physics>

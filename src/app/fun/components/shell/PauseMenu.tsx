@@ -1,6 +1,6 @@
 /**
  * PauseMenu
- * 
+ *
  * Overlay displayed when game is paused.
  * Shows restart/home options and skin selection for applicable games.
  */
@@ -11,7 +11,8 @@ import { getGameCard } from '../../config/games';
 import { getArcadePanelCSS } from '../../config/themes';
 import type { GameId, UnlockableSkin } from '../../store/types';
 
-const LOCKED_SKIN_IMAGE = 'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
+const LOCKED_SKIN_IMAGE =
+  'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
 
 export interface PauseMenuProps {
   gameId: GameId;
@@ -38,7 +39,8 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
   onToggleSounds,
   onSelectSkin,
 }) => {
-  const showSkinSelection = (gameId === 'spinblock' || gameId === 'reactpong') && skins.length > 0;
+  const showSkinSelection =
+    (gameId === 'spinblock' || gameId === 'reactpong') && skins.length > 0;
   const accent = getGameCard(gameId)?.accent ?? '#60a5fa';
   const panelStyles = getArcadePanelCSS(accent);
 
@@ -60,12 +62,14 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
         >
           Pause
         </div>
-        <h1 className="mb-4 mt-2 text-2xl font-semibold text-white/90">Game Paused</h1>
-        
+        <h1 className="mb-4 mt-2 text-2xl font-semibold text-white/90">
+          Game Paused
+        </h1>
+
         <ul className="list-none text-center mb-6">
           <MenuItem onClick={onRestart}>Restart Game (R)</MenuItem>
           <MenuItem onClick={onGoHome}>Home Screen (H)</MenuItem>
-          
+
           {showSkinSelection && (
             <>
               <li
@@ -77,7 +81,7 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
               <SkinGrid skins={skins} onSelectSkin={onSelectSkin} />
             </>
           )}
-          
+
           <MenuItem onClick={onToggleMusic}>
             Music: {musicOn ? 'On' : 'Off'}
           </MenuItem>
@@ -85,11 +89,14 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
             Sounds: {soundsOn ? 'On' : 'Off'}
           </MenuItem>
         </ul>
-        
+
         <button
           onClick={onResume}
           className="px-6 py-2 text-sm uppercase tracking-[0.3em] border border-white/10 bg-white/10 text-white/80 transition-all duration-300 hover:-translate-y-0.5 hover:text-white hover:bg-white/20 active:translate-y-0 active:scale-95"
-          style={{ borderRadius: 'var(--arcade-radius-sm)', fontFamily: 'var(--arcade-mono)' }}
+          style={{
+            borderRadius: 'var(--arcade-radius-sm)',
+            fontFamily: 'var(--arcade-mono)',
+          }}
         >
           Resume (P)
         </button>

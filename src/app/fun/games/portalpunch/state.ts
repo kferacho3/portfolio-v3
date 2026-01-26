@@ -1,8 +1,13 @@
 import { proxy } from 'valtio';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
-export type PortalPunchEvent = 'DoubleTargets' | 'PortalDrift' | 'LaserSweep' | null;
+export type PortalPunchEvent =
+  | 'DoubleTargets'
+  | 'PortalDrift'
+  | 'LaserSweep'
+  | null;
 
 export const portalPunchState = proxy({
   score: 0,
@@ -71,7 +76,11 @@ export const portalPunchState = proxy({
       this.idleTime = Math.min(this.idleTime + dt, 6);
     }
     const idlePenalty = this.idleTime > 1.4 ? (this.idleTime - 1.4) * 0.6 : 0;
-    this.integrity = clamp(this.integrity - (this.integrityDecay + idlePenalty) * dt, 0, 100);
+    this.integrity = clamp(
+      this.integrity - (this.integrityDecay + idlePenalty) * dt,
+      0,
+      100
+    );
     if (this.integrity <= 0) {
       this.integrity = 0;
       this.gameOver = true;
@@ -85,8 +94,18 @@ export const portalPunchState = proxy({
       }
     } else if (this.elapsed >= this.nextEventAt) {
       const roll = Math.random();
-      this.event = roll < 0.34 ? 'DoubleTargets' : roll < 0.67 ? 'PortalDrift' : 'LaserSweep';
-      this.eventDuration = this.event === 'DoubleTargets' ? 8 : this.event === 'PortalDrift' ? 7 : 7.5;
+      this.event =
+        roll < 0.34
+          ? 'DoubleTargets'
+          : roll < 0.67
+            ? 'PortalDrift'
+            : 'LaserSweep';
+      this.eventDuration =
+        this.event === 'DoubleTargets'
+          ? 8
+          : this.event === 'PortalDrift'
+            ? 7
+            : 7.5;
       this.eventTime = this.eventDuration;
       this.nextEventAt = this.elapsed + 26;
     }

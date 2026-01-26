@@ -31,7 +31,11 @@ function randomDonutRadius(min: number, max: number) {
 
 export function clampToArena(pos: Vec3, arenaHalf = ARENA_HALF): Vec3 {
   const limit = arenaHalf - 2;
-  return [THREE.MathUtils.clamp(pos[0], -limit, limit), pos[1], THREE.MathUtils.clamp(pos[2], -limit, limit)];
+  return [
+    THREE.MathUtils.clamp(pos[0], -limit, limit),
+    pos[1],
+    THREE.MathUtils.clamp(pos[2], -limit, limit),
+  ];
 }
 
 export function pickSpawnPoint(playerPos: Vec3, opts: SpawnOptions): Vec3 {
@@ -86,4 +90,3 @@ export function pickSpawnPoint(playerPos: Vec3, opts: SpawnOptions): Vec3 {
   const limit = arenaHalf - 3;
   return [randBetween(-limit, limit), y, randBetween(-limit, limit)];
 }
-

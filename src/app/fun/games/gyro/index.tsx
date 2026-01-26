@@ -1,6 +1,6 @@
 /**
  * Gyro.tsx (GateShift)
- * 
+ *
  * 3D Tunnel Runner with Shape-Morphing
  * Morph your shape to match gates before passing through them
  * Inspired by Super Hexagon + Color Switch mechanics
@@ -9,7 +9,13 @@
 
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 import { SeededRandom } from '../../utils/seededRandom';
@@ -18,10 +24,20 @@ import { SeededRandom } from '../../utils/seededRandom';
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════
 
-type GateShape = 'circle' | 'square' | 'triangle' | 'pentagon' | 'hexagon' | 'heptagon' | 'octagon';
+type GateShape =
+  | 'circle'
+  | 'square'
+  | 'triangle'
+  | 'pentagon'
+  | 'hexagon'
+  | 'heptagon'
+  | 'octagon';
 type DifficultyMode = 'easy' | 'medium' | 'hard';
 
-const DIFFICULTY_SETTINGS: Record<DifficultyMode, { shapes: GateShape[]; gateSpacing: number }> = {
+const DIFFICULTY_SETTINGS: Record<
+  DifficultyMode,
+  { shapes: GateShape[]; gateSpacing: number }
+> = {
   easy: {
     shapes: ['circle', 'square', 'triangle'],
     gateSpacing: 12,
@@ -31,7 +47,15 @@ const DIFFICULTY_SETTINGS: Record<DifficultyMode, { shapes: GateShape[]; gateSpa
     gateSpacing: 10,
   },
   hard: {
-    shapes: ['circle', 'square', 'triangle', 'pentagon', 'hexagon', 'heptagon', 'octagon'],
+    shapes: [
+      'circle',
+      'square',
+      'triangle',
+      'pentagon',
+      'hexagon',
+      'heptagon',
+      'octagon',
+    ],
     gateSpacing: 8,
   },
 };
@@ -63,13 +87,15 @@ export const gyroState = proxy({
     gyroState.gameOver = false;
     gyroState.difficulty = 1;
     gyroState.paletteIndex = 0;
-    gyroState.playerShape = DIFFICULTY_SETTINGS[gyroState.difficultyMode].shapes[0];
+    gyroState.playerShape =
+      DIFFICULTY_SETTINGS[gyroState.difficultyMode].shapes[0];
     gyroState.gatesPassed = 0;
   },
   cycleShape: () => {
     const allowedShapes = DIFFICULTY_SETTINGS[gyroState.difficultyMode].shapes;
     const currentIndex = allowedShapes.indexOf(gyroState.playerShape);
-    gyroState.playerShape = allowedShapes[(currentIndex + 1) % allowedShapes.length];
+    gyroState.playerShape =
+      allowedShapes[(currentIndex + 1) % allowedShapes.length];
   },
 });
 
@@ -120,7 +146,11 @@ interface Gate {
   passed: boolean;
 }
 
-const generateGate = (rng: SeededRandom, z: number, shapes: GateShape[]): Gate => {
+const generateGate = (
+  rng: SeededRandom,
+  z: number,
+  shapes: GateShape[]
+): Gate => {
   return {
     id: `gate-${z}-${Date.now()}-${Math.random()}`,
     z,
@@ -134,7 +164,10 @@ const generateGate = (rng: SeededRandom, z: number, shapes: GateShape[]): Gate =
 // SHAPE GEOMETRY HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const createShapeGeometry = (shape: GateShape, size: number): THREE.BufferGeometry => {
+const createShapeGeometry = (
+  shape: GateShape,
+  size: number
+): THREE.BufferGeometry => {
   switch (shape) {
     case 'circle':
       return new THREE.CircleGeometry(size, 32);
@@ -155,7 +188,11 @@ const createShapeGeometry = (shape: GateShape, size: number): THREE.BufferGeomet
   }
 };
 
-const createGateOutline = (shape: GateShape, innerRadius: number, outerRadius: number): THREE.BufferGeometry => {
+const createGateOutline = (
+  shape: GateShape,
+  innerRadius: number,
+  outerRadius: number
+): THREE.BufferGeometry => {
   const getPoints = (r: number, sides: number): THREE.Vector2[] => {
     const points: THREE.Vector2[] = [];
     for (let i = 0; i <= sides; i++) {
@@ -167,14 +204,29 @@ const createGateOutline = (shape: GateShape, innerRadius: number, outerRadius: n
 
   let sides: number;
   switch (shape) {
-    case 'circle': sides = 32; break;
-    case 'square': sides = 4; break;
-    case 'triangle': sides = 3; break;
-    case 'pentagon': sides = 5; break;
-    case 'hexagon': sides = 6; break;
-    case 'heptagon': sides = 7; break;
-    case 'octagon': sides = 8; break;
-    default: sides = 32;
+    case 'circle':
+      sides = 32;
+      break;
+    case 'square':
+      sides = 4;
+      break;
+    case 'triangle':
+      sides = 3;
+      break;
+    case 'pentagon':
+      sides = 5;
+      break;
+    case 'hexagon':
+      sides = 6;
+      break;
+    case 'heptagon':
+      sides = 7;
+      break;
+    case 'octagon':
+      sides = 8;
+      break;
+    default:
+      sides = 32;
   }
 
   const outerPoints = getPoints(outerRadius, sides);
@@ -221,7 +273,11 @@ const GateComponent: React.FC<{
   });
 
   return (
-    <group position={[0, 0, gate.z + zOffset]} rotation={[0, 0, gate.rotation]} ref={groupRef}>
+    <group
+      position={[0, 0, gate.z + zOffset]}
+      rotation={[0, 0, gate.rotation]}
+      ref={groupRef}
+    >
       <mesh geometry={geometry}>
         <meshStandardMaterial
           color={shapeColor}
@@ -234,13 +290,27 @@ const GateComponent: React.FC<{
       </mesh>
       {/* Shape indicator in center */}
       <mesh position={[0, 0, 0.2]}>
-        {gate.shape === 'circle' && <circleGeometry args={[indicatorSize, 32]} />}
-        {gate.shape === 'square' && <planeGeometry args={[indicatorSize * 1.6, indicatorSize * 1.6]} />}
-        {gate.shape === 'triangle' && <circleGeometry args={[indicatorSize, 3]} />}
-        {gate.shape === 'pentagon' && <circleGeometry args={[indicatorSize, 5]} />}
-        {gate.shape === 'hexagon' && <circleGeometry args={[indicatorSize, 6]} />}
-        {gate.shape === 'heptagon' && <circleGeometry args={[indicatorSize, 7]} />}
-        {gate.shape === 'octagon' && <circleGeometry args={[indicatorSize, 8]} />}
+        {gate.shape === 'circle' && (
+          <circleGeometry args={[indicatorSize, 32]} />
+        )}
+        {gate.shape === 'square' && (
+          <planeGeometry args={[indicatorSize * 1.6, indicatorSize * 1.6]} />
+        )}
+        {gate.shape === 'triangle' && (
+          <circleGeometry args={[indicatorSize, 3]} />
+        )}
+        {gate.shape === 'pentagon' && (
+          <circleGeometry args={[indicatorSize, 5]} />
+        )}
+        {gate.shape === 'hexagon' && (
+          <circleGeometry args={[indicatorSize, 6]} />
+        )}
+        {gate.shape === 'heptagon' && (
+          <circleGeometry args={[indicatorSize, 7]} />
+        )}
+        {gate.shape === 'octagon' && (
+          <circleGeometry args={[indicatorSize, 8]} />
+        )}
         <meshStandardMaterial
           color={shapeColor}
           emissive={shapeColor}
@@ -270,7 +340,9 @@ const Player: React.FC<{
     <group position={[0, 0, PLAYER_Z]}>
       <mesh ref={meshRef}>
         {shape === 'circle' && <circleGeometry args={[PLAYER_SIZE, 32]} />}
-        {shape === 'square' && <planeGeometry args={[PLAYER_SIZE * 1.6, PLAYER_SIZE * 1.6]} />}
+        {shape === 'square' && (
+          <planeGeometry args={[PLAYER_SIZE * 1.6, PLAYER_SIZE * 1.6]} />
+        )}
         {shape === 'triangle' && <circleGeometry args={[PLAYER_SIZE, 3]} />}
         {shape === 'pentagon' && <circleGeometry args={[PLAYER_SIZE, 5]} />}
         {shape === 'hexagon' && <circleGeometry args={[PLAYER_SIZE, 6]} />}
@@ -332,7 +404,9 @@ const DifficultySelector: React.FC<{
               key={mode}
               onClick={() => onChange(mode)}
               className={`px-2.5 py-1 rounded-md text-[10px] uppercase tracking-wider transition ${
-                isActive ? buttonStyles[mode] : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
+                isActive
+                  ? buttonStyles[mode]
+                  : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'
               }`}
             >
               {mode} ({DIFFICULTY_SETTINGS[mode].shapes.length})
@@ -359,11 +433,13 @@ const TunnelWireframe: React.FC<{ color: string }> = ({ color }) => {
         points.push(new THREE.Vector3(x, y, -z));
       }
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      result.push(
-        <line key={`long-${i}`} geometry={geometry}>
-          <lineBasicMaterial color={color} opacity={0.15} transparent />
-        </line>
-      );
+      const material = new THREE.LineBasicMaterial({
+        color,
+        opacity: 0.15,
+        transparent: true,
+      });
+      const lineObj = new THREE.Line(geometry, material);
+      result.push(<primitive key={`long-${i}`} object={lineObj} />);
     }
 
     return result;
@@ -518,7 +594,10 @@ const Gyro: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         const gateWorldZ = gate.z + nextZTravel;
 
         // Gate is at player position
-        if (Math.abs(gateWorldZ - PLAYER_Z) < GATE_PASS_WINDOW && !passedGateIds.current.has(gate.id)) {
+        if (
+          Math.abs(gateWorldZ - PLAYER_Z) < GATE_PASS_WINDOW &&
+          !passedGateIds.current.has(gate.id)
+        ) {
           passedGateIds.current.add(gate.id);
 
           if (gate.shape === gyroState.playerShape) {
@@ -554,7 +633,9 @@ const Gyro: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       // Add new gates
       while (lastGateZ.current + nextZTravel > -GATE_COUNT * gateSpacing - 20) {
         lastGateZ.current -= gateSpacing;
-        updated.push(generateGate(rngRef.current, lastGateZ.current, activeShapes));
+        updated.push(
+          generateGate(rngRef.current, lastGateZ.current, activeShapes)
+        );
       }
 
       return updated;
@@ -587,24 +668,37 @@ const Gyro: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="absolute top-4 left-4 z-50 pointer-events-auto flex flex-col sm:flex-row items-start gap-3">
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3 text-white">
-            <div className="text-3xl font-bold font-mono">{Math.floor(snap.score)}</div>
-            <div className="text-xs text-white/60 mt-1">Combo: x{snap.combo + 1}</div>
-            <div className="text-xs text-white/40">Best: {Math.floor(snap.highScore)}</div>
+            <div className="text-3xl font-bold font-mono">
+              {Math.floor(snap.score)}
+            </div>
+            <div className="text-xs text-white/60 mt-1">
+              Combo: x{snap.combo + 1}
+            </div>
+            <div className="text-xs text-white/40">
+              Best: {Math.floor(snap.highScore)}
+            </div>
           </div>
           <div className="flex flex-col gap-2">
             <ShapeIndicator label="Current" shape={snap.playerShape} />
-            {nextGate && <ShapeIndicator label="Next Gate" shape={nextGate.shape} />}
+            {nextGate && (
+              <ShapeIndicator label="Next Gate" shape={nextGate.shape} />
+            )}
           </div>
         </div>
 
         <div className="absolute bottom-20 left-4 z-50 pointer-events-auto">
-          <DifficultySelector value={snap.difficultyMode} onChange={handleDifficultyChange} />
+          <DifficultySelector
+            value={snap.difficultyMode}
+            onChange={handleDifficultyChange}
+          />
         </div>
 
         {/* Controls hint */}
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
           <div>Space/Click to change shape</div>
-          <div className="text-xs mt-1">1/2/3 to set difficulty | Match the gate shape</div>
+          <div className="text-xs mt-1">
+            1/2/3 to set difficulty | Match the gate shape
+          </div>
         </div>
 
         {/* Game Over */}
@@ -612,9 +706,15 @@ const Gyro: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 pointer-events-auto">
             <div className="text-center">
               <h1 className="text-5xl font-bold text-white mb-4">GAME OVER</h1>
-              <p className="text-3xl text-white/80 mb-2">{Math.floor(snap.score)}</p>
-              <p className="text-lg text-white/60 mb-1">Gates: {snap.gatesPassed}</p>
-              <p className="text-lg text-white/60 mb-6">Best: {Math.floor(snap.highScore)}</p>
+              <p className="text-3xl text-white/80 mb-2">
+                {Math.floor(snap.score)}
+              </p>
+              <p className="text-lg text-white/60 mb-1">
+                Gates: {snap.gatesPassed}
+              </p>
+              <p className="text-lg text-white/60 mb-6">
+                Best: {Math.floor(snap.highScore)}
+              </p>
               <p className="text-white/50">Press R to restart</p>
             </div>
           </div>

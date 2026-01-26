@@ -34,7 +34,13 @@ function lerp(a: number, b: number, t: number) {
 
 function hexToRgb(hex: string): RGB {
   const h = hex.replace('#', '').trim();
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h;
   const n = parseInt(full, 16);
   return {
     r: (n >> 16) & 255,
@@ -66,7 +72,16 @@ function dist2(ax: number, ay: number, bx: number, by: number) {
   return dx * dx + dy * dy;
 }
 
-function pointInTriangle(px: number, py: number, ax: number, ay: number, bx: number, by: number, cx: number, cy: number) {
+function pointInTriangle(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  cx: number,
+  cy: number
+) {
   // Barycentric technique
   const v0x = cx - ax;
   const v0y = cy - ay;
@@ -87,7 +102,14 @@ function pointInTriangle(px: number, py: number, ax: number, ay: number, bx: num
   return u >= 0 && v >= 0 && u + v <= 1;
 }
 
-function distPointToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+function distPointToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number
+) {
   const abx = bx - ax;
   const aby = by - ay;
   const apx = px - ax;
@@ -247,7 +269,10 @@ export default function Bouncer() {
   const runtimeRef = useRef<Runtime>(makeRuntime());
   const [ready, setReady] = useState(false);
 
-  const currentSkin = useMemo(() => ballSkins[snap.selectedSkin] ?? ballSkins[0], [snap.selectedSkin]);
+  const currentSkin = useMemo(
+    () => ballSkins[snap.selectedSkin] ?? ballSkins[0],
+    [snap.selectedSkin]
+  );
 
   useEffect(() => {
     const rt = runtimeRef.current;
@@ -262,7 +287,9 @@ export default function Bouncer() {
 
     const resize = () => {
       const parent = canvas.parentElement;
-      const rect = parent ? parent.getBoundingClientRect() : canvas.getBoundingClientRect();
+      const rect = parent
+        ? parent.getBoundingClientRect()
+        : canvas.getBoundingClientRect();
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       rt.w = Math.max(1, Math.floor(rect.width));
       rt.h = Math.max(1, Math.floor(rect.height));
@@ -321,7 +348,8 @@ export default function Bouncer() {
         input.keysDown.has(' ') ||
         input.keysDown.has('space') ||
         input.keysDown.has('spacebar');
-      rt.dropHeld = snap.phase === 'playing' ? input.pointerDown || spaceHeld : false;
+      rt.dropHeld =
+        snap.phase === 'playing' ? input.pointerDown || spaceHeld : false;
 
       const dt = dtReal;
       // Tap to start/restart. While playing, a tap "invokes gravity" (cuts the upward arc so you can
@@ -386,16 +414,25 @@ export default function Bouncer() {
   const palette = palettes[snap.paletteIndex] ?? palettes[0];
 
   return (
-    <div className="w-full h-full relative select-none" style={{ background: palette.bg }}>
+    <div
+      className="w-full h-full relative select-none"
+      style={{ background: palette.bg }}
+    >
       <canvas ref={canvasRef} className="w-full h-full block" />
 
       {/* Minimal UI overlay */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-4 left-4 text-xs font-medium opacity-70" style={{ color: palette.spikes }}>
+        <div
+          className="absolute top-4 left-4 text-xs font-medium opacity-70"
+          style={{ color: palette.spikes }}
+        >
           {snap.phase === 'playing' ? 'TAP = DROP' : 'TAP TO PLAY'}
         </div>
 
-        <div className="absolute top-4 right-4 text-xs font-medium opacity-70" style={{ color: palette.spikes }}>
+        <div
+          className="absolute top-4 right-4 text-xs font-medium opacity-70"
+          style={{ color: palette.spikes }}
+        >
           ◇ {snap.squares}
         </div>
 
@@ -406,16 +443,27 @@ export default function Bouncer() {
               style={{ background: 'rgba(0,0,0,0.06)' }}
             >
               <div className="text-center">
-                <div className="text-3xl font-extrabold tracking-tight" style={{ color: palette.spikes }}>
+                <div
+                  className="text-3xl font-extrabold tracking-tight"
+                  style={{ color: palette.spikes }}
+                >
                   BOUNCER
                 </div>
-                <div className="mt-1 text-sm opacity-80" style={{ color: palette.spikes }}>
-                  Tap to drop. Dodge spikes. Collect squares to shift the colors.
+                <div
+                  className="mt-1 text-sm opacity-80"
+                  style={{ color: palette.spikes }}
+                >
+                  Tap to drop. Dodge spikes. Collect squares to shift the
+                  colors.
                 </div>
 
                 {snap.phase === 'gameover' && (
-                  <div className="mt-3 text-sm" style={{ color: palette.spikes }}>
-                    Best: <span className="font-semibold">{snap.bestScore}</span>
+                  <div
+                    className="mt-3 text-sm"
+                    style={{ color: palette.spikes }}
+                  >
+                    Best:{' '}
+                    <span className="font-semibold">{snap.bestScore}</span>
                   </div>
                 )}
 
@@ -430,7 +478,10 @@ export default function Bouncer() {
 
                   <button
                     className="px-4 py-2 rounded-xl text-sm font-semibold"
-                    style={{ background: 'rgba(255,255,255,0.8)', color: '#1B2330' }}
+                    style={{
+                      background: 'rgba(255,255,255,0.8)',
+                      color: '#1B2330',
+                    }}
                     onClick={() => {
                       // Skin cycling / unlocking: if locked, try to buy.
                       const next = (snap.selectedSkin + 1) % ballSkins.length;
@@ -447,8 +498,12 @@ export default function Bouncer() {
                   </button>
                 </div>
 
-                <div className="mt-3 text-[11px] opacity-70" style={{ color: palette.spikes }}>
-                  Inspired by the snappy, minimalist one-tap era (original implementation).
+                <div
+                  className="mt-3 text-[11px] opacity-70"
+                  style={{ color: palette.spikes }}
+                >
+                  Inspired by the snappy, minimalist one-tap era (original
+                  implementation).
                 </div>
               </div>
             </div>
@@ -550,7 +605,8 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
   // Scoring: when obstacle passes the ball
   const obstacleBase = Math.max(18, Math.round(rt.ballR * 1.45));
   const obstacleGap = Math.max(8, Math.round(rt.ballR * 0.45));
-  const obstacleW = (spikes: number) => spikes * obstacleBase + (spikes - 1) * obstacleGap;
+  const obstacleW = (spikes: number) =>
+    spikes * obstacleBase + (spikes - 1) * obstacleGap;
 
   rt.obstacles.forEach((o) => {
     const w = obstacleW(o.spikes);
@@ -583,7 +639,19 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
       const maxY = ay + rt.ballR;
       if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
 
-      if (circleIntersectsTriangle(cx, cy, rt.ballR * 0.92, ax, ay, bx, by, tx, ty)) {
+      if (
+        circleIntersectsTriangle(
+          cx,
+          cy,
+          rt.ballR * 0.92,
+          ax,
+          ay,
+          bx,
+          by,
+          tx,
+          ty
+        )
+      ) {
         // Hit!
         rt.hitFlash = 1;
         spawnShatter(rt, 26);
@@ -640,7 +708,8 @@ function advanceScroller(rt: Runtime, dt: number, active: boolean) {
       spikes: choice([1, 1, 2, 2, 3]),
       scored: false,
     });
-    rt.distToNextObstacle = rand(obstacleMin, obstacleMax) + Math.abs(rt.distToNextObstacle);
+    rt.distToNextObstacle =
+      rand(obstacleMin, obstacleMax) + Math.abs(rt.distToNextObstacle);
   }
 
   rt.distToNextPickup -= dx;
@@ -648,10 +717,15 @@ function advanceScroller(rt: Runtime, dt: number, active: boolean) {
     rt.pickups.push({
       id: idCounter++,
       x: rt.w + rand(120, 320),
-      y: rt.groundY - rt.platformH / 2 - rt.ballR - rand(rt.h * 0.08, rt.h * 0.22),
+      y:
+        rt.groundY -
+        rt.platformH / 2 -
+        rt.ballR -
+        rand(rt.h * 0.08, rt.h * 0.22),
       size: Math.max(14, Math.round(rt.ballR * 0.95)),
     });
-    rt.distToNextPickup = rand(pickupMin, pickupMax) + Math.abs(rt.distToNextPickup);
+    rt.distToNextPickup =
+      rand(pickupMin, pickupMax) + Math.abs(rt.distToNextPickup);
   }
 
   rt.obstacles = rt.obstacles.filter((o) => o.x > -200);
@@ -714,7 +788,11 @@ function spawnShatter(rt: Runtime, n: number) {
 // Rendering
 // -----------------------------
 
-function draw(ctx: CanvasRenderingContext2D, rt: Runtime, skin: typeof ballSkins[number]) {
+function draw(
+  ctx: CanvasRenderingContext2D,
+  rt: Runtime,
+  skin: (typeof ballSkins)[number]
+) {
   const dpr = rt.dpr;
   const w = rt.w;
   const h = rt.h;
@@ -744,7 +822,11 @@ function draw(ctx: CanvasRenderingContext2D, rt: Runtime, skin: typeof ballSkins
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.font = `800 ${Math.round(h * 0.38)}px ui-sans-serif, system-ui, -apple-system`;
-  ctx.fillText(String(Math.max(0, Math.round(rt.shownScore))), w * 0.56, h * 0.28);
+  ctx.fillText(
+    String(Math.max(0, Math.round(rt.shownScore))),
+    w * 0.56,
+    h * 0.28
+  );
   ctx.restore();
 
   // Platform
@@ -810,7 +892,15 @@ function draw(ctx: CanvasRenderingContext2D, rt: Runtime, skin: typeof ballSkins
   ctx.globalAlpha = 0.18 * shadowScale;
   ctx.fillStyle = '#000000';
   ctx.beginPath();
-  ctx.ellipse(rt.ballX, yBase + rt.ballR * 0.35, rt.ballR * 0.85 * shadowScale, rt.ballR * 0.32 * shadowScale, 0, 0, Math.PI * 2);
+  ctx.ellipse(
+    rt.ballX,
+    yBase + rt.ballR * 0.35,
+    rt.ballR * 0.85 * shadowScale,
+    rt.ballR * 0.32 * shadowScale,
+    0,
+    0,
+    Math.PI * 2
+  );
   ctx.fill();
   ctx.restore();
 

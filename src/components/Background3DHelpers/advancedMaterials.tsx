@@ -48,20 +48,22 @@ export const ThinFilmIridescentMaterial: React.FC<ThinFilmProps> = ({
   iridescenceThicknessMax = 400,
 }) => {
   const ref = useRef<THREE.MeshPhysicalMaterial>(null);
-  
+
   // Animate the iridescence thickness for shimmering effect
   useFrame(({ clock }) => {
     if (!ref.current) return;
     const t = clock.getElapsedTime() * 0.3;
-    const thickness = iridescenceThicknessMin + 
-      (iridescenceThicknessMax - iridescenceThicknessMin) * 
-      (0.5 + 0.5 * Math.sin(t));
-    
+    const thickness =
+      iridescenceThicknessMin +
+      (iridescenceThicknessMax - iridescenceThicknessMin) *
+        (0.5 + 0.5 * Math.sin(t));
+
     // Note: Three.js uses iridescenceThicknessRange as [min, max]
     // We'll animate the whole material slightly
-    ref.current.iridescence = iridescenceIntensity * (0.9 + 0.1 * Math.sin(t * 2));
+    ref.current.iridescence =
+      iridescenceIntensity * (0.9 + 0.1 * Math.sin(t * 2));
   });
-  
+
   return (
     <meshPhysicalMaterial
       ref={ref}
@@ -72,7 +74,10 @@ export const ThinFilmIridescentMaterial: React.FC<ThinFilmProps> = ({
       clearcoatRoughness={0.1}
       iridescence={iridescenceIntensity}
       iridescenceIOR={iridescenceIOR}
-      iridescenceThicknessRange={[iridescenceThicknessMin, iridescenceThicknessMax]}
+      iridescenceThicknessRange={[
+        iridescenceThicknessMin,
+        iridescenceThicknessMax,
+      ]}
       envMap={envMap ?? undefined}
       envMapIntensity={1.5}
       side={THREE.DoubleSide}
@@ -99,22 +104,25 @@ export const RimGlowNeonMaterial: React.FC<RimGlowProps> = ({
   envMap,
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  
-  const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uBaseColor: { value: new THREE.Color(color) },
-    uGlowColor: { value: new THREE.Color(glowColor) },
-    uGlowIntensity: { value: glowIntensity },
-    uGlowPower: { value: glowPower },
-    envMap: { value: envMap },
-  }), [color, glowColor, glowIntensity, glowPower, envMap]);
-  
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uBaseColor: { value: new THREE.Color(color) },
+      uGlowColor: { value: new THREE.Color(glowColor) },
+      uGlowIntensity: { value: glowIntensity },
+      uGlowPower: { value: glowPower },
+      envMap: { value: envMap },
+    }),
+    [color, glowColor, glowIntensity, glowPower, envMap]
+  );
+
   useFrame(({ clock }) => {
     if (materialRef.current) {
       materialRef.current.uniforms.uTime.value = clock.getElapsedTime();
     }
   });
-  
+
   const vertexShader = /* glsl */ `
     varying vec3 vNormal;
     varying vec3 vViewPosition;
@@ -128,7 +136,7 @@ export const RimGlowNeonMaterial: React.FC<RimGlowProps> = ({
       gl_Position = projectionMatrix * mvPosition;
     }
   `;
-  
+
   const fragmentShader = /* glsl */ `
     uniform float uTime;
     uniform vec3 uBaseColor;
@@ -158,7 +166,7 @@ export const RimGlowNeonMaterial: React.FC<RimGlowProps> = ({
       gl_FragColor = vec4(color, 1.0);
     }
   `;
-  
+
   return (
     <shaderMaterial
       ref={materialRef}
@@ -191,21 +199,25 @@ export const TriplanarMarbleMaterial: React.FC<TriplanarMarbleProps> = ({
   noiseSpeed = 0.1,
 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
-  
-  const uniforms = useMemo(() => ({
-    uTime: { value: 0 },
-    uColor1: { value: new THREE.Color(color1) },
-    uColor2: { value: new THREE.Color(color2) },
-    uColor3: { value: new THREE.Color(color3) },
-    uNoiseScale: { value: noiseScale },
-  }), [color1, color2, color3, noiseScale]);
-  
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uColor1: { value: new THREE.Color(color1) },
+      uColor2: { value: new THREE.Color(color2) },
+      uColor3: { value: new THREE.Color(color3) },
+      uNoiseScale: { value: noiseScale },
+    }),
+    [color1, color2, color3, noiseScale]
+  );
+
   useFrame(({ clock }) => {
     if (materialRef.current) {
-      materialRef.current.uniforms.uTime.value = clock.getElapsedTime() * noiseSpeed;
+      materialRef.current.uniforms.uTime.value =
+        clock.getElapsedTime() * noiseSpeed;
     }
   });
-  
+
   const vertexShader = /* glsl */ `
     varying vec3 vPosition;
     varying vec3 vNormal;
@@ -219,7 +231,7 @@ export const TriplanarMarbleMaterial: React.FC<TriplanarMarbleProps> = ({
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `;
-  
+
   const fragmentShader = /* glsl */ `
     uniform float uTime;
     uniform vec3 uColor1;
@@ -336,7 +348,7 @@ export const TriplanarMarbleMaterial: React.FC<TriplanarMarbleProps> = ({
       gl_FragColor = vec4(color, 1.0);
     }
   `;
-  
+
   return (
     <shaderMaterial
       ref={materialRef}
@@ -364,14 +376,14 @@ export const WireGlowMaterial: React.FC<WireGlowProps> = ({
   glowIntensity = 1.5,
 }) => {
   const materialRef = useRef<THREE.MeshBasicMaterial>(null);
-  
+
   useFrame(({ clock }) => {
     if (materialRef.current) {
       const pulse = 0.7 + 0.3 * Math.sin(clock.getElapsedTime() * 2);
       materialRef.current.opacity = glowIntensity * pulse;
     }
   });
-  
+
   return (
     <meshBasicMaterial
       ref={materialRef}
@@ -401,12 +413,15 @@ export const MatcapStylizedMaterial: React.FC<MatcapStylizedProps> = ({
   coolColor = '#4ecdc4',
   highlightColor = '#ffffff',
 }) => {
-  const uniforms = useMemo(() => ({
-    uWarmColor: { value: new THREE.Color(warmColor) },
-    uCoolColor: { value: new THREE.Color(coolColor) },
-    uHighlightColor: { value: new THREE.Color(highlightColor) },
-  }), [warmColor, coolColor, highlightColor]);
-  
+  const uniforms = useMemo(
+    () => ({
+      uWarmColor: { value: new THREE.Color(warmColor) },
+      uCoolColor: { value: new THREE.Color(coolColor) },
+      uHighlightColor: { value: new THREE.Color(highlightColor) },
+    }),
+    [warmColor, coolColor, highlightColor]
+  );
+
   const vertexShader = /* glsl */ `
     varying vec3 vNormal;
     varying vec3 vViewPosition;
@@ -418,7 +433,7 @@ export const MatcapStylizedMaterial: React.FC<MatcapStylizedProps> = ({
       gl_Position = projectionMatrix * mvPosition;
     }
   `;
-  
+
   const fragmentShader = /* glsl */ `
     uniform vec3 uWarmColor;
     uniform vec3 uCoolColor;
@@ -450,7 +465,7 @@ export const MatcapStylizedMaterial: React.FC<MatcapStylizedProps> = ({
       gl_FragColor = vec4(color, 1.0);
     }
   `;
-  
+
   return (
     <shaderMaterial
       uniforms={uniforms}
@@ -475,7 +490,7 @@ export const ChromaticDispersionMaterial: React.FC<ChromaticProps> = ({
   dispersionStrength = 0.05,
 }) => {
   const materialRef = useRef<THREE.MeshPhysicalMaterial>(null);
-  
+
   return (
     <meshPhysicalMaterial
       ref={materialRef}
@@ -503,9 +518,7 @@ export const ChromaticDispersionMaterial: React.FC<ChromaticProps> = ({
 export const createThinFilm = (
   color: string,
   env?: THREE.Texture | null
-): JSX.Element => (
-  <ThinFilmIridescentMaterial color={color} envMap={env} />
-);
+): JSX.Element => <ThinFilmIridescentMaterial color={color} envMap={env} />;
 
 export const createRimGlow = (
   baseColor: string,
@@ -541,7 +554,7 @@ export const createChromatic = (env?: THREE.Texture | null): JSX.Element => (
    MATERIAL MODE ENUM for integration
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type MaterialMode = 
+export type MaterialMode =
   | 'neon'
   | 'glass'
   | 'diamond'

@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Physics, type RapierRigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
@@ -10,11 +16,21 @@ import { Coin, Gem, PowerUp } from './_components/Collectibles';
 import { Bumper, HazardZone, Spike } from './_components/Hazards';
 import PlayerBall from './_components/PlayerBall';
 import SpinBlockHUD from './_components/SpinBlockHUD';
-import { BALL_FALL_Y, BALL_RADIUS, BALL_RESPAWN_POSITION, BOARD_PRESETS, MAX_TILT } from './constants';
+import {
+  BALL_FALL_Y,
+  BALL_RADIUS,
+  BALL_RESPAWN_POSITION,
+  BOARD_PRESETS,
+  MAX_TILT,
+} from './constants';
 import { spinBlockState } from './state';
 import type { PowerUpType, SpinBlockBoardPreset } from './types';
 import { generateLevelSpawns } from './utils/level';
-import { getBumperPositions, getHazardZones, getSpikePositions } from './utils/positions';
+import {
+  getBumperPositions,
+  getHazardZones,
+  getSpikePositions,
+} from './utils/positions';
 
 export { spinBlockState } from './state';
 export * from './constants';
@@ -42,11 +58,17 @@ const SpinBlock: React.FC = () => {
 
   const [coins, setCoins] = useState<[number, number, number][]>([]);
   const [gems, setGems] = useState<[number, number, number][]>([]);
-  const [powerUps, setPowerUps] = useState<{ pos: [number, number, number]; type: PowerUpType }[]>([]);
+  const [powerUps, setPowerUps] = useState<
+    { pos: [number, number, number]; type: PowerUpType }[]
+  >([]);
   const didInitRef = useRef(false);
 
   const generateLevel = useCallback((preset: SpinBlockBoardPreset) => {
-    const { coins: nextCoins, gems: nextGems, powerUps: nextPowerUps } = generateLevelSpawns(preset);
+    const {
+      coins: nextCoins,
+      gems: nextGems,
+      powerUps: nextPowerUps,
+    } = generateLevelSpawns(preset);
     setCoins(nextCoins);
     setGems(nextGems);
     setPowerUps(nextPowerUps);
@@ -56,7 +78,11 @@ const SpinBlock: React.FC = () => {
     spinBlockState.reset();
     generateLevel(board);
 
-    camera.position.set(0, Math.max(18, board.boxSize * 1.2), Math.max(12, board.boxSize * 0.9));
+    camera.position.set(
+      0,
+      Math.max(18, board.boxSize * 1.2),
+      Math.max(12, board.boxSize * 0.9)
+    );
     camera.lookAt(0, 0, 0);
 
     didInitRef.current = true;
@@ -73,7 +99,14 @@ const SpinBlock: React.FC = () => {
   const resetBall = useCallback(() => {
     const body = ballBodyRef.current;
     if (!body) return;
-    body.setTranslation({ x: BALL_RESPAWN_POSITION[0], y: BALL_RESPAWN_POSITION[1], z: BALL_RESPAWN_POSITION[2] }, true);
+    body.setTranslation(
+      {
+        x: BALL_RESPAWN_POSITION[0],
+        y: BALL_RESPAWN_POSITION[1],
+        z: BALL_RESPAWN_POSITION[2],
+      },
+      true
+    );
     body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     ejectedRef.current = false;
@@ -113,8 +146,10 @@ const SpinBlock: React.FC = () => {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      if (['w', 's', 'arrowup', 'arrowdown'].includes(key)) targetTiltX.current = 0;
-      if (['a', 'd', 'arrowleft', 'arrowright'].includes(key)) targetTiltZ.current = 0;
+      if (['w', 's', 'arrowup', 'arrowdown'].includes(key))
+        targetTiltX.current = 0;
+      if (['a', 'd', 'arrowleft', 'arrowright'].includes(key))
+        targetTiltZ.current = 0;
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -129,8 +164,12 @@ const SpinBlock: React.FC = () => {
     if (!snap.isPlaying) return;
 
     const slowFactor = snap.slowTime > 0 ? 0.5 : 1;
-    setTiltX((prev) => THREE.MathUtils.lerp(prev, targetTiltX.current, 0.1 * slowFactor));
-    setTiltZ((prev) => THREE.MathUtils.lerp(prev, targetTiltZ.current, 0.1 * slowFactor));
+    setTiltX((prev) =>
+      THREE.MathUtils.lerp(prev, targetTiltX.current, 0.1 * slowFactor)
+    );
+    setTiltZ((prev) =>
+      THREE.MathUtils.lerp(prev, targetTiltZ.current, 0.1 * slowFactor)
+    );
 
     arenaQuat.current.setFromEuler(new THREE.Euler(tiltX, 0, tiltZ));
     arenaInvQuat.current.copy(arenaQuat.current).invert();
@@ -169,8 +208,18 @@ const SpinBlock: React.FC = () => {
       }
 
       if ((outX || outZ) && !inEjectWindow) {
-        if (outX) tmpV3.current.x = THREE.MathUtils.clamp(tmpV3.current.x, -limit, limit);
-        if (outZ) tmpV3.current.z = THREE.MathUtils.clamp(tmpV3.current.z, -limit, limit);
+        if (outX)
+          tmpV3.current.x = THREE.MathUtils.clamp(
+            tmpV3.current.x,
+            -limit,
+            limit
+          );
+        if (outZ)
+          tmpV3.current.z = THREE.MathUtils.clamp(
+            tmpV3.current.z,
+            -limit,
+            limit
+          );
 
         if (outX) tmpV3b.current.x *= -0.65;
         if (outZ) tmpV3b.current.z *= -0.65;
@@ -178,8 +227,14 @@ const SpinBlock: React.FC = () => {
         tmpV3.current.applyQuaternion(arenaQuat.current);
         tmpV3b.current.applyQuaternion(arenaQuat.current);
 
-        body.setTranslation({ x: tmpV3.current.x, y: p.y, z: tmpV3.current.z }, true);
-        body.setLinvel({ x: tmpV3b.current.x, y: tmpV3b.current.y, z: tmpV3b.current.z }, true);
+        body.setTranslation(
+          { x: tmpV3.current.x, y: p.y, z: tmpV3.current.z },
+          true
+        );
+        body.setLinvel(
+          { x: tmpV3b.current.x, y: tmpV3b.current.y, z: tmpV3b.current.z },
+          true
+        );
       }
 
       if (ejectedRef.current && p.y < BALL_FALL_Y) {
@@ -199,23 +254,29 @@ const SpinBlock: React.FC = () => {
     setGems((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const handlePowerUpCollect = useCallback((type: PowerUpType, index: number) => {
-    switch (type) {
-      case 'multiplier':
-        spinBlockState.activateMultiplier();
-        break;
-      case 'shield':
-        spinBlockState.activateShield();
-        break;
-      case 'slowTime':
-        spinBlockState.activateSlowTime();
-        break;
-      case 'heart':
-        spinBlockState.hearts = Math.min(spinBlockState.maxHearts, spinBlockState.hearts + 1);
-        break;
-    }
-    setPowerUps((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  const handlePowerUpCollect = useCallback(
+    (type: PowerUpType, index: number) => {
+      switch (type) {
+        case 'multiplier':
+          spinBlockState.activateMultiplier();
+          break;
+        case 'shield':
+          spinBlockState.activateShield();
+          break;
+        case 'slowTime':
+          spinBlockState.activateSlowTime();
+          break;
+        case 'heart':
+          spinBlockState.hearts = Math.min(
+            spinBlockState.maxHearts,
+            spinBlockState.hearts + 1
+          );
+          break;
+      }
+      setPowerUps((prev) => prev.filter((_, i) => i !== index));
+    },
+    []
+  );
 
   const handleHazardHit = useCallback(() => {
     spinBlockState.hitHazard();
@@ -227,9 +288,18 @@ const SpinBlock: React.FC = () => {
     resetBall();
   }, [generateLevel, resetBall, board]);
 
-  const bumperPositions = useMemo(() => getBumperPositions(board.boxSize), [board.boxSize]);
-  const spikePositions = useMemo(() => getSpikePositions(board.boxSize), [board.boxSize]);
-  const hazardZones = useMemo(() => getHazardZones(board.boxSize), [board.boxSize]);
+  const bumperPositions = useMemo(
+    () => getBumperPositions(board.boxSize),
+    [board.boxSize]
+  );
+  const spikePositions = useMemo(
+    () => getSpikePositions(board.boxSize),
+    [board.boxSize]
+  );
+  const hazardZones = useMemo(
+    () => getHazardZones(board.boxSize),
+    [board.boxSize]
+  );
 
   return (
     <>
@@ -237,7 +307,10 @@ const SpinBlock: React.FC = () => {
       <directionalLight position={[10, 20, 10]} intensity={1} castShadow />
       <pointLight position={[0, 10, 0]} intensity={0.5} color="#4488ff" />
 
-      <Physics gravity={[Math.sin(tiltZ) * 20, -15, -Math.sin(tiltX) * 20]} timeStep={snap.slowTime > 0 ? 1 / 120 : 1 / 60}>
+      <Physics
+        gravity={[Math.sin(tiltZ) * 20, -15, -Math.sin(tiltX) * 20]}
+        timeStep={snap.slowTime > 0 ? 1 / 120 : 1 / 60}
+      >
         <group rotation={[tiltX, 0, tiltZ]}>
           <BoxArena board={board} />
 
@@ -258,19 +331,37 @@ const SpinBlock: React.FC = () => {
           ))}
 
           {hazardZones.map((zone, i) => (
-            <HazardZone key={`zone-${i}`} position={zone.pos} size={zone.size} onHit={handleHazardHit} />
+            <HazardZone
+              key={`zone-${i}`}
+              position={zone.pos}
+              size={zone.size}
+              onHit={handleHazardHit}
+            />
           ))}
 
           {coins.map((pos, i) => (
-            <Coin key={`coin-${i}`} position={pos} onCollect={() => handleCoinCollect(i)} />
+            <Coin
+              key={`coin-${i}`}
+              position={pos}
+              onCollect={() => handleCoinCollect(i)}
+            />
           ))}
 
           {gems.map((pos, i) => (
-            <Gem key={`gem-${i}`} position={pos} onCollect={() => handleGemCollect(i)} />
+            <Gem
+              key={`gem-${i}`}
+              position={pos}
+              onCollect={() => handleGemCollect(i)}
+            />
           ))}
 
           {powerUps.map((pu, i) => (
-            <PowerUp key={`powerup-${i}`} position={pu.pos} type={pu.type} onCollect={(type) => handlePowerUpCollect(type, i)} />
+            <PowerUp
+              key={`powerup-${i}`}
+              position={pu.pos}
+              type={pu.type}
+              onCollect={(type) => handlePowerUpCollect(type, i)}
+            />
           ))}
         </group>
 

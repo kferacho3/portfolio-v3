@@ -211,7 +211,9 @@ const FlappyBird = dynamic(() => Promise.resolve(FlappyBirdGame), {
   ssr: false,
   loading: () => (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-900">
-      <div className="text-white text-xl animate-pulse">Loading Flappy Bird...</div>
+      <div className="text-white text-xl animate-pulse">
+        Loading Flappy Bird...
+      </div>
     </div>
   ),
 });

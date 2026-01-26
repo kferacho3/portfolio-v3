@@ -100,13 +100,13 @@ export interface DroneRowData {
   drones: DroneData[];
 }
 
-export type RowData = 
-  | GrassRowData 
-  | RoadRowData 
-  | RiverRowData 
-  | IceRowData 
-  | WildlifeRowData 
-  | SubwayRowData 
+export type RowData =
+  | GrassRowData
+  | RoadRowData
+  | RiverRowData
+  | IceRowData
+  | WildlifeRowData
+  | SubwayRowData
   | DroneRowData;
 
 export interface PlayerState {

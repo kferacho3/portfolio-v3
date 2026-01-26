@@ -19,7 +19,14 @@ export function boxGeometry(
   depth = 1.2,
   segments = 8
 ): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(width, height, depth, segments, segments, segments);
+  const geo = new THREE.BoxGeometry(
+    width,
+    height,
+    depth,
+    segments,
+    segments,
+    segments
+  );
   geo.computeVertexNormals();
   return geo;
 }
@@ -80,7 +87,12 @@ export function capsuleGeometry(
   capSegments = 16,
   radialSegments = 32
 ): THREE.BufferGeometry {
-  const geo = new THREE.CapsuleGeometry(radius, length, capSegments, radialSegments);
+  const geo = new THREE.CapsuleGeometry(
+    radius,
+    length,
+    capSegments,
+    radialSegments
+  );
   geo.computeVertexNormals();
   return geo;
 }
@@ -94,7 +106,12 @@ export function torusGeometry(
   radialSegments = 24,
   tubularSegments = 64
 ): THREE.BufferGeometry {
-  const geo = new THREE.TorusGeometry(radius, tube, radialSegments, tubularSegments);
+  const geo = new THREE.TorusGeometry(
+    radius,
+    tube,
+    radialSegments,
+    tubularSegments
+  );
   geo.computeVertexNormals();
   return geo;
 }

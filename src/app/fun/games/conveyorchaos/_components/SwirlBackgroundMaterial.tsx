@@ -4,7 +4,9 @@ import { useFrame } from '@react-three/fiber';
 import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-export const SwirlBackgroundMaterial: React.FC<{ isLightMode: boolean }> = ({ isLightMode }) => {
+export const SwirlBackgroundMaterial: React.FC<{ isLightMode: boolean }> = ({
+  isLightMode,
+}) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const uniforms = useMemo(
     () => ({
@@ -25,15 +27,18 @@ export const SwirlBackgroundMaterial: React.FC<{ isLightMode: boolean }> = ({ is
       ref={materialRef}
       uniforms={uniforms}
       side={THREE.BackSide}
-      vertexShader={/* glsl */ `
+      vertexShader={
+        /* glsl */ `
         varying vec3 vWorldPosition;
         void main() {
           vec4 worldPosition = modelMatrix * vec4(position, 1.0);
           vWorldPosition = worldPosition.xyz;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
-      `}
-      fragmentShader={/* glsl */ `
+      `
+      }
+      fragmentShader={
+        /* glsl */ `
         uniform float uTime;
         uniform float uLightMode;
         varying vec3 vWorldPosition;
@@ -136,7 +141,8 @@ export const SwirlBackgroundMaterial: React.FC<{ isLightMode: boolean }> = ({ is
             gl_FragColor = vec4(color, 1.0);
           }
         }
-      `}
+      `
+      }
     />
   );
 };

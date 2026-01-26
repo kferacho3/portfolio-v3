@@ -73,10 +73,15 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
     <Html fullscreen style={{ pointerEvents: 'none' }}>
       <div className="absolute top-4 left-4 z-50">
         <div className="bg-black/50 backdrop-blur-sm rounded-xl px-4 py-3 text-white border border-white/10">
-          <div className="text-3xl font-light tracking-wider" style={{ color: currentColor }}>
+          <div
+            className="text-3xl font-light tracking-wider"
+            style={{ color: currentColor }}
+          >
             {score}
           </div>
-          <div className="text-[10px] text-white/40 uppercase tracking-widest">Score</div>
+          <div className="text-[10px] text-white/40 uppercase tracking-widest">
+            Score
+          </div>
 
           <div className="mt-3 flex items-center gap-4">
             <div>
@@ -110,7 +115,9 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
           </div>
 
           <div className="mt-4">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">Controls</div>
+            <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">
+              Controls
+            </div>
             <div className="flex gap-2 pointer-events-auto">
               {(['mouse', 'keyboard', 'hybrid'] as const).map((mode) => (
                 <button
@@ -122,7 +129,11 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
                       : 'border-white/15 text-white/60 hover:border-white/30'
                   }`}
                 >
-                  {mode === 'mouse' ? 'Mouse' : mode === 'keyboard' ? 'Keyboard' : 'Hybrid'}
+                  {mode === 'mouse'
+                    ? 'Mouse'
+                    : mode === 'keyboard'
+                      ? 'Keyboard'
+                      : 'Hybrid'}
                 </button>
               ))}
             </div>
@@ -169,7 +180,10 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
           <div className="text-center max-w-md px-8">
             <h1
               className="text-6xl font-thin tracking-[0.3em] mb-6"
-              style={{ color: currentColor, textShadow: `0 0 40px ${currentColor}` }}
+              style={{
+                color: currentColor,
+                textShadow: `0 0 40px ${currentColor}`,
+              }}
             >
               WEAVE
             </h1>
@@ -182,19 +196,30 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
             </p>
             <div className="flex justify-center gap-6 text-xs text-white/40 mb-8">
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ORB_COLOR }} />
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: ORB_COLOR }}
+                />
                 <span>Orb (+10)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: BONUS_ORB_COLOR }} />
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: BONUS_ORB_COLOR }}
+                />
                 <span>Bonus (+50)</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: ARM_COLOR }} />
+                <div
+                  className="w-3 h-3 rounded"
+                  style={{ backgroundColor: ARM_COLOR }}
+                />
                 <span>Danger!</span>
               </div>
             </div>
-            <p className="text-white/40 text-xs animate-pulse">Click or press Space / ← / → / A / D to begin</p>
+            <p className="text-white/40 text-xs animate-pulse">
+              Click or press Space / ← / → / A / D to begin
+            </p>
           </div>
         </div>
       )}
@@ -202,7 +227,10 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
       {gameOver && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50">
           <div className="text-center">
-            <h1 className="text-5xl font-thin tracking-widest mb-6" style={{ color: '#ff3366' }}>
+            <h1
+              className="text-5xl font-thin tracking-widest mb-6"
+              style={{ color: '#ff3366' }}
+            >
               GAME OVER
             </h1>
             <p className="text-4xl text-white/80 mb-2 font-light">{score}</p>
@@ -210,9 +238,13 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
               <p>Orbs Collected: {orbsCollected}</p>
               <p>Level Reached: {level}</p>
               <p>Best Combo: {bestCombo}x</p>
-              {score >= highScore && score > 0 && <p className="text-yellow-400 mt-2">New High Score!</p>}
+              {score >= highScore && score > 0 && (
+                <p className="text-yellow-400 mt-2">New High Score!</p>
+              )}
             </div>
-            <p className="text-white/40 text-xs animate-pulse">Click or Press R to play again</p>
+            <p className="text-white/40 text-xs animate-pulse">
+              Click or Press R to play again
+            </p>
           </div>
         </div>
       )}

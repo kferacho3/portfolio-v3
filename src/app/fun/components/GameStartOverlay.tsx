@@ -57,7 +57,10 @@ const GameStartOverlay: React.FC<GameStartOverlayProps> = ({
           Tap to start or press
           <span
             className="ml-2 inline-flex items-center border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.3em] text-white/70"
-            style={{ borderRadius: 'var(--arcade-radius-sm)', fontFamily: 'var(--arcade-mono)' }}
+            style={{
+              borderRadius: 'var(--arcade-radius-sm)',
+              fontFamily: 'var(--arcade-mono)',
+            }}
           >
             Enter
           </span>
@@ -65,7 +68,9 @@ const GameStartOverlay: React.FC<GameStartOverlayProps> = ({
         <div className="mt-5 flex items-center justify-center">
           <div
             className="h-1 w-24 rounded-full"
-            style={{ background: `linear-gradient(90deg, ${accent}, rgba(255,255,255,0))` }}
+            style={{
+              background: `linear-gradient(90deg, ${accent}, rgba(255,255,255,0))`,
+            }}
           />
         </div>
       </div>

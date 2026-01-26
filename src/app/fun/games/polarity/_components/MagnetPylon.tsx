@@ -14,7 +14,11 @@ export const MagnetPylon: React.FC<{ magnet: Magnet }> = ({ magnet }) => {
       </mesh>
       <mesh castShadow position={[0, 1.65, 0]}>
         <sphereGeometry args={[0.55, 16, 16]} />
-        <meshStandardMaterial color={c.main} emissive={c.emissive} emissiveIntensity={0.7} />
+        <meshStandardMaterial
+          color={c.main}
+          emissive={c.emissive}
+          emissiveIntensity={0.7}
+        />
       </mesh>
     </group>
   );

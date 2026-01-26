@@ -1,5 +1,10 @@
 import { useFrame } from '@react-three/fiber';
-import { BallCollider, CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  BallCollider,
+  CuboidCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { reactPongState } from '../state';
@@ -37,7 +42,10 @@ const Ball: React.FC<BallProps> = ({ position, ballColor, onBodyReady }) => {
   useEffect(() => {
     if (!initialized.current && api.current) {
       initialized.current = true;
-      api.current.setTranslation({ x: position[0], y: position[1], z: position[2] }, true);
+      api.current.setTranslation(
+        { x: position[0], y: position[1], z: position[2] },
+        true
+      );
       api.current.setLinvel({ x: 0, y: -5, z: 0 }, true);
     }
   });
@@ -48,7 +56,10 @@ const Ball: React.FC<BallProps> = ({ position, ballColor, onBodyReady }) => {
     frameCount.current++;
 
     if (!initialized.current || frameCount.current < 3) {
-      api.current.setTranslation({ x: position[0], y: position[1], z: position[2] }, true);
+      api.current.setTranslation(
+        { x: position[0], y: position[1], z: position[2] },
+        true
+      );
       api.current.setLinvel({ x: 0, y: -5, z: 0 }, true);
       initialized.current = true;
       return;
@@ -113,11 +124,23 @@ const Ball: React.FC<BallProps> = ({ position, ballColor, onBodyReady }) => {
         <pointLight color={ballColor} intensity={1} distance={8} />
       </RigidBody>
 
-      <RigidBody type="fixed" colliders={false} position={[0, -20, 0]} restitution={2.1} onCollisionEnter={resetBall}>
+      <RigidBody
+        type="fixed"
+        colliders={false}
+        position={[0, -20, 0]}
+        restitution={2.1}
+        onCollisionEnter={resetBall}
+      >
         <CuboidCollider args={[1000, 2, 1000]} />
       </RigidBody>
 
-      <RigidBody type="fixed" colliders={false} position={[0, 30, 0]} restitution={2.1} onCollisionEnter={resetBall}>
+      <RigidBody
+        type="fixed"
+        colliders={false}
+        position={[0, 30, 0]}
+        restitution={2.1}
+        onCollisionEnter={resetBall}
+      >
         <CuboidCollider args={[1000, 2, 1000]} />
       </RigidBody>
     </>

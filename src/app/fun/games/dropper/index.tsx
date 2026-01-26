@@ -6,14 +6,21 @@ import { DIFFICULTY_HEARTS, ITEM_CONFIGS, MAX_HEARTS } from './constants';
 import DropperHUD from './_components/DropperHUD';
 import GameScene from './_components/GameScene';
 import { dropperState } from './state';
-import type { DropperDifficulty, FallingItem, Particle, PowerUpType } from './types';
+import type {
+  DropperDifficulty,
+  FallingItem,
+  Particle,
+  PowerUpType,
+} from './types';
 import { getRandomItemType } from './utils/items';
 
 export { dropperState } from './state';
 export * from './constants';
 export * from './types';
 
-const Dropper: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true }) => {
+const Dropper: React.FC<{ soundsOn?: boolean }> = ({
+  soundsOn: _soundsOn = true,
+}) => {
   const { gl } = useThree();
 
   const [score, setScore] = useState(0);
@@ -78,22 +85,25 @@ const Dropper: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true 
     [reset]
   );
 
-  const spawnParticles = useCallback((x: number, y: number, color: string, count: number) => {
-    const newParticles: Particle[] = [];
-    for (let i = 0; i < count; i++) {
-      newParticles.push({
-        id: `p-${Date.now()}-${i}`,
-        x,
-        y,
-        vx: (Math.random() - 0.5) * 4,
-        vy: Math.random() * 3 + 1,
-        color,
-        life: 1,
-        size: Math.random() * 0.5 + 0.3,
-      });
-    }
-    setParticles((prev) => [...prev, ...newParticles]);
-  }, []);
+  const spawnParticles = useCallback(
+    (x: number, y: number, color: string, count: number) => {
+      const newParticles: Particle[] = [];
+      for (let i = 0; i < count; i++) {
+        newParticles.push({
+          id: `p-${Date.now()}-${i}`,
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 4,
+          vy: Math.random() * 3 + 1,
+          color,
+          life: 1,
+          size: Math.random() * 0.5 + 0.3,
+        });
+      }
+      setParticles((prev) => [...prev, ...newParticles]);
+    },
+    []
+  );
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -135,7 +145,8 @@ const Dropper: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true 
 
     if (shieldTime > 0) setShieldTime((t) => Math.max(0, t - delta));
     if (magnetTime > 0) setMagnetTime((t) => Math.max(0, t - delta));
-    if (doublePointsTime > 0) setDoublePointsTime((t) => Math.max(0, t - delta));
+    if (doublePointsTime > 0)
+      setDoublePointsTime((t) => Math.max(0, t - delta));
     if (slowTimeActive > 0) setSlowTimeActive((t) => Math.max(0, t - delta));
 
     const timeMult = slowTimeActive > 0 ? 0.5 : 1;
@@ -199,7 +210,8 @@ const Dropper: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true 
           continue;
         }
 
-        const newY = item.y - item.config.fallSpeed * diffMult * timeMult * delta;
+        const newY =
+          item.y - item.config.fallSpeed * diffMult * timeMult * delta;
 
         if (newY <= catchY + 1 && newY >= catchY - 0.8) {
           const dist = Math.abs(item.x - playerXRef.current);
@@ -226,12 +238,19 @@ const Dropper: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn = true 
               points += item.config.points;
             } else {
               gotGood = true;
-              let itemPoints = item.config.points + (item.config.isRare ? combo * 25 : combo * 5);
+              let itemPoints =
+                item.config.points +
+                (item.config.isRare ? combo * 25 : combo * 5);
               if (doublePointsTime > 0) itemPoints *= 2;
               points += itemPoints;
               setCollected((c) => c + 1);
               setPlayerPulse(item.config.isRare ? 2 : 1);
-              spawnParticles(item.x, newY, item.config.color, item.config.isRare ? 12 : 6);
+              spawnParticles(
+                item.x,
+                newY,
+                item.config.color,
+                item.config.isRare ? 12 : 6
+              );
             }
             remaining.push({ ...item, y: newY, collected: true });
             continue;

@@ -1,6 +1,6 @@
 /**
  * Arcade Store Selectors
- * 
+ *
  * Optimized selector hooks using useShallow to prevent unnecessary re-renders.
  * Components should use these selectors instead of accessing the store directly.
  */
@@ -173,8 +173,7 @@ export const useRandomGameAction = () =>
 /**
  * Check if currently on home screen
  */
-export const useIsHome = () =>
-  useArcadeStore((s) => s.currentGame === 'home');
+export const useIsHome = () => useArcadeStore((s) => s.currentGame === 'home');
 
 /**
  * Check if a game is currently active
@@ -185,8 +184,7 @@ export const useIsGameActive = () =>
 /**
  * Check if game is paused
  */
-export const useIsPaused = () =>
-  useArcadeStore((s) => s.paused);
+export const useIsPaused = () => useArcadeStore((s) => s.paused);
 
 /**
  * Get current game ID (null if on home)
@@ -197,14 +195,12 @@ export const useCurrentGameId = (): GameId | null =>
 /**
  * Check if music is enabled
  */
-export const useIsMusicOn = () =>
-  useArcadeStore((s) => s.musicOn);
+export const useIsMusicOn = () => useArcadeStore((s) => s.musicOn);
 
 /**
  * Check if sounds are enabled
  */
-export const useIsSoundsOn = () =>
-  useArcadeStore((s) => s.soundsOn);
+export const useIsSoundsOn = () => useArcadeStore((s) => s.soundsOn);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Specific Game Mode Selectors

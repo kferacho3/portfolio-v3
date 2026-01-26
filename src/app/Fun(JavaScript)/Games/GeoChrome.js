@@ -1,12 +1,19 @@
 import { Physics, useBox, useSphere } from '@react-three/cannon';
-import { Box, Cone, Dodecahedron, Html, Sphere, TorusKnot } from '@react-three/drei';
+import {
+  Box,
+  Cone,
+  Dodecahedron,
+  Html,
+  Sphere,
+  TorusKnot,
+} from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { colorPalettes } from './ColorPalettes';
 
 const ICOSPHERE_RADIUS = 98;
-const GRAVITY_FORCE = .81;
+const GRAVITY_FORCE = 0.81;
 const SHAPES = ['sphere', 'cube', 'torusKnot', 'cone', 'dodecahedron'];
 const SPEED = 100;
 
@@ -104,7 +111,10 @@ function IcosahedronSurface() {
       <icosahedronGeometry attach="geometry" args={[ICOSPHERE_RADIUS, 12]} />
       <meshBasicMaterial attach="material" color="#000" wireframe={false} />
       <lineSegments>
-        <edgesGeometry attach="geometry" args={[new THREE.IcosahedronGeometry(ICOSPHERE_RADIUS, 24)]} />
+        <edgesGeometry
+          attach="geometry"
+          args={[new THREE.IcosahedronGeometry(ICOSPHERE_RADIUS, 24)]}
+        />
         <lineBasicMaterial attach="material" color="#ffffff" />
       </lineSegments>
     </mesh>
@@ -119,7 +129,12 @@ function PlayerShape({ setScore, playerColor, playerShape, playerRef }) {
   }));
   const [shape, setShape] = useState('sphere');
   const { camera } = useThree();
-  const controls = useRef({ forward: false, backward: false, left: false, right: false });
+  const controls = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+  });
 
   const direction = new THREE.Vector3();
   const frontVector = new THREE.Vector3();
@@ -188,16 +203,31 @@ function PlayerShape({ setScore, playerColor, playerShape, playerRef }) {
     const velocity = new THREE.Vector3();
     api.velocity.subscribe((v) => velocity.fromArray(v));
 
-    frontVector.set(0, 0, Number(controls.current.backward) - Number(controls.current.forward));
-    sideVector.set(Number(controls.current.left) - Number(controls.current.right), 0, 0);
-    direction.subVectors(frontVector, sideVector).normalize().multiplyScalar(SPEED).applyEuler(camera.rotation);
+    frontVector.set(
+      0,
+      0,
+      Number(controls.current.backward) - Number(controls.current.forward)
+    );
+    sideVector.set(
+      Number(controls.current.left) - Number(controls.current.right),
+      0,
+      0
+    );
+    direction
+      .subVectors(frontVector, sideVector)
+      .normalize()
+      .multiplyScalar(SPEED)
+      .applyEuler(camera.rotation);
     velocity.add(direction);
     api.velocity.set(velocity.x, velocity.y, velocity.z);
 
     // Controls movement of the player shape + scene to provide a zoomed-in Third Person View
     const currentPosition = ref.current.getWorldPosition(new THREE.Vector3());
     const distanceToCenter = currentPosition.length();
-    const correctionVector = currentPosition.clone().normalize().multiplyScalar(ICOSPHERE_RADIUS - distanceToCenter);
+    const correctionVector = currentPosition
+      .clone()
+      .normalize()
+      .multiplyScalar(ICOSPHERE_RADIUS - distanceToCenter);
     api.position.set(
       currentPosition.x + correctionVector.x,
       currentPosition.y + correctionVector.y,
@@ -210,12 +240,11 @@ function PlayerShape({ setScore, playerColor, playerShape, playerRef }) {
     state.camera.position.lerp(cameraTarget, 0.1);
     state.camera.lookAt(currentPosition);
 
-
-
-
     // Update rotation and position of the player shape
     ref.current.rotation.copy(camera.rotation);
-    ref.current.position.copy(camera.position).add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(1));
+    ref.current.position
+      .copy(camera.position)
+      .add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(1));
   });
 
   return (
@@ -225,7 +254,14 @@ function PlayerShape({ setScore, playerColor, playerShape, playerRef }) {
   );
 }
 
-function ProceduralShape({ position, color, shape, onCollect, playerShape, playerRef }) {
+function ProceduralShape({
+  position,
+  color,
+  shape,
+  onCollect,
+  playerShape,
+  playerRef,
+}) {
   const [ref, api] = useBox(() => ({
     mass: 10000,
     position: [position[0], ICOSPHERE_RADIUS + -30, position[2]],
@@ -239,12 +275,12 @@ function ProceduralShape({ position, color, shape, onCollect, playerShape, playe
           shape === 'cube'
             ? new THREE.BoxGeometry(0.5, 0.5, 0.5)
             : shape === 'cone'
-            ? new THREE.ConeGeometry(0.5, 0.5, 32)
-            : shape === 'torusKnot'
-            ? new THREE.TorusKnotGeometry(0.5, 0.1, 64, 8)
-            : shape === 'dodecahedron'
-            ? new THREE.DodecahedronGeometry(1)
-            : new THREE.SphereGeometry(0.5, 32, 32),
+              ? new THREE.ConeGeometry(0.5, 0.5, 32)
+              : shape === 'torusKnot'
+                ? new THREE.TorusKnotGeometry(0.5, 0.1, 64, 8)
+                : shape === 'dodecahedron'
+                  ? new THREE.DodecahedronGeometry(1)
+                  : new THREE.SphereGeometry(0.5, 32, 32),
           new THREE.MeshStandardMaterial({ color })
         );
         playerRef.current.add(newShape);
@@ -273,11 +309,20 @@ function ProceduralShape({ position, color, shape, onCollect, playerShape, playe
     if (ref.current) {
       const currentPosition = ref.current.getWorldPosition(new THREE.Vector3());
       const distanceToCenter = currentPosition.length();
-      const gravityDirection = currentPosition.clone().normalize().multiplyScalar(-GRAVITY_FORCE);
-      api.applyForce([gravityDirection.x, gravityDirection.y, gravityDirection.z], [0, 0, 0]);
+      const gravityDirection = currentPosition
+        .clone()
+        .normalize()
+        .multiplyScalar(-GRAVITY_FORCE);
+      api.applyForce(
+        [gravityDirection.x, gravityDirection.y, gravityDirection.z],
+        [0, 0, 0]
+      );
 
       // Ensure it stays on the surface
-      const correctionVector = currentPosition.clone().normalize().multiplyScalar(ICOSPHERE_RADIUS - distanceToCenter);
+      const correctionVector = currentPosition
+        .clone()
+        .normalize()
+        .multiplyScalar(ICOSPHERE_RADIUS - distanceToCenter);
       api.position.set(
         currentPosition.x + correctionVector.x,
         currentPosition.y + correctionVector.y + 1, // Adjusted y position to float slightly above
@@ -293,7 +338,12 @@ function ProceduralShape({ position, color, shape, onCollect, playerShape, playe
   );
 }
 
-function ProceduralShapes({ setScore, playerShape, currentPalette, playerRef }) {
+function ProceduralShapes({
+  setScore,
+  playerShape,
+  currentPalette,
+  playerRef,
+}) {
   const [shapes, setShapes] = useState([]);
 
   const generateShapes = useCallback(() => {

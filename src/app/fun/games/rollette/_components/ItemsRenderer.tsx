@@ -4,7 +4,15 @@ import React, { useRef } from 'react';
 import { Dodecahedron, TorusKnot } from '@react-three/drei';
 import * as THREE from 'three';
 import { TORUS_MATERIAL } from '../constants';
-import type { RingItem, PyramidItem, SpringItem, TetraItem, TorusKnotItem, DodecaItem, StarItem } from '../types';
+import type {
+  RingItem,
+  PyramidItem,
+  SpringItem,
+  TetraItem,
+  TorusKnotItem,
+  DodecaItem,
+  StarItem,
+} from '../types';
 import { RingMesh } from './RingMesh';
 import { PyramidMesh } from './PyramidMesh';
 import { SpringMesh } from './SpringMesh';
@@ -20,7 +28,16 @@ export const ItemsRenderer: React.FC<{
   dodecas: DodecaItem[];
   star: StarItem;
   dodecaMeshRefs: React.MutableRefObject<Record<string, THREE.Object3D | null>>;
-}> = ({ rings, pyramids, springs, tetras, knots, dodecas, star, dodecaMeshRefs }) => {
+}> = ({
+  rings,
+  pyramids,
+  springs,
+  tetras,
+  knots,
+  dodecas,
+  star,
+  dodecaMeshRefs,
+}) => {
   return (
     <>
       {rings.map((r) => (
@@ -38,12 +55,25 @@ export const ItemsRenderer: React.FC<{
       {knots.map((k) => {
         const mat = TORUS_MATERIAL[k.type];
         return (
-          <TorusKnot key={k.id} args={[0.8, 0.28, 96, 12]} position={k.pos} castShadow>
+          <TorusKnot
+            key={k.id}
+            args={[0.8, 0.28, 96, 12]}
+            position={k.pos}
+            castShadow
+          >
             <meshPhysicalMaterial
               color={mat.color}
               emissive={mat.color}
               emissiveIntensity={0.22}
-              {...(mat.isClear ? { transmission: 1, roughness: 0, thickness: 2.5, envMapIntensity: 3, clearcoat: 1 } : {})}
+              {...(mat.isClear
+                ? {
+                    transmission: 1,
+                    roughness: 0,
+                    thickness: 2.5,
+                    envMapIntensity: 3,
+                    clearcoat: 1,
+                  }
+                : {})}
             />
           </TorusKnot>
         );
@@ -58,7 +88,11 @@ export const ItemsRenderer: React.FC<{
             dodecaMeshRefs.current[d.id] = obj;
           }}
         >
-          <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.25} />
+          <meshStandardMaterial
+            color="#22d3ee"
+            emissive="#22d3ee"
+            emissiveIntensity={0.25}
+          />
         </Dodecahedron>
       ))}
       <StarMesh item={star} />

@@ -8,19 +8,36 @@ import {
   WORLD_RADIUS,
   colorPalettes,
 } from '../constants';
-import type { ClusterData, ClusterPattern, ClusterShapeData, DepositGate, Hazard, ShapeType } from '../types';
+import type {
+  ClusterData,
+  ClusterPattern,
+  ClusterShapeData,
+  DepositGate,
+  Hazard,
+  ShapeType,
+} from '../types';
 
 export const selectRandomPalette = () => {
   const keys = Object.keys(colorPalettes);
   return colorPalettes[keys[Math.floor(Math.random() * keys.length)]];
 };
 
-export const randomColor = (palette: string[]) => palette[Math.floor(Math.random() * palette.length)];
+export const randomColor = (palette: string[]) =>
+  palette[Math.floor(Math.random() * palette.length)];
 
-export const randomShape = (): ShapeType => SHAPES[Math.floor(Math.random() * SHAPES.length)];
+export const randomShape = (): ShapeType =>
+  SHAPES[Math.floor(Math.random() * SHAPES.length)];
 
-export const sphericalToCartesian = (theta: number, phi: number, r: number): [number, number, number] => {
-  return [r * Math.sin(phi) * Math.cos(theta), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta)];
+export const sphericalToCartesian = (
+  theta: number,
+  phi: number,
+  r: number
+): [number, number, number] => {
+  return [
+    r * Math.sin(phi) * Math.cos(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.sin(theta),
+  ];
 };
 
 export const cartesianToSpherical = (x: number, y: number, z: number) => {
@@ -32,15 +49,15 @@ export const cartesianToSpherical = (x: number, y: number, z: number) => {
   };
 };
 
-export const generateClusterShapes = (pattern: ClusterPattern, count: number, palette: string[]): ClusterShapeData[] => {
+export const generateClusterShapes = (
+  pattern: ClusterPattern,
+  count: number,
+  palette: string[]
+): ClusterShapeData[] => {
   const shapes: ClusterShapeData[] = [];
-  const materials: Array<'standard' | 'iridescent' | 'neon' | 'holographic' | 'crystal'> = [
-    'standard',
-    'iridescent',
-    'neon',
-    'holographic',
-    'crystal',
-  ];
+  const materials: Array<
+    'standard' | 'iridescent' | 'neon' | 'holographic' | 'crystal'
+  > = ['standard', 'iridescent', 'neon', 'holographic', 'crystal'];
 
   for (let i = 0; i < count; i++) {
     let pos: [number, number, number];
@@ -70,7 +87,11 @@ export const generateClusterShapes = (pattern: ClusterPattern, count: number, pa
         break;
       }
       case 'ring': {
-        pos = [Math.cos(angle) * radius, Math.sin(angle * 2) * 0.8, Math.sin(angle) * radius];
+        pos = [
+          Math.cos(angle) * radius,
+          Math.sin(angle * 2) * 0.8,
+          Math.sin(angle) * radius,
+        ];
         break;
       }
       case 'fibonacci': {
@@ -131,13 +152,24 @@ export const generateClusterShapes = (pattern: ClusterPattern, count: number, pa
   return shapes;
 };
 
-export const generateClusters = (count: number = CLUSTER_COUNT): ClusterData[] => {
+export const generateClusters = (
+  count: number = CLUSTER_COUNT
+): ClusterData[] => {
   const clusters: ClusterData[] = [];
-  const patterns: ClusterPattern[] = ['spiral', 'mandala', 'ring', 'fibonacci', 'flower', 'wave', 'helix', 'grid'];
+  const patterns: ClusterPattern[] = [
+    'spiral',
+    'mandala',
+    'ring',
+    'fibonacci',
+    'flower',
+    'wave',
+    'helix',
+    'grid',
+  ];
 
   for (let i = 0; i < count; i++) {
     const theta = (i / count) * Math.PI * 2 + Math.random() * 0.5;
-    const phi = Math.PI / 4 + Math.random() * Math.PI / 2;
+    const phi = Math.PI / 4 + (Math.random() * Math.PI) / 2;
     const palette = selectRandomPalette();
 
     clusters.push({
@@ -145,7 +177,11 @@ export const generateClusters = (count: number = CLUSTER_COUNT): ClusterData[] =
       pattern: patterns[i % patterns.length],
       worldPosition: sphericalToCartesian(theta, phi, WORLD_RADIUS),
       rotation: Math.random() * Math.PI * 2,
-      shapes: generateClusterShapes(patterns[i % patterns.length], SHAPES_PER_CLUSTER, palette),
+      shapes: generateClusterShapes(
+        patterns[i % patterns.length],
+        SHAPES_PER_CLUSTER,
+        palette
+      ),
       palette,
     });
   }
@@ -153,7 +189,9 @@ export const generateClusters = (count: number = CLUSTER_COUNT): ClusterData[] =
   return clusters;
 };
 
-export const generateDeposits = (count: number = DEPOSIT_COUNT): DepositGate[] => {
+export const generateDeposits = (
+  count: number = DEPOSIT_COUNT
+): DepositGate[] => {
   const deposits: DepositGate[] = [];
   const usedShapes = new Set<ShapeType>();
 
@@ -185,12 +223,16 @@ export const generateHazards = (count: number = HAZARD_COUNT): Hazard[] => {
 
   return Array.from({ length: count }, (_, i) => {
     const theta = Math.random() * Math.PI * 2;
-    const phi = Math.PI / 4 + Math.random() * Math.PI / 2;
+    const phi = Math.PI / 4 + (Math.random() * Math.PI) / 2;
 
     return {
       id: `hazard-${i}`,
       position: sphericalToCartesian(theta, phi, WORLD_RADIUS),
-      velocity: new THREE.Vector3((Math.random() - 0.5) * 0.02, (Math.random() - 0.5) * 0.02, (Math.random() - 0.5) * 0.02),
+      velocity: new THREE.Vector3(
+        (Math.random() - 0.5) * 0.02,
+        (Math.random() - 0.5) * 0.02,
+        (Math.random() - 0.5) * 0.02
+      ),
       type: types[Math.floor(Math.random() * types.length)],
     };
   });

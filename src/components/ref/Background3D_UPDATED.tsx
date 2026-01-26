@@ -383,7 +383,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
 
 const PROCEDURAL_PRESET_META: Record<
   ProceduralPreset,
-  { envIntensity: number; transparent?: boolean; palette?: [string, string, string, string] }
+  {
+    envIntensity: number;
+    transparent?: boolean;
+    palette?: [string, string, string, string];
+  }
 > = {
   InkSplatter: { envIntensity: 1.55 },
   VoronoiStainedGlass: { envIntensity: 1.75 },
@@ -413,7 +417,10 @@ const PROCEDURAL_PRESET_META: Record<
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 /** Derive a vivid 4-color palette from a single base color. */
-const derivePalette = (hex: string, seed: number): [THREE.Color, THREE.Color, THREE.Color, THREE.Color] => {
+const derivePalette = (
+  hex: string,
+  seed: number
+): [THREE.Color, THREE.Color, THREE.Color, THREE.Color] => {
   const base = new THREE.Color(hex);
   const hsl = { h: 0, s: 0, l: 0 };
   base.getHSL(hsl);
@@ -422,9 +429,21 @@ const derivePalette = (hex: string, seed: number): [THREE.Color, THREE.Color, TH
   const j = (Math.sin(seed * 12.9898) * 43758.5453) % 1;
   const jit = (j - 0.5) * 0.08;
 
-  const c2 = new THREE.Color().setHSL((hsl.h + 0.33 + jit + 1) % 1, clamp01(hsl.s * 0.95 + 0.12), clamp01(hsl.l * 1.05));
-  const c3 = new THREE.Color().setHSL((hsl.h + 0.66 - jit + 1) % 1, clamp01(hsl.s * 1.1 + 0.05), clamp01(hsl.l * 0.9 + 0.05));
-  const accent = new THREE.Color().setHSL((hsl.h + 0.5 + jit + 1) % 1, clamp01(0.92), clamp01(0.62));
+  const c2 = new THREE.Color().setHSL(
+    (hsl.h + 0.33 + jit + 1) % 1,
+    clamp01(hsl.s * 0.95 + 0.12),
+    clamp01(hsl.l * 1.05)
+  );
+  const c3 = new THREE.Color().setHSL(
+    (hsl.h + 0.66 - jit + 1) % 1,
+    clamp01(hsl.s * 1.1 + 0.05),
+    clamp01(hsl.l * 0.9 + 0.05)
+  );
+  const accent = new THREE.Color().setHSL(
+    (hsl.h + 0.5 + jit + 1) % 1,
+    clamp01(0.92),
+    clamp01(0.62)
+  );
 
   return [base, c2, c3, accent];
 };
@@ -751,10 +770,17 @@ const ProceduralMeshMaterial: React.FC<ProceduralMeshMaterialProps> = ({
   const meta = PROCEDURAL_PRESET_META[preset];
   const transparent = !!meta.transparent;
 
-  const palette = useMemo<[THREE.Color, THREE.Color, THREE.Color, THREE.Color]>(() => {
+  const palette = useMemo<
+    [THREE.Color, THREE.Color, THREE.Color, THREE.Color]
+  >(() => {
     if (meta.palette) {
       const [a, b, c, d] = meta.palette;
-      return [new THREE.Color(a), new THREE.Color(b), new THREE.Color(c), new THREE.Color(d)];
+      return [
+        new THREE.Color(a),
+        new THREE.Color(b),
+        new THREE.Color(c),
+        new THREE.Color(d),
+      ];
     }
     return derivePalette(baseColor, seed);
   }, [baseColor, seed, meta.palette]);
@@ -797,7 +823,6 @@ const ProceduralMeshMaterial: React.FC<ProceduralMeshMaterialProps> = ({
   );
 };
 
-
 /* ────────────── 5.   Enhanced Perlin Noise ────────────────────────── */
 const noise3D = createNoise3D();
 const noise4D = createNoise4D();
@@ -828,11 +853,7 @@ function displace(
     z * 1.1 + 5.4,
     tFlow * 1.4
   );
-  const detail = noise3D(
-    x * 2.4 - tFlow * 2.0,
-    y * 2.4 + tFlow * 1.4,
-    z * 2.4
-  );
+  const detail = noise3D(x * 2.4 - tFlow * 2.0, y * 2.4 + tFlow * 1.4, z * 2.4);
 
   let n = base * 0.62 + mid * 0.28 + detail * 0.1;
 
@@ -1442,9 +1463,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={apollonianPackingGeometry()} />;
       case 'ApollonianPyramid':
         return (
-          <primitive
-            object={apollonianPackingGeometry(3, 3, 0.5, 'pyramid')}
-          />
+          <primitive object={apollonianPackingGeometry(3, 3, 0.5, 'pyramid')} />
         );
       case 'MengerSponge':
         return <primitive object={mengerSpongeGeometry()} />;
@@ -1798,8 +1817,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ) : (
         DiamondMaterial(env)
       ),
-    (_env?: THREE.Texture | null) => HolographicMaterial(color),
-    (_env?: THREE.Texture | null) => <meshNormalMaterial wireframe={wireframe} />,
+    () => HolographicMaterial(color),
+    () => (
+      <meshNormalMaterial wireframe={wireframe} />
+    ),
 
     /* ───── 5 NEW ultra-unique procedural shaders (patterns / splats / splatters) ───── */
     (env: THREE.Texture | null) =>
@@ -1863,25 +1884,41 @@ export default function Background3D({ onAnimationComplete }: Props) {
       wireframe ? (
         <meshBasicMaterial color="#D4AF37" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="GoldGilded" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="GoldGilded"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#C0C0C0" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="SilverMercury" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="SilverMercury"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#E5E4E2" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="PlatinumFrost" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="PlatinumFrost"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#D7F2FF" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="DiamondCaustics" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="DiamondCaustics"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
   ] as const;
 
@@ -2061,15 +2098,30 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
     /* 5.5 ▸ procedural surface shader uniforms (NEW) --------------------- */
     {
-      const matMaybe: any = (meshRef.current as any)?.material;
-      const mats = Array.isArray(matMaybe) ? matMaybe : [matMaybe];
+      type UniformValue = { value?: unknown };
+      type SurfaceUniforms = Record<string, UniformValue> & {
+        uStyle?: UniformValue;
+        uTime?: { value: number };
+        uAmp?: { value: number };
+        uMouse?: { value?: { copy?: (v: THREE.Vector3) => void } };
+      };
+
+      const matMaybe = (meshRef.current as THREE.Mesh | null)?.material;
+      const mats = Array.isArray(matMaybe)
+        ? matMaybe
+        : matMaybe
+        ? [matMaybe]
+        : [];
+
       mats.forEach((m) => {
-        const u = m?.uniforms;
+        const u = (m as { uniforms?: SurfaceUniforms }).uniforms;
         // Only target our surface shaders (they expose uStyle)
         if (!u || !u.uStyle) return;
         if (u.uTime) u.uTime.value = clock.elapsedTime;
         if (u.uAmp) u.uAmp.value = baseAmp;
-        if (u.uMouse && u.uMouse.value?.copy) u.uMouse.value.copy(localHoverPos);
+        if (u.uMouse?.value && typeof u.uMouse.value.copy === 'function') {
+          u.uMouse.value.copy(localHoverPos);
+        }
       });
     }
 

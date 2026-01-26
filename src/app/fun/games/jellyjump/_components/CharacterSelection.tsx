@@ -27,7 +27,14 @@ export default function CharacterSelection() {
           maxWidth: '92vw',
         }}
       >
-        <div style={{ fontSize: 12, opacity: 0.7, letterSpacing: 0.5, textAlign: 'center' }}>
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.7,
+            letterSpacing: 0.5,
+            textAlign: 'center',
+          }}
+        >
           Choose your Jelly
         </div>
         <div
@@ -48,11 +55,17 @@ export default function CharacterSelection() {
                 width: 48,
                 height: 48,
                 borderRadius: 10,
-                border: snap.selectedCharacter === idx ? '3px solid #fff' : '2px solid rgba(255,255,255,0.3)',
+                border:
+                  snap.selectedCharacter === idx
+                    ? '3px solid #fff'
+                    : '2px solid rgba(255,255,255,0.3)',
                 background: char.color,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: snap.selectedCharacter === idx ? '0 0 12px rgba(255,255,255,0.5)' : 'none',
+                boxShadow:
+                  snap.selectedCharacter === idx
+                    ? '0 0 12px rgba(255,255,255,0.5)'
+                    : 'none',
                 flex: '0 0 auto',
               }}
               title={char.name}

@@ -89,12 +89,22 @@ Only add heavy spin when you're in control. Spin is a weapon and a trap.`;
           key={`powerup-${i}`}
           position={[-7 + i * 1.5, 4, 0]}
           fontSize={0.3}
-          color={p.type === 'slowmo' ? '#00ffff' : p.type === 'shield' ? '#00ff00' : '#ff00ff'}
+          color={
+            p.type === 'slowmo'
+              ? '#00ffff'
+              : p.type === 'shield'
+                ? '#00ff00'
+                : '#ff00ff'
+          }
           anchorX="left"
           anchorY="middle"
         >
           {p.type.toUpperCase()}
-          {p.remainingTime ? ` ${p.remainingTime.toFixed(1)}s` : p.remainingUses ? ` x${p.remainingUses}` : ''}
+          {p.remainingTime
+            ? ` ${p.remainingTime.toFixed(1)}s`
+            : p.remainingUses
+              ? ` x${p.remainingUses}`
+              : ''}
         </Text>
       ))}
 

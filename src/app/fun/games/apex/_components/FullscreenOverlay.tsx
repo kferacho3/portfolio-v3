@@ -1,7 +1,9 @@
 import { Html } from '@react-three/drei';
 import React, { useEffect, useRef, useState } from 'react';
 
-const FullscreenOverlay: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const FullscreenOverlay: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [mounted, setMounted] = useState(false);
   const portalRef = useRef<HTMLElement>(null!);
 
@@ -28,7 +30,14 @@ const FullscreenOverlay: React.FC<{ children: React.ReactNode }> = ({ children }
       transform={false}
       center={false}
     >
-      <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+        }}
+      >
         {children}
       </div>
     </Html>

@@ -1,5 +1,11 @@
 import clamp from 'lodash-es/clamp';
-import { ACHIEVEMENTS, COMBO_MULTIPLIERS, SCORE_VALUES, defaultBallTexture, reactPongSkins } from '../constants';
+import {
+  ACHIEVEMENTS,
+  COMBO_MULTIPLIERS,
+  SCORE_VALUES,
+  defaultBallTexture,
+  reactPongSkins,
+} from '../constants';
 import type { BlockType } from '../types';
 import type { ReactPongState } from '../state';
 
@@ -43,12 +49,17 @@ export const addHitEffect = (
   }, 800);
 };
 
-export const triggerScreenShake = (state: ReactPongState, intensity: number) => {
+export const triggerScreenShake = (
+  state: ReactPongState,
+  intensity: number
+) => {
   state.screenShake = intensity;
 };
 
 export const getMultiplier = (state: ReactPongState) => {
-  const thresholds = Object.keys(COMBO_MULTIPLIERS).map(Number).sort((a, b) => b - a);
+  const thresholds = Object.keys(COMBO_MULTIPLIERS)
+    .map(Number)
+    .sort((a, b) => b - a);
   for (const threshold of thresholds) {
     if (state.hitStreak >= threshold) {
       return COMBO_MULTIPLIERS[threshold as keyof typeof COMBO_MULTIPLIERS];
@@ -57,7 +68,11 @@ export const getMultiplier = (state: ReactPongState) => {
   return { multiplier: 1, name: '', color: '#ffffff' };
 };
 
-export const hitBlock = (state: ReactPongState, type: BlockType, id: string) => {
+export const hitBlock = (
+  state: ReactPongState,
+  type: BlockType,
+  id: string
+) => {
   const block = state.blocks[type][id];
   if (block) {
     block.hitsLeft -= 1;
@@ -80,7 +95,11 @@ export const pong = (
   let hitColor = '#00d4ff';
   const pos = position || ([0, 0, 0] as [number, number, number]);
 
-  const { multiplier, name: comboName, color: comboColor } = getMultiplier(state);
+  const {
+    multiplier,
+    name: comboName,
+    color: comboColor,
+  } = getMultiplier(state);
 
   if (colliderType === 'paddle') {
     const localAudio = state.audio.paddleHitSound;
@@ -96,13 +115,16 @@ export const pong = (
     state.totalHits++;
     state.count++;
 
-    const baseScore = SCORE_VALUES.paddle.base + Math.round(velocity * SCORE_VALUES.paddle.perVelocity);
+    const baseScore =
+      SCORE_VALUES.paddle.base +
+      Math.round(velocity * SCORE_VALUES.paddle.perVelocity);
     scoreDelta = Math.round(baseScore * multiplier);
     hitColor = '#00ffaa';
 
     const comboThresholds = Object.keys(COMBO_MULTIPLIERS).map(Number);
     if (comboThresholds.includes(state.hitStreak)) {
-      const combo = COMBO_MULTIPLIERS[state.hitStreak as keyof typeof COMBO_MULTIPLIERS];
+      const combo =
+        COMBO_MULTIPLIERS[state.hitStreak as keyof typeof COMBO_MULTIPLIERS];
       state.comboText = combo.name;
       state.comboColor = combo.color;
       triggerScreenShake(state, state.hitStreak >= 50 ? 0.3 : 0.15);
@@ -180,7 +202,13 @@ export const pong = (
   if (scoreDelta > 0) {
     state.score += scoreDelta;
 
-    addScorePopup(state, scoreDelta, pos, hitColor, comboName && colliderType === 'paddle' ? comboName : undefined);
+    addScorePopup(
+      state,
+      scoreDelta,
+      pos,
+      hitColor,
+      comboName && colliderType === 'paddle' ? comboName : undefined
+    );
     addHitEffect(state, pos, hitColor, velocity / 10);
 
     if (state.score > state.highScore) {

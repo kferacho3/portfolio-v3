@@ -1,9 +1,9 @@
-import { useFrame } from "@react-three/fiber";
-import { patchShaders } from "gl-noise";
-import { easing } from "maath";
-import * as React from "react";
-import * as THREE from "three";
-import CSM from "three-custom-shader-material";
+import { useFrame } from '@react-three/fiber';
+import { patchShaders } from 'gl-noise';
+import { easing } from 'maath';
+import * as React from 'react';
+import * as THREE from 'three';
+import CSM from 'three-custom-shader-material';
 
 const vertexShader = /* glsl */ `
   varying vec2 vUv;
@@ -39,7 +39,7 @@ const fragmentShader = patchShaders(/* glsl */ `
 export function DissolveMaterial({
   baseMaterial,
   thickness = 0.1,
-  color = "#eb5a13",
+  color = '#eb5a13',
   intensity = 50,
   duration = 1.2,
   visible = true,
@@ -47,7 +47,7 @@ export function DissolveMaterial({
 }) {
   const uniforms = React.useRef({
     uThickness: { value: 0.1 },
-    uColor: { value: new THREE.Color("#eb5a13").multiplyScalar(20) },
+    uColor: { value: new THREE.Color('#eb5a13').multiplyScalar(20) },
     uProgress: { value: 0 },
   });
 
@@ -59,7 +59,7 @@ export function DissolveMaterial({
   useFrame((_state, delta) => {
     easing.damp(
       uniforms.current.uProgress,
-      "value",
+      'value',
       visible ? 1 : 0,
       duration,
       delta

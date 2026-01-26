@@ -3,7 +3,13 @@
 
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { proxy, useSnapshot } from 'valtio';
 import * as THREE from 'three';
 
@@ -44,7 +50,8 @@ const LEGO_COLORS = [
   '#03A9F4', // Light Blue
 ];
 
-const getRandomLegoColor = () => LEGO_COLORS[Math.floor(Math.random() * LEGO_COLORS.length)];
+const getRandomLegoColor = () =>
+  LEGO_COLORS[Math.floor(Math.random() * LEGO_COLORS.length)];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GAME CONSTANTS
@@ -73,11 +80,39 @@ interface BlockTypeConfig {
 }
 
 const BLOCK_TYPES: Record<BlockType, BlockTypeConfig> = {
-  normal: { points: 10, probability: 0.50, dropSpeedMultiplier: 1.0, isDangerous: false },
-  golden: { points: 50, probability: 0.20, dropSpeedMultiplier: 1.2, color: '#FFD700', isDangerous: false },
-  diamond: { points: 100, probability: 0.12, dropSpeedMultiplier: 1.4, color: '#00FFFF', isDangerous: false },
-  rainbow: { points: 200, probability: 0.08, dropSpeedMultiplier: 1.6, isDangerous: false },
-  bomb: { points: -1, probability: 0.10, dropSpeedMultiplier: 1.3, color: '#FF0000', isDangerous: true },
+  normal: {
+    points: 10,
+    probability: 0.5,
+    dropSpeedMultiplier: 1.0,
+    isDangerous: false,
+  },
+  golden: {
+    points: 50,
+    probability: 0.2,
+    dropSpeedMultiplier: 1.2,
+    color: '#FFD700',
+    isDangerous: false,
+  },
+  diamond: {
+    points: 100,
+    probability: 0.12,
+    dropSpeedMultiplier: 1.4,
+    color: '#00FFFF',
+    isDangerous: false,
+  },
+  rainbow: {
+    points: 200,
+    probability: 0.08,
+    dropSpeedMultiplier: 1.6,
+    isDangerous: false,
+  },
+  bomb: {
+    points: -1,
+    probability: 0.1,
+    dropSpeedMultiplier: 1.3,
+    color: '#FF0000',
+    isDangerous: true,
+  },
 };
 
 const getRandomBlockType = (): BlockType => {
@@ -119,7 +154,11 @@ interface HeartsDisplayProps {
   isHurt: boolean;
 }
 
-const HeartsDisplay: React.FC<HeartsDisplayProps> = ({ maxHearts, currentHearts, isHurt }) => {
+const HeartsDisplay: React.FC<HeartsDisplayProps> = ({
+  maxHearts,
+  currentHearts,
+  isHurt,
+}) => {
   return (
     <div className="flex gap-1.5 items-center">
       {Array.from({ length: maxHearts }).map((_, i) => (
@@ -157,7 +196,10 @@ interface LegoBlockMaterialProps {
   color: string;
 }
 
-const LegoBlockMaterial: React.FC<LegoBlockMaterialProps> = ({ type, color }) => {
+const LegoBlockMaterial: React.FC<LegoBlockMaterialProps> = ({
+  type,
+  color,
+}) => {
   const materialRef = useRef<THREE.MeshPhysicalMaterial>(null);
 
   useFrame(({ clock }) => {
@@ -247,15 +289,24 @@ const LegoBlockMaterial: React.FC<LegoBlockMaterialProps> = ({ type, color }) =>
 // LEGO STUDS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LegoStuds: React.FC<{ color: string; type: BlockType }> = ({ color, type }) => {
+const LegoStuds: React.FC<{ color: string; type: BlockType }> = ({
+  color,
+  type,
+}) => {
   if (type === 'bomb') return null;
-  
+
   const studRadius = 0.15;
   const studHeight = 0.12;
   const positions: [number, number][] = [
-    [-1, -1], [-1, 0], [-1, 1],
-    [0, -1], [0, 0], [0, 1],
-    [1, -1], [1, 0], [1, 1],
+    [-1, -1],
+    [-1, 0],
+    [-1, 1],
+    [0, -1],
+    [0, 0],
+    [0, 1],
+    [1, -1],
+    [1, 0],
+    [1, 1],
   ];
 
   return (
@@ -304,7 +355,7 @@ const FallingBlockVisual: React.FC<FallingBlockVisualProps> = ({ block }) => {
         <LegoBlockMaterial type={block.type} color={block.color} />
       </mesh>
       {!isBomb && <LegoStuds color={block.color} type={block.type} />}
-      
+
       {/* Glow effect for special blocks */}
       {block.type !== 'normal' && (
         <mesh scale={1.1}>
@@ -321,7 +372,7 @@ const FallingBlockVisual: React.FC<FallingBlockVisualProps> = ({ block }) => {
           />
         </mesh>
       )}
-      
+
       {/* Bomb fuse */}
       {isBomb && (
         <mesh position={[0, 0.9, 0]}>
@@ -343,7 +394,11 @@ interface PlayerStackProps {
   isHurt: boolean;
 }
 
-const PlayerStack: React.FC<PlayerStackProps> = ({ position, blocks, isHurt }) => {
+const PlayerStack: React.FC<PlayerStackProps> = ({
+  position,
+  blocks,
+  isHurt,
+}) => {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame(({ clock }) => {
@@ -366,10 +421,13 @@ const PlayerStack: React.FC<PlayerStackProps> = ({ position, blocks, isHurt }) =
           emissiveIntensity={isHurt ? 0.3 : 0}
         />
       </mesh>
-      
+
       {/* Stacked blocks */}
       {blocks.map((block, index) => (
-        <group key={block.id} position={[0, index * BLOCK_SIZE[1] + BLOCK_SIZE[1] / 2, 0]}>
+        <group
+          key={block.id}
+          position={[0, index * BLOCK_SIZE[1] + BLOCK_SIZE[1] / 2, 0]}
+        >
           <mesh castShadow receiveShadow>
             <boxGeometry args={BLOCK_SIZE} />
             <LegoBlockMaterial type={block.type} color={block.color} />
@@ -379,7 +437,10 @@ const PlayerStack: React.FC<PlayerStackProps> = ({ position, blocks, isHurt }) =
       ))}
 
       {/* Catch zone indicator */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, blocks.length * BLOCK_SIZE[1] + 0.5, 0]}>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, blocks.length * BLOCK_SIZE[1] + 0.5, 0]}
+      >
         <ringGeometry args={[1.8, 2.2, 32]} />
         <meshBasicMaterial
           color={isHurt ? '#FF4444' : '#00FF00'}
@@ -401,7 +462,10 @@ interface CameraControllerProps {
   playerX: number;
 }
 
-const CameraController: React.FC<CameraControllerProps> = ({ stackHeight, playerX }) => {
+const CameraController: React.FC<CameraControllerProps> = ({
+  stackHeight,
+  playerX,
+}) => {
   const { camera } = useThree();
   const currentY = useRef(5);
   const currentLookY = useRef(2);
@@ -418,27 +482,31 @@ const CameraController: React.FC<CameraControllerProps> = ({ stackHeight, player
     // Camera should always keep the top of stack visible with some headroom for falling blocks
     // Position camera to look at the top portion of the stack
     const topOfStack = stackHeight;
-    
+
     // Camera Y should be slightly above stack top to see incoming blocks
     const targetCamY = Math.max(5, topOfStack + 5);
-    
+
     // Look at point should be at stack top level
     const targetLookY = Math.max(2, topOfStack + 1);
-    
+
     // Camera Z stays relatively fixed but can zoom out slightly for very tall stacks
     const targetCamZ = 12 + Math.max(0, stackHeight * 0.1);
-    
+
     // Smooth interpolation - use higher lerp factor for more responsive following
     currentY.current = THREE.MathUtils.lerp(currentY.current, targetCamY, 0.08);
-    currentLookY.current = THREE.MathUtils.lerp(currentLookY.current, targetLookY, 0.08);
-    
+    currentLookY.current = THREE.MathUtils.lerp(
+      currentLookY.current,
+      targetLookY,
+      0.08
+    );
+
     // Apply camera position
     camera.position.set(
       playerX * 0.15, // Slight X follow
       currentY.current,
       targetCamZ
     );
-    
+
     // Look at the top of the stack area
     camera.lookAt(playerX * 0.1, currentLookY.current, 0);
   });
@@ -455,7 +523,10 @@ interface DifficultySelectorProps {
   onSelect: (d: 'easy' | 'medium' | 'hard') => void;
 }
 
-const DifficultySelector: React.FC<DifficultySelectorProps> = ({ difficulty, onSelect }) => {
+const DifficultySelector: React.FC<DifficultySelectorProps> = ({
+  difficulty,
+  onSelect,
+}) => {
   return (
     <div className="flex gap-2">
       {(['easy', 'medium', 'hard'] as const).map((d) => (
@@ -467,8 +538,8 @@ const DifficultySelector: React.FC<DifficultySelectorProps> = ({ difficulty, onS
               ? d === 'easy'
                 ? 'bg-green-600 text-white'
                 : d === 'medium'
-                ? 'bg-yellow-600 text-white'
-                : 'bg-red-600 text-white'
+                  ? 'bg-yellow-600 text-white'
+                  : 'bg-red-600 text-white'
               : 'bg-slate-800/80 text-white/60 hover:bg-slate-700/80'
           }`}
         >
@@ -486,7 +557,9 @@ const DifficultySelector: React.FC<DifficultySelectorProps> = ({ difficulty, onS
 const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
   const snap = useSnapshot(stackzState);
   const [score, setScore] = useState(0);
-  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>(
+    'medium'
+  );
   const [hearts, setHearts] = useState(DIFFICULTY_HEARTS['medium']);
   const [stackedBlocks, setStackedBlocks] = useState<StackedBlock[]>([]);
   const [fallingBlocks, setFallingBlocks] = useState<FallingBlock[]>([]);
@@ -527,13 +600,16 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
     lastDropTimeRef.current = Date.now();
   }, [difficulty]);
 
-  const changeDifficulty = useCallback((d: 'easy' | 'medium' | 'hard') => {
-    setDifficulty(d);
-    setHearts(DIFFICULTY_HEARTS[d]);
-    if (gameStarted) {
-      reset();
-    }
-  }, [gameStarted, reset]);
+  const changeDifficulty = useCallback(
+    (d: 'easy' | 'medium' | 'hard') => {
+      setDifficulty(d);
+      setHearts(DIFFICULTY_HEARTS[d]);
+      if (gameStarted) {
+        reset();
+      }
+    },
+    [gameStarted, reset]
+  );
 
   useEffect(() => {
     stackzState.reset = reset;
@@ -545,10 +621,10 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
     const config = BLOCK_TYPES[type];
     const color = config.color || getRandomLegoColor();
     const spawnX = (Math.random() - 0.5) * 12;
-    
+
     // Spawn blocks above the current stack top
     const spawnY = currentStackHeight + SPAWN_OFFSET;
-    
+
     const newBlock: FallingBlock = {
       id: `falling-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       position: [spawnX, spawnY, 0],
@@ -556,7 +632,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
       color,
       velocity: 5 * config.dropSpeedMultiplier,
     };
-    
+
     setFallingBlocks((prev) => [...prev, newBlock]);
   }, []);
 
@@ -564,10 +640,10 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
       if (gameOver || !gameStarted) return;
-      
+
       const rect = gl.domElement.getBoundingClientRect();
       const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      
+
       playerXRef.current = x * 7;
       setPlayerX(playerXRef.current);
     };
@@ -596,7 +672,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
         reset();
       }
     };
-    
+
     const handleKeyUp = (event: KeyboardEvent) => {
       keysPressed.current.delete(event.key.toLowerCase());
     };
@@ -621,7 +697,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
     if (keysPressed.current.has('d') || keysPressed.current.has('arrowright')) {
       moveDirection += 1;
     }
-    
+
     if (moveDirection !== 0) {
       playerXRef.current += moveDirection * STACK_MOVE_SPEED * delta;
       playerXRef.current = Math.max(-7, Math.min(7, playerXRef.current));
@@ -639,7 +715,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
     // Update falling blocks
     const stackHeight = stackedBlocks.length * BLOCK_SIZE[1];
     const catchY = STACK_BASE_Y + stackHeight + BLOCK_SIZE[1];
-    
+
     setFallingBlocks((prev) => {
       const remaining: FallingBlock[] = [];
       let newScore = 0;
@@ -649,20 +725,20 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
 
       for (const block of prev) {
         const newY = block.position[1] - block.velocity * delta;
-        
+
         // Check if block reached catch height
         if (newY <= catchY + 0.5) {
           const distance = Math.abs(block.position[0] - playerXRef.current);
-          
+
           if (distance < CATCH_THRESHOLD) {
             const config = BLOCK_TYPES[block.type];
-            
+
             if (config.isDangerous) {
               // Hit by bomb
               caughtBad = true;
               setIsHurt(true);
               setTimeout(() => setIsHurt(false), 300);
-              
+
               setHearts((prev) => {
                 const newHearts = prev - 1;
                 if (newHearts <= 0) {
@@ -674,7 +750,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
               // Caught good block
               caughtGood = true;
               newScore += config.points + combo * 5;
-              
+
               setStackedBlocks((prevStack) => [
                 ...prevStack,
                 {
@@ -704,7 +780,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
         setCombo((prev) => prev + 1);
         setScore((prev) => prev + newScore);
       }
-      
+
       if (caughtBad || missed) {
         setCombo(0);
         if (missed) {
@@ -734,21 +810,31 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="absolute top-4 left-4 rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-sm px-5 py-4 text-white shadow-xl pointer-events-auto">
           <div className="text-3xl font-bold">{score}</div>
-          <div className="text-xs text-white/50 uppercase tracking-wider">Score</div>
-          
+          <div className="text-xs text-white/50 uppercase tracking-wider">
+            Score
+          </div>
+
           {/* Hearts Display */}
           <div className="mt-3">
-            <HeartsDisplay maxHearts={maxHearts} currentHearts={hearts} isHurt={isHurt} />
+            <HeartsDisplay
+              maxHearts={maxHearts}
+              currentHearts={hearts}
+              isHurt={isHurt}
+            />
           </div>
 
           <div className="mt-3 flex gap-4">
             <div>
-              <div className="text-lg font-semibold">{stackedBlocks.length}</div>
+              <div className="text-lg font-semibold">
+                {stackedBlocks.length}
+              </div>
               <div className="text-xs text-white/50">Stack</div>
             </div>
             {combo > 1 && (
               <div>
-                <div className="text-lg font-semibold text-yellow-400">{combo}x</div>
+                <div className="text-lg font-semibold text-yellow-400">
+                  {combo}x
+                </div>
                 <div className="text-xs text-white/50">Combo</div>
               </div>
             )}
@@ -756,8 +842,13 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
 
           {/* Difficulty selector */}
           <div className="mt-4">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">Difficulty</div>
-            <DifficultySelector difficulty={difficulty} onSelect={changeDifficulty} />
+            <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">
+              Difficulty
+            </div>
+            <DifficultySelector
+              difficulty={difficulty}
+              onSelect={changeDifficulty}
+            />
           </div>
 
           <div className="text-xs text-white/40 mt-3">Mouse or A/D to move</div>
@@ -769,18 +860,30 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
             <div className="text-center bg-slate-950/90 rounded-3xl border border-white/10 p-8 backdrop-blur-xl">
               {gameOver ? (
                 <>
-                  <h1 className="text-4xl font-bold text-red-400 mb-4">Game Over!</h1>
+                  <h1 className="text-4xl font-bold text-red-400 mb-4">
+                    Game Over!
+                  </h1>
                   <p className="text-2xl text-white mb-2">Score: {score}</p>
-                  <p className="text-lg text-white/60 mb-2">Blocks Stacked: {stackedBlocks.length}</p>
-                  <p className="text-lg text-white/60 mb-6">Best Combo: {combo}x</p>
+                  <p className="text-lg text-white/60 mb-2">
+                    Blocks Stacked: {stackedBlocks.length}
+                  </p>
+                  <p className="text-lg text-white/60 mb-6">
+                    Best Combo: {combo}x
+                  </p>
                 </>
               ) : (
                 <>
                   <h1 className="text-4xl font-bold text-white mb-4">Stackz</h1>
-                  <p className="text-lg text-white/70 mb-6">Catch falling blocks and build your tower!<br/>Avoid the bombs!</p>
+                  <p className="text-lg text-white/70 mb-6">
+                    Catch falling blocks and build your tower!
+                    <br />
+                    Avoid the bombs!
+                  </p>
                 </>
               )}
-              <p className="text-white/50 animate-pulse">Click or Press SPACE to {gameOver ? 'restart' : 'start'}</p>
+              <p className="text-white/50 animate-pulse">
+                Click or Press SPACE to {gameOver ? 'restart' : 'start'}
+              </p>
             </div>
           </div>
         )}
@@ -800,11 +903,23 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
       {/* Lighting */}
       <ambientLight intensity={0.5} />
       <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow />
-      <directionalLight position={[-5, 10, -5]} intensity={0.4} color="#88aaff" />
-      <pointLight position={[0, stackHeight + 5, 5]} intensity={0.5} color="#ffffff" />
+      <directionalLight
+        position={[-5, 10, -5]}
+        intensity={0.4}
+        color="#88aaff"
+      />
+      <pointLight
+        position={[0, stackHeight + 5, 5]}
+        intensity={0.5}
+        color="#ffffff"
+      />
 
       {/* Player stack */}
-      <PlayerStack position={[playerX, STACK_BASE_Y, 0]} blocks={stackedBlocks} isHurt={isHurt} />
+      <PlayerStack
+        position={[playerX, STACK_BASE_Y, 0]}
+        blocks={stackedBlocks}
+        isHurt={isHurt}
+      />
 
       {/* Falling blocks */}
       {fallingBlocks.map((block) => (
@@ -812,11 +927,18 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
       ))}
 
       {/* Ground */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -0.5, 0]}
+        receiveShadow
+      >
         <planeGeometry args={[30, 30]} />
         <meshStandardMaterial color="#1a1a2e" />
       </mesh>
-      <gridHelper args={[30, 30, '#333333', '#222222']} position={[0, -0.49, 0]} />
+      <gridHelper
+        args={[30, 30, '#333333', '#222222']}
+        position={[0, -0.49, 0]}
+      />
 
       {/* Spawn indicator line - follows stack height */}
       <mesh position={[0, stackHeight + SPAWN_OFFSET, -1]} rotation={[0, 0, 0]}>

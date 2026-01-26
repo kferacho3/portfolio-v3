@@ -1,6 +1,12 @@
 import { proxy } from 'valtio';
 
-import { BALL_SKINS, DEFAULT_BALL, DEFAULT_THEME, PLATFORM_THEMES, STORAGE_KEYS } from './constants';
+import {
+  BALL_SKINS,
+  DEFAULT_BALL,
+  DEFAULT_THEME,
+  PLATFORM_THEMES,
+  STORAGE_KEYS,
+} from './constants';
 import type { SpiralHopPhase } from './types';
 
 function safeJSONParse<T>(raw: string | null, fallback: T): T {
@@ -52,39 +58,69 @@ export const spiralHopState = proxy({
   load: () => {
     if (typeof window === 'undefined') return;
 
-    spiralHopState.best = safeNumber(localStorage.getItem(STORAGE_KEYS.best), 0);
-    spiralHopState.bestCombo = safeNumber(localStorage.getItem(STORAGE_KEYS.bestCombo), 0);
-    spiralHopState.totalGems = safeNumber(localStorage.getItem(STORAGE_KEYS.gems), 0);
+    spiralHopState.best = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.best),
+      0
+    );
+    spiralHopState.bestCombo = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.bestCombo),
+      0
+    );
+    spiralHopState.totalGems = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.gems),
+      0
+    );
 
     spiralHopState.unlockedBalls = uniq(
-      safeJSONParse<string[]>(localStorage.getItem(STORAGE_KEYS.unlockedBalls), [DEFAULT_BALL]).filter((id) =>
-        BALL_IDS.includes(id),
-      ),
+      safeJSONParse<string[]>(
+        localStorage.getItem(STORAGE_KEYS.unlockedBalls),
+        [DEFAULT_BALL]
+      ).filter((id) => BALL_IDS.includes(id))
     );
 
     spiralHopState.unlockedThemes = uniq(
-      safeJSONParse<string[]>(localStorage.getItem(STORAGE_KEYS.unlockedThemes), [DEFAULT_THEME]).filter((id) =>
-        THEME_IDS.includes(id),
-      ),
+      safeJSONParse<string[]>(
+        localStorage.getItem(STORAGE_KEYS.unlockedThemes),
+        [DEFAULT_THEME]
+      ).filter((id) => THEME_IDS.includes(id))
     );
 
-    const selectedBall = localStorage.getItem(STORAGE_KEYS.selectedBall) ?? DEFAULT_BALL;
-    if (spiralHopState.unlockedBalls.includes(selectedBall)) spiralHopState.selectedBall = selectedBall;
+    const selectedBall =
+      localStorage.getItem(STORAGE_KEYS.selectedBall) ?? DEFAULT_BALL;
+    if (spiralHopState.unlockedBalls.includes(selectedBall))
+      spiralHopState.selectedBall = selectedBall;
 
-    const selectedTheme = localStorage.getItem(STORAGE_KEYS.selectedTheme) ?? DEFAULT_THEME;
-    if (spiralHopState.unlockedThemes.includes(selectedTheme)) spiralHopState.selectedTheme = selectedTheme;
+    const selectedTheme =
+      localStorage.getItem(STORAGE_KEYS.selectedTheme) ?? DEFAULT_THEME;
+    if (spiralHopState.unlockedThemes.includes(selectedTheme))
+      spiralHopState.selectedTheme = selectedTheme;
   },
 
   save: () => {
     if (typeof window === 'undefined') return;
 
     localStorage.setItem(STORAGE_KEYS.best, String(spiralHopState.best));
-    localStorage.setItem(STORAGE_KEYS.bestCombo, String(spiralHopState.bestCombo));
+    localStorage.setItem(
+      STORAGE_KEYS.bestCombo,
+      String(spiralHopState.bestCombo)
+    );
     localStorage.setItem(STORAGE_KEYS.gems, String(spiralHopState.totalGems));
-    localStorage.setItem(STORAGE_KEYS.unlockedBalls, JSON.stringify(spiralHopState.unlockedBalls));
-    localStorage.setItem(STORAGE_KEYS.unlockedThemes, JSON.stringify(spiralHopState.unlockedThemes));
-    localStorage.setItem(STORAGE_KEYS.selectedBall, spiralHopState.selectedBall);
-    localStorage.setItem(STORAGE_KEYS.selectedTheme, spiralHopState.selectedTheme);
+    localStorage.setItem(
+      STORAGE_KEYS.unlockedBalls,
+      JSON.stringify(spiralHopState.unlockedBalls)
+    );
+    localStorage.setItem(
+      STORAGE_KEYS.unlockedThemes,
+      JSON.stringify(spiralHopState.unlockedThemes)
+    );
+    localStorage.setItem(
+      STORAGE_KEYS.selectedBall,
+      spiralHopState.selectedBall
+    );
+    localStorage.setItem(
+      STORAGE_KEYS.selectedTheme,
+      spiralHopState.selectedTheme
+    );
   },
 
   start: () => {
@@ -100,8 +136,10 @@ export const spiralHopState = proxy({
   end: () => {
     spiralHopState.phase = 'gameover';
 
-    if (spiralHopState.score > spiralHopState.best) spiralHopState.best = spiralHopState.score;
-    if (spiralHopState.combo > spiralHopState.bestCombo) spiralHopState.bestCombo = spiralHopState.combo;
+    if (spiralHopState.score > spiralHopState.best)
+      spiralHopState.best = spiralHopState.score;
+    if (spiralHopState.combo > spiralHopState.bestCombo)
+      spiralHopState.bestCombo = spiralHopState.combo;
 
     spiralHopState.totalGems += spiralHopState.runGems;
     spiralHopState.runGems = 0;
@@ -128,7 +166,9 @@ export const spiralHopState = proxy({
   unlockRandomBall: () => {
     if (spiralHopState.totalGems < COSTS.ball) return;
 
-    const locked = BALL_IDS.filter((id) => !spiralHopState.unlockedBalls.includes(id));
+    const locked = BALL_IDS.filter(
+      (id) => !spiralHopState.unlockedBalls.includes(id)
+    );
     if (locked.length === 0) {
       spiralHopState.toast = 'All balls unlocked';
       spiralHopState.toastUntil = Date.now() + 2000;
@@ -147,7 +187,9 @@ export const spiralHopState = proxy({
   unlockRandomTheme: () => {
     if (spiralHopState.totalGems < COSTS.theme) return;
 
-    const locked = THEME_IDS.filter((id) => !spiralHopState.unlockedThemes.includes(id));
+    const locked = THEME_IDS.filter(
+      (id) => !spiralHopState.unlockedThemes.includes(id)
+    );
     if (locked.length === 0) {
       spiralHopState.toast = 'All platform colors unlocked';
       spiralHopState.toastUntil = Date.now() + 2000;
@@ -156,7 +198,10 @@ export const spiralHopState = proxy({
 
     const id = locked[Math.floor(Math.random() * locked.length)];
     spiralHopState.totalGems -= COSTS.theme;
-    spiralHopState.unlockedThemes = uniq([...spiralHopState.unlockedThemes, id]);
+    spiralHopState.unlockedThemes = uniq([
+      ...spiralHopState.unlockedThemes,
+      id,
+    ]);
     spiralHopState.selectedTheme = id;
     spiralHopState.toast = `Unlocked platform: ${PLATFORM_THEMES.find((t) => t.id === id)?.name ?? id}`;
     spiralHopState.toastUntil = Date.now() + 2500;

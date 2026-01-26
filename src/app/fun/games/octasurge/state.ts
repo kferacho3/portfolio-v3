@@ -21,7 +21,10 @@ export const octaSurgeState = proxy({
 
   load: () => {
     if (typeof localStorage === 'undefined') return;
-    octaSurgeState.best = safeNumber(localStorage.getItem(STORAGE_KEYS.best), 0);
+    octaSurgeState.best = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.best),
+      0
+    );
     octaSurgeState.totalCollectibles = safeNumber(
       localStorage.getItem(STORAGE_KEYS.totalCollectibles),
       0
@@ -39,7 +42,10 @@ export const octaSurgeState = proxy({
       STORAGE_KEYS.totalCollectibles,
       String(octaSurgeState.totalCollectibles)
     );
-    localStorage.setItem(STORAGE_KEYS.totalSpecial, String(octaSurgeState.totalSpecial));
+    localStorage.setItem(
+      STORAGE_KEYS.totalSpecial,
+      String(octaSurgeState.totalSpecial)
+    );
   },
 
   start: () => {

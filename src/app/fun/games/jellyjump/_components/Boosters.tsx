@@ -3,7 +3,13 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { jellyJumpState, mutation } from '../state';
-import { PLATFORM_SPACING, PLATFORM_VISIBLE_ABOVE, PLATFORM_VISIBLE_BELOW, BOOSTER_SIZE, PALETTES } from '../constants';
+import {
+  PLATFORM_SPACING,
+  PLATFORM_VISIBLE_ABOVE,
+  PLATFORM_VISIBLE_BELOW,
+  BOOSTER_SIZE,
+  PALETTES,
+} from '../constants';
 import type { PlatformPattern } from '../types';
 
 export default function Boosters({ pattern }: { pattern: PlatformPattern }) {
@@ -38,7 +44,8 @@ export default function Boosters({ pattern }: { pattern: PlatformPattern }) {
   );
 
   useFrame(() => {
-    if ((!levelSkipRef.current || !freezeRef.current) || snap.phase !== 'playing') return;
+    if (!levelSkipRef.current || !freezeRef.current || snap.phase !== 'playing')
+      return;
 
     const py = mutation.playerPos[1];
     const currentRow = Math.floor(py / PLATFORM_SPACING);
@@ -79,10 +86,18 @@ export default function Boosters({ pattern }: { pattern: PlatformPattern }) {
 
   return (
     <group>
-      <instancedMesh ref={levelSkipRef} args={[undefined, levelSkipMat, maxBoosters]} frustumCulled={false}>
+      <instancedMesh
+        ref={levelSkipRef}
+        args={[undefined, levelSkipMat, maxBoosters]}
+        frustumCulled={false}
+      >
         <octahedronGeometry args={[BOOSTER_SIZE, 0]} />
       </instancedMesh>
-      <instancedMesh ref={freezeRef} args={[undefined, freezeMat, maxBoosters]} frustumCulled={false}>
+      <instancedMesh
+        ref={freezeRef}
+        args={[undefined, freezeMat, maxBoosters]}
+        frustumCulled={false}
+      >
         <octahedronGeometry args={[BOOSTER_SIZE, 0]} />
       </instancedMesh>
     </group>

@@ -6,17 +6,21 @@ source: https://sketchfab.com/3d-models/ugly-face-monster-8c2e666b04f04bcab1e86a
 title: ugly face  monster
 */
 
-import React, { useRef } from 'react'
-import { useGLTF } from '@react-three/drei'
+import React, { useRef } from 'react';
+import { useGLTF } from '@react-three/drei';
 
 export default function Model(props) {
-  const group = useRef()
-  const { nodes, materials } = useGLTF('/alien.glb')
+  const group = useRef();
+  const { nodes, materials } = useGLTF('/alien.glb');
   return (
     <group ref={group} {...props} dispose={null}>
-      <mesh geometry={nodes.Object_2.geometry} material={materials['Scene_-_Root']} rotation={[0, Math.PI / 2, 0]} />
+      <mesh
+        geometry={nodes.Object_2.geometry}
+        material={materials['Scene_-_Root']}
+        rotation={[0, Math.PI / 2, 0]}
+      />
     </group>
-  )
+  );
 }
 
-useGLTF.preload('/alien.glb')
+useGLTF.preload('/alien.glb');

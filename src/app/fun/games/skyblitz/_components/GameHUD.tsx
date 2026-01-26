@@ -8,7 +8,13 @@ const GameHUD: React.FC = () => {
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div style={{ position: 'fixed', inset: 0, fontFamily: 'system-ui, sans-serif' }}>
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
         <div
           style={{
             position: 'absolute',
@@ -47,7 +53,13 @@ const GameHUD: React.FC = () => {
             width: '12rem',
           }}
         >
-          <div style={{ color: 'white', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+          <div
+            style={{
+              color: 'white',
+              fontSize: '0.875rem',
+              marginBottom: '0.25rem',
+            }}
+          >
             Health
           </div>
           <div

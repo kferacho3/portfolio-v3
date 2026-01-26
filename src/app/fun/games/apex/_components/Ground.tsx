@@ -2,12 +2,28 @@ import { useFrame } from '@react-three/fiber';
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ARENA_PRESETS, CURVE_BOUNDARY_HARD, CURVE_BOUNDARY_SOFT, THEMES, getArenaTheme } from '../constants';
+import {
+  ARENA_PRESETS,
+  CURVE_BOUNDARY_HARD,
+  CURVE_BOUNDARY_SOFT,
+  THEMES,
+  getArenaTheme,
+} from '../constants';
 import { apexState, mutation } from '../state';
 
 const applyGroundShader = (
   material: THREE.MeshStandardMaterial,
-  kind: 'solid' | 'alloy' | 'quilt' | 'prismatic' | 'zigzag' | 'trail' | 'ripple' | 'grid' | 'grass' | 'ice',
+  kind:
+    | 'solid'
+    | 'alloy'
+    | 'quilt'
+    | 'prismatic'
+    | 'zigzag'
+    | 'trail'
+    | 'ripple'
+    | 'grid'
+    | 'grass'
+    | 'ice',
   base: THREE.Color,
   accent: THREE.Color,
   worldScale: number
@@ -141,7 +157,10 @@ const Ground: React.FC = () => {
   const ringRef = useRef<THREE.Mesh>(null);
   const snap = useSnapshot(apexState);
   const preset = ARENA_PRESETS[snap.arena];
-  const theme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
+  const theme = useMemo(
+    () => getArenaTheme(preset, THEMES[snap.currentTheme]),
+    [preset, snap.currentTheme]
+  );
   const groundKind = preset.ground?.kind ?? 'solid';
   const groundColor = theme.bg;
   const groundAccent = theme.accent;
@@ -192,7 +211,12 @@ const Ground: React.FC = () => {
   }, [groundAccent, groundColor, groundKind, groundWorldScale]);
 
   const ringMaterial = useMemo(
-    () => new THREE.MeshBasicMaterial({ color: theme.accent, transparent: true, opacity: 0.22 }),
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: theme.accent,
+        transparent: true,
+        opacity: 0.22,
+      }),
     [theme.accent]
   );
 
@@ -212,7 +236,8 @@ const Ground: React.FC = () => {
       ringRef.current.position.x = mutation.spherePos.x;
       ringRef.current.position.z = mutation.spherePos.z;
     }
-    const uniforms = (groundMaterial as THREE.MeshStandardMaterial).userData.uniforms;
+    const uniforms = (groundMaterial as THREE.MeshStandardMaterial).userData
+      .uniforms;
     if (uniforms?.uTime) {
       uniforms.uTime.value = clockRef.current;
     }
@@ -220,13 +245,23 @@ const Ground: React.FC = () => {
 
   return (
     <>
-      <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -15, 0]}>
+      <mesh
+        ref={meshRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -15, 0]}
+      >
         <planeGeometry args={[500, 500]} />
         <primitive object={groundMaterial} attach="material" />
       </mesh>
       {snap.mode === 'curved' && (
-        <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -14.96, 0]}>
-          <ringGeometry args={[CURVE_BOUNDARY_SOFT * 0.9, CURVE_BOUNDARY_HARD * 1.05, 64]} />
+        <mesh
+          ref={ringRef}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, -14.96, 0]}
+        >
+          <ringGeometry
+            args={[CURVE_BOUNDARY_SOFT * 0.9, CURVE_BOUNDARY_HARD * 1.05, 64]}
+          />
           <primitive object={ringMaterial} attach="material" />
         </mesh>
       )}

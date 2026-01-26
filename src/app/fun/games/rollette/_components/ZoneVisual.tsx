@@ -27,13 +27,30 @@ export const ZoneVisual: React.FC = () => {
     <group ref={groupRef}>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.86, 1, 48]} />
-        <meshStandardMaterial color="#34d399" emissive="#34d399" emissiveIntensity={0.6} transparent opacity={0.35} />
+        <meshStandardMaterial
+          color="#34d399"
+          emissive="#34d399"
+          emissiveIntensity={0.6}
+          transparent
+          opacity={0.35}
+        />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[1, 1.08, 48]} />
-        <meshStandardMaterial color="#34d399" emissive="#34d399" emissiveIntensity={0.95} transparent opacity={0.18} />
+        <meshStandardMaterial
+          color="#34d399"
+          emissive="#34d399"
+          emissiveIntensity={0.95}
+          transparent
+          opacity={0.18}
+        />
       </mesh>
-      <pointLight ref={glowRef} color="#34d399" intensity={0.85} distance={40} />
+      <pointLight
+        ref={glowRef}
+        color="#34d399"
+        intensity={0.85}
+        distance={40}
+      />
     </group>
   );
 };

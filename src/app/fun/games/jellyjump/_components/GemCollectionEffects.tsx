@@ -46,12 +46,14 @@ export default function GemCollectionEffects() {
     []
   );
 
-  const ringsRef = useRef<{ pos: THREE.Vector3; life: number; maxLife: number }[]>([]);
+  const ringsRef = useRef<
+    { pos: THREE.Vector3; life: number; maxLife: number }[]
+  >([]);
 
   // Spawn particles when gems are collected
   useEffect(() => {
     if (snap.phase !== 'playing') return;
-    
+
     const gemsDiff = snap.gemsCollected - lastGemsCollected.current;
     if (gemsDiff > 0) {
       const [px, py, pz] = mutation.playerPos;
@@ -126,21 +128,33 @@ export default function GemCollectionEffects() {
       ringDummy.scale.set(scale, scale, scale);
       ringDummy.updateMatrix();
       ringRef.current.setMatrixAt(ringCount, ringDummy.matrix);
-      ringRef.current.setColorAt(ringCount, tempColor.set('#fde047').multiplyScalar(1 - t));
+      ringRef.current.setColorAt(
+        ringCount,
+        tempColor.set('#fde047').multiplyScalar(1 - t)
+      );
       ringCount += 1;
       if (ringCount >= 40) break;
     }
     ringRef.current.count = ringCount;
     ringRef.current.instanceMatrix.needsUpdate = true;
-    if (ringRef.current.instanceColor) ringRef.current.instanceColor.needsUpdate = true;
+    if (ringRef.current.instanceColor)
+      ringRef.current.instanceColor.needsUpdate = true;
   });
 
   return (
     <group>
-      <instancedMesh ref={meshRef} args={[undefined, gemMat, 140]} frustumCulled={false}>
+      <instancedMesh
+        ref={meshRef}
+        args={[undefined, gemMat, 140]}
+        frustumCulled={false}
+      >
         <octahedronGeometry args={[0.1, 0]} />
       </instancedMesh>
-      <instancedMesh ref={ringRef} args={[undefined, ringMat, 40]} frustumCulled={false}>
+      <instancedMesh
+        ref={ringRef}
+        args={[undefined, ringMat, 40]}
+        frustumCulled={false}
+      >
         <ringGeometry args={[0.2, 0.35, 32]} />
       </instancedMesh>
     </group>

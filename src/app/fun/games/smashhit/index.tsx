@@ -78,7 +78,12 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function smoothLerp(current: number, target: number, dt: number, speed: number) {
+function smoothLerp(
+  current: number,
+  target: number,
+  dt: number,
+  speed: number
+) {
   const t = 1 - Math.pow(0.001, dt * speed);
   return lerp(current, target, t);
 }
@@ -127,7 +132,10 @@ function requiredPattern(level: number, rng: SeededRandom): number[] {
 
   if (level <= 0) return [ctr];
   if (level === 1) return rng.bool(0.5) ? [ctr, left] : [ctr, right];
-  if (level === 2) return rng.bool(0.5) ? [ctr, left, right] : [ctr, up, down].filter((i) => i >= 0 && i < BLOCKS_PER_OBSTACLE);
+  if (level === 2)
+    return rng.bool(0.5)
+      ? [ctr, left, right]
+      : [ctr, up, down].filter((i) => i >= 0 && i < BLOCKS_PER_OBSTACLE);
   if (level === 3) {
     // 2x2 around center (clamped to grid)
     const r = Math.floor(ROWS / 2);
@@ -140,9 +148,12 @@ function requiredPattern(level: number, rng: SeededRandom): number[] {
   }
 
   // A spicier cross
-  const base = [ctr, left, right, up, down].filter((i) => i >= 0 && i < BLOCKS_PER_OBSTACLE);
+  const base = [ctr, left, right, up, down].filter(
+    (i) => i >= 0 && i < BLOCKS_PER_OBSTACLE
+  );
   // Randomly drop one arm to keep it readable
-  if (base.length > 3 && rng.bool(0.35)) base.splice(1 + Math.floor(rng.float() * (base.length - 1)), 1);
+  if (base.length > 3 && rng.bool(0.35))
+    base.splice(1 + Math.floor(rng.float() * (base.length - 1)), 1);
   return base;
 }
 
@@ -174,38 +185,47 @@ function SmashHit() {
     nextSpawnZ: START_SPAWN_Z,
 
     obstacleCursor: 0,
-    obstacles: Array.from({ length: MAX_OBSTACLES }, (): Obstacle => ({
-      active: false,
-      z: 0,
-      required: [],
-      passed: false,
-      color: new THREE.Color('#60a5fa'),
-      crystalActive: false,
-      crystalX: 0,
-      crystalY: 0,
-    })),
+    obstacles: Array.from(
+      { length: MAX_OBSTACLES },
+      (): Obstacle => ({
+        active: false,
+        z: 0,
+        required: [],
+        passed: false,
+        color: new THREE.Color('#60a5fa'),
+        crystalActive: false,
+        crystalX: 0,
+        crystalY: 0,
+      })
+    ),
 
     // Per glass block (alive = present and not broken)
     glassAlive: new Array<boolean>(MAX_GLASS_BLOCKS).fill(false),
     glassRequired: new Array<boolean>(MAX_GLASS_BLOCKS).fill(false),
 
     // Shot pool
-    shots: Array.from({ length: MAX_SHOTS }, (): Shot => ({
-      active: false,
-      pos: new THREE.Vector3(0, 0, 0),
-      vel: new THREE.Vector3(0, 0, -1),
-      life: 0,
-    })),
+    shots: Array.from(
+      { length: MAX_SHOTS },
+      (): Shot => ({
+        active: false,
+        pos: new THREE.Vector3(0, 0, 0),
+        vel: new THREE.Vector3(0, 0, -1),
+        life: 0,
+      })
+    ),
     shotCursor: 0,
 
     // Shards pool
-    shards: Array.from({ length: MAX_SHARDS }, (): Shard => ({
-      active: false,
-      pos: new THREE.Vector3(0, 0, 0),
-      vel: new THREE.Vector3(0, 0, 0),
-      rot: new THREE.Vector3(0, 0, 0),
-      life: 0,
-    })),
+    shards: Array.from(
+      { length: MAX_SHARDS },
+      (): Shard => ({
+        active: false,
+        pos: new THREE.Vector3(0, 0, 0),
+        vel: new THREE.Vector3(0, 0, 0),
+        rot: new THREE.Vector3(0, 0, 0),
+        life: 0,
+      })
+    ),
     shardCursor: 0,
 
     // input edge tracking
@@ -261,7 +281,8 @@ function SmashHit() {
         glassRef.current.setColorAt(i, new THREE.Color('#60a5fa'));
       }
       glassRef.current.instanceMatrix.needsUpdate = true;
-      if (glassRef.current.instanceColor) glassRef.current.instanceColor.needsUpdate = true;
+      if (glassRef.current.instanceColor)
+        glassRef.current.instanceColor.needsUpdate = true;
     }
 
     if (crystalRef.current) {
@@ -273,7 +294,8 @@ function SmashHit() {
         crystalRef.current.setColorAt(i, matPalette.crystal);
       }
       crystalRef.current.instanceMatrix.needsUpdate = true;
-      if (crystalRef.current.instanceColor) crystalRef.current.instanceColor.needsUpdate = true;
+      if (crystalRef.current.instanceColor)
+        crystalRef.current.instanceColor.needsUpdate = true;
     }
 
     if (shotsRef.current) {
@@ -295,7 +317,8 @@ function SmashHit() {
         shardsRef.current.setColorAt(i, matPalette.shard);
       }
       shardsRef.current.instanceMatrix.needsUpdate = true;
-      if (shardsRef.current.instanceColor) shardsRef.current.instanceColor.needsUpdate = true;
+      if (shardsRef.current.instanceColor)
+        shardsRef.current.instanceColor.needsUpdate = true;
     }
 
     // baseline camera + fog
@@ -358,13 +381,18 @@ function SmashHit() {
 
     if (glassRef.current) {
       glassRef.current.instanceMatrix.needsUpdate = true;
-      if (glassRef.current.instanceColor) glassRef.current.instanceColor.needsUpdate = true;
+      if (glassRef.current.instanceColor)
+        glassRef.current.instanceColor.needsUpdate = true;
     }
 
     // Update crystal instance
     if (crystalRef.current) {
       if (obstacle.crystalActive) {
-        w.dummy.position.set(obstacle.crystalX, obstacle.crystalY, obstacle.z - 2.2);
+        w.dummy.position.set(
+          obstacle.crystalX,
+          obstacle.crystalY,
+          obstacle.z - 2.2
+        );
         w.dummy.rotation.set(Math.PI / 4, Math.PI / 4, 0);
         w.dummy.scale.set(1, 1, 1);
         w.dummy.updateMatrix();
@@ -377,14 +405,19 @@ function SmashHit() {
         crystalRef.current.setMatrixAt(oIndex, w.dummy.matrix);
       }
       crystalRef.current.instanceMatrix.needsUpdate = true;
-      if (crystalRef.current.instanceColor) crystalRef.current.instanceColor.needsUpdate = true;
+      if (crystalRef.current.instanceColor)
+        crystalRef.current.instanceColor.needsUpdate = true;
     }
 
     w.obstacleCursor += 1;
     w.nextSpawnZ -= w.rng.float(SPACING_MIN, SPACING_MAX);
   };
 
-  const breakBlock = (oIndex: number, blockIndex: number, hitPos: THREE.Vector3) => {
+  const breakBlock = (
+    oIndex: number,
+    blockIndex: number,
+    hitPos: THREE.Vector3
+  ) => {
     const w = world.current;
     const gIndex = oIndex * BLOCKS_PER_OBSTACLE + blockIndex;
     if (!w.glassAlive[gIndex]) return;
@@ -417,7 +450,11 @@ function SmashHit() {
       shard.life = SHARD_LIFE * (0.6 + w.rng.float() * 0.8);
       shard.pos.copy(hitPos);
       shard.vel.set(w.rng.float(-4, 4), w.rng.float(-4, 4), w.rng.float(-6, 1));
-      shard.rot.set(w.rng.float(0, Math.PI), w.rng.float(0, Math.PI), w.rng.float(0, Math.PI));
+      shard.rot.set(
+        w.rng.float(0, Math.PI),
+        w.rng.float(0, Math.PI),
+        w.rng.float(0, Math.PI)
+      );
       w.shardCursor += 1;
     }
   };
@@ -523,7 +560,8 @@ function SmashHit() {
       camera.lookAt(0, 0, w.cameraZ - 12);
 
       // keep corridor around camera
-      if (corridorRef.current) corridorRef.current.position.z = w.cameraZ - CORRIDOR_DEPTH / 2;
+      if (corridorRef.current)
+        corridorRef.current.position.z = w.cameraZ - CORRIDOR_DEPTH / 2;
 
       // shots update
       if (shotsRef.current) {
@@ -565,7 +603,10 @@ function SmashHit() {
               const dx = s.pos.x - cx;
               const dy = s.pos.y - cy;
               const dz = s.pos.z - cz;
-              if (dx * dx + dy * dy + dz * dz < (SHOT_RADIUS + 0.22) * (SHOT_RADIUS + 0.22)) {
+              if (
+                dx * dx + dy * dy + dz * dz <
+                (SHOT_RADIUS + 0.22) * (SHOT_RADIUS + 0.22)
+              ) {
                 o.crystalActive = false;
                 smashHitState.addBalls(3);
                 smashHitState.addScore(80);
@@ -586,8 +627,16 @@ function SmashHit() {
                   shard.active = true;
                   shard.life = SHARD_LIFE * (0.6 + w.rng.float() * 0.8);
                   shard.pos.set(cx, cy, cz);
-                  shard.vel.set(w.rng.float(-5, 5), w.rng.float(-5, 5), w.rng.float(-6, 2));
-                  shard.rot.set(w.rng.float(0, Math.PI), w.rng.float(0, Math.PI), w.rng.float(0, Math.PI));
+                  shard.vel.set(
+                    w.rng.float(-5, 5),
+                    w.rng.float(-5, 5),
+                    w.rng.float(-6, 2)
+                  );
+                  shard.rot.set(
+                    w.rng.float(0, Math.PI),
+                    w.rng.float(0, Math.PI),
+                    w.rng.float(0, Math.PI)
+                  );
                   w.shardCursor += 1;
                 }
 
@@ -597,7 +646,8 @@ function SmashHit() {
             }
 
             // glass plane proximity check
-            if (Math.abs(s.pos.z - o.z) > (BLOCK_THICKNESS * 1.2 + SHOT_RADIUS)) continue;
+            if (Math.abs(s.pos.z - o.z) > BLOCK_THICKNESS * 1.2 + SHOT_RADIUS)
+              continue;
 
             // test blocks
             const half = BLOCK_SIZE * 0.5;
@@ -675,10 +725,18 @@ function SmashHit() {
 
       <mesh ref={corridorRef} position={[0, 0, START_Z - CORRIDOR_DEPTH / 2]}>
         <boxGeometry args={[CORRIDOR_W, CORRIDOR_H, CORRIDOR_DEPTH]} />
-        <meshStandardMaterial side={THREE.BackSide} color={matPalette.corridor} roughness={0.85} metalness={0.0} />
+        <meshStandardMaterial
+          side={THREE.BackSide}
+          color={matPalette.corridor}
+          roughness={0.85}
+          metalness={0.0}
+        />
       </mesh>
 
-      <instancedMesh ref={glassRef} args={[undefined, undefined, MAX_GLASS_BLOCKS]}>
+      <instancedMesh
+        ref={glassRef}
+        args={[undefined, undefined, MAX_GLASS_BLOCKS]}
+      >
         <boxGeometry args={[BLOCK_SIZE, BLOCK_SIZE, BLOCK_THICKNESS]} />
         <meshStandardMaterial
           vertexColors
@@ -689,19 +747,32 @@ function SmashHit() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={crystalRef} args={[undefined, undefined, MAX_OBSTACLES]}>
+      <instancedMesh
+        ref={crystalRef}
+        args={[undefined, undefined, MAX_OBSTACLES]}
+      >
         <octahedronGeometry args={[0.24, 0]} />
         <meshStandardMaterial vertexColors roughness={0.25} metalness={0.25} />
       </instancedMesh>
 
       <instancedMesh ref={shotsRef} args={[undefined, undefined, MAX_SHOTS]}>
         <sphereGeometry args={[SHOT_RADIUS, 14, 14]} />
-        <meshStandardMaterial color={matPalette.shot} roughness={0.15} metalness={0.95} />
+        <meshStandardMaterial
+          color={matPalette.shot}
+          roughness={0.15}
+          metalness={0.95}
+        />
       </instancedMesh>
 
       <instancedMesh ref={shardsRef} args={[undefined, undefined, MAX_SHARDS]}>
         <boxGeometry args={[0.12, 0.06, 0.02]} />
-        <meshStandardMaterial vertexColors transparent opacity={0.55} roughness={0.25} metalness={0.05} />
+        <meshStandardMaterial
+          vertexColors
+          transparent
+          opacity={0.55}
+          roughness={0.25}
+          metalness={0.05}
+        />
       </instancedMesh>
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -711,13 +782,18 @@ function SmashHit() {
             top: 14,
             left: 14,
             color: 'white',
-            fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+            fontFamily:
+              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
             textShadow: '0 2px 10px rgba(0,0,0,0.45)',
           }}
         >
-          <div style={{ fontSize: 14, opacity: 0.85, letterSpacing: 1 }}>SMASH HIT</div>
+          <div style={{ fontSize: 14, opacity: 0.85, letterSpacing: 1 }}>
+            SMASH HIT
+          </div>
           <div style={{ fontSize: 34, fontWeight: 900 }}>{snap.score}</div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>Balls: {snap.balls} • Combo: {Math.floor(snap.combo)}</div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            Balls: {snap.balls} • Combo: {Math.floor(snap.combo)}
+          </div>
           <div style={{ fontSize: 12, opacity: 0.55 }}>Best: {snap.best}</div>
         </div>
 
@@ -742,9 +818,12 @@ function SmashHit() {
                 backdropFilter: 'blur(8px)',
               }}
             >
-              <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: 2 }}>SMASH HIT</div>
+              <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: 2 }}>
+                SMASH HIT
+              </div>
               <div style={{ marginTop: 8, fontSize: 14, opacity: 0.9 }}>
-                Click / Tap / Space to throw • Clear the highlighted glass cells to survive
+                Click / Tap / Space to throw • Clear the highlighted glass cells
+                to survive
               </div>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.75 }}>
                 Hit the gold crystals for +3 balls.
@@ -758,7 +837,8 @@ function SmashHit() {
               )}
 
               <div style={{ marginTop: 14, fontSize: 12, opacity: 0.6 }}>
-                Pro tip: hold your fire until you see the “required” blocks (slightly brighter).
+                Pro tip: hold your fire until you see the “required” blocks
+                (slightly brighter).
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 /**
  * Hooks Barrel Export
- * 
+ *
  * Re-exports all domain hooks.
  */
 

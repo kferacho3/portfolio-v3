@@ -10,8 +10,14 @@ const BackgroundGrid: React.FC = () => {
 
     for (let i = -divisions / 2; i <= divisions / 2; i++) {
       const pos = i * step;
-      result.push([new THREE.Vector3(pos, -gridSize / 2, -2), new THREE.Vector3(pos, gridSize / 2, -2)]);
-      result.push([new THREE.Vector3(-gridSize / 2, pos, -2), new THREE.Vector3(gridSize / 2, pos, -2)]);
+      result.push([
+        new THREE.Vector3(pos, -gridSize / 2, -2),
+        new THREE.Vector3(pos, gridSize / 2, -2),
+      ]);
+      result.push([
+        new THREE.Vector3(-gridSize / 2, pos, -2),
+        new THREE.Vector3(gridSize / 2, pos, -2),
+      ]);
     }
     return result;
   }, []);

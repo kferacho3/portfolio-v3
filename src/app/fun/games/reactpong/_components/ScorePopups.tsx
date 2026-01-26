@@ -20,7 +20,14 @@ const ScorePopupItem: React.FC<{ popup: ScorePopup }> = ({ popup }) => {
   });
 
   return (
-    <group ref={ref} position={[popup.position[0], popup.position[1] + 1, popup.position[2] + 1]}>
+    <group
+      ref={ref}
+      position={[
+        popup.position[0],
+        popup.position[1] + 1,
+        popup.position[2] + 1,
+      ]}
+    >
       <Text
         fontSize={0.5}
         color={popup.color}

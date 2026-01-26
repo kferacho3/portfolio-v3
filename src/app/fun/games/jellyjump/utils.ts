@@ -35,10 +35,14 @@ import type {
 } from './types';
 
 export const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-export const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+export const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-export function generatePattern(seed: number, size: number = PLATFORM_PATTERN_SIZE): PlatformPattern {
+export function generatePattern(
+  seed: number,
+  size: number = PLATFORM_PATTERN_SIZE
+): PlatformPattern {
   const rng = new SeededRandom(seed);
   const types: boolean[] = [];
   const activationTimes: number[] = [];
@@ -63,26 +67,42 @@ export function generatePattern(seed: number, size: number = PLATFORM_PATTERN_SI
   // Generate obstacles, levers, boosters, and gems (only after level 5 for difficulty)
   for (let i = 5; i < size; i += 1) {
     const difficulty = clamp01((i - 5) / 120);
-    const obstacleRate = lerp(OBSTACLE_SPAWN_RATE, OBSTACLE_SPAWN_RATE + 0.18, difficulty);
-    const leverRate = lerp(LEVER_SPAWN_RATE, LEVER_SPAWN_RATE + 0.06, difficulty * 0.6);
-    const boosterRate = lerp(BOOSTER_SPAWN_RATE, BOOSTER_SPAWN_RATE * 0.6, difficulty);
+    const obstacleRate = lerp(
+      OBSTACLE_SPAWN_RATE,
+      OBSTACLE_SPAWN_RATE + 0.18,
+      difficulty
+    );
+    const leverRate = lerp(
+      LEVER_SPAWN_RATE,
+      LEVER_SPAWN_RATE + 0.06,
+      difficulty * 0.6
+    );
+    const boosterRate = lerp(
+      BOOSTER_SPAWN_RATE,
+      BOOSTER_SPAWN_RATE * 0.6,
+      difficulty
+    );
     const gemRate = lerp(GEM_SPAWN_RATE, GEM_SPAWN_RATE * 0.85, difficulty);
-    
+
     // Obstacles (bombs)
-    if (rng.float() < obstacleRate) {
+    if (rng.random() < obstacleRate) {
       obstacles.push({
         rowIndex: i,
         x: rng.float(-CORRIDOR_HALF_WIDTH + 1, CORRIDOR_HALF_WIDTH - 1),
         z: rng.float(-0.5, 0.5),
         type: 'bomb',
-        driftAmp: rng.float(OBSTACLE_DRIFT_MIN, OBSTACLE_DRIFT_MAX) * lerp(0.7, 1.2, difficulty),
-        driftSpeed: rng.float(OBSTACLE_DRIFT_SPEED_MIN, OBSTACLE_DRIFT_SPEED_MAX) * lerp(0.8, 1.4, difficulty),
+        driftAmp:
+          rng.float(OBSTACLE_DRIFT_MIN, OBSTACLE_DRIFT_MAX) *
+          lerp(0.7, 1.2, difficulty),
+        driftSpeed:
+          rng.float(OBSTACLE_DRIFT_SPEED_MIN, OBSTACLE_DRIFT_SPEED_MAX) *
+          lerp(0.8, 1.4, difficulty),
         driftPhase: rng.float(0, Math.PI * 2),
       });
     }
-    
+
     // Levers (unlock next level)
-    if (rng.float() < leverRate && i < size - 1) {
+    if (rng.random() < leverRate && i < size - 1) {
       levers.push({
         rowIndex: i,
         x: rng.float(-2, 2),
@@ -91,9 +111,9 @@ export function generatePattern(seed: number, size: number = PLATFORM_PATTERN_SI
         activated: false,
       });
     }
-    
+
     // Boosters
-    if (rng.float() < boosterRate) {
+    if (rng.random() < boosterRate) {
       boosters.push({
         rowIndex: i,
         x: rng.float(-CORRIDOR_HALF_WIDTH + 1, CORRIDOR_HALF_WIDTH - 1),
@@ -102,9 +122,9 @@ export function generatePattern(seed: number, size: number = PLATFORM_PATTERN_SI
         collected: false,
       });
     }
-    
+
     // Gems (collectibles)
-    if (rng.float() < gemRate) {
+    if (rng.random() < gemRate) {
       gems.push({
         rowIndex: i,
         x: rng.float(-CORRIDOR_HALF_WIDTH + 1, CORRIDOR_HALF_WIDTH - 1),
@@ -118,7 +138,10 @@ export function generatePattern(seed: number, size: number = PLATFORM_PATTERN_SI
   return { seed, types, activationTimes, obstacles, levers, boosters, gems };
 }
 
-export function getPlatformKind(index: number, pattern: PlatformPattern): PlatformKind {
+export function getPlatformKind(
+  index: number,
+  pattern: PlatformPattern
+): PlatformKind {
   if (index <= 0) return 'base';
   const isSlide = pattern.types[index % pattern.types.length];
   return isSlide ? 'slide' : 'rotate';
@@ -128,7 +151,10 @@ export function getPlatformPieces(
   index: number,
   timeS: number,
   pattern: PlatformPattern
-): { kind: PlatformKind; pieces: [PlatformPieceTransform, PlatformPieceTransform] } {
+): {
+  kind: PlatformKind;
+  pieces: [PlatformPieceTransform, PlatformPieceTransform];
+} {
   const y = index * PLATFORM_SPACING;
   const kind = getPlatformKind(index, pattern);
 
@@ -143,7 +169,8 @@ export function getPlatformPieces(
     };
   }
 
-  const activation = pattern.activationTimes[index % pattern.activationTimes.length];
+  const activation =
+    pattern.activationTimes[index % pattern.activationTimes.length];
   const t = clamp01((timeS - activation) / PLATFORM_ANIM_DURATION);
 
   if (kind === 'slide') {
@@ -191,9 +218,17 @@ export function getLavaY(timeS: number, currentLevel: number): number {
 }
 
 export function getObstaclePosition(obstacle: ObstacleData, timeS: number) {
-  const drift = Math.sin(timeS * obstacle.driftSpeed + obstacle.driftPhase) * obstacle.driftAmp;
-  const wobble = Math.cos(timeS * (obstacle.driftSpeed * 0.85) + obstacle.driftPhase) * OBSTACLE_Z_WOBBLE;
-  const x = clamp(obstacle.x + drift, -CORRIDOR_HALF_WIDTH + 1, CORRIDOR_HALF_WIDTH - 1);
+  const drift =
+    Math.sin(timeS * obstacle.driftSpeed + obstacle.driftPhase) *
+    obstacle.driftAmp;
+  const wobble =
+    Math.cos(timeS * (obstacle.driftSpeed * 0.85) + obstacle.driftPhase) *
+    OBSTACLE_Z_WOBBLE;
+  const x = clamp(
+    obstacle.x + drift,
+    -CORRIDOR_HALF_WIDTH + 1,
+    CORRIDOR_HALF_WIDTH - 1
+  );
   const z = clamp(obstacle.z + wobble, -0.9, 0.9);
   return { x, z };
 }

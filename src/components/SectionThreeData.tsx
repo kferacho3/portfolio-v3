@@ -27,8 +27,10 @@ export const featuredWebsites: Project[] = [
   {
     id: 0,
     title: 'Zom AI',
-    imageDesktop: 'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
-    imageMobile: 'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
     link: 'https://zomtech.com',
     description:
       'Lead frontend and UI engineering across the product. Built the app shell and component architecture, delivered responsive UX from mobile to desktop, and orchestrated complex API integrations with authenticated workflows and synchronized state.',

@@ -43,12 +43,20 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
     <div className="absolute top-4 left-4 rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-sm px-5 py-4 text-white shadow-xl pointer-events-auto">
       <div className="text-3xl font-bold">
         {score}
-        {doublePointsTime > 0 && <span className="text-green-400 text-lg ml-2">2x</span>}
+        {doublePointsTime > 0 && (
+          <span className="text-green-400 text-lg ml-2">2x</span>
+        )}
       </div>
-      <div className="text-xs text-white/50 uppercase tracking-wider">Score</div>
+      <div className="text-xs text-white/50 uppercase tracking-wider">
+        Score
+      </div>
 
       <div className="mt-3">
-        <HeartsDisplay currentHearts={hearts} isHurt={isHurt} isHealing={isHealing} />
+        <HeartsDisplay
+          currentHearts={hearts}
+          isHurt={isHurt}
+          isHealing={isHealing}
+        />
       </div>
 
       <div className="mt-3 flex gap-4">
@@ -58,16 +66,25 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
         </div>
         {combo > 1 && (
           <div>
-            <div className="text-lg font-semibold text-yellow-400">{combo}x</div>
+            <div className="text-lg font-semibold text-yellow-400">
+              {combo}x
+            </div>
             <div className="text-xs text-white/50">Combo</div>
           </div>
         )}
       </div>
 
-      <PowerUpDisplay shieldTime={shieldTime} magnetTime={magnetTime} doubleTime={doubleTime} slowTime={slowTime} />
+      <PowerUpDisplay
+        shieldTime={shieldTime}
+        magnetTime={magnetTime}
+        doubleTime={doubleTime}
+        slowTime={slowTime}
+      />
 
       <div className="mt-4">
-        <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">Difficulty</div>
+        <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">
+          Difficulty
+        </div>
         <div className="flex gap-2">
           {(['easy', 'medium', 'hard'] as const).map((d) => (
             <button
@@ -97,9 +114,13 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
         <div className="text-center bg-slate-950/90 rounded-3xl border border-white/10 p-8 backdrop-blur-xl">
           <h1 className="text-4xl font-bold text-red-400 mb-4">Game Over!</h1>
           <p className="text-2xl text-white mb-2">Score: {score}</p>
-          <p className="text-lg text-white/60 mb-1">Items Caught: {collected}</p>
+          <p className="text-lg text-white/60 mb-1">
+            Items Caught: {collected}
+          </p>
           <p className="text-lg text-white/60 mb-4">Best Combo: {bestCombo}x</p>
-          <p className="text-white/50 animate-pulse">Click or Press SPACE to restart</p>
+          <p className="text-white/50 animate-pulse">
+            Click or Press SPACE to restart
+          </p>
         </div>
       </div>
     )}

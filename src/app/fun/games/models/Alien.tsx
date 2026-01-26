@@ -54,7 +54,11 @@ export function Alien({
     if (scale == null) return baseScale;
     if (typeof scale === 'number') return scale * baseScale;
     if (Array.isArray(scale)) {
-      return [scale[0] * baseScale, scale[1] * baseScale, scale[2] * baseScale] as [number, number, number];
+      return [
+        scale[0] * baseScale,
+        scale[1] * baseScale,
+        scale[2] * baseScale,
+      ] as [number, number, number];
     }
     if (scale instanceof THREE.Vector3) {
       return scale.clone().multiplyScalar(baseScale);
@@ -73,7 +77,12 @@ export function Alien({
   }, [color, emissiveIntensity, materials]);
 
   return (
-    <group {...props} rotation={rotation ?? DEFAULT_ROTATION} scale={resolvedScale} dispose={null}>
+    <group
+      {...props}
+      rotation={rotation ?? DEFAULT_ROTATION}
+      scale={resolvedScale}
+      dispose={null}
+    >
       <mesh geometry={geometry} material={coloredMaterial} />
     </group>
   );

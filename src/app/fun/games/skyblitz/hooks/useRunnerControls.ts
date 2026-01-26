@@ -8,10 +8,18 @@ interface RunnerControlsOptions {
   velocityRef: React.MutableRefObject<number>;
 }
 
-export const useRunnerControls = ({ phase, isJumpingRef, velocityRef }: RunnerControlsOptions) => {
+export const useRunnerControls = ({
+  phase,
+  isJumpingRef,
+  velocityRef,
+}: RunnerControlsOptions) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === 'Space' && !isJumpingRef.current && phase === 'playing') {
+      if (
+        event.code === 'Space' &&
+        !isJumpingRef.current &&
+        phase === 'playing'
+      ) {
         velocityRef.current = 7;
         isJumpingRef.current = true;
       }

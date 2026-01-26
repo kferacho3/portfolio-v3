@@ -34,14 +34,22 @@ const HUD: React.FC = () => {
             color: 'white',
           }}
         >
-          <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#00d4ff' }}>Level {snap.level}</div>
+          <div
+            style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#00d4ff' }}
+          >
+            Level {snap.level}
+          </div>
           <div style={{ fontSize: '1.1rem', marginTop: '0.5rem' }}>
             Score: <span style={{ color: '#00ffaa' }}>{snap.score}</span>
           </div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>Best: {snap.bestScore}</div>
+          <div style={{ fontSize: '0.9rem', opacity: 0.7 }}>
+            Best: {snap.bestScore}
+          </div>
 
           <div style={{ marginTop: '0.75rem' }}>
-            <div style={{ fontSize: '0.8rem', marginBottom: '0.25rem' }}>Health</div>
+            <div style={{ fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+              Health
+            </div>
             <div
               style={{
                 width: '150px',
@@ -55,7 +63,12 @@ const HUD: React.FC = () => {
                 style={{
                   width: `${snap.health}%`,
                   height: '100%',
-                  background: snap.health > 50 ? '#00ff88' : snap.health > 25 ? '#ffaa00' : '#ff4444',
+                  background:
+                    snap.health > 50
+                      ? '#00ff88'
+                      : snap.health > 25
+                        ? '#ffaa00'
+                        : '#ff4444',
                   transition: 'width 0.3s, background 0.3s',
                 }}
               />
@@ -98,7 +111,11 @@ const HUD: React.FC = () => {
             textAlign: 'right',
           }}
         >
-          <div style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '0.5rem' }}>Current Shape</div>
+          <div
+            style={{ fontSize: '0.9rem', opacity: 0.7, marginBottom: '0.5rem' }}
+          >
+            Current Shape
+          </div>
           <div
             style={{
               fontSize: '1.2rem',
@@ -109,7 +126,11 @@ const HUD: React.FC = () => {
           >
             {snap.currentShape}
           </div>
-          <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}>Press SPACE to cycle</div>
+          <div
+            style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}
+          >
+            Press SPACE to cycle
+          </div>
 
           <div
             style={{
@@ -177,11 +198,17 @@ const HUD: React.FC = () => {
             color: 'white',
           }}
         >
-          <div style={{ fontSize: '4rem', fontWeight: 'bold', color: '#ff4444' }}>GAME OVER</div>
+          <div
+            style={{ fontSize: '4rem', fontWeight: 'bold', color: '#ff4444' }}
+          >
+            GAME OVER
+          </div>
           <div style={{ fontSize: '1.5rem', marginTop: '1rem' }}>
             Final Score: <span style={{ color: '#00d4ff' }}>{snap.score}</span>
           </div>
-          <div style={{ fontSize: '1rem', marginTop: '0.5rem', opacity: 0.7 }}>Level Reached: {snap.level}</div>
+          <div style={{ fontSize: '1rem', marginTop: '0.5rem', opacity: 0.7 }}>
+            Level Reached: {snap.level}
+          </div>
           <button
             onClick={() => geoState.reset()}
             style={{

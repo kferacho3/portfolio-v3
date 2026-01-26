@@ -4,7 +4,12 @@ import { useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { CLUSTER_COUNT, DEPOSIT_COUNT, HAZARD_COUNT, WORLD_RADIUS } from './constants';
+import {
+  CLUSTER_COUNT,
+  DEPOSIT_COUNT,
+  HAZARD_COUNT,
+  WORLD_RADIUS,
+} from './constants';
 import CameraController from './_components/CameraController';
 import DepositGateComponent from './_components/DepositGate';
 import HazardComponent from './_components/Hazard';
@@ -14,7 +19,11 @@ import ShapeCluster from './_components/ShapeCluster';
 import WorldSurface from './_components/WorldSurface';
 import { geoState } from './state';
 import type { ClusterData, DepositGate, Hazard, ShapeType } from './types';
-import { generateClusters, generateDeposits, generateHazards } from './utils/generation';
+import {
+  generateClusters,
+  generateDeposits,
+  generateHazards,
+} from './utils/generation';
 
 export { geoState } from './state';
 export * from './constants';
@@ -24,9 +33,15 @@ const GeoChrome: React.FC = () => {
   const snap = useSnapshot(geoState);
   const { scene } = useThree();
 
-  const [clusters, setClusters] = useState<ClusterData[]>(() => generateClusters(CLUSTER_COUNT));
-  const [deposits, setDeposits] = useState<DepositGate[]>(() => generateDeposits(DEPOSIT_COUNT));
-  const [hazards, setHazards] = useState<Hazard[]>(() => generateHazards(HAZARD_COUNT));
+  const [clusters, setClusters] = useState<ClusterData[]>(() =>
+    generateClusters(CLUSTER_COUNT)
+  );
+  const [deposits, setDeposits] = useState<DepositGate[]>(() =>
+    generateDeposits(DEPOSIT_COUNT)
+  );
+  const [hazards, setHazards] = useState<Hazard[]>(() =>
+    generateHazards(HAZARD_COUNT)
+  );
   const [gameKey, setGameKey] = useState(0);
 
   const playerPosition = useRef(new THREE.Vector3(0, WORLD_RADIUS, 0));
@@ -62,27 +77,34 @@ const GeoChrome: React.FC = () => {
     }
   }, [snap.deposited, snap.targetDeposits, snap.level]);
 
-  const handleCollect = useCallback((clusterId: string, shapeId: string, shapeType: ShapeType) => {
-    setClusters((prev) =>
-      prev.map((cluster) => {
-        if (cluster.id !== clusterId) return cluster;
-        return {
-          ...cluster,
-          shapes: cluster.shapes.map((shape) => {
-            if (shape.id !== shapeId) return shape;
-            geoState.addCargo(shapeType);
-            geoState.score += 10;
-            if (geoState.score > geoState.bestScore) geoState.bestScore = geoState.score;
-            return { ...shape, collected: true };
-          }),
-        };
-      })
-    );
-  }, []);
+  const handleCollect = useCallback(
+    (clusterId: string, shapeId: string, shapeType: ShapeType) => {
+      setClusters((prev) =>
+        prev.map((cluster) => {
+          if (cluster.id !== clusterId) return cluster;
+          return {
+            ...cluster,
+            shapes: cluster.shapes.map((shape) => {
+              if (shape.id !== shapeId) return shape;
+              geoState.addCargo(shapeType);
+              geoState.score += 10;
+              if (geoState.score > geoState.bestScore)
+                geoState.bestScore = geoState.score;
+              return { ...shape, collected: true };
+            }),
+          };
+        })
+      );
+    },
+    []
+  );
 
-  const handleDeposit = useCallback((_depositId: string, shape: ShapeType): boolean => {
-    return geoState.depositCargo(shape);
-  }, []);
+  const handleDeposit = useCallback(
+    (_depositId: string, shape: ShapeType): boolean => {
+      return geoState.depositCargo(shape);
+    },
+    []
+  );
 
   const handleHazardHit = useCallback(() => {
     geoState.takeDamage(15);
@@ -103,7 +125,11 @@ const GeoChrome: React.FC = () => {
 
       <CameraController playerPosition={playerPosition.current} />
 
-      <Player key={gameKey} position={playerPosition.current} onMove={handlePlayerMove} />
+      <Player
+        key={gameKey}
+        position={playerPosition.current}
+        onMove={handlePlayerMove}
+      />
 
       {clusters.map((cluster) => (
         <ShapeCluster

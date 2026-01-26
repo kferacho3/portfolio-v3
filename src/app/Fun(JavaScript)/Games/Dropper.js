@@ -2,7 +2,13 @@ import { a, useSpring } from '@react-spring/three';
 import { Physics, useBox } from '@react-three/cannon';
 import { Html, useProgress } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
-import React, { Suspense, forwardRef, useCallback, useEffect, useState } from 'react';
+import React, {
+  Suspense,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useState,
+} from 'react';
 import LoadingAnimation from '../GamePreloader/Preloader';
 
 const generateRandomColor = () => {
@@ -13,23 +19,25 @@ const generateRandomColor = () => {
 };
 
 // Animated Block Component
-const AnimatedBlock = React.forwardRef(({ position, size, color, onPositionChange }, ref) => {
-  const [spring, api] = useSpring(() => ({
-    position,
-    config: { mass: 1, tension: 170, friction: 26 },
-  }));
+const AnimatedBlock = React.forwardRef(
+  ({ position, size, color, onPositionChange }, ref) => {
+    const [spring, api] = useSpring(() => ({
+      position,
+      config: { mass: 1, tension: 170, friction: 26 },
+    }));
 
-  useEffect(() => {
-    api.start({ position });
-  }, [position, api]);
+    useEffect(() => {
+      api.start({ position });
+    }, [position, api]);
 
-  return (
-    <a.mesh position={spring.position} ref={ref} castShadow>
-      <boxBufferGeometry args={size} />
-      <meshLambertMaterial color={color} />
-    </a.mesh>
-  );
-});
+    return (
+      <a.mesh position={spring.position} ref={ref} castShadow>
+        <boxBufferGeometry args={size} />
+        <meshLambertMaterial color={color} />
+      </a.mesh>
+    );
+  }
+);
 
 const StaticBlock = ({ position, size, color }) => {
   const [ref] = useBox(() => ({ type: 'Static', position, args: size }));
@@ -42,38 +50,37 @@ const StaticBlock = ({ position, size, color }) => {
   );
 };
 
-const DroppedBlock = forwardRef(({ position, size, color, onCollide, score }, ref) => {
-  const [hasScored, setHasScored] = useState(false); // Add a flag to track scoring
+const DroppedBlock = forwardRef(
+  ({ position, size, color, onCollide, score }, ref) => {
+    const [hasScored, setHasScored] = useState(false); // Add a flag to track scoring
 
-  const [blockRef, api] = useBox(() => ({
-    mass: 0.1,
-    position,
-    args: size,
-    onCollide: (e) => {
-      if (!hasScored) {
-        onCollide(); // Only call onCollide if the score hasn't been updated yet
-        setHasScored(true); // Prevent further score updates for this block
-      }
-      // Freeze the block when it collides
-      api.velocity.set(0, 0, 0);
-      api.angularVelocity.set(0, 0, 0);
-      api.mass.set(0); // Make the block static after dropping
-    },
-  }));
+    const [blockRef, api] = useBox(() => ({
+      mass: 0.1,
+      position,
+      args: size,
+      onCollide: (e) => {
+        if (!hasScored) {
+          onCollide(); // Only call onCollide if the score hasn't been updated yet
+          setHasScored(true); // Prevent further score updates for this block
+        }
+        // Freeze the block when it collides
+        api.velocity.set(0, 0, 0);
+        api.angularVelocity.set(0, 0, 0);
+        api.mass.set(0); // Make the block static after dropping
+      },
+    }));
 
-  return (
-    <mesh ref={blockRef} castShadow>
-          <Html position={[0, 0, 0]} className="score" style={{ color: 'white' }}>
+    return (
+      <mesh ref={blockRef} castShadow>
+        <Html position={[0, 0, 0]} className="score" style={{ color: 'white' }}>
           Score: {score}
         </Html>
-      <boxBufferGeometry args={size} />
-      <meshLambertMaterial color={color} />
-    </mesh>
-  );
-});
-
-
-
+        <boxBufferGeometry args={size} />
+        <meshLambertMaterial color={color} />
+      </mesh>
+    );
+  }
+);
 
 const CameraController = ({ targetPosition }) => {
   const { camera } = useThree();
@@ -84,10 +91,10 @@ const CameraController = ({ targetPosition }) => {
     newPosition[1] = targetPosition[1] + 5; // Adjust Y position to match block's Y plus an offset if needed
 
     // Set camera to new position
-    camera.position.set(0, newPosition[1] /2, newPosition[2]);
+    camera.position.set(0, newPosition[1] / 2, newPosition[2]);
 
     // Look at the animated block
-    camera.lookAt(0, targetPosition[1]/2, targetPosition[2]);
+    camera.lookAt(0, targetPosition[1] / 2, targetPosition[2]);
     camera.updateProjectionMatrix(); // Ensure the camera's projection matrix is updated
   }, [camera, targetPosition]); // Depend on camera and targetPosition to update effect
 
@@ -106,18 +113,21 @@ const Dropper = () => {
   const [position, setPosition] = useState([0, 0, 0]);
   const blockSize = [4, 0.5, 4];
   const [highestY, setHighestY] = useState(0);
-// This logic goes inside the Dropper component where you define other blocks
-const handleBlockCollision = useCallback(() => {
-  setScore((prevScore) => prevScore + 1);
-}, []);
+  // This logic goes inside the Dropper component where you define other blocks
+  const handleBlockCollision = useCallback(() => {
+    setScore((prevScore) => prevScore + 1);
+  }, []);
 
-
- useEffect(() => {
+  useEffect(() => {
     const oscillateBlock = () => {
       // Reduce the additional height added after each drop to lower the starting height of the animated block
       // You can adjust this value to control how high above the highest block the animated block starts
       const additionalHeight = 4.0; // Reduced from 3.5 to make the animated block not translate as high
-      setPosition([Math.sin(Date.now() / 500) * 5, highestY + blockSize[1] + additionalHeight, 0]);
+      setPosition([
+        Math.sin(Date.now() / 500) * 5,
+        highestY + blockSize[1] + additionalHeight,
+        0,
+      ]);
     };
 
     const intervalId = setInterval(oscillateBlock, 100);
@@ -127,23 +137,25 @@ const handleBlockCollision = useCallback(() => {
   const handleSpaceBar = useCallback(() => {
     const newYPosition = highestY + blockSize[1] + 0.15;
     const newColor = generateRandomColor(); // Use the random color generator
-  
-    setBlocks(prevBlocks => [...prevBlocks, {
-      position: [position[0], newYPosition, position[2]],
-      size: blockSize,
-      color: newColor,
-      Component: DroppedBlock,
-      onCollide: handleBlockCollision, // Add this line to ensure the collision callback is passed
-      score: score,
-    }]);
-    
+
+    setBlocks((prevBlocks) => [
+      ...prevBlocks,
+      {
+        position: [position[0], newYPosition, position[2]],
+        size: blockSize,
+        color: newColor,
+        Component: DroppedBlock,
+        onCollide: handleBlockCollision, // Add this line to ensure the collision callback is passed
+        score: score,
+      },
+    ]);
+
     setHighestY(newYPosition);
   }, [position, highestY, blockSize]);
-  
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (event.code === "Space") handleSpaceBar();
+      if (event.code === 'Space') handleSpaceBar();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -153,13 +165,21 @@ const handleBlockCollision = useCallback(() => {
   // Note: Camera's initial position is set in the Canvas component, and we use CameraController to adjust its focus
   return (
     <Canvas shadows camera={{ position: [0, 5, 15], fov: 50 }}>
-
       <CameraController highestY={highestY} targetPosition={position} />
       <Suspense fallback={<Loader />}>
         <ambientLight intensity={0.5} />
-        <spotLight position={[10, 15, 10]} angle={0.3} intensity={1.5} castShadow />
+        <spotLight
+          position={[10, 15, 10]}
+          angle={0.3}
+          intensity={1.5}
+          castShadow
+        />
         <Physics>
-          <StaticBlock position={[0, -1, 0]} size={blockSize} color="lightblue" />
+          <StaticBlock
+            position={[0, -1, 0]}
+            size={blockSize}
+            color="lightblue"
+          />
           {blocks.map((block, index) => (
             <block.Component key={index} {...block} />
           ))}

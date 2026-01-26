@@ -1,6 +1,6 @@
 /**
  * useGameAudio Hook
- * 
+ *
  * Domain hook for managing game audio (music and sound effects).
  * Handles music loading, playback, and volume control.
  */
@@ -100,21 +100,24 @@ export function useSoundEffect() {
   const { soundsOn } = useAudioState();
   const audioPoolRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
-  const playSound = useCallback((url: string, volume: number = AUDIO_SETTINGS.soundsVolume) => {
-    if (!soundsOn) return;
+  const playSound = useCallback(
+    (url: string, volume: number = AUDIO_SETTINGS.soundsVolume) => {
+      if (!soundsOn) return;
 
-    // Check if we have a cached audio element
-    let audio = audioPoolRef.current.get(url);
-    
-    if (!audio) {
-      audio = new Audio(url);
-      audioPoolRef.current.set(url, audio);
-    }
+      // Check if we have a cached audio element
+      let audio = audioPoolRef.current.get(url);
 
-    audio.volume = volume;
-    audio.currentTime = 0;
-    audio.play().catch(console.warn);
-  }, [soundsOn]);
+      if (!audio) {
+        audio = new Audio(url);
+        audioPoolRef.current.set(url, audio);
+      }
+
+      audio.volume = volume;
+      audio.currentTime = 0;
+      audio.play().catch(console.warn);
+    },
+    [soundsOn]
+  );
 
   // Cleanup on unmount
   useEffect(() => {

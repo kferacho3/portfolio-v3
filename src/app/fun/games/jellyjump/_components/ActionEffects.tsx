@@ -83,18 +83,31 @@ export default function ActionEffects() {
         if (evt.type === 'bomb') base.set(COLOR_MAP.bomb);
         if (evt.type === 'lever') base.set(COLOR_MAP.lever);
         if (evt.type === 'booster') {
-          base.set(evt.variant === 'freeze' ? COLOR_MAP.boosterFreeze : COLOR_MAP.boosterSkip);
+          base.set(
+            evt.variant === 'freeze'
+              ? COLOR_MAP.boosterFreeze
+              : COLOR_MAP.boosterSkip
+          );
         }
 
         const count =
-          evt.type === 'bomb' ? 24 :
-          evt.type === 'booster' ? 18 :
-          evt.type === 'lever' ? 12 : 10;
+          evt.type === 'bomb'
+            ? 24
+            : evt.type === 'booster'
+              ? 18
+              : evt.type === 'lever'
+                ? 12
+                : 10;
         const speed =
-          evt.type === 'bomb' ? 8 :
-          evt.type === 'booster' ? 6 :
-          evt.type === 'lever' ? 4 : 5;
-        const maxLife = evt.type === 'bomb' ? 0.9 : evt.type === 'booster' ? 0.7 : 0.6;
+          evt.type === 'bomb'
+            ? 8
+            : evt.type === 'booster'
+              ? 6
+              : evt.type === 'lever'
+                ? 4
+                : 5;
+        const maxLife =
+          evt.type === 'bomb' ? 0.9 : evt.type === 'booster' ? 0.7 : 0.6;
 
         for (let i = 0; i < count; i += 1) {
           const dir = new THREE.Vector3(
@@ -148,14 +161,18 @@ export default function ActionEffects() {
       dummySpark.scale.setScalar(scale);
       dummySpark.updateMatrix();
       sparkMeshRef.current.setMatrixAt(sparkCount, dummySpark.matrix);
-      sparkMeshRef.current.setColorAt(sparkCount, tempColor.copy(spark.color).multiplyScalar(1 - t));
+      sparkMeshRef.current.setColorAt(
+        sparkCount,
+        tempColor.copy(spark.color).multiplyScalar(1 - t)
+      );
       sparkCount += 1;
       if (sparkCount >= 220) break;
     }
 
     sparkMeshRef.current.count = sparkCount;
     sparkMeshRef.current.instanceMatrix.needsUpdate = true;
-    if (sparkMeshRef.current.instanceColor) sparkMeshRef.current.instanceColor.needsUpdate = true;
+    if (sparkMeshRef.current.instanceColor)
+      sparkMeshRef.current.instanceColor.needsUpdate = true;
 
     let ringCount = 0;
     for (const ring of ringsRef.current) {
@@ -166,22 +183,34 @@ export default function ActionEffects() {
       dummyRing.scale.set(scale, scale, scale);
       dummyRing.updateMatrix();
       ringMeshRef.current.setMatrixAt(ringCount, dummyRing.matrix);
-      ringMeshRef.current.setColorAt(ringCount, tempColor.copy(ring.color).multiplyScalar(1 - t));
+      ringMeshRef.current.setColorAt(
+        ringCount,
+        tempColor.copy(ring.color).multiplyScalar(1 - t)
+      );
       ringCount += 1;
       if (ringCount >= 40) break;
     }
 
     ringMeshRef.current.count = ringCount;
     ringMeshRef.current.instanceMatrix.needsUpdate = true;
-    if (ringMeshRef.current.instanceColor) ringMeshRef.current.instanceColor.needsUpdate = true;
+    if (ringMeshRef.current.instanceColor)
+      ringMeshRef.current.instanceColor.needsUpdate = true;
   });
 
   return (
     <group>
-      <instancedMesh ref={sparkMeshRef} args={[undefined, sparkMat, 220]} frustumCulled={false}>
+      <instancedMesh
+        ref={sparkMeshRef}
+        args={[undefined, sparkMat, 220]}
+        frustumCulled={false}
+      >
         <octahedronGeometry args={[0.12, 0]} />
       </instancedMesh>
-      <instancedMesh ref={ringMeshRef} args={[undefined, ringMat, 40]} frustumCulled={false}>
+      <instancedMesh
+        ref={ringMeshRef}
+        args={[undefined, ringMat, 40]}
+        frustumCulled={false}
+      >
         <ringGeometry args={[0.18, 0.32, 32]} />
       </instancedMesh>
     </group>

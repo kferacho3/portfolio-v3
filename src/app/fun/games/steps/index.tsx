@@ -123,10 +123,12 @@ function Steps() {
         }
       }
       tileMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (tileMeshRef.current.instanceColor) tileMeshRef.current.instanceColor.needsUpdate = true;
+      if (tileMeshRef.current.instanceColor)
+        tileMeshRef.current.instanceColor.needsUpdate = true;
       if (spikeMeshRef.current) {
         spikeMeshRef.current.instanceMatrix.needsUpdate = true;
-        if (spikeMeshRef.current.instanceColor) spikeMeshRef.current.instanceColor.needsUpdate = true;
+        if (spikeMeshRef.current.instanceColor)
+          spikeMeshRef.current.instanceColor.needsUpdate = true;
       }
     }
 
@@ -153,7 +155,15 @@ function Steps() {
     if (old) w.tilesByKey.delete(old.key);
 
     const hasSpike = index > 10 ? w.rng.bool(SPIKE_CHANCE) : false;
-    const tile: Tile = { key, ix, iz, index, instanceId, painted: false, hasSpike };
+    const tile: Tile = {
+      key,
+      ix,
+      iz,
+      index,
+      instanceId,
+      painted: false,
+      hasSpike,
+    };
     w.tilesByKey.set(key, tile);
     w.instanceToTile[instanceId] = tile;
 
@@ -188,10 +198,12 @@ function Steps() {
       }
 
       tileMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (tileMeshRef.current.instanceColor) tileMeshRef.current.instanceColor.needsUpdate = true;
+      if (tileMeshRef.current.instanceColor)
+        tileMeshRef.current.instanceColor.needsUpdate = true;
       if (spikeMeshRef.current) {
         spikeMeshRef.current.instanceMatrix.needsUpdate = true;
-        if (spikeMeshRef.current.instanceColor) spikeMeshRef.current.instanceColor.needsUpdate = true;
+        if (spikeMeshRef.current.instanceColor)
+          spikeMeshRef.current.instanceColor.needsUpdate = true;
       }
     }
 
@@ -214,7 +226,8 @@ function Steps() {
       // alternate between two “paint” tones for a lively trail
       const c = tile.index % 2 === 0 ? palette.paintedA : palette.paintedB;
       tileMeshRef.current.setColorAt(tile.instanceId, c);
-      if (tileMeshRef.current.instanceColor) tileMeshRef.current.instanceColor.needsUpdate = true;
+      if (tileMeshRef.current.instanceColor)
+        tileMeshRef.current.instanceColor.needsUpdate = true;
     }
   };
 
@@ -310,19 +323,31 @@ function Steps() {
       <ambientLight intensity={0.7} />
       <directionalLight position={[7, 11, 6]} intensity={0.9} castShadow />
 
-      <instancedMesh ref={tileMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]} castShadow receiveShadow>
+      <instancedMesh
+        ref={tileMeshRef}
+        args={[undefined, undefined, MAX_RENDER_TILES]}
+        castShadow
+        receiveShadow
+      >
         <boxGeometry args={[TILE_SIZE, TILE_HEIGHT, TILE_SIZE]} />
         <meshStandardMaterial vertexColors roughness={0.55} metalness={0.05} />
       </instancedMesh>
 
-      <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+      <instancedMesh
+        ref={spikeMeshRef}
+        args={[undefined, undefined, MAX_RENDER_TILES]}
+      >
         <coneGeometry args={[0.16, 0.32, 10]} />
         <meshStandardMaterial vertexColors roughness={0.45} metalness={0.05} />
       </instancedMesh>
 
       <mesh ref={playerRef} castShadow>
         <boxGeometry args={PLAYER_SIZE} />
-        <meshStandardMaterial color={'#ff5aa5'} roughness={0.4} metalness={0.05} />
+        <meshStandardMaterial
+          color={'#ff5aa5'}
+          roughness={0.4}
+          metalness={0.05}
+        />
       </mesh>
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -332,7 +357,8 @@ function Steps() {
             top: 14,
             left: 14,
             color: '#0b1220',
-            fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+            fontFamily:
+              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
           }}
         >
           <div style={{ fontSize: 14, opacity: 0.75 }}>STEPS</div>
@@ -361,7 +387,9 @@ function Steps() {
                 boxShadow: '0 12px 40px rgba(0,0,0,0.08)',
               }}
             >
-              <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>STEPS</div>
+              <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1 }}>
+                STEPS
+              </div>
               <div style={{ marginTop: 6, fontSize: 14, opacity: 0.75 }}>
                 Tap / Space to start • Tap to switch direction • Avoid spikes.
               </div>
@@ -372,7 +400,8 @@ function Steps() {
                 </div>
               )}
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.55 }}>
-                Tip: Late taps are safer than early taps — watch the next corner.
+                Tip: Late taps are safer than early taps — watch the next
+                corner.
               </div>
             </div>
           </div>

@@ -1,10 +1,18 @@
 import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  CuboidCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import React, { useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { WALL_MODE_HEIGHT, WALL_MODE_WALL_Z, WALL_MODE_WIDTH } from '../../constants';
+import {
+  WALL_MODE_HEIGHT,
+  WALL_MODE_WALL_Z,
+  WALL_MODE_WIDTH,
+} from '../../constants';
 import { reactPongState } from '../../state';
 import type { WallZone } from '../../types';
 
@@ -30,7 +38,8 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
         if (panel) {
           const speed = 0.5 + i * 0.2;
           const amplitude = 2 + i;
-          panel.position.x = Math.sin(clock.getElapsedTime() * speed) * amplitude;
+          panel.position.x =
+            Math.sin(clock.getElapsedTime() * speed) * amplitude;
         }
       });
     }
@@ -62,7 +71,10 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
           speedScale = hitZone.effect;
           break;
         case 'spin':
-          ballRef.current?.setAngvel({ x: hitZone.effect * 4, y: 0, z: hitZone.effect * 6 }, true);
+          ballRef.current?.setAngvel(
+            { x: hitZone.effect * 4, y: 0, z: hitZone.effect * 6 },
+            true
+          );
           newVelX += (Math.random() - 0.5) * hitZone.effect * 2;
           newVelY += (Math.random() - 0.5) * hitZone.effect * 2;
           break;
@@ -72,7 +84,11 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
           break;
         case 'hazard': {
           const angle = (Math.random() - 0.5) * Math.PI * 0.7;
-          const speed = Math.sqrt(ballVel.x * ballVel.x + ballVel.y * ballVel.y + ballVel.z * ballVel.z);
+          const speed = Math.sqrt(
+            ballVel.x * ballVel.x +
+              ballVel.y * ballVel.y +
+              ballVel.z * ballVel.z
+          );
           newVelX = Math.sin(angle) * speed * 0.6;
           newVelY = Math.cos(angle) * speed * 0.6;
           break;
@@ -82,7 +98,10 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
       }
     }
 
-    const result = reactPongState.wallModeHitWall(hitZone?.type, reactPongState.wallMode.lastCatchWasPerfect);
+    const result = reactPongState.wallModeHitWall(
+      hitZone?.type,
+      reactPongState.wallMode.lastCatchWasPerfect
+    );
     const targetSpeed = Math.min(
       reactPongState.wallMode.maxSpeed,
       reactPongState.wallMode.currentSpeed * speedScale
@@ -100,7 +119,11 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
     reactPongState.addScorePopup(
       result.score,
       [ballPos.x, ballPos.y, ballPos.z],
-      hitZone?.type === 'target' ? '#ffff00' : hitZone?.type === 'hazard' ? '#ff0000' : '#00d4ff',
+      hitZone?.type === 'target'
+        ? '#ffff00'
+        : hitZone?.type === 'hazard'
+          ? '#ff0000'
+          : '#00d4ff',
       result.combo.name || undefined
     );
     reactPongState.addHitEffect(
@@ -138,8 +161,16 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
 
   return (
     <>
-      <RigidBody type="fixed" position={[0, 0, wallZ]} onCollisionEnter={handleWallHit}>
-        <CuboidCollider args={[wallWidth / 2, wallHeight / 2, wallThickness / 2]} restitution={1} friction={0} />
+      <RigidBody
+        type="fixed"
+        position={[0, 0, wallZ]}
+        onCollisionEnter={handleWallHit}
+      >
+        <CuboidCollider
+          args={[wallWidth / 2, wallHeight / 2, wallThickness / 2]}
+          restitution={1}
+          friction={0}
+        />
         <mesh>
           <boxGeometry args={[wallWidth, wallHeight, wallThickness]} />
           <meshStandardMaterial
@@ -155,7 +186,11 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
       {zones.map((zone) => (
         <mesh
           key={zone.id}
-          position={[zone.position[0], zone.position[1], wallZ + wallThickness / 2 + 0.05]}
+          position={[
+            zone.position[0],
+            zone.position[1],
+            wallZ + wallThickness / 2 + 0.05,
+          ]}
         >
           <boxGeometry args={[zone.size[0], zone.size[1], 0.2]} />
           <meshStandardMaterial
@@ -173,7 +208,11 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
         .map((zone) => (
           <Text
             key={`label-${zone.id}`}
-            position={[zone.position[0], zone.position[1], wallZ + wallThickness / 2 + 0.2]}
+            position={[
+              zone.position[0],
+              zone.position[1],
+              wallZ + wallThickness / 2 + 0.2,
+            ]}
             fontSize={0.3}
             color="#ffffff"
             anchorX="center"
@@ -192,21 +231,38 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
             position={[0, -wallHeight / 4, wallZ + wallThickness / 2 + 0.2]}
           >
             <boxGeometry args={[3, 0.5, 0.3]} />
-            <meshStandardMaterial color="#ff4080" emissive="#ff4080" emissiveIntensity={0.5} />
+            <meshStandardMaterial
+              color="#ff4080"
+              emissive="#ff4080"
+              emissiveIntensity={0.5}
+            />
           </mesh>
           <mesh
             ref={(el) => {
               if (el) movingPanelRefs.current[1] = el;
             }}
-            position={[0, -wallHeight / 2 + 1.2, wallZ + wallThickness / 2 + 0.2]}
+            position={[
+              0,
+              -wallHeight / 2 + 1.2,
+              wallZ + wallThickness / 2 + 0.2,
+            ]}
           >
             <boxGeometry args={[2.5, 0.5, 0.3]} />
-            <meshStandardMaterial color="#40ff80" emissive="#40ff80" emissiveIntensity={0.5} />
+            <meshStandardMaterial
+              color="#40ff80"
+              emissive="#40ff80"
+              emissiveIntensity={0.5}
+            />
           </mesh>
         </>
       )}
 
-      <pointLight position={[0, 0, wallZ + 2]} color="#4080ff" intensity={0.6} distance={15} />
+      <pointLight
+        position={[0, 0, wallZ + 2]}
+        color="#4080ff"
+        intensity={0.6}
+        distance={15}
+      />
     </>
   );
 };

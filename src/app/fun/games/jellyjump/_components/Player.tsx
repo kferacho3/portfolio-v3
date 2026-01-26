@@ -132,7 +132,10 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
 
     // Jump if queued and (grounded or within coyote window)
     const canCoyote = nowMs - mutation.lastGroundedMs <= COYOTE_TIME_MS;
-    if (mutation.jumpQueuedUntilMs >= nowMs && (mutation.isGrounded || canCoyote)) {
+    if (
+      mutation.jumpQueuedUntilMs >= nowMs &&
+      (mutation.isGrounded || canCoyote)
+    ) {
       vy = JUMP_VELOCITY;
       mutation.isGrounded = false;
       mutation.jumpQueuedUntilMs = 0;
@@ -158,16 +161,21 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     // Check a few rows around the player (fast and deterministic)
     for (let i = row - 1; i <= row + 1; i += 1) {
       if (i < 0) continue;
-      
+
       // Check if this row requires lever activation
       if (i > 0) {
-        const requiredLever = pattern.levers.find(l => l.targetRowIndex === i);
-        if (requiredLever && !snap.activatedLevers.has(requiredLever.rowIndex)) {
+        const requiredLever = pattern.levers.find(
+          (l) => l.targetRowIndex === i
+        );
+        if (
+          requiredLever &&
+          !snap.activatedLevers.has(requiredLever.rowIndex)
+        ) {
           // Skip collision with platforms that require unactivated lever
           continue;
         }
       }
-      
+
       const { pieces } = getPlatformPieces(i, timeS, pattern);
 
       for (let k = 0; k < 2; k += 1) {
@@ -179,8 +187,11 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
         const topY = p.y + PLATFORM_THICKNESS / 2;
 
         // AABB overlap (approx; rotations are only solid when almost horizontal)
-        const overlapX = px >= p.x - halfLen - playerHalf && px <= p.x + halfLen + playerHalf;
-        const overlapZ = pz >= p.z - halfDepth - playerHalf && pz <= p.z + halfDepth + playerHalf;
+        const overlapX =
+          px >= p.x - halfLen - playerHalf && px <= p.x + halfLen + playerHalf;
+        const overlapZ =
+          pz >= p.z - halfDepth - playerHalf &&
+          pz <= p.z + halfDepth + playerHalf;
 
         if (!overlapX || !overlapZ) continue;
 
@@ -193,16 +204,24 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
         // This handles both landing from above and being on the platform
         const prevBottom = prevY - playerHalf;
         const nextBottom = playerBottom;
-        
+
         // Landing: moving downward through the top plane
-        const isLanding = vy <= 0 && prevBottom > platformTop && nextBottom <= platformTop;
-        
+        const isLanding =
+          vy <= 0 && prevBottom > platformTop && nextBottom <= platformTop;
+
         // Already on platform: player bottom is at or slightly above platform top
-        const isOnPlatform = nextBottom <= platformTop + 0.15 && nextBottom >= platformBottom - 0.3 && vy <= 1.0;
-        
+        const isOnPlatform =
+          nextBottom <= platformTop + 0.15 &&
+          nextBottom >= platformBottom - 0.3 &&
+          vy <= 1.0;
+
         // Starting position: if very close to initial platform, snap to it
-        const isStarting = timeS < 0.2 && i === 0 && nextBottom <= platformTop + 0.5 && nextBottom >= platformBottom - 0.5;
-        
+        const isStarting =
+          timeS < 0.2 &&
+          i === 0 &&
+          nextBottom <= platformTop + 0.5 &&
+          nextBottom >= platformBottom - 0.5;
+
         if (isLanding || isOnPlatform || isStarting) {
           py = platformTop + playerHalf;
           vy = Math.max(0, vy); // Stop downward velocity
@@ -228,7 +247,7 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       const dx = px - obstaclePos.x;
       const dz = pz - obstaclePos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      
+
       if (dist < interactionRadius + OBSTACLE_RADIUS) {
         // Hit by bomb - knock down levels
         const newLevel = Math.max(0, currentRow - BOMB_KNOCKDOWN_LEVELS);
@@ -237,7 +256,10 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
         vy = -6.5; // Knockdown effect
         mutation.isGrounded = false;
         mutation.lastBombHitMs = nowMs;
-        jellyJumpState.score = Math.max(0, jellyJumpState.score - LEVEL_SCORE_VALUE * BOMB_KNOCKDOWN_LEVELS);
+        jellyJumpState.score = Math.max(
+          0,
+          jellyJumpState.score - LEVEL_SCORE_VALUE * BOMB_KNOCKDOWN_LEVELS
+        );
         mutation.effectQueue.push({
           id: mutation.nextEffectId++,
           type: 'bomb',
@@ -257,11 +279,11 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     for (const lever of pattern.levers) {
       if (lever.rowIndex !== currentRow) continue;
       if (snap.activatedLevers.has(lever.rowIndex)) continue;
-      
+
       const dx = px - lever.x;
       const dz = pz - lever.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      
+
       if (dist < interactionRadius + LEVER_SIZE && mutation.isGrounded) {
         // Activate lever - unlocks the target row
         jellyJumpState.activatedLevers.add(lever.rowIndex);
@@ -281,17 +303,20 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     for (const booster of pattern.boosters) {
       if (booster.rowIndex !== currentRow) continue;
       if (booster.collected) continue;
-      
+
       const dx = px - booster.x;
       const dz = pz - booster.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      
+
       if (dist < interactionRadius + BOOSTER_SIZE) {
         booster.collected = true;
-        
+
         if (booster.type === 'levelSkip') {
           // Skip levels
-          const newLevel = Math.min(PLATFORM_PATTERN_SIZE - 1, currentRow + LEVEL_SKIP_BOOST);
+          const newLevel = Math.min(
+            PLATFORM_PATTERN_SIZE - 1,
+            currentRow + LEVEL_SKIP_BOOST
+          );
           const newY = newLevel * PLATFORM_SPACING + 1.2;
           py = newY;
           vy = 15; // Upward boost
@@ -331,17 +356,17 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     for (const gem of pattern.gems) {
       if (gem.rowIndex !== currentRow) continue;
       if (gem.collected) continue;
-      
+
       const dx = px - gem.x;
       const dz = pz - gem.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
-      
+
       if (dist < interactionRadius + GEM_SIZE) {
         gem.collected = true;
         jellyJumpState.gems += 1;
         jellyJumpState.gemsCollected += 1;
         jellyJumpState.score += gem.value;
-        
+
         // Collection effect - visual feedback
         squashRef.current.value = 0.5; // Squish effect
       }
@@ -360,7 +385,10 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     // ─────────────────────────────────────────────────────────────────────
     const currentLevel = Math.max(0, Math.floor(py / PLATFORM_SPACING));
     mutation.maxY = Math.max(mutation.maxY, py);
-    const runMaxLevel = Math.max(0, Math.floor(mutation.maxY / PLATFORM_SPACING));
+    const runMaxLevel = Math.max(
+      0,
+      Math.floor(mutation.maxY / PLATFORM_SPACING)
+    );
     const lavaY = getLavaY(timeS, runMaxLevel);
 
     // If player touches lava (or falls way below), end.

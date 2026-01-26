@@ -1,6 +1,10 @@
 import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { CuboidCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  CuboidCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import clamp from 'lodash-es/clamp';
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
@@ -22,7 +26,11 @@ interface WallModePaddleProps {
   shotSpinRef: React.MutableRefObject<{ x: number; y: number }>;
 }
 
-const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, shotSpinRef }) => {
+const WallModePaddle: React.FC<WallModePaddleProps> = ({
+  ballRef,
+  scoreColor,
+  shotSpinRef,
+}) => {
   const paddleApi = useRef<RapierRigidBody | null>(null);
   const captureGlowRef = useRef<THREE.Mesh>(null);
   const pointerDown = useRef(false);
@@ -39,8 +47,10 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
 
   const widenMultiplier = reactPongState.hasPowerup('widen') ? 1.4 : 1;
   const baseCaptureSize = wallMode.currentLevelConfig.captureZoneSize;
-  const actualCaptureWidth = baseCaptureSize * WALL_MODE_PADDLE_WIDTH_MULTIPLIER * widenMultiplier;
-  const actualCaptureHeight = baseCaptureSize * WALL_MODE_PADDLE_HEIGHT_RATIO * widenMultiplier;
+  const actualCaptureWidth =
+    baseCaptureSize * WALL_MODE_PADDLE_WIDTH_MULTIPLIER * widenMultiplier;
+  const actualCaptureHeight =
+    baseCaptureSize * WALL_MODE_PADDLE_HEIGHT_RATIO * widenMultiplier;
 
   const launchBall = useCallback(() => {
     if (!ballRef.current) return;
@@ -50,9 +60,16 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
     const direction = new THREE.Vector3(jitterX, jitterY, -1).normalize();
     const speed = reactPongState.wallMode.currentSpeed;
 
-    ballRef.current.setTranslation({ x: 0, y: 0, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET }, true);
+    ballRef.current.setTranslation(
+      { x: 0, y: 0, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET },
+      true
+    );
     ballRef.current.setLinvel(
-      { x: direction.x * speed, y: direction.y * speed, z: direction.z * speed },
+      {
+        x: direction.x * speed,
+        y: direction.y * speed,
+        z: direction.z * speed,
+      },
       true
     );
   }, [ballRef]);
@@ -83,7 +100,11 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
     ).normalize();
 
     ballRef.current.setTranslation(
-      { x: paddleXY.x, y: paddleXY.y, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET },
+      {
+        x: paddleXY.x,
+        y: paddleXY.y,
+        z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET,
+      },
       true
     );
     ballRef.current.setLinvel(
@@ -156,12 +177,17 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
 
   useFrame((state) => {
     const sensitivity = wallMode.stabilizeMode ? 0.6 : 1;
-    vec.current.set(state.pointer.x * sensitivity, state.pointer.y * sensitivity, 0.5).unproject(state.camera);
+    vec.current
+      .set(state.pointer.x * sensitivity, state.pointer.y * sensitivity, 0.5)
+      .unproject(state.camera);
     dir.current.copy(vec.current).sub(state.camera.position).normalize();
 
     if (Math.abs(dir.current.z) < 0.001) return;
-    const distance = (WALL_MODE_PLAYER_Z - state.camera.position.z) / dir.current.z;
-    const target = state.camera.position.clone().add(dir.current.multiplyScalar(distance));
+    const distance =
+      (WALL_MODE_PLAYER_Z - state.camera.position.z) / dir.current.z;
+    const target = state.camera.position
+      .clone()
+      .add(dir.current.multiplyScalar(distance));
 
     const halfWidth = Math.max(
       0,
@@ -169,7 +195,9 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
     );
     const halfHeight = Math.max(
       0,
-      WALL_MODE_HEIGHT / 2 - actualCaptureHeight / 2 - WALL_MODE_PADDLE_EDGE_INSET
+      WALL_MODE_HEIGHT / 2 -
+        actualCaptureHeight / 2 -
+        WALL_MODE_PADDLE_EDGE_INSET
     );
     const clampedX = clamp(target.x, -halfWidth, halfWidth);
     const clampedY = clamp(target.y, -halfHeight, halfHeight);
@@ -187,7 +215,11 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
       tiltAngle = state.pointer.x * 0.3;
     }
 
-    paddleApi.current?.setNextKinematicTranslation({ x: clampedX, y: clampedY, z: WALL_MODE_PLAYER_Z });
+    paddleApi.current?.setNextKinematicTranslation({
+      x: clampedX,
+      y: clampedY,
+      z: WALL_MODE_PLAYER_Z,
+    });
 
     euler.current.set(0, 0, tiltAngle);
     quaternion.current.setFromEuler(euler.current);
@@ -212,7 +244,11 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
 
     if (wallMode.isBallCaptured && ballRef.current) {
       ballRef.current.setTranslation(
-        { x: clampedX, y: clampedY, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET },
+        {
+          x: clampedX,
+          y: clampedY,
+          z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET,
+        },
         true
       );
       ballRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -221,7 +257,8 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
     reactPongState.updatePowerups(delta);
 
     if (captureGlowRef.current) {
-      const material = captureGlowRef.current.material as THREE.MeshBasicMaterial;
+      const material = captureGlowRef.current
+        .material as THREE.MeshBasicMaterial;
       if (wallMode.isBallCaptured) {
         material.opacity = 0.3 + wallMode.chargeAmount * 0.4;
         const hue = wallMode.chargeAmount * 0.1;
@@ -231,53 +268,63 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
         material.color.set(scoreColor);
       }
     }
-
   });
 
-  const handleCapture = useCallback((payload: { totalForceMagnitude: number }) => {
-    if (payload.totalForceMagnitude > 150 && !reactPongState.wallMode.isBallCaptured) {
-      const paddlePosition = paddleApi.current?.translation();
-      const ballPosition = ballRef.current?.translation();
-      const ballVelocity = ballRef.current?.linvel();
-      if (!paddlePosition || !ballPosition || !ballVelocity) return;
-      if (ballVelocity.z <= 0) return;
-      if (ballPosition.z < WALL_MODE_PLAYER_Z - 1) return;
+  const handleCapture = useCallback(
+    (payload: { totalForceMagnitude: number }) => {
+      if (
+        payload.totalForceMagnitude > 150 &&
+        !reactPongState.wallMode.isBallCaptured
+      ) {
+        const paddlePosition = paddleApi.current?.translation();
+        const ballPosition = ballRef.current?.translation();
+        const ballVelocity = ballRef.current?.linvel();
+        if (!paddlePosition || !ballPosition || !ballVelocity) return;
+        if (ballVelocity.z <= 0) return;
+        if (ballPosition.z < WALL_MODE_PLAYER_Z - 1) return;
 
-      const distX = Math.abs(ballPosition.x - paddlePosition.x);
-      const distY = Math.abs(ballPosition.y - paddlePosition.y);
-      const distFromCenter = Math.hypot(distX, distY);
-      const perfectRadius = Math.min(actualCaptureWidth, actualCaptureHeight) * 0.2;
-      const isPerfect = distFromCenter < perfectRadius;
+        const distX = Math.abs(ballPosition.x - paddlePosition.x);
+        const distY = Math.abs(ballPosition.y - paddlePosition.y);
+        const distFromCenter = Math.hypot(distX, distY);
+        const perfectRadius =
+          Math.min(actualCaptureWidth, actualCaptureHeight) * 0.2;
+        const isPerfect = distFromCenter < perfectRadius;
 
-      const hasMagnet = reactPongState.hasPowerup('magnet');
-      const effectiveWidth = hasMagnet ? actualCaptureWidth * 1.4 : actualCaptureWidth;
-      const effectiveHeight = hasMagnet ? actualCaptureHeight * 1.4 : actualCaptureHeight;
+        const hasMagnet = reactPongState.hasPowerup('magnet');
+        const effectiveWidth = hasMagnet
+          ? actualCaptureWidth * 1.4
+          : actualCaptureWidth;
+        const effectiveHeight = hasMagnet
+          ? actualCaptureHeight * 1.4
+          : actualCaptureHeight;
 
-      if (distX <= effectiveWidth / 2 && distY <= effectiveHeight / 2) {
-        reactPongState.wallMode.lastCatchWasPerfect = isPerfect;
-        reactPongState.wallModeCaptureBall();
+        if (distX <= effectiveWidth / 2 && distY <= effectiveHeight / 2) {
+          reactPongState.wallMode.lastCatchWasPerfect = isPerfect;
+          reactPongState.wallModeCaptureBall();
 
-        if (hasMagnet) {
-          reactPongState.usePowerup('magnet');
+          if (hasMagnet) {
+            reactPongState.usePowerup('magnet');
+          }
+
+          const sound = reactPongState.audio.paddleHitSound;
+          if (sound) {
+            try {
+              sound.currentTime = 0;
+              sound.volume = 0.5;
+              void sound.play().catch(() => {});
+            } catch {}
+          }
+
+          reactPongState.addHitEffect(
+            [ballPosition.x, ballPosition.y, ballPosition.z],
+            isPerfect ? '#ffff00' : scoreColor,
+            isPerfect ? 2 : 1
+          );
         }
-
-        const sound = reactPongState.audio.paddleHitSound;
-        if (sound) {
-          try {
-            sound.currentTime = 0;
-            sound.volume = 0.5;
-            void sound.play().catch(() => {});
-          } catch {}
-        }
-
-        reactPongState.addHitEffect(
-          [ballPosition.x, ballPosition.y, ballPosition.z],
-          isPerfect ? '#ffff00' : scoreColor,
-          isPerfect ? 2 : 1
-        );
       }
-    }
-  }, [actualCaptureHeight, actualCaptureWidth, ballRef, scoreColor]);
+    },
+    [actualCaptureHeight, actualCaptureWidth, ballRef, scoreColor]
+  );
 
   return (
     <RigidBody
@@ -288,7 +335,9 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
       colliders={false}
       onContactForce={handleCapture}
     >
-      <CuboidCollider args={[actualCaptureWidth / 2, actualCaptureHeight / 2, 0.2]} />
+      <CuboidCollider
+        args={[actualCaptureWidth / 2, actualCaptureHeight / 2, 0.2]}
+      />
 
       <mesh castShadow receiveShadow>
         <boxGeometry args={[actualCaptureWidth, actualCaptureHeight, 0.4]} />
@@ -304,7 +353,9 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
       </mesh>
 
       <mesh ref={captureGlowRef} position={[0, 0, 0.4]}>
-        <boxGeometry args={[actualCaptureWidth + 0.5, actualCaptureHeight + 0.5, 0.2]} />
+        <boxGeometry
+          args={[actualCaptureWidth + 0.5, actualCaptureHeight + 0.5, 0.2]}
+        />
         <meshBasicMaterial color={scoreColor} transparent opacity={0.2} />
       </mesh>
 
@@ -366,7 +417,9 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
       {Math.abs(wallMode.spinIntensity) > 0.2 && (
         <mesh position={[wallMode.spinIntensity * 2, 0.5, 0.2]}>
           <sphereGeometry args={[0.15, 8, 8]} />
-          <meshBasicMaterial color={wallMode.spinIntensity > 0 ? '#ff4400' : '#0044ff'} />
+          <meshBasicMaterial
+            color={wallMode.spinIntensity > 0 ? '#ff4400' : '#0044ff'}
+          />
         </mesh>
       )}
 
@@ -377,7 +430,11 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
         >
           <boxGeometry args={[actualCaptureWidth, 0.2, 0.5]} />
           <meshBasicMaterial
-            color={new THREE.Color().setHSL(wallMode.chargeAmount * 0.1, 1, 0.5)}
+            color={new THREE.Color().setHSL(
+              wallMode.chargeAmount * 0.1,
+              1,
+              0.5
+            )}
             transparent
             opacity={0.8}
           />
@@ -410,7 +467,11 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({ ballRef, scoreColor, sh
         </Text>
       )}
 
-      <pointLight color={scoreColor} intensity={wallMode.isBallCaptured ? 1.5 : 0.6} distance={6} />
+      <pointLight
+        color={scoreColor}
+        intensity={wallMode.isBallCaptured ? 1.5 : 0.6}
+        distance={6}
+      />
     </RigidBody>
   );
 };

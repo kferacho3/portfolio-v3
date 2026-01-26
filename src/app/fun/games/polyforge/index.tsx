@@ -20,7 +20,11 @@ function makePalette(seed: number) {
   const c1 = new THREE.Color().setHSL(baseHue / 360, 0.75, 0.55);
   const c2 = new THREE.Color().setHSL(((baseHue + 45) % 360) / 360, 0.75, 0.55);
   const c3 = new THREE.Color().setHSL(((baseHue + 90) % 360) / 360, 0.75, 0.55);
-  const c4 = new THREE.Color().setHSL(((baseHue + 180) % 360) / 360, 0.75, 0.55);
+  const c4 = new THREE.Color().setHSL(
+    ((baseHue + 180) % 360) / 360,
+    0.75,
+    0.55
+  );
   return [c1, c2, c3, c4];
 }
 
@@ -64,7 +68,11 @@ export default function PolyForge() {
     const g = buildGeometry(snap.level).toNonIndexed();
     const pos = g.getAttribute('position');
     const colors = new Float32Array(pos.count * 3);
-    const base = new THREE.Color().setHSL(palette[0].getHSL({ h: 0, s: 0, l: 0 }).h, 0.15, 0.12);
+    const base = new THREE.Color().setHSL(
+      palette[0].getHSL({ h: 0, s: 0, l: 0 }).h,
+      0.15,
+      0.12
+    );
 
     for (let i = 0; i < pos.count; i += 1) {
       colors[i * 3 + 0] = base.r;
@@ -120,10 +128,18 @@ export default function PolyForge() {
       world.current.laserT = 0.09;
 
       const start = camera.getWorldPosition(tmpPos);
-      const end = hit?.point ? hit.point : tmpDir.set(0, 0, -1).applyQuaternion(camera.quaternion).multiplyScalar(12).add(start);
+      const end = hit?.point
+        ? hit.point
+        : tmpDir
+            .set(0, 0, -1)
+            .applyQuaternion(camera.quaternion)
+            .multiplyScalar(12)
+            .add(start);
 
       // Cylinder aligns to Y axis by default
-      const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+      const mid = new THREE.Vector3()
+        .addVectors(start, end)
+        .multiplyScalar(0.5);
       const dir = new THREE.Vector3().subVectors(end, start);
       const len = dir.length();
       dir.normalize();
@@ -131,7 +147,10 @@ export default function PolyForge() {
       laser.position.copy(mid);
       laser.scale.set(1, Math.max(0.001, len), 1);
 
-      const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      const quat = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        dir
+      );
       laser.quaternion.copy(quat);
     }
 
@@ -232,13 +251,21 @@ export default function PolyForge() {
             position: 'absolute',
             top: 16,
             left: 16,
-            fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+            fontFamily:
+              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
             color: 'white',
             textShadow: '0 2px 12px rgba(0,0,0,0.55)',
             userSelect: 'none',
           }}
         >
-          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 12,
+              alignItems: 'baseline',
+              flexWrap: 'wrap',
+            }}
+          >
             <div style={{ fontWeight: 800, letterSpacing: 0.2 }}>PolyForge</div>
             <div style={{ opacity: 0.9 }}>Level {snap.level}</div>
             <div style={{ opacity: 0.9 }}>Lives {snap.lives}</div>
@@ -247,7 +274,8 @@ export default function PolyForge() {
             Progress: {snap.progress}/{Math.max(1, snap.total)}
           </div>
           <div style={{ marginTop: 6, opacity: 0.95 }}>
-            Score: {snap.score} <span style={{ opacity: 0.7 }}>Best: {snap.best}</span>
+            Score: {snap.score}{' '}
+            <span style={{ opacity: 0.7 }}>Best: {snap.best}</span>
           </div>
         </div>
 
@@ -270,8 +298,19 @@ export default function PolyForge() {
                 border: '1px solid rgba(255,255,255,0.12)',
               }}
             >
-              <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 6, color: 'white' }}>PolyForge</div>
-              <div style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.45 }}>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 900,
+                  marginBottom: 6,
+                  color: 'white',
+                }}
+              >
+                PolyForge
+              </div>
+              <div
+                style={{ color: 'rgba(255,255,255,0.86)', lineHeight: 1.45 }}
+              >
                 Tap/click to fire a laser and paint the polygon face you hit.
                 <br />
                 Paint every face to forge the next poly.
@@ -279,7 +318,9 @@ export default function PolyForge() {
                 Miss too many times and you’re out.
               </div>
               <div style={{ marginTop: 12, color: 'rgba(255,255,255,0.72)' }}>
-                {snap.phase === 'gameover' ? 'Tap/Space to try again.' : 'Tap/Space to start.'}
+                {snap.phase === 'gameover'
+                  ? 'Tap/Space to try again.'
+                  : 'Tap/Space to start.'}
               </div>
             </div>
           </div>

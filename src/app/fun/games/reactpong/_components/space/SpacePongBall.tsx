@@ -49,7 +49,7 @@ export const BallTracker: React.FC<{
   const predictedPos = useMemo(() => {
     if (!isVisible) return { x: 0, y: 0 };
 
-    const distanceToTravel = showPlayerSide ? ballState.z : (maxZ - ballState.z);
+    const distanceToTravel = showPlayerSide ? ballState.z : maxZ - ballState.z;
     const timeToReach = Math.abs(distanceToTravel / ballState.vz);
 
     return {
@@ -65,8 +65,18 @@ export const BallTracker: React.FC<{
 
   return (
     <mesh ref={meshRef} position={[predictedPos.x, predictedPos.y, zPos]}>
-      <ringGeometry args={[SPACE_BALL_RADIUS * scale * 0.8, SPACE_BALL_RADIUS * scale * 1.2, 32]} />
-      <meshBasicMaterial color={showPlayerSide ? '#ff4444' : '#44ff44'} transparent opacity={0.5} />
+      <ringGeometry
+        args={[
+          SPACE_BALL_RADIUS * scale * 0.8,
+          SPACE_BALL_RADIUS * scale * 1.2,
+          32,
+        ]}
+      />
+      <meshBasicMaterial
+        color={showPlayerSide ? '#ff4444' : '#44ff44'}
+        transparent
+        opacity={0.5}
+      />
     </mesh>
   );
 };

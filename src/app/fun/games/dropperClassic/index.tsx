@@ -1,6 +1,6 @@
 /**
  * DropperClassic.tsx
- * 
+ *
  * Port of legacy Dropper.js - Space-to-drop stacking game.
  * Press Space to drop an oscillating block and stack them as high as possible.
  */
@@ -57,10 +57,13 @@ const AnimatedBlock: React.FC<{
   size: [number, number, number];
   color: string;
 }> = ({ position, size, color }) => {
-  const [spring] = useSpring(() => ({
-    position,
-    config: { mass: 1, tension: 170, friction: 26 },
-  }), [position]);
+  const [spring] = useSpring(
+    () => ({
+      position,
+      config: { mass: 1, tension: 170, friction: 26 },
+    }),
+    [position]
+  );
 
   return (
     <a.mesh position={spring.position as any} castShadow>
@@ -76,7 +79,7 @@ const StaticBlock: React.FC<{
   size: [number, number, number];
   color: string;
 }> = ({ position, size, color }) => {
-  const [ref] = useBox(() => ({
+  const [ref] = useBox<THREE.Mesh>(() => ({
     type: 'Static',
     position,
     args: size,
@@ -99,7 +102,7 @@ const DroppedBlock: React.FC<{
 }> = ({ position, size, color, onCollide }) => {
   const hasScoredRef = useRef(false);
 
-  const [ref, api] = useBox(() => ({
+  const [ref, api] = useBox<THREE.Mesh>(() => ({
     mass: 0.1,
     position,
     args: size,
@@ -149,7 +152,9 @@ interface DroppedBlockData {
   color: string;
 }
 
-const DropperClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
+const DropperClassic: React.FC<{ soundsOn?: boolean }> = ({
+  soundsOn = true,
+}) => {
   const snap = useSnapshot(dropperClassicState);
   const [blocks, setBlocks] = useState<DroppedBlockData[]>([]);
   const [position, setPosition] = useState<[number, number, number]>([0, 0, 0]);
@@ -158,7 +163,8 @@ const DropperClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) =
   // Oscillate the animated block
   useEffect(() => {
     const oscillateBlock = () => {
-      const x = Math.sin(Date.now() / OSCILLATION_SPEED) * OSCILLATION_AMPLITUDE;
+      const x =
+        Math.sin(Date.now() / OSCILLATION_SPEED) * OSCILLATION_AMPLITUDE;
       const y = highestY + BLOCK_SIZE[1] + ADDITIONAL_HEIGHT;
       setPosition([x, y, 0]);
     };
@@ -215,7 +221,12 @@ const DropperClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) =
 
       {/* Lighting */}
       <ambientLight intensity={0.5} />
-      <spotLight position={[10, 15, 10]} angle={0.3} intensity={1.5} castShadow />
+      <spotLight
+        position={[10, 15, 10]}
+        angle={0.3}
+        intensity={1.5}
+        castShadow
+      />
 
       <Physics gravity={[0, -30, 0]}>
         {/* Base platform */}
@@ -241,8 +252,12 @@ const DropperClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) =
         <div className="absolute top-4 left-4 z-50 pointer-events-auto">
           <div className="bg-slate-950/80 backdrop-blur-sm rounded-xl border border-white/10 px-4 py-3 text-white shadow-lg">
             <div className="text-lg font-semibold">Score: {snap.score}</div>
-            <div className="text-sm text-white/60 mt-1">Height: {highestY.toFixed(1)}</div>
-            <div className="text-xs text-white/40 mt-2">Press SPACE to drop</div>
+            <div className="text-sm text-white/60 mt-1">
+              Height: {highestY.toFixed(1)}
+            </div>
+            <div className="text-xs text-white/40 mt-2">
+              Press SPACE to drop
+            </div>
           </div>
         </div>
       </Html>

@@ -31,7 +31,11 @@ import {
 } from '../constants';
 import { apexState, mutation } from '../state';
 import type { GameMode, GemType, PowerUpType, TileData } from '../types';
-import { generateCurvedTiles, generateTileForMode, resetCurvePathCache } from '../utils/pathGeneration';
+import {
+  generateCurvedTiles,
+  generateTileForMode,
+  resetCurvePathCache,
+} from '../utils/pathGeneration';
 import type { ArenaVoxelPattern } from '../constants';
 
 const applyTopShader = (
@@ -293,7 +297,10 @@ const applyTopShader = (
 const hash11 = (n: number) => {
   let x = n;
   x = (x << 13) ^ x;
-  return 1.0 - ((x * (x * x * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0;
+  return (
+    1.0 -
+    ((x * (x * x * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0
+  );
 };
 
 const voxelHeight = (
@@ -471,7 +478,10 @@ const TileSystem: React.FC = () => {
   const voxelMeshRef = useRef<THREE.InstancedMesh>(null);
   const snap = useSnapshot(apexState);
   const preset = ARENA_PRESETS[snap.arena];
-  const theme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
+  const theme = useMemo(
+    () => getArenaTheme(preset, THEMES[snap.currentTheme]),
+    [preset, snap.currentTheme]
+  );
   const isZigzagClassic = preset.key === 'zigzagClassic';
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const voxelDummy = useMemo(() => new THREE.Object3D(), []);
@@ -493,7 +503,10 @@ const TileSystem: React.FC = () => {
   );
   const { sideMaterial, topMaterial, tileMaterials } = useMemo(() => {
     const surface = preset.surface ?? {};
-    const edgeColor = new THREE.Color(theme.bg).lerp(theme.tile, THEME_EDGE_BLEND);
+    const edgeColor = new THREE.Color(theme.bg).lerp(
+      theme.tile,
+      THEME_EDGE_BLEND
+    );
     const side = new THREE.MeshStandardMaterial({
       color: edgeColor,
       emissive: edgeColor,
@@ -517,7 +530,8 @@ const TileSystem: React.FC = () => {
       : new THREE.MeshStandardMaterial({
           color: theme.tile,
           emissive: isZigzagClassic ? theme.tile : theme.glow,
-          emissiveIntensity: surface.topEmissive ?? (isZigzagClassic ? 0.03 : 0.5),
+          emissiveIntensity:
+            surface.topEmissive ?? (isZigzagClassic ? 0.03 : 0.5),
           metalness: surface.topMetalness ?? (isZigzagClassic ? 0.05 : 0.6),
           roughness: surface.topRoughness ?? (isZigzagClassic ? 0.9 : 0.4),
         });
@@ -539,7 +553,8 @@ const TileSystem: React.FC = () => {
   }, [sideMaterial, topMaterial]);
 
   const voxelConfig = useMemo(() => {
-    if (!preset.voxelPattern || !preset.voxelGrid || !preset.voxelHeight) return null;
+    if (!preset.voxelPattern || !preset.voxelGrid || !preset.voxelHeight)
+      return null;
     return {
       grid: preset.voxelGrid,
       pattern: preset.voxelPattern,
@@ -578,90 +593,104 @@ const TileSystem: React.FC = () => {
     };
   }, [tileGeometry]);
 
-  const addNewTile = useCallback((mode: GameMode) => {
-    const modeSettings = MODE_SETTINGS[mode];
+  const addNewTile = useCallback(
+    (mode: GameMode) => {
+      const modeSettings = MODE_SETTINGS[mode];
 
-    const spawnTile = (pos: THREE.Vector3, rotationY: number, scaleX: number, scaleZ: number) => {
-      const tile: TileData = {
-        id: mutation.nextTileId++,
-        x: pos.x,
-        y: pos.y,
-        z: pos.z,
-        status: 'active',
-        lastContactTime: -1,
-        fallVelocity: 0,
-        rotationY,
-        scaleX,
-        scaleZ,
+      const spawnTile = (
+        pos: THREE.Vector3,
+        rotationY: number,
+        scaleX: number,
+        scaleZ: number
+      ) => {
+        const tile: TileData = {
+          id: mutation.nextTileId++,
+          x: pos.x,
+          y: pos.y,
+          z: pos.z,
+          status: 'active',
+          lastContactTime: -1,
+          fallVelocity: 0,
+          rotationY,
+          scaleX,
+          scaleZ,
+        };
+        mutation.tiles.push(tile);
+        return tile;
       };
-      mutation.tiles.push(tile);
-      return tile;
-    };
 
-    const spawnGemOnTile = (tile: TileData) => {
-      const specialRoll = Math.random();
-      const gemType: GemType =
-        specialRoll < SPECIAL_GEM_CHANCE
-          ? SPECIAL_GEM_TYPES[Math.floor(Math.random() * SPECIAL_GEM_TYPES.length)]
-          : 'normal';
-      mutation.gems.push({
-        id: mutation.nextGemId++,
-        x: tile.x,
-        y: tile.y + GEM_HEIGHT_OFFSET,
-        z: tile.z,
-        tileId: tile.id,
-        type: gemType,
-        collected: false,
-        rotation: 0,
-        absorbing: false,
-        absorbProgress: 0,
-      });
-    };
+      const spawnGemOnTile = (tile: TileData) => {
+        const specialRoll = Math.random();
+        const gemType: GemType =
+          specialRoll < SPECIAL_GEM_CHANCE
+            ? SPECIAL_GEM_TYPES[
+                Math.floor(Math.random() * SPECIAL_GEM_TYPES.length)
+              ]
+            : 'normal';
+        mutation.gems.push({
+          id: mutation.nextGemId++,
+          x: tile.x,
+          y: tile.y + GEM_HEIGHT_OFFSET,
+          z: tile.z,
+          tileId: tile.id,
+          type: gemType,
+          collected: false,
+          rotation: 0,
+          absorbing: false,
+          absorbProgress: 0,
+        });
+      };
 
-    const spawnPowerUpOnTile = (tile: TileData) => {
-      const types: Exclude<PowerUpType, 'none'>[] = ['shield', 'magnet', 'slowmo'];
-      mutation.powerUps.push({
-        id: mutation.nextGemId++,
-        type: types[Math.floor(Math.random() * types.length)],
-        x: tile.x,
-        y: tile.y + GEM_HEIGHT_OFFSET + POWERUP_HEIGHT_OFFSET,
-        z: tile.z,
-        tileId: tile.id,
-        collected: false,
-      });
-    };
+      const spawnPowerUpOnTile = (tile: TileData) => {
+        const types: Exclude<PowerUpType, 'none'>[] = [
+          'shield',
+          'magnet',
+          'slowmo',
+        ];
+        mutation.powerUps.push({
+          id: mutation.nextGemId++,
+          type: types[Math.floor(Math.random() * types.length)],
+          x: tile.x,
+          y: tile.y + GEM_HEIGHT_OFFSET + POWERUP_HEIGHT_OFFSET,
+          z: tile.z,
+          tileId: tile.id,
+          collected: false,
+        });
+      };
 
-    if (mode === 'curved') {
-      const { left, right, rotationY } = generateCurvedTiles();
-      const leftTile = spawnTile(left, rotationY, 1, CURVE_TILE_STRETCH);
-      const rightTile = spawnTile(right, rotationY, 1, CURVE_TILE_STRETCH);
+      if (mode === 'curved') {
+        const { left, right, rotationY } = generateCurvedTiles();
+        const leftTile = spawnTile(left, rotationY, 1, CURVE_TILE_STRETCH);
+        const rightTile = spawnTile(right, rotationY, 1, CURVE_TILE_STRETCH);
+
+        if (Math.random() < modeSettings.gemSpawnChance) {
+          spawnGemOnTile(Math.random() < 0.5 ? leftTile : rightTile);
+        }
+
+        if (Math.random() < modeSettings.powerUpChance) {
+          spawnPowerUpOnTile(Math.random() < 0.5 ? leftTile : rightTile);
+        }
+        return;
+      }
+
+      const prevPos = mutation.lastTilePos.clone();
+      const pos = generateTileForMode(mode);
+      const delta = pos.clone().sub(prevPos);
+      const rotationY = Math.atan2(delta.x, delta.z);
+      const scaleX = 1;
+      const scaleZ = 1;
+      const tile = spawnTile(pos, rotationY, scaleX, scaleZ);
 
       if (Math.random() < modeSettings.gemSpawnChance) {
-        spawnGemOnTile(Math.random() < 0.5 ? leftTile : rightTile);
+        spawnGemOnTile(tile);
       }
 
       if (Math.random() < modeSettings.powerUpChance) {
-        spawnPowerUpOnTile(Math.random() < 0.5 ? leftTile : rightTile);
+        spawnPowerUpOnTile(tile);
       }
-      return;
-    }
-
-    const prevPos = mutation.lastTilePos.clone();
-    const pos = generateTileForMode(mode);
-    const delta = pos.clone().sub(prevPos);
-    const rotationY = Math.atan2(delta.x, delta.z);
-    const scaleX = 1;
-    const scaleZ = 1;
-    const tile = spawnTile(pos, rotationY, scaleX, scaleZ);
-
-    if (Math.random() < modeSettings.gemSpawnChance) {
-      spawnGemOnTile(tile);
-    }
-
-    if (Math.random() < modeSettings.powerUpChance) {
-      spawnPowerUpOnTile(tile);
-    }
-  }, [generateTileForMode]);
+    },
+    [generateTileForMode]
+  );
 
   const initializeLevel = useCallback(() => {
     mutation.tiles = [];
@@ -731,7 +760,11 @@ const TileSystem: React.FC = () => {
     if (apexState.mode === 'curved') {
       mutation.lastTilePos.set(0, tileY, 0);
     }
-    mutation.curveCenterPos.set(mutation.lastTilePos.x, tileY, mutation.lastTilePos.z);
+    mutation.curveCenterPos.set(
+      mutation.lastTilePos.x,
+      tileY,
+      mutation.lastTilePos.z
+    );
 
     for (let i = 0; i < INITIAL_TILE_BATCH; i++) {
       addNewTile(apexState.mode);
@@ -742,7 +775,10 @@ const TileSystem: React.FC = () => {
   }, [addNewTile]);
 
   useEffect(() => {
-    if ((snap.phase === 'playing' || snap.phase === 'menu') && !mutation.initialized) {
+    if (
+      (snap.phase === 'playing' || snap.phase === 'menu') &&
+      !mutation.initialized
+    ) {
       initializeLevel();
     }
   }, [snap.phase, initializeLevel]);
@@ -845,9 +881,15 @@ const TileSystem: React.FC = () => {
       }
 
       if (tilesToRemove.length > 0) {
-        mutation.tiles = mutation.tiles.filter((t) => !tilesToRemove.includes(t.id));
-        mutation.gems = mutation.gems.filter((g) => !tilesToRemove.includes(g.tileId));
-        mutation.powerUps = mutation.powerUps.filter((p) => !tilesToRemove.includes(p.tileId));
+        mutation.tiles = mutation.tiles.filter(
+          (t) => !tilesToRemove.includes(t.id)
+        );
+        mutation.gems = mutation.gems.filter(
+          (g) => !tilesToRemove.includes(g.tileId)
+        );
+        mutation.powerUps = mutation.powerUps.filter(
+          (p) => !tilesToRemove.includes(p.tileId)
+        );
       }
     }
 
@@ -904,7 +946,11 @@ const TileSystem: React.FC = () => {
               voxelConfig.maxHeight,
               voxelConfig.pattern
             );
-            voxelDummy.position.set(tile.x + rx, baseY + height / 2, tile.z + rz);
+            voxelDummy.position.set(
+              tile.x + rx,
+              baseY + height / 2,
+              tile.z + rz
+            );
             voxelDummy.rotation.set(0, 0, 0);
             voxelDummy.scale.set(stepX * coverage, height, stepZ * coverage);
             voxelDummy.updateMatrix();
@@ -930,7 +976,11 @@ const TileSystem: React.FC = () => {
       {voxelConfig && (
         <instancedMesh
           ref={voxelMeshRef}
-          args={[undefined, undefined, MAX_TILES * voxelConfig.grid * voxelConfig.grid]}
+          args={[
+            undefined,
+            undefined,
+            MAX_TILES * voxelConfig.grid * voxelConfig.grid,
+          ]}
           geometry={voxelGeometry}
           material={voxelMaterial}
           frustumCulled={false}

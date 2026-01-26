@@ -71,8 +71,14 @@ export default function SectionTwo() {
   ];
 
   const additionalSkills = [
-    { name: 'AI-assisted workflows (Claude, Cursor, Codex)', icon: <SiOpenai /> },
-    { name: 'API synchronization & data contracts', icon: <FaProjectDiagram /> },
+    {
+      name: 'AI-assisted workflows (Claude, Cursor, Codex)',
+      icon: <SiOpenai />,
+    },
+    {
+      name: 'API synchronization & data contracts',
+      icon: <FaProjectDiagram />,
+    },
     { name: 'Auth & access control', icon: <FaUserShield /> },
     { name: 'Code reviews & quality gates', icon: <FaCodeBranch /> },
     { name: 'Git & Version Control', icon: <SiGit /> },
@@ -146,7 +152,6 @@ export default function SectionTwo() {
       aria-labelledby="skills-title"
       className="relative w-full px-3 py-12 sm:px-4 sm:py-14 md:px-8 md:py-16 lg:px-12"
     >
-
       <motion.div
         className="relative z-10 mx-auto max-w-5xl text-center"
         initial={{ opacity: 0, y: 24 }}
@@ -161,7 +166,8 @@ export default function SectionTwo() {
           Skills &amp; Toolbox
         </h2>
         <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground">
-          Systems-first delivery with AI-accelerated workflows, spanning UI systems, 3D experiences, and full-stack integrations.
+          Systems-first delivery with AI-accelerated workflows, spanning UI
+          systems, 3D experiences, and full-stack integrations.
         </p>
       </motion.div>
 

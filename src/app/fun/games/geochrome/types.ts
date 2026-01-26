@@ -1,6 +1,14 @@
 export type ShapeType = (typeof import('./constants').SHAPES)[number];
 
-export type ClusterPattern = 'spiral' | 'mandala' | 'ring' | 'fibonacci' | 'flower' | 'wave' | 'helix' | 'grid';
+export type ClusterPattern =
+  | 'spiral'
+  | 'mandala'
+  | 'ring'
+  | 'fibonacci'
+  | 'flower'
+  | 'wave'
+  | 'helix'
+  | 'grid';
 
 export interface ClusterShapeData {
   id: string;

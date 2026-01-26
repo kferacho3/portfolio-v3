@@ -90,7 +90,9 @@ export default class Pipe {
 
     if (
       this.pipesPosition[this.pipesPosition.length - 1]?.offset >
-      Math.floor(Math.random() * (MaxPipeOffset - MinPipeOffset + 1) + MinPipeOffset)
+      Math.floor(
+        Math.random() * (MaxPipeOffset - MinPipeOffset + 1) + MinPipeOffset
+      )
     ) {
       this.generateNew();
     }

@@ -33,7 +33,7 @@ export interface ColorPalette {
   style: PaletteStyle;
 }
 
-export type PaletteStyle = 
+export type PaletteStyle =
   | 'vibrant'
   | 'pastel'
   | 'neon'
@@ -74,8 +74,8 @@ const complementaryHue = (h: number): number => wrapHue(h + 0.5);
  * Get triadic hues (120° apart)
  */
 const triadicHues = (h: number): [number, number] => [
-  wrapHue(h + 1/3),
-  wrapHue(h + 2/3),
+  wrapHue(h + 1 / 3),
+  wrapHue(h + 2 / 3),
 ];
 
 /**
@@ -101,7 +101,7 @@ const analogousHues = (h: number): [number, number] => [
  */
 function generateVibrantPalette(baseHue: number): ColorPalette {
   const [triadic1, triadic2] = triadicHues(baseHue);
-  
+
   return {
     primary: hsl(baseHue, 0.85, 0.55),
     secondary: hsl(baseHue, 0.7, 0.45),
@@ -122,7 +122,7 @@ function generateVibrantPalette(baseHue: number): ColorPalette {
  */
 function generatePastelPalette(baseHue: number): ColorPalette {
   const [analog1, analog2] = analogousHues(baseHue);
-  
+
   return {
     primary: hsl(baseHue, 0.45, 0.75),
     secondary: hsl(analog1, 0.4, 0.7),
@@ -143,7 +143,7 @@ function generatePastelPalette(baseHue: number): ColorPalette {
  */
 function generateNeonPalette(baseHue: number): ColorPalette {
   const [triadic1, triadic2] = triadicHues(baseHue);
-  
+
   return {
     primary: hsl(baseHue, 1.0, 0.55),
     secondary: hsl(triadic1, 1.0, 0.5),
@@ -185,7 +185,7 @@ function generateWarmPalette(baseHue: number): ColorPalette {
   // Force hue into warm range (0-0.15 or 0.9-1.0)
   const warmHue = baseHue < 0.5 ? baseHue * 0.3 : 0.9 + (baseHue - 0.5) * 0.2;
   const [split1, split2] = splitComplementaryHues(warmHue);
-  
+
   return {
     primary: hsl(warmHue, 0.85, 0.5),
     secondary: hsl(wrapHue(warmHue + 0.05), 0.8, 0.55),
@@ -208,7 +208,7 @@ function generateCoolPalette(baseHue: number): ColorPalette {
   // Force hue into cool range (0.5-0.75)
   const coolHue = 0.5 + baseHue * 0.25;
   const [analog1, analog2] = analogousHues(coolHue);
-  
+
   return {
     primary: hsl(coolHue, 0.75, 0.5),
     secondary: hsl(analog1, 0.7, 0.45),
@@ -230,12 +230,12 @@ function generateCoolPalette(baseHue: number): ColorPalette {
 function generateCyberpunkPalette(baseHue: number): ColorPalette {
   // Classic cyberpunk colors
   const magenta = 0.85; // ~306°
-  const cyan = 0.5;     // 180°
-  const yellow = 0.15;  // ~54°
-  
+  const cyan = 0.5; // 180°
+  const yellow = 0.15; // ~54°
+
   // Slight variation based on baseHue
   const shift = (baseHue - 0.5) * 0.1;
-  
+
   return {
     primary: hsl(magenta + shift, 1.0, 0.55),
     secondary: hsl(cyan + shift, 1.0, 0.5),
@@ -260,7 +260,7 @@ function generateSunsetPalette(baseHue: number): ColorPalette {
   const pink = 0.92;
   const purple = 0.78;
   const shift = (baseHue - 0.5) * 0.05;
-  
+
   return {
     primary: hsl(orange + shift, 0.95, 0.55),
     secondary: hsl(pink + shift, 0.85, 0.55),
@@ -285,7 +285,7 @@ function generateOceanPalette(baseHue: number): ColorPalette {
   const teal = 0.48;
   const seafoam = 0.42;
   const shift = (baseHue - 0.5) * 0.08;
-  
+
   return {
     primary: hsl(deepBlue + shift, 0.7, 0.45),
     secondary: hsl(teal + shift, 0.65, 0.5),
@@ -310,7 +310,7 @@ function generateForestPalette(baseHue: number): ColorPalette {
   const brown = 0.08;
   const gold = 0.12;
   const shift = (baseHue - 0.5) * 0.06;
-  
+
   return {
     primary: hsl(green + shift, 0.55, 0.4),
     secondary: hsl(brown + shift, 0.45, 0.35),
@@ -335,7 +335,7 @@ function generateAuroraPalette(baseHue: number): ColorPalette {
   const purple = 0.78;
   const pink = 0.92;
   const shift = (baseHue - 0.5) * 0.1;
-  
+
   return {
     primary: hsl(green + shift, 0.85, 0.5),
     secondary: hsl(purple + shift, 0.75, 0.5),
@@ -363,27 +363,49 @@ export function generatePalette(
   baseHue?: number
 ): ColorPalette {
   const hue = baseHue ?? Math.random();
-  
+
   // If no style specified, pick randomly
   const styles: PaletteStyle[] = [
-    'vibrant', 'pastel', 'neon', 'monochrome', 'warm',
-    'cool', 'cyberpunk', 'sunset', 'ocean', 'forest', 'aurora'
+    'vibrant',
+    'pastel',
+    'neon',
+    'monochrome',
+    'warm',
+    'cool',
+    'cyberpunk',
+    'sunset',
+    'ocean',
+    'forest',
+    'aurora',
   ];
-  const selectedStyle = style ?? styles[Math.floor(Math.random() * styles.length)];
-  
+  const selectedStyle =
+    style ?? styles[Math.floor(Math.random() * styles.length)];
+
   switch (selectedStyle) {
-    case 'vibrant': return generateVibrantPalette(hue);
-    case 'pastel': return generatePastelPalette(hue);
-    case 'neon': return generateNeonPalette(hue);
-    case 'monochrome': return generateMonochromePalette(hue);
-    case 'warm': return generateWarmPalette(hue);
-    case 'cool': return generateCoolPalette(hue);
-    case 'cyberpunk': return generateCyberpunkPalette(hue);
-    case 'sunset': return generateSunsetPalette(hue);
-    case 'ocean': return generateOceanPalette(hue);
-    case 'forest': return generateForestPalette(hue);
-    case 'aurora': return generateAuroraPalette(hue);
-    default: return generateVibrantPalette(hue);
+    case 'vibrant':
+      return generateVibrantPalette(hue);
+    case 'pastel':
+      return generatePastelPalette(hue);
+    case 'neon':
+      return generateNeonPalette(hue);
+    case 'monochrome':
+      return generateMonochromePalette(hue);
+    case 'warm':
+      return generateWarmPalette(hue);
+    case 'cool':
+      return generateCoolPalette(hue);
+    case 'cyberpunk':
+      return generateCyberpunkPalette(hue);
+    case 'sunset':
+      return generateSunsetPalette(hue);
+    case 'ocean':
+      return generateOceanPalette(hue);
+    case 'forest':
+      return generateForestPalette(hue);
+    case 'aurora':
+      return generateAuroraPalette(hue);
+    default:
+      return generateVibrantPalette(hue);
   }
 }
 
@@ -403,13 +425,16 @@ export function lerpPalette(
   const lerp = (a: THREE.Color, b: THREE.Color): THREE.Color => {
     return new THREE.Color().lerpColors(a, b, t);
   };
-  
+
   return {
     primary: lerp(from.primary, to.primary),
     secondary: lerp(from.secondary, to.secondary),
     accent: lerp(from.accent, to.accent),
     complement: lerp(from.complement, to.complement),
-    triadic: [lerp(from.triadic[0], to.triadic[0]), lerp(from.triadic[1], to.triadic[1])],
+    triadic: [
+      lerp(from.triadic[0], to.triadic[0]),
+      lerp(from.triadic[1], to.triadic[1]),
+    ],
     background: lerp(from.background, to.background),
     shadow: lerp(from.shadow, to.shadow),
     highlight: lerp(from.highlight, to.highlight),
@@ -435,9 +460,7 @@ export function easeLerpPalette(
  * Standard ease-in-out cubic function
  */
 export function easeInOutCubic(t: number): number {
-  return t < 0.5 
-    ? 4 * t * t * t 
-    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 /**
@@ -461,11 +484,11 @@ export function applyPaletteToMaterial(
   } = {}
 ): void {
   const { useEmissive = false, emissiveIntensity = 1.0 } = options;
-  
+
   if ('color' in material) {
     (material as THREE.MeshStandardMaterial).color.copy(palette.primary);
   }
-  
+
   if (useEmissive && 'emissive' in material) {
     const stdMat = material as THREE.MeshStandardMaterial;
     stdMat.emissive.copy(palette.emissive);
@@ -500,33 +523,33 @@ export function createPaletteGradientTexture(
   size: number = 256
 ): THREE.DataTexture {
   const data = new Uint8Array(size * 4);
-  
+
   const colors = [
     palette.primary,
     palette.secondary,
     palette.accent,
     palette.complement,
   ];
-  
+
   for (let i = 0; i < size; i++) {
     const t = i / (size - 1);
     const segmentT = t * (colors.length - 1);
     const idx = Math.floor(segmentT);
     const localT = segmentT - idx;
-    
+
     const c1 = colors[Math.min(idx, colors.length - 1)];
     const c2 = colors[Math.min(idx + 1, colors.length - 1)];
-    
+
     const r = c1.r + (c2.r - c1.r) * localT;
     const g = c1.g + (c2.g - c1.g) * localT;
     const b = c1.b + (c2.b - c1.b) * localT;
-    
+
     data[i * 4] = Math.floor(r * 255);
     data[i * 4 + 1] = Math.floor(g * 255);
     data[i * 4 + 2] = Math.floor(b * 255);
     data[i * 4 + 3] = 255;
   }
-  
+
   const texture = new THREE.DataTexture(data, size, 1, THREE.RGBAFormat);
   texture.needsUpdate = true;
   return texture;
@@ -566,10 +589,7 @@ export class PaletteManager {
   /**
    * Transition to a new palette
    */
-  transitionTo(
-    newPalette: ColorPalette,
-    duration: number = 1000
-  ): void {
+  transitionTo(newPalette: ColorPalette, duration: number = 1000): void {
     if (this.targetPalette) {
       // Complete current transition first
       this.currentPalette = this.palette;
@@ -583,10 +603,7 @@ export class PaletteManager {
   /**
    * Generate and transition to a new random palette
    */
-  randomize(
-    style?: PaletteStyle,
-    duration: number = 1000
-  ): void {
+  randomize(style?: PaletteStyle, duration: number = 1000): void {
     this.transitionTo(generatePalette(style), duration);
   }
 
@@ -597,7 +614,7 @@ export class PaletteManager {
     if (this.targetPalette && this.transitionProgress < 1) {
       const elapsed = performance.now() - this.transitionStartTime;
       this.transitionProgress = Math.min(elapsed / this.transitionDuration, 1);
-      
+
       if (this.transitionProgress >= 1) {
         this.currentPalette = this.targetPalette;
         this.targetPalette = null;
@@ -613,12 +630,12 @@ export class PaletteManager {
   subscribe(callback: (palette: ColorPalette) => void): () => void {
     this.listeners.push(callback);
     return () => {
-      this.listeners = this.listeners.filter(l => l !== callback);
+      this.listeners = this.listeners.filter((l) => l !== callback);
     };
   }
 
   private notifyListeners(): void {
-    this.listeners.forEach(l => l(this.currentPalette));
+    this.listeners.forEach((l) => l(this.currentPalette));
   }
 
   /**

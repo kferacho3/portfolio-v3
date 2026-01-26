@@ -23,4 +23,11 @@ export type RunStatus = {
   gemsThisRun: number;
 };
 
-export type { OscillateLevel, OscillateSegment, OscillateGem, OscillatePhase, OscillateMode, OscillateSkin } from './state';
+export type {
+  OnePathLevel as OscillateLevel,
+  OnePathSegment as OscillateSegment,
+  OnePathGem as OscillateGem,
+  OnePathPhase as OscillatePhase,
+  OnePathMode as OscillateMode,
+  OnePathSkin as OscillateSkin,
+} from './state';

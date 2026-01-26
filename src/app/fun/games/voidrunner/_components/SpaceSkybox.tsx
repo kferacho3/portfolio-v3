@@ -29,13 +29,17 @@ const SpaceSkybox: React.FC = () => {
       sunRef.current.position.x = 0;
       const scale = 1 + Math.sin(state.clock.elapsedTime * 2) * 0.02;
       sunRef.current.scale.setScalar(scale);
-      (sunRef.current.material as THREE.MeshStandardMaterial).emissive.copy(mutation.globalColor);
+      (sunRef.current.material as THREE.MeshStandardMaterial).emissive.copy(
+        mutation.globalColor
+      );
     }
 
     if (voidRef.current) {
       voidRef.current.position.z = playerZ - 3000;
       voidRef.current.rotation.z += 0.002;
-      (voidRef.current.material as THREE.MeshBasicMaterial).color.copy(mutation.globalColor);
+      (voidRef.current.material as THREE.MeshBasicMaterial).color.copy(
+        mutation.globalColor
+      );
     }
 
     if (starsRef.current) {
@@ -61,10 +65,17 @@ const SpaceSkybox: React.FC = () => {
       const z = (Math.random() - 0.5) * 500;
       positions.push(x, y, z);
 
-      colors.push(0.5 + Math.random() * 0.5, 0.1 + Math.random() * 0.2, 0.5 + Math.random() * 0.5);
+      colors.push(
+        0.5 + Math.random() * 0.5,
+        0.1 + Math.random() * 0.2,
+        0.5 + Math.random() * 0.5
+      );
     }
 
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(positions, 3)
+    );
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     return geometry;
   }, []);
@@ -90,7 +101,13 @@ const SpaceSkybox: React.FC = () => {
       </mesh>
 
       <points ref={nebulaRef} geometry={nebulaGeometry}>
-        <pointsMaterial size={15} vertexColors transparent opacity={0.4} blending={THREE.AdditiveBlending} />
+        <pointsMaterial
+          size={15}
+          vertexColors
+          transparent
+          opacity={0.4}
+          blending={THREE.AdditiveBlending}
+        />
       </points>
 
       <Stars
@@ -104,7 +121,15 @@ const SpaceSkybox: React.FC = () => {
         speed={0.3}
       />
 
-      <Stars radius={1500} depth={400} count={5000} factor={80} saturation={0} fade speed={0.1} />
+      <Stars
+        radius={1500}
+        depth={400}
+        count={5000}
+        factor={80}
+        saturation={0}
+        fade
+        speed={0.1}
+      />
 
       <fog attach="fog" args={['#000010', 100, 1000]} />
     </>

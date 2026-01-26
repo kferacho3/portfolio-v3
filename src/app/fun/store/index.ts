@@ -1,6 +1,6 @@
 /**
  * Arcade Store
- * 
+ *
  * Centralized Zustand store for the arcade shell.
  * Single source of truth for UI state, audio settings, and game coordination.
  */
@@ -134,7 +134,9 @@ export const useArcadeStore = create<ArcadeStore>()(
 
         selectPreviousGame: () => {
           const { selectedIndex } = get();
-          set({ selectedIndex: (selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES });
+          set({
+            selectedIndex: (selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES,
+          });
         },
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -214,10 +216,11 @@ export const useArcadeStore = create<ArcadeStore>()(
           const playableGames = ALL_GAME_IDS.filter(
             (id) => id !== currentGame && !EXCLUDED_FROM_RANDOM.includes(id)
           );
-          
+
           if (playableGames.length === 0) return;
-          
-          const randomGame = playableGames[Math.floor(Math.random() * playableGames.length)];
+
+          const randomGame =
+            playableGames[Math.floor(Math.random() * playableGames.length)];
           set({
             currentGame: randomGame,
             showGameRules: false,

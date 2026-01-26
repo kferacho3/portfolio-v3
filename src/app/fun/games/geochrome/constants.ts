@@ -3,7 +3,16 @@ export const PLAYER_SPEED = 0.8;
 export const COLLECTION_RADIUS = 3.5;
 export const DEPOSIT_RADIUS = 6;
 export const HAZARD_RADIUS = 2.5;
-export const SHAPES = ['sphere', 'cube', 'torus', 'cone', 'dodecahedron', 'octahedron', 'icosahedron', 'torusKnot'] as const;
+export const SHAPES = [
+  'sphere',
+  'cube',
+  'torus',
+  'cone',
+  'dodecahedron',
+  'octahedron',
+  'icosahedron',
+  'torusKnot',
+] as const;
 export const CLUSTER_COUNT = 8;
 export const SHAPES_PER_CLUSTER = 12;
 export const DEPOSIT_COUNT = 5;

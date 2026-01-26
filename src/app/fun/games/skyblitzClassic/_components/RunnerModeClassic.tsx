@@ -27,7 +27,14 @@ const RunnerModeClassic: React.FC<{
         inclination={0.49}
         azimuth={0.25}
       />
-      <Stars radius={10000} depth={50} count={5000} factor={4} saturation={0} fade />
+      <Stars
+        radius={10000}
+        depth={50}
+        count={5000}
+        factor={4}
+        saturation={0}
+        fade
+      />
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
 

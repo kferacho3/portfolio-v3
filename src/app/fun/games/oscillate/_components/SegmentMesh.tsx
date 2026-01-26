@@ -38,12 +38,22 @@ export const SegmentMesh: React.FC<{
   }, [seg.axis, seg.dir, seg.length, seg.x, seg.z]);
 
   const baseScale = React.useMemo(() => {
-    if (seg.axis === 'x') return new THREE.Vector3(seg.length, CONST.BASE_H, width + CONST.WALL_T * 2);
-    return new THREE.Vector3(width + CONST.WALL_T * 2, CONST.BASE_H, seg.length);
+    if (seg.axis === 'x')
+      return new THREE.Vector3(
+        seg.length,
+        CONST.BASE_H,
+        width + CONST.WALL_T * 2
+      );
+    return new THREE.Vector3(
+      width + CONST.WALL_T * 2,
+      CONST.BASE_H,
+      seg.length
+    );
   }, [seg.axis, seg.length, width, CONST.BASE_H, CONST.WALL_T]);
 
   const deckScale = React.useMemo(() => {
-    if (seg.axis === 'x') return new THREE.Vector3(seg.length, CONST.DECK_H, width);
+    if (seg.axis === 'x')
+      return new THREE.Vector3(seg.length, CONST.DECK_H, width);
     return new THREE.Vector3(width, CONST.DECK_H, seg.length);
   }, [seg.axis, seg.length, width, CONST.DECK_H]);
 
@@ -68,15 +78,46 @@ export const SegmentMesh: React.FC<{
       />
 
       {/* walls */}
-      <WallBar side={-1} segIndex={segIndex} lvlRef={lvlRef} mats={mats} geoms={geoms} CONST={CONST} />
-      <WallBar side={1} segIndex={segIndex} lvlRef={lvlRef} mats={mats} geoms={geoms} CONST={CONST} />
+      <WallBar
+        side={-1}
+        segIndex={segIndex}
+        lvlRef={lvlRef}
+        mats={mats}
+        geoms={geoms}
+        CONST={CONST}
+      />
+      <WallBar
+        side={1}
+        segIndex={segIndex}
+        lvlRef={lvlRef}
+        mats={mats}
+        geoms={geoms}
+        CONST={CONST}
+      />
 
       {/* gate at end (visual + target glow) */}
-      {!isLast && <GateVisual segIndex={segIndex} lvlRef={lvlRef} mats={mats} geoms={geoms} CONST={CONST} openW={openW} />}
+      {!isLast && (
+        <GateVisual
+          segIndex={segIndex}
+          lvlRef={lvlRef}
+          mats={mats}
+          geoms={geoms}
+          CONST={CONST}
+          openW={openW}
+        />
+      )}
 
       {/* gems */}
       {seg.gems.map((g, gi) => (
-        <GemMesh key={g.id} segIndex={segIndex} gemIndex={gi} lvlRef={lvlRef} mats={mats} geoms={geoms} y={gemY} />
+        <GemMesh
+          key={g.id}
+          segIndex={segIndex}
+          gemIndex={gi}
+          lvlRef={lvlRef}
+          mats={mats}
+          geoms={geoms}
+          y={gemY}
+        />
       ))}
     </group>
   );

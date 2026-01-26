@@ -78,10 +78,13 @@ export const reactPongState = proxy({
     wallModeHitWall(reactPongState, zoneType, isPerfectCatch),
   wallModeMiss: () => wallModeMiss(reactPongState),
   getWallModeMultiplier: () => getWallModeMultiplier(reactPongState),
-  collectPowerup: (type: Parameters<typeof collectPowerup>[1]) => collectPowerup(reactPongState, type),
+  collectPowerup: (type: Parameters<typeof collectPowerup>[1]) =>
+    collectPowerup(reactPongState, type),
   updatePowerups: (delta: number) => updatePowerups(reactPongState, delta),
-  hasPowerup: (type: Parameters<typeof hasPowerup>[1]) => hasPowerup(reactPongState, type),
-  usePowerup: (type: Parameters<typeof usePowerup>[1]) => usePowerup(reactPongState, type),
+  hasPowerup: (type: Parameters<typeof hasPowerup>[1]) =>
+    hasPowerup(reactPongState, type),
+  usePowerup: (type: Parameters<typeof usePowerup>[1]) =>
+    usePowerup(reactPongState, type),
 
   addScorePopup: (
     value: number,
@@ -89,13 +92,21 @@ export const reactPongState = proxy({
     color: string,
     combo?: string
   ) => addScorePopup(reactPongState, value, position, color, combo),
-  addHitEffect: (position: [number, number, number], color: string, intensity: number) =>
-    addHitEffect(reactPongState, position, color, intensity),
-  triggerScreenShake: (intensity: number) => triggerScreenShake(reactPongState, intensity),
+  addHitEffect: (
+    position: [number, number, number],
+    color: string,
+    intensity: number
+  ) => addHitEffect(reactPongState, position, color, intensity),
+  triggerScreenShake: (intensity: number) =>
+    triggerScreenShake(reactPongState, intensity),
   getMultiplier: () => getMultiplier(reactPongState),
-  hitBlock: (type: Parameters<typeof hitBlock>[1], id: string) => hitBlock(reactPongState, type, id),
-  pong: (velocity: number, colliderType: string, position?: [number, number, number]) =>
-    pong(reactPongState, velocity, colliderType, position),
+  hitBlock: (type: Parameters<typeof hitBlock>[1], id: string) =>
+    hitBlock(reactPongState, type, id),
+  pong: (
+    velocity: number,
+    colliderType: string,
+    position?: [number, number, number]
+  ) => pong(reactPongState, velocity, colliderType, position),
   reset: () => reset(reactPongState),
 });
 

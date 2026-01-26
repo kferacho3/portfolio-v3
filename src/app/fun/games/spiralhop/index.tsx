@@ -28,9 +28,10 @@ function makePlatform(
   rng: SeededRandom,
   prev: PlatformData | null,
   id: number,
-  difficulty: number,
+  difficulty: number
 ): PlatformData {
-  const length = rng.float(GAME.lengthMin, GAME.lengthMax) * (1 - difficulty * 0.12);
+  const length =
+    rng.float(GAME.lengthMin, GAME.lengthMax) * (1 - difficulty * 0.12);
   const width = GAME.platformWidth * (1 - difficulty * 0.06);
   const gap = rng.float(GAME.gapMin, GAME.gapMax);
 
@@ -40,14 +41,21 @@ function makePlatform(
 
   const prevEnd = prev
     ? new THREE.Vector3(prev.x, prev.y, prev.z).add(
-        forwardFromYaw(prev.baseYaw).multiplyScalar(prev.length / 2 + gap),
+        forwardFromYaw(prev.baseYaw).multiplyScalar(prev.length / 2 + gap)
       )
     : new THREE.Vector3(0, 0, 0);
 
-  const center = prevEnd.clone().add(forwardFromYaw(yaw).multiplyScalar(length / 2));
+  const center = prevEnd
+    .clone()
+    .add(forwardFromYaw(yaw).multiplyScalar(length / 2));
   const heightBase = prev ? prev.y : 0;
-  const heightDelta = rng.float(-GAME.heightStep, GAME.heightStep) * (0.6 + difficulty * 0.35);
-  center.y = clamp(heightBase + heightDelta, -GAME.heightClamp, GAME.heightClamp);
+  const heightDelta =
+    rng.float(-GAME.heightStep, GAME.heightStep) * (0.6 + difficulty * 0.35);
+  center.y = clamp(
+    heightBase + heightDelta,
+    -GAME.heightClamp,
+    GAME.heightClamp
+  );
 
   const twistDir = rng.bool() ? 1 : -1;
   const twistSpeed = twistDir * rng.float(0.25, 0.6) * (1 + difficulty * 0.9);
@@ -75,7 +83,14 @@ export default function SpiralHop() {
   const { camera, gl, scene } = useThree();
 
   const input = useInputRef({
-    preventDefault: [' ', 'Space', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'arrowdown',
+    ],
   });
 
   const rngRef = useRef(new SeededRandom(1));
@@ -102,20 +117,26 @@ export default function SpiralHop() {
     combo: 0,
     // Popup
     popupId: 1,
-    popups: [] as { id: number; text: string; position: [number, number, number] }[],
+    popups: [] as {
+      id: number;
+      text: string;
+      position: [number, number, number];
+    }[],
     dummy: new THREE.Object3D(),
     trail: Array.from({ length: TRAIL_COUNT }, () => new THREE.Vector3()),
     trailIndex: 0,
   });
 
   const theme = useMemo(
-    () => PLATFORM_THEMES.find((t) => t.id === snap.selectedTheme) ?? PLATFORM_THEMES[0],
-    [snap.selectedTheme],
+    () =>
+      PLATFORM_THEMES.find((t) => t.id === snap.selectedTheme) ??
+      PLATFORM_THEMES[0],
+    [snap.selectedTheme]
   );
 
   const ballSkin = useMemo(
     () => BALL_SKINS.find((b) => b.id === snap.selectedBall) ?? BALL_SKINS[0],
-    [snap.selectedBall],
+    [snap.selectedBall]
   );
 
   // One-time setup
@@ -173,7 +194,11 @@ export default function SpiralHop() {
     w.grounded = true;
     w.localZ = -nextPlatforms[0].length / 2 + w.radius + 0.05;
     w.vel.set(0, 0, 0);
-    w.pos.set(nextPlatforms[0].x, nextPlatforms[0].y + w.radius, nextPlatforms[0].z);
+    w.pos.set(
+      nextPlatforms[0].x,
+      nextPlatforms[0].y + w.radius,
+      nextPlatforms[0].z
+    );
     w.combo = 0;
     spiralHopState.combo = 0;
     w.popups = [];
@@ -185,11 +210,12 @@ export default function SpiralHop() {
 
   function addPopup(text: string, position: THREE.Vector3) {
     const id = world.current.popupId++;
-    const p: { id: number; text: string; position: [number, number, number] } = {
-      id,
-      text,
-      position: [position.x, position.y, position.z],
-    };
+    const p: { id: number; text: string; position: [number, number, number] } =
+      {
+        id,
+        text,
+        position: [position.x, position.y, position.z],
+      };
     world.current.popups.push(p);
     setTimeout(() => {
       world.current.popups = world.current.popups.filter((pp) => pp.id !== id);
@@ -201,7 +227,8 @@ export default function SpiralHop() {
     const isPaused = uiSnap.paused;
 
     // Keep input in sync even while paused
-    const tapped = input.current.pointerJustDown || input.current.justPressed.has(' ');
+    const tapped =
+      input.current.pointerJustDown || input.current.justPressed.has(' ');
 
     if (snap.phase !== 'playing' || isPaused) {
       clearFrameInput(input);
@@ -236,7 +263,9 @@ export default function SpiralHop() {
 
       // Compute ball world position from platform frame
       const fwd = forwardFromYaw(current.yaw);
-      const worldPos = new THREE.Vector3(current.x, current.y, current.z).add(fwd.clone().multiplyScalar(w.localZ));
+      const worldPos = new THREE.Vector3(current.x, current.y, current.z).add(
+        fwd.clone().multiplyScalar(w.localZ)
+      );
 
       w.pos.copy(worldPos);
       w.pos.y = current.y + w.radius;
@@ -284,7 +313,10 @@ export default function SpiralHop() {
           spiralHopState.score += 1 + bonus;
 
           if (perfect) {
-            addPopup('Perfect +1', new THREE.Vector3(w.pos.x, w.pos.y + 0.7, w.pos.z));
+            addPopup(
+              'Perfect +1',
+              new THREE.Vector3(w.pos.x, w.pos.y + 0.7, w.pos.z)
+            );
           }
 
           // Collect gem
@@ -304,7 +336,12 @@ export default function SpiralHop() {
             let prev = trimmed[trimmed.length - 1] ?? null;
             const baseId = (prev?.id ?? 0) + 1;
             for (let i = 0; i < removeCount; i++) {
-              const p = makePlatform(rngRef.current, prev, baseId + i, difficulty);
+              const p = makePlatform(
+                rngRef.current,
+                prev,
+                baseId + i,
+                difficulty
+              );
               trimmed.push(p);
               prev = p;
             }
@@ -388,7 +425,12 @@ export default function SpiralHop() {
       roughness: ballSkin.roughness ?? 0.35,
       metalness: ballSkin.metalness ?? 0.12,
     });
-  }, [ballSkin.color, ballSkin.emissive, ballSkin.roughness, ballSkin.metalness]);
+  }, [
+    ballSkin.color,
+    ballSkin.emissive,
+    ballSkin.roughness,
+    ballSkin.metalness,
+  ]);
 
   return (
     <>
@@ -396,9 +438,21 @@ export default function SpiralHop() {
 
       {/* World lights */}
       <ambientLight intensity={0.75} color={theme.skyTop} />
-      <directionalLight position={[6, 10, 6]} intensity={0.6} color={'#ffffff'} />
-      <pointLight position={[0, 6, 4]} intensity={0.8} color={theme.glowColor} />
-      <pointLight position={[-6, 4, -8]} intensity={0.6} color={theme.topColor} />
+      <directionalLight
+        position={[6, 10, 6]}
+        intensity={0.6}
+        color={'#ffffff'}
+      />
+      <pointLight
+        position={[0, 6, 4]}
+        intensity={0.8}
+        color={theme.glowColor}
+      />
+      <pointLight
+        position={[-6, 4, -8]}
+        intensity={0.6}
+        color={theme.topColor}
+      />
 
       {/* Platforms */}
       {platforms.map((p, i) => (
@@ -413,12 +467,20 @@ export default function SpiralHop() {
           {/* Base */}
           <mesh position={[0, -GAME.platformHeight / 2, 0]}>
             <boxGeometry args={[p.width, GAME.platformHeight, p.length]} />
-            <meshStandardMaterial color={theme.edgeColor} roughness={0.55} metalness={0.05} />
+            <meshStandardMaterial
+              color={theme.edgeColor}
+              roughness={0.55}
+              metalness={0.05}
+            />
           </mesh>
           {/* Top */}
           <mesh position={[0, 0.03, 0]}>
             <boxGeometry args={[p.width * 0.96, 0.1, p.length * 0.96]} />
-            <meshStandardMaterial color={theme.topColor} roughness={0.28} metalness={0.12} />
+            <meshStandardMaterial
+              color={theme.topColor}
+              roughness={0.28}
+              metalness={0.12}
+            />
           </mesh>
           {/* Glow skirt */}
           <mesh position={[0, -GAME.platformHeight, 0]}>
@@ -440,7 +502,12 @@ export default function SpiralHop() {
             rotation={[0, Math.PI / 4, 0]}
           >
             <octahedronGeometry args={[0.18, 0]} />
-            <meshStandardMaterial color={theme.glowColor} emissive={theme.glowColor} emissiveIntensity={0.7} roughness={0.15} />
+            <meshStandardMaterial
+              color={theme.glowColor}
+              emissive={theme.glowColor}
+              emissiveIntensity={0.7}
+              roughness={0.15}
+            />
           </mesh>
         </group>
       ))}
@@ -453,15 +520,27 @@ export default function SpiralHop() {
       {/* Trail */}
       <instancedMesh ref={trailRef} args={[undefined, undefined, TRAIL_COUNT]}>
         <sphereGeometry args={[0.18, 12, 12]} />
-        <meshStandardMaterial color={theme.glowColor} emissive={theme.glowColor} emissiveIntensity={0.6} transparent opacity={0.35} />
+        <meshStandardMaterial
+          color={theme.glowColor}
+          emissive={theme.glowColor}
+          emissiveIntensity={0.6}
+          transparent
+          opacity={0.35}
+        />
       </instancedMesh>
 
       {/* Popups */}
       {world.current.popups.map((p) => (
-        <Html key={p.id} position={p.position} center style={{ pointerEvents: 'none' }}>
+        <Html
+          key={p.id}
+          position={p.position}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
           <div
             style={{
-              fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+              fontFamily:
+                'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
               fontWeight: 900,
               fontSize: 16,
               color: 'rgba(0,0,0,0.75)',

@@ -1,5 +1,9 @@
 import { useFrame } from '@react-three/fiber';
-import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  BallCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
@@ -13,7 +17,12 @@ interface WallModeBallProps {
   onBodyReady?: (body: RapierRigidBody | null) => void;
 }
 
-const WallModeBall: React.FC<WallModeBallProps> = ({ position, ballColor, shotSpinRef, onBodyReady }) => {
+const WallModeBall: React.FC<WallModeBallProps> = ({
+  position,
+  ballColor,
+  shotSpinRef,
+  onBodyReady,
+}) => {
   const api = useRef<RapierRigidBody | null>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const frameCount = useRef(0);
@@ -24,7 +33,10 @@ const WallModeBall: React.FC<WallModeBallProps> = ({ position, ballColor, shotSp
       reactPongState.usePowerup('shield');
       if (api.current) {
         const vel = api.current.linvel();
-        api.current.setLinvel({ x: vel.x, y: vel.y, z: -Math.abs(vel.z) }, true);
+        api.current.setLinvel(
+          { x: vel.x, y: vel.y, z: -Math.abs(vel.z) },
+          true
+        );
       }
       return;
     }
@@ -32,7 +44,10 @@ const WallModeBall: React.FC<WallModeBallProps> = ({ position, ballColor, shotSp
     reactPongState.wallModeMiss();
 
     if (api.current) {
-      api.current.setTranslation({ x: 0, y: 0, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET }, true);
+      api.current.setTranslation(
+        { x: 0, y: 0, z: WALL_MODE_PLAYER_Z - WALL_MODE_BALL_OFFSET },
+        true
+      );
       api.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
       api.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
     }
@@ -48,7 +63,10 @@ const WallModeBall: React.FC<WallModeBallProps> = ({ position, ballColor, shotSp
     frameCount.current++;
 
     if (frameCount.current < 5) {
-      api.current.setTranslation({ x: position[0], y: position[1], z: position[2] }, true);
+      api.current.setTranslation(
+        { x: position[0], y: position[1], z: position[2] },
+        true
+      );
       api.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
       return;
     }
@@ -60,13 +78,19 @@ const WallModeBall: React.FC<WallModeBallProps> = ({ position, ballColor, shotSp
     const hasSlowMo = reactPongState.hasPowerup('slowmo');
     if (hasSlowMo && speed > 5) {
       const slowFactor = 0.5;
-      api.current.setLinvel({ x: vel.x * slowFactor, y: vel.y * slowFactor, z: vel.z * slowFactor }, true);
+      api.current.setLinvel(
+        { x: vel.x * slowFactor, y: vel.y * slowFactor, z: vel.z * slowFactor },
+        true
+      );
     }
 
     const maxSpeed = wallMode.maxSpeed;
     if (speed > maxSpeed) {
       const scale = maxSpeed / speed;
-      api.current.setLinvel({ x: vel.x * scale, y: vel.y * scale, z: vel.z * scale }, true);
+      api.current.setLinvel(
+        { x: vel.x * scale, y: vel.y * scale, z: vel.z * scale },
+        true
+      );
     }
 
     if (wallMode.gameState === 'playing' && !wallMode.isBallCaptured) {

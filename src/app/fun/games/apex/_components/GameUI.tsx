@@ -24,16 +24,29 @@ const GameUI: React.FC = () => {
   const selectedMode = MODE_INFO[snap.mode];
   const selectedModeBest = snap.highScores[snap.mode];
   const selectedArena = ARENA_PRESETS[snap.arena];
-  const selectedSkin = PLAYER_SKIN_INFO[snap.playerSkin] ?? PLAYER_SKIN_INFO.classic;
+  const selectedSkin =
+    PLAYER_SKIN_INFO[snap.playerSkin] ?? PLAYER_SKIN_INFO.classic;
   const arenaTheme = useMemo(
     () => getArenaTheme(selectedArena, THEMES[snap.currentTheme]),
     [selectedArena, snap.currentTheme]
   );
   const skinGroups = [
-    { label: 'Classic', keys: PLAYER_SKIN_KEYS.filter((key) => key === 'classic') },
-    { label: 'Prism', keys: PLAYER_SKIN_KEYS.filter((key) => key.startsWith('prism')) },
-    { label: 'Fractal', keys: PLAYER_SKIN_KEYS.filter((key) => key.startsWith('fractal')) },
-    { label: 'Nova', keys: PLAYER_SKIN_KEYS.filter((key) => key.startsWith('nova')) },
+    {
+      label: 'Classic',
+      keys: PLAYER_SKIN_KEYS.filter((key) => key === 'classic'),
+    },
+    {
+      label: 'Prism',
+      keys: PLAYER_SKIN_KEYS.filter((key) => key.startsWith('prism')),
+    },
+    {
+      label: 'Fractal',
+      keys: PLAYER_SKIN_KEYS.filter((key) => key.startsWith('fractal')),
+    },
+    {
+      label: 'Nova',
+      keys: PLAYER_SKIN_KEYS.filter((key) => key.startsWith('nova')),
+    },
   ].filter((group) => group.keys.length > 0);
 
   if (snap.phase === 'menu') {
@@ -98,7 +111,14 @@ const GameUI: React.FC = () => {
             }}
           >
             {/* Mode picker (dropdown) */}
-            <div style={{ marginTop: '0.5rem', display: 'grid', gap: '0.5rem', justifyItems: 'center' }}>
+            <div
+              style={{
+                marginTop: '0.5rem',
+                display: 'grid',
+                gap: '0.5rem',
+                justifyItems: 'center',
+              }}
+            >
               <div
                 style={{
                   color: 'rgba(255,255,255,0.4)',
@@ -136,7 +156,9 @@ const GameUI: React.FC = () => {
                 <div style={{ position: 'relative', flex: 1 }}>
                   <select
                     value={snap.mode}
-                    onChange={(event) => apexState.setMode(event.target.value as GameMode)}
+                    onChange={(event) =>
+                      apexState.setMode(event.target.value as GameMode)
+                    }
                     style={{
                       width: '100%',
                       appearance: 'none',
@@ -173,12 +195,30 @@ const GameUI: React.FC = () => {
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', width: 'min(92vw, 520px)' }}>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.85rem', textAlign: 'left' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  width: 'min(92vw, 520px)',
+                }}
+              >
+                <div
+                  style={{
+                    color: 'rgba(255,255,255,0.55)',
+                    fontSize: '0.85rem',
+                    textAlign: 'left',
+                  }}
+                >
                   {selectedMode.description}
                 </div>
                 {selectedModeBest > 0 && (
-                  <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>
+                  <div
+                    style={{
+                      color: 'rgba(255,255,255,0.4)',
+                      fontSize: '0.85rem',
+                    }}
+                  >
                     Best: {selectedModeBest.toLocaleString()}
                   </div>
                 )}
@@ -186,7 +226,15 @@ const GameUI: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ marginTop: '-0.25rem', marginBottom: '1.75rem', display: 'grid', gap: '0.5rem', justifyItems: 'center' }}>
+          <div
+            style={{
+              marginTop: '-0.25rem',
+              marginBottom: '1.75rem',
+              display: 'grid',
+              gap: '0.5rem',
+              justifyItems: 'center',
+            }}
+          >
             <div
               style={{
                 color: 'rgba(255,255,255,0.4)',
@@ -224,7 +272,9 @@ const GameUI: React.FC = () => {
               <div style={{ position: 'relative', flex: 1 }}>
                 <select
                   value={snap.arena}
-                  onChange={(event) => apexState.setArena(event.target.value as ArenaPresetKey)}
+                  onChange={(event) =>
+                    apexState.setArena(event.target.value as ArenaPresetKey)
+                  }
                   style={{
                     width: '100%',
                     appearance: 'none',
@@ -261,14 +311,35 @@ const GameUI: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', width: 'min(92vw, 520px)' }}>
-              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.85rem', textAlign: 'left' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: '1rem',
+                width: 'min(92vw, 520px)',
+              }}
+            >
+              <div
+                style={{
+                  color: 'rgba(255,255,255,0.55)',
+                  fontSize: '0.85rem',
+                  textAlign: 'left',
+                }}
+              >
                 {selectedArena.description}
               </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '12px', marginBottom: '2rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '12px',
+              marginBottom: '2rem',
+            }}
+          >
             {(['easy', 'normal', 'hard'] as const).map((d) => (
               <button
                 key={d}
@@ -276,9 +347,16 @@ const GameUI: React.FC = () => {
                 style={{
                   padding: '0.5rem 1.25rem',
                   borderRadius: '8px',
-                  border: snap.difficulty === d ? '1px solid #22d3ee' : '1px solid rgba(255,255,255,0.2)',
-                  background: snap.difficulty === d ? 'rgba(34,211,238,0.2)' : 'transparent',
-                  color: snap.difficulty === d ? '#22d3ee' : 'rgba(255,255,255,0.5)',
+                  border:
+                    snap.difficulty === d
+                      ? '1px solid #22d3ee'
+                      : '1px solid rgba(255,255,255,0.2)',
+                  background:
+                    snap.difficulty === d
+                      ? 'rgba(34,211,238,0.2)'
+                      : 'transparent',
+                  color:
+                    snap.difficulty === d ? '#22d3ee' : 'rgba(255,255,255,0.5)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   textTransform: 'uppercase',
@@ -333,7 +411,9 @@ const GameUI: React.FC = () => {
               <div style={{ position: 'relative', flex: 1 }}>
                 <select
                   value={snap.playerSkin}
-                  onChange={(event) => apexState.setPlayerSkin(event.target.value as PlayerSkin)}
+                  onChange={(event) =>
+                    apexState.setPlayerSkin(event.target.value as PlayerSkin)
+                  }
                   style={{
                     width: '100%',
                     appearance: 'none',
@@ -373,7 +453,9 @@ const GameUI: React.FC = () => {
                 </span>
               </div>
             </div>
-            <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.85rem' }}>
+            <div
+              style={{ color: 'rgba(255,255,255,0.55)', fontSize: '0.85rem' }}
+            >
               {selectedSkin.description}
             </div>
           </div>
@@ -417,8 +499,17 @@ const GameUI: React.FC = () => {
               START GAME
             </button>
 
-            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.875rem', textAlign: 'center' }}>
-              <p style={{ margin: 0 }}>Tap / Space / Click to flip curve • Right click or Q/E to swap lanes</p>
+            <div
+              style={{
+                color: 'rgba(255,255,255,0.3)',
+                fontSize: '0.875rem',
+                textAlign: 'center',
+              }}
+            >
+              <p style={{ margin: 0 }}>
+                Tap / Space / Click to flip curve • Right click or Q/E to swap
+                lanes
+              </p>
             </div>
           </div>
 
@@ -436,7 +527,8 @@ const GameUI: React.FC = () => {
   }
 
   if (snap.phase === 'gameover') {
-    const isNewHighScore = snap.score >= snap.highScores[snap.mode] && snap.score > 0;
+    const isNewHighScore =
+      snap.score >= snap.highScores[snap.mode] && snap.score > 0;
 
     return (
       <FullscreenOverlay>
@@ -472,28 +564,69 @@ const GameUI: React.FC = () => {
           </h1>
 
           {isNewHighScore && (
-            <div style={{ color: '#22d3ee', fontSize: '1.25rem', marginBottom: '1rem', animation: 'pulse 2s infinite' }}>
+            <div
+              style={{
+                color: '#22d3ee',
+                fontSize: '1.25rem',
+                marginBottom: '1rem',
+                animation: 'pulse 2s infinite',
+              }}
+            >
               NEW HIGH SCORE!
             </div>
           )}
 
-          <div style={{ fontSize: '3.5rem', fontWeight: 700, color: '#fff', marginBottom: '0.5rem' }}>
+          <div
+            style={{
+              fontSize: '3.5rem',
+              fontWeight: 700,
+              color: '#fff',
+              marginBottom: '0.5rem',
+            }}
+          >
             {snap.score.toLocaleString()}
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.4)', marginBottom: '2rem' }}>{MODE_INFO[snap.mode].name} Mode</div>
+          <div style={{ color: 'rgba(255,255,255,0.4)', marginBottom: '2rem' }}>
+            {MODE_INFO[snap.mode].name} Mode
+          </div>
 
-          <div style={{ display: 'flex', gap: '3rem', marginBottom: '2rem', textAlign: 'center' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '3rem',
+              marginBottom: '2rem',
+              textAlign: 'center',
+            }}
+          >
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>Gems</div>
-              <div style={{ fontSize: '1.5rem', color: '#fff' }}>{snap.gems}</div>
+              <div
+                style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}
+              >
+                Gems
+              </div>
+              <div style={{ fontSize: '1.5rem', color: '#fff' }}>
+                {snap.gems}
+              </div>
             </div>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>Level</div>
-              <div style={{ fontSize: '1.5rem', color: '#fff' }}>{snap.level}</div>
+              <div
+                style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}
+              >
+                Level
+              </div>
+              <div style={{ fontSize: '1.5rem', color: '#fff' }}>
+                {snap.level}
+              </div>
             </div>
             <div>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}>Best Combo</div>
-              <div style={{ fontSize: '1.5rem', color: '#fff' }}>x{snap.bestCombo}</div>
+              <div
+                style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem' }}
+              >
+                Best Combo
+              </div>
+              <div style={{ fontSize: '1.5rem', color: '#fff' }}>
+                x{snap.bestCombo}
+              </div>
             </div>
           </div>
 
@@ -582,13 +715,26 @@ const GameUI: React.FC = () => {
           >
             Best
           </div>
-          <div style={{ fontSize: '1rem', fontWeight: 600, color: 'rgba(255,255,255,0.8)' }}>
+          <div
+            style={{
+              fontSize: '1rem',
+              fontWeight: 600,
+              color: 'rgba(255,255,255,0.8)',
+            }}
+          >
             {snap.highScores[snap.mode].toLocaleString()}
           </div>
         </div>
 
         {snap.combo > 1 && (
-          <div style={{ position: 'absolute', top: '1.5rem', left: '50%', transform: 'translateX(-50%)' }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: '1.5rem',
+              left: '50%',
+              transform: 'translateX(-50%)',
+            }}
+          >
             <div
               style={{
                 padding: '0.5rem 1rem',
@@ -609,7 +755,14 @@ const GameUI: React.FC = () => {
           </div>
         )}
 
-        <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', textAlign: 'right' }}>
+        <div
+          style={{
+            position: 'absolute',
+            top: '1.5rem',
+            right: '1.5rem',
+            textAlign: 'right',
+          }}
+        >
           <div
             style={{
               color: 'rgba(255,255,255,0.4)',
@@ -621,14 +774,31 @@ const GameUI: React.FC = () => {
           >
             Level
           </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 700, color: theme.accent }}>{snap.level}</div>
-          <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+          <div
+            style={{ fontSize: '1.5rem', fontWeight: 700, color: theme.accent }}
+          >
+            {snap.level}
+          </div>
+          <div
+            style={{
+              color: 'rgba(255,255,255,0.6)',
+              fontSize: '0.875rem',
+              marginTop: '0.5rem',
+            }}
+          >
             {snap.gems} gems
           </div>
         </div>
 
         {snap.powerUp !== 'none' && (
-          <div style={{ position: 'absolute', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)' }}>
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '1.5rem',
+              left: '50%',
+              transform: 'translateX(-50%)',
+            }}
+          >
             <div
               style={{
                 padding: '0.5rem 1rem',
@@ -643,11 +813,23 @@ const GameUI: React.FC = () => {
                       ? '#ff00ff40'
                       : '#ffcc0040',
                 border: `2px solid ${
-                  snap.powerUp === 'shield' ? '#00ff88' : snap.powerUp === 'magnet' ? '#ff00ff' : '#ffcc00'
+                  snap.powerUp === 'shield'
+                    ? '#00ff88'
+                    : snap.powerUp === 'magnet'
+                      ? '#ff00ff'
+                      : '#ffcc00'
                 }`,
               }}
             >
-              <span style={{ color: '#fff', fontWeight: 700, textTransform: 'uppercase' }}>{snap.powerUp}</span>
+              <span
+                style={{
+                  color: '#fff',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {snap.powerUp}
+              </span>
               <div
                 style={{
                   width: '4rem',
@@ -664,7 +846,11 @@ const GameUI: React.FC = () => {
                     transition: 'all 0.1s',
                     width: `${(snap.powerUpTimer / POWERUP_DURATION) * 100}%`,
                     background:
-                      snap.powerUp === 'shield' ? '#00ff88' : snap.powerUp === 'magnet' ? '#ff00ff' : '#ffcc00',
+                      snap.powerUp === 'shield'
+                        ? '#00ff88'
+                        : snap.powerUp === 'magnet'
+                          ? '#ff00ff'
+                          : '#ffcc00',
                   }}
                 />
               </div>

@@ -15,12 +15,19 @@ const GlobalColorManager: React.FC = () => {
       const colorIndex = Math.floor(t * (COLORS.length - 1));
       const nextIndex = (colorIndex + 1) % (COLORS.length - 1);
       const blend = (t * (COLORS.length - 1)) % 1;
-      mutation.globalColor.lerpColors(COLORS[colorIndex].three, COLORS[nextIndex].three, blend);
+      mutation.globalColor.lerpColors(
+        COLORS[colorIndex].three,
+        COLORS[nextIndex].three,
+        blend
+      );
       return;
     }
 
     if (currentLevel > prevLevel.current) {
-      colorAlpha.current = Math.min(1, colorAlpha.current + delta * mutation.gameSpeed * 0.5);
+      colorAlpha.current = Math.min(
+        1,
+        colorAlpha.current + delta * mutation.gameSpeed * 0.5
+      );
       mutation.globalColor.lerpColors(
         COLORS[prevLevel.current].three,
         COLORS[currentLevel].three,

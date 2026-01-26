@@ -1,6 +1,6 @@
 /**
  * Arcade Lobby Page
- * 
+ *
  * Main arcade hub displaying the 3D arcade cabinet and game selection.
  * Individual games are now at /fun/[gameId]
  */
@@ -11,7 +11,13 @@ import { useFrame } from '@react-three/fiber';
 import { easeCubicInOut } from 'd3-ease';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Group, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import AnimatedCamera from './components/AnimatedCamera';
@@ -21,24 +27,24 @@ import { ArcadeDeck } from './components/shell';
 import { GAME_CARDS, TOTAL_GAMES } from './config/games';
 import { ORBIT_SETTINGS } from './config/themes';
 import { useArcadeStore } from './store';
-import {
-  useGameState,
-  useNavigationActions,
-} from './store/selectors';
+import { useGameState, useNavigationActions } from './store/selectors';
 import { useAutoCycleGames } from './hooks';
 import type { GameId } from './store/types';
 
-const CanvasProvider = dynamic(() => import('../../components/CanvasProvider'), {
-  ssr: false,
-});
+const CanvasProvider = dynamic(
+  () => import('../../components/CanvasProvider'),
+  {
+    ssr: false,
+  }
+);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Arcade Orbit Controls
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const ArcadeOrbitControls: React.FC<{ active: boolean; target: Vector3 }> = ({ 
-  active, 
-  target 
+const ArcadeOrbitControls: React.FC<{ active: boolean; target: Vector3 }> = ({
+  active,
+  target,
 }) => {
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
   const rampStartRef = useRef<number | null>(null);
@@ -61,7 +67,9 @@ const ArcadeOrbitControls: React.FC<{ active: boolean; target: Vector3 }> = ({
     const elapsed = clock.elapsedTime - rampStartRef.current;
     const t = Math.min(elapsed / ORBIT_SETTINGS.rampDuration, 1);
     const eased = easeCubicInOut(t);
-    const oscillation = Math.sin(clock.elapsedTime * ORBIT_SETTINGS.oscillationSpeed);
+    const oscillation = Math.sin(
+      clock.elapsedTime * ORBIT_SETTINGS.oscillationSpeed
+    );
 
     controls.autoRotate = true;
     controls.autoRotateSpeed = ORBIT_SETTINGS.autoSpeed * eased * oscillation;
@@ -102,16 +110,28 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
   const arcadeRef = useRef<Group>(null);
 
   const [animationComplete, setAnimationComplete] = useState(false);
-  const [targetCameraPositions, setTargetCameraPositions] = useState<[number, number, number][]>([]);
-  const [lookAtPosition, setLookAtPosition] = useState<[number, number, number]>([0, 1.5, 0]);
-  const [arcadeFocus, setArcadeFocus] = useState<[number, number, number]>([0, 1.5, 0]);
+  const [targetCameraPositions, setTargetCameraPositions] = useState<
+    [number, number, number][]
+  >([]);
+  const [lookAtPosition, setLookAtPosition] = useState<
+    [number, number, number]
+  >([0, 1.5, 0]);
+  const [arcadeFocus, setArcadeFocus] = useState<[number, number, number]>([
+    0, 1.5, 0,
+  ]);
   const [arcadeRadius, setArcadeRadius] = useState(3);
-  const [arcadeForward, setArcadeForward] = useState<[number, number, number]>([0, 0, 1]);
+  const [arcadeForward, setArcadeForward] = useState<[number, number, number]>([
+    0, 0, 1,
+  ]);
   const cameraPositionsSet = useRef(false);
   const focusReady = useRef(false);
 
   const handleArcadeFocus = useCallback(
-    (focus: [number, number, number], radius: number, forward?: [number, number, number]) => {
+    (
+      focus: [number, number, number],
+      radius: number,
+      forward?: [number, number, number]
+    ) => {
       setArcadeFocus(focus);
       setArcadeRadius(radius);
       if (forward) {
@@ -130,9 +150,9 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
   useEffect(() => {
     if (cameraPositionsSet.current) return;
     if (!focusReady.current) return;
-    
+
     cameraPositionsSet.current = true;
-    
+
     const [fx, fy, fz] = arcadeFocus;
     const [nx, ny, nz] = arcadeForward;
     const focus = new Vector3(fx, fy, fz);
@@ -143,27 +163,32 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
     const r = Math.max(arcadeRadius, 1.5);
 
     // Cinematic camera positions
-    const shot1 = focus.clone()
+    const shot1 = focus
+      .clone()
       .addScaledVector(forward, r * 12)
       .addScaledVector(right, r * 6)
       .addScaledVector(up, r * 5);
 
-    const shot2 = focus.clone()
+    const shot2 = focus
+      .clone()
       .addScaledVector(forward, r * 7)
       .addScaledVector(right, r * 3)
       .addScaledVector(up, r * 3);
 
-    const shot3 = focus.clone()
+    const shot3 = focus
+      .clone()
       .addScaledVector(forward, r * 4)
       .addScaledVector(right, r * 0.5)
       .addScaledVector(up, r * 1.5);
 
-    const shot4 = focus.clone()
+    const shot4 = focus
+      .clone()
       .addScaledVector(forward, r * 2)
       .addScaledVector(right, r * 0.05)
       .addScaledVector(up, r * 0.3);
 
-    const shot5 = focus.clone()
+    const shot5 = focus
+      .clone()
       .addScaledVector(forward, r * 0.55)
       .addScaledVector(up, r * 0.01);
 
@@ -223,7 +248,7 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
 
 export default function FunPage() {
   const router = useRouter();
-  
+
   // Zustand state
   const { selectedIndex } = useGameState();
   const { setSelectedIndex, setCurrentGame } = useNavigationActions();
@@ -237,14 +262,20 @@ export default function FunPage() {
   }, [setCurrentGame]);
 
   // Handle game selection in carousel
-  const handleSelectGame = useCallback((index: number) => {
-    setSelectedIndex(index);
-  }, [setSelectedIndex]);
+  const handleSelectGame = useCallback(
+    (index: number) => {
+      setSelectedIndex(index);
+    },
+    [setSelectedIndex]
+  );
 
   // Handle game launch - navigate to game page
-  const handleLaunchGame = useCallback((gameId: string) => {
-    router.push(`/fun/${gameId}`);
-  }, [router]);
+  const handleLaunchGame = useCallback(
+    (gameId: string) => {
+      router.push(`/fun/${gameId}`);
+    },
+    [router]
+  );
 
   return (
     <>
@@ -255,7 +286,7 @@ export default function FunPage() {
           onLaunchGame={handleLaunchGame}
         />
       </CanvasProvider>
-      
+
       {/* Bottom game selector */}
       <ArcadeDeck
         selectedIndex={selectedIndex}

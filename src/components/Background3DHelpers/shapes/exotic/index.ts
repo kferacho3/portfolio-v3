@@ -139,7 +139,7 @@ export function celticKnotGeometry(
 
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2 * loops;
-    
+
     // Celtic knot curve - figure-8 with interlacing
     const r = 1 + 0.3 * Math.sin(3 * t);
     const x = r * Math.cos(t) * (1 + 0.4 * Math.cos(2 * t));
@@ -150,7 +150,13 @@ export function celticKnotGeometry(
   }
 
   const curve = new THREE.CatmullRomCurve3(points, true);
-  const geo = new THREE.TubeGeometry(curve, segments, tubeRadius * scale, 12, true);
+  const geo = new THREE.TubeGeometry(
+    curve,
+    segments,
+    tubeRadius * scale,
+    12,
+    true
+  );
   geo.computeVertexNormals();
   return geo;
 }
@@ -169,18 +175,24 @@ export function solomonSealGeometry(
 
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2 * turns;
-    
+
     // 5-pointed star pattern
-    const r = 1 + 0.3 * Math.cos(5 * t / turns);
+    const r = 1 + 0.3 * Math.cos((5 * t) / turns);
     const x = r * Math.cos(t);
     const y = r * Math.sin(t);
-    const z = 0.4 * Math.sin(5 * t / turns) * Math.cos(t * 0.5);
+    const z = 0.4 * Math.sin((5 * t) / turns) * Math.cos(t * 0.5);
 
     points.push(new THREE.Vector3(x * scale, z * scale, y * scale));
   }
 
   const curve = new THREE.CatmullRomCurve3(points, true);
-  const geo = new THREE.TubeGeometry(curve, segments, tubeRadius * scale, 12, true);
+  const geo = new THREE.TubeGeometry(
+    curve,
+    segments,
+    tubeRadius * scale,
+    12,
+    true
+  );
   geo.computeVertexNormals();
   return geo;
 }
@@ -213,7 +225,13 @@ export function doubleHelixGeometry(
     }
 
     const curve = new THREE.CatmullRomCurve3(points, false);
-    const helixGeo = new THREE.TubeGeometry(curve, segments, tubeRadius * scale, 8, false);
+    const helixGeo = new THREE.TubeGeometry(
+      curve,
+      segments,
+      tubeRadius * scale,
+      8,
+      false
+    );
     geometries.push(helixGeo);
   }
 
@@ -221,7 +239,7 @@ export function doubleHelixGeometry(
   const rungCount = turns * 4;
   for (let i = 0; i < rungCount; i++) {
     const t = (i / rungCount) * Math.PI * 2 * turns;
-    const y = ((i / rungCount) - 0.5) * 2 * scale;
+    const y = (i / rungCount - 0.5) * 2 * scale;
 
     const start = new THREE.Vector3(
       helixRadius * Math.cos(t) * scale,
@@ -235,7 +253,13 @@ export function doubleHelixGeometry(
     );
 
     const rungCurve = new THREE.LineCurve3(start, end);
-    const rungGeo = new THREE.TubeGeometry(rungCurve, 2, tubeRadius * 0.5 * scale, 6, false);
+    const rungGeo = new THREE.TubeGeometry(
+      rungCurve,
+      2,
+      tubeRadius * 0.5 * scale,
+      6,
+      false
+    );
     geometries.push(rungGeo);
   }
 
@@ -295,22 +319,24 @@ export function voronoiShellGeometry(
   for (let i = 0; i < cellCount; i++) {
     const phi = Math.acos(2 * Math.random() - 1);
     const theta = Math.random() * Math.PI * 2;
-    points.push(new THREE.Vector3(
-      radius * Math.sin(phi) * Math.cos(theta),
-      radius * Math.cos(phi),
-      radius * Math.sin(phi) * Math.sin(theta)
-    ));
+    points.push(
+      new THREE.Vector3(
+        radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      )
+    );
   }
 
   // Create wireframe-like structure connecting nearest neighbors
   for (let i = 0; i < points.length; i++) {
     const neighbors: { idx: number; dist: number }[] = [];
-    
+
     for (let j = 0; j < points.length; j++) {
       if (i !== j) {
         neighbors.push({
           idx: j,
-          dist: points[i].distanceTo(points[j])
+          dist: points[i].distanceTo(points[j]),
         });
       }
     }
@@ -366,9 +392,11 @@ export function penroseTiling3DGeometry(
       // Use 5-fold symmetry
       for (let k = 0; k < 5; k++) {
         const angle = (k * Math.PI * 2) / 5;
-        const x = (i * Math.cos(angle) + j * Math.cos(angle + Math.PI / 5)) * 0.5;
-        const y = (i * Math.sin(angle) + j * Math.sin(angle + Math.PI / 5)) * 0.5;
-        
+        const x =
+          (i * Math.cos(angle) + j * Math.cos(angle + Math.PI / 5)) * 0.5;
+        const y =
+          (i * Math.sin(angle) + j * Math.sin(angle + Math.PI / 5)) * 0.5;
+
         if (Math.sqrt(x * x + y * y) < layers * 0.8) {
           tiles.push({ x, y, type: (i + j + k) % 2 });
         }
@@ -396,7 +424,11 @@ export function penroseTiling3DGeometry(
     };
 
     const tileGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    tileGeo.translate(tile.x * scale, -tileHeight * scale * 0.5, tile.y * scale);
+    tileGeo.translate(
+      tile.x * scale,
+      -tileHeight * scale * 0.5,
+      tile.y * scale
+    );
     tileGeo.rotateX(Math.PI / 2);
     geometries.push(tileGeo);
   }
@@ -425,18 +457,11 @@ export function hexapodGeometry(
   // Six arms with sub-branches
   for (let i = 0; i < 6; i++) {
     const angle = (i / 6) * Math.PI * 2;
-    const armDir = new THREE.Vector3(
-      Math.cos(angle),
-      0,
-      Math.sin(angle)
-    );
+    const armDir = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
 
     // Main arm
     const armEnd = armDir.clone().multiplyScalar(armLength);
-    const armCurve = new THREE.LineCurve3(
-      new THREE.Vector3(0, 0, 0),
-      armEnd
-    );
+    const armCurve = new THREE.LineCurve3(new THREE.Vector3(0, 0, 0), armEnd);
     const armGeo = new THREE.TubeGeometry(armCurve, 8, armRadius, 8, false);
     geometries.push(armGeo);
 
@@ -456,7 +481,13 @@ export function hexapodGeometry(
       ).add(subStart);
 
       const subCurve = new THREE.LineCurve3(subStart, subEnd);
-      const subGeo = new THREE.TubeGeometry(subCurve, 4, armRadius * 0.6, 6, false);
+      const subGeo = new THREE.TubeGeometry(
+        subCurve,
+        4,
+        armRadius * 0.6,
+        6,
+        false
+      );
       geometries.push(subGeo);
 
       const subSphere = new THREE.SphereGeometry(armRadius, 8, 8);
@@ -486,7 +517,7 @@ export function ruledSurfaceGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const theta = u * Math.PI * 2;
     const z = (v - 0.5) * 2 * c;
-    
+
     const r = a * Math.sqrt(1 + (z * z) / (c * c));
     const x = r * Math.cos(theta);
     const y = r * Math.sin(theta);
@@ -517,9 +548,11 @@ export function gyroidMinimalGeometry(
 
   // Evaluate gyroid function
   const gyroid = (x: number, y: number, z: number): number => {
-    return Math.sin(x) * Math.cos(y) + 
-           Math.sin(y) * Math.cos(z) + 
-           Math.sin(z) * Math.cos(x);
+    return (
+      Math.sin(x) * Math.cos(y) +
+      Math.sin(y) * Math.cos(z) +
+      Math.sin(z) * Math.cos(x)
+    );
   };
 
   // Simplified surface extraction
@@ -556,10 +589,10 @@ export function gyroidMinimalGeometry(
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-  
+
   // Mark as point cloud
   geo.userData.static = true;
-  
+
   return geo;
 }
 
@@ -574,9 +607,10 @@ export function gyroidMinimalGeometry(
 export function snubDodecahedronGeometry(scale = 1): THREE.BufferGeometry {
   // Snub dodecahedron vertices (approximate)
   const phi = (1 + Math.sqrt(5)) / 2;
-  const xi = Math.pow(phi / 2 + Math.sqrt(phi - 5/27) / 2, 1/3) +
-             Math.pow(phi / 2 - Math.sqrt(phi - 5/27) / 2, 1/3);
-  
+  const xi =
+    Math.pow(phi / 2 + Math.sqrt(phi - 5 / 27) / 2, 1 / 3) +
+    Math.pow(phi / 2 - Math.sqrt(phi - 5 / 27) / 2, 1 / 3);
+
   const alpha = xi - 1 / xi;
   const beta = xi * phi + phi * phi + phi / xi;
 
@@ -585,7 +619,9 @@ export function snubDodecahedronGeometry(scale = 1): THREE.BufferGeometry {
   // Even permutations with even sign changes
   const permute = (a: number, b: number, c: number) => {
     const perms = [
-      [a, b, c], [b, c, a], [c, a, b],
+      [a, b, c],
+      [b, c, a],
+      [c, a, b],
     ];
     for (const [x, y, z] of perms) {
       for (const sx of [1, -1]) {
@@ -602,26 +638,42 @@ export function snubDodecahedronGeometry(scale = 1): THREE.BufferGeometry {
 
   // Generate vertices
   permute(2 * alpha, 2, 2 * beta);
-  permute(alpha + beta / phi + phi, -alpha * phi + beta + 1 / phi, alpha / phi + beta * phi - 1);
-  permute(alpha + beta / phi - phi, alpha * phi - beta + 1 / phi, alpha / phi + beta * phi + 1);
-  permute(-alpha / phi + beta * phi + 1, -alpha + beta / phi - phi, alpha * phi + beta - 1 / phi);
-  permute(-alpha / phi + beta * phi - 1, alpha - beta / phi - phi, alpha * phi + beta + 1 / phi);
+  permute(
+    alpha + beta / phi + phi,
+    -alpha * phi + beta + 1 / phi,
+    alpha / phi + beta * phi - 1
+  );
+  permute(
+    alpha + beta / phi - phi,
+    alpha * phi - beta + 1 / phi,
+    alpha / phi + beta * phi + 1
+  );
+  permute(
+    -alpha / phi + beta * phi + 1,
+    -alpha + beta / phi - phi,
+    alpha * phi + beta - 1 / phi
+  );
+  permute(
+    -alpha / phi + beta * phi - 1,
+    alpha - beta / phi - phi,
+    alpha * phi + beta + 1 / phi
+  );
 
   // Create convex hull using icosahedron subdivision approach
   const geo = new THREE.IcosahedronGeometry(scale, 2);
-  
+
   // Adjust vertices to match snub dodecahedron proportions
   const posAttr = geo.getAttribute('position');
   for (let i = 0; i < posAttr.count; i++) {
     const x = posAttr.getX(i);
     const y = posAttr.getY(i);
     const z = posAttr.getZ(i);
-    
+
     // Apply chirality twist
     const angle = Math.atan2(y, x);
     const r = Math.sqrt(x * x + y * y);
     const twist = z * 0.1;
-    
+
     posAttr.setXYZ(
       i,
       r * Math.cos(angle + twist) * scale,
@@ -661,14 +713,30 @@ export function greatStellatedDodecahedronGeometry(
   ];
 
   // Normalize to unit sphere
-  icoVerts.forEach(v => v.normalize());
+  icoVerts.forEach((v) => v.normalize());
 
   // Icosahedron faces (20 triangles)
   const faces = [
-    [0, 1, 8], [0, 8, 4], [0, 4, 5], [0, 5, 9], [0, 9, 1],
-    [1, 6, 8], [8, 6, 10], [8, 10, 4], [4, 10, 2], [4, 2, 5],
-    [5, 2, 11], [5, 11, 9], [9, 11, 7], [9, 7, 1], [1, 7, 6],
-    [3, 6, 7], [3, 7, 11], [3, 11, 2], [3, 2, 10], [3, 10, 6],
+    [0, 1, 8],
+    [0, 8, 4],
+    [0, 4, 5],
+    [0, 5, 9],
+    [0, 9, 1],
+    [1, 6, 8],
+    [8, 6, 10],
+    [8, 10, 4],
+    [4, 10, 2],
+    [4, 2, 5],
+    [5, 2, 11],
+    [5, 11, 9],
+    [9, 11, 7],
+    [9, 7, 1],
+    [1, 7, 6],
+    [3, 6, 7],
+    [3, 7, 11],
+    [3, 11, 2],
+    [3, 2, 10],
+    [3, 10, 6],
   ];
 
   // Create stellated spikes
@@ -688,19 +756,40 @@ export function greatStellatedDodecahedronGeometry(
     const spikeGeo = new THREE.BufferGeometry();
     const vertices = new Float32Array([
       // Triangle 1: v0, v1, apex
-      v0.x, v0.y, v0.z,
-      v1.x, v1.y, v1.z,
-      apex.x, apex.y, apex.z,
+      v0.x,
+      v0.y,
+      v0.z,
+      v1.x,
+      v1.y,
+      v1.z,
+      apex.x,
+      apex.y,
+      apex.z,
       // Triangle 2: v1, v2, apex
-      v1.x, v1.y, v1.z,
-      v2.x, v2.y, v2.z,
-      apex.x, apex.y, apex.z,
+      v1.x,
+      v1.y,
+      v1.z,
+      v2.x,
+      v2.y,
+      v2.z,
+      apex.x,
+      apex.y,
+      apex.z,
       // Triangle 3: v2, v0, apex
-      v2.x, v2.y, v2.z,
-      v0.x, v0.y, v0.z,
-      apex.x, apex.y, apex.z,
+      v2.x,
+      v2.y,
+      v2.z,
+      v0.x,
+      v0.y,
+      v0.z,
+      apex.x,
+      apex.y,
+      apex.z,
     ]);
-    spikeGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    spikeGeo.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(vertices, 3)
+    );
     spikeGeo.computeVertexNormals();
     geometries.push(spikeGeo);
   }

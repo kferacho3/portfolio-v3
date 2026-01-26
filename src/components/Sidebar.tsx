@@ -8,9 +8,9 @@ import AnimatedLink from './AnimatedLink';
 
 // Import icons from react-icons
 import {
-    AiFillGithub,
-    AiFillLinkedin,
-    AiOutlineDownload,
+  AiFillGithub,
+  AiFillLinkedin,
+  AiOutlineDownload,
 } from 'react-icons/ai';
 
 interface SidebarProps {

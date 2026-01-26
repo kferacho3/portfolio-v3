@@ -12,7 +12,12 @@ const RunnerGround: React.FC = () => {
   });
 
   return (
-    <mesh ref={meshRef} position={[0, -1, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+    <mesh
+      ref={meshRef}
+      position={[0, -1, 0]}
+      rotation={[-Math.PI / 2, 0, 0]}
+      receiveShadow
+    >
       <planeGeometry args={[1000, 1000]} />
       <meshStandardMaterial color="#1a1a2e" />
     </mesh>

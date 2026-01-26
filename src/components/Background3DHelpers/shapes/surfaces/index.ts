@@ -23,11 +23,11 @@ export function mobiusGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     u = u * Math.PI * 2;
     v = (v - 0.5) * width;
-    
+
     const x = (radius + v * Math.cos(u / 2)) * Math.cos(u);
     const y = (radius + v * Math.cos(u / 2)) * Math.sin(u);
     const z = v * Math.sin(u / 2);
-    
+
     target.set(x, z, y);
   };
 
@@ -39,17 +39,14 @@ export function mobiusGeometry(
 /**
  * Klein Bottle - Non-orientable surface that intersects itself
  */
-export function kleinGeometry(
-  scale = 1,
-  segments = 50
-): THREE.BufferGeometry {
+export function kleinGeometry(scale = 1, segments = 50): THREE.BufferGeometry {
   const func = (u: number, v: number, target: THREE.Vector3) => {
     u = u * Math.PI * 2;
     v = v * Math.PI * 2;
-    
+
     const r = 4 * (1 - Math.cos(u) / 2);
-    
-    let x, y, z;
+
+    let x, y;
     if (u < Math.PI) {
       x = 6 * Math.cos(u) * (1 + Math.sin(u)) + r * Math.cos(u) * Math.cos(v);
       y = 16 * Math.sin(u) + r * Math.sin(u) * Math.cos(v);
@@ -57,8 +54,8 @@ export function kleinGeometry(
       x = 6 * Math.cos(u) * (1 + Math.sin(u)) + r * Math.cos(v + Math.PI);
       y = 16 * Math.sin(u);
     }
-    z = r * Math.sin(v);
-    
+    const z = r * Math.sin(v);
+
     target.set(x * scale * 0.04, y * scale * 0.04, z * scale * 0.04);
   };
 
@@ -79,7 +76,7 @@ export function springGeometry(
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
   const segments = coils * 50;
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2 * coils;
     const x = radius * Math.cos(t);
@@ -87,7 +84,7 @@ export function springGeometry(
     const z = radius * Math.sin(t);
     points.push(new THREE.Vector3(x, y, z));
   }
-  
+
   const curve = new THREE.CatmullRomCurve3(points, false);
   const geo = new THREE.TubeGeometry(curve, segments, tubeRadius, 12, false);
   geo.computeVertexNormals();
@@ -99,15 +96,16 @@ export function springGeometry(
  */
 export function heartGeometry(scale = 1, depth = 0.4): THREE.BufferGeometry {
   const shape = new THREE.Shape();
-  
+
   // Heart outline using bezier curves
-  const x0 = 0, y0 = 0;
+  const x0 = 0,
+    y0 = 0;
   shape.moveTo(x0, y0);
   shape.bezierCurveTo(x0 - 0.5, y0 + 0.5, x0 - 1, y0, x0 - 1, y0 - 0.5);
   shape.bezierCurveTo(x0 - 1, y0 - 1, x0, y0 - 1.5, x0, y0 - 2);
   shape.bezierCurveTo(x0, y0 - 1.5, x0 + 1, y0 - 1, x0 + 1, y0 - 0.5);
   shape.bezierCurveTo(x0 + 1, y0, x0 + 0.5, y0 + 0.5, x0, y0);
-  
+
   const extrudeSettings = {
     depth: depth * scale,
     bevelEnabled: true,
@@ -116,7 +114,7 @@ export function heartGeometry(scale = 1, depth = 0.4): THREE.BufferGeometry {
     bevelSize: 0.1 * scale,
     bevelThickness: 0.1 * scale,
   };
-  
+
   const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
   geo.scale(scale * 0.5, scale * 0.5, 1);
   geo.rotateX(Math.PI);
@@ -137,24 +135,24 @@ export function gearGeometry(
   const shape = new THREE.Shape();
   const toothAngle = (Math.PI * 2) / teeth;
   const toothHalf = toothAngle / 4;
-  
+
   for (let i = 0; i < teeth; i++) {
     const baseAngle = i * toothAngle;
-    
+
     // Inner point
     const ix = innerRadius * Math.cos(baseAngle);
     const iy = innerRadius * Math.sin(baseAngle);
-    
+
     // Outer tooth points
     const o1x = outerRadius * Math.cos(baseAngle + toothHalf);
     const o1y = outerRadius * Math.sin(baseAngle + toothHalf);
     const o2x = outerRadius * Math.cos(baseAngle + toothHalf * 2);
     const o2y = outerRadius * Math.sin(baseAngle + toothHalf * 2);
-    
+
     // Next inner point
     const nix = innerRadius * Math.cos(baseAngle + toothHalf * 3);
     const niy = innerRadius * Math.sin(baseAngle + toothHalf * 3);
-    
+
     if (i === 0) {
       shape.moveTo(ix, iy);
     }
@@ -163,7 +161,7 @@ export function gearGeometry(
     shape.lineTo(nix, niy);
   }
   shape.closePath();
-  
+
   const extrudeSettings = {
     depth,
     bevelEnabled: true,
@@ -172,7 +170,7 @@ export function gearGeometry(
     bevelSize: 0.02,
     bevelThickness: 0.02,
   };
-  
+
   const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
   geo.translate(0, 0, -depth / 2);
   geo.computeVertexNormals();
@@ -189,16 +187,20 @@ export function boySurfaceGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const U = u * Math.PI;
     const V = v * Math.PI;
-    
+
     const sqrt2 = Math.sqrt(2);
     const denom = sqrt2 - Math.sin(2 * U) * Math.sin(3 * V);
-    
-    const x = (sqrt2 * Math.cos(2 * U) * Math.pow(Math.cos(V), 2) + 
-               Math.cos(U) * Math.sin(2 * V)) / denom;
-    const y = (sqrt2 * Math.sin(2 * U) * Math.pow(Math.cos(V), 2) - 
-               Math.sin(U) * Math.sin(2 * V)) / denom;
-    const z = 3 * Math.pow(Math.cos(V), 2) / denom;
-    
+
+    const x =
+      (sqrt2 * Math.cos(2 * U) * Math.pow(Math.cos(V), 2) +
+        Math.cos(U) * Math.sin(2 * V)) /
+      denom;
+    const y =
+      (sqrt2 * Math.sin(2 * U) * Math.pow(Math.cos(V), 2) -
+        Math.sin(U) * Math.sin(2 * V)) /
+      denom;
+    const z = (3 * Math.pow(Math.cos(V), 2)) / denom;
+
     target.set(x * scale * 0.4, y * scale * 0.4, (z - 1.5) * scale * 0.4);
   };
 
@@ -218,12 +220,12 @@ export function romanSurfaceGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     u = u * Math.PI * 2;
     v = (v - 0.5) * Math.PI;
-    
+
     const a = 1;
     const x = a * Math.sin(2 * u) * Math.pow(Math.cos(v), 2);
     const y = a * Math.sin(u) * Math.sin(2 * v);
     const z = a * Math.cos(u) * Math.sin(2 * v);
-    
+
     target.set(x * scale, y * scale, z * scale);
   };
 
@@ -243,11 +245,11 @@ export function enneperSurfaceGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const U = (u - 0.5) * 2 * range;
     const V = (v - 0.5) * 2 * range;
-    
+
     const x = U - (U * U * U) / 3 + U * V * V;
     const y = V - (V * V * V) / 3 + V * U * U;
     const z = U * U - V * V;
-    
+
     target.set(x * scale * 0.3, z * scale * 0.15, y * scale * 0.3);
   };
 
@@ -269,11 +271,11 @@ export function helicoidSurfaceGeometry(
   const func = (u: number, v: number, target: THREE.Vector3) => {
     const theta = u * Math.PI * 2 * turns;
     const r = (v - 0.5) * 2;
-    
+
     const x = r * Math.cos(theta);
     const y = pitch * theta;
     const z = r * Math.sin(theta);
-    
+
     target.set(x * scale * 0.5, y * scale * 0.3, z * scale * 0.5);
   };
 

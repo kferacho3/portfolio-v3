@@ -610,16 +610,18 @@ const BackdropPlane: React.FC<{
 
 // Lazy load HDR environment map only when needed
 const useEnvMap = (shouldLoad: boolean) => {
-  const [envMap, setEnvMap] = React.useState<THREE.DataTexture | null>(null);
+  const [envMap, setEnvMap] = React.useState<THREE.Texture | null>(null);
   const loaderRef = React.useRef<RGBELoader | null>(null);
 
   useEffect(() => {
     if (!shouldLoad) {
       // Dispose if no longer needed
-      if (envMap) {
-        envMap.dispose();
-        setEnvMap(null);
-      }
+      setEnvMap((current) => {
+        if (current) {
+          current.dispose();
+        }
+        return null;
+      });
       return;
     }
 
@@ -631,15 +633,23 @@ const useEnvMap = (shouldLoad: boolean) => {
       loaderRef.current = new RGBELoader();
     }
 
+    let loadedTexture: THREE.Texture | null = null;
+    let cancelled = false;
+
     loaderRef.current.load(
       'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_08_1k.hdr',
       (texture) => {
+        if (cancelled) {
+          texture.dispose();
+          return;
+        }
         texture.mapping = THREE.EquirectangularReflectionMapping;
         // Reduce texture size further if needed
         if (texture.image) {
           texture.minFilter = THREE.LinearMipmapLinearFilter;
           texture.magFilter = THREE.LinearFilter;
         }
+        loadedTexture = texture;
         setEnvMap(texture);
       },
       undefined,
@@ -650,8 +660,9 @@ const useEnvMap = (shouldLoad: boolean) => {
 
     return () => {
       // Cleanup on unmount or when deps change
-      if (envMap) {
-        envMap.dispose();
+      cancelled = true;
+      if (loadedTexture) {
+        loadedTexture.dispose();
       }
     };
   }, [shouldLoad, envMap]);
@@ -669,11 +680,11 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   // Determine if backdrop should be shown (used for env map loading decision)
   const gamesWithoutBackdrop = ['voidrunner', 'apex'];
   const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
-  
+
   // Only load env map if backdrop cluster is needed and not on mobile/light mode
   const shouldLoadEnvMap = showBackdrop && !isMobile && !isLightMode;
   const envMap = useEnvMap(shouldLoadEnvMap);
-  
+
   const qualityScale = isMobile ? 0.65 : 1;
 
   const reactPongSnap = useSnapshot(reactPongState);
@@ -849,8 +860,8 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
       )}
 
-      <EffectComposer 
-        enableNormalPass={false} 
+      <EffectComposer
+        enableNormalPass={false}
         multisampling={isMobile ? 0 : 2} // Reduce multisampling on mobile
       >
         <HueSaturation saturation={saturation} />

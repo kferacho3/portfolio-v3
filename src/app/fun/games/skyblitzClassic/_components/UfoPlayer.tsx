@@ -29,7 +29,10 @@ const UfoPlayer: React.FC<{
     dir.current
       .set(state.pointer.x / 5, Math.max(state.pointer.y, -0.1), -1)
       .normalize();
-    const rotation = new THREE.Quaternion().setFromUnitVectors(fromForward.current, dir.current);
+    const rotation = new THREE.Quaternion().setFromUnitVectors(
+      fromForward.current,
+      dir.current
+    );
     targetRotation.current.slerp(rotation, 0.1);
     playerRef.current.quaternion.slerp(targetRotation.current, 0.1);
 

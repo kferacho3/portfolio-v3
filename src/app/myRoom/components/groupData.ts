@@ -67,7 +67,7 @@ export const groupData: GroupData[] = [
     name: 'TVMonitor',
     title: 'Entertainment Hub',
     description:
-      'Central entertainment display for gaming sessions, streaming, and media consumption. The heart of the room\'s leisure activities.',
+      "Central entertainment display for gaming sessions, streaming, and media consumption. The heart of the room's leisure activities.",
     isSelected: false,
     isSelectedTwice: false,
   },
@@ -157,7 +157,7 @@ export const groupData: GroupData[] = [
     name: 'GameZone',
     title: 'Console Rack',
     description:
-      'Multi-platform gaming setup housing current and legacy consoles. Cross-platform development and testing capabilities at arm\'s reach.',
+      "Multi-platform gaming setup housing current and legacy consoles. Cross-platform development and testing capabilities at arm's reach.",
     isSelected: false,
     isSelectedTwice: false,
   },
@@ -165,7 +165,7 @@ export const groupData: GroupData[] = [
     name: 'XBOX',
     title: 'Xbox Series X',
     description:
-      'Microsoft\'s flagship console for high-fidelity gaming and development testing. Quick Resume and Game Pass keep the library fresh.',
+      "Microsoft's flagship console for high-fidelity gaming and development testing. Quick Resume and Game Pass keep the library fresh.",
     isSelected: false,
     isSelectedTwice: false,
   },
@@ -173,7 +173,7 @@ export const groupData: GroupData[] = [
     name: 'PS5',
     title: 'PlayStation 5',
     description:
-      'Sony\'s next-gen console featuring the DualSense controller\'s haptic feedback. Essential for platform-specific testing and exclusives.',
+      "Sony's next-gen console featuring the DualSense controller's haptic feedback. Essential for platform-specific testing and exclusives.",
     isSelected: false,
     isSelectedTwice: false,
   },
@@ -249,7 +249,7 @@ export const groupData: GroupData[] = [
     name: 'MeBitUFO',
     title: 'UFO MeBit',
     description:
-      'Hovering extraterrestrial craft with glowing propulsion effects. The truth is out there, and it\'s collectible.',
+      "Hovering extraterrestrial craft with glowing propulsion effects. The truth is out there, and it's collectible.",
     isSelected: false,
     isSelectedTwice: false,
     isFound: false,

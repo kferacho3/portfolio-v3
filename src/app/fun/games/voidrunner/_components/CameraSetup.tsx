@@ -11,7 +11,9 @@ import {
   PLAYER_START_Z,
 } from '../constants';
 
-const CameraSetup: React.FC<{ phase: 'menu' | 'playing' | 'gameover' }> = ({ phase }) => {
+const CameraSetup: React.FC<{ phase: 'menu' | 'playing' | 'gameover' }> = ({
+  phase,
+}) => {
   const { camera } = useThree();
 
   useEffect(() => {
@@ -21,7 +23,11 @@ const CameraSetup: React.FC<{ phase: 'menu' | 'playing' | 'gameover' }> = ({ pha
       PLAYER_START_Y + CAMERA_OFFSET_Y,
       PLAYER_START_Z + CAMERA_OFFSET_Z
     );
-    camera.lookAt(PLAYER_START_X, PLAYER_START_Y, PLAYER_START_Z - CAMERA_LOOK_AHEAD);
+    camera.lookAt(
+      PLAYER_START_X,
+      PLAYER_START_Y,
+      PLAYER_START_Z - CAMERA_LOOK_AHEAD
+    );
     camera.fov = CAMERA_FOV;
     camera.updateProjectionMatrix();
   }, [camera, phase]);

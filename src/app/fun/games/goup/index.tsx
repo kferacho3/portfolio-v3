@@ -34,7 +34,12 @@ function GoUp() {
     <group>
       <GoUpHUD arena={arena} />
       <GoUpMenu arena={arena} onArenaPick={handleArenaPick} />
-      <GoUpWorld arenaIndex={arenaIndex} setArenaIndex={setArenaIndex} bgCubes={bgCubes} arena={arena} />
+      <GoUpWorld
+        arenaIndex={arenaIndex}
+        setArenaIndex={setArenaIndex}
+        bgCubes={bgCubes}
+        arena={arena}
+      />
     </group>
   );
 }

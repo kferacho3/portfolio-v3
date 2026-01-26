@@ -18,7 +18,7 @@ export const ROW_BUFFER_AHEAD = 14;
 
 // Player settings
 export const BASE_STEP_TIME = 0.16;
-export const BOOST_STEP_TIME = 0.10;
+export const BOOST_STEP_TIME = 0.1;
 export const PLAYER_HEIGHT = 0.9;
 export const PLAYER_RADIUS = TILE_SIZE * 0.35;
 export const MAX_QUEUE = 2;
@@ -40,7 +40,14 @@ export const NEON_GREEN = '#39ff14';
 export const NEON_PURPLE = '#bf00ff';
 export const NEON_YELLOW = '#ffff00';
 
-export const VEHICLE_COLORS = ['#ff3366', '#00ccff', '#ff9500', '#00ff88', '#cc66ff', '#ffdd00'];
+export const VEHICLE_COLORS = [
+  '#ff3366',
+  '#00ccff',
+  '#ff9500',
+  '#00ff88',
+  '#cc66ff',
+  '#ffdd00',
+];
 export const GRASS_COLORS = ['#1a472a', '#0d3320'];
 export const GRASS_ACCENT = '#39ff14';
 export const ROAD_COLOR = '#0a0a12';
@@ -61,19 +68,19 @@ export const BEST_SCORE_KEY = 'fluxhop-best-score';
 export const BEST_COMBO_KEY = 'fluxhop-best-combo';
 
 // Utility functions
-export const clamp = (value: number, min: number, max: number) => 
+export const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-export const randomInt = (min: number, max: number) => 
+export const randomInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-export const randomFloat = (min: number, max: number) => 
+export const randomFloat = (min: number, max: number) =>
   min + Math.random() * (max - min);
 
-export const randomChoice = <T,>(values: T[]) => 
+export const randomChoice = <T>(values: T[]) =>
   values[Math.floor(Math.random() * values.length)];
 
-export const worldXToTile = (x: number) => 
+export const worldXToTile = (x: number) =>
   clamp(Math.round(x / TILE_SIZE), MIN_TILE_INDEX, MAX_TILE_INDEX);
 
 export const difficultyForRow = (rowIndex: number) => {

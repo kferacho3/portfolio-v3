@@ -21,7 +21,9 @@ const AnimatedLink: React.FC<AnimatedLinkProps> = ({
   const colors = ['#39FF14', '#FFA500', '#9400D3']; // Neon green, orange, purple
   const isExternal =
     !!link &&
-    (link.startsWith('http') || link.startsWith('mailto:') || link.startsWith('tel:'));
+    (link.startsWith('http') ||
+      link.startsWith('mailto:') ||
+      link.startsWith('tel:'));
 
   return (
     <motion.a

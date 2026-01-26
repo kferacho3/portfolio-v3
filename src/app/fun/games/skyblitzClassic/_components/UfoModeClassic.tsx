@@ -23,7 +23,11 @@ const UfoModeClassic: React.FC<{
 }> = ({ score, setScore, graphicsMode }) => {
   const playerRef = useRef<THREE.Object3D>(new THREE.Object3D());
   const [projectiles, setProjectiles] = useState<
-    Array<{ position: [number, number, number]; velocity: [number, number, number]; spawnedAt: number }>
+    Array<{
+      position: [number, number, number];
+      velocity: [number, number, number];
+      spawnedAt: number;
+    }>
   >([]);
   const lastShotTime = useRef(0);
 
@@ -34,18 +38,28 @@ const UfoModeClassic: React.FC<{
     if (now - lastShotTime.current < UFO_FIRE_COOLDOWN) return;
     lastShotTime.current = now;
 
-    const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(playerRef.current.quaternion).normalize();
+    const dir = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(playerRef.current.quaternion)
+      .normalize();
     const velocity = dir.multiplyScalar(UFO_PROJECTILE_SPEED);
     const spawn = new THREE.Vector3()
       .copy(playerRef.current.position)
       .addScaledVector(dir, UFO_PROJECTILE_SPAWN_OFFSET);
     spawn.y += 0.25;
 
-    const projectilePosition: [number, number, number] = [spawn.x, spawn.y, spawn.z];
+    const projectilePosition: [number, number, number] = [
+      spawn.x,
+      spawn.y,
+      spawn.z,
+    ];
 
     setProjectiles((old) => [
       ...old.slice(-20),
-      { position: projectilePosition, velocity: [velocity.x, velocity.y, velocity.z], spawnedAt: now },
+      {
+        position: projectilePosition,
+        velocity: [velocity.x, velocity.y, velocity.z],
+        spawnedAt: now,
+      },
     ]);
   }, []);
 
@@ -62,7 +76,9 @@ const UfoModeClassic: React.FC<{
   useEffect(() => {
     const t = window.setInterval(() => {
       const now = performance.now();
-      setProjectiles((old) => old.filter((p) => now - p.spawnedAt < UFO_PROJECTILE_TTL));
+      setProjectiles((old) =>
+        old.filter((p) => now - p.spawnedAt < UFO_PROJECTILE_TTL)
+      );
     }, 250);
     return () => window.clearInterval(t);
   }, []);
@@ -80,7 +96,14 @@ const UfoModeClassic: React.FC<{
         inclination={0.49}
         azimuth={0.25}
       />
-      <Stars radius={300} depth={500} count={5000} factor={2} saturation={0} fade />
+      <Stars
+        radius={300}
+        depth={500}
+        count={5000}
+        factor={2}
+        saturation={0}
+        fade
+      />
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
 
@@ -88,10 +111,18 @@ const UfoModeClassic: React.FC<{
         <UfoGround />
         <UfoPlayer playerRef={playerRef} setScore={setScore} />
         {Array.from({ length: UFO_NUM_OBSTACLES }, (_, idx) => (
-          <UfoObstacle key={`ufo-ob-${idx}`} index={idx} playerRef={playerRef} />
+          <UfoObstacle
+            key={`ufo-ob-${idx}`}
+            index={idx}
+            playerRef={playerRef}
+          />
         ))}
         {projectiles.map((projectile, index) => (
-          <Projectile key={`proj-${index}`} position={projectile.position} velocity={projectile.velocity} />
+          <Projectile
+            key={`proj-${index}`}
+            position={projectile.position}
+            velocity={projectile.velocity}
+          />
         ))}
       </Physics>
 

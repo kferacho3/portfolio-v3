@@ -3,7 +3,10 @@ import React, { useRef } from 'react';
 import * as THREE from 'three';
 import { NEON_COLORS } from '../constants';
 
-const CentralCore: React.FC<{ level: number; pulse: number }> = ({ level, pulse }) => {
+const CentralCore: React.FC<{ level: number; pulse: number }> = ({
+  level,
+  pulse,
+}) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const color = NEON_COLORS[(level - 1) % NEON_COLORS.length];
@@ -23,11 +26,20 @@ const CentralCore: React.FC<{ level: number; pulse: number }> = ({ level, pulse 
     <group>
       <mesh ref={meshRef}>
         <dodecahedronGeometry args={[1]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.9} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.9}
+        />
       </mesh>
       <mesh ref={glowRef}>
         <sphereGeometry args={[1, 24, 24]} />
-        <meshBasicMaterial color={color} transparent opacity={0.15} side={THREE.BackSide} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.15}
+          side={THREE.BackSide}
+        />
       </mesh>
       <pointLight color={color} intensity={2.5} distance={10} />
     </group>

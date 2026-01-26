@@ -1516,11 +1516,8 @@ export const mandelbulbSliceGeometry = () => {
   return geometry;
 };
 
-const makePrismGeometry = (
-  sides: number,
-  radius = 0.95,
-  height = 1.6
-) => new THREE.CylinderGeometry(radius, radius, height, sides, 1, false);
+const makePrismGeometry = (sides: number, radius = 0.95, height = 1.6) =>
+  new THREE.CylinderGeometry(radius, radius, height, sides, 1, false);
 
 export const triPrismGeometry = () => makePrismGeometry(3);
 export const pentPrismGeometry = () => makePrismGeometry(5);
@@ -2687,7 +2684,7 @@ export const sphericalHarmonicsGeometry = (
 
   const w1 = 0.22 + rnd() * 0.15;
   const w2 = 0.12 + rnd() * 0.12;
-  const w3 = 0.08 + rnd() * 0.10;
+  const w3 = 0.08 + rnd() * 0.1;
 
   for (let i = 0; i < pos.length; i += 3) {
     const x = pos[i];
@@ -2973,7 +2970,9 @@ export const oloidGeometry = (samplesPerCircle = 160) => {
   }
 
   try {
-    const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const {
+      ConvexGeometry,
+    } = require('three/examples/jsm/geometries/ConvexGeometry.js');
     const geom = new ConvexGeometry(pts);
     geom.computeVertexNormals();
     return normalizeGeometry(geom);
@@ -2991,14 +2990,18 @@ export const oloidGeometry = (samplesPerCircle = 160) => {
  * (p,q)-Torus Link - Two or more torus knots linked together
  * Creates beautiful intertwined curves
  */
-export const torusLinkGeometry = (p: number = 2, q: number = 3, loops: number = 2) => {
+export const torusLinkGeometry = (
+  p: number = 2,
+  q: number = 3,
+  loops: number = 2
+) => {
   const allPoints: THREE.Vector3[][] = [];
-  
+
   for (let loop = 0; loop < loops; loop++) {
     const points: THREE.Vector3[] = [];
     const phaseOffset = (loop / loops) * Math.PI * 2;
     const segments = 256;
-    
+
     for (let i = 0; i <= segments; i++) {
       const t = (i / segments) * Math.PI * 2;
       const r = 0.5 + 0.2 * Math.cos(q * t + phaseOffset);
@@ -3009,14 +3012,14 @@ export const torusLinkGeometry = (p: number = 2, q: number = 3, loops: number = 
     }
     allPoints.push(points);
   }
-  
+
   // Combine all tube geometries
   const geometries: THREE.BufferGeometry[] = [];
   for (const points of allPoints) {
     const curve = new THREE.CatmullRomCurve3(points, true);
     geometries.push(new THREE.TubeGeometry(curve, 200, 0.04, 12, true));
   }
-  
+
   // Merge geometries
   return mergeGeometries(geometries);
 };
@@ -3035,38 +3038,38 @@ export const borromeanRingsGeometry = () => {
     const segments = 128;
     const R = 0.6; // Major radius
     const amplitude = 0.25; // Wave amplitude
-    
+
     for (let i = 0; i <= segments; i++) {
       const t = (i / segments) * Math.PI * 2;
-      
+
       // Base circle with sinusoidal modulation for interlocking
       let x = R * Math.cos(t);
       let y = R * Math.sin(t);
       let z = amplitude * Math.sin(3 * t + phase);
-      
+
       // Rotate based on axis
       if (axis === 'y') {
         [x, z] = [z, x];
       } else if (axis === 'z') {
         [y, z] = [z, y];
       }
-      
+
       points.push(new THREE.Vector3(x, y + offset, z));
     }
     return points;
   };
-  
+
   const rings = [
     createRing('x', 0, 0),
-    createRing('y', 0.15, Math.PI * 2 / 3),
-    createRing('z', -0.15, Math.PI * 4 / 3),
+    createRing('y', 0.15, (Math.PI * 2) / 3),
+    createRing('z', -0.15, (Math.PI * 4) / 3),
   ];
-  
-  const geometries = rings.map(points => {
+
+  const geometries = rings.map((points) => {
     const curve = new THREE.CatmullRomCurve3(points, true);
     return new THREE.TubeGeometry(curve, 100, 0.05, 12, true);
   });
-  
+
   return mergeGeometries(geometries);
 };
 
@@ -3083,7 +3086,7 @@ export const lissajousKnotGeometry = (
 ) => {
   const points: THREE.Vector3[] = [];
   const segments = 512;
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
     const x = Math.cos(nx * t + phaseX) * 0.5;
@@ -3091,7 +3094,7 @@ export const lissajousKnotGeometry = (
     const z = Math.cos(nz * t) * 0.5;
     points.push(new THREE.Vector3(x, y, z));
   }
-  
+
   const curve = new THREE.CatmullRomCurve3(points, true);
   const geometry = new THREE.TubeGeometry(curve, 400, 0.04, 16, true);
   geometry.computeVertexNormals();
@@ -3107,38 +3110,63 @@ export const rhombicDodecahedronGeometry = (scale: number = 1) => {
   // Vertices of a rhombic dodecahedron
   const vertices: [number, number, number][] = [
     // Cube vertices (8)
-    [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
-    [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1],
+    [1, 1, 1],
+    [1, 1, -1],
+    [1, -1, 1],
+    [1, -1, -1],
+    [-1, 1, 1],
+    [-1, 1, -1],
+    [-1, -1, 1],
+    [-1, -1, -1],
     // Octahedron vertices (6)
-    [2, 0, 0], [-2, 0, 0],
-    [0, 2, 0], [0, -2, 0],
-    [0, 0, 2], [0, 0, -2],
+    [2, 0, 0],
+    [-2, 0, 0],
+    [0, 2, 0],
+    [0, -2, 0],
+    [0, 0, 2],
+    [0, 0, -2],
   ];
-  
+
   // Rhombic faces (12 faces, each with 4 vertices)
   const faces = [
-    [0, 10, 4, 12], [0, 8, 2, 12], [0, 12, 6, 10], [0, 2, 8, 10],
-    [1, 8, 0, 10], [1, 10, 5, 13], [1, 13, 3, 8], [2, 8, 3, 11],
-    [4, 10, 5, 9], [5, 13, 7, 9], [6, 12, 2, 11], [6, 9, 7, 11],
+    [0, 10, 4, 12],
+    [0, 8, 2, 12],
+    [0, 12, 6, 10],
+    [0, 2, 8, 10],
+    [1, 8, 0, 10],
+    [1, 10, 5, 13],
+    [1, 13, 3, 8],
+    [2, 8, 3, 11],
+    [4, 10, 5, 9],
+    [5, 13, 7, 9],
+    [6, 12, 2, 11],
+    [6, 9, 7, 11],
   ];
-  
+
   // Build geometry
   const positions: number[] = [];
   const indices: number[] = [];
-  
+
   // Add all vertices
-  vertices.forEach(v => {
-    positions.push(v[0] * scale * 0.35, v[1] * scale * 0.35, v[2] * scale * 0.35);
+  vertices.forEach((v) => {
+    positions.push(
+      v[0] * scale * 0.35,
+      v[1] * scale * 0.35,
+      v[2] * scale * 0.35
+    );
   });
-  
+
   // Triangulate faces (each rhombus = 2 triangles)
-  faces.forEach(face => {
+  faces.forEach((face) => {
     indices.push(face[0], face[1], face[2]);
     indices.push(face[0], face[2], face[3]);
   });
-  
+
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
@@ -3152,16 +3180,21 @@ export const rhombicDodecahedronGeometry = (scale: number = 1) => {
 export const truncatedIcosahedronGeometry = () => {
   const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
   const scale = 0.3;
-  
+
   // Vertices of truncated icosahedron
   const verts: [number, number, number][] = [];
-  
+
   // Generate vertices using the standard formulas
   // (0, ±1, ±3φ)
-  [[0, 1, 3*phi], [0, 1, -3*phi], [0, -1, 3*phi], [0, -1, -3*phi]].forEach(v => {
+  [
+    [0, 1, 3 * phi],
+    [0, 1, -3 * phi],
+    [0, -1, 3 * phi],
+    [0, -1, -3 * phi],
+  ].forEach((v) => {
     verts.push([v[0] * scale, v[1] * scale, v[2] * scale]);
   });
-  
+
   // (±1, ±(2+φ), ±2φ)
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
@@ -3170,39 +3203,45 @@ export const truncatedIcosahedronGeometry = () => {
       }
     }
   }
-  
+
   // (±φ, ±2, ±(2φ+1))
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        verts.push([sx * phi * scale, sy * 2 * scale, sz * (2*phi + 1) * scale]);
+        verts.push([
+          sx * phi * scale,
+          sy * 2 * scale,
+          sz * (2 * phi + 1) * scale,
+        ]);
       }
     }
   }
-  
+
   // Cyclic permutations of all the above
   const allVerts: [number, number, number][] = [];
   verts.forEach(([x, y, z]) => {
     allVerts.push([x, y, z], [y, z, x], [z, x, y]);
   });
-  
+
   // Remove duplicates
   const uniqueVerts: [number, number, number][] = [];
   const seen = new Set<string>();
-  allVerts.forEach(v => {
-    const key = v.map(n => n.toFixed(4)).join(',');
+  allVerts.forEach((v) => {
+    const key = v.map((n) => n.toFixed(4)).join(',');
     if (!seen.has(key)) {
       seen.add(key);
       uniqueVerts.push(v);
     }
   });
-  
+
   // Create convex hull from vertices
-  const points = uniqueVerts.map(v => new THREE.Vector3(v[0], v[1], v[2]));
-  
+  const points = uniqueVerts.map((v) => new THREE.Vector3(v[0], v[1], v[2]));
+
   try {
     // Use THREE.js ConvexGeometry through dynamic import
-    const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const {
+      ConvexGeometry,
+    } = require('three/examples/jsm/geometries/ConvexGeometry.js');
     const geometry = new ConvexGeometry(points);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -3223,24 +3262,32 @@ export const truncatedIcosahedronGeometry = () => {
 export const disdyakisTriacontahedronGeometry = () => {
   const phi = (1 + Math.sqrt(5)) / 2;
   const scale = 0.4;
-  
+
   // Generate vertices for disdyakis triacontahedron
   const vertices: THREE.Vector3[] = [];
-  
+
   // Face-centered vertices scaled differently for the characteristic shape
-  const a = 1, b = phi, c = phi * phi;
-  
+  const a = 1,
+    b = phi,
+    c = phi * phi;
+
   // Rectangular parallelepiped vertices
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        vertices.push(new THREE.Vector3(sx * a * scale, sy * b * scale, sz * c * scale));
-        vertices.push(new THREE.Vector3(sx * b * scale, sy * c * scale, sz * a * scale));
-        vertices.push(new THREE.Vector3(sx * c * scale, sy * a * scale, sz * b * scale));
+        vertices.push(
+          new THREE.Vector3(sx * a * scale, sy * b * scale, sz * c * scale)
+        );
+        vertices.push(
+          new THREE.Vector3(sx * b * scale, sy * c * scale, sz * a * scale)
+        );
+        vertices.push(
+          new THREE.Vector3(sx * c * scale, sy * a * scale, sz * b * scale)
+        );
       }
     }
   }
-  
+
   // Add axis-aligned vertices
   const d = phi + 1;
   vertices.push(new THREE.Vector3(d * scale, 0, 0));
@@ -3249,9 +3296,11 @@ export const disdyakisTriacontahedronGeometry = () => {
   vertices.push(new THREE.Vector3(0, -d * scale, 0));
   vertices.push(new THREE.Vector3(0, 0, d * scale));
   vertices.push(new THREE.Vector3(0, 0, -d * scale));
-  
+
   try {
-    const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const {
+      ConvexGeometry,
+    } = require('three/examples/jsm/geometries/ConvexGeometry.js');
     const geometry = new ConvexGeometry(vertices);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
@@ -3266,31 +3315,33 @@ export const disdyakisTriacontahedronGeometry = () => {
 /**
  * Helper function to merge multiple geometries
  */
-function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+function mergeGeometries(
+  geometries: THREE.BufferGeometry[]
+): THREE.BufferGeometry {
   if (geometries.length === 0) return new THREE.SphereGeometry(1, 16, 16);
   if (geometries.length === 1) return geometries[0];
-  
+
   const positions: number[] = [];
   const normals: number[] = [];
   const indices: number[] = [];
   let indexOffset = 0;
-  
+
   for (const geo of geometries) {
     const pos = geo.attributes.position.array;
     const norm = geo.attributes.normal?.array;
-    
+
     // Add positions
     for (let i = 0; i < pos.length; i++) {
       positions.push(pos[i]);
     }
-    
+
     // Add normals if available
     if (norm) {
       for (let i = 0; i < norm.length; i++) {
         normals.push(norm[i]);
       }
     }
-    
+
     // Add indices
     if (geo.index) {
       const idx = geo.index.array;
@@ -3304,18 +3355,21 @@ function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeomet
         indices.push(i + indexOffset);
       }
     }
-    
+
     indexOffset += pos.length / 3;
   }
-  
+
   const merged = new THREE.BufferGeometry();
-  merged.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  merged.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
   if (normals.length > 0) {
     merged.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
   }
   merged.setIndex(indices);
   merged.computeVertexNormals();
   merged.computeBoundingSphere();
-  
+
   return merged;
 }

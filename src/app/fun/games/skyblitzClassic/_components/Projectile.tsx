@@ -7,13 +7,16 @@ const Projectile = forwardRef<
   THREE.Object3D,
   { position: [number, number, number]; velocity: [number, number, number] }
 >(({ position, velocity }, ref) => {
-  const [projRef] = useBox(() => ({
-    mass: 0.01,
-    position,
-    velocity,
-    type: 'Dynamic',
-    restitution: 2,
-  }), ref);
+  const [projRef] = useBox(
+    () => ({
+      mass: 0.01,
+      position,
+      velocity,
+      type: 'Dynamic',
+      restitution: 2,
+    }),
+    ref
+  );
 
   return (
     <mesh ref={projRef}>

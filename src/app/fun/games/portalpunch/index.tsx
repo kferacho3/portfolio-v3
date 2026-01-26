@@ -3,11 +3,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Html, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import {
+  Bloom,
+  ChromaticAberration,
+  EffectComposer,
+  Noise,
+  Vignette,
+} from '@react-three/postprocessing';
 import { Physics, usePlane, useSphere, useBox } from '@react-three/cannon';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
+import {
+  ArcadeHudCard,
+  ArcadeHudPill,
+  ArcadeHudShell,
+} from '../../components/shell/ArcadeHudPanel';
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { portalPunchState } from './state';
@@ -29,15 +39,24 @@ const CHAIN_WINDOW_MAX = 1.4;
 const LASER_TELEGRAPH = 1.1;
 const BEST_SCORE_KEY = 'portalpunch-best-score';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 type PortalPair = { a: THREE.Vector3 | null; b: THREE.Vector3 | null };
 type Target = { id: string; pos: THREE.Vector3; active: boolean };
 type NullZone = { id: string; pos: THREE.Vector3; r: number };
 
-function spawnTargetSafe(avoid: THREE.Vector3, portals: PortalPair, nullZones: NullZone[]): THREE.Vector3 {
+function spawnTargetSafe(
+  avoid: THREE.Vector3,
+  portals: PortalPair,
+  nullZones: NullZone[]
+): THREE.Vector3 {
   for (let i = 0; i < 30; i++) {
-    const p = new THREE.Vector3(THREE.MathUtils.randFloat(-HALF + 5, HALF - 5), 0, THREE.MathUtils.randFloat(-HALF + 5, HALF - 5));
+    const p = new THREE.Vector3(
+      THREE.MathUtils.randFloat(-HALF + 5, HALF - 5),
+      0,
+      THREE.MathUtils.randFloat(-HALF + 5, HALF - 5)
+    );
     if (p.distanceTo(avoid) < 8) continue;
     if (portals.a && p.distanceTo(portals.a) < 6) continue;
     if (portals.b && p.distanceTo(portals.b) < 6) continue;
@@ -51,11 +70,18 @@ function spawnTargetSafe(avoid: THREE.Vector3, portals: PortalPair, nullZones: N
     if (blocked) continue;
     return p;
   }
-  return new THREE.Vector3(THREE.MathUtils.randFloat(-HALF + 5, HALF - 5), 0, THREE.MathUtils.randFloat(-HALF + 5, HALF - 5));
+  return new THREE.Vector3(
+    THREE.MathUtils.randFloat(-HALF + 5, HALF - 5),
+    0,
+    THREE.MathUtils.randFloat(-HALF + 5, HALF - 5)
+  );
 }
 
 const Ground: React.FC = () => {
-  const [ref] = usePlane(() => ({ rotation: [-Math.PI / 2, 0, 0], position: [0, 0, 0] }));
+  const [ref] = usePlane(() => ({
+    rotation: [-Math.PI / 2, 0, 0],
+    position: [0, 0, 0],
+  }));
   return (
     <mesh ref={ref} receiveShadow>
       <planeGeometry args={[ARENA, ARENA]} />
@@ -64,7 +90,10 @@ const Ground: React.FC = () => {
   );
 };
 
-const Wall: React.FC<{ position: [number, number, number]; size: [number, number, number] }> = ({ position, size }) => {
+const Wall: React.FC<{
+  position: [number, number, number];
+  size: [number, number, number];
+}> = ({ position, size }) => {
   const [ref] = useBox(() => ({ type: 'Static', position, args: size }));
   return (
     <mesh ref={ref} visible={false}>
@@ -74,11 +103,11 @@ const Wall: React.FC<{ position: [number, number, number]; size: [number, number
   );
 };
 
-const PortalMarker: React.FC<{ portalsRef: React.MutableRefObject<PortalPair>; slot: 'a' | 'b'; color: string }> = ({
-  portalsRef,
-  slot,
-  color,
-}) => {
+const PortalMarker: React.FC<{
+  portalsRef: React.MutableRefObject<PortalPair>;
+  slot: 'a' | 'b';
+  color: string;
+}> = ({ portalsRef, slot, color }) => {
   const ref = useRef<THREE.Group | null>(null);
 
   useFrame(() => {
@@ -96,11 +125,19 @@ const PortalMarker: React.FC<{ portalsRef: React.MutableRefObject<PortalPair>; s
     <group ref={ref}>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[1.2, 1.75, 32]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.55} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.55}
+        />
       </mesh>
       <mesh position={[0, 0.35, 0]}>
         <torusGeometry args={[0.9, 0.12, 12, 24]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.25} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.25}
+        />
       </mesh>
     </group>
   );
@@ -110,7 +147,11 @@ const NullZoneMarker: React.FC<{ z: NullZone }> = ({ z }) => (
   <group position={[z.pos.x, 0.02, z.pos.z]}>
     <mesh rotation={[-Math.PI / 2, 0, 0]}>
       <ringGeometry args={[z.r - 0.2, z.r, 40]} />
-      <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.35} />
+      <meshStandardMaterial
+        color="#ef4444"
+        emissive="#7f1d1d"
+        emissiveIntensity={0.35}
+      />
     </mesh>
   </group>
 );
@@ -140,19 +181,39 @@ const PortalPunchHUD: React.FC = () => {
   const toastOpacity = clamp(s.toastTime / 1.1, 0, 1);
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <ArcadeHudShell gameId="portalpunch" className="absolute top-4 left-4 pointer-events-auto">
+      <ArcadeHudShell
+        gameId="portalpunch"
+        className="absolute top-4 left-4 pointer-events-auto"
+      >
         <ArcadeHudCard className="min-w-[260px]">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Portal Combo</div>
-          <div className="text-[9px] uppercase tracking-[0.26em] text-white/40">Place → Punch → Chain</div>
-          <div className="mt-1 text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
-          <div className="text-2xl font-semibold text-white">{s.score.toLocaleString()}</div>
-          <div className="text-[11px] text-white/50">Best {s.bestScore.toLocaleString()}</div>
+          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">
+            Portal Combo
+          </div>
+          <div className="text-[9px] uppercase tracking-[0.26em] text-white/40">
+            Place → Punch → Chain
+          </div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.32em] text-white/50">
+            Score
+          </div>
+          <div className="text-2xl font-semibold text-white">
+            {s.score.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-white/50">
+            Best {s.bestScore.toLocaleString()}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <ArcadeHudPill label={`Chain x${s.chain}`} />
             <ArcadeHudPill label={`Window ${s.chainTime.toFixed(1)}s`} />
             <ArcadeHudPill label={`Integrity ${Math.round(s.integrity)}%`} />
-            {s.chargedTime > 0 && <ArcadeHudPill label="Charged" tone="accent" />}
-            {s.event && <ArcadeHudPill label={`${s.event} ${Math.ceil(s.eventTime)}s`} tone="accent" />}
+            {s.chargedTime > 0 && (
+              <ArcadeHudPill label="Charged" tone="accent" />
+            )}
+            {s.event && (
+              <ArcadeHudPill
+                label={`${s.event} ${Math.ceil(s.eventTime)}s`}
+                tone="accent"
+              />
+            )}
           </div>
 
           <div className="mt-3 space-y-2 text-[11px] text-white/70">
@@ -163,7 +224,9 @@ const PortalPunchHUD: React.FC = () => {
             <div className="h-2 w-56 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-cyan-400/70"
-                style={{ width: `${clamp((s.chainTime / CHAIN_WINDOW_MAX) * 100, 0, 100)}%` }}
+                style={{
+                  width: `${clamp((s.chainTime / CHAIN_WINDOW_MAX) * 100, 0, 100)}%`,
+                }}
               />
             </div>
 
@@ -172,12 +235,16 @@ const PortalPunchHUD: React.FC = () => {
               <span>{Math.round(s.integrity)}%</span>
             </div>
             <div className="h-2 w-56 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full bg-emerald-300/70" style={{ width: `${clamp(s.integrity, 0, 100)}%` }} />
+              <div
+                className="h-full bg-emerald-300/70"
+                style={{ width: `${clamp(s.integrity, 0, 100)}%` }}
+              />
             </div>
           </div>
 
           <div className="mt-2 text-[10px] uppercase tracking-[0.28em] text-white/50">
-            LMB portal A • RMB portal B • E clear • WASD roll • Space dash • Teleport + hit to restore integrity
+            LMB portal A • RMB portal B • E clear • WASD roll • Space dash •
+            Teleport + hit to restore integrity
           </div>
         </ArcadeHudCard>
       </ArcadeHudShell>
@@ -187,15 +254,22 @@ const PortalPunchHUD: React.FC = () => {
           <ArcadeHudShell gameId="portalpunch">
             <ArcadeHudCard className="text-center">
               <div className="text-3xl font-semibold text-white">Game Over</div>
-              <div className="mt-2 text-lg text-white/80">Final Score: {s.score.toLocaleString()}</div>
-              <div className="mt-4 text-[11px] uppercase tracking-[0.3em] text-white/50">Press R to restart</div>
+              <div className="mt-2 text-lg text-white/80">
+                Final Score: {s.score.toLocaleString()}
+              </div>
+              <div className="mt-4 text-[11px] uppercase tracking-[0.3em] text-white/50">
+                Press R to restart
+              </div>
             </ArcadeHudCard>
           </ArcadeHudShell>
         </div>
       )}
 
       {s.toastTime > 0 && s.toastText && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 pointer-events-none" style={{ opacity: toastOpacity }}>
+        <div
+          className="fixed top-6 left-1/2 -translate-x-1/2 pointer-events-none"
+          style={{ opacity: toastOpacity }}
+        >
           <ArcadeHudShell gameId="portalpunch">
             <ArcadeHudCard className="px-4 py-2 text-xs font-semibold tracking-[0.25em]">
               {s.toastText}
@@ -218,7 +292,14 @@ const Player: React.FC<{
 
   const inputRef = useInputRef({
     enabled: !paused,
-    preventDefault: [' ', 'Space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowup',
+      'arrowdown',
+      'arrowleft',
+      'arrowright',
+    ],
   });
 
   const [ref, api] = useSphere(() => ({
@@ -239,7 +320,9 @@ const Player: React.FC<{
   const punchFxTimeRef = useRef(0);
 
   useEffect(() => {
-    const unsub = api.velocity.subscribe((v) => velRef.current.set(v[0], v[1], v[2]));
+    const unsub = api.velocity.subscribe((v) =>
+      velRef.current.set(v[0], v[1], v[2])
+    );
     return () => void unsub();
   }, [api]);
 
@@ -270,17 +353,28 @@ const Player: React.FC<{
     const keys = inputRef.current.keysDown;
     const justPressed = inputRef.current.justPressed;
 
-    const ix = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
-    const iz = (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0);
+    const ix =
+      (keys.has('d') || keys.has('arrowright') ? 1 : 0) -
+      (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
+    const iz =
+      (keys.has('s') || keys.has('arrowdown') ? 1 : 0) -
+      (keys.has('w') || keys.has('arrowup') ? 1 : 0);
 
     const input = new THREE.Vector3(ix, 0, iz);
     if (input.lengthSq() > 0.0001) input.normalize();
 
     // Steering: keys + subtle pointer influence
-    const steer = new THREE.Vector3(input.x + state.pointer.x * 0.35, 0, input.z + -state.pointer.y * 0.35);
+    const steer = new THREE.Vector3(
+      input.x + state.pointer.x * 0.35,
+      0,
+      input.z + -state.pointer.y * 0.35
+    );
     if (steer.lengthSq() > 0.0001) steer.normalize();
 
-    api.applyForce([steer.x * 80 * timeScale, 0, steer.z * 80 * timeScale], [0, 0, 0]);
+    api.applyForce(
+      [steer.x * 80 * timeScale, 0, steer.z * 80 * timeScale],
+      [0, 0, 0]
+    );
 
     // Soft target assist to keep runs flowing
     let nearest: Target | null = null;
@@ -299,28 +393,51 @@ const Player: React.FC<{
       const dist = Math.sqrt(bestD2);
       const falloff = clamp(1 - dist / 12, 0, 1);
       if (falloff > 0.01) {
-        const dir = new THREE.Vector3(nearest.pos.x - p.x, 0, nearest.pos.z - p.z).normalize();
-        api.applyForce([dir.x * 35 * falloff * timeScale, 0, dir.z * 35 * falloff * timeScale], [0, 0, 0]);
+        const dir = new THREE.Vector3(
+          nearest.pos.x - p.x,
+          0,
+          nearest.pos.z - p.z
+        ).normalize();
+        api.applyForce(
+          [
+            dir.x * 35 * falloff * timeScale,
+            0,
+            dir.z * 35 * falloff * timeScale,
+          ],
+          [0, 0, 0]
+        );
       }
     }
 
     // Dash (small “save” tool)
-    if ((justPressed.has(' ') || justPressed.has('space')) && dashCdRef.current <= 0) {
+    if (
+      (justPressed.has(' ') || justPressed.has('space')) &&
+      dashCdRef.current <= 0
+    ) {
       dashCdRef.current = DASH_CD;
       portalPunchState.onDash();
       const v = velRef.current.clone();
-      const dir = v.lengthSq() > 0.4 ? v.normalize() : new THREE.Vector3(0, 0, -1);
-      api.applyImpulse([dir.x * DASH_IMPULSE, 0.55, dir.z * DASH_IMPULSE], [0, 0, 0]);
+      const dir =
+        v.lengthSq() > 0.4 ? v.normalize() : new THREE.Vector3(0, 0, -1);
+      api.applyImpulse(
+        [dir.x * DASH_IMPULSE, 0.55, dir.z * DASH_IMPULSE],
+        [0, 0, 0]
+      );
     }
 
     // Laser hazard: event-driven and telegraphed
-    const laserEvent = portalPunchState.event === 'LaserSweep' && portalPunchState.eventDuration > 0;
+    const laserEvent =
+      portalPunchState.event === 'LaserSweep' &&
+      portalPunchState.eventDuration > 0;
     if (laserEvent) {
-      const eventElapsed = portalPunchState.eventDuration - portalPunchState.eventTime;
+      const eventElapsed =
+        portalPunchState.eventDuration - portalPunchState.eventTime;
       const laserLive = eventElapsed >= LASER_TELEGRAPH;
       if (laserLive) {
         const laserA = portalPunchState.elapsed * 0.9;
-        const distToLine = Math.abs(Math.sin(laserA) * p.x - Math.cos(laserA) * p.z);
+        const distToLine = Math.abs(
+          Math.sin(laserA) * p.x - Math.cos(laserA) * p.z
+        );
         if (distToLine < 0.5) {
           portalPunchState.breakChain();
           portalPunchState.damageIntegrity(18 * step);
@@ -342,7 +459,10 @@ const Player: React.FC<{
 
         const v = velRef.current.clone();
         const spd = v.length();
-        const dir = spd > 0.35 ? v.clone().divideScalar(spd) : new THREE.Vector3(0, 0, -1);
+        const dir =
+          spd > 0.35
+            ? v.clone().divideScalar(spd)
+            : new THREE.Vector3(0, 0, -1);
 
         // Small exit offset prevents infinite instant loops
         const out = to.clone().addScaledVector(dir, 2.0);
@@ -353,7 +473,11 @@ const Player: React.FC<{
 
         api.position.set(out.x, p.y, out.z);
 
-        const boosted = clamp(spd * (teleport.punch ? 1.4 : 1.15) + (teleport.punch ? 6.2 : 1.5), 0, 38);
+        const boosted = clamp(
+          spd * (teleport.punch ? 1.4 : 1.15) + (teleport.punch ? 6.2 : 1.5),
+          0,
+          38
+        );
         api.velocity.set(dir.x * boosted, velRef.current.y, dir.z * boosted);
 
         if (teleport.punch && punchFxRef.current) {
@@ -385,7 +509,8 @@ const Player: React.FC<{
 
         const punch = portalPunchState.punchTime > 0;
         portalPunchState.onTargetHit(velRef.current.length(), punch);
-        const sinceTeleport = portalPunchState.elapsed - lastTeleportAtRef.current;
+        const sinceTeleport =
+          portalPunchState.elapsed - lastTeleportAtRef.current;
         if (sinceTeleport < 1.1) {
           const bonus = 35 + clamp(velRef.current.length() * 3.2, 0, 55);
           portalPunchState.addScore(bonus);
@@ -426,7 +551,11 @@ const Player: React.FC<{
     const cz = clamp(p.z, -HALF + 2.4, HALF - 2.4);
     if (cx !== p.x || cz !== p.z) {
       api.position.set(cx, p.y, cz);
-      api.velocity.set(velRef.current.x * 0.35, velRef.current.y, velRef.current.z * 0.35);
+      api.velocity.set(
+        velRef.current.x * 0.35,
+        velRef.current.y,
+        velRef.current.z * 0.35
+      );
       portalPunchState.breakChain();
       const impact = clamp(velRef.current.length() * 0.65, 6, 14);
       portalPunchState.damageIntegrity(impact);
@@ -453,11 +582,21 @@ const Player: React.FC<{
     <>
       <mesh ref={ref} castShadow>
         <sphereGeometry args={[BALL_R, 28, 28]} />
-        <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.12} />
+        <meshStandardMaterial
+          color="#22d3ee"
+          emissive="#22d3ee"
+          emissiveIntensity={0.12}
+        />
       </mesh>
       <mesh ref={punchFxRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
         <ringGeometry args={[0.8, 1.45, 32]} />
-        <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.6} transparent opacity={0} />
+        <meshStandardMaterial
+          color="#facc15"
+          emissive="#f59e0b"
+          emissiveIntensity={0.6}
+          transparent
+          opacity={0}
+        />
       </mesh>
     </>
   );
@@ -468,7 +607,9 @@ const LaserVisual: React.FC = () => {
   const matRef = useRef<THREE.MeshStandardMaterial | null>(null);
   useFrame(() => {
     if (!ref.current) return;
-    const laserEvent = portalPunchState.event === 'LaserSweep' && portalPunchState.eventDuration > 0;
+    const laserEvent =
+      portalPunchState.event === 'LaserSweep' &&
+      portalPunchState.eventDuration > 0;
     if (!laserEvent) {
       ref.current.visible = false;
       return;
@@ -477,11 +618,14 @@ const LaserVisual: React.FC = () => {
     ref.current.visible = true;
     ref.current.rotation.set(0, portalPunchState.elapsed * 0.9, 0);
 
-    const eventElapsed = portalPunchState.eventDuration - portalPunchState.eventTime;
+    const eventElapsed =
+      portalPunchState.eventDuration - portalPunchState.eventTime;
     const telegraph = clamp(eventElapsed / LASER_TELEGRAPH, 0, 1);
     if (matRef.current) {
-      matRef.current.emissiveIntensity = eventElapsed < LASER_TELEGRAPH ? 0.15 + 0.2 * telegraph : 0.45;
-      matRef.current.opacity = eventElapsed < LASER_TELEGRAPH ? 0.25 + 0.25 * telegraph : 0.55;
+      matRef.current.emissiveIntensity =
+        eventElapsed < LASER_TELEGRAPH ? 0.15 + 0.2 * telegraph : 0.45;
+      matRef.current.opacity =
+        eventElapsed < LASER_TELEGRAPH ? 0.25 + 0.25 * telegraph : 0.55;
     }
   });
   return (
@@ -510,7 +654,10 @@ const PortalPlacementController: React.FC<{
   useEffect(() => void (pausedRef.current = paused), [paused]);
 
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
-  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const plane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    []
+  );
   const tmp = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
@@ -532,7 +679,11 @@ const PortalPlacementController: React.FC<{
       raycaster.setFromCamera({ x, y } as any, camera);
       if (!raycaster.ray.intersectPlane(plane, tmp)) return;
 
-      const p = new THREE.Vector3(clamp(tmp.x, -HALF + 3, HALF - 3), 0, clamp(tmp.z, -HALF + 3, HALF - 3));
+      const p = new THREE.Vector3(
+        clamp(tmp.x, -HALF + 3, HALF - 3),
+        0,
+        clamp(tmp.z, -HALF + 3, HALF - 3)
+      );
       if (!canPlace(p)) return;
 
       setPortals((prev) => {
@@ -584,7 +735,11 @@ const PortalPunch: React.FC = () => {
   const [targets, setTargets] = useState<Target[]>(
     Array.from({ length: 7 }, (_, i) => ({
       id: `t-${i}-${Math.random().toString(36).slice(2, 7)}`,
-      pos: new THREE.Vector3(THREE.MathUtils.randFloat(-HALF + 5, HALF - 5), 0, THREE.MathUtils.randFloat(-HALF + 5, HALF - 5)),
+      pos: new THREE.Vector3(
+        THREE.MathUtils.randFloat(-HALF + 5, HALF - 5),
+        0,
+        THREE.MathUtils.randFloat(-HALF + 5, HALF - 5)
+      ),
       active: i === 0,
     }))
   );
@@ -616,11 +771,16 @@ const PortalPunch: React.FC = () => {
     const event = portalPunchState.event;
     if (event !== lastEventRef.current) {
       if (event === 'DoubleTargets') activateTargets(2);
-      if (lastEventRef.current === 'DoubleTargets' && event !== 'DoubleTargets') keepSingleTarget();
+      if (lastEventRef.current === 'DoubleTargets' && event !== 'DoubleTargets')
+        keepSingleTarget();
 
       if (event === 'PortalDrift') {
-        driftRef.current.a.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-        driftRef.current.b.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+        driftRef.current.a
+          .set(Math.random() - 0.5, 0, Math.random() - 0.5)
+          .normalize();
+        driftRef.current.b
+          .set(Math.random() - 0.5, 0, Math.random() - 0.5)
+          .normalize();
       }
       if (lastEventRef.current === 'PortalDrift' && event !== 'PortalDrift') {
         driftRef.current.a.set(0, 0, 0);
@@ -653,7 +813,13 @@ const PortalPunch: React.FC = () => {
         }
       }
 
-      if (pos.x < -HALF + 3 || pos.x > HALF - 3 || pos.z < -HALF + 3 || pos.z > HALF - 3 || inNullZone) {
+      if (
+        pos.x < -HALF + 3 ||
+        pos.x > HALF - 3 ||
+        pos.z < -HALF + 3 ||
+        pos.z > HALF - 3 ||
+        inNullZone
+      ) {
         dir.multiplyScalar(-1);
         pos.addScaledVector(dir, step * driftSpeed * 2);
       }
@@ -668,10 +834,22 @@ const PortalPunch: React.FC = () => {
 
   const walls = useMemo(
     () => [
-      { position: [0, 10, -HALF - 1.4] as [number, number, number], size: [ARENA + 10, 22, 2] as [number, number, number] },
-      { position: [0, 10, HALF + 1.4] as [number, number, number], size: [ARENA + 10, 22, 2] as [number, number, number] },
-      { position: [-HALF - 1.4, 10, 0] as [number, number, number], size: [2, 22, ARENA + 10] as [number, number, number] },
-      { position: [HALF + 1.4, 10, 0] as [number, number, number], size: [2, 22, ARENA + 10] as [number, number, number] },
+      {
+        position: [0, 10, -HALF - 1.4] as [number, number, number],
+        size: [ARENA + 10, 22, 2] as [number, number, number],
+      },
+      {
+        position: [0, 10, HALF + 1.4] as [number, number, number],
+        size: [ARENA + 10, 22, 2] as [number, number, number],
+      },
+      {
+        position: [-HALF - 1.4, 10, 0] as [number, number, number],
+        size: [2, 22, ARENA + 10] as [number, number, number],
+      },
+      {
+        position: [HALF + 1.4, 10, 0] as [number, number, number],
+        size: [2, 22, ARENA + 10] as [number, number, number],
+      },
     ],
     []
   );
@@ -681,7 +859,14 @@ const PortalPunch: React.FC = () => {
       <PortalPunchHUD />
       <NeonDome accentA="#22d3ee" accentB="#2d0a3b" />
       <fog attach="fog" args={['#050814', 35, 110]} />
-      <Stars radius={240} depth={60} count={1200} factor={4} saturation={0} fade />
+      <Stars
+        radius={240}
+        depth={60}
+        count={1200}
+        factor={4}
+        saturation={0}
+        fade
+      />
       <ambientLight intensity={0.38} />
       <directionalLight position={[22, 30, 14]} intensity={1.1} castShadow />
 
@@ -694,7 +879,11 @@ const PortalPunch: React.FC = () => {
         }
       />
 
-      <PortalPlacementController portalsRef={portalsRef} setPortals={setPortals} nullZones={nullZones} />
+      <PortalPlacementController
+        portalsRef={portalsRef}
+        setPortals={setPortals}
+        nullZones={nullZones}
+      />
 
       <Physics gravity={[0, -22, 0]} iterations={6}>
         <Ground />
@@ -707,14 +896,23 @@ const PortalPunch: React.FC = () => {
           <NullZoneMarker key={z.id} z={z} />
         ))}
 
-        {portals.a && <PortalMarker portalsRef={portalsRef} slot="a" color="#22d3ee" />}
-        {portals.b && <PortalMarker portalsRef={portalsRef} slot="b" color="#fb7185" />}
+        {portals.a && (
+          <PortalMarker portalsRef={portalsRef} slot="a" color="#22d3ee" />
+        )}
+        {portals.b && (
+          <PortalMarker portalsRef={portalsRef} slot="b" color="#fb7185" />
+        )}
 
         {targets.map((t) => (
           <TargetOrb key={t.id} t={t} />
         ))}
 
-        <Player portalsRef={portalsRef} targetsRef={targetsRef} setTargets={setTargets} nullZones={nullZones} />
+        <Player
+          portalsRef={portalsRef}
+          targetsRef={targetsRef}
+          setTargets={setTargets}
+          nullZones={nullZones}
+        />
       </Physics>
 
       <LaserVisual />

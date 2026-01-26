@@ -3,7 +3,13 @@
 import { Dodecahedron, Sky, Stars, TorusKnot } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Physics, type RapierRigidBody } from '@react-three/rapier';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import {
   ARENA_HALF,
@@ -20,7 +26,16 @@ import {
 } from '../constants';
 import { rolletteState } from '../state';
 import { pickSpawnPoint } from '../utils/spawn';
-import { randId, dist2XZ, pickRingColor, pickPyramidType, pickSpringType, pickTetraType, pickKnotType, pickTorusOutcome } from '../utils';
+import {
+  randId,
+  dist2XZ,
+  pickRingColor,
+  pickPyramidType,
+  pickSpringType,
+  pickTetraType,
+  pickKnotType,
+  pickTorusOutcome,
+} from '../utils';
 import { clamp } from '../utils/helpers';
 import type {
   DodecaItem,
@@ -62,7 +77,11 @@ export const RolletteWorld: React.FC<{
   const [blocks, setBlocks] = useState<MovingBlockItem[]>([]);
   const [tetras, setTetras] = useState<TetraItem[]>([]);
   const [knots, setKnots] = useState<TorusKnotItem[]>([]);
-  const [star, setStar] = useState<StarItem>({ id: 'star', kind: 'star', pos: [0, ITEM_Y + 0.6, 0] });
+  const [star, setStar] = useState<StarItem>({
+    id: 'star',
+    kind: 'star',
+    pos: [0, ITEM_Y + 0.6, 0],
+  });
 
   const ringsRef = useRef(rings);
   const pyramidsRef = useRef(pyramids);
@@ -94,7 +113,9 @@ export const RolletteWorld: React.FC<{
   const lastNearMissAtRef = useRef<Record<string, number>>({});
 
   const dodecaMeshRefs = useRef<Record<string, THREE.Object3D | null>>({});
-  const dodecaMotionRef = useRef<Record<string, { pos: Vec3; vel: [number, number] }>>({});
+  const dodecaMotionRef = useRef<
+    Record<string, { pos: Vec3; vel: [number, number] }>
+  >({});
 
   const [bursts, setBursts] = useState<Burst[]>([]);
   const burstsRef = useRef(bursts);
@@ -117,7 +138,8 @@ export const RolletteWorld: React.FC<{
 
   const avoidList = useCallback(() => {
     const avoids: Array<{ center: Vec3; radius: number }> = [];
-    for (const p of pyramidsRef.current) avoids.push({ center: p.pos, radius: 2.2 });
+    for (const p of pyramidsRef.current)
+      avoids.push({ center: p.pos, radius: 2.2 });
     for (const b of blocksRef.current) {
       const bp = blockWorldPosRef.current[b.id] ?? b.pos;
       avoids.push({ center: bp, radius: 3.8 });
@@ -132,18 +154,27 @@ export const RolletteWorld: React.FC<{
     [soundsOn]
   );
 
-  const spawnBurst = useCallback((pos: Vec3, color: string, count = 14, life = 0.65, shape: Burst['shape'] = 'spark') => {
-    const burst: Burst = {
-      id: randId('burst'),
-      pos,
-      color,
-      bornAt: performance.now() / 1000,
-      life,
-      count,
-      shape,
-    };
-    setBursts((prev) => [...prev.slice(-16), burst]);
-  }, []);
+  const spawnBurst = useCallback(
+    (
+      pos: Vec3,
+      color: string,
+      count = 14,
+      life = 0.65,
+      shape: Burst['shape'] = 'spark'
+    ) => {
+      const burst: Burst = {
+        id: randId('burst'),
+        pos,
+        color,
+        bornAt: performance.now() / 1000,
+        life,
+        count,
+        shape,
+      };
+      setBursts((prev) => [...prev.slice(-16), burst]);
+    },
+    []
+  );
 
   const resetBall = useCallback(() => {
     const rb = ballRef.current;
@@ -163,7 +194,12 @@ export const RolletteWorld: React.FC<{
     const playerPos = playerPosRef.current;
     const avoid = avoidList();
 
-    rolletteState.zoneCenter = pickSpawnPoint(playerPos, { minDist: 8, maxDist: 26, y: FLOOR_Y, avoid });
+    rolletteState.zoneCenter = pickSpawnPoint(playerPos, {
+      minDist: 8,
+      maxDist: 26,
+      y: FLOOR_Y,
+      avoid,
+    });
     zoneMoveIdRef.current = rolletteState.zoneMoveId;
     difficultyRef.current = rolletteState.difficultyLevel;
 
@@ -172,7 +208,12 @@ export const RolletteWorld: React.FC<{
         id: randId('ring'),
         kind: 'ring',
         color: pickRingColor(level),
-        pos: pickSpawnPoint(playerPos, { minDist: 10, maxDist: 30, y: ITEM_Y, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 10,
+          maxDist: 30,
+          y: ITEM_Y,
+          avoid,
+        }),
       }))
     );
     setPyramids(
@@ -180,7 +221,12 @@ export const RolletteWorld: React.FC<{
         id: randId('pyr'),
         kind: 'pyramid',
         type: pickPyramidType(level),
-        pos: pickSpawnPoint(playerPos, { minDist: 10, maxDist: 30, y: ITEM_Y, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 10,
+          maxDist: 30,
+          y: ITEM_Y,
+          avoid,
+        }),
       }))
     );
     setSprings(
@@ -188,14 +234,24 @@ export const RolletteWorld: React.FC<{
         id: randId('spring'),
         kind: 'spring',
         type: pickSpringType(level),
-        pos: pickSpawnPoint(playerPos, { minDist: 12, maxDist: 32, y: ITEM_Y, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 12,
+          maxDist: 32,
+          y: ITEM_Y,
+          avoid,
+        }),
       }))
     );
     setDodecas(
       Array.from({ length: 8 }, () => ({
         id: randId('dodeca'),
         kind: 'dodeca',
-        pos: pickSpawnPoint(playerPos, { minDist: 10, maxDist: 26, y: ITEM_Y + 0.55, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 10,
+          maxDist: 26,
+          y: ITEM_Y + 0.55,
+          avoid,
+        }),
         vel: [(Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5],
       }))
     );
@@ -203,7 +259,12 @@ export const RolletteWorld: React.FC<{
       Array.from({ length: 6 }, (_, i) => ({
         id: `block-${i}`,
         kind: 'block',
-        pos: pickSpawnPoint(playerPos, { minDist: 14, maxDist: 35, y: ITEM_Y + 0.3, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 14,
+          maxDist: 35,
+          y: ITEM_Y + 0.3,
+          avoid,
+        }),
         axis: Math.random() < 0.5 ? 'x' : 'z',
         amp: 6 + Math.random() * 5,
         speed: 0.55 + Math.random() * 0.5,
@@ -216,7 +277,12 @@ export const RolletteWorld: React.FC<{
         id: randId('tetra'),
         kind: 'tetra',
         type: pickTetraType(level),
-        pos: pickSpawnPoint(playerPos, { minDist: 16, maxDist: 36, y: ITEM_Y + 0.45, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 16,
+          maxDist: 36,
+          y: ITEM_Y + 0.45,
+          avoid,
+        }),
       }))
     );
     setKnots(
@@ -224,13 +290,23 @@ export const RolletteWorld: React.FC<{
         id: randId('knot'),
         kind: 'knot',
         type: pickKnotType(),
-        pos: pickSpawnPoint(playerPos, { minDist: 16, maxDist: 36, y: ITEM_Y + 0.45, avoid }),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 16,
+          maxDist: 36,
+          y: ITEM_Y + 0.45,
+          avoid,
+        }),
       }))
     );
     setStar({
       id: 'star',
       kind: 'star',
-      pos: pickSpawnPoint(playerPos, { minDist: 18, maxDist: 38, y: ITEM_Y + 0.75, avoid }),
+      pos: pickSpawnPoint(playerPos, {
+        minDist: 18,
+        maxDist: 38,
+        y: ITEM_Y + 0.75,
+        avoid,
+      }),
     });
     setBursts([]);
   }, [avoidList, resetBall]);
@@ -313,12 +389,20 @@ export const RolletteWorld: React.FC<{
       if (ringsRef.current.length < targetRings) {
         setRings((prev) => [
           ...prev,
-          ...Array.from({ length: Math.min(6, targetRings - prev.length) }, () => ({
-            id: randId('ring'),
-            kind: 'ring' as const,
-            color: pickRingColor(level),
-            pos: pickSpawnPoint(playerPos, { minDist: 10, maxDist: 34, y: ITEM_Y, avoid }),
-          })),
+          ...Array.from(
+            { length: Math.min(6, targetRings - prev.length) },
+            () => ({
+              id: randId('ring'),
+              kind: 'ring' as const,
+              color: pickRingColor(level),
+              pos: pickSpawnPoint(playerPos, {
+                minDist: 10,
+                maxDist: 34,
+                y: ITEM_Y,
+                avoid,
+              }),
+            })
+          ),
         ]);
       }
 
@@ -326,12 +410,20 @@ export const RolletteWorld: React.FC<{
       if (pyramidsRef.current.length < targetPyramids) {
         setPyramids((prev) => [
           ...prev,
-          ...Array.from({ length: Math.min(4, targetPyramids - prev.length) }, () => ({
-            id: randId('pyr'),
-            kind: 'pyramid' as const,
-            type: pickPyramidType(level),
-            pos: pickSpawnPoint(playerPos, { minDist: 10, maxDist: 34, y: ITEM_Y, avoid }),
-          })),
+          ...Array.from(
+            { length: Math.min(4, targetPyramids - prev.length) },
+            () => ({
+              id: randId('pyr'),
+              kind: 'pyramid' as const,
+              type: pickPyramidType(level),
+              pos: pickSpawnPoint(playerPos, {
+                minDist: 10,
+                maxDist: 34,
+                y: ITEM_Y,
+                avoid,
+              }),
+            })
+          ),
         ]);
       }
 
@@ -339,16 +431,24 @@ export const RolletteWorld: React.FC<{
       if (blocksRef.current.length < targetBlocks) {
         setBlocks((prev) => [
           ...prev,
-          ...Array.from({ length: Math.min(1, targetBlocks - prev.length) }, (_, i) => ({
-            id: `block-${prev.length + i}`,
-            kind: 'block' as const,
-            pos: pickSpawnPoint(playerPos, { minDist: 14, maxDist: 38, y: ITEM_Y + 0.3, avoid }),
-            axis: Math.random() < 0.5 ? 'x' : 'z',
-            amp: 6 + Math.random() * 6,
-            speed: 0.55 + Math.random() * 0.65 + level * 0.02,
-            phase: Math.random() * Math.PI * 2,
-            glass: Math.random() < 0.35,
-          })),
+          ...Array.from(
+            { length: Math.min(1, targetBlocks - prev.length) },
+            (_, i) => ({
+              id: `block-${prev.length + i}`,
+              kind: 'block' as const,
+              pos: pickSpawnPoint(playerPos, {
+                minDist: 14,
+                maxDist: 38,
+                y: ITEM_Y + 0.3,
+                avoid,
+              }),
+              axis: Math.random() < 0.5 ? 'x' : 'z',
+              amp: 6 + Math.random() * 6,
+              speed: 0.55 + Math.random() * 0.65 + level * 0.02,
+              phase: Math.random() * Math.PI * 2,
+              glass: Math.random() < 0.35,
+            })
+          ),
         ]);
       }
     }
@@ -368,7 +468,17 @@ export const RolletteWorld: React.FC<{
       });
       rolletteState.setToast('ZONE MOVED');
       playSound('zone');
-      spawnBurst([rolletteState.zoneCenter[0], ITEM_Y + 0.2, rolletteState.zoneCenter[2]], '#34d399', 18, 0.8, 'spark');
+      spawnBurst(
+        [
+          rolletteState.zoneCenter[0],
+          ITEM_Y + 0.2,
+          rolletteState.zoneCenter[2],
+        ],
+        '#34d399',
+        18,
+        0.8,
+        'spark'
+      );
     }
 
     for (const b of blocksRef.current) {
@@ -383,7 +493,9 @@ export const RolletteWorld: React.FC<{
     }
 
     const zc = rolletteState.zoneCenter;
-    const inZoneNow = dist2XZ(playerPosRef.current, [zc[0], 0, zc[2]]) < rolletteState.zoneRadius * rolletteState.zoneRadius;
+    const inZoneNow =
+      dist2XZ(playerPosRef.current, [zc[0], 0, zc[2]]) <
+      rolletteState.zoneRadius * rolletteState.zoneRadius;
     if (rolletteState.inZone !== inZoneNow) rolletteState.inZone = inZoneNow;
 
     const inputX = (keysRef.current.d ? 1 : 0) - (keysRef.current.a ? 1 : 0);
@@ -402,7 +514,8 @@ export const RolletteWorld: React.FC<{
     const slippery = rolletteState.slipperyTime > 0;
 
     if (shieldLightRef.current) {
-      shieldLightRef.current.intensity = rolletteState.shieldTime > 0 ? 0.95 : 0;
+      shieldLightRef.current.intensity =
+        rolletteState.shieldTime > 0 ? 0.95 : 0;
       shieldLightRef.current.distance = 6;
     }
 
@@ -415,21 +528,30 @@ export const RolletteWorld: React.FC<{
     rb.setAngularDamping(isBraking ? 0.9 : 0.55);
 
     const baseForce = isBraking ? 25 : slippery ? 42 : 36;
-    rb.addForce({ x: moveDir.x * baseForce, y: 0, z: moveDir.z * baseForce }, true);
+    rb.addForce(
+      { x: moveDir.x * baseForce, y: 0, z: moveDir.z * baseForce },
+      true
+    );
 
     const speed = Math.sqrt(v.x * v.x + v.z * v.z);
     const maxSpeed = (slippery ? 32 : 26) + rolletteState.difficultyLevel * 0.6;
     if (speed > maxSpeed) {
       const over = speed - maxSpeed;
       const inv = 1 / Math.max(1e-4, speed);
-      rb.addForce({ x: -v.x * inv * over * 18, y: 0, z: -v.z * inv * over * 18 }, true);
+      rb.addForce(
+        { x: -v.x * inv * over * 18, y: 0, z: -v.z * inv * over * 18 },
+        true
+      );
     }
 
     if (dashQueuedRef.current) {
       dashQueuedRef.current = false;
       if (rolletteState.dashCooldown <= 0) {
         const dashImpulse = 16 + rolletteState.difficultyLevel * 0.25;
-        rb.applyImpulse({ x: moveDir.x * dashImpulse, y: 0.25, z: moveDir.z * dashImpulse }, true);
+        rb.applyImpulse(
+          { x: moveDir.x * dashImpulse, y: 0.25, z: moveDir.z * dashImpulse },
+          true
+        );
         rolletteState.dashCooldown = rolletteState.dashCooldownMax;
         playSound('dash');
         spawnBurst([p.x, ITEM_Y + 0.2, p.z], '#f472b6', 10, 0.45, 'spark');
@@ -441,12 +563,21 @@ export const RolletteWorld: React.FC<{
     camera.lookAt(p.x, p.y + 1.1, p.z);
     if (damageFlashRef.current > 0) {
       damageFlashRef.current = Math.max(0, damageFlashRef.current - dt * 1.4);
-      camera.position.add(new THREE.Vector3((Math.random() - 0.5) * damageFlashRef.current, 0, (Math.random() - 0.5) * damageFlashRef.current));
+      camera.position.add(
+        new THREE.Vector3(
+          (Math.random() - 0.5) * damageFlashRef.current,
+          0,
+          (Math.random() - 0.5) * damageFlashRef.current
+        )
+      );
     }
 
     const limit = ARENA_HALF - 2.5;
     if (Math.abs(p.x) > limit || Math.abs(p.z) > limit) {
-      rb.addForce({ x: -Math.sign(p.x) * 40, y: 0, z: -Math.sign(p.z) * 40 }, true);
+      rb.addForce(
+        { x: -Math.sign(p.x) * 40, y: 0, z: -Math.sign(p.z) * 40 },
+        true
+      );
     }
 
     const playerPos = playerPosRef.current;
@@ -460,10 +591,27 @@ export const RolletteWorld: React.FC<{
         lastRingHitAtRef.current[ring.id] = nowS;
         rolletteState.hitRing(ring.color, inZoneNow);
         playSound('point');
-        spawnBurst([ring.pos[0], ITEM_Y + 0.3, ring.pos[2]], ring.color === 'gold' ? '#facc15' : ring.color === 'silver' ? '#cbd5e1' : '#cd7f32', 10, 0.55, 'spark');
+        spawnBurst(
+          [ring.pos[0], ITEM_Y + 0.3, ring.pos[2]],
+          ring.color === 'gold'
+            ? '#facc15'
+            : ring.color === 'silver'
+              ? '#cbd5e1'
+              : '#cd7f32',
+          10,
+          0.55,
+          'spark'
+        );
 
         const wantZone = Math.random() < 0.65;
-        let nextPos = pickSpawnPoint(playerPos, { minDist: 10, maxDist: 34, y: ITEM_Y, avoid, preferDir: lastMoveDirRef.current, biasTowardPreferDir: 0.65 });
+        let nextPos = pickSpawnPoint(playerPos, {
+          minDist: 10,
+          maxDist: 34,
+          y: ITEM_Y,
+          avoid,
+          preferDir: lastMoveDirRef.current,
+          biasTowardPreferDir: 0.65,
+        });
         if (wantZone) {
           for (let i = 0; i < 10; i++) {
             const a = Math.random() * Math.PI * 2;
@@ -471,14 +619,19 @@ export const RolletteWorld: React.FC<{
             const x = rolletteState.zoneCenter[0] + Math.cos(a) * r;
             const z = rolletteState.zoneCenter[2] + Math.sin(a) * r;
             const candidate: Vec3 = [x, ITEM_Y, z];
-            if (Math.abs(x) > ARENA_HALF - 2 || Math.abs(z) > ARENA_HALF - 2) continue;
+            if (Math.abs(x) > ARENA_HALF - 2 || Math.abs(z) > ARENA_HALF - 2)
+              continue;
             if (dist2XZ(candidate, playerPos) < 8 * 8) continue;
             nextPos = candidate;
             break;
           }
         }
         const nextColor = pickRingColor(level);
-        setRings((prev) => prev.map((r) => (r.id === ring.id ? { ...r, pos: nextPos, color: nextColor } : r)));
+        setRings((prev) =>
+          prev.map((r) =>
+            r.id === ring.id ? { ...r, pos: nextPos, color: nextColor } : r
+          )
+        );
         break;
       }
     }
@@ -491,16 +644,31 @@ export const RolletteWorld: React.FC<{
         rolletteState.hitPyramid(pyr.type);
         playSound('hit');
         damageFlashRef.current = Math.min(0.6, damageFlashRef.current + 0.35);
-        spawnBurst([pyr.pos[0], ITEM_Y + 0.35, pyr.pos[2]], '#ef4444', pyr.type === 'black' ? 18 : 14, 0.8, 'spark');
+        spawnBurst(
+          [pyr.pos[0], ITEM_Y + 0.35, pyr.pos[2]],
+          '#ef4444',
+          pyr.type === 'black' ? 18 : 14,
+          0.8,
+          'spark'
+        );
 
         const dx = p.x - pyr.pos[0];
         const dz = p.z - pyr.pos[2];
         const mag = Math.max(1e-3, Math.sqrt(dx * dx + dz * dz));
         rb.applyImpulse({ x: (dx / mag) * 8, y: 0.5, z: (dz / mag) * 8 }, true);
 
-        const nextPos = pickSpawnPoint(playerPos, { minDist: 12, maxDist: 36, y: ITEM_Y, avoid });
+        const nextPos = pickSpawnPoint(playerPos, {
+          minDist: 12,
+          maxDist: 36,
+          y: ITEM_Y,
+          avoid,
+        });
         const nextType = pickPyramidType(level);
-        setPyramids((prev) => prev.map((pp) => (pp.id === pyr.id ? { ...pp, pos: nextPos, type: nextType } : pp)));
+        setPyramids((prev) =>
+          prev.map((pp) =>
+            pp.id === pyr.id ? { ...pp, pos: nextPos, type: nextType } : pp
+          )
+        );
         break;
       }
     }
@@ -510,18 +678,37 @@ export const RolletteWorld: React.FC<{
       if (nowS - lastAt < 0.35) continue;
       if (dist2XZ(playerPos, s.pos) < 1.65 * 1.65) {
         lastSpringHitAtRef.current[s.id] = nowS;
-        rolletteState.addScore(SPRING_POINTS[s.type] * (inZoneNow ? ZONE_MULTIPLIER : 1) * rolletteState.bonusMultiplier);
+        rolletteState.addScore(
+          SPRING_POINTS[s.type] *
+            (inZoneNow ? ZONE_MULTIPLIER : 1) *
+            rolletteState.bonusMultiplier
+        );
         rolletteState.refillDash(DASH_REFILL_FRACTION_ON_SPRING);
         if (s.type === 'cyan') rolletteState.activateSlow(2);
         playSound('point');
-        spawnBurst([s.pos[0], ITEM_Y + 0.2, s.pos[2]], s.type === 'cyan' ? '#22d3ee' : '#facc15', 12, 0.55, 'spark');
+        spawnBurst(
+          [s.pos[0], ITEM_Y + 0.2, s.pos[2]],
+          s.type === 'cyan' ? '#22d3ee' : '#facc15',
+          12,
+          0.55,
+          'spark'
+        );
 
         const fwd = lastMoveDirRef.current;
         rb.applyImpulse({ x: fwd.x * 6, y: 6.5, z: fwd.z * 6 }, true);
 
-        const nextPos = pickSpawnPoint(playerPos, { minDist: 14, maxDist: 36, y: ITEM_Y, avoid });
+        const nextPos = pickSpawnPoint(playerPos, {
+          minDist: 14,
+          maxDist: 36,
+          y: ITEM_Y,
+          avoid,
+        });
         const nextType = pickSpringType(level);
-        setSprings((prev) => prev.map((ss) => (ss.id === s.id ? { ...ss, pos: nextPos, type: nextType } : ss)));
+        setSprings((prev) =>
+          prev.map((ss) =>
+            ss.id === s.id ? { ...ss, pos: nextPos, type: nextType } : ss
+          )
+        );
         break;
       }
     }
@@ -533,20 +720,43 @@ export const RolletteWorld: React.FC<{
 
       const dd2 = dist2XZ(playerPos, pos);
       if (dd2 < 1.7 * 1.7) {
-        rolletteState.addScore(90 * (inZoneNow ? ZONE_MULTIPLIER : 1) * rolletteState.bonusMultiplier);
-        rolletteState.comboTimer = Math.min(CHAIN_WINDOW_S, rolletteState.comboTimer + 0.35);
+        rolletteState.addScore(
+          90 * (inZoneNow ? ZONE_MULTIPLIER : 1) * rolletteState.bonusMultiplier
+        );
+        rolletteState.comboTimer = Math.min(
+          CHAIN_WINDOW_S,
+          rolletteState.comboTimer + 0.35
+        );
         playSound('point');
-        spawnBurst([pos[0], ITEM_Y + 0.35, pos[2]], '#22d3ee', 16, 0.7, 'spark');
+        spawnBurst(
+          [pos[0], ITEM_Y + 0.35, pos[2]],
+          '#22d3ee',
+          16,
+          0.7,
+          'spark'
+        );
 
         const flock = Math.random() < 0.18;
-        const base = pickSpawnPoint(playerPos, { minDist: 10, maxDist: 28, y: ITEM_Y + 0.55, avoid });
-        const nextVel: [number, number] = [(Math.random() - 0.5) * (flock ? 7 : 5), (Math.random() - 0.5) * (flock ? 7 : 5)];
+        const base = pickSpawnPoint(playerPos, {
+          minDist: 10,
+          maxDist: 28,
+          y: ITEM_Y + 0.55,
+          avoid,
+        });
+        const nextVel: [number, number] = [
+          (Math.random() - 0.5) * (flock ? 7 : 5),
+          (Math.random() - 0.5) * (flock ? 7 : 5),
+        ];
         motion.pos = [...base];
         motion.vel = nextVel;
         const obj = dodecaMeshRefs.current[d.id];
         if (obj) obj.position.set(base[0], base[1], base[2]);
 
-        setDodecas((prev) => prev.map((dd) => (dd.id === d.id ? { ...dd, pos: base, vel: nextVel } : dd)));
+        setDodecas((prev) =>
+          prev.map((dd) =>
+            dd.id === d.id ? { ...dd, pos: base, vel: nextVel } : dd
+          )
+        );
         continue;
       }
 
@@ -581,15 +791,29 @@ export const RolletteWorld: React.FC<{
         const dx = p.x - bp[0];
         const dz = p.z - bp[2];
         const mag = Math.max(1e-3, Math.sqrt(dx * dx + dz * dz));
-        rb.applyImpulse({ x: (dx / mag) * 12, y: 0.4, z: (dz / mag) * 12 }, true);
-        spawnBurst([bp[0], ITEM_Y + 0.35, bp[2]], b.glass ? '#e2e8f0' : '#38bdf8', b.glass ? 22 : 12, 0.8, b.glass ? 'box' : 'spark');
+        rb.applyImpulse(
+          { x: (dx / mag) * 12, y: 0.4, z: (dz / mag) * 12 },
+          true
+        );
+        spawnBurst(
+          [bp[0], ITEM_Y + 0.35, bp[2]],
+          b.glass ? '#e2e8f0' : '#38bdf8',
+          b.glass ? 22 : 12,
+          0.8,
+          b.glass ? 'box' : 'spark'
+        );
         break;
       }
 
       const lastNear = lastNearMissAtRef.current[b.id] ?? -999;
       if (d2 < nearR * nearR && d2 > hitR * hitR && nowS - lastNear > 0.7) {
         lastNearMissAtRef.current[b.id] = nowS;
-        rolletteState.addScore(20 * (1 + rolletteState.combo * 0.08) * (inZoneNow ? ZONE_MULTIPLIER : 1) * rolletteState.bonusMultiplier);
+        rolletteState.addScore(
+          20 *
+            (1 + rolletteState.combo * 0.08) *
+            (inZoneNow ? ZONE_MULTIPLIER : 1) *
+            rolletteState.bonusMultiplier
+        );
         spawnBurst([bp[0], ITEM_Y + 0.25, bp[2]], '#38bdf8', 8, 0.45, 'spark');
       }
     }
@@ -601,18 +825,39 @@ export const RolletteWorld: React.FC<{
         lastTetraHitAtRef.current[tItem.id] = nowS;
         if (tItem.type === 'purple') {
           rolletteState.activateShield(10);
-          spawnBurst([tItem.pos[0], ITEM_Y + 0.35, tItem.pos[2]], '#a855f7', 16, 0.7, 'tetra');
+          spawnBurst(
+            [tItem.pos[0], ITEM_Y + 0.35, tItem.pos[2]],
+            '#a855f7',
+            16,
+            0.7,
+            'tetra'
+          );
         } else {
           const base = TETRA_HEAL[tItem.type];
           const scaled = base / (1 + level * 0.12);
           rolletteState.heal(scaled);
-          spawnBurst([tItem.pos[0], ITEM_Y + 0.35, tItem.pos[2]], tItem.type === 'green' ? '#22c55e' : '#3b82f6', 14, 0.7, 'tetra');
+          spawnBurst(
+            [tItem.pos[0], ITEM_Y + 0.35, tItem.pos[2]],
+            tItem.type === 'green' ? '#22c55e' : '#3b82f6',
+            14,
+            0.7,
+            'tetra'
+          );
         }
         playSound('point');
 
-        const nextPos = pickSpawnPoint(playerPos, { minDist: 16, maxDist: 40, y: ITEM_Y + 0.45, avoid });
+        const nextPos = pickSpawnPoint(playerPos, {
+          minDist: 16,
+          maxDist: 40,
+          y: ITEM_Y + 0.45,
+          avoid,
+        });
         const nextType = pickTetraType(level);
-        setTetras((prev) => prev.map((tt) => (tt.id === tItem.id ? { ...tt, pos: nextPos, type: nextType } : tt)));
+        setTetras((prev) =>
+          prev.map((tt) =>
+            tt.id === tItem.id ? { ...tt, pos: nextPos, type: nextType } : tt
+          )
+        );
         break;
       }
     }
@@ -624,10 +869,18 @@ export const RolletteWorld: React.FC<{
         lastKnotHitAtRef.current[kItem.id] = nowS;
         const out = pickTorusOutcome();
         if (out.kind === 'points') {
-          rolletteState.addScore(out.value * (inZoneNow ? ZONE_MULTIPLIER : 1) * rolletteState.bonusMultiplier);
+          rolletteState.addScore(
+            out.value *
+              (inZoneNow ? ZONE_MULTIPLIER : 1) *
+              rolletteState.bonusMultiplier
+          );
           rolletteState.setToast(`+${out.value}`);
         } else if (out.kind === 'jackpot') {
-          rolletteState.addScore(out.value * (inZoneNow ? ZONE_MULTIPLIER : 1) * rolletteState.bonusMultiplier);
+          rolletteState.addScore(
+            out.value *
+              (inZoneNow ? ZONE_MULTIPLIER : 1) *
+              rolletteState.bonusMultiplier
+          );
           rolletteState.setToast(`JACKPOT +${out.value.toLocaleString()}`);
         } else if (out.kind === 'multiplier') {
           rolletteState.activateMultiplier(out.value, out.time);
@@ -635,11 +888,26 @@ export const RolletteWorld: React.FC<{
           rolletteState.activateShield(out.time);
         }
         playSound('point');
-        spawnBurst([kItem.pos[0], ITEM_Y + 0.35, kItem.pos[2]], '#e879f9', 18, 0.85, 'spark');
+        spawnBurst(
+          [kItem.pos[0], ITEM_Y + 0.35, kItem.pos[2]],
+          '#e879f9',
+          18,
+          0.85,
+          'spark'
+        );
 
-        const nextPos = pickSpawnPoint(playerPos, { minDist: 18, maxDist: 44, y: ITEM_Y + 0.45, avoid });
+        const nextPos = pickSpawnPoint(playerPos, {
+          minDist: 18,
+          maxDist: 44,
+          y: ITEM_Y + 0.45,
+          avoid,
+        });
         const nextType = pickKnotType();
-        setKnots((prev) => prev.map((kk) => (kk.id === kItem.id ? { ...kk, pos: nextPos, type: nextType } : kk)));
+        setKnots((prev) =>
+          prev.map((kk) =>
+            kk.id === kItem.id ? { ...kk, pos: nextPos, type: nextType } : kk
+          )
+        );
         break;
       }
     }
@@ -649,9 +917,20 @@ export const RolletteWorld: React.FC<{
         lastStarHitAtRef.current = nowS;
         rolletteState.hitStar();
         playSound('point');
-        spawnBurst([starRef.current.pos[0], ITEM_Y + 0.35, starRef.current.pos[2]], '#0b0b12', 18, 0.85, 'spark');
+        spawnBurst(
+          [starRef.current.pos[0], ITEM_Y + 0.35, starRef.current.pos[2]],
+          '#0b0b12',
+          18,
+          0.85,
+          'spark'
+        );
 
-        const nextPos = pickSpawnPoint(playerPos, { minDist: 18, maxDist: 44, y: ITEM_Y + 0.75, avoid });
+        const nextPos = pickSpawnPoint(playerPos, {
+          minDist: 18,
+          maxDist: 44,
+          y: ITEM_Y + 0.75,
+          avoid,
+        });
         setStar((prev) => ({ ...prev, pos: nextPos }));
       }
     }
@@ -660,7 +939,14 @@ export const RolletteWorld: React.FC<{
   return (
     <>
       <Sky />
-      <Stars radius={260} depth={60} count={3200} factor={4} saturation={0} fade />
+      <Stars
+        radius={260}
+        depth={60}
+        count={3200}
+        factor={4}
+        saturation={0}
+        fade
+      />
 
       <ambientLight intensity={0.35} />
       <directionalLight position={[18, 24, 12]} intensity={1} castShadow />

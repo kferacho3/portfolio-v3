@@ -23,7 +23,12 @@ export const LowPolyGroundVisual: React.FC<{ tint: string }> = ({ tint }) => {
   }, []);
   return (
     <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color={tint} roughness={0.95} metalness={0.05} flatShading />
+      <meshStandardMaterial
+        color={tint}
+        roughness={0.95}
+        metalness={0.05}
+        flatShading
+      />
     </mesh>
   );
 };

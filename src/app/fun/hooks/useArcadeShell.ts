@@ -1,6 +1,6 @@
 /**
  * useArcadeShell Hook
- * 
+ *
  * Domain hook for arcade shell UI state and actions.
  * Combines store state with navigation and UI control logic.
  */
@@ -28,13 +28,13 @@ import type { GameId, GameType } from '../store/types';
  */
 export function useArcadeShell() {
   const router = useRouter();
-  
+
   // State
   const { currentGame, selectedIndex } = useGameState();
   const { paused, showGameRules, restartSeed, health } = useGameUIState();
   const { musicOn, soundsOn } = useAudioState();
   const { skyBlitzMode, reactPongMode, shapeShifterMode } = useGameModeState();
-  
+
   // Actions
   const {
     setCurrentGame,
@@ -44,7 +44,7 @@ export function useArcadeShell() {
     selectNextGame,
     selectPreviousGame,
   } = useNavigationActions();
-  
+
   const {
     togglePause,
     setPaused,
@@ -53,9 +53,10 @@ export function useArcadeShell() {
     restartGame,
     setHealth,
   } = useGameStateActions();
-  
+
   const { toggleMusic, toggleSounds } = useAudioActions();
-  const { setSkyBlitzMode, setReactPongMode, setShapeShifterMode } = useGameModeActions();
+  const { setSkyBlitzMode, setReactPongMode, setShapeShifterMode } =
+    useGameModeActions();
   const { launchRandomGame } = useRandomGameAction();
 
   // Derived state
@@ -70,10 +71,13 @@ export function useArcadeShell() {
     router.push('/fun');
   }, [storeGoHome, router]);
 
-  const launchGame = useCallback((gameId: GameId) => {
-    storeLaunchGame(gameId);
-    router.push(`/fun/${gameId}`);
-  }, [storeLaunchGame, router]);
+  const launchGame = useCallback(
+    (gameId: GameId) => {
+      storeLaunchGame(gameId);
+      router.push(`/fun/${gameId}`);
+    },
+    [storeLaunchGame, router]
+  );
 
   const launchSelectedGame = useCallback(() => {
     if (selectedGame) {
@@ -82,15 +86,18 @@ export function useArcadeShell() {
   }, [selectedGame, launchGame]);
 
   // Mode switching
-  const handleModeSwitch = useCallback((mode: string) => {
-    if (currentGame === 'skyblitz') {
-      setSkyBlitzMode(mode as 'UfoMode' | 'RunnerManMode');
-    } else if (currentGame === 'reactpong') {
-      setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls');
-    } else if (currentGame === 'shapeshifter') {
-      setShapeShifterMode(mode as '3x3' | '4x4' | '5x5');
-    }
-  }, [currentGame, setSkyBlitzMode, setReactPongMode, setShapeShifterMode]);
+  const handleModeSwitch = useCallback(
+    (mode: string) => {
+      if (currentGame === 'skyblitz') {
+        setSkyBlitzMode(mode as 'UfoMode' | 'RunnerManMode');
+      } else if (currentGame === 'reactpong') {
+        setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls');
+      } else if (currentGame === 'shapeshifter') {
+        setShapeShifterMode(mode as '3x3' | '4x4' | '5x5');
+      }
+    },
+    [currentGame, setSkyBlitzMode, setReactPongMode, setShapeShifterMode]
+  );
 
   // Get current mode for the active game
   const getCurrentMode = useCallback(() => {
@@ -123,7 +130,7 @@ export function useArcadeShell() {
     skyBlitzMode,
     reactPongMode,
     shapeShifterMode,
-    
+
     // Navigation actions
     goHome,
     launchGame,
@@ -132,7 +139,7 @@ export function useArcadeShell() {
     selectNextGame,
     selectPreviousGame,
     launchRandomGame,
-    
+
     // Game state actions
     togglePause,
     setPaused,
@@ -140,11 +147,11 @@ export function useArcadeShell() {
     setShowGameRules,
     restartGame,
     setHealth,
-    
+
     // Audio actions
     toggleMusic,
     toggleSounds,
-    
+
     // Mode switching
     handleModeSwitch,
     getCurrentMode,
@@ -215,7 +222,15 @@ export function useArcadeKeyboard() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isHome, goHome, restartGame, toggleGameRules, togglePause, launchRandomGame, launchGame]);
+  }, [
+    isHome,
+    goHome,
+    restartGame,
+    toggleGameRules,
+    togglePause,
+    launchRandomGame,
+    launchGame,
+  ]);
 }
 
 /**

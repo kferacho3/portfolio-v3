@@ -68,8 +68,7 @@ export default class Bird {
   }
 
   isDead() {
-    return this.birdPosition.y >=
-      CANVAS_HEIGHT - BIRDSIZE.Height - FLOOROFFSET
+    return this.birdPosition.y >= CANVAS_HEIGHT - BIRDSIZE.Height - FLOOROFFSET
       ? true
       : false;
   }
@@ -78,11 +77,16 @@ export default class Bird {
     this.velocity += this.gravity;
     this.birdPosition.y += this.velocity;
 
-    if (this.velocity > 8) this.birdRotate = { angle: 0, xOffset: 0, yOffset: 0 };
-    if (this.velocity > 9) this.birdRotate = { angle: 22.5, xOffset: 12, yOffset: -10 };
-    if (this.velocity > 10) this.birdRotate = { angle: 45, xOffset: 30, yOffset: -15 };
-    if (this.velocity > 11) this.birdRotate = { angle: 67.5, xOffset: 45, yOffset: -10 };
-    if (this.velocity > 12) this.birdRotate = { angle: 90, xOffset: 60, yOffset: -10 };
+    if (this.velocity > 8)
+      this.birdRotate = { angle: 0, xOffset: 0, yOffset: 0 };
+    if (this.velocity > 9)
+      this.birdRotate = { angle: 22.5, xOffset: 12, yOffset: -10 };
+    if (this.velocity > 10)
+      this.birdRotate = { angle: 45, xOffset: 30, yOffset: -15 };
+    if (this.velocity > 11)
+      this.birdRotate = { angle: 67.5, xOffset: 45, yOffset: -10 };
+    if (this.velocity > 12)
+      this.birdRotate = { angle: 90, xOffset: 60, yOffset: -10 };
 
     if (this.isDead()) {
       this.birdPosition.y = CANVAS_HEIGHT - BIRDSIZE.Height - FLOOROFFSET;

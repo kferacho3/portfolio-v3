@@ -1,4 +1,10 @@
-import type { PyramidType, RingColor, SpringType, TetraType, TorusKnotType } from './types';
+import type {
+  PyramidType,
+  RingColor,
+  SpringType,
+  TetraType,
+  TorusKnotType,
+} from './types';
 
 export const ARENA_SIZE = 100;
 export const ARENA_HALF = ARENA_SIZE / 2;
@@ -64,9 +70,11 @@ export const TORUS_OUTCOMES = [
   | { p: number; kind: 'jackpot'; value: number }
 >;
 
-export const TORUS_MATERIAL: Record<TorusKnotType, { color: string; isClear?: boolean }> = {
+export const TORUS_MATERIAL: Record<
+  TorusKnotType,
+  { color: string; isClear?: boolean }
+> = {
   rainbow: { color: '#a855f7' },
   random: { color: '#22d3ee' },
   clear: { color: '#ffffff', isClear: true },
 };
-

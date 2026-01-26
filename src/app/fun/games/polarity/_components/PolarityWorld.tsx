@@ -6,7 +6,11 @@ import * as THREE from 'three';
 import { useSphere } from '@react-three/cannon';
 import { useGameUIState } from '../../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../../hooks/useInput';
-import { polarityState, type PolarityCharge, type PolarityEvent } from '../state';
+import {
+  polarityState,
+  type PolarityCharge,
+  type PolarityEvent,
+} from '../state';
 import {
   HALF,
   PLAYER_RADIUS,
@@ -32,7 +36,13 @@ import {
   FLIP_PERFECT_RADIUS,
   ARENA_SIZE,
 } from '../constants';
-import { clamp, randSign, randomInArena, spawnAroundPlayer, spawnIonAhead } from '../utils';
+import {
+  clamp,
+  randSign,
+  randomInArena,
+  spawnAroundPlayer,
+  spawnIonAhead,
+} from '../utils';
 import type { Magnet, Ion, Spike } from '../types';
 import { chargeColors } from './chargeColors';
 import { Ground } from './Ground';
@@ -50,7 +60,14 @@ export const PolarityWorld: React.FC = () => {
 
   const inputRef = useInputRef({
     enabled: !paused,
-    preventDefault: [' ', 'Space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowup',
+      'arrowdown',
+      'arrowleft',
+      'arrowright',
+    ],
   });
 
   const lastPlayerPosRef = useRef(new THREE.Vector3(0, 1, 0));
@@ -60,7 +77,10 @@ export const PolarityWorld: React.FC = () => {
   const lastChargeRef = useRef<PolarityCharge>(polarityState.charge);
   const playerMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const lastEventRef = useRef<PolarityEvent | null>(null);
-  const stormRef = useRef<{ ids: string[]; originals: Record<string, PolarityCharge> } | null>(null);
+  const stormRef = useRef<{
+    ids: string[];
+    originals: Record<string, PolarityCharge>;
+  } | null>(null);
   const spikeGrazeRef = useRef<Record<string, number>>({});
   const pylonWhipRef = useRef<Record<string, number>>({});
   const zoneActiveRef = useRef(false);
@@ -135,7 +155,9 @@ export const PolarityWorld: React.FC = () => {
     const storm = stormRef.current;
     if (!storm) return;
     setMagnets((prev) =>
-      prev.map((m) => (storm.originals[m.id] ? { ...m, charge: storm.originals[m.id] } : m))
+      prev.map((m) =>
+        storm.originals[m.id] ? { ...m, charge: storm.originals[m.id] } : m
+      )
     );
     stormRef.current = null;
   };
@@ -220,7 +242,11 @@ export const PolarityWorld: React.FC = () => {
         if (event === 'PolarityStorm') applyStorm();
         if (event === 'Superconductor') {
           const zonePos = spawnAroundPlayer(p, 0, { minDist: 8, maxDist: 18 });
-          polarityState.zone = { x: zonePos.x, z: zonePos.z, radius: ZONE_RADIUS };
+          polarityState.zone = {
+            x: zonePos.x,
+            z: zonePos.z,
+            radius: ZONE_RADIUS,
+          };
         }
         if (event === 'IonBloom') spawnIonBloom(p, forward);
 
@@ -244,19 +270,29 @@ export const PolarityWorld: React.FC = () => {
             ...prev,
             ...Array.from({ length: targetMagnets - prev.length }, (_, j) => ({
               id: `m-${prev.length + j}`,
-              pos: spawnAroundPlayer(lastPlayerPosRef.current, 0.8, { minDist: 10, maxDist: 28 }),
+              pos: spawnAroundPlayer(lastPlayerPosRef.current, 0.8, {
+                minDist: 10,
+                maxDist: 28,
+              }),
               charge: randSign(),
             })),
           ]);
         }
 
-        const targetSpikes = clamp(SPIKE_BASE_COUNT + (level - 1) * 2, SPIKE_BASE_COUNT, 26);
+        const targetSpikes = clamp(
+          SPIKE_BASE_COUNT + (level - 1) * 2,
+          SPIKE_BASE_COUNT,
+          26
+        );
         if (spikes.length < targetSpikes) {
           setSpikes((prev) => [
             ...prev,
             ...Array.from({ length: targetSpikes - prev.length }, (_, j) => ({
               id: `sp-${prev.length + j}`,
-              pos: spawnAroundPlayer(lastPlayerPosRef.current, 0.35, { minDist: 10, maxDist: 30 }),
+              pos: spawnAroundPlayer(lastPlayerPosRef.current, 0.35, {
+                minDist: 10,
+                maxDist: 30,
+              }),
             })),
           ]);
         }
@@ -298,7 +334,8 @@ export const PolarityWorld: React.FC = () => {
           }
         }
 
-        const flipPerfect = bestMagnet && bestD2 < FLIP_PERFECT_RADIUS * FLIP_PERFECT_RADIUS;
+        const flipPerfect =
+          bestMagnet && bestD2 < FLIP_PERFECT_RADIUS * FLIP_PERFECT_RADIUS;
         polarityState.flipCharge();
         playerApi.applyImpulse([0, 0.25, 0], [0, 0, 0]);
         if (flipPerfect && bestMagnet) {
@@ -313,19 +350,37 @@ export const PolarityWorld: React.FC = () => {
         if (pulse === 'pulse') {
           const v = velocityRef.current.clone();
           const vLen = v.length();
-          const fallbackDir = vLen > 0.5 ? v.divideScalar(vLen) : new THREE.Vector3(0, 0, -1);
-          playerApi.applyImpulse([fallbackDir.x * PULSE_IMPULSE, 0.2, fallbackDir.z * PULSE_IMPULSE], [0, 0, 0]);
+          const fallbackDir =
+            vLen > 0.5 ? v.divideScalar(vLen) : new THREE.Vector3(0, 0, -1);
+          playerApi.applyImpulse(
+            [fallbackDir.x * PULSE_IMPULSE, 0.2, fallbackDir.z * PULSE_IMPULSE],
+            [0, 0, 0]
+          );
         } else if (pulse === 'burst') {
           const v = velocityRef.current.clone();
           const vLen = v.length();
-          const fallbackDir = vLen > 0.5 ? v.divideScalar(vLen) : new THREE.Vector3(0, 0, -1);
-          playerApi.applyImpulse([fallbackDir.x * (PULSE_IMPULSE * 1.4), 0.5, fallbackDir.z * (PULSE_IMPULSE * 1.4)], [0, 0, 0]);
+          const fallbackDir =
+            vLen > 0.5 ? v.divideScalar(vLen) : new THREE.Vector3(0, 0, -1);
+          playerApi.applyImpulse(
+            [
+              fallbackDir.x * (PULSE_IMPULSE * 1.4),
+              0.5,
+              fallbackDir.z * (PULSE_IMPULSE * 1.4),
+            ],
+            [0, 0, 0]
+          );
 
           const burstR2 = RESONANCE_BURST_RADIUS * RESONANCE_BURST_RADIUS;
           setSpikes((prev) =>
             prev.map((spike) =>
               spike.pos.distanceToSquared(p) < burstR2
-                ? { ...spike, pos: spawnAroundPlayer(p, 0.35, { minDist: 12, maxDist: 30 }) }
+                ? {
+                    ...spike,
+                    pos: spawnAroundPlayer(p, 0.35, {
+                      minDist: 12,
+                      maxDist: 30,
+                    }),
+                  }
                 : spike
             )
           );
@@ -362,13 +417,24 @@ export const PolarityWorld: React.FC = () => {
 
       const controlScale = wobbling ? 0.45 : stabilizing ? 1.05 : 1.0;
       playerApi.applyForce(
-        [steer.x * BASE_MOVE_FORCE * controlScale * timeScale, 0, steer.z * BASE_MOVE_FORCE * controlScale * timeScale],
+        [
+          steer.x * BASE_MOVE_FORCE * controlScale * timeScale,
+          0,
+          steer.z * BASE_MOVE_FORCE * controlScale * timeScale,
+        ],
         [0, 0, 0]
       );
 
       const stabilizeScale = stabilizing ? 0.7 : 1;
-      const levelStrength = (1 + clamp(polarityState.level - 1, 0, 50) * 0.065) * zoneBoost * stabilizeScale;
-      const maxForce = MAGNET_MAX_FORCE * (1 + clamp(polarityState.level - 1, 0, 10) * 0.04) * zoneBoost * stabilizeScale;
+      const levelStrength =
+        (1 + clamp(polarityState.level - 1, 0, 50) * 0.065) *
+        zoneBoost *
+        stabilizeScale;
+      const maxForce =
+        MAGNET_MAX_FORCE *
+        (1 + clamp(polarityState.level - 1, 0, 10) * 0.04) *
+        zoneBoost *
+        stabilizeScale;
       for (let i = 0; i < magnets.length; i++) {
         const m = magnets[i];
         const dir = new THREE.Vector3().subVectors(m.pos, p);
@@ -378,13 +444,26 @@ export const PolarityWorld: React.FC = () => {
         const isAttract = m.charge !== polarityState.charge;
         const signed = isAttract ? 1 : -1;
         const magnitude = clamp(k, 0, maxForce);
-        playerApi.applyForce([dir.x * magnitude * signed * timeScale, 0, dir.z * magnitude * signed * timeScale], [0, 0, 0]);
+        playerApi.applyForce(
+          [
+            dir.x * magnitude * signed * timeScale,
+            0,
+            dir.z * magnitude * signed * timeScale,
+          ],
+          [0, 0, 0]
+        );
       }
 
       const spd = velocityRef.current.length();
       if (spd > MAX_SPEED) {
-        const oppose = velocityRef.current.clone().normalize().multiplyScalar(-SPEED_SOFT_CAP_FORCE * (spd - MAX_SPEED));
-        playerApi.applyForce([oppose.x * timeScale, 0, oppose.z * timeScale], [0, 0, 0]);
+        const oppose = velocityRef.current
+          .clone()
+          .normalize()
+          .multiplyScalar(-SPEED_SOFT_CAP_FORCE * (spd - MAX_SPEED));
+        playerApi.applyForce(
+          [oppose.x * timeScale, 0, oppose.z * timeScale],
+          [0, 0, 0]
+        );
       }
 
       if (spd > PYLON_WHIP_SPEED) {
@@ -408,7 +487,11 @@ export const PolarityWorld: React.FC = () => {
       const clampedZ = clamp(p.z, -HALF + 2.4, HALF - 2.4);
       if (clampedX !== p.x || clampedZ !== p.z) {
         playerApi.position.set(clampedX, p.y, clampedZ);
-        playerApi.velocity.set(velocityRef.current.x * 0.35, velocityRef.current.y, velocityRef.current.z * 0.35);
+        playerApi.velocity.set(
+          velocityRef.current.x * 0.35,
+          velocityRef.current.y,
+          velocityRef.current.z * 0.35
+        );
       }
 
       const ionR2 = ION_PICKUP_RADIUS * ION_PICKUP_RADIUS;
@@ -437,10 +520,16 @@ export const PolarityWorld: React.FC = () => {
           polarityState.takeDamage(12);
           setSpikes((prev) => {
             const next = [...prev];
-            next[i] = { ...next[i], pos: spawnAroundPlayer(p, 0.35, { minDist: 12, maxDist: 30 }) };
+            next[i] = {
+              ...next[i],
+              pos: spawnAroundPlayer(p, 0.35, { minDist: 12, maxDist: 30 }),
+            };
             return next;
           });
-          const away = new THREE.Vector3().subVectors(p, s.pos).normalize().multiplyScalar(5.5);
+          const away = new THREE.Vector3()
+            .subVectors(p, s.pos)
+            .normalize()
+            .multiplyScalar(5.5);
           playerApi.applyImpulse([away.x, 0.6, away.z], [0, 0, 0]);
           hitSpike = true;
           break;
@@ -470,10 +559,22 @@ export const PolarityWorld: React.FC = () => {
 
   const walls = useMemo(
     () => [
-      { position: [0, 12, -HALF - 1.4] as [number, number, number], size: [ARENA_SIZE + 8, 30, 2] as [number, number, number] },
-      { position: [0, 12, HALF + 1.4] as [number, number, number], size: [ARENA_SIZE + 8, 30, 2] as [number, number, number] },
-      { position: [-HALF - 1.4, 12, 0] as [number, number, number], size: [2, 30, ARENA_SIZE + 8] as [number, number, number] },
-      { position: [HALF + 1.4, 12, 0] as [number, number, number], size: [2, 30, ARENA_SIZE + 8] as [number, number, number] },
+      {
+        position: [0, 12, -HALF - 1.4] as [number, number, number],
+        size: [ARENA_SIZE + 8, 30, 2] as [number, number, number],
+      },
+      {
+        position: [0, 12, HALF + 1.4] as [number, number, number],
+        size: [ARENA_SIZE + 8, 30, 2] as [number, number, number],
+      },
+      {
+        position: [-HALF - 1.4, 12, 0] as [number, number, number],
+        size: [2, 30, ARENA_SIZE + 8] as [number, number, number],
+      },
+      {
+        position: [HALF + 1.4, 12, 0] as [number, number, number],
+        size: [2, 30, ARENA_SIZE + 8] as [number, number, number],
+      },
     ],
     []
   );
@@ -491,7 +592,12 @@ export const PolarityWorld: React.FC = () => {
 
       <mesh ref={playerRef} castShadow>
         <sphereGeometry args={[PLAYER_RADIUS, 28, 28]} />
-        <meshStandardMaterial ref={playerMatRef} color={playerColor.main} emissive={playerColor.emissive} emissiveIntensity={0.35} />
+        <meshStandardMaterial
+          ref={playerMatRef}
+          color={playerColor.main}
+          emissive={playerColor.emissive}
+          emissiveIntensity={0.35}
+        />
       </mesh>
       <PlayerTrail target={playerRef} color={playerColor.emissive} />
 

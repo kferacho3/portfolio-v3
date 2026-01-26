@@ -6,12 +6,12 @@ source: https://sketchfab.com/3d-models/arcade-machine-444b485039474d818aa661ca1
 title: Arcade Machine
 */
 
-import React, { useRef } from 'react'
-import { useGLTF } from '@react-three/drei'
+import React, { useRef } from 'react';
+import { useGLTF } from '@react-three/drei';
 
 export default function Model(props) {
-  const group = useRef()
-  const { nodes, materials } = useGLTF('/arcade.glb')
+  const group = useRef();
+  const { nodes, materials } = useGLTF('/arcade.glb');
   return (
     <group ref={group} {...props} dispose={null}>
       <mesh
@@ -37,7 +37,7 @@ export default function Model(props) {
         position={[0.62, 146.59, 8.96]}
       />
     </group>
-  )
+  );
 }
 
-useGLTF.preload('/arcade.glb')
+useGLTF.preload('/arcade.glb');

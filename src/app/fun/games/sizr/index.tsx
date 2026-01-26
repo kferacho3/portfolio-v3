@@ -3,7 +3,13 @@
 
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { proxy } from 'valtio';
 import * as THREE from 'three';
 
@@ -42,7 +48,8 @@ const LEGO_COLORS = [
   '#009247', // Dark Green
 ];
 
-const getRandomLegoColor = () => LEGO_COLORS[Math.floor(Math.random() * LEGO_COLORS.length)];
+const getRandomLegoColor = () =>
+  LEGO_COLORS[Math.floor(Math.random() * LEGO_COLORS.length)];
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GAME CONSTANTS
@@ -68,13 +75,17 @@ interface SizrProps {
 // LEGO BLOCK MATERIAL - Gives blocks that classic LEGO shine
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LegoBlockMaterial: React.FC<{ color: string; isPerfect?: boolean }> = ({ color, isPerfect }) => {
+const LegoBlockMaterial: React.FC<{ color: string; isPerfect?: boolean }> = ({
+  color,
+  isPerfect,
+}) => {
   const materialRef = useRef<THREE.MeshPhysicalMaterial>(null);
-  
+
   useFrame(({ clock }) => {
     if (!materialRef.current || !isPerfect) return;
     // Subtle glow animation for perfect blocks
-    materialRef.current.emissiveIntensity = 0.2 + 0.1 * Math.sin(clock.getElapsedTime() * 4);
+    materialRef.current.emissiveIntensity =
+      0.2 + 0.1 * Math.sin(clock.getElapsedTime() * 4);
   });
 
   return (
@@ -95,19 +106,22 @@ const LegoBlockMaterial: React.FC<{ color: string; isPerfect?: boolean }> = ({ c
 // LEGO STUD COMPONENT - Classic LEGO studs on top of blocks
 // ═══════════════════════════════════════════════════════════════════════════
 
-const LegoStuds: React.FC<{ size: [number, number, number]; color: string }> = ({ size, color }) => {
+const LegoStuds: React.FC<{
+  size: [number, number, number];
+  color: string;
+}> = ({ size, color }) => {
   const [width, height, depth] = size;
   const studRadius = 0.15;
   const studHeight = 0.12;
   const studSpacing = 0.8;
-  
+
   const studs = useMemo(() => {
     const result: [number, number][] = [];
     const countX = Math.floor(width / studSpacing);
     const countZ = Math.floor(depth / studSpacing);
     const offsetX = (width - (countX - 1) * studSpacing) / 2;
     const offsetZ = (depth - (countZ - 1) * studSpacing) / 2;
-    
+
     for (let x = 0; x < countX; x++) {
       for (let z = 0; z < countZ; z++) {
         result.push([
@@ -148,21 +162,30 @@ interface FallingPieceProps {
   direction: 'left' | 'right';
 }
 
-const FallingPiece: React.FC<FallingPieceProps> = ({ position, size, color, direction }) => {
+const FallingPiece: React.FC<FallingPieceProps> = ({
+  position,
+  size,
+  color,
+  direction,
+}) => {
   const meshRef = useRef<THREE.Mesh>(null);
-  const velocityRef = useRef({ x: direction === 'left' ? -2 : 2, y: 0, rotZ: 0 });
+  const velocityRef = useRef({
+    x: direction === 'left' ? -2 : 2,
+    y: 0,
+    rotZ: 0,
+  });
   const [visible, setVisible] = useState(true);
 
   useFrame((_, delta) => {
     if (!meshRef.current || !visible) return;
-    
+
     velocityRef.current.y -= 25 * delta; // Gravity
     velocityRef.current.rotZ += (direction === 'left' ? -3 : 3) * delta;
-    
+
     meshRef.current.position.x += velocityRef.current.x * delta;
     meshRef.current.position.y += velocityRef.current.y * delta;
     meshRef.current.rotation.z = velocityRef.current.rotZ;
-    
+
     if (meshRef.current.position.y < -20) {
       setVisible(false);
     }
@@ -189,7 +212,9 @@ const FallingPiece: React.FC<FallingPieceProps> = ({ position, size, color, dire
 // PERFECT INDICATOR
 // ═══════════════════════════════════════════════════════════════════════════
 
-const PerfectIndicator: React.FC<{ position: [number, number, number] }> = ({ position }) => {
+const PerfectIndicator: React.FC<{ position: [number, number, number] }> = ({
+  position,
+}) => {
   const [visible, setVisible] = useState(true);
   const groupRef = useRef<THREE.Group>(null);
   const timeRef = useRef(0);
@@ -197,10 +222,11 @@ const PerfectIndicator: React.FC<{ position: [number, number, number] }> = ({ po
   useFrame((_, delta) => {
     if (!groupRef.current || !visible) return;
     timeRef.current += delta;
-    
-    groupRef.current.position.y = position[1] + 1 + Math.sin(timeRef.current * 8) * 0.2;
+
+    groupRef.current.position.y =
+      position[1] + 1 + Math.sin(timeRef.current * 8) * 0.2;
     groupRef.current.scale.setScalar(1 + Math.sin(timeRef.current * 10) * 0.1);
-    
+
     if (timeRef.current > 1) {
       setVisible(false);
     }
@@ -209,7 +235,10 @@ const PerfectIndicator: React.FC<{ position: [number, number, number] }> = ({ po
   if (!visible) return null;
 
   return (
-    <group ref={groupRef} position={[position[0], position[1] + 1, position[2]]}>
+    <group
+      ref={groupRef}
+      position={[position[0], position[1] + 1, position[2]]}
+    >
       <Html center>
         <div className="text-yellow-400 font-bold text-2xl animate-bounce">
           PERFECT! ✨
@@ -227,15 +256,18 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
   const [stack, setStack] = useState<StackBlock[]>([
     { position: [0, -3, 0], size: BASE_SIZE, color: getRandomLegoColor() },
   ]);
-  const [currentSize, setCurrentSize] = useState<[number, number, number]>(BASE_SIZE);
+  const [currentSize, setCurrentSize] =
+    useState<[number, number, number]>(BASE_SIZE);
   const [currentY, setCurrentY] = useState(-3 + BLOCK_HEIGHT);
   const [currentColor, setCurrentColor] = useState(getRandomLegoColor());
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
   const [perfectStreak, setPerfectStreak] = useState(0);
   const [fallingPieces, setFallingPieces] = useState<FallingPieceProps[]>([]);
-  const [perfectIndicators, setPerfectIndicators] = useState<[number, number, number][]>([]);
-  
+  const [perfectIndicators, setPerfectIndicators] = useState<
+    [number, number, number][]
+  >([]);
+
   const lastPlaceRef = useRef(0);
   const movingXRef = useRef(-MOVE_RANGE);
   const directionRef = useRef(1);
@@ -305,10 +337,10 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
 
     const newWidth = overlap;
     const newX = (overlapLeft + overlapRight) / 2;
-    
+
     // Check for perfect placement
     const isPerfect = Math.abs(currWidth - overlap) < PERFECT_THRESHOLD;
-    
+
     // Calculate points
     let points = Math.round(overlap * 10);
     if (isPerfect) {
@@ -327,7 +359,7 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
         const cutOffX = isLeftCut
           ? currLeft + cutOffWidth / 2
           : currRight - cutOffWidth / 2;
-        
+
         setFallingPieces((prev) => [
           ...prev,
           {
@@ -351,11 +383,21 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
 
     const nextY = currY + BLOCK_HEIGHT;
     setCurrentY(nextY);
-    setCurrentSize(isPerfect ? currentSize : [newWidth, currentSize[1], currentSize[2]]);
+    setCurrentSize(
+      isPerfect ? currentSize : [newWidth, currentSize[1], currentSize[2]]
+    );
     setCurrentColor(getRandomLegoColor());
     directionRef.current *= -1;
     movingXRef.current = directionRef.current > 0 ? -MOVE_RANGE : MOVE_RANGE;
-  }, [currentSize, currentColor, currentY, gameOver, reset, stack, perfectStreak]);
+  }, [
+    currentSize,
+    currentColor,
+    currentY,
+    gameOver,
+    reset,
+    stack,
+    perfectStreak,
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -372,7 +414,7 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
   // Animation loop
   useFrame((_, delta) => {
     if (gameOver) return;
-    
+
     let nextX = movingXRef.current + directionRef.current * moveSpeed * delta;
     if (nextX > MOVE_RANGE) {
       nextX = MOVE_RANGE;
@@ -383,12 +425,12 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
       directionRef.current = 1;
     }
     movingXRef.current = nextX;
-    
+
     if (movingMeshRef.current) {
       movingMeshRef.current.position.x = nextX;
       movingMeshRef.current.position.y = currentY;
     }
-    
+
     // Camera follows the stack
     const targetCamY = Math.max(4, currentY + 4);
     const targetCamZ = 12 + Math.max(0, stack.length * 0.1);
@@ -410,8 +452,10 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="absolute top-4 left-4 rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-sm px-5 py-4 text-white shadow-xl pointer-events-auto">
           <div className="text-3xl font-bold">{score}</div>
-          <div className="text-xs text-white/50 uppercase tracking-wider">Score</div>
-          
+          <div className="text-xs text-white/50 uppercase tracking-wider">
+            Score
+          </div>
+
           <div className="mt-3 flex gap-4">
             <div>
               <div className="text-lg font-semibold">{stack.length - 1}</div>
@@ -419,7 +463,9 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
             </div>
             {perfectStreak > 0 && (
               <div>
-                <div className="text-lg font-semibold text-yellow-400">{perfectStreak}x</div>
+                <div className="text-lg font-semibold text-yellow-400">
+                  {perfectStreak}x
+                </div>
                 <div className="text-xs text-white/50">Perfect</div>
               </div>
             )}
@@ -435,16 +481,28 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
 
         {/* Game Title - positioned to not overlap with Arcade Deck */}
         <div className="absolute top-4 left-40 text-left pointer-events-auto">
-          <div className="text-white/30 text-xs uppercase tracking-[0.3em]">SIZR</div>
-          <div className="text-white/60 text-[10px] mt-1">Match the size perfectly!</div>
+          <div className="text-white/30 text-xs uppercase tracking-[0.3em]">
+            SIZR
+          </div>
+          <div className="text-white/60 text-[10px] mt-1">
+            Match the size perfectly!
+          </div>
         </div>
       </Html>
 
       {/* Lighting */}
       <ambientLight intensity={0.6} />
       <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow />
-      <directionalLight position={[-5, 10, -5]} intensity={0.4} color="#fff5e6" />
-      <pointLight position={[0, currentY + 5, 5]} intensity={0.5} color="#ffffff" />
+      <directionalLight
+        position={[-5, 10, -5]}
+        intensity={0.4}
+        color="#fff5e6"
+      />
+      <pointLight
+        position={[0, currentY + 5, 5]}
+        intensity={0.5}
+        color="#ffffff"
+      />
 
       {/* Stack */}
       <group>
@@ -461,7 +519,11 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
         {/* Moving block */}
         {!gameOver && (
           <group>
-            <mesh ref={movingMeshRef} position={[movingXRef.current, currentY, 0]} castShadow>
+            <mesh
+              ref={movingMeshRef}
+              position={[movingXRef.current, currentY, 0]}
+              castShadow
+            >
               <boxGeometry args={currentSize} />
               <LegoBlockMaterial color={currentColor} />
             </mesh>
@@ -474,7 +536,16 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
                 <bufferAttribute
                   attach="attributes-position"
                   count={2}
-                  array={new Float32Array([movingXRef.current, currentY - 0.3, 0, movingXRef.current, -10, 0])}
+                  array={
+                    new Float32Array([
+                      movingXRef.current,
+                      currentY - 0.3,
+                      0,
+                      movingXRef.current,
+                      -10,
+                      0,
+                    ])
+                  }
                   itemSize={3}
                 />
               </bufferGeometry>
@@ -495,8 +566,15 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
       ))}
 
       {/* Ground reference */}
-      <gridHelper args={[20, 20, '#333333', '#222222']} position={[0, -3.5, 0]} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.5, 0]} receiveShadow>
+      <gridHelper
+        args={[20, 20, '#333333', '#222222']}
+        position={[0, -3.5, 0]}
+      />
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -3.5, 0]}
+        receiveShadow
+      >
         <planeGeometry args={[20, 20]} />
         <meshStandardMaterial color="#1a1a2e" />
       </mesh>

@@ -35,7 +35,10 @@ const Sphere: React.FC = () => {
   const { camera } = useThree();
   const snap = useSnapshot(apexState);
   const preset = ARENA_PRESETS[snap.arena];
-  const theme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
+  const theme = useMemo(
+    () => getArenaTheme(preset, THEMES[snap.currentTheme]),
+    [preset, snap.currentTheme]
+  );
   const rotationRef = useRef(new THREE.Euler());
   const spiralScratch = useRef({
     radial: new THREE.Vector3(),
@@ -48,16 +51,49 @@ const Sphere: React.FC = () => {
       prism: new THREE.IcosahedronGeometry(SPHERE_RADIUS * 1.05, 0),
       prismflare: new THREE.OctahedronGeometry(SPHERE_RADIUS * 1.1, 0),
       prismshift: new THREE.TetrahedronGeometry(SPHERE_RADIUS * 1.15, 0),
-      prismhalo: new THREE.TorusGeometry(SPHERE_RADIUS * 0.7, SPHERE_RADIUS * 0.18, 18, 36),
+      prismhalo: new THREE.TorusGeometry(
+        SPHERE_RADIUS * 0.7,
+        SPHERE_RADIUS * 0.18,
+        18,
+        36
+      ),
       prismglint: new THREE.IcosahedronGeometry(SPHERE_RADIUS * 1.1, 1),
       prismedge: new THREE.OctahedronGeometry(SPHERE_RADIUS * 1.2, 1),
       prismvibe: new THREE.TetrahedronGeometry(SPHERE_RADIUS * 1.25, 1),
-      prismflux: new THREE.BoxGeometry(SPHERE_RADIUS * 1.5, SPHERE_RADIUS * 1.5, SPHERE_RADIUS * 1.5),
-      fractal: new THREE.TorusKnotGeometry(SPHERE_RADIUS * 0.6, SPHERE_RADIUS * 0.2, 80, 12),
-      fractalcrown: new THREE.TorusKnotGeometry(SPHERE_RADIUS * 0.62, SPHERE_RADIUS * 0.22, 120, 16),
-      fractalsurge: new THREE.TorusKnotGeometry(SPHERE_RADIUS * 0.55, SPHERE_RADIUS * 0.18, 100, 12),
-      fractalrune: new THREE.TorusGeometry(SPHERE_RADIUS * 0.75, SPHERE_RADIUS * 0.2, 14, 26),
-      fractalspire: new THREE.ConeGeometry(SPHERE_RADIUS * 0.8, SPHERE_RADIUS * 1.8, 6),
+      prismflux: new THREE.BoxGeometry(
+        SPHERE_RADIUS * 1.5,
+        SPHERE_RADIUS * 1.5,
+        SPHERE_RADIUS * 1.5
+      ),
+      fractal: new THREE.TorusKnotGeometry(
+        SPHERE_RADIUS * 0.6,
+        SPHERE_RADIUS * 0.2,
+        80,
+        12
+      ),
+      fractalcrown: new THREE.TorusKnotGeometry(
+        SPHERE_RADIUS * 0.62,
+        SPHERE_RADIUS * 0.22,
+        120,
+        16
+      ),
+      fractalsurge: new THREE.TorusKnotGeometry(
+        SPHERE_RADIUS * 0.55,
+        SPHERE_RADIUS * 0.18,
+        100,
+        12
+      ),
+      fractalrune: new THREE.TorusGeometry(
+        SPHERE_RADIUS * 0.75,
+        SPHERE_RADIUS * 0.2,
+        14,
+        26
+      ),
+      fractalspire: new THREE.ConeGeometry(
+        SPHERE_RADIUS * 0.8,
+        SPHERE_RADIUS * 1.8,
+        6
+      ),
       fractalshard: new THREE.TetrahedronGeometry(SPHERE_RADIUS * 1.3, 0),
       fractalwarp: new THREE.IcosahedronGeometry(SPHERE_RADIUS * 0.95, 2),
       fractalshade: new THREE.DodecahedronGeometry(SPHERE_RADIUS * 1.0, 0),
@@ -65,10 +101,24 @@ const Sphere: React.FC = () => {
       novapulse: new THREE.IcosahedronGeometry(SPHERE_RADIUS * 1.08, 1),
       novabloom: new THREE.OctahedronGeometry(SPHERE_RADIUS * 1.12, 1),
       novacore: new THREE.SphereGeometry(SPHERE_RADIUS * 1.15, 20, 20),
-      novaflare: new THREE.ConeGeometry(SPHERE_RADIUS * 0.9, SPHERE_RADIUS * 2.1, 8),
+      novaflare: new THREE.ConeGeometry(
+        SPHERE_RADIUS * 0.9,
+        SPHERE_RADIUS * 2.1,
+        8
+      ),
       novastorm: new THREE.IcosahedronGeometry(SPHERE_RADIUS * 1.2, 2),
-      novaspike: new THREE.CylinderGeometry(SPHERE_RADIUS * 0.5, SPHERE_RADIUS * 0.9, SPHERE_RADIUS * 1.9, 8),
-      novaring: new THREE.TorusGeometry(SPHERE_RADIUS * 0.8, SPHERE_RADIUS * 0.22, 12, 28),
+      novaspike: new THREE.CylinderGeometry(
+        SPHERE_RADIUS * 0.5,
+        SPHERE_RADIUS * 0.9,
+        SPHERE_RADIUS * 1.9,
+        8
+      ),
+      novaring: new THREE.TorusGeometry(
+        SPHERE_RADIUS * 0.8,
+        SPHERE_RADIUS * 0.22,
+        12,
+        28
+      ),
     }),
     []
   );
@@ -120,16 +170,21 @@ const Sphere: React.FC = () => {
           .copy(mutation.curveCenterPos)
           .addScaledVector(result.normal, mutation.curveLaneOffset);
 
-        const moveDelta = result.tangent.clone().multiplyScalar(mutation.speed * delta);
+        const moveDelta = result.tangent
+          .clone()
+          .multiplyScalar(mutation.speed * delta);
         mutation.velocity.copy(moveDelta.divideScalar(delta));
 
         mutation.speed = Math.min(
-          mutation.speed + SPEED_INCREMENT * modeSettings.speedIncrementMultiplier * delta,
+          mutation.speed +
+            SPEED_INCREMENT * modeSettings.speedIncrementMultiplier * delta,
           SPEED_LIMIT * modeSettings.speedLimitMultiplier
         );
 
         apexState.distance += mutation.speed * delta;
-        if (Math.floor(apexState.distance / LEVEL_DISTANCE) >= apexState.level) {
+        if (
+          Math.floor(apexState.distance / LEVEL_DISTANCE) >= apexState.level
+        ) {
           apexState.levelUp();
         }
       }
@@ -169,12 +224,15 @@ const Sphere: React.FC = () => {
         mutation.velocity.copy(moveDelta.divideScalar(delta));
 
         mutation.speed = Math.min(
-          mutation.speed + SPEED_INCREMENT * modeSettings.speedIncrementMultiplier * delta,
+          mutation.speed +
+            SPEED_INCREMENT * modeSettings.speedIncrementMultiplier * delta,
           SPEED_LIMIT * modeSettings.speedLimitMultiplier
         );
 
         apexState.distance += mutation.speed * delta;
-        if (Math.floor(apexState.distance / LEVEL_DISTANCE) >= apexState.level) {
+        if (
+          Math.floor(apexState.distance / LEVEL_DISTANCE) >= apexState.level
+        ) {
           apexState.levelUp();
         }
       }
@@ -184,7 +242,11 @@ const Sphere: React.FC = () => {
       if (snap.mode === 'zen') {
         const activeTile = mutation.tiles.find((t) => t.status === 'active');
         if (activeTile) {
-          mutation.spherePos.set(activeTile.x, activeTile.y + SPHERE_RADIUS, activeTile.z);
+          mutation.spherePos.set(
+            activeTile.x,
+            activeTile.y + SPHERE_RADIUS,
+            activeTile.z
+          );
           mutation.velocity.set(0, 0, 0);
           mutation.isOnPlatform = true;
         }
@@ -214,11 +276,16 @@ const Sphere: React.FC = () => {
         camera.position.x = mutation.spherePos.x - CAMERA_OFFSET_X;
         camera.position.z = mutation.spherePos.z + CAMERA_OFFSET_Z;
       } else {
-        const movementAverage = (mutation.spherePos.x - mutation.spherePos.z) / 2;
+        const movementAverage =
+          (mutation.spherePos.x - mutation.spherePos.z) / 2;
         camera.position.x = -CAMERA_OFFSET_X + movementAverage;
         camera.position.z = CAMERA_OFFSET_Z - movementAverage;
       }
-      camera.lookAt(mutation.spherePos.x, mutation.spherePos.y, mutation.spherePos.z);
+      camera.lookAt(
+        mutation.spherePos.x,
+        mutation.spherePos.y,
+        mutation.spherePos.z
+      );
     }
   });
 
@@ -232,7 +299,11 @@ const Sphere: React.FC = () => {
   return (
     <group>
       <Trail width={1} length={8} color={skinAccent} attenuation={(t) => t * t}>
-        <mesh ref={meshRef} position={[0, SPHERE_RADIUS, 0]} geometry={geometry}>
+        <mesh
+          ref={meshRef}
+          position={[0, SPHERE_RADIUS, 0]}
+          geometry={geometry}
+        >
           {isPrism ? (
             <meshPhysicalMaterial
               color={skin.color}
@@ -251,9 +322,7 @@ const Sphere: React.FC = () => {
             <meshStandardMaterial
               color={skin.color}
               emissive={skinAccent}
-              emissiveIntensity={
-                isNova ? 0.65 : isFractal ? 0.35 : 0.1
-              }
+              emissiveIntensity={isNova ? 0.65 : isFractal ? 0.35 : 0.1}
               metalness={snap.playerSkin === 'classic' ? 0.9 : 0.4}
               roughness={snap.playerSkin === 'classic' ? 0.1 : 0.3}
               flatShading={isFractal}
@@ -266,7 +335,12 @@ const Sphere: React.FC = () => {
       {snap.powerUp === 'shield' && (
         <mesh position={mutation.spherePos}>
           <icosahedronGeometry args={[SPHERE_RADIUS * 2, 1]} />
-          <meshBasicMaterial color="#00ff88" transparent opacity={0.3} wireframe />
+          <meshBasicMaterial
+            color="#00ff88"
+            transparent
+            opacity={0.3}
+            wireframe
+          />
         </mesh>
       )}
     </group>

@@ -20,18 +20,40 @@ const PlayerAvatar: React.FC<{
     <group ref={playerRef}>
       <mesh ref={bodyRef} position={[0, PLAYER_HEIGHT / 2, 0]} castShadow>
         <boxGeometry args={[TILE_SIZE * 0.6, PLAYER_HEIGHT, TILE_SIZE * 0.5]} />
-        <meshStandardMaterial color="#ffffff" emissive={NEON_CYAN} emissiveIntensity={0.3} roughness={0.3} metalness={0.4} />
+        <meshStandardMaterial
+          color="#ffffff"
+          emissive={NEON_CYAN}
+          emissiveIntensity={0.3}
+          roughness={0.3}
+          metalness={0.4}
+        />
       </mesh>
-      <mesh position={[TILE_SIZE * 0.1, PLAYER_HEIGHT * 0.85, TILE_SIZE * 0.26]}>
+      <mesh
+        position={[TILE_SIZE * 0.1, PLAYER_HEIGHT * 0.85, TILE_SIZE * 0.26]}
+      >
         <boxGeometry args={[TILE_SIZE * 0.12, TILE_SIZE * 0.12, 0.04]} />
         <meshStandardMaterial color="#000000" />
       </mesh>
-      <mesh position={[-TILE_SIZE * 0.1, PLAYER_HEIGHT * 0.85, TILE_SIZE * 0.26]}>
+      <mesh
+        position={[-TILE_SIZE * 0.1, PLAYER_HEIGHT * 0.85, TILE_SIZE * 0.26]}
+      >
         <boxGeometry args={[TILE_SIZE * 0.12, TILE_SIZE * 0.12, 0.04]} />
         <meshStandardMaterial color="#000000" />
       </mesh>
-      <pointLight ref={glowRef} position={[0, 1.2, 0]} intensity={0.6} color={NEON_CYAN} distance={4} />
-      <Sparkles count={16} scale={[1.2, 1.2, 1.2]} size={2.5} speed={0.5} color={NEON_CYAN} />
+      <pointLight
+        ref={glowRef}
+        position={[0, 1.2, 0]}
+        intensity={0.6}
+        color={NEON_CYAN}
+        distance={4}
+      />
+      <Sparkles
+        count={16}
+        scale={[1.2, 1.2, 1.2]}
+        size={2.5}
+        speed={0.5}
+        color={NEON_CYAN}
+      />
     </group>
   );
 };

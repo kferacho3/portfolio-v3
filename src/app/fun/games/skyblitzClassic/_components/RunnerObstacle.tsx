@@ -7,10 +7,13 @@ const RunnerObstacle = forwardRef<
   THREE.Object3D,
   { position: [number, number, number]; scale: number }
 >(({ position, scale }, ref) => {
-  const [boxRef] = useBox(() => ({
-    type: 'Static',
-    position,
-  }), ref);
+  const [boxRef] = useBox(
+    () => ({
+      type: 'Static',
+      position,
+    }),
+    ref
+  );
 
   return (
     <mesh ref={boxRef} scale={[1, scale, 1]}>

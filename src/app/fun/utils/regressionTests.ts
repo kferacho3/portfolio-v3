@@ -1,6 +1,6 @@
 /**
  * Regression Tests for Legacy vs TSX Game Parity
- * 
+ *
  * Provides utilities to compare behavior between legacy JavaScript games
  * and their TSX counterparts using input recording and replay.
  */
@@ -73,10 +73,10 @@ export async function runRegressionTest(
   if (!session) {
     // Record a new session
     inputRecorder.startRecording(config.game, config.seed);
-    
+
     // Wait for the test duration
     await new Promise((resolve) => setTimeout(resolve, config.duration));
-    
+
     // Take snapshots periodically
     const snapshotInterval = setInterval(() => {
       inputRecorder.recordSnapshot({
@@ -116,7 +116,7 @@ export async function runRegressionTest(
 
   // Reset TSX and replay
   tsxAccessor.reset();
-  
+
   const tsxSnapshots: RecordingSession['snapshots'] = [];
   const tsxSnapshotInterval = setInterval(() => {
     tsxSnapshots.push({
@@ -143,14 +143,20 @@ export async function runRegressionTest(
     snapshots: tsxSnapshots,
   };
 
-  const comparison = compareRecordings(legacySession, tsxSession, config.tolerances);
+  const comparison = compareRecordings(
+    legacySession,
+    tsxSession,
+    config.tolerances
+  );
 
   const scoreDifference = Math.abs(legacyFinalScore - tsxFinalScore);
   const passed = comparison.match && scoreDifference <= config.tolerances.score;
 
   if (!passed) {
     details.push(...comparison.differences);
-    details.push(`Score difference: ${scoreDifference} (tolerance: ${config.tolerances.score})`);
+    details.push(
+      `Score difference: ${scoreDifference} (tolerance: ${config.tolerances.score})`
+    );
   }
 
   return {
@@ -269,14 +275,16 @@ export function generateTestReport(results: TestResult[]): string {
     lines.push(`│  TSX Score: ${result.tsxScore}`);
     lines.push(`│  Difference: ${result.scoreDifference}`);
     lines.push(`│  Duration: ${(result.duration / 1000).toFixed(2)}s`);
-    
+
     if (result.details.length > 0) {
       lines.push('│  Details:');
       for (const detail of result.details) {
         lines.push(`│    - ${detail}`);
       }
     }
-    lines.push('└─────────────────────────────────────────────────────────────────────────');
+    lines.push(
+      '└─────────────────────────────────────────────────────────────────────────'
+    );
     lines.push('');
   }
 
@@ -287,15 +295,19 @@ export function generateTestReport(results: TestResult[]): string {
  * Generate JSON report for automated processing
  */
 export function generateJSONReport(results: TestResult[]): string {
-  return JSON.stringify({
-    timestamp: new Date().toISOString(),
-    summary: {
-      total: results.length,
-      passed: results.filter((r) => r.passed).length,
-      failed: results.filter((r) => !r.passed).length,
+  return JSON.stringify(
+    {
+      timestamp: new Date().toISOString(),
+      summary: {
+        total: results.length,
+        passed: results.filter((r) => r.passed).length,
+        failed: results.filter((r) => !r.passed).length,
+      },
+      results,
     },
-    results,
-  }, null, 2);
+    null,
+    2
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

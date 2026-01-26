@@ -3,11 +3,17 @@
 import * as React from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import { EffectComposer, Bloom, ChromaticAberration, Noise, Vignette } from '@react-three/postprocessing';
+import {
+  EffectComposer,
+  Bloom,
+  ChromaticAberration,
+  Noise,
+  Vignette,
+} from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { clearFrameInput, useInputRef } from '../../../hooks/useInput';
-import { oscillateState } from '../state';
+import { onePathState as oscillateState } from '../state';
 import { COLORS, CONST } from '../constants';
 import { segmentBasis, ballWorldPos } from '../utils';
 import { clamp } from '../helpers';
@@ -22,7 +28,9 @@ export const Scene: React.FC = () => {
   const snap = useSnapshot(oscillateState);
   const inputRef = useInputRef();
 
-  const lvlRef = React.useRef<OscillateLevel>(oscillateState.buildLevel(oscillateState.level, oscillateState.mode));
+  const lvlRef = React.useRef<OscillateLevel>(
+    oscillateState.buildLevel(oscillateState.level, oscillateState.mode)
+  );
 
   const run = React.useRef<RunStatus>({
     t: 0,
@@ -53,8 +61,16 @@ export const Scene: React.FC = () => {
   const trailRef = React.useRef<THREE.InstancedMesh>(null);
 
   const mats = React.useMemo(() => {
-    const baseA = new THREE.MeshStandardMaterial({ color: new THREE.Color(COLORS.base), roughness: 0.78, metalness: 0.06 });
-    const baseB = new THREE.MeshStandardMaterial({ color: new THREE.Color(COLORS.baseDark), roughness: 0.78, metalness: 0.06 });
+    const baseA = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(COLORS.base),
+      roughness: 0.78,
+      metalness: 0.06,
+    });
+    const baseB = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(COLORS.baseDark),
+      roughness: 0.78,
+      metalness: 0.06,
+    });
     const deck = new THREE.MeshStandardMaterial({
       color: new THREE.Color(COLORS.deck),
       roughness: 0.65,
@@ -62,7 +78,11 @@ export const Scene: React.FC = () => {
       emissive: new THREE.Color(COLORS.deckHi),
       emissiveIntensity: 0.12,
     });
-    const wall = new THREE.MeshStandardMaterial({ color: new THREE.Color(COLORS.wall), roughness: 0.65, metalness: 0.08 });
+    const wall = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(COLORS.wall),
+      roughness: 0.65,
+      metalness: 0.08,
+    });
     const wallEdge = new THREE.MeshStandardMaterial({
       color: new THREE.Color('#ffffff'),
       roughness: 0.35,
@@ -77,9 +97,21 @@ export const Scene: React.FC = () => {
       emissive: new THREE.Color('#ffcc3a'),
       emissiveIntensity: 0.35,
     });
-    const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(COLORS.portalGlow), transparent: true, opacity: 0.55 });
-    const portalA = new THREE.MeshStandardMaterial({ color: new THREE.Color('#ffffff'), roughness: 0.4, metalness: 0.1 });
-    const portalB = new THREE.MeshStandardMaterial({ color: new THREE.Color('#101010'), roughness: 0.4, metalness: 0.1 });
+    const glow = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.portalGlow),
+      transparent: true,
+      opacity: 0.55,
+    });
+    const portalA = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#ffffff'),
+      roughness: 0.4,
+      metalness: 0.1,
+    });
+    const portalB = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#101010'),
+      roughness: 0.4,
+      metalness: 0.1,
+    });
     const gate = new THREE.MeshStandardMaterial({
       color: new THREE.Color(COLORS.deckHi),
       roughness: 0.2,
@@ -96,11 +128,24 @@ export const Scene: React.FC = () => {
       emissive: new THREE.Color(COLORS.danger),
       emissiveIntensity: 0.28,
     });
-    return { baseA, baseB, deck, wall, wallEdge, gem, glow, portalA, portalB, gate, danger };
+    return {
+      baseA,
+      baseB,
+      deck,
+      wall,
+      wallEdge,
+      gem,
+      glow,
+      portalA,
+      portalB,
+      gate,
+      danger,
+    };
   }, []);
 
   const ballMat = React.useMemo(() => {
-    const skin = snap.skins.find((s) => s.id === snap.selectedSkin) ?? snap.skins[0];
+    const skin =
+      snap.skins.find((s) => s.id === snap.selectedSkin) ?? snap.skins[0];
     const m = new THREE.MeshStandardMaterial({
       color: new THREE.Color(skin.color),
       roughness: skin.roughness,
@@ -185,13 +230,17 @@ export const Scene: React.FC = () => {
     r.vy = 0;
 
     const p = ballWorldPos(lvl, r);
-    for (let i = 0; i < trail.current.pts.length; i++) trail.current.pts[i].copy(p);
+    for (let i = 0; i < trail.current.pts.length; i++)
+      trail.current.pts[i].copy(p);
     trail.current.head = 0;
   }, []);
 
   React.useEffect(() => {
     if (snap.phase === 'menu' || snap.phase === 'playing') {
-      lvlRef.current = oscillateState.buildLevel(oscillateState.level, oscillateState.mode);
+      lvlRef.current = oscillateState.buildLevel(
+        oscillateState.level,
+        oscillateState.mode
+      );
       resetRun(lvlRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -276,7 +325,10 @@ export const Scene: React.FC = () => {
 
   useFrame((_, dt) => {
     const input = inputRef.current;
-    const tap = input.pointerJustDown || input.justPressed.has(' ') || input.justPressed.has('Enter');
+    const tap =
+      input.pointerJustDown ||
+      input.justPressed.has(' ') ||
+      input.justPressed.has('Enter');
 
     const lvl = lvlRef.current;
     const r = run.current;
@@ -305,12 +357,20 @@ export const Scene: React.FC = () => {
       }
 
       if (portalRef.current) {
-        portalRef.current.position.set(lvl.exit.x, CONST.BASE_H + CONST.DECK_H + 0.24, lvl.exit.z);
+        portalRef.current.position.set(
+          lvl.exit.x,
+          CONST.BASE_H + CONST.DECK_H + 0.24,
+          lvl.exit.z
+        );
         portalRef.current.rotation.y += dt * 0.65;
         portalRef.current.rotation.x = Math.sin(r.t * 0.8) * 0.15;
       }
       if (particlesRef.current) {
-        particlesRef.current.position.set(lvl.exit.x, CONST.BASE_H + CONST.DECK_H + 0.24, lvl.exit.z);
+        particlesRef.current.position.set(
+          lvl.exit.x,
+          CONST.BASE_H + CONST.DECK_H + 0.24,
+          lvl.exit.z
+        );
         particlesRef.current.rotation.y += dt * 0.9;
       }
 
@@ -408,12 +468,20 @@ export const Scene: React.FC = () => {
     }
 
     if (portalRef.current) {
-      portalRef.current.position.set(lvl.exit.x, CONST.BASE_H + CONST.DECK_H + 0.24, lvl.exit.z);
+      portalRef.current.position.set(
+        lvl.exit.x,
+        CONST.BASE_H + CONST.DECK_H + 0.24,
+        lvl.exit.z
+      );
       portalRef.current.rotation.y += dt * 0.65;
       portalRef.current.rotation.x = Math.sin(r.t * 0.8) * 0.15;
     }
     if (particlesRef.current) {
-      particlesRef.current.position.set(lvl.exit.x, CONST.BASE_H + CONST.DECK_H + 0.24, lvl.exit.z);
+      particlesRef.current.position.set(
+        lvl.exit.x,
+        CONST.BASE_H + CONST.DECK_H + 0.24,
+        lvl.exit.z
+      );
       particlesRef.current.rotation.y += dt * 0.95;
       particlesRef.current.rotation.x += dt * 0.3;
     }
@@ -465,7 +533,14 @@ export const Scene: React.FC = () => {
         <directionalLight position={[-6, 6, -2]} intensity={0.45} />
 
         {lvl.segments.map((seg, i) => (
-          <SegmentMesh key={seg.id} segIndex={i} lvlRef={lvlRef} mats={mats} geoms={geoms} CONST={CONST} />
+          <SegmentMesh
+            key={seg.id}
+            segIndex={i}
+            lvlRef={lvlRef}
+            mats={mats}
+            geoms={geoms}
+            CONST={CONST}
+          />
         ))}
 
         <group ref={portalRef}>
@@ -476,14 +551,33 @@ export const Scene: React.FC = () => {
             const y = Math.sin(a) * r;
             const mat = i % 2 === 0 ? mats.portalA : mats.portalB;
             return (
-              <mesh key={i} geometry={geoms.portalSeg} material={mat} position={[x, y + 0.18, 0]} rotation={[0, a, 0]} castShadow />
+              <mesh
+                key={i}
+                geometry={geoms.portalSeg}
+                material={mat}
+                position={[x, y + 0.18, 0]}
+                rotation={[0, a, 0]}
+                castShadow
+              />
             );
           })}
-          <mesh geometry={geoms.glow} material={mats.glow} rotation={[Math.PI / 2, 0, 0]} position={[0, 0.18, 0]} />
+          <mesh
+            geometry={geoms.glow}
+            material={mats.glow}
+            rotation={[Math.PI / 2, 0, 0]}
+            position={[0, 0.18, 0]}
+          />
         </group>
-        <points ref={particlesRef} geometry={particleGeom} material={particleMat} />
+        <points
+          ref={particlesRef}
+          geometry={particleGeom}
+          material={particleMat}
+        />
 
-        <instancedMesh ref={trailRef} args={[undefined as any, undefined as any, 26]}>
+        <instancedMesh
+          ref={trailRef}
+          args={[undefined as any, undefined as any, 26]}
+        >
           <sphereGeometry args={[1, 10, 10]} />
           <meshStandardMaterial
             color={COLORS.deckHi}
@@ -494,7 +588,12 @@ export const Scene: React.FC = () => {
           />
         </instancedMesh>
 
-        <mesh ref={ballRef} geometry={geoms.ball} material={ballMat} castShadow />
+        <mesh
+          ref={ballRef}
+          geometry={geoms.ball}
+          material={ballMat}
+          castShadow
+        />
 
         <PerfectFlash run={run} />
         <MissFlash run={run} />
@@ -504,7 +603,12 @@ export const Scene: React.FC = () => {
         </Html>
 
         <EffectComposer multisampling={0}>
-          <Bloom intensity={0.55} luminanceThreshold={0.45} luminanceSmoothing={0.25} mipmapBlur />
+          <Bloom
+            intensity={0.55}
+            luminanceThreshold={0.45}
+            luminanceSmoothing={0.25}
+            mipmapBlur
+          />
           <ChromaticAberration
             offset={new THREE.Vector2(0.0012, 0.001)}
             radialModulation

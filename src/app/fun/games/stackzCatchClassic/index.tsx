@@ -1,6 +1,6 @@
 /**
  * StackzCatchClassic.tsx
- * 
+ *
  * Port of legacy Stackz.js - Catch falling blocks game.
  * Move your catcher with the mouse to catch falling blocks.
  */
@@ -110,7 +110,7 @@ const FallingBlock: React.FC<{
 // Mouse-controlled catcher
 const Catcher: React.FC = () => {
   const { viewport } = useThree();
-  
+
   const [ref, api] = useBox(() => ({
     type: 'Kinematic',
     position: [0, -3, 0],
@@ -151,7 +151,9 @@ interface BlockData {
   position: [number, number, number];
 }
 
-const StackzCatchClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
+const StackzCatchClassic: React.FC<{ soundsOn?: boolean }> = ({
+  soundsOn = true,
+}) => {
   const snap = useSnapshot(stackzCatchClassicState);
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const blockIdCounter = useRef(0);
@@ -257,7 +259,9 @@ const StackzCatchClassic: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true 
                 style={{ width: `${(snap.misses / MAX_MISSES) * 100}%` }}
               />
             </div>
-            <div className="text-xs text-white/40 mt-2">Move mouse to catch</div>
+            <div className="text-xs text-white/40 mt-2">
+              Move mouse to catch
+            </div>
           </div>
         </div>
 

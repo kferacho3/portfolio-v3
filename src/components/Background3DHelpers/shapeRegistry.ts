@@ -14,26 +14,26 @@ import { SHAPES, ShapeName } from './shapeFunctions';
 /* ─────────────────────────── Type Definitions ─────────────────────────────── */
 
 export type ShapeCategory =
-  | 'primitive'      // Basic geometric shapes (box, sphere, etc.)
-  | 'poly'           // Platonic solids, stellations, compounds
-  | 'knot'           // Mathematical knots and variations
-  | 'parametric'     // Parametric surfaces (mobius, klein, etc.)
-  | 'implicit'       // Implicit/iso-surfaces (TPMS, metaballs)
-  | 'fractalMesh'    // Fractal geometries rendered as meshes
-  | 'fractalPoints'  // Fractal geometries rendered as point clouds
-  | 'projection4D'   // 4D polytopes projected to 3D
-  | 'attractor'      // Strange attractors
-  | 'shell'          // Shell-like surfaces
-  | 'prism'          // Prism shapes
-  | 'exotic';        // Ultra-unique exotic geometries (Phase 5)
+  | 'primitive' // Basic geometric shapes (box, sphere, etc.)
+  | 'poly' // Platonic solids, stellations, compounds
+  | 'knot' // Mathematical knots and variations
+  | 'parametric' // Parametric surfaces (mobius, klein, etc.)
+  | 'implicit' // Implicit/iso-surfaces (TPMS, metaballs)
+  | 'fractalMesh' // Fractal geometries rendered as meshes
+  | 'fractalPoints' // Fractal geometries rendered as point clouds
+  | 'projection4D' // 4D polytopes projected to 3D
+  | 'attractor' // Strange attractors
+  | 'shell' // Shell-like surfaces
+  | 'prism' // Prism shapes
+  | 'exotic'; // Ultra-unique exotic geometries (Phase 5)
 
 export type ComplexityLevel = 'low' | 'mid' | 'high' | 'extreme';
 
-export type MaterialMode = 
-  | 'neon' 
-  | 'glass' 
-  | 'diamond' 
-  | 'holographic' 
+export type MaterialMode =
+  | 'neon'
+  | 'glass'
+  | 'diamond'
+  | 'holographic'
   | 'normal'
   | 'thinfilm'
   | 'rimglow'
@@ -46,11 +46,11 @@ export interface ShapeMeta {
   category: ShapeCategory;
   complexity: ComplexityLevel;
   mobileSafe: boolean;
-  deformBias: number;       // Multiplier for uAmp (1.0 = default)
-  noiseScaleBias: number;   // Multiplier for uNoiseScale (1.0 = default)
+  deformBias: number; // Multiplier for uAmp (1.0 = default)
+  noiseScaleBias: number; // Multiplier for uNoiseScale (1.0 = default)
   preferredMaterials?: MaterialMode[];
-  static?: boolean;         // If true, skip vertex deformation
-  lowNoise?: boolean;       // If true, reduce noise intensity
+  static?: boolean; // If true, skip vertex deformation
+  lowNoise?: boolean; // If true, reduce noise intensity
 }
 
 /* ─────────────────────────── Shape Metadata Registry ────────────────────── */
@@ -1239,7 +1239,9 @@ export function getShapesByCategory(category: ShapeCategory): ShapeName[] {
 /**
  * Get shapes filtered by complexity
  */
-export function getShapesByComplexity(complexity: ComplexityLevel): ShapeName[] {
+export function getShapesByComplexity(
+  complexity: ComplexityLevel
+): ShapeName[] {
   return SHAPES.filter((name) => SHAPE_META[name]?.complexity === complexity);
 }
 
@@ -1254,7 +1256,7 @@ export function getMobileSafeShapes(): ShapeName[] {
  * Get shapes suitable for a given material mode
  */
 export function getShapesForMaterial(material: MaterialMode): ShapeName[] {
-  return SHAPES.filter((name) => 
+  return SHAPES.filter((name) =>
     SHAPE_META[name]?.preferredMaterials?.includes(material)
   );
 }
@@ -1269,9 +1271,9 @@ export function isStaticShape(name: ShapeName): boolean {
 /**
  * Get deformation parameters for a shape
  */
-export function getDeformParams(name: ShapeName): { 
-  deformBias: number; 
-  noiseScaleBias: number; 
+export function getDeformParams(name: ShapeName): {
+  deformBias: number;
+  noiseScaleBias: number;
   lowNoise: boolean;
 } {
   const meta = SHAPE_META[name];
@@ -1297,7 +1299,7 @@ export function pickWeightedRandomShape(
   // Default weights
   const defaultWeights: Record<ShapeCategory, number> = {
     primitive: 0.06,
-    poly: 0.10,
+    poly: 0.1,
     knot: 0.12,
     parametric: 0.12,
     implicit: 0.08,
@@ -1314,16 +1316,16 @@ export function pickWeightedRandomShape(
 
   // Build weighted pool
   const pool: ShapeName[] = [];
-  
+
   for (const shape of SHAPES) {
     if (shape === exclude) continue;
-    
+
     const meta = SHAPE_META[shape];
     if (!meta) continue;
-    
+
     // Skip mobile-unsafe shapes on mobile
     if (isMobile && !meta.mobileSafe) continue;
-    
+
     // Add shape multiple times based on category weight
     const weight = weights[meta.category] ?? 0.1;
     const count = Math.round(weight * 10);

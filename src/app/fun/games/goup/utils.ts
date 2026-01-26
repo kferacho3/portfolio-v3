@@ -25,7 +25,12 @@ export function hslToColor(h: number, s: number, l: number) {
   return c;
 }
 
-export function easingLerp(current: number, target: number, dt: number, lambda = 12) {
+export function easingLerp(
+  current: number,
+  target: number,
+  dt: number,
+  lambda = 12
+) {
   const t = 1 - Math.exp(-lambda * dt);
   return current + (target - current) * t;
 }

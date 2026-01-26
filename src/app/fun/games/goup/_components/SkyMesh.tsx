@@ -6,7 +6,10 @@ import * as THREE from 'three';
 import { SKY_RADIUS } from '../constants';
 import type { Arena } from '../types';
 
-export const SkyMesh: React.FC<{ arena: Arena; playerPos: THREE.Vector3 }> = ({ arena, playerPos }) => {
+export const SkyMesh: React.FC<{ arena: Arena; playerPos: THREE.Vector3 }> = ({
+  arena,
+  playerPos,
+}) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const skyUniforms = useMemo(
     () => ({

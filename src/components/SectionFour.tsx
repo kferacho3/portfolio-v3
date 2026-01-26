@@ -147,7 +147,6 @@ function SectionFour() {
       aria-labelledby="contact-title"
       className="relative min-h-screen py-12 px-4 sm:py-16 sm:px-6 lg:px-8"
     >
-
       <div className="relative max-w-7xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -281,9 +280,7 @@ function SectionFour() {
                     required
                   />
                   {errors.email && touched.email && (
-                    <p className="text-rose-400 text-sm mt-2">
-                      {errors.email}
-                    </p>
+                    <p className="text-rose-400 text-sm mt-2">{errors.email}</p>
                   )}
                 </div>
 
@@ -538,7 +535,9 @@ function SectionFour() {
                       <a
                         key={item.label}
                         href={item.href}
-                        target={item.href.startsWith('http') ? '_blank' : undefined}
+                        target={
+                          item.href.startsWith('http') ? '_blank' : undefined
+                        }
                         rel={
                           item.href.startsWith('http')
                             ? 'noopener noreferrer'
@@ -563,9 +562,7 @@ function SectionFour() {
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 p-4 text-center backdrop-blur-xl"
               >
-                <div className="text-3xl font-bold text-foreground">
-                  20+
-                </div>
+                <div className="text-3xl font-bold text-foreground">20+</div>
                 <div className="text-sm text-muted-foreground">
                   Projects Completed
                 </div>
@@ -577,9 +574,7 @@ function SectionFour() {
                 transition={{ duration: 0.6, delay: 0.4 }}
                 className="rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 p-4 text-center backdrop-blur-xl"
               >
-                <div className="text-3xl font-bold text-foreground">
-                  100%
-                </div>
+                <div className="text-3xl font-bold text-foreground">100%</div>
                 <div className="text-sm text-muted-foreground">
                   Client Satisfaction
                 </div>
@@ -621,7 +616,9 @@ function SectionFour() {
                   {modalType === 'success' ? 'Success' : 'Error'}
                 </motion.div>
                 <h3 className="text-2xl font-bold text-foreground mb-2">
-                  {modalType === 'success' ? 'Message Sent' : 'Something went wrong'}
+                  {modalType === 'success'
+                    ? 'Message Sent'
+                    : 'Something went wrong'}
                 </h3>
                 <p className="text-muted-foreground mb-6">{modalMessage}</p>
                 <button

@@ -35,7 +35,8 @@ export default function Lava() {
   useFrame(() => {
     if (!meshRef.current) return;
 
-    const timeS = snap.phase === 'playing' ? (Date.now() - snap.startTime) / 1000 : 0;
+    const timeS =
+      snap.phase === 'playing' ? (Date.now() - snap.startTime) / 1000 : 0;
     const lavaY = getLavaY(timeS, snap.runMaxLevel);
     meshRef.current.position.y = lavaY;
   });

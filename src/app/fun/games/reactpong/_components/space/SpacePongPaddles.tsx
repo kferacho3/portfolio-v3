@@ -22,8 +22,16 @@ export const PlayerPaddle: React.FC<{
     const halfWidth = TUNNEL_WIDTH / 2 - SPACE_PADDLE_WIDTH / 2;
     const halfHeight = TUNNEL_HEIGHT / 2 - SPACE_PADDLE_HEIGHT / 2;
 
-    const targetX = clamp(state.pointer.x * TUNNEL_WIDTH * 0.6, -halfWidth, halfWidth);
-    const targetY = clamp(state.pointer.y * TUNNEL_HEIGHT * 0.6, -halfHeight, halfHeight);
+    const targetX = clamp(
+      state.pointer.x * TUNNEL_WIDTH * 0.6,
+      -halfWidth,
+      halfWidth
+    );
+    const targetY = clamp(
+      state.pointer.y * TUNNEL_HEIGHT * 0.6,
+      -halfHeight,
+      halfHeight
+    );
 
     prevPosition.current = { x: position.x, y: position.y };
 
@@ -78,7 +86,11 @@ export const CPUPaddle: React.FC<{
   const scale = 0.25;
 
   return (
-    <mesh ref={meshRef} position={[0, 0, -TUNNEL_DEPTH]} scale={[scale, scale, 1]}>
+    <mesh
+      ref={meshRef}
+      position={[0, 0, -TUNNEL_DEPTH]}
+      scale={[scale, scale, 1]}
+    >
       <boxGeometry args={[SPACE_PADDLE_WIDTH, SPACE_PADDLE_HEIGHT, 0.2]} />
       <meshStandardMaterial
         color="#ff4466"

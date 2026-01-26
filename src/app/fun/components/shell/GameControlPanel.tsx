@@ -1,6 +1,6 @@
 /**
  * GameControlPanel
- * 
+ *
  * Right-side control panel for in-game controls.
  * Shows game title, rules, audio toggles, and navigation shortcuts.
  */
@@ -74,12 +74,15 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
                   ? 'border-[var(--arcade-accent)] text-[var(--arcade-accent)] bg-[var(--arcade-accent)]/10'
                   : 'border-white/30 text-white/50 hover:text-white hover:border-white/50'
               }`}
-              style={{ fontFamily: 'var(--arcade-mono)', borderRadius: '999px' }}
+              style={{
+                fontFamily: 'var(--arcade-mono)',
+                borderRadius: '999px',
+              }}
             >
               ?
             </button>
           </div>
-          
+
           <div className="flex items-center justify-between">
             <span
               className="text-[10px] uppercase tracking-[0.32em] text-white/40"
@@ -99,7 +102,7 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
             <ControlButton onClick={onGoHome} label="Home" hotkey="H" />
             <ControlButton onClick={onRestart} label="Restart" hotkey="R" />
           </div>
-          
+
           <div className="mt-2 grid grid-cols-2 gap-2">
             <AudioToggleButton
               label="Music"
@@ -172,7 +175,10 @@ const ControlButton: React.FC<{
   <button
     onClick={onClick}
     className="border px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition-all duration-300 hover:-translate-y-0.5 hover:text-white hover:bg-white/5 active:translate-y-0 active:scale-95 flex items-center justify-center gap-1.5"
-    style={{ borderColor: 'var(--arcade-stroke)', borderRadius: 'var(--arcade-radius-sm)' }}
+    style={{
+      borderColor: 'var(--arcade-stroke)',
+      borderRadius: 'var(--arcade-radius-sm)',
+    }}
   >
     <span>{label}</span>
     <span

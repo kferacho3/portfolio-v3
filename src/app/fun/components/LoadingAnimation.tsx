@@ -62,10 +62,20 @@ const PacmanLoading: React.FC<PacmanLoadingProps> = ({
       <div className="relative w-24 h-24">
         <Pacman />
         {/* Position the ghosts relative to Pacman */}
-        <svg width="100" height="100" viewBox="0 0 30 30" className="absolute top-2 left-4">
+        <svg
+          width="100"
+          height="100"
+          viewBox="0 0 30 30"
+          className="absolute top-2 left-4"
+        >
           <circle cx="15" cy="15" r="5" fill="#ff0040" />
         </svg>
-        <svg width="100" height="100" viewBox="0 0 30 30" className="absolute top-2 right-4">
+        <svg
+          width="100"
+          height="100"
+          viewBox="0 0 30 30"
+          className="absolute top-2 right-4"
+        >
           <circle cx="15" cy="15" r="5" fill="#00bfff" />
         </svg>
       </div>

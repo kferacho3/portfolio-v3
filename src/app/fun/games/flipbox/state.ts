@@ -1,6 +1,7 @@
 import { proxy } from 'valtio';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 export type FlipBoxEvent = 'AxisLock' | 'Heavy' | 'Sticky' | null;
 

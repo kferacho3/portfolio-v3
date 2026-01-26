@@ -38,7 +38,7 @@ class ErrorBoundary extends Component<
 // Animated close button using CSS instead of framer-motion
 const CloseButton: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [mounted, setMounted] = useState(false);
-  
+
   React.useEffect(() => {
     // Trigger mount animation
     const timer = setTimeout(() => setMounted(true), 10);

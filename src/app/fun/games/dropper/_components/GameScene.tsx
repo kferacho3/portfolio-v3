@@ -14,7 +14,15 @@ const GameScene: React.FC<{
   isHurt: boolean;
   hasShield: boolean;
   hasMagnet: boolean;
-}> = ({ items, particles, playerX, playerPulse, isHurt, hasShield, hasMagnet }) => {
+}> = ({
+  items,
+  particles,
+  playerX,
+  playerPulse,
+  isHurt,
+  hasShield,
+  hasMagnet,
+}) => {
   const { camera } = useThree();
 
   useEffect(() => {
@@ -30,22 +38,44 @@ const GameScene: React.FC<{
     <>
       <ambientLight intensity={0.5} />
       <directionalLight position={[5, 15, 5]} intensity={1.2} castShadow />
-      <directionalLight position={[-5, 10, -5]} intensity={0.4} color="#4488ff" />
+      <directionalLight
+        position={[-5, 10, -5]}
+        intensity={0.4}
+        color="#4488ff"
+      />
       <pointLight position={[0, 12, 5]} intensity={0.8} color="#ffffff" />
 
-      <BasketCollector x={playerX} pulseIntensity={playerPulse} isHurt={isHurt} hasShield={hasShield} hasMagnet={hasMagnet} />
+      <BasketCollector
+        x={playerX}
+        pulseIntensity={playerPulse}
+        isHurt={isHurt}
+        hasShield={hasShield}
+        hasMagnet={hasMagnet}
+      />
 
       {items.map((item) => (
-        <FallingItemVisual key={item.id} item={item} magnetX={playerX} hasMagnet={hasMagnet} />
+        <FallingItemVisual
+          key={item.id}
+          item={item}
+          magnetX={playerX}
+          hasMagnet={hasMagnet}
+        />
       ))}
 
       <ParticleEffect particles={particles} />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.5, 0]} receiveShadow>
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -0.5, 0]}
+        receiveShadow
+      >
         <planeGeometry args={[40, 40]} />
         <meshStandardMaterial color="#0a0f1a" />
       </mesh>
-      <gridHelper args={[40, 40, '#1a2535', '#1a2535']} position={[0, -0.49, 0]} />
+      <gridHelper
+        args={[40, 40, '#1a2535', '#1a2535']}
+        position={[0, -0.49, 0]}
+      />
 
       <mesh position={[0, 14, -2]}>
         <planeGeometry args={[20, 0.1]} />

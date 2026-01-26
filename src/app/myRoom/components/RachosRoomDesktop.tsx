@@ -15,7 +15,8 @@ import {
 import { GroupData } from './groupData';
 
 // S3 URL for the new RachosRoom model
-const MODEL_URL = 'https://racho-devs.s3.us-east-2.amazonaws.com/roomV2/desktop/RachosRoomMain.glb';
+const MODEL_URL =
+  'https://racho-devs.s3.us-east-2.amazonaws.com/roomV2/desktop/RachosRoomMain.glb';
 
 // Define GroupProps based on JSX Intrinsic Elements
 type GroupProps = JSX.IntrinsicElements['group'];
@@ -39,7 +40,10 @@ type AudioState = {
 
 // GLTF Result type
 type GLTFResult = GLTF & {
-  nodes: Record<string, THREE.Object3D & THREE.Mesh & THREE.SkinnedMesh & THREE.Bone>;
+  nodes: Record<
+    string,
+    THREE.Object3D & THREE.Mesh & THREE.SkinnedMesh & THREE.Bone
+  >;
   materials: Record<string, THREE.Material>;
 };
 
@@ -73,7 +77,7 @@ const normalizeAxisWeights = (values: [number, number, number]) => {
   return [values[0] / sum, values[1] / sum, values[2] / sum] as [
     number,
     number,
-    number
+    number,
   ];
 };
 
@@ -83,7 +87,7 @@ const normalizeVec3 = (values: [number, number, number]) => {
   return [values[0] / length, values[1] / length, values[2] / length] as [
     number,
     number,
-    number
+    number,
   ];
 };
 
@@ -93,7 +97,6 @@ const averageRange = (data: Float32Array, start: number, end: number) => {
   for (let i = start; i < safeEnd; i++) sum += data[i] ?? 0;
   return sum / (safeEnd - start);
 };
-
 
 // Define AnimatedGroupProps by extending GroupProps
 interface AnimatedGroupProps
@@ -136,7 +139,10 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     ready: false,
   });
   const glowMaterials = useRef<
-    { material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial; base: number }[]
+    {
+      material: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial;
+      base: number;
+    }[]
   >([]);
 
   const effect = useMemo(() => {
@@ -150,28 +156,28 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     const intensity = isMeBit
       ? 1.15
       : isGold
-      ? 0.9
-      : isRed
-      ? 0.8
-      : isCloset
-      ? 0.8
-      : isWhite
-      ? 0.65
-      : 0.45;
+        ? 0.9
+        : isRed
+          ? 0.8
+          : isCloset
+            ? 0.8
+            : isWhite
+              ? 0.65
+              : 0.45;
 
     const band: 'low' | 'mid' | 'high' = isMeBit
       ? 'mid'
       : isGold
-      ? 'low'
-      : isRed
-      ? 'high'
-      : isWhite
-      ? 'mid'
-      : rand() < 0.34
-      ? 'low'
-      : rand() < 0.67
-      ? 'mid'
-      : 'high';
+        ? 'low'
+        : isRed
+          ? 'high'
+          : isWhite
+            ? 'mid'
+            : rand() < 0.34
+              ? 'low'
+              : rand() < 0.67
+                ? 'mid'
+                : 'high';
 
     const scaleAxis = normalizeAxisWeights([
       0.3 + rand() * 0.7,
@@ -194,7 +200,8 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     const micro = (0.006 + rand() * 0.02) * intensity;
     const sway = (0.015 + rand() * 0.04) * intensity;
     const twist = (0.015 + rand() * 0.04) * intensity;
-    const drift = (isCloset ? 0.015 + rand() * 0.04 : 0.008 + rand() * 0.02) * intensity;
+    const drift =
+      (isCloset ? 0.015 + rand() * 0.04 : 0.008 + rand() * 0.02) * intensity;
     const speed = (isCloset ? 0.9 : 0.6) + rand() * 1.6;
     const flutter = 1.6 + rand() * 2.8;
     const pulse = 0.6 + rand() * 0.6;
@@ -202,26 +209,27 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     const energyBoost = isMeBit
       ? 0.45
       : isGold
-      ? 0.32
-      : isRed
-      ? 0.28
-      : isCloset
-      ? 0.26
-      : isWhite
-      ? 0.22
-      : 0.18;
+        ? 0.32
+        : isRed
+          ? 0.28
+          : isCloset
+            ? 0.26
+            : isWhite
+              ? 0.22
+              : 0.18;
     const beatBoost = isMeBit ? 0.9 : isCloset ? 0.75 : isGold ? 0.65 : 0.55;
     const beatScale = (0.12 + rand() * 0.18) * intensity;
     const beatRotate = (0.06 + rand() * 0.1) * intensity;
     const glow = isMeBit || isGold || isRed;
-    const glowIntensity = (isMeBit ? 1.4 : isGold ? 1.1 : 0.9) * (0.7 + rand() * 0.6);
+    const glowIntensity =
+      (isMeBit ? 1.4 : isGold ? 1.1 : 0.9) * (0.7 + rand() * 0.6);
     const glowColor = isGold
       ? new THREE.Color('#ffd166')
       : isRed
-      ? new THREE.Color('#ff5a5f')
-      : isMeBit
-      ? new THREE.Color('#67f5ff')
-      : new THREE.Color('#ffffff');
+        ? new THREE.Color('#ff5a5f')
+        : isMeBit
+          ? new THREE.Color('#67f5ff')
+          : new THREE.Color('#ffffff');
 
     return {
       band,
@@ -309,20 +317,70 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     if (!isPlaying) {
       // Reset to base transform when not playing
       const base = baseTransform.current;
-      groupRef.current.scale.x = THREE.MathUtils.damp(groupRef.current.scale.x, base.scale.x, 8, delta);
-      groupRef.current.scale.y = THREE.MathUtils.damp(groupRef.current.scale.y, base.scale.y, 8, delta);
-      groupRef.current.scale.z = THREE.MathUtils.damp(groupRef.current.scale.z, base.scale.z, 8, delta);
-      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, base.rotation.x, 8, delta);
-      groupRef.current.rotation.y = THREE.MathUtils.damp(groupRef.current.rotation.y, base.rotation.y, 8, delta);
-      groupRef.current.rotation.z = THREE.MathUtils.damp(groupRef.current.rotation.z, base.rotation.z, 8, delta);
-      groupRef.current.position.x = THREE.MathUtils.damp(groupRef.current.position.x, base.position.x, 8, delta);
-      groupRef.current.position.y = THREE.MathUtils.damp(groupRef.current.position.y, base.position.y, 8, delta);
-      groupRef.current.position.z = THREE.MathUtils.damp(groupRef.current.position.z, base.position.z, 8, delta);
-      
+      groupRef.current.scale.x = THREE.MathUtils.damp(
+        groupRef.current.scale.x,
+        base.scale.x,
+        8,
+        delta
+      );
+      groupRef.current.scale.y = THREE.MathUtils.damp(
+        groupRef.current.scale.y,
+        base.scale.y,
+        8,
+        delta
+      );
+      groupRef.current.scale.z = THREE.MathUtils.damp(
+        groupRef.current.scale.z,
+        base.scale.z,
+        8,
+        delta
+      );
+      groupRef.current.rotation.x = THREE.MathUtils.damp(
+        groupRef.current.rotation.x,
+        base.rotation.x,
+        8,
+        delta
+      );
+      groupRef.current.rotation.y = THREE.MathUtils.damp(
+        groupRef.current.rotation.y,
+        base.rotation.y,
+        8,
+        delta
+      );
+      groupRef.current.rotation.z = THREE.MathUtils.damp(
+        groupRef.current.rotation.z,
+        base.rotation.z,
+        8,
+        delta
+      );
+      groupRef.current.position.x = THREE.MathUtils.damp(
+        groupRef.current.position.x,
+        base.position.x,
+        8,
+        delta
+      );
+      groupRef.current.position.y = THREE.MathUtils.damp(
+        groupRef.current.position.y,
+        base.position.y,
+        8,
+        delta
+      );
+      groupRef.current.position.z = THREE.MathUtils.damp(
+        groupRef.current.position.z,
+        base.position.z,
+        8,
+        delta
+      );
+
       // Reset glow when not playing
       if (effect.glow && glowMaterials.current.length) {
         glowMaterials.current.forEach(({ material, base }) => {
-          material.emissiveIntensity = THREE.MathUtils.damp(material.emissiveIntensity, base, 5, delta);
+          material.emissiveIntensity = THREE.MathUtils.damp(
+            material.emissiveIntensity,
+            base,
+            5,
+            delta
+          );
         });
       }
       return;
@@ -343,7 +401,8 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     );
 
     const drift =
-      (wave * effect.bob + flutter * effect.micro + swing * effect.drift) * motion;
+      (wave * effect.bob + flutter * effect.micro + swing * effect.drift) *
+      motion;
     const scaleDrive = motion * effect.scale + beat * effect.beatScale;
     const rotDrive = motion + beat * effect.beatRotate;
 
@@ -372,9 +431,13 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     );
 
     const targetRotX =
-      base.rotation.x + wave * effect.rotation[0] * rotDrive + swing * effect.sway;
+      base.rotation.x +
+      wave * effect.rotation[0] * rotDrive +
+      swing * effect.sway;
     const targetRotY =
-      base.rotation.y + swing * effect.rotation[1] * rotDrive + flutter * effect.twist;
+      base.rotation.y +
+      swing * effect.rotation[1] * rotDrive +
+      flutter * effect.twist;
     const targetRotZ = base.rotation.z + wave * effect.rotation[2] * rotDrive;
 
     groupRef.current.rotation.x = THREE.MathUtils.damp(
@@ -420,7 +483,8 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
     );
 
     if (effect.glow && glowMaterials.current.length) {
-      const glowTarget = effect.glowIntensity * (0.35 + 0.65 * motion + beat * 0.4);
+      const glowTarget =
+        effect.glowIntensity * (0.35 + 0.65 * motion + beat * 0.4);
       glowMaterials.current.forEach(({ material, base }) => {
         material.emissiveIntensity = THREE.MathUtils.damp(
           material.emissiveIntensity,
@@ -436,9 +500,11 @@ const AnimatedGroup: React.FC<AnimatedGroupProps> = ({
   useCursor(hovered, 'pointer');
 
   // Get group data for this group if groups are provided
-  const groupDataIndex = groups?.findIndex((group) => group.name === name) ?? -1;
+  const groupDataIndex =
+    groups?.findIndex((group) => group.name === name) ?? -1;
 
-  const groupData = groups && groupDataIndex >= 0 ? groups[groupDataIndex] : null;
+  const groupData =
+    groups && groupDataIndex >= 0 ? groups[groupDataIndex] : null;
 
   useEffect(() => {
     if (groupRef.current && groupData && setGroups && groupDataIndex >= 0) {
@@ -637,7 +703,10 @@ export default function RachosRoom({
     const lowEnd = Math.max(2, Math.floor(fftBins * 0.18));
     const midEnd = Math.max(lowEnd + 2, Math.floor(fftBins * 0.58));
 
-    const pickBand = (groupName: string, roll: number): 'low' | 'mid' | 'high' => {
+    const pickBand = (
+      groupName: string,
+      roll: number
+    ): 'low' | 'mid' | 'high' => {
       if (meBitsGroups.includes(groupName)) return 'mid';
       if (goldGroups.includes(groupName)) return 'low';
       if (redGroups.includes(groupName)) return 'high';
@@ -654,26 +723,31 @@ export default function RachosRoom({
       high: [midEnd, fftBins],
     } as const;
 
-    return animatedGroupNames.reduce((acc, groupName) => {
-      const seed = hashString(groupName);
-      const rand = mulberry32(seed);
-      const band = pickBand(groupName, rand());
-      const [start, end] = bandRanges[band];
-      const range = Math.max(1, end - start);
-      const binCount = meBitsGroups.includes(groupName)
-        ? 3
-        : goldGroups.includes(groupName) || redGroups.includes(groupName) || closetGroups.includes(groupName)
-        ? 2
-        : 1 + Math.floor(rand() * 2);
+    return animatedGroupNames.reduce(
+      (acc, groupName) => {
+        const seed = hashString(groupName);
+        const rand = mulberry32(seed);
+        const band = pickBand(groupName, rand());
+        const [start, end] = bandRanges[band];
+        const range = Math.max(1, end - start);
+        const binCount = meBitsGroups.includes(groupName)
+          ? 3
+          : goldGroups.includes(groupName) ||
+              redGroups.includes(groupName) ||
+              closetGroups.includes(groupName)
+            ? 2
+            : 1 + Math.floor(rand() * 2);
 
-      const bins = new Set<number>();
-      while (bins.size < binCount) {
-        bins.add(start + Math.floor(rand() * range));
-      }
+        const bins = new Set<number>();
+        while (bins.size < binCount) {
+          bins.add(start + Math.floor(rand() * range));
+        }
 
-      acc[groupName] = Array.from(bins);
-      return acc;
-    }, {} as Record<string, number[]>);
+        acc[groupName] = Array.from(bins);
+        return acc;
+      },
+      {} as Record<string, number[]>
+    );
   }, [animatedGroupNames, fftBins]);
 
   const bandEdges = useMemo(() => {
@@ -693,7 +767,7 @@ export default function RachosRoom({
 
   useFrame((state, delta) => {
     if (!analyser) return;
-    
+
     const data = analyser.getFrequencyData();
     const smooth = audioStateRef.current.smooth;
 
@@ -748,7 +822,7 @@ export default function RachosRoom({
     audioStateRef.current.time = state.clock.elapsedTime;
     audioStateRef.current.data = data;
   });
-  
+
   return (
     <AudioStateContext.Provider value={audioStateRef}>
       <group {...props} dispose={null}>
@@ -764,55 +838,119 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MeBitRobot']}
           >
-            <group position={[3.084, 0.506, 0.16]} rotation={[-Math.PI, 1.566, -Math.PI]} scale={[0.006, 0.006, 0.007]}>
-              <group position={[0, 0.615, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={100}>
-                <group position={[-0.723, 0, 2.015]} rotation={[0, 0, -Math.PI]}>
+            <group
+              position={[3.084, 0.506, 0.16]}
+              rotation={[-Math.PI, 1.566, -Math.PI]}
+              scale={[0.006, 0.006, 0.007]}
+            >
+              <group
+                position={[0, 0.615, 0]}
+                rotation={[-Math.PI / 2, 0, 0]}
+                scale={100}
+              >
+                <group
+                  position={[-0.723, 0, 2.015]}
+                  rotation={[0, 0, -Math.PI]}
+                >
                   <group position={[-0.723, 0, -1.963]}>
                     <group position={[0.894, -0.002, 1.418]} scale={0.491}>
-                      <mesh geometry={nodes.Mesh_40001?.geometry} material={materials['PaletteMaterial001.032']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                      <mesh
+                        geometry={nodes.Mesh_40001?.geometry}
+                        material={materials['PaletteMaterial001.032']}
+                        position={[-5.999, -1, -3.995]}
+                        scale={0.001}
+                      />
                     </group>
                   </group>
                 </group>
                 <group position={[0.723, 0, 2.015]}>
                   <group position={[-0.723, 0, -1.963]}>
                     <group position={[0.894, -0.002, 1.418]} scale={0.491}>
-                      <mesh geometry={nodes.Mesh_40002?.geometry} material={materials['PaletteMaterial001.032']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                      <mesh
+                        geometry={nodes.Mesh_40002?.geometry}
+                        material={materials['PaletteMaterial001.032']}
+                        position={[-5.999, -1, -3.995]}
+                        scale={0.001}
+                      />
                     </group>
                   </group>
                 </group>
                 <group position={[0, 0, 0.051]}>
                   <group position={[0.001, -0.132, 1.329]} scale={0.778}>
-                    <mesh geometry={nodes.Mesh_41001?.geometry} material={materials['PaletteMaterial002.015']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                    <mesh
+                      geometry={nodes.Mesh_41001?.geometry}
+                      material={materials['PaletteMaterial002.015']}
+                      position={[-5.999, -1, -3.995]}
+                      scale={0.001}
+                    />
                   </group>
                   <group position={[0.069, 0.004, 3.25]} scale={2.845}>
                     <group position={[-5.999, -1, -3.995]} scale={0.001}>
-                      <mesh geometry={nodes.Mesh_42001_1?.geometry} material={materials['PaletteMaterial001.031']} />
-                      <mesh geometry={nodes.Mesh_42001_2?.geometry} material={materials['Glass.005']} />
-                      <mesh geometry={nodes.Mesh_42001_3?.geometry} material={materials['PaletteMaterial001.032']} />
-                      <mesh geometry={nodes.Mesh_42001_4?.geometry} material={materials['PaletteMaterial003.010']} />
-                      <mesh geometry={nodes.Mesh_42001_5?.geometry} material={materials['PaletteMaterial004.008']} />
-                      <mesh geometry={nodes.Mesh_42001_6?.geometry} material={materials['PaletteMaterial005.009']} />
+                      <mesh
+                        geometry={nodes.Mesh_42001_1?.geometry}
+                        material={materials['PaletteMaterial001.031']}
+                      />
+                      <mesh
+                        geometry={nodes.Mesh_42001_2?.geometry}
+                        material={materials['Glass.005']}
+                      />
+                      <mesh
+                        geometry={nodes.Mesh_42001_3?.geometry}
+                        material={materials['PaletteMaterial001.032']}
+                      />
+                      <mesh
+                        geometry={nodes.Mesh_42001_4?.geometry}
+                        material={materials['PaletteMaterial003.010']}
+                      />
+                      <mesh
+                        geometry={nodes.Mesh_42001_5?.geometry}
+                        material={materials['PaletteMaterial004.008']}
+                      />
+                      <mesh
+                        geometry={nodes.Mesh_42001_6?.geometry}
+                        material={materials['PaletteMaterial005.009']}
+                      />
                     </group>
                   </group>
                 </group>
                 <group position={[0, 0, 0.05]} scale={[1, 1, 0.128]}>
                   <group position={[0.001, -0.002, -0.002]} scale={0.506}>
-                    <mesh geometry={nodes.Mesh_43001?.geometry} material={materials['PaletteMaterial002.015']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                    <mesh
+                      geometry={nodes.Mesh_43001?.geometry}
+                      material={materials['PaletteMaterial002.015']}
+                      position={[-5.999, -1, -3.995]}
+                      scale={0.001}
+                    />
                   </group>
                 </group>
                 <group position={[0, 0, 0.819]} scale={[1, 1, 0.834]}>
                   <group position={[0.001, -0.002, -0.002]} scale={0.506}>
-                    <mesh geometry={nodes.Mesh_43002?.geometry} material={materials['PaletteMaterial002.015']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                    <mesh
+                      geometry={nodes.Mesh_43002?.geometry}
+                      material={materials['PaletteMaterial002.015']}
+                      position={[-5.999, -1, -3.995]}
+                      scale={0.001}
+                    />
                   </group>
                 </group>
                 <group position={[0, 0, 0.427]} scale={[1, 1, 0.474]}>
                   <group position={[0.001, -0.002, -0.002]} scale={0.506}>
-                    <mesh geometry={nodes.Mesh_43003?.geometry} material={materials['PaletteMaterial002.015']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                    <mesh
+                      geometry={nodes.Mesh_43003?.geometry}
+                      material={materials['PaletteMaterial002.015']}
+                      position={[-5.999, -1, -3.995]}
+                      scale={0.001}
+                    />
                   </group>
                 </group>
                 <group position={[0, 0, 1]}>
                   <group position={[0.001, -0.002, -0.002]} scale={0.506}>
-                    <mesh geometry={nodes.Mesh_43004?.geometry} material={materials['PaletteMaterial002.015']} position={[-5.999, -1, -3.995]} scale={0.001} />
+                    <mesh
+                      geometry={nodes.Mesh_43004?.geometry}
+                      material={materials['PaletteMaterial002.015']}
+                      position={[-5.999, -1, -3.995]}
+                      scale={0.001}
+                    />
                   </group>
                 </group>
               </group>
@@ -831,20 +969,72 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['MeBitSanta']}
           >
             <group position={[-5.999, -1.039, -4.064]} scale={0.001}>
-              <mesh geometry={nodes.MeBitSanta002_1?.geometry} material={materials['default.001']} />
-              <mesh geometry={nodes.MeBitSanta002_2?.geometry} material={materials['M_Bake.001']} />
-              <mesh geometry={nodes.MeBitSanta002_3?.geometry} material={materials['Material.001']} />
+              <mesh
+                geometry={nodes.MeBitSanta002_1?.geometry}
+                material={materials['default.001']}
+              />
+              <mesh
+                geometry={nodes.MeBitSanta002_2?.geometry}
+                material={materials['M_Bake.001']}
+              />
+              <mesh
+                geometry={nodes.MeBitSanta002_3?.geometry}
+                material={materials['Material.001']}
+              />
             </group>
-            <mesh geometry={nodes.MeBitSanta002?.geometry} material={materials['CH_NPC_Pig_MI_PJH.001']} position={[-5.196, 4.443, -3.22]} rotation={[0, 0, 1.63]} scale={0.005} />
-            <mesh geometry={nodes.MeBitSanta003?.geometry} material={materials['CH_NPC_Pig_MI_PJH.001']} position={[-5.285, 4.443, -3.305]} rotation={[0, 0, 1.635]} scale={0.005} />
-            <mesh geometry={nodes.MeBitSanta004?.geometry} material={materials['CH_NPC_Pig_MI_PJH.001']} position={[-5.285, 4.443, -3.22]} rotation={[0, 0, 1.635]} scale={0.005} />
-            <mesh geometry={nodes.MeBitSanta005?.geometry} material={materials['CH_NPC_Pig_MI_PJH.001']} position={[-5.196, 4.443, -3.305]} rotation={[0, 0, 1.63]} scale={0.005} />
-            <group position={[-4.44, 4.369, -4.53]} rotation={[-2.041, -1.559, -2.039]} scale={0}>
-              <mesh geometry={nodes.Mesh_54001?.geometry} material={materials['MeditationSanta_Model_9_u1_v1.001']} />
-              <mesh geometry={nodes.Mesh_54001_1?.geometry} material={materials['PaletteMaterial001.005']} />
-              <mesh geometry={nodes.Mesh_54001_2?.geometry} material={materials['material_0.001']} />
-              <mesh geometry={nodes.Mesh_54001_3?.geometry} material={materials['Material_0.001']} />
-              <mesh geometry={nodes.Mesh_54001_4?.geometry} material={materials['PaletteMaterial001.017']} />
+            <mesh
+              geometry={nodes.MeBitSanta002?.geometry}
+              material={materials['CH_NPC_Pig_MI_PJH.001']}
+              position={[-5.196, 4.443, -3.22]}
+              rotation={[0, 0, 1.63]}
+              scale={0.005}
+            />
+            <mesh
+              geometry={nodes.MeBitSanta003?.geometry}
+              material={materials['CH_NPC_Pig_MI_PJH.001']}
+              position={[-5.285, 4.443, -3.305]}
+              rotation={[0, 0, 1.635]}
+              scale={0.005}
+            />
+            <mesh
+              geometry={nodes.MeBitSanta004?.geometry}
+              material={materials['CH_NPC_Pig_MI_PJH.001']}
+              position={[-5.285, 4.443, -3.22]}
+              rotation={[0, 0, 1.635]}
+              scale={0.005}
+            />
+            <mesh
+              geometry={nodes.MeBitSanta005?.geometry}
+              material={materials['CH_NPC_Pig_MI_PJH.001']}
+              position={[-5.196, 4.443, -3.305]}
+              rotation={[0, 0, 1.63]}
+              scale={0.005}
+            />
+            <group
+              position={[-4.44, 4.369, -4.53]}
+              rotation={[-2.041, -1.559, -2.039]}
+              scale={0}
+            >
+              <mesh
+                geometry={nodes.Mesh_54001?.geometry}
+                material={materials['MeditationSanta_Model_9_u1_v1.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_54001_1?.geometry}
+                material={materials['PaletteMaterial001.005']}
+              />
+              <mesh
+                geometry={nodes.Mesh_54001_2?.geometry}
+                material={materials['material_0.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_54001_3?.geometry}
+                material={materials['Material_0.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_54001_4?.geometry}
+                material={materials['PaletteMaterial001.017']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -858,15 +1048,43 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['LightUpSpeakers']}
           >
-            <group position={[-3.372, -4.12, 6.032]} rotation={[Math.PI, -0.775, -Math.PI / 2]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_0001?.geometry} material={materials['PaletteMaterial001.002']} />
-              <mesh geometry={nodes.Mesh_0001_1?.geometry} material={materials['blackInternal.001']} />
-              <mesh geometry={nodes.Mesh_0001_2?.geometry} material={materials['frontColor.001']} />
-              <mesh geometry={nodes.Mesh_0001_3?.geometry} material={materials['PaletteMaterial003.001']} />
-              <mesh geometry={nodes.Mesh_0001_4?.geometry} material={materials['blackFabric.001']} />
-              <mesh geometry={nodes.Mesh_0001_5?.geometry} material={materials['PaletteMaterial004.001']} />
-              <mesh geometry={nodes.Mesh_0001_6?.geometry} material={materials['equalizer.001']} />
-              <mesh geometry={nodes.Mesh_0001_7?.geometry} material={materials['Material.002']} />
+            <group
+              position={[-3.372, -4.12, 6.032]}
+              rotation={[Math.PI, -0.775, -Math.PI / 2]}
+              scale={0.001}
+            >
+              <mesh
+                geometry={nodes.Mesh_0001?.geometry}
+                material={materials['PaletteMaterial001.002']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_1?.geometry}
+                material={materials['blackInternal.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_2?.geometry}
+                material={materials['frontColor.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_3?.geometry}
+                material={materials['PaletteMaterial003.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_4?.geometry}
+                material={materials['blackFabric.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_5?.geometry}
+                material={materials['PaletteMaterial004.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_6?.geometry}
+                material={materials['equalizer.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_0001_7?.geometry}
+                material={materials['Material.002']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -881,11 +1099,26 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['BunnyEarsCactus']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_89005?.geometry} material={materials['lambert1.001']} />
-              <mesh geometry={nodes.Mesh_89005_1?.geometry} material={materials['cactus_04_mat.001']} />
-              <mesh geometry={nodes.Mesh_89005_2?.geometry} material={materials['cactus_04_spike_mat.001']} />
-              <mesh geometry={nodes.Mesh_89005_3?.geometry} material={materials['cactus_ground_mat.001']} />
-              <mesh geometry={nodes.Mesh_89005_4?.geometry} material={materials['cactus_stone_mat.001']} />
+              <mesh
+                geometry={nodes.Mesh_89005?.geometry}
+                material={materials['lambert1.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89005_1?.geometry}
+                material={materials['cactus_04_mat.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89005_2?.geometry}
+                material={materials['cactus_04_spike_mat.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89005_3?.geometry}
+                material={materials['cactus_ground_mat.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89005_4?.geometry}
+                material={materials['cactus_stone_mat.001']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -900,32 +1133,110 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['Arcade']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_36001?.geometry} material={materials['PaletteMaterial003.003']} />
-              <mesh geometry={nodes.Mesh_36001_1?.geometry} material={materials['GameBoy.001']} />
-              <mesh geometry={nodes.Mesh_36001_2?.geometry} material={materials['bButton.001']} />
-              <mesh geometry={nodes.Mesh_36001_3?.geometry} material={materials['TT_checker_1024x1024_UV_GRID.001']} />
-              <mesh geometry={nodes.Mesh_36001_4?.geometry} material={materials['ARCADE.001']} />
-              <mesh geometry={nodes.Mesh_36001_5?.geometry} material={materials['PaletteMaterial002.002']} />
-              <mesh geometry={nodes.Mesh_36001_6?.geometry} material={materials['PaletteMaterial003.004']} />
-              <mesh geometry={nodes.Mesh_36001_7?.geometry} material={materials['PaletteMaterial001.007']} />
-              <mesh geometry={nodes.Mesh_36001_8?.geometry} material={materials['PaletteMaterial002.003']} />
-              <mesh geometry={nodes.Mesh_36001_9?.geometry} material={materials['PaletteMaterial004.003']} />
-              <mesh geometry={nodes.Mesh_36001_10?.geometry} material={materials['Stick.001']} />
-              <mesh geometry={nodes.Mesh_36001_11?.geometry} material={materials['lowpoly.001']} />
-              <mesh geometry={nodes.Mesh_36001_12?.geometry} material={materials['GamepadStuff.001']} />
-              <mesh geometry={nodes.Mesh_36001_13?.geometry} material={materials['gamepadMain.001']} />
-              <mesh geometry={nodes.Mesh_36001_14?.geometry} material={materials['PaletteMaterial005.002']} />
-              <mesh geometry={nodes.Mesh_36001_15?.geometry} material={materials['TT_checker_1024x1024_UV_GRID.002']} />
-              <mesh geometry={nodes.Mesh_36001_16?.geometry} material={materials['PaletteMaterial006.001']} />
-              <mesh geometry={nodes.Mesh_36001_17?.geometry} material={materials['controllerbody.001']} />
-              <mesh geometry={nodes.Mesh_36001_18?.geometry} material={materials['material.001']} />
-              <mesh geometry={nodes.Mesh_36001_19?.geometry} material={materials['ANALOG.001']} />
-              <mesh geometry={nodes.Mesh_36001_20?.geometry} material={materials['dpad.001']} />
-              <mesh geometry={nodes.Mesh_36001_21?.geometry} material={materials['cstick.001']} />
-              <mesh geometry={nodes.Mesh_36001_22?.geometry} material={materials['abutton.001']} />
-              <mesh geometry={nodes.Mesh_36001_23?.geometry} material={materials['zbutton.001']} />
-              <mesh geometry={nodes.Mesh_36001_24?.geometry} material={materials['bumpers.001']} />
-              <mesh geometry={nodes.Mesh_36001_25?.geometry} material={materials['PaletteMaterial001.008']} />
+              <mesh
+                geometry={nodes.Mesh_36001?.geometry}
+                material={materials['PaletteMaterial003.003']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_1?.geometry}
+                material={materials['GameBoy.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_2?.geometry}
+                material={materials['bButton.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_3?.geometry}
+                material={materials['TT_checker_1024x1024_UV_GRID.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_4?.geometry}
+                material={materials['ARCADE.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_5?.geometry}
+                material={materials['PaletteMaterial002.002']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_6?.geometry}
+                material={materials['PaletteMaterial003.004']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_7?.geometry}
+                material={materials['PaletteMaterial001.007']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_8?.geometry}
+                material={materials['PaletteMaterial002.003']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_9?.geometry}
+                material={materials['PaletteMaterial004.003']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_10?.geometry}
+                material={materials['Stick.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_11?.geometry}
+                material={materials['lowpoly.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_12?.geometry}
+                material={materials['GamepadStuff.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_13?.geometry}
+                material={materials['gamepadMain.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_14?.geometry}
+                material={materials['PaletteMaterial005.002']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_15?.geometry}
+                material={materials['TT_checker_1024x1024_UV_GRID.002']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_16?.geometry}
+                material={materials['PaletteMaterial006.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_17?.geometry}
+                material={materials['controllerbody.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_18?.geometry}
+                material={materials['material.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_19?.geometry}
+                material={materials['ANALOG.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_20?.geometry}
+                material={materials['dpad.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_21?.geometry}
+                material={materials['cstick.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_22?.geometry}
+                material={materials['abutton.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_23?.geometry}
+                material={materials['zbutton.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_24?.geometry}
+                material={materials['bumpers.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36001_25?.geometry}
+                material={materials['PaletteMaterial001.008']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -935,7 +1246,12 @@ export default function RachosRoom({
             analyser={analyser}
             frequencyIndices={groupNameToFrequencyIndices['RoomFloor']}
           >
-            <mesh geometry={nodes.RoomFloor?.geometry} material={materials['Material.003']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.RoomFloor?.geometry}
+              material={materials['Material.003']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* TV Monitor */}
@@ -948,7 +1264,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['TVMonitor']}
           >
-            <mesh geometry={nodes.TVMonitor?.geometry} material={materials['Material.004']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.TVMonitor?.geometry}
+              material={materials['Material.004']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Monitor Screen (Computer Monitor) */}
@@ -961,7 +1282,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MonitorScreen']}
           >
-            <mesh geometry={nodes.Computer_Monitor?.geometry} material={materials['Material.005']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Computer_Monitor?.geometry}
+              material={materials['Material.005']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Kitchen Set */}
@@ -974,7 +1300,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['KitchenSet']}
           >
-            <mesh geometry={nodes.KitchenSet?.geometry} material={materials['PaletteMaterial001.009']} position={[-5.999, -0.966, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.KitchenSet?.geometry}
+              material={materials['PaletteMaterial001.009']}
+              position={[-5.999, -0.966, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Room Wall */}
@@ -983,7 +1314,12 @@ export default function RachosRoom({
             analyser={analyser}
             frequencyIndices={groupNameToFrequencyIndices['RoomWall']}
           >
-            <mesh geometry={nodes.RoomWall?.geometry} material={materials['Material.012']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.RoomWall?.geometry}
+              material={materials['Material.012']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* MeBit Cthulu */}
@@ -997,7 +1333,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MeBitCthulu']}
           >
-            <mesh geometry={nodes.MeBitCthulu?.geometry} material={materials['PaletteMaterial001.015']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.MeBitCthulu?.geometry}
+              material={materials['PaletteMaterial001.015']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* MeBit Chandelier */}
@@ -1011,13 +1352,34 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MeBitChandelier']}
           >
-            <group position={[0.163, 6.558, 0.312]} rotation={[1.505, 0, -3.141]} scale={[2.208, 0.261, 2.212]}>
-              <mesh geometry={nodes.Curve001?.geometry} material={materials['PaletteMaterial005.004']} />
-              <mesh geometry={nodes.Curve001_1?.geometry} material={materials['constant1.002']} />
-              <mesh geometry={nodes.Curve001_2?.geometry} material={materials['constant2.002']} />
-              <mesh geometry={nodes.Curve001_3?.geometry} material={materials['HoloFillDark.002']} />
+            <group
+              position={[0.163, 6.558, 0.312]}
+              rotation={[1.505, 0, -3.141]}
+              scale={[2.208, 0.261, 2.212]}
+            >
+              <mesh
+                geometry={nodes.Curve001?.geometry}
+                material={materials['PaletteMaterial005.004']}
+              />
+              <mesh
+                geometry={nodes.Curve001_1?.geometry}
+                material={materials['constant1.002']}
+              />
+              <mesh
+                geometry={nodes.Curve001_2?.geometry}
+                material={materials['constant2.002']}
+              />
+              <mesh
+                geometry={nodes.Curve001_3?.geometry}
+                material={materials['HoloFillDark.002']}
+              />
             </group>
-            <mesh geometry={nodes.Middle_Chandelier?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Middle_Chandelier?.geometry}
+              material={materials['PaletteMaterial001.002']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* MeBit Helmet */}
@@ -1032,9 +1394,18 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['MeBitHelmet']}
           >
             <group position={[-5.089, 3.661, -3.47]} scale={0.325}>
-              <mesh geometry={nodes.MeBitHelmet001?.geometry} material={materials['soft.001']} />
-              <mesh geometry={nodes.MeBitHelmet001_1?.geometry} material={materials['base.001']} />
-              <mesh geometry={nodes.MeBitHelmet001_2?.geometry} material={materials['PaletteMaterial005.004']} />
+              <mesh
+                geometry={nodes.MeBitHelmet001?.geometry}
+                material={materials['soft.001']}
+              />
+              <mesh
+                geometry={nodes.MeBitHelmet001_1?.geometry}
+                material={materials['base.001']}
+              />
+              <mesh
+                geometry={nodes.MeBitHelmet001_2?.geometry}
+                material={materials['PaletteMaterial005.004']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1049,25 +1420,83 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MeBitTerranium']}
           >
-            <group position={[-3.385, 4.815, -3.536]} rotation={[-Math.PI / 2, 0, 0]} scale={0.172}>
-              <mesh geometry={nodes.glas_low_glass_0002?.geometry} material={materials['glass.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_1?.geometry} material={materials['robot_2.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_2?.geometry} material={materials['robot_1.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_3?.geometry} material={materials['Cactus_spines_01.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_4?.geometry} material={materials['Carnegiea_bark_01.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_5?.geometry} material={materials['Carnegiea_bark_03.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_6?.geometry} material={materials['Carnegiea_petal_01.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_7?.geometry} material={materials['Carnegiea_petal_02.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_8?.geometry} material={materials['Carnegiea_petal_03.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_9?.geometry} material={materials['Carnegiea_sepal_01.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_10?.geometry} material={materials['Carnegiea_stigma.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_11?.geometry} material={materials['Carnegiea_flower_stalk.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_12?.geometry} material={materials['Carnegiea_stamens.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_13?.geometry} material={materials['SickPlantSteam_Mat.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_14?.geometry} material={materials['PaletteMaterial001.029']} />
-              <mesh geometry={nodes.glas_low_glass_0002_15?.geometry} material={materials['SickPlantFlower_Mat.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_16?.geometry} material={materials['SickPlantFlowerIside_Mat.001']} />
-              <mesh geometry={nodes.glas_low_glass_0002_17?.geometry} material={materials['inside.001']} />
+            <group
+              position={[-3.385, 4.815, -3.536]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              scale={0.172}
+            >
+              <mesh
+                geometry={nodes.glas_low_glass_0002?.geometry}
+                material={materials['glass.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_1?.geometry}
+                material={materials['robot_2.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_2?.geometry}
+                material={materials['robot_1.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_3?.geometry}
+                material={materials['Cactus_spines_01.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_4?.geometry}
+                material={materials['Carnegiea_bark_01.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_5?.geometry}
+                material={materials['Carnegiea_bark_03.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_6?.geometry}
+                material={materials['Carnegiea_petal_01.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_7?.geometry}
+                material={materials['Carnegiea_petal_02.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_8?.geometry}
+                material={materials['Carnegiea_petal_03.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_9?.geometry}
+                material={materials['Carnegiea_sepal_01.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_10?.geometry}
+                material={materials['Carnegiea_stigma.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_11?.geometry}
+                material={materials['Carnegiea_flower_stalk.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_12?.geometry}
+                material={materials['Carnegiea_stamens.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_13?.geometry}
+                material={materials['SickPlantSteam_Mat.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_14?.geometry}
+                material={materials['PaletteMaterial001.029']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_15?.geometry}
+                material={materials['SickPlantFlower_Mat.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_16?.geometry}
+                material={materials['SickPlantFlowerIside_Mat.001']}
+              />
+              <mesh
+                geometry={nodes.glas_low_glass_0002_17?.geometry}
+                material={materials['inside.001']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1082,10 +1511,23 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MeBitEnderman']}
           >
-            <group position={[-4.101, 0.458, -3.473]} rotation={[1.641, 0, 0]} scale={[0.093, 0.067, 0.093]}>
-              <mesh geometry={nodes.Mesh_37003?.geometry} material={materials['Skin.001']} />
-              <mesh geometry={nodes.Mesh_37003_1?.geometry} material={materials['PaletteMaterial001.003']} />
-              <mesh geometry={nodes.Mesh_37003_2?.geometry} material={materials['Eyes.001']} />
+            <group
+              position={[-4.101, 0.458, -3.473]}
+              rotation={[1.641, 0, 0]}
+              scale={[0.093, 0.067, 0.093]}
+            >
+              <mesh
+                geometry={nodes.Mesh_37003?.geometry}
+                material={materials['Skin.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_37003_1?.geometry}
+                material={materials['PaletteMaterial001.003']}
+              />
+              <mesh
+                geometry={nodes.Mesh_37003_2?.geometry}
+                material={materials['Eyes.001']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1099,9 +1541,18 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['XBOX']}
           >
-            <group position={[4.076, 2.23, -2.919]} scale={[0.22, 0.499, 0.499]}>
-              <mesh geometry={nodes.Cube005?.geometry} material={materials['Material.014']} />
-              <mesh geometry={nodes.Cube005_1?.geometry} material={materials['PaletteMaterial001.016']} />
+            <group
+              position={[4.076, 2.23, -2.919]}
+              scale={[0.22, 0.499, 0.499]}
+            >
+              <mesh
+                geometry={nodes.Cube005?.geometry}
+                material={materials['Material.014']}
+              />
+              <mesh
+                geometry={nodes.Cube005_1?.geometry}
+                material={materials['PaletteMaterial001.016']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1111,7 +1562,12 @@ export default function RachosRoom({
             analyser={analyser}
             frequencyIndices={groupNameToFrequencyIndices['Couch']}
           >
-            <mesh geometry={nodes.Couch?.geometry} material={materials['Material.018']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Couch?.geometry}
+              material={materials['Material.018']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Puzzle Shelf */}
@@ -1124,21 +1580,67 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['PuzzleShelf']}
           >
-            <group position={[-5.584, 0.309, -1.968]} rotation={[-Math.PI / 2, 0, -1.565]} scale={[2.617, 2.955, 3.725]}>
-              <mesh geometry={nodes.PuzzleShelf012?.geometry} material={materials['Sticker_SPC-SG.006']} />
-              <mesh geometry={nodes.PuzzleShelf012_1?.geometry} material={materials['baked.006']} />
-              <mesh geometry={nodes.PuzzleShelf012_2?.geometry} material={materials['RubixCube.006']} />
-              <mesh geometry={nodes.PuzzleShelf012_3?.geometry} material={materials['PaletteMaterial001.034']} />
-              <mesh geometry={nodes.PuzzleShelf012_4?.geometry} material={materials['PaletteMaterial002.017']} />
-              <mesh geometry={nodes.PuzzleShelf012_5?.geometry} material={materials['Mtl2.006']} />
-              <mesh geometry={nodes.PuzzleShelf012_6?.geometry} material={materials['material.012']} />
-              <mesh geometry={nodes.PuzzleShelf012_7?.geometry} material={materials['Sticker_B-P']} />
-              <mesh geometry={nodes.PuzzleShelf012_8?.geometry} material={materials['Sticker_Y-P']} />
-              <mesh geometry={nodes.PuzzleShelf012_9?.geometry} material={materials['Sticker_O-P']} />
-              <mesh geometry={nodes.PuzzleShelf012_10?.geometry} material={materials['Sticker_W-P']} />
-              <mesh geometry={nodes.PuzzleShelf012_11?.geometry} material={materials['Sticker_R-P']} />
-              <mesh geometry={nodes.PuzzleShelf012_12?.geometry} material={materials['Sticker_G-P']} />
-              <mesh geometry={nodes.PuzzleShelf012_13?.geometry} material={materials.Base} />
+            <group
+              position={[-5.584, 0.309, -1.968]}
+              rotation={[-Math.PI / 2, 0, -1.565]}
+              scale={[2.617, 2.955, 3.725]}
+            >
+              <mesh
+                geometry={nodes.PuzzleShelf012?.geometry}
+                material={materials['Sticker_SPC-SG.006']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_1?.geometry}
+                material={materials['baked.006']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_2?.geometry}
+                material={materials['RubixCube.006']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_3?.geometry}
+                material={materials['PaletteMaterial001.034']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_4?.geometry}
+                material={materials['PaletteMaterial002.017']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_5?.geometry}
+                material={materials['Mtl2.006']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_6?.geometry}
+                material={materials['material.012']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_7?.geometry}
+                material={materials['Sticker_B-P']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_8?.geometry}
+                material={materials['Sticker_Y-P']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_9?.geometry}
+                material={materials['Sticker_O-P']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_10?.geometry}
+                material={materials['Sticker_W-P']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_11?.geometry}
+                material={materials['Sticker_R-P']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_12?.geometry}
+                material={materials['Sticker_G-P']}
+              />
+              <mesh
+                geometry={nodes.PuzzleShelf012_13?.geometry}
+                material={materials.Base}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1153,17 +1655,50 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['RoomDisplayOne']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.RoomDisplayOne003?.geometry} material={materials['PaletteMaterial001.018']} />
-              <mesh geometry={nodes.RoomDisplayOne003_1?.geometry} material={materials['lambert7SG.001']} />
-              <mesh geometry={nodes.RoomDisplayOne003_2?.geometry} material={materials['PaletteMaterial008.003']} />
-              <mesh geometry={nodes.RoomDisplayOne003_3?.geometry} material={materials['PaletteMaterial009.002']} />
-              <mesh geometry={nodes.RoomDisplayOne003_4?.geometry} material={materials['equalizer.002']} />
-              <mesh geometry={nodes.RoomDisplayOne003_5?.geometry} material={materials['blackInternal.002']} />
-              <mesh geometry={nodes.RoomDisplayOne003_6?.geometry} material={materials['blackFabric.002']} />
-              <mesh geometry={nodes.RoomDisplayOne003_7?.geometry} material={materials['PaletteMaterial010.002']} />
-              <mesh geometry={nodes.RoomDisplayOne003_8?.geometry} material={materials['PaletteMaterial007.003']} />
-              <mesh geometry={nodes.RoomDisplayOne003_9?.geometry} material={materials['frontColor.002']} />
-              <mesh geometry={nodes.RoomDisplayOne003_10?.geometry} material={materials['PaletteMaterial005.005']} />
+              <mesh
+                geometry={nodes.RoomDisplayOne003?.geometry}
+                material={materials['PaletteMaterial001.018']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_1?.geometry}
+                material={materials['lambert7SG.001']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_2?.geometry}
+                material={materials['PaletteMaterial008.003']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_3?.geometry}
+                material={materials['PaletteMaterial009.002']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_4?.geometry}
+                material={materials['equalizer.002']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_5?.geometry}
+                material={materials['blackInternal.002']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_6?.geometry}
+                material={materials['blackFabric.002']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_7?.geometry}
+                material={materials['PaletteMaterial010.002']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_8?.geometry}
+                material={materials['PaletteMaterial007.003']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_9?.geometry}
+                material={materials['frontColor.002']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne003_10?.geometry}
+                material={materials['PaletteMaterial005.005']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1178,8 +1713,14 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['RoomDisplayTwo']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.RoomDisplayOne004?.geometry} material={materials['blinn4SG.001']} />
-              <mesh geometry={nodes.RoomDisplayOne004_1?.geometry} material={materials['PaletteMaterial004.006']} />
+              <mesh
+                geometry={nodes.RoomDisplayOne004?.geometry}
+                material={materials['blinn4SG.001']}
+              />
+              <mesh
+                geometry={nodes.RoomDisplayOne004_1?.geometry}
+                material={materials['PaletteMaterial004.006']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1193,7 +1734,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['GraphicLeft']}
           >
-            <mesh geometry={nodes.Graphic_Left_Plants?.geometry} material={materials['Material.011']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Graphic_Left_Plants?.geometry}
+              material={materials['Material.011']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           <AnimatedGroup
@@ -1205,7 +1751,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['GraphicMiddle']}
           >
-            <mesh geometry={nodes.Graphic_Middle_Cats?.geometry} material={materials['Material.011']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Graphic_Middle_Cats?.geometry}
+              material={materials['Material.011']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           <AnimatedGroup
@@ -1217,26 +1768,111 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['GraphicRight']}
           >
-            <mesh geometry={nodes.Graphic_Right_Puzzles?.geometry} material={materials['Material.011']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Graphic_Right_Puzzles?.geometry}
+              material={materials['Material.011']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Furniture */}
-          <mesh geometry={nodes.TrackPad?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.TV_Stand?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Computer_Stand?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.TV_Frame?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Computer_Desk_Drawer?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Computer_Table?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Remote?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Cup?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.94, -1, -4.074]} scale={0.001} />
-          <mesh geometry={nodes.Left_Chandelier?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Right_Chandelier?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Middle_Console?.geometry} material={materials['Material.006']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Fancy_Lights?.geometry} material={materials['PaletteMaterial006.003']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Chandelier_Lights?.geometry} material={materials['PaletteMaterial002.006']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Right_Blank_Frame?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.HEADPHONES?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Middle_Blank_Frsme?.geometry} material={materials['PaletteMaterial001.002']} position={[-5.999, -1, -3.995]} scale={0.001} />
+          <mesh
+            geometry={nodes.TrackPad?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.TV_Stand?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Computer_Stand?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.TV_Frame?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Computer_Desk_Drawer?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Computer_Table?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Remote?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Cup?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.94, -1, -4.074]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Left_Chandelier?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Right_Chandelier?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Middle_Console?.geometry}
+            material={materials['Material.006']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Fancy_Lights?.geometry}
+            material={materials['PaletteMaterial006.003']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Chandelier_Lights?.geometry}
+            material={materials['PaletteMaterial002.006']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Right_Blank_Frame?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.HEADPHONES?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Middle_Blank_Frsme?.geometry}
+            material={materials['PaletteMaterial001.002']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
 
           {/* PS5 */}
           <AnimatedGroup
@@ -1248,7 +1884,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['PS5']}
           >
-            <mesh geometry={nodes.PS5?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.PS5?.geometry}
+              material={materials['PaletteMaterial001.016']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Cable Box */}
@@ -1261,7 +1902,12 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['CableBox']}
           >
-            <mesh geometry={nodes.Cable_Box?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Cable_Box?.geometry}
+              material={materials['PaletteMaterial001.016']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Shelf Keyboard */}
@@ -1274,18 +1920,43 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['ShelfKeyboard']}
           >
-            <mesh geometry={nodes.Shelf_Keyboard?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
+            <mesh
+              geometry={nodes.Shelf_Keyboard?.geometry}
+              material={materials['PaletteMaterial001.016']}
+              position={[-5.999, -1, -3.995]}
+              scale={0.001}
+            />
           </AnimatedGroup>
 
           {/* Speakers */}
-          <mesh geometry={nodes.Right_Speaker?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
-          <mesh geometry={nodes.Left_Speaker?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
+          <mesh
+            geometry={nodes.Right_Speaker?.geometry}
+            material={materials['PaletteMaterial001.016']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
+          <mesh
+            geometry={nodes.Left_Speaker?.geometry}
+            material={materials['PaletteMaterial001.016']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
 
           {/* Mouse */}
-          <mesh geometry={nodes.Mouse?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
+          <mesh
+            geometry={nodes.Mouse?.geometry}
+            material={materials['PaletteMaterial001.016']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
 
           {/* Main Keyboard */}
-          <mesh geometry={nodes.Main_Keyboard?.geometry} material={materials['PaletteMaterial001.016']} position={[-5.999, -1, -3.995]} scale={0.001} />
+          <mesh
+            geometry={nodes.Main_Keyboard?.geometry}
+            material={materials['PaletteMaterial001.016']}
+            position={[-5.999, -1, -3.995]}
+            scale={0.001}
+          />
 
           {/* MeBit Car */}
           <AnimatedGroup
@@ -1299,17 +1970,50 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['MeBitCar']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_39002?.geometry} material={materials['PaletteMaterial001.010']} />
-              <mesh geometry={nodes.Mesh_39002_1?.geometry} material={materials['forMayaAOrear_lights.001']} />
-              <mesh geometry={nodes.Mesh_39002_2?.geometry} material={materials['forMayaAOnumber.001']} />
-              <mesh geometry={nodes.Mesh_39002_3?.geometry} material={materials['forMayaAOlambert15.001']} />
-              <mesh geometry={nodes.Mesh_39002_4?.geometry} material={materials['forMayaAOlambert16.001']} />
-              <mesh geometry={nodes.Mesh_39002_5?.geometry} material={materials['forMayaAOblinn6.001']} />
-              <mesh geometry={nodes.Mesh_39002_6?.geometry} material={materials['PaletteMaterial002.004']} />
-              <mesh geometry={nodes.Mesh_39002_7?.geometry} material={materials['forMayaAOGrill2.001']} />
-              <mesh geometry={nodes.Mesh_39002_8?.geometry} material={materials['Chrome_2.001']} />
-              <mesh geometry={nodes.Mesh_39002_9?.geometry} material={materials['PaletteMaterial003.005']} />
-              <mesh geometry={nodes.Mesh_39002_10?.geometry} material={materials['material.002']} />
+              <mesh
+                geometry={nodes.Mesh_39002?.geometry}
+                material={materials['PaletteMaterial001.010']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_1?.geometry}
+                material={materials['forMayaAOrear_lights.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_2?.geometry}
+                material={materials['forMayaAOnumber.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_3?.geometry}
+                material={materials['forMayaAOlambert15.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_4?.geometry}
+                material={materials['forMayaAOlambert16.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_5?.geometry}
+                material={materials['forMayaAOblinn6.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_6?.geometry}
+                material={materials['PaletteMaterial002.004']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_7?.geometry}
+                material={materials['forMayaAOGrill2.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_8?.geometry}
+                material={materials['Chrome_2.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_9?.geometry}
+                material={materials['PaletteMaterial003.005']}
+              />
+              <mesh
+                geometry={nodes.Mesh_39002_10?.geometry}
+                material={materials['material.002']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1324,9 +2028,19 @@ export default function RachosRoom({
             isPlaying={isPlaying}
             frequencyIndices={groupNameToFrequencyIndices['MeBitPlant']}
           >
-            <group position={[-1.018, 1.437, -2.908]} rotation={[-1.477, 1.571, 0]} scale={[0.352, 0.352, 0.896]}>
-              <mesh geometry={nodes.armHoles_LP_UV_checker_0002?.geometry} material={materials['PaletteMaterial001.013']} />
-              <mesh geometry={nodes.armHoles_LP_UV_checker_0002_1?.geometry} material={materials['UV_checker.001']} />
+            <group
+              position={[-1.018, 1.437, -2.908]}
+              rotation={[-1.477, 1.571, 0]}
+              scale={[0.352, 0.352, 0.896]}
+            >
+              <mesh
+                geometry={nodes.armHoles_LP_UV_checker_0002?.geometry}
+                material={materials['PaletteMaterial001.013']}
+              />
+              <mesh
+                geometry={nodes.armHoles_LP_UV_checker_0002_1?.geometry}
+                material={materials['UV_checker.001']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1342,11 +2056,26 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['MeBitBoat']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_89006?.geometry} material={materials['Material.008']} />
-              <mesh geometry={nodes.Mesh_89006_1?.geometry} material={materials['SVGMat.001']} />
-              <mesh geometry={nodes.Mesh_89006_2?.geometry} material={materials['Material.009']} />
-              <mesh geometry={nodes.Mesh_89006_3?.geometry} material={materials['Material.010']} />
-              <mesh geometry={nodes.Mesh_89006_4?.geometry} material={materials['PaletteMaterial001.014']} />
+              <mesh
+                geometry={nodes.Mesh_89006?.geometry}
+                material={materials['Material.008']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89006_1?.geometry}
+                material={materials['SVGMat.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89006_2?.geometry}
+                material={materials['Material.009']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89006_3?.geometry}
+                material={materials['Material.010']}
+              />
+              <mesh
+                geometry={nodes.Mesh_89006_4?.geometry}
+                material={materials['PaletteMaterial001.014']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1362,9 +2091,18 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['MeBitBalloon']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_36017?.geometry} material={materials['baloon.001']} />
-              <mesh geometry={nodes.Mesh_36017_1?.geometry} material={materials['baloon.002']} />
-              <mesh geometry={nodes.Mesh_36017_2?.geometry} material={materials['PaletteMaterial001.003']} />
+              <mesh
+                geometry={nodes.Mesh_36017?.geometry}
+                material={materials['baloon.001']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36017_1?.geometry}
+                material={materials['baloon.002']}
+              />
+              <mesh
+                geometry={nodes.Mesh_36017_2?.geometry}
+                material={materials['PaletteMaterial001.003']}
+              />
             </group>
           </AnimatedGroup>
 
@@ -1380,49 +2118,121 @@ export default function RachosRoom({
             frequencyIndices={groupNameToFrequencyIndices['MeSubBit']}
           >
             <group position={[-5.999, -1, -3.995]} scale={0.001}>
-              <mesh geometry={nodes.Mesh_44002?.geometry} material={materials['Glass.002']} />
-              <mesh geometry={nodes.Mesh_44002_1?.geometry} material={materials['Material.007']} />
-              <mesh geometry={nodes.Mesh_44002_2?.geometry} material={materials['PaletteMaterial001.003']} />
+              <mesh
+                geometry={nodes.Mesh_44002?.geometry}
+                material={materials['Glass.002']}
+              />
+              <mesh
+                geometry={nodes.Mesh_44002_1?.geometry}
+                material={materials['Material.007']}
+              />
+              <mesh
+                geometry={nodes.Mesh_44002_2?.geometry}
+                material={materials['PaletteMaterial001.003']}
+              />
             </group>
           </AnimatedGroup>
 
           {/* Additional mesh groups */}
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36058?.geometry} material={materials['PaletteMaterial001.002']} />
-            <mesh geometry={nodes.Mesh_36058_1?.geometry} material={materials['PaletteMaterial008.002']} />
+            <mesh
+              geometry={nodes.Mesh_36058?.geometry}
+              material={materials['PaletteMaterial001.002']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36058_1?.geometry}
+              material={materials['PaletteMaterial008.002']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36351?.geometry} material={materials['PaletteMaterial001.002']} />
-            <mesh geometry={nodes.Mesh_36351_1?.geometry} material={materials['PaletteMaterial002.006']} />
-            <mesh geometry={nodes.Mesh_36351_2?.geometry} material={materials['PaletteMaterial006.003']} />
-            <mesh geometry={nodes.Mesh_36351_3?.geometry} material={materials['PaletteMaterial007.002']} />
+            <mesh
+              geometry={nodes.Mesh_36351?.geometry}
+              material={materials['PaletteMaterial001.002']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36351_1?.geometry}
+              material={materials['PaletteMaterial002.006']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36351_2?.geometry}
+              material={materials['PaletteMaterial006.003']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36351_3?.geometry}
+              material={materials['PaletteMaterial007.002']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36389?.geometry} material={materials['PaletteMaterial001.002']} />
-            <mesh geometry={nodes.Mesh_36389_1?.geometry} material={materials['Material.011']} />
+            <mesh
+              geometry={nodes.Mesh_36389?.geometry}
+              material={materials['PaletteMaterial001.002']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36389_1?.geometry}
+              material={materials['Material.011']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36439?.geometry} material={materials['PaletteMaterial001.002']} />
-            <mesh geometry={nodes.Mesh_36439_1?.geometry} material={materials['Material.011']} />
+            <mesh
+              geometry={nodes.Mesh_36439?.geometry}
+              material={materials['PaletteMaterial001.002']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36439_1?.geometry}
+              material={materials['Material.011']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36456?.geometry} material={materials['PaletteMaterial001.002']} />
-            <mesh geometry={nodes.Mesh_36456_1?.geometry} material={materials['Material.011']} />
+            <mesh
+              geometry={nodes.Mesh_36456?.geometry}
+              material={materials['PaletteMaterial001.002']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36456_1?.geometry}
+              material={materials['Material.011']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36700?.geometry} material={materials['PaletteMaterial001.002']} />
-            <mesh geometry={nodes.Mesh_36700_1?.geometry} material={materials['Material.006']} />
+            <mesh
+              geometry={nodes.Mesh_36700?.geometry}
+              material={materials['PaletteMaterial001.002']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36700_1?.geometry}
+              material={materials['Material.006']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36668?.geometry} material={materials['PaletteMaterial001.016']} />
-            <mesh geometry={nodes.Mesh_36668_1?.geometry} material={materials['PaletteMaterial001.018']} />
+            <mesh
+              geometry={nodes.Mesh_36668?.geometry}
+              material={materials['PaletteMaterial001.016']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36668_1?.geometry}
+              material={materials['PaletteMaterial001.018']}
+            />
           </group>
           <group position={[-5.999, -1, -3.995]} scale={0.001}>
-            <mesh geometry={nodes.Mesh_36021?.geometry} material={materials['PaletteMaterial001.003']} />
-            <mesh geometry={nodes.Mesh_36021_1?.geometry} material={materials['Tassels.001']} />
-            <mesh geometry={nodes.Mesh_36021_2?.geometry} material={materials['PaletteMaterial001.011']} />
-            <mesh geometry={nodes.Mesh_36021_3?.geometry} material={materials['PaletteMaterial001.005']} />
-            <mesh geometry={nodes.Mesh_36021_4?.geometry} material={materials['Carpet.001']} />
+            <mesh
+              geometry={nodes.Mesh_36021?.geometry}
+              material={materials['PaletteMaterial001.003']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36021_1?.geometry}
+              material={materials['Tassels.001']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36021_2?.geometry}
+              material={materials['PaletteMaterial001.011']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36021_3?.geometry}
+              material={materials['PaletteMaterial001.005']}
+            />
+            <mesh
+              geometry={nodes.Mesh_36021_4?.geometry}
+              material={materials['Carpet.001']}
+            />
           </group>
         </group>
       </group>

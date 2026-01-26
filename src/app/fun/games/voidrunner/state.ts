@@ -1,11 +1,17 @@
 /**
  * VoidRunner Game State
- * 
+ *
  * Valtio proxy state for VoidRunner game.
  */
 import * as THREE from 'three';
 import { proxy } from 'valtio';
-import type { VoidRunnerGameState, MutationState, Difficulty, GameMode, Character } from './types';
+import type {
+  VoidRunnerGameState,
+  MutationState,
+  Difficulty,
+  GameMode,
+  Character,
+} from './types';
 import {
   COLORS,
   INITIAL_GAME_SPEED,
@@ -33,7 +39,11 @@ const getSpeedForLevel = (level: number, difficulty: Difficulty) => {
   const lateLevels = Math.max(0, level - GENTLE_LEVELS);
   const late = Math.pow(lateLevels, LATE_EXPONENT) * LATE_STEP;
   const baseSpeed = INITIAL_GAME_SPEED + gentle + late;
-  return baseSpeed * DIFFICULTY_SETTINGS[difficulty].speedMult * getBreatherSpeedScale(level);
+  return (
+    baseSpeed *
+    DIFFICULTY_SETTINGS[difficulty].speedMult *
+    getBreatherSpeedScale(level)
+  );
 };
 
 // Fast mutation object for per-frame updates (not reactive)
@@ -53,17 +63,19 @@ export const mutation: MutationState = {
   hitStop: 0,
 };
 
-export const voidRunnerState = proxy<VoidRunnerGameState & {
-  reset: () => void;
-  startGame: () => void;
-  endGame: () => void;
-  setCharacter: (c: Character) => void;
-  setDifficulty: (d: Difficulty) => void;
-  setMode: (m: GameMode) => void;
-  incrementLevel: () => void;
-  addNearMiss: () => void;
-  loadHighScore: () => void;
-}>({
+export const voidRunnerState = proxy<
+  VoidRunnerGameState & {
+    reset: () => void;
+    startGame: () => void;
+    endGame: () => void;
+    setCharacter: (c: Character) => void;
+    setDifficulty: (d: Difficulty) => void;
+    setMode: (m: GameMode) => void;
+    incrementLevel: () => void;
+    addNearMiss: () => void;
+    loadHighScore: () => void;
+  }
+>({
   phase: 'menu',
   score: 0,
   level: 1,
@@ -128,7 +140,9 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
       this.highScore = this.score;
       try {
         localStorage.setItem('voidrunner-highscore', String(this.score));
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
     mutation.gameOver = true;
     mutation.gameSpeed = 0;
@@ -164,6 +178,8 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
     try {
       const saved = localStorage.getItem('voidrunner-highscore');
       if (saved) this.highScore = parseInt(saved, 10);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   },
 });

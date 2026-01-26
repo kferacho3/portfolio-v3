@@ -45,5 +45,12 @@ export const WallBar: React.FC<{
     ref.current.scale.y *= broken ? 0.35 : 0.75 + hp01 * 0.25;
   });
 
-  return <mesh ref={ref} geometry={geoms.unitBox} material={mats.wall as any} castShadow />;
+  return (
+    <mesh
+      ref={ref}
+      geometry={geoms.unitBox}
+      material={mats.wall as any}
+      castShadow
+    />
+  );
 };

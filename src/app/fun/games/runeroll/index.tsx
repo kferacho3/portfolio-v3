@@ -1,71 +1,77 @@
-'use client'
+'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { PerspectiveCamera } from '@react-three/drei'
-import * as THREE from 'three'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
 
-import { SeededRandom } from '../../utils/seededRandom'
-import { clearFrameInput, useInputRef } from '../../hooks/useInput'
+import { SeededRandom } from '../../utils/seededRandom';
+import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
-type GameStatus = 'menu' | 'playing' | 'gameover'
+type GameStatus = 'menu' | 'playing' | 'gameover';
 
-const STORAGE_KEY = 'runeroll_best_v1'
+const STORAGE_KEY = 'runeroll_best_v1';
 
-const SPEED = 6.2
-const SPACING = 3.25
-const LOOK_AHEAD = 20
-const CUBE_SIZE = 0.8
+const SPEED = 6.2;
+const SPACING = 3.25;
+const LOOK_AHEAD = 20;
+const CUBE_SIZE = 0.8;
 
-const RUNE_COLORS = ['#ff6b6b', '#4dd4ac', '#6c7bff', '#ffd166'] as const
+const RUNE_COLORS = ['#ff6b6b', '#4dd4ac', '#6c7bff', '#ffd166'] as const;
 
 function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v))
+  return Math.max(lo, Math.min(hi, v));
 }
 
 function hashSeed(seed: number, n: number) {
   // cheap deterministic mix
-  let x = (seed ^ (n * 0x9e3779b1)) >>> 0
-  x ^= x << 13
-  x ^= x >>> 17
-  x ^= x << 5
-  return x >>> 0
+  let x = (seed ^ (n * 0x9e3779b1)) >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return x >>> 0;
 }
 
 type Gate = {
-  z: number
-  rune: number
-}
+  z: number;
+  rune: number;
+};
 
 function getGate(seed: number, i: number, out: Gate) {
-  const rng = new SeededRandom(hashSeed(seed, i))
-  out.z = i * SPACING
-  out.rune = rng.int(0, 3)
-  return out
+  const rng = new SeededRandom(hashSeed(seed, i));
+  out.z = i * SPACING;
+  out.rune = rng.int(0, 3);
+  return out;
 }
 
 export default function RuneRoll() {
-  const [status, setStatus] = useState<GameStatus>('menu')
-  const [seed, setSeed] = useState<number>(() => (Date.now() >>> 0))
-  const [score, setScore] = useState(0)
-  const [best, setBest] = useState(0)
+  const [status, setStatus] = useState<GameStatus>('menu');
+  const [seed, setSeed] = useState<number>(() => Date.now() >>> 0);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
 
   useEffect(() => {
     try {
-      const v = Number(localStorage.getItem(STORAGE_KEY) || 0)
-      if (Number.isFinite(v)) setBest(v)
+      const v = Number(localStorage.getItem(STORAGE_KEY) || 0);
+      if (Number.isFinite(v)) setBest(v);
     } catch {
       // ignore
     }
-  }, [])
+  }, []);
 
   const start = useCallback(() => {
-    setScore(0)
-    setSeed((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0)
-    setStatus('playing')
-  }, [])
+    setScore(0);
+    setSeed((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
+    setStatus('playing');
+  }, []);
 
-  const backToMenu = useCallback(() => setStatus('menu'), [])
+  const backToMenu = useCallback(() => setStatus('menu'), []);
 
   return (
     <div className="relative w-full h-full select-none">
@@ -83,16 +89,16 @@ export default function RuneRoll() {
           status={status}
           onScore={() => setScore((s) => s + 1)}
           onGameOver={(finalScore) => {
-            setStatus('gameover')
+            setStatus('gameover');
             setBest((b) => {
-              const n = Math.max(b, finalScore)
+              const n = Math.max(b, finalScore);
               try {
-                localStorage.setItem(STORAGE_KEY, String(n))
+                localStorage.setItem(STORAGE_KEY, String(n));
               } catch {
                 // ignore
               }
-              return n
-            })
+              return n;
+            });
           }}
         />
       </Canvas>
@@ -100,7 +106,9 @@ export default function RuneRoll() {
       <div className="absolute left-0 right-0 top-0 p-4 flex items-start justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <div className="text-white/90 text-sm tracking-wide">RuneRoll</div>
-          <div className="text-white font-semibold text-2xl leading-none">{score}</div>
+          <div className="text-white font-semibold text-2xl leading-none">
+            {score}
+          </div>
           <div className="text-white/60 text-xs mt-1">Best {best}</div>
         </div>
         <div className="text-white/40 text-xs">Tap or Space: rotate rune</div>
@@ -115,7 +123,8 @@ export default function RuneRoll() {
             </div>
             {status === 'gameover' && (
               <div className="text-white/80 text-sm mt-3">
-                You cleared <span className="font-semibold">{score}</span> gates.
+                You cleared <span className="font-semibold">{score}</span>{' '}
+                gates.
               </div>
             )}
             <div className="mt-4 flex gap-2 justify-center">
@@ -138,7 +147,7 @@ export default function RuneRoll() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function Scene({
@@ -147,15 +156,18 @@ function Scene({
   onScore,
   onGameOver,
 }: {
-  seed: number
-  status: GameStatus
-  onScore: () => void
-  onGameOver: (finalScore: number) => void
+  seed: number;
+  status: GameStatus;
+  onScore: () => void;
+  onGameOver: (finalScore: number) => void;
 }) {
-  const input = useInputRef({ enabled: status === 'playing', preventDefault: [' ', 'Space'] })
+  const input = useInputRef({
+    enabled: status === 'playing',
+    preventDefault: [' ', 'Space'],
+  });
 
-  const cubeRef = useRef<THREE.Mesh>(null!)
-  const gatesGroupRef = useRef<THREE.Group>(null!)
+  const cubeRef = useRef<THREE.Mesh>(null!);
+  const gatesGroupRef = useRef<THREE.Group>(null!);
 
   const sim = useRef({
     z: 0,
@@ -163,95 +175,113 @@ function Scene({
     runeScore: 0,
     rot: 0,
     rotTarget: 0,
-  })
+  });
 
-  const gateScratch = useMemo(() => ({ z: 0, rune: 0 } as Gate), [])
+  const gateScratch = useMemo(() => ({ z: 0, rune: 0 }) as Gate, []);
 
   useEffect(() => {
-    if (status !== 'playing') return
-    sim.current.z = 0
-    sim.current.rune = 0
-    sim.current.runeScore = 0
-    sim.current.rot = 0
-    sim.current.rotTarget = 0
-  }, [seed, status])
+    if (status !== 'playing') return;
+    sim.current.z = 0;
+    sim.current.rune = 0;
+    sim.current.runeScore = 0;
+    sim.current.rot = 0;
+    sim.current.rotTarget = 0;
+  }, [seed, status]);
 
   const materials = useMemo(() => {
     // 6 faces: [right,left,top,bottom,front,back]
     // We color top & front faces with rune color, rest neutral.
-    const neutral = new THREE.MeshStandardMaterial({ color: '#22252a', roughness: 0.55, metalness: 0.15 })
+    const neutral = new THREE.MeshStandardMaterial({
+      color: '#22252a',
+      roughness: 0.55,
+      metalness: 0.15,
+    });
     return {
       neutral,
       runeMats: RUNE_COLORS.map(
-        (c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.15 })
+        (c) =>
+          new THREE.MeshStandardMaterial({
+            color: c,
+            roughness: 0.35,
+            metalness: 0.15,
+          })
       ),
-    }
-  }, [])
+    };
+  }, []);
 
   useFrame((state, dt) => {
-    dt = Math.min(dt, 1 / 30)
+    dt = Math.min(dt, 1 / 30);
 
     if (status !== 'playing') {
-      clearFrameInput(input.current)
-      return
+      clearFrameInput(input.current);
+      return;
     }
 
-    const s = sim.current
+    const s = sim.current;
 
-    const just = input.current.justPressed
-    const rotate = input.current.pointerJustDown || (just && (just.has(' ') || just.has('space')))
+    const just = input.current.justPressed;
+    const rotate =
+      input.current.pointerJustDown ||
+      (just && (just.has(' ') || just.has('space')));
     if (rotate) {
-      s.rune = (s.rune + 1) % 4
-      s.rotTarget = s.rune * (Math.PI / 2)
+      s.rune = (s.rune + 1) % 4;
+      s.rotTarget = s.rune * (Math.PI / 2);
     }
 
     // smooth rotation
-    const diff = s.rotTarget - s.rot
-    s.rot += diff * clamp(dt * 10, 0, 1)
+    const diff = s.rotTarget - s.rot;
+    s.rot += diff * clamp(dt * 10, 0, 1);
 
     // move world forward (path flows from ahead (-Z) toward you)
-    s.z += SPEED * dt
+    s.z += SPEED * dt;
 
     // gate check: when a gate crosses z==0 in world space (gate i at world z = s.z - i*SPACING)
-    const justCleared = Math.floor(s.z / SPACING)
+    const justCleared = Math.floor(s.z / SPACING);
     if (justCleared > s.runeScore) {
       // we cleared one or more gates (dt might be large)
       for (let i = s.runeScore + 1; i <= justCleared; i++) {
-        getGate(seed, i, gateScratch)
+        getGate(seed, i, gateScratch);
         if (gateScratch.rune !== s.rune) {
-          onGameOver(s.runeScore)
-          clearFrameInput(input.current)
-          return
+          onGameOver(s.runeScore);
+          clearFrameInput(input.current);
+          return;
         }
-        s.runeScore = i
-        onScore()
+        s.runeScore = i;
+        onScore();
       }
     }
 
     // update cube
     if (cubeRef.current) {
-      cubeRef.current.rotation.set(0, s.rot, 0)
+      cubeRef.current.rotation.set(0, s.rot, 0);
     }
 
     // update moving gates group (inverted: path comes from -Z ahead, flows toward +Z past you)
     if (gatesGroupRef.current) {
-      gatesGroupRef.current.position.z = s.z
+      gatesGroupRef.current.position.z = s.z;
     }
 
-    clearFrameInput(input.current)
-  })
+    clearFrameInput(input.current);
+  });
 
   const visibleGateIndices = useMemo(() => {
-    const out: number[] = []
-    for (let i = 1; i <= LOOK_AHEAD; i++) out.push(i)
-    return out
-  }, [])
+    const out: number[] = [];
+    for (let i = 1; i <= LOOK_AHEAD; i++) out.push(i);
+    return out;
+  }, []);
 
   const cubeFaceMaterials = useMemo(() => {
-    const runeMat = materials.runeMats[sim.current.rune]
+    const runeMat = materials.runeMats[sim.current.rune];
     // right,left,top,bottom,front,back
-    return [materials.neutral, materials.neutral, runeMat, materials.neutral, runeMat, materials.neutral]
-  }, [materials.neutral, materials.runeMats])
+    return [
+      materials.neutral,
+      materials.neutral,
+      runeMat,
+      materials.neutral,
+      runeMat,
+      materials.neutral,
+    ];
+  }, [materials.neutral, materials.runeMats]);
 
   return (
     <group>
@@ -259,13 +289,21 @@ function Scene({
       <color attach="background" args={['#0b0f1a']} />
 
       {/* floor */}
-      <mesh position={[0, -0.9, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh
+        position={[0, -0.9, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
         <planeGeometry args={[20, 120]} />
         <meshStandardMaterial color="#0f1626" roughness={1} />
       </mesh>
 
       {/* center strip */}
-      <mesh position={[0, -0.899, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh
+        position={[0, -0.899, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
         <planeGeometry args={[2.2, 120]} />
         <meshStandardMaterial color="#111b2e" roughness={1} />
       </mesh>
@@ -279,9 +317,9 @@ function Scene({
 
       <group ref={gatesGroupRef}>
         {visibleGateIndices.map((i) => {
-          const g = { z: 0, rune: 0 }
-          getGate(seed, i, g)
-          const c = RUNE_COLORS[g.rune]
+          const g = { z: 0, rune: 0 };
+          getGate(seed, i, g);
+          const c = RUNE_COLORS[g.rune];
           return (
             <group key={i} position={[0, 0, -g.z]}>
               {/* arch */}
@@ -301,12 +339,16 @@ function Scene({
               {/* rune panel */}
               <mesh position={[0, 0.65, 0.13]} castShadow>
                 <boxGeometry args={[0.8, 0.8, 0.08]} />
-                <meshStandardMaterial color={c} roughness={0.35} metalness={0.15} />
+                <meshStandardMaterial
+                  color={c}
+                  roughness={0.35}
+                  metalness={0.15}
+                />
               </mesh>
             </group>
-          )
+          );
         })}
       </group>
     </group>
-  )
+  );
 }

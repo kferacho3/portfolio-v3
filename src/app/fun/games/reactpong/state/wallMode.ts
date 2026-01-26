@@ -62,7 +62,11 @@ export const generateWallZones = (state: ReactPongState) => {
   const wallWidth = Math.max(6, WALL_MODE_WIDTH - 2);
   const wallHeight = Math.max(4, WALL_MODE_HEIGHT - 2);
 
-  if (config.wallType === 'zones' || config.wallType === 'advanced' || config.wallType === 'chaos') {
+  if (
+    config.wallType === 'zones' ||
+    config.wallType === 'advanced' ||
+    config.wallType === 'chaos'
+  ) {
     zones.push({
       id: 'speed-1',
       type: 'speed',
@@ -93,8 +97,8 @@ export const generateWallZones = (state: ReactPongState) => {
       id: 'target-1',
       type: 'target',
       position: [
-        Math.random() * wallWidth / 2 - wallWidth / 4,
-        Math.random() * wallHeight / 2 - wallHeight / 4,
+        (Math.random() * wallWidth) / 2 - wallWidth / 4,
+        (Math.random() * wallHeight) / 2 - wallHeight / 4,
         0,
       ],
       size: [1.5, 1.5],
@@ -146,7 +150,9 @@ export const wallModeCaptureBall = (state: ReactPongState) => {
   }
 };
 
-export const wallModeReleaseBall = (state: ReactPongState): { speed: number; spin: number; charge: number } => {
+export const wallModeReleaseBall = (
+  state: ReactPongState
+): { speed: number; spin: number; charge: number } => {
   const charge = state.wallMode.chargeAmount;
   const spin = state.wallMode.spinIntensity;
   const baseSpeed = state.wallMode.currentSpeed;
@@ -163,7 +169,11 @@ export const wallModeReleaseBall = (state: ReactPongState): { speed: number; spi
   };
 };
 
-export const wallModeHitWall = (state: ReactPongState, zoneType?: string, isPerfectCatch: boolean = false) => {
+export const wallModeHitWall = (
+  state: ReactPongState,
+  zoneType?: string,
+  isPerfectCatch: boolean = false
+) => {
   state.wallMode.rallyStreak++;
   state.wallMode.levelStreak++;
 
@@ -191,7 +201,10 @@ export const wallModeHitWall = (state: ReactPongState, zoneType?: string, isPerf
 
   const comboThresholds = Object.keys(WALL_MODE_COMBO_MULTIPLIERS).map(Number);
   if (comboThresholds.includes(state.wallMode.rallyStreak)) {
-    const combo = WALL_MODE_COMBO_MULTIPLIERS[state.wallMode.rallyStreak as keyof typeof WALL_MODE_COMBO_MULTIPLIERS];
+    const combo =
+      WALL_MODE_COMBO_MULTIPLIERS[
+        state.wallMode.rallyStreak as keyof typeof WALL_MODE_COMBO_MULTIPLIERS
+      ];
     state.comboText = combo.name;
     state.comboColor = combo.color;
     state.triggerScreenShake(0.15);
@@ -201,13 +214,21 @@ export const wallModeHitWall = (state: ReactPongState, zoneType?: string, isPerf
     state.highScore = state.score;
   }
 
-  if (state.wallMode.levelStreak >= state.wallMode.currentLevelConfig.streakGoal) {
+  if (
+    state.wallMode.levelStreak >= state.wallMode.currentLevelConfig.streakGoal
+  ) {
     state.wallMode.gameState = 'levelComplete';
   }
 
   const powerupChance = zoneType === 'target' ? 0.05 : 0.02;
   if (Math.random() < powerupChance && !state.wallMode.availablePowerup) {
-    const powerupTypes: PowerupType[] = ['slowmo', 'widen', 'magnet', 'shield', 'curveBoost'];
+    const powerupTypes: PowerupType[] = [
+      'slowmo',
+      'widen',
+      'magnet',
+      'shield',
+      'curveBoost',
+    ];
     state.wallMode.availablePowerup = {
       type: powerupTypes[Math.floor(Math.random() * powerupTypes.length)],
       position: [
@@ -235,10 +256,14 @@ export const wallModeMiss = (state: ReactPongState) => {
 };
 
 export const getWallModeMultiplier = (state: ReactPongState) => {
-  const thresholds = Object.keys(WALL_MODE_COMBO_MULTIPLIERS).map(Number).sort((a, b) => b - a);
+  const thresholds = Object.keys(WALL_MODE_COMBO_MULTIPLIERS)
+    .map(Number)
+    .sort((a, b) => b - a);
   for (const threshold of thresholds) {
     if (state.wallMode.rallyStreak >= threshold) {
-      return WALL_MODE_COMBO_MULTIPLIERS[threshold as keyof typeof WALL_MODE_COMBO_MULTIPLIERS];
+      return WALL_MODE_COMBO_MULTIPLIERS[
+        threshold as keyof typeof WALL_MODE_COMBO_MULTIPLIERS
+      ];
     }
   }
   return { multiplier: 1, name: '', color: '#ffffff' };
@@ -261,7 +286,10 @@ export const collectPowerup = (state: ReactPongState, type: PowerupType) => {
       state.wallMode.activePowerups.push({ type: 'shield', remainingUses: 1 });
       break;
     case 'curveBoost':
-      state.wallMode.activePowerups.push({ type: 'curveBoost', remainingUses: 1 });
+      state.wallMode.activePowerups.push({
+        type: 'curveBoost',
+        remainingUses: 1,
+      });
       break;
   }
 };

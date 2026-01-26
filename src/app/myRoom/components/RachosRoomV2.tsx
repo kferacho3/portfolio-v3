@@ -3732,4 +3732,3 @@ export default function RachosRoom(props: JSX.IntrinsicElements['group']) {
     </group>
   );
 }
-

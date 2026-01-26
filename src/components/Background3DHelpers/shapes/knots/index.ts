@@ -19,7 +19,13 @@ function createTubeFromPoints(
   closed: boolean = true
 ): THREE.BufferGeometry {
   const curve = new THREE.CatmullRomCurve3(points, closed);
-  const geo = new THREE.TubeGeometry(curve, segments, tubeRadius, radialSegments, closed);
+  const geo = new THREE.TubeGeometry(
+    curve,
+    segments,
+    tubeRadius,
+    radialSegments,
+    closed
+  );
   geo.computeVertexNormals();
   return geo;
 }
@@ -60,15 +66,17 @@ export function trefoilKnotGeometry(
   segments = 200
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
     const x = Math.sin(t) + 2 * Math.sin(2 * t);
     const y = Math.cos(t) - 2 * Math.cos(2 * t);
     const z = -Math.sin(3 * t);
-    points.push(new THREE.Vector3(x * scale * 0.4, y * scale * 0.4, z * scale * 0.4));
+    points.push(
+      new THREE.Vector3(x * scale * 0.4, y * scale * 0.4, z * scale * 0.4)
+    );
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 12, true);
 }
 
@@ -81,15 +89,17 @@ export function eightKnotGeometry(
   segments = 200
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
     const x = (2 + Math.cos(2 * t)) * Math.cos(3 * t);
     const y = (2 + Math.cos(2 * t)) * Math.sin(3 * t);
     const z = Math.sin(4 * t);
-    points.push(new THREE.Vector3(x * scale * 0.35, y * scale * 0.35, z * scale * 0.35));
+    points.push(
+      new THREE.Vector3(x * scale * 0.35, y * scale * 0.35, z * scale * 0.35)
+    );
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 12, true);
 }
 
@@ -114,7 +124,7 @@ export function knot1Geometry(
   segments = 200
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 4;
     const r = 0.8 + 0.4 * Math.sin(3 * t);
@@ -123,7 +133,7 @@ export function knot1Geometry(
     const z = 0.5 * Math.sin(5 * t);
     points.push(new THREE.Vector3(x * scale, y * scale, z * scale));
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 10, true);
 }
 
@@ -136,7 +146,7 @@ export function knot2Geometry(
   segments = 250
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 6;
     const r = 0.6 + 0.3 * Math.cos(4 * t);
@@ -145,7 +155,7 @@ export function knot2Geometry(
     const z = 0.4 * Math.sin(3 * t);
     points.push(new THREE.Vector3(x * scale, y * scale, z * scale));
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 10, true);
 }
 
@@ -158,7 +168,7 @@ export function knot4Geometry(
   segments = 300
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 4;
     const r = 0.7 + 0.25 * Math.sin(5 * t) + 0.15 * Math.cos(7 * t);
@@ -167,7 +177,7 @@ export function knot4Geometry(
     const z = 0.35 * Math.sin(4 * t) + 0.15 * Math.cos(6 * t);
     points.push(new THREE.Vector3(x * scale, y * scale, z * scale));
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 8, true);
 }
 
@@ -180,17 +190,17 @@ export function knot5Geometry(
   segments = 350
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 8;
-    const spiral = 0.1 * t / (Math.PI * 2);
+    const spiral = (0.1 * t) / (Math.PI * 2);
     const r = 0.5 + 0.2 * Math.sin(6 * t) + spiral * 0.1;
     const x = r * Math.cos(t);
     const y = r * Math.sin(t);
     const z = 0.25 * Math.sin(8 * t) + (i / segments - 0.5) * 0.5;
     points.push(new THREE.Vector3(x * scale, y * scale, z * scale));
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 8, true);
 }
 
@@ -203,18 +213,20 @@ export function grannyKnotGeometry(
   segments = 300
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 4;
-    
+
     // Modified trefoil with extra twists
     const x = Math.sin(t) + 2 * Math.sin(2 * t) + 0.5 * Math.sin(4 * t);
     const y = Math.cos(t) - 2 * Math.cos(2 * t) - 0.5 * Math.cos(4 * t);
     const z = -Math.sin(3 * t) + 0.3 * Math.sin(6 * t);
-    
-    points.push(new THREE.Vector3(x * scale * 0.3, y * scale * 0.3, z * scale * 0.3));
+
+    points.push(
+      new THREE.Vector3(x * scale * 0.3, y * scale * 0.3, z * scale * 0.3)
+    );
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 10, true);
 }
 
@@ -227,18 +239,20 @@ export function cinquefoilKnotGeometry(
   segments = 250
 ): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
-  
+
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
-    
+
     // Cinquefoil parametrization
     const x = Math.cos(t) * (2 + Math.cos(5 * t));
     const y = Math.sin(t) * (2 + Math.cos(5 * t));
     const z = Math.sin(5 * t);
-    
-    points.push(new THREE.Vector3(x * scale * 0.35, y * scale * 0.35, z * scale * 0.35));
+
+    points.push(
+      new THREE.Vector3(x * scale * 0.35, y * scale * 0.35, z * scale * 0.35)
+    );
   }
-  
+
   return createTubeFromPoints(points, tubeRadius * scale, segments, 12, true);
 }
 

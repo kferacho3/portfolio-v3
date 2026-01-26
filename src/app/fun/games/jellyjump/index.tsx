@@ -37,7 +37,10 @@ export default function JellyJump() {
     jellyJumpState.loadBest();
   }, []);
 
-  const pattern = useMemo(() => generatePattern(snap.worldSeed), [snap.worldSeed]);
+  const pattern = useMemo(
+    () => generatePattern(snap.worldSeed),
+    [snap.worldSeed]
+  );
 
   return (
     <group>

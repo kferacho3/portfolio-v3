@@ -15,9 +15,17 @@ export const SpikeMesh: React.FC<{ spike: Spike }> = ({ spike }) => {
   });
 
   return (
-    <mesh ref={ref} position={[spike.pos.x, spike.pos.y, spike.pos.z]} castShadow>
+    <mesh
+      ref={ref}
+      position={[spike.pos.x, spike.pos.y, spike.pos.z]}
+      castShadow
+    >
       <coneGeometry args={[0.85, 2.1, 8]} />
-      <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.35} />
+      <meshStandardMaterial
+        color="#ef4444"
+        emissive="#7f1d1d"
+        emissiveIntensity={0.35}
+      />
     </mesh>
   );
 };

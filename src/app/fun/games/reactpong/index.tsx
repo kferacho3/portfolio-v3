@@ -19,7 +19,8 @@ export * from './types';
 export * from './constants';
 
 const ReactPong: React.FC<{ ready?: boolean }> = ({ ready: _ready }) => {
-  const { scoreColor, ballColor, mode, scorePopups, hitEffects } = useSnapshot(reactPongState);
+  const { scoreColor, ballColor, mode, scorePopups, hitEffects } =
+    useSnapshot(reactPongState);
   const ballBodyRef = useRef<RapierRigidBody | null>(null);
 
   const paddleHitSoundRef = useRef<HTMLAudioElement | null>(null);
@@ -29,10 +30,18 @@ const ReactPong: React.FC<{ ready?: boolean }> = ({ ready: _ready }) => {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      paddleHitSoundRef.current = new Audio('https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/ReactPongPingPongHit.mp3');
-      wallHitSoundRef.current = new Audio('https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/ReactPongWallHit.mp3');
-      scoreSoundRef.current = new Audio('https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/SoundScore.mp3');
-      scoreBonusSoundRef.current = new Audio('https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/SoundScoreBonusPoints.mp3');
+      paddleHitSoundRef.current = new Audio(
+        'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/ReactPongPingPongHit.mp3'
+      );
+      wallHitSoundRef.current = new Audio(
+        'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/ReactPongWallHit.mp3'
+      );
+      scoreSoundRef.current = new Audio(
+        'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/SoundScore.mp3'
+      );
+      scoreBonusSoundRef.current = new Audio(
+        'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/gameAudio/reactPong/SoundScoreBonusPoints.mp3'
+      );
     }
   }, []);
 

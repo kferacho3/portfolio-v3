@@ -34,7 +34,11 @@ const BoxArena: React.FC<{ board: SpinBlockBoardPreset }> = ({ board }) => {
   return (
     <group>
       <RigidBody type="fixed" position={[0, -halfWall, 0]}>
-        <CuboidCollider args={[halfSize, halfWall, halfSize]} restitution={0.3} friction={0.5} />
+        <CuboidCollider
+          args={[halfSize, halfWall, halfSize]}
+          restitution={0.3}
+          friction={0.5}
+        />
         <mesh material={floorMaterial} receiveShadow>
           <boxGeometry args={[board.boxSize, WALL_THICKNESS, board.boxSize]} />
         </mesh>
@@ -45,31 +49,71 @@ const BoxArena: React.FC<{ board: SpinBlockBoardPreset }> = ({ board }) => {
         <meshBasicMaterial color="#1a1a3a" transparent opacity={0.5} />
       </mesh>
 
-      <RigidBody type="fixed" position={[0, wallHalfHeight, halfSize + halfWall]}>
-        <CuboidCollider args={[halfSize + WALL_THICKNESS, wallHalfHeight, halfWall]} restitution={0.8} />
+      <RigidBody
+        type="fixed"
+        position={[0, wallHalfHeight, halfSize + halfWall]}
+      >
+        <CuboidCollider
+          args={[halfSize + WALL_THICKNESS, wallHalfHeight, halfWall]}
+          restitution={0.8}
+        />
         <mesh material={wallMaterial}>
-          <boxGeometry args={[board.boxSize + WALL_THICKNESS * 2, board.wallHeight, WALL_THICKNESS]} />
+          <boxGeometry
+            args={[
+              board.boxSize + WALL_THICKNESS * 2,
+              board.wallHeight,
+              WALL_THICKNESS,
+            ]}
+          />
         </mesh>
       </RigidBody>
 
-      <RigidBody type="fixed" position={[0, wallHalfHeight, -halfSize - halfWall]}>
-        <CuboidCollider args={[halfSize + WALL_THICKNESS, wallHalfHeight, halfWall]} restitution={0.8} />
+      <RigidBody
+        type="fixed"
+        position={[0, wallHalfHeight, -halfSize - halfWall]}
+      >
+        <CuboidCollider
+          args={[halfSize + WALL_THICKNESS, wallHalfHeight, halfWall]}
+          restitution={0.8}
+        />
         <mesh material={wallMaterial}>
-          <boxGeometry args={[board.boxSize + WALL_THICKNESS * 2, board.wallHeight, WALL_THICKNESS]} />
+          <boxGeometry
+            args={[
+              board.boxSize + WALL_THICKNESS * 2,
+              board.wallHeight,
+              WALL_THICKNESS,
+            ]}
+          />
         </mesh>
       </RigidBody>
 
-      <RigidBody type="fixed" position={[-halfSize - halfWall, wallHalfHeight, 0]}>
-        <CuboidCollider args={[halfWall, wallHalfHeight, halfSize]} restitution={0.8} />
+      <RigidBody
+        type="fixed"
+        position={[-halfSize - halfWall, wallHalfHeight, 0]}
+      >
+        <CuboidCollider
+          args={[halfWall, wallHalfHeight, halfSize]}
+          restitution={0.8}
+        />
         <mesh material={wallMaterial}>
-          <boxGeometry args={[WALL_THICKNESS, board.wallHeight, board.boxSize]} />
+          <boxGeometry
+            args={[WALL_THICKNESS, board.wallHeight, board.boxSize]}
+          />
         </mesh>
       </RigidBody>
 
-      <RigidBody type="fixed" position={[halfSize + halfWall, wallHalfHeight, 0]}>
-        <CuboidCollider args={[halfWall, wallHalfHeight, halfSize]} restitution={0.8} />
+      <RigidBody
+        type="fixed"
+        position={[halfSize + halfWall, wallHalfHeight, 0]}
+      >
+        <CuboidCollider
+          args={[halfWall, wallHalfHeight, halfSize]}
+          restitution={0.8}
+        />
         <mesh material={wallMaterial}>
-          <boxGeometry args={[WALL_THICKNESS, board.wallHeight, board.boxSize]} />
+          <boxGeometry
+            args={[WALL_THICKNESS, board.wallHeight, board.boxSize]}
+          />
         </mesh>
       </RigidBody>
     </group>

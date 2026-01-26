@@ -32,9 +32,13 @@ import type {
 
 const pickRandomThemeKey = (exclude?: ThemeKey): ThemeKey => {
   if (THEME_KEYS.length === 1) return THEME_KEYS[0];
-  let next = THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)] as ThemeKey;
+  let next = THEME_KEYS[
+    Math.floor(Math.random() * THEME_KEYS.length)
+  ] as ThemeKey;
   while (exclude && next === exclude) {
-    next = THEME_KEYS[Math.floor(Math.random() * THEME_KEYS.length)] as ThemeKey;
+    next = THEME_KEYS[
+      Math.floor(Math.random() * THEME_KEYS.length)
+    ] as ThemeKey;
   }
   return next;
 };
@@ -70,13 +74,16 @@ const NOVA_SKINS: PlayerSkin[] = [
   'novaring',
 ];
 
-const pickSkin = (skins: PlayerSkin[]) => skins[Math.floor(Math.random() * skins.length)];
+const pickSkin = (skins: PlayerSkin[]) =>
+  skins[Math.floor(Math.random() * skins.length)];
 
 const getStoredArena = (): ArenaPresetKey | null => {
   if (typeof window === 'undefined') return null;
   const stored = window.localStorage.getItem('apex-arena');
   if (!stored) return null;
-  return (ARENA_KEYS as readonly string[]).includes(stored) ? (stored as ArenaPresetKey) : null;
+  return (ARENA_KEYS as readonly string[]).includes(stored)
+    ? (stored as ArenaPresetKey)
+    : null;
 };
 
 export const apexState = proxy<
@@ -189,7 +196,8 @@ export const apexState = proxy<
     const difficultyMult =
       this.difficulty === 'easy' ? 0.8 : this.difficulty === 'hard' ? 1.3 : 1;
     const modeSettings = MODE_SETTINGS[this.mode];
-    mutation.speed = INITIAL_SPEED * difficultyMult * modeSettings.speedMultiplier;
+    mutation.speed =
+      INITIAL_SPEED * difficultyMult * modeSettings.speedMultiplier;
     mutation.gameOver = false;
     mutation.isOnPlatform = true;
     mutation.initialized = false;
@@ -228,7 +236,8 @@ export const apexState = proxy<
 
   addScore(points: number) {
     if (!Number.isFinite(points)) return 0;
-    const multiplier = this.comboMultiplier * MODE_SETTINGS[this.mode].scoreMultiplier;
+    const multiplier =
+      this.comboMultiplier * MODE_SETTINGS[this.mode].scoreMultiplier;
     const awarded = Math.floor(points * multiplier);
     if (awarded > 0) this.score += awarded;
     return awarded;
@@ -242,7 +251,8 @@ export const apexState = proxy<
     else if (this.combo >= 5) this.comboMultiplier = 2;
     else if (this.combo >= 2) this.comboMultiplier = 1.5;
     const tier = Math.floor(this.score / GEM_SCORE_STEP);
-    const tierBoost = 1 + Math.min(tier, GEM_SCORE_MULTIPLIER_CAP) * GEM_SCORE_MULTIPLIER_STEP;
+    const tierBoost =
+      1 + Math.min(tier, GEM_SCORE_MULTIPLIER_CAP) * GEM_SCORE_MULTIPLIER_STEP;
     const basePoints = GEM_BASE_POINTS[type] ?? 20;
     const awarded = this.addScore(basePoints * tierBoost);
 
@@ -274,7 +284,11 @@ export const apexState = proxy<
       this.difficulty === 'easy' ? 0.8 : this.difficulty === 'hard' ? 1.3 : 1;
     const modeSettings = MODE_SETTINGS[this.mode];
     mutation.speed = Math.min(
-      mutation.speed + SPEED_INCREMENT * 10 * difficultyMult * modeSettings.speedIncrementMultiplier,
+      mutation.speed +
+        SPEED_INCREMENT *
+          10 *
+          difficultyMult *
+          modeSettings.speedIncrementMultiplier,
       SPEED_LIMIT * modeSettings.speedLimitMultiplier
     );
   },

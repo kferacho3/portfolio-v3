@@ -1,12 +1,27 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Html, Sky, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Bloom, ChromaticAberration, EffectComposer, Noise } from '@react-three/postprocessing';
+import {
+  Bloom,
+  ChromaticAberration,
+  EffectComposer,
+  Noise,
+} from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
+import {
+  ArcadeHudCard,
+  ArcadeHudPill,
+  ArcadeHudShell,
+} from '../../components/shell/ArcadeHudPanel';
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { traceState } from './state';
@@ -34,7 +49,8 @@ const SEAL_BUFFER_MS = 180;
 const PERFECT_WALL_MARGIN = 3.2;
 const BEST_SCORE_KEY = 'trace-best-score';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 type Segment = { x: number; z: number; t: number; key: string };
 type Shard = { id: string; pos: THREE.Vector3 };
@@ -57,9 +73,13 @@ function spawnShardAwayFrom(player: THREE.Vector3): THREE.Vector3 {
   return randomArenaPoint(1.0);
 }
 
-const cellKey = (x: number, z: number) => `${Math.floor(x / HASH_CELL)}:${Math.floor(z / HASH_CELL)}`;
+const cellKey = (x: number, z: number) =>
+  `${Math.floor(x / HASH_CELL)}:${Math.floor(z / HASH_CELL)}`;
 
-const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({ accentA, accentB }) => {
+const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({
+  accentA,
+  accentB,
+}) => {
   const mat = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -121,7 +141,7 @@ const LowPolyGround: React.FC = () => {
       const x = pos.getX(i);
       const z = pos.getZ(i);
       const ridge = Math.sin(x * 0.22) * Math.cos(z * 0.18) * 0.11;
-      const bowl = -Math.hypot(x, z) / (ARENA_SIZE * 0.7) * 0.42;
+      const bowl = (-Math.hypot(x, z) / (ARENA_SIZE * 0.7)) * 0.42;
       pos.setY(i, -0.02 + ridge + bowl);
     }
     pos.needsUpdate = true;
@@ -130,7 +150,12 @@ const LowPolyGround: React.FC = () => {
   }, []);
   return (
     <mesh geometry={geom} receiveShadow>
-      <meshStandardMaterial color="#060913" roughness={0.95} metalness={0.05} flatShading />
+      <meshStandardMaterial
+        color="#060913"
+        roughness={0.95}
+        metalness={0.05}
+        flatShading
+      />
     </mesh>
   );
 };
@@ -172,42 +197,70 @@ const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
           style={{ background: 'rgba(34, 211, 238, 0.2)', opacity: flash }}
         />
       )}
-      <ArcadeHudShell gameId="trace" className="absolute top-4 left-4 pointer-events-auto">
+      <ArcadeHudShell
+        gameId="trace"
+        className="absolute top-4 left-4 pointer-events-auto"
+      >
         <ArcadeHudCard className="min-w-[260px]">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Neon Etch</div>
-          <div className="text-[9px] uppercase tracking-[0.26em] text-white/40">Carve → Phase → Seal</div>
-          <div className="mt-1 text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
-          <div className="text-2xl font-semibold text-white">{s.score.toLocaleString()}</div>
-          <div className="text-[11px] text-white/50">Best {s.bestScore.toLocaleString()}</div>
+          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">
+            Neon Etch
+          </div>
+          <div className="text-[9px] uppercase tracking-[0.26em] text-white/40">
+            Carve → Phase → Seal
+          </div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.32em] text-white/50">
+            Score
+          </div>
+          <div className="text-2xl font-semibold text-white">
+            {s.score.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-white/50">
+            Best {s.bestScore.toLocaleString()}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <ArcadeHudPill label={`Combo x${s.combo}`} />
             <ArcadeHudPill label={`Window ${s.comboTime.toFixed(1)}s`} />
-            <ArcadeHudPill label={`Phase ${s.phaseCharges}/${s.phaseMaxCharges}`} />
+            <ArcadeHudPill
+              label={`Phase ${s.phaseCharges}/${s.phaseMaxCharges}`}
+            />
             <ArcadeHudPill label={`Solidify ${Math.round(solidifyMs)}ms`} />
             <ArcadeHudPill label={`Seals ${s.seals}`} tone="accent" />
             <ArcadeHudPill label={`Perfect ${s.perfectPhases}`} />
-            {s.event && <ArcadeHudPill label={`${s.event} ${Math.ceil(s.eventTime)}s`} tone="accent" />}
+            {s.event && (
+              <ArcadeHudPill
+                label={`${s.event} ${Math.ceil(s.eventTime)}s`}
+                tone="accent"
+              />
+            )}
           </div>
           <div className="mt-2 space-y-2 text-[11px] text-white/70">
             <div className="flex items-center justify-between">
               <span>Purge</span>
-              <span>{s.purgeCooldown > 0 ? s.purgeCooldown.toFixed(1) : 'ready'}</span>
+              <span>
+                {s.purgeCooldown > 0 ? s.purgeCooldown.toFixed(1) : 'ready'}
+              </span>
             </div>
             <div className="h-2 w-56 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-sky-300/70"
-                style={{ width: `${clamp((1 - s.purgeCooldown / s.purgeCooldownMax) * 100, 0, 100)}%` }}
+                style={{
+                  width: `${clamp((1 - s.purgeCooldown / s.purgeCooldownMax) * 100, 0, 100)}%`,
+                }}
               />
             </div>
 
             <div className="flex items-center justify-between">
               <span>Seal</span>
-              <span>{s.sealCooldown > 0 ? s.sealCooldown.toFixed(1) : 'ready'}</span>
+              <span>
+                {s.sealCooldown > 0 ? s.sealCooldown.toFixed(1) : 'ready'}
+              </span>
             </div>
             <div className="h-2 w-56 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-cyan-400/70"
-                style={{ width: `${clamp((1 - s.sealCooldown / s.sealCooldownMax) * 100, 0, 100)}%` }}
+                style={{
+                  width: `${clamp((1 - s.sealCooldown / s.sealCooldownMax) * 100, 0, 100)}%`,
+                }}
               />
             </div>
           </div>
@@ -222,17 +275,26 @@ const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
           <ArcadeHudShell gameId="trace">
             <ArcadeHudCard className="text-center">
               <div className="text-3xl font-semibold text-white">Game Over</div>
-              <div className="mt-2 text-lg text-white/80">Final Score: {s.score.toLocaleString()}</div>
-              <div className="mt-4 text-[11px] uppercase tracking-[0.3em] text-white/50">Press R to restart</div>
+              <div className="mt-2 text-lg text-white/80">
+                Final Score: {s.score.toLocaleString()}
+              </div>
+              <div className="mt-4 text-[11px] uppercase tracking-[0.3em] text-white/50">
+                Press R to restart
+              </div>
             </ArcadeHudCard>
           </ArcadeHudShell>
         </div>
       )}
 
       {s.toastTime > 0 && s.toastText && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 pointer-events-none" style={{ opacity: toastOpacity }}>
+        <div
+          className="fixed top-6 left-1/2 -translate-x-1/2 pointer-events-none"
+          style={{ opacity: toastOpacity }}
+        >
           <ArcadeHudShell gameId="trace">
-            <ArcadeHudCard className="px-4 py-2 text-xs font-semibold tracking-[0.25em]">{s.toastText}</ArcadeHudCard>
+            <ArcadeHudCard className="px-4 py-2 text-xs font-semibold tracking-[0.25em]">
+              {s.toastText}
+            </ArcadeHudCard>
           </ArcadeHudShell>
         </div>
       )}
@@ -247,7 +309,14 @@ const Trace: React.FC = () => {
 
   const inputRef = useInputRef({
     enabled: !paused,
-    preventDefault: [' ', 'Space', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'arrowdown',
+    ],
   });
 
   const playerMesh = useRef<THREE.Mesh | null>(null);
@@ -258,7 +327,9 @@ const Trace: React.FC = () => {
   const speedRef = useRef(16);
 
   const segsRef = useRef<Segment[]>([]);
-  const lastSegPosRef = useRef(new THREE.Vector3(posRef.current.x, 0, posRef.current.z));
+  const lastSegPosRef = useRef(
+    new THREE.Vector3(posRef.current.x, 0, posRef.current.z)
+  );
   const bucketsRef = useRef<Map<string, Segment[]>>(new Map());
 
   const lastGrazeAtRef = useRef(0);
@@ -334,7 +405,10 @@ const Trace: React.FC = () => {
 
   useFrame((_, dt) => {
     // Camera follow always
-    camera.position.lerp(new THREE.Vector3(posRef.current.x, 22, posRef.current.z + 18), 0.08);
+    camera.position.lerp(
+      new THREE.Vector3(posRef.current.x, 22, posRef.current.z + 18),
+      0.08
+    );
     camera.lookAt(posRef.current.x, 0, posRef.current.z);
 
     if (paused) {
@@ -354,7 +428,10 @@ const Trace: React.FC = () => {
 
     // Solidify ramps from ~650ms to ~260ms over ~110s; SoftStorm slows it temporarily
     const baseSolidify = clamp(650 - traceState.elapsed * 3.55, 260, 650);
-    const solidifyMs = traceState.event === 'SoftStorm' ? clamp(baseSolidify + 220, 260, 900) : baseSolidify;
+    const solidifyMs =
+      traceState.event === 'SoftStorm'
+        ? clamp(baseSolidify + 220, 260, 900)
+        : baseSolidify;
 
     const keys = inputRef.current.keysDown;
     const justPressed = inputRef.current.justPressed;
@@ -431,7 +508,12 @@ const Trace: React.FC = () => {
     // Arena boundaries: walls are lethal unless phasing (that’s your “save” tool)
     const min = -HALF + PLAYER_R;
     const max = HALF - PLAYER_R;
-    if (posRef.current.x < min || posRef.current.x > max || posRef.current.z < min || posRef.current.z > max) {
+    if (
+      posRef.current.x < min ||
+      posRef.current.x > max ||
+      posRef.current.z < min ||
+      posRef.current.z > max
+    ) {
       if (traceState.phaseTime > 0) {
         posRef.current.x = clamp(posRef.current.x, min, max);
         posRef.current.z = clamp(posRef.current.z, min, max);
@@ -441,7 +523,9 @@ const Trace: React.FC = () => {
     }
 
     // Trail spawn (distance-based)
-    const dSeg = lastSegPosRef.current.distanceTo(new THREE.Vector3(posRef.current.x, 0, posRef.current.z));
+    const dSeg = lastSegPosRef.current.distanceTo(
+      new THREE.Vector3(posRef.current.x, 0, posRef.current.z)
+    );
     if (dSeg >= SEG_SPACING) {
       const x = posRef.current.x;
       const z = posRef.current.z;
@@ -585,14 +669,23 @@ const Trace: React.FC = () => {
   });
 
   // Recompute solidify for HUD display (matches frame calculation closely)
-  const hudSolidify = clamp(650 - traceState.elapsed * 3.55, 260, 650) + (traceState.event === 'SoftStorm' ? 220 : 0);
+  const hudSolidify =
+    clamp(650 - traceState.elapsed * 3.55, 260, 650) +
+    (traceState.event === 'SoftStorm' ? 220 : 0);
 
   return (
     <>
       <TraceHUD solidifyMs={hudSolidify} />
       <NeonDome accentA="#a78bfa" accentB="#1e1b2e" />
       <fog attach="fog" args={['#031019', 30, 120]} />
-      <Stars radius={240} depth={60} count={1500} factor={4} saturation={0} fade />
+      <Stars
+        radius={240}
+        depth={60}
+        count={1500}
+        factor={4}
+        saturation={0}
+        fade
+      />
       <ambientLight intensity={0.35} />
       <directionalLight position={[18, 32, 14]} intensity={1.1} castShadow />
 
@@ -614,16 +707,27 @@ const Trace: React.FC = () => {
       <primitive object={gridHelper} position={[0, 0.02, 0]} />
 
       {/* Trail instanced boxes */}
-      <instancedMesh ref={trailMesh} args={[undefined as any, undefined as any, MAX_SEGS]}>
+      <instancedMesh
+        ref={trailMesh}
+        args={[undefined as any, undefined as any, MAX_SEGS]}
+      >
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial vertexColors emissive="#22d3ee" emissiveIntensity={0.2} />
+        <meshStandardMaterial
+          vertexColors
+          emissive="#22d3ee"
+          emissiveIntensity={0.2}
+        />
       </instancedMesh>
 
       {/* Shards */}
       {shards.map((s) => (
         <mesh key={s.id} position={[s.pos.x, 1.05, s.pos.z]} castShadow>
           <tetrahedronGeometry args={[0.65, 0]} />
-          <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.55} />
+          <meshStandardMaterial
+            color="#facc15"
+            emissive="#f59e0b"
+            emissiveIntensity={0.55}
+          />
         </mesh>
       ))}
 

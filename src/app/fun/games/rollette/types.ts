@@ -57,4 +57,3 @@ export interface TorusKnotItem extends BaseItem {
 export interface StarItem extends BaseItem {
   kind: 'star';
 }
-

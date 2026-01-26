@@ -6,7 +6,9 @@ interface CameraControllerProps {
   playerPosition: THREE.Vector3;
 }
 
-const CameraController: React.FC<CameraControllerProps> = ({ playerPosition }) => {
+const CameraController: React.FC<CameraControllerProps> = ({
+  playerPosition,
+}) => {
   const { camera } = useThree();
   const targetRef = useRef(new THREE.Vector3());
   const velocityRef = useRef(new THREE.Vector3());
@@ -31,7 +33,10 @@ const CameraController: React.FC<CameraControllerProps> = ({ playerPosition }) =
 
     targetRef.current.copy(idealPosition);
 
-    const acceleration = targetRef.current.clone().sub(camera.position).multiplyScalar(springStrength);
+    const acceleration = targetRef.current
+      .clone()
+      .sub(camera.position)
+      .multiplyScalar(springStrength);
 
     velocityRef.current.add(acceleration.multiplyScalar(delta));
     velocityRef.current.multiplyScalar(damping);

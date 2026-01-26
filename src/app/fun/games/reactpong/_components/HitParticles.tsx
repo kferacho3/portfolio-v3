@@ -37,7 +37,11 @@ const HitParticleEffect: React.FC<{ effect: HitEffect }> = ({ effect }) => {
           ref={(el) => {
             meshRefs.current[i] = el;
           }}
-          position={[Math.cos(p.angle) * p.offset, Math.sin(p.angle) * p.offset, 0]}
+          position={[
+            Math.cos(p.angle) * p.offset,
+            Math.sin(p.angle) * p.offset,
+            0,
+          ]}
         >
           <sphereGeometry args={[p.size, 6, 6]} />
           <meshBasicMaterial color={effect.color} transparent opacity={0.7} />

@@ -98,11 +98,15 @@ function placeNormalCollectible(
   }
   if (gaps.length === 0) return;
   const g = rng.pick(gaps);
-  const lead = rng.float(GAME.collectibleGapLeadMin, GAME.collectibleGapLeadMax);
+  const lead = rng.float(
+    GAME.collectibleGapLeadMin,
+    GAME.collectibleGapLeadMax
+  );
   const safeFaces = Array.from({ length: GAME.faces }, (_, i) => i).filter(
     (f) => !g.excludedFaces.has(f)
   );
-  const face = safeFaces.length > 0 ? rng.pick(safeFaces) : rng.int(0, GAME.faces - 1);
+  const face =
+    safeFaces.length > 0 ? rng.pick(safeFaces) : rng.int(0, GAME.faces - 1);
   c.faceIndex = face;
   c.z = g.z + lead;
   c.collected = false;
@@ -190,7 +194,9 @@ export default function OctaSurge() {
     collectibles: [] as CollectibleData[],
     ringZ: [] as number[],
   });
-  const [collectionEffects, setCollectionEffects] = useState<CollectionEffect[]>([]);
+  const [collectionEffects, setCollectionEffects] = useState<
+    CollectionEffect[]
+  >([]);
   const collectionEffectsRef = useRef<CollectionEffect[]>([]);
   const pendingEffectsRef = useRef<CollectionEffect[]>([]);
   useEffect(() => {
@@ -310,8 +316,12 @@ export default function OctaSurge() {
     w.speed = GAME.baseSpeed * (1 + progress * GAME.speedRamp);
 
     // Rotation: smooth easing (lower ease = silkier)
-    const keyLeft = input.current.keysDown.has('arrowleft') || input.current.keysDown.has('a');
-    const keyRight = input.current.keysDown.has('arrowright') || input.current.keysDown.has('d');
+    const keyLeft =
+      input.current.keysDown.has('arrowleft') ||
+      input.current.keysDown.has('a');
+    const keyRight =
+      input.current.keysDown.has('arrowright') ||
+      input.current.keysDown.has('d');
     w.targetRotationVel = 0;
     if (keyLeft) w.targetRotationVel = GAME.keyRotationSpeed;
     if (keyRight) w.targetRotationVel = -GAME.keyRotationSpeed;
@@ -377,9 +387,14 @@ export default function OctaSurge() {
       }
       c.z += w.speed * delta;
 
-      const radius = c.type === 'special' ? GAME.specialHitRadius : GAME.collectibleHitRadius;
+      const radius =
+        c.type === 'special'
+          ? GAME.specialHitRadius
+          : GAME.collectibleHitRadius;
       const overlap = zOverlap(playerZ, playerHalf, c.z, radius);
-      const diff = Math.abs(smallestAngleDiff(c.faceIndex * fA + w.worldRot, playerAngle));
+      const diff = Math.abs(
+        smallestAngleDiff(c.faceIndex * fA + w.worldRot, playerAngle)
+      );
       const sameFace = diff < collectFaceTol;
       if (overlap && sameFace) {
         octaSurgeState.collect(c.type);
@@ -419,7 +434,11 @@ export default function OctaSurge() {
       const segMax = Math.max(prevZ, o.z) + obsHalf;
       const sweptOverlap =
         playerZ - playerHalf < segMax && playerZ + playerHalf > segMin;
-      const sameFace = sameFaceObstacle(o.faceIndex, w.worldRot, GAME.faceHitTightness);
+      const sameFace = sameFaceObstacle(
+        o.faceIndex,
+        w.worldRot,
+        GAME.faceHitTightness
+      );
       const skipHit = invuln || w.collectedThisFrame;
       if (!skipHit && sweptOverlap && sameFace) {
         octaSurgeState.end();
@@ -457,11 +476,17 @@ export default function OctaSurge() {
     endFrame();
   });
 
-  const faces = useMemo(() => Array.from({ length: GAME.faces }, (_, i) => i), []);
+  const faces = useMemo(
+    () => Array.from({ length: GAME.faces }, (_, i) => i),
+    []
+  );
 
   // Build a fixed number of rings (same count as initialized)
   const ringCount = 26;
-  const rings = useMemo(() => Array.from({ length: ringCount }, (_, i) => i), []);
+  const rings = useMemo(
+    () => Array.from({ length: ringCount }, (_, i) => i),
+    []
+  );
 
   return (
     <group>
@@ -469,8 +494,18 @@ export default function OctaSurge() {
 
       {/* Lights — bright end glow + fill */}
       <ambientLight intensity={0.4} />
-      <pointLight position={[0, 0, -70]} intensity={4} distance={160} color="#e0f0ff" />
-      <pointLight position={[0, 0, -40]} intensity={1.5} distance={80} color="#ffb3d9" />
+      <pointLight
+        position={[0, 0, -70]}
+        intensity={4}
+        distance={160}
+        color="#e0f0ff"
+      />
+      <pointLight
+        position={[0, 0, -40]}
+        intensity={1.5}
+        distance={80}
+        color="#ffb3d9"
+      />
       <directionalLight position={[6, 8, 10]} intensity={0.85} />
 
       {/* Tunnel */}
@@ -510,9 +545,18 @@ export default function OctaSurge() {
             }}
             geometry={geom.ringGeo}
             rotation={[Math.PI / 2, 0, 0]}
-            position={[0, 0, -GAME.tunnelLength + (i / ringCount) * GAME.tunnelLength]}
+            position={[
+              0,
+              0,
+              -GAME.tunnelLength + (i / ringCount) * GAME.tunnelLength,
+            ]}
           >
-            <meshBasicMaterial color={'#88ccff'} wireframe transparent opacity={0.2} />
+            <meshBasicMaterial
+              color={'#88ccff'}
+              wireframe
+              transparent
+              opacity={0.2}
+            />
           </mesh>
         ))}
 
@@ -534,7 +578,13 @@ export default function OctaSurge() {
               castShadow
               receiveShadow
             >
-              <meshStandardMaterial color={'#1a0a12'} emissive={'#8B1538'} emissiveIntensity={0.25} roughness={0.5} metalness={0.15} />
+              <meshStandardMaterial
+                color={'#1a0a12'}
+                emissive={'#8B1538'}
+                emissiveIntensity={0.25}
+                roughness={0.5}
+                metalness={0.15}
+              />
             </mesh>
             <mesh
               ref={(m) => {
@@ -544,7 +594,12 @@ export default function OctaSurge() {
               rotation={[Math.PI / 2, 0, 0]}
               geometry={geom.holeGeo}
             >
-              <meshBasicMaterial color={'#000000'} transparent opacity={0.55} side={THREE.DoubleSide} />
+              <meshBasicMaterial
+                color={'#000000'}
+                transparent
+                opacity={0.55}
+                side={THREE.DoubleSide}
+              />
             </mesh>
           </group>
         ))}
@@ -593,7 +648,10 @@ export default function OctaSurge() {
               rotation={[0, 0, (e.faceIndex / GAME.faces) * Math.PI * 2]}
               scale={[scale, scale, scale]}
             >
-              <mesh position={[0, geom.apothem - 0.15, 0]} geometry={geom.collectibleGeo}>
+              <mesh
+                position={[0, geom.apothem - 0.15, 0]}
+                geometry={geom.collectibleGeo}
+              >
                 <meshBasicMaterial
                   color={isSpecial ? '#C4B5FD' : '#FDE68A'}
                   transparent
@@ -620,15 +678,32 @@ export default function OctaSurge() {
       {/* Player — faceted blue sphere (per reference) */}
       <group position={[0, -(GAME.apothem - GAME.playerInset), playerZ]}>
         <mesh geometry={geom.playerGeo}>
-          <meshStandardMaterial color={'#3B82F6'} emissive={'#1E40AF'} emissiveIntensity={0.2} roughness={0.2} metalness={0.4} />
+          <meshStandardMaterial
+            color={'#3B82F6'}
+            emissive={'#1E40AF'}
+            emissiveIntensity={0.2}
+            roughness={0.2}
+            metalness={0.4}
+          />
         </mesh>
         <mesh geometry={geom.innerGeo} position={[0, 0.16, 0]}>
-          <meshStandardMaterial color={'#E0F0FF'} roughness={0.15} emissive={'#1a2744'} />
+          <meshStandardMaterial
+            color={'#E0F0FF'}
+            roughness={0.15}
+            emissive={'#1a2744'}
+          />
         </mesh>
       </group>
 
       {/* Subtle stars */}
-      <Stars radius={90} depth={80} count={1200} factor={2} saturation={0} fade />
+      <Stars
+        radius={90}
+        depth={80}
+        count={1200}
+        factor={2}
+        saturation={0}
+        fade
+      />
     </group>
   );
 }

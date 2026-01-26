@@ -2,7 +2,15 @@
  * Apex Constants and Configuration
  */
 import * as THREE from 'three';
-import type { ArenaPresetKey, GameMode, GemType, ModeSettings, PlayerSkin, ThemeColors, ThemeKey } from './types';
+import type {
+  ArenaPresetKey,
+  GameMode,
+  GemType,
+  ModeSettings,
+  PlayerSkin,
+  ThemeColors,
+  ThemeKey,
+} from './types';
 
 export const TILE_SIZE = 1.25;
 export const TILE_DEPTH = 3.6;
@@ -35,7 +43,14 @@ export const GEM_HEIGHT_OFFSET = TILE_DEPTH / 2 + GEM_HEIGHT;
 export const SPECIAL_GEM_CHANCE = 0.08;
 export const SPECIAL_GEM_TYPES = ['prism', 'fractal', 'nova'] as const;
 export const GEM_SCORE_STEP = 100;
-export const GEM_SCORE_COLORS = ['#ff44eb', '#22d3ee', '#f59e0b', '#a78bfa', '#34d399', '#fb7185'];
+export const GEM_SCORE_COLORS = [
+  '#ff44eb',
+  '#22d3ee',
+  '#f59e0b',
+  '#a78bfa',
+  '#34d399',
+  '#fb7185',
+];
 export const GEM_SCORE_MULTIPLIER_STEP = 0.12;
 export const GEM_SCORE_MULTIPLIER_CAP = 8;
 export const GEM_BASE_POINTS: Record<GemType, number> = {
@@ -275,7 +290,17 @@ export type ArenaLights = {
 };
 
 export type ArenaGround = {
-  kind: 'solid' | 'alloy' | 'quilt' | 'prismatic' | 'zigzag' | 'trail' | 'ripple' | 'grid' | 'grass' | 'ice';
+  kind:
+    | 'solid'
+    | 'alloy'
+    | 'quilt'
+    | 'prismatic'
+    | 'zigzag'
+    | 'trail'
+    | 'ripple'
+    | 'grid'
+    | 'grass'
+    | 'ice';
   color?: string;
   accent?: string;
 };
@@ -726,7 +751,10 @@ export const ARENA_PRESETS: Record<ArenaPresetKey, ArenaPreset> = {
 
 export const ARENA_KEYS = Object.keys(ARENA_PRESETS) as ArenaPresetKey[];
 
-export const getArenaTheme = (preset: ArenaPreset, baseTheme: ThemeColors): ThemeColors => {
+export const getArenaTheme = (
+  preset: ArenaPreset,
+  baseTheme: ThemeColors
+): ThemeColors => {
   if (!preset.usePalette || !preset.palette) return baseTheme;
 
   const palette = preset.palette;
@@ -752,7 +780,9 @@ export const getArenaLights = (preset: ArenaPreset) => ({
   ambient: preset.lights?.ambient ?? 2.5,
   directional: preset.lights?.directional ?? 3.5,
   directionalColor: preset.lights?.directionalColor ?? '#ffffff',
-  directionalPosition: preset.lights?.directionalPosition ?? ([15, 30, 10] as [number, number, number]),
+  directionalPosition:
+    preset.lights?.directionalPosition ??
+    ([15, 30, 10] as [number, number, number]),
 });
 
 export const DIRECTIONS = [
@@ -770,7 +800,12 @@ export const PLAYER_SKIN_INFO: Record<
     accent: '#22d3ee',
     description: 'Polished chrome',
   },
-  prism: { name: 'Prism', color: '#9ae6ff', accent: '#60a5fa', description: 'Glass refraction' },
+  prism: {
+    name: 'Prism',
+    color: '#9ae6ff',
+    accent: '#60a5fa',
+    description: 'Glass refraction',
+  },
   prismflare: {
     name: 'Prism Flare',
     color: '#b7f0ff',
@@ -813,7 +848,12 @@ export const PLAYER_SKIN_INFO: Record<
     accent: '#7dd3fc',
     description: 'Charged glass',
   },
-  fractal: { name: 'Fractal', color: '#e9d5ff', accent: '#c084fc', description: 'Faceted bloom' },
+  fractal: {
+    name: 'Fractal',
+    color: '#e9d5ff',
+    accent: '#c084fc',
+    description: 'Faceted bloom',
+  },
   fractalcrown: {
     name: 'Fractal Crown',
     color: '#f5d0fe',
@@ -856,7 +896,12 @@ export const PLAYER_SKIN_INFO: Record<
     accent: '#8b5cf6',
     description: 'Shadowed mesh',
   },
-  nova: { name: 'Nova', color: '#fecaca', accent: '#fb7185', description: 'Solar core' },
+  nova: {
+    name: 'Nova',
+    color: '#fecaca',
+    accent: '#fb7185',
+    description: 'Solar core',
+  },
   novapulse: {
     name: 'Nova Pulse',
     color: '#ffd1d1',
@@ -903,11 +948,34 @@ export const PLAYER_SKIN_INFO: Record<
 
 export const PLAYER_SKIN_KEYS = Object.keys(PLAYER_SKIN_INFO) as PlayerSkin[];
 
-export const MODE_INFO: Record<GameMode, { name: string; description: string; color: string }> = {
-  classic: { name: 'Classic', description: 'Sharp 90° turns. Pure skill.', color: '#00ffff' },
-  curved: { name: 'Curved', description: 'Flowing wave patterns.', color: '#ff6b6b' },
-  spiral: { name: 'Spiral', description: 'Hypnotic inward spiral.', color: '#6c5ce7' },
-  gravity: { name: 'Gravity', description: 'World-bending shifts.', color: '#00ff88' },
-  speedrush: { name: 'Speed Rush', description: '1.5x speed. 2x points.', color: '#f39c12' },
+export const MODE_INFO: Record<
+  GameMode,
+  { name: string; description: string; color: string }
+> = {
+  classic: {
+    name: 'Classic',
+    description: 'Sharp 90° turns. Pure skill.',
+    color: '#00ffff',
+  },
+  curved: {
+    name: 'Curved',
+    description: 'Flowing wave patterns.',
+    color: '#ff6b6b',
+  },
+  spiral: {
+    name: 'Spiral',
+    description: 'Hypnotic inward spiral.',
+    color: '#6c5ce7',
+  },
+  gravity: {
+    name: 'Gravity',
+    description: 'World-bending shifts.',
+    color: '#00ff88',
+  },
+  speedrush: {
+    name: 'Speed Rush',
+    description: '1.5x speed. 2x points.',
+    color: '#f39c12',
+  },
   zen: { name: 'Zen', description: 'No death. Pure flow.', color: '#48dbfb' },
 };

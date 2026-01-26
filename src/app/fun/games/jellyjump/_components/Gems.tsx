@@ -3,7 +3,13 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { jellyJumpState, mutation } from '../state';
-import { PLATFORM_SPACING, PLATFORM_VISIBLE_ABOVE, PLATFORM_VISIBLE_BELOW, GEM_SIZE, PALETTES } from '../constants';
+import {
+  PLATFORM_SPACING,
+  PLATFORM_VISIBLE_ABOVE,
+  PLATFORM_VISIBLE_BELOW,
+  GEM_SIZE,
+  PALETTES,
+} from '../constants';
 import type { PlatformPattern } from '../types';
 
 export default function Gems({ pattern }: { pattern: PlatformPattern }) {
@@ -58,7 +64,11 @@ export default function Gems({ pattern }: { pattern: PlatformPattern }) {
   const maxGems = 100;
 
   return (
-    <instancedMesh ref={gemRef} args={[undefined, gemMat, maxGems]} frustumCulled={false}>
+    <instancedMesh
+      ref={gemRef}
+      args={[undefined, gemMat, maxGems]}
+      frustumCulled={false}
+    >
       <octahedronGeometry args={[GEM_SIZE, 0]} />
     </instancedMesh>
   );

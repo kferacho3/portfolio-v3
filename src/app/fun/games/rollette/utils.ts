@@ -1,9 +1,17 @@
 import { clamp } from './utils/helpers';
 import type { Vec3 } from '../types';
-import type { RingColor, PyramidType, SpringType, TetraType, TorusKnotType, Vec3 } from './types';
+import type {
+  RingColor,
+  PyramidType,
+  SpringType,
+  TetraType,
+  TorusKnotType,
+  Vec3,
+} from './types';
 import { TORUS_OUTCOMES } from './constants';
 
-export const randId = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+export const randId = (prefix: string) =>
+  `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 
 export const dist2XZ = (a: Vec3, b: Vec3) => {
   const dx = a[0] - b[0];

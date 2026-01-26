@@ -50,9 +50,13 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
   inZone,
   paused,
 }) => {
-  const healthPct = maxHealth > 0 ? THREE.MathUtils.clamp(health / maxHealth, 0, 1) : 0;
+  const healthPct =
+    maxHealth > 0 ? THREE.MathUtils.clamp(health / maxHealth, 0, 1) : 0;
   const comboPct = THREE.MathUtils.clamp(comboTimer / CHAIN_WINDOW_S, 0, 1);
-  const dashPct = dashCooldownMax > 0 ? 1 - THREE.MathUtils.clamp(dashCooldown / dashCooldownMax, 0, 1) : 1;
+  const dashPct =
+    dashCooldownMax > 0
+      ? 1 - THREE.MathUtils.clamp(dashCooldown / dashCooldownMax, 0, 1)
+      : 1;
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -60,41 +64,69 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
         <div className="rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white shadow-lg backdrop-blur-sm">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50">Score</div>
-              <div className="text-3xl font-bold font-mono">{Math.floor(score).toLocaleString()}</div>
-              <div className="text-xs text-white/45 mt-1">Best: {Math.floor(highScore).toLocaleString()}</div>
+              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50">
+                Score
+              </div>
+              <div className="text-3xl font-bold font-mono">
+                {Math.floor(score).toLocaleString()}
+              </div>
+              <div className="text-xs text-white/45 mt-1">
+                Best: {Math.floor(highScore).toLocaleString()}
+              </div>
             </div>
 
             <div className="min-w-[180px]">
               <div className="flex items-center justify-between text-xs text-white/60">
                 <span>Health</span>
-                <span className="font-mono" style={{ color: healthColor(healthPct) }}>
+                <span
+                  className="font-mono"
+                  style={{ color: healthColor(healthPct) }}
+                >
                   {Math.max(0, Math.round(health))}%
                 </span>
               </div>
               <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-white/10">
                 <div
                   className="h-full rounded-full transition-all duration-150"
-                  style={{ width: `${healthPct * 100}%`, backgroundColor: healthColor(healthPct) }}
+                  style={{
+                    width: `${healthPct * 100}%`,
+                    backgroundColor: healthColor(healthPct),
+                  }}
                 />
               </div>
-              {shieldTime > 0 && <div className="mt-1 text-[10px] text-cyan-300/90">Shield active</div>}
+              {shieldTime > 0 && (
+                <div className="mt-1 text-[10px] text-cyan-300/90">
+                  Shield active
+                </div>
+              )}
             </div>
           </div>
 
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">Penalty</div>
-              <div className="font-mono text-lg">{Math.floor(debt).toLocaleString()}</div>
+              <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+                Penalty
+              </div>
+              <div className="font-mono text-lg">
+                {Math.floor(debt).toLocaleString()}
+              </div>
             </div>
 
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">Dash</div>
+              <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">
+                Dash
+              </div>
               <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-white/10">
-                <div className="h-full rounded-full bg-fuchsia-400/90" style={{ width: `${dashPct * 100}%` }} />
+                <div
+                  className="h-full rounded-full bg-fuchsia-400/90"
+                  style={{ width: `${dashPct * 100}%` }}
+                />
               </div>
               <div className="mt-1 text-[10px] text-white/50">
-                Space {dashCooldown > 0 ? `(CD ${dashCooldown.toFixed(1)}s)` : '(Ready)'}
+                Space{' '}
+                {dashCooldown > 0
+                  ? `(CD ${dashCooldown.toFixed(1)}s)`
+                  : '(Ready)'}
               </div>
             </div>
           </div>
@@ -105,14 +137,23 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
               <span className="font-mono">+{combo}</span>
             </div>
             <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-amber-300/90" style={{ width: `${comboPct * 100}%` }} />
+              <div
+                className="h-full rounded-full bg-amber-300/90"
+                style={{ width: `${comboPct * 100}%` }}
+              />
             </div>
           </div>
 
           <div className="mt-3 flex items-center justify-between text-xs text-white/60">
             <div className="flex items-center gap-3">
-              {inZone && <span className="text-emerald-300">IN THE ZONE x{ZONE_MULTIPLIER}</span>}
-              {starChain > 0 && <span className="text-pink-300">STAR x{starChain}</span>}
+              {inZone && (
+                <span className="text-emerald-300">
+                  IN THE ZONE x{ZONE_MULTIPLIER}
+                </span>
+              )}
+              {starChain > 0 && (
+                <span className="text-pink-300">STAR x{starChain}</span>
+              )}
             </div>
             {bonusMultiplier > 1 && (
               <span className="text-cyan-300 font-mono">
@@ -123,7 +164,9 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
         </div>
 
         <div className="text-white/50 text-xs pointer-events-auto">
-          <div>WASD: steer • Mouse: influence • Hold Click: brake • Space: dash</div>
+          <div>
+            WASD: steer • Mouse: influence • Hold Click: brake • Space: dash
+          </div>
           <div>R: restart • P: pause</div>
         </div>
       </div>
@@ -148,9 +191,15 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
       {gameOver && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 pointer-events-auto">
           <div className="rounded-2xl border border-white/10 bg-slate-950/80 px-8 py-6 text-white shadow-2xl backdrop-blur-sm text-center">
-            <div className="text-4xl font-extrabold tracking-wide">GAME OVER</div>
-            <div className="mt-2 text-white/70 font-mono text-2xl">{Math.floor(score).toLocaleString()}</div>
-            <div className="mt-1 text-white/40 text-sm">Best: {Math.floor(highScore).toLocaleString()}</div>
+            <div className="text-4xl font-extrabold tracking-wide">
+              GAME OVER
+            </div>
+            <div className="mt-2 text-white/70 font-mono text-2xl">
+              {Math.floor(score).toLocaleString()}
+            </div>
+            <div className="mt-1 text-white/40 text-sm">
+              Best: {Math.floor(highScore).toLocaleString()}
+            </div>
             <div className="mt-5 text-white/60">Press R to restart</div>
           </div>
         </div>
@@ -158,4 +207,3 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
     </Html>
   );
 };
-

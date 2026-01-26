@@ -18,7 +18,10 @@ export const geoState = proxy({
     this.score = 0;
     this.health = 100;
     this.level = 1;
-    this.cargo = SHAPES.reduce((acc, shape) => ({ ...acc, [shape]: 0 }), {} as Record<ShapeType, number>);
+    this.cargo = SHAPES.reduce(
+      (acc, shape) => ({ ...acc, [shape]: 0 }),
+      {} as Record<ShapeType, number>
+    );
     this.deposited = 0;
     this.targetDeposits = 15;
     this.gameOver = false;

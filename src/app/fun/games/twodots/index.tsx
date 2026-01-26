@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Html, Line } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -48,12 +54,54 @@ const ANCHOR_COLOR = '#94a3b8';
 const FIRE_EMISSIVE = '#f97316';
 
 const LEVELS: LevelConfig[] = [
-  { moves: 18, targets: [10, 0, 10, 0], anchors: 0, fireChance: 0.02, bombs: 1, starThresholds: [6, 10] },
-  { moves: 19, targets: [0, 12, 0, 12], anchors: 0, fireChance: 0.03, bombs: 1, starThresholds: [6, 11] },
-  { moves: 20, targets: [8, 8, 8, 0], anchors: 4, fireChance: 0.04, bombs: 1, starThresholds: [7, 12] },
-  { moves: 21, targets: [0, 10, 10, 10], anchors: 6, fireChance: 0.05, bombs: 1, starThresholds: [7, 12] },
-  { moves: 22, targets: [10, 10, 10, 10], anchors: 8, fireChance: 0.06, bombs: 1, starThresholds: [8, 13] },
-  { moves: 23, targets: [12, 12, 0, 12], anchors: 10, fireChance: 0.07, bombs: 1, starThresholds: [8, 14] },
+  {
+    moves: 18,
+    targets: [10, 0, 10, 0],
+    anchors: 0,
+    fireChance: 0.02,
+    bombs: 1,
+    starThresholds: [6, 10],
+  },
+  {
+    moves: 19,
+    targets: [0, 12, 0, 12],
+    anchors: 0,
+    fireChance: 0.03,
+    bombs: 1,
+    starThresholds: [6, 11],
+  },
+  {
+    moves: 20,
+    targets: [8, 8, 8, 0],
+    anchors: 4,
+    fireChance: 0.04,
+    bombs: 1,
+    starThresholds: [7, 12],
+  },
+  {
+    moves: 21,
+    targets: [0, 10, 10, 10],
+    anchors: 6,
+    fireChance: 0.05,
+    bombs: 1,
+    starThresholds: [7, 12],
+  },
+  {
+    moves: 22,
+    targets: [10, 10, 10, 10],
+    anchors: 8,
+    fireChance: 0.06,
+    bombs: 1,
+    starThresholds: [8, 13],
+  },
+  {
+    moves: 23,
+    targets: [12, 12, 0, 12],
+    anchors: 10,
+    fireChance: 0.07,
+    bombs: 1,
+    starThresholds: [8, 14],
+  },
 ];
 
 function getLevelConfig(level: number): LevelConfig {
@@ -87,7 +135,11 @@ function manhattan(a: Coord, b: Coord) {
   return Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
 }
 
-function createRandomDot(rng: SeededRandom, config: LevelConfig, allowFire: boolean) {
+function createRandomDot(
+  rng: SeededRandom,
+  config: LevelConfig,
+  allowFire: boolean
+) {
   const color = rng.int(0, PALETTE.length - 1);
   if (allowFire && rng.bool(config.fireChance)) {
     return { color, special: 'fire' } as Dot;
@@ -175,29 +227,34 @@ export default function TwoDots() {
     // More accurate coordinate conversion - find closest grid cell
     const rawC = point.x / SPACING + halfCols;
     const rawR = point.y / SPACING + halfRows;
-    
+
     // Round to nearest integer for grid position
     const c = Math.round(rawC);
     const r = Math.round(rawR);
-    
+
     // Bounds check
     if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
-    
+
     // Calculate the center of the grid cell
     const cx = (c - halfCols) * SPACING;
     const cy = (r - halfRows) * SPACING;
-    
+
     // More forgiving distance check - allow clicks near the dot center
     // Use larger tolerance for better user experience
     const dist = Math.hypot(point.x - cx, point.y - cy);
     const maxDist = DOT_RADIUS * 2.5; // Increased tolerance for easier clicking
     if (dist > maxDist) return null;
-    
+
     return { r, c };
   };
 
   const resetSelection = () => {
-    selectionRef.current = { dragging: false, color: null, path: [], loop: false };
+    selectionRef.current = {
+      dragging: false,
+      color: null,
+      path: [],
+      loop: false,
+    };
     setPath([]);
     setLoop(false);
     setPathColor(null);
@@ -208,7 +265,13 @@ export default function TwoDots() {
     levelConfigRef.current = config;
     if (resetScore) twoDotsState.score = 0;
     twoDotsState.phase = 'playing';
-    twoDotsState.setLevelState(level, config.moves, config.targets, config.anchors, config.bombs);
+    twoDotsState.setLevelState(
+      level,
+      config.moves,
+      config.targets,
+      config.anchors,
+      config.bombs
+    );
     twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
     setBoosterMode('none');
     setHelpOpen(false);
@@ -235,7 +298,12 @@ export default function TwoDots() {
     resetSelection();
   }, [snap.worldSeed]);
 
-  const commitClear = (coords: Coord[], colorToClear: number | null, isLoop: boolean, consumeMove: boolean) => {
+  const commitClear = (
+    coords: Coord[],
+    colorToClear: number | null,
+    isLoop: boolean,
+    consumeMove: boolean
+  ) => {
     const prev = boardRef.current;
     const config = levelConfigRef.current;
     if (consumeMove) {
@@ -282,7 +350,8 @@ export default function TwoDots() {
       ];
 
       for (const next of neighbors) {
-        if (next.r < 0 || next.r >= ROWS || next.c < 0 || next.c >= COLS) continue;
+        if (next.r < 0 || next.r >= ROWS || next.c < 0 || next.c >= COLS)
+          continue;
         if (!prev[next.r][next.c]) continue;
         const key = keyOf(next.r, next.c);
         if (!toClear.has(key)) {
@@ -300,7 +369,8 @@ export default function TwoDots() {
         { r: coord.r, c: coord.c - 1 },
       ];
       for (const next of neighbors) {
-        if (next.r < 0 || next.r >= ROWS || next.c < 0 || next.c >= COLS) continue;
+        if (next.r < 0 || next.r >= ROWS || next.c < 0 || next.c >= COLS)
+          continue;
         const neighbor = prev[next.r]?.[next.c];
         if (!neighbor || neighbor.special !== 'anchor') continue;
         const key = keyOf(next.r, next.c);
@@ -325,7 +395,9 @@ export default function TwoDots() {
       next[coord.r][coord.c] = null;
     }
 
-    const rng = new SeededRandom(twoDotsState.worldSeed + twoDotsState.score + Date.now());
+    const rng = new SeededRandom(
+      twoDotsState.worldSeed + twoDotsState.score + Date.now()
+    );
     for (let c = 0; c < COLS; c++) {
       const stack: Dot[] = [];
       for (let r = 0; r < ROWS; r++) {
@@ -348,14 +420,21 @@ export default function TwoDots() {
     const remainingColors = twoDotsState.remainingColors.map((value, idx) =>
       Math.max(0, value - clearedColors[idx])
     );
-    const remainingAnchors = Math.max(0, twoDotsState.remainingAnchors - clearedAnchors);
+    const remainingAnchors = Math.max(
+      0,
+      twoDotsState.remainingAnchors - clearedAnchors
+    );
 
     twoDotsState.remainingColors = remainingColors;
     twoDotsState.remainingAnchors = remainingAnchors;
 
-    const goalsComplete = remainingColors.every((value) => value <= 0) && remainingAnchors <= 0;
+    const goalsComplete =
+      remainingColors.every((value) => value <= 0) && remainingAnchors <= 0;
     if (goalsComplete) {
-      twoDotsState.stars = computeStars(twoDotsState.movesLeft, config.starThresholds);
+      twoDotsState.stars = computeStars(
+        twoDotsState.movesLeft,
+        config.starThresholds
+      );
       twoDotsState.phase = 'levelComplete';
     } else if (twoDotsState.movesLeft <= 0) {
       twoDotsState.endGame();
@@ -426,7 +505,12 @@ export default function TwoDots() {
 
     // Continuous raycaster tracking during drag for better accuracy
     const sel = selectionRef.current;
-    if (sel.dragging && snap.phase === 'playing' && !paused && inputState.pointerDown) {
+    if (
+      sel.dragging &&
+      snap.phase === 'playing' &&
+      !paused &&
+      inputState.pointerDown
+    ) {
       mouse.set(inputState.pointerX, inputState.pointerY);
       raycaster.setFromCamera(mouse, camera);
       const allDots = Array.from(dotMeshesRef.current.values());
@@ -457,33 +541,36 @@ export default function TwoDots() {
     }
   });
 
-  const handleDown = React.useCallback((r: number, c: number) => {
-    if (paused || helpOpen) return;
+  const handleDown = React.useCallback(
+    (r: number, c: number) => {
+      if (paused || helpOpen) return;
 
-    if (snap.phase === 'menu') {
-      beginLevel(1, true);
-      return;
-    }
-    if (snap.phase !== 'playing') return;
+      if (snap.phase === 'menu') {
+        beginLevel(1, true);
+        return;
+      }
+      if (snap.phase !== 'playing') return;
 
-    if (boosterMode === 'bomb') {
-      applyBomb({ r, c });
-      return;
-    }
+      if (boosterMode === 'bomb') {
+        applyBomb({ r, c });
+        return;
+      }
 
-    const dot = boardRef.current[r]?.[c];
-    if (!dot || dot.special === 'anchor') return;
+      const dot = boardRef.current[r]?.[c];
+      if (!dot || dot.special === 'anchor') return;
 
-    const sel = selectionRef.current;
-    sel.dragging = true;
-    sel.color = dot.color;
-    sel.path = [{ r, c }];
-    sel.loop = false;
-    lastHoveredRef.current = keyOf(r, c);
-    setPath(sel.path);
-    setLoop(false);
-    setPathColor(dot.color);
-  }, [paused, helpOpen, snap.phase, boosterMode]);
+      const sel = selectionRef.current;
+      sel.dragging = true;
+      sel.color = dot.color;
+      sel.path = [{ r, c }];
+      sel.loop = false;
+      lastHoveredRef.current = keyOf(r, c);
+      setPath(sel.path);
+      setLoop(false);
+      setPathColor(dot.color);
+    },
+    [paused, helpOpen, snap.phase, boosterMode]
+  );
 
   const handleEnter = React.useCallback((r: number, c: number) => {
     const sel = selectionRef.current;
@@ -524,7 +611,8 @@ export default function TwoDots() {
     setPath([...sel.path]);
   }, []);
 
-  const colorLine = pathColor == null ? '#ffffff' : PALETTE[pathColor]?.color ?? '#ffffff';
+  const colorLine =
+    pathColor == null ? '#ffffff' : (PALETTE[pathColor]?.color ?? '#ffffff');
 
   return (
     <group>
@@ -533,7 +621,11 @@ export default function TwoDots() {
 
       <mesh position={[0, 0, -0.6]}>
         <planeGeometry args={[COLS * SPACING + 1.5, ROWS * SPACING + 1.5]} />
-        <meshStandardMaterial color={'#111827'} roughness={0.9} metalness={0.0} />
+        <meshStandardMaterial
+          color={'#111827'}
+          roughness={0.9}
+          metalness={0.0}
+        />
       </mesh>
 
       {/* Improved detection plane with better hit area - positioned behind dots for fallback */}
@@ -560,7 +652,9 @@ export default function TwoDots() {
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
 
-      {points.length >= 2 && <Line points={points} color={colorLine} lineWidth={4} dashed={loop} />}
+      {points.length >= 2 && (
+        <Line points={points} color={colorLine} lineWidth={4} dashed={loop} />
+      )}
 
       {board.map((row, r) =>
         row.map((dot, c) => {
@@ -568,11 +662,11 @@ export default function TwoDots() {
           const pos = worldPos(r, c);
           const isSelected = selectedSet.has(keyOf(r, c));
           const key = keyOf(r, c);
-          
+
           if (dot.special === 'anchor') {
             return (
-              <mesh 
-                key={`anchor-${key}`} 
+              <mesh
+                key={`anchor-${key}`}
                 ref={(mesh) => {
                   if (mesh) {
                     dotMeshesRef.current.set(key, mesh);
@@ -582,7 +676,7 @@ export default function TwoDots() {
                     dotMeshesRef.current.delete(key);
                   }
                 }}
-                position={[pos.x, pos.y, 0.1]} 
+                position={[pos.x, pos.y, 0.1]}
                 scale={1.05}
                 onPointerDown={(e) => {
                   e.stopPropagation();
@@ -592,21 +686,31 @@ export default function TwoDots() {
                 }}
                 onPointerEnter={(e) => {
                   e.stopPropagation();
-                  if (selectionRef.current.dragging && snap.phase === 'playing' && !paused) {
+                  if (
+                    selectionRef.current.dragging &&
+                    snap.phase === 'playing' &&
+                    !paused
+                  ) {
                     handleEnter(r, c);
                   }
                 }}
               >
-                <boxGeometry args={[DOT_RADIUS * 1.4, DOT_RADIUS * 1.4, DOT_RADIUS * 1.4]} />
-                <meshStandardMaterial color={ANCHOR_COLOR} roughness={0.8} metalness={0.15} />
+                <boxGeometry
+                  args={[DOT_RADIUS * 1.4, DOT_RADIUS * 1.4, DOT_RADIUS * 1.4]}
+                />
+                <meshStandardMaterial
+                  color={ANCHOR_COLOR}
+                  roughness={0.8}
+                  metalness={0.15}
+                />
               </mesh>
             );
           }
 
           const isFire = dot.special === 'fire';
           return (
-            <mesh 
-              key={key} 
+            <mesh
+              key={key}
               ref={(mesh) => {
                 if (mesh) {
                   dotMeshesRef.current.set(key, mesh);
@@ -616,7 +720,7 @@ export default function TwoDots() {
                   dotMeshesRef.current.delete(key);
                 }
               }}
-              position={[pos.x, pos.y, 0.1]} 
+              position={[pos.x, pos.y, 0.1]}
               scale={isSelected ? 1.15 : 1}
               onPointerDown={(e) => {
                 e.stopPropagation();
@@ -626,7 +730,11 @@ export default function TwoDots() {
               }}
               onPointerEnter={(e) => {
                 e.stopPropagation();
-                if (selectionRef.current.dragging && snap.phase === 'playing' && !paused) {
+                if (
+                  selectionRef.current.dragging &&
+                  snap.phase === 'playing' &&
+                  !paused
+                ) {
                   handleEnter(r, c);
                 }
               }}
@@ -662,18 +770,26 @@ export default function TwoDots() {
         >
           <div style={{ fontWeight: 800, fontSize: 18 }}>Two Dots</div>
           <div style={{ marginTop: 6, fontSize: 14, opacity: 0.9 }}>
-            Level: <b>{snap.level}</b> &nbsp;|&nbsp; Moves: <b>{snap.movesLeft}</b>
+            Level: <b>{snap.level}</b> &nbsp;|&nbsp; Moves:{' '}
+            <b>{snap.movesLeft}</b>
           </div>
           <div style={{ marginTop: 6, fontSize: 14, opacity: 0.9 }}>
             Score: <b>{snap.score}</b> &nbsp;|&nbsp; Best: <b>{snap.best}</b>
           </div>
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>Objectives</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+            Objectives
+          </div>
+          <div
+            style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}
+          >
             {snap.targetColors.map((target, idx) => {
               if (target <= 0) return null;
               const remaining = snap.remainingColors[idx] ?? target;
               return (
-                <div key={`goal-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div
+                  key={`goal-${idx}`}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
                   <span
                     style={{
                       width: 12,
@@ -683,7 +799,9 @@ export default function TwoDots() {
                       boxShadow: '0 0 8px rgba(255,255,255,0.25)',
                     }}
                   />
-                  <span style={{ fontSize: 12 }}>{remaining}/{target}</span>
+                  <span style={{ fontSize: 12 }}>
+                    {remaining}/{target}
+                  </span>
                 </div>
               );
             })}
@@ -697,7 +815,9 @@ export default function TwoDots() {
                     background: ANCHOR_COLOR,
                   }}
                 />
-                <span style={{ fontSize: 12 }}>{snap.remainingAnchors}/{snap.targetAnchors}</span>
+                <span style={{ fontSize: 12 }}>
+                  {snap.remainingAnchors}/{snap.targetAnchors}
+                </span>
               </div>
             )}
           </div>
@@ -707,7 +827,12 @@ export default function TwoDots() {
         </div>
 
         <div
-          style={{ position: 'absolute', right: 16, top: 12, pointerEvents: 'auto' }}
+          style={{
+            position: 'absolute',
+            right: 16,
+            top: 12,
+            pointerEvents: 'auto',
+          }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <button
@@ -752,20 +877,50 @@ export default function TwoDots() {
               }}
             >
               <div style={{ fontSize: 18, fontWeight: 800 }}>How to Play</div>
-              <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
-                Connect 2+ dots of the same color with horizontal or vertical lines.
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  opacity: 0.9,
+                }}
+              >
+                Connect 2+ dots of the same color with horizontal or vertical
+                lines.
                 <br />
                 Make a loop to clear all dots of that color.
               </div>
-              <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
-                <b>Anchor Dots</b> are gray blocks. Clear dots next to them to break them.
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  opacity: 0.9,
+                }}
+              >
+                <b>Anchor Dots</b> are gray blocks. Clear dots next to them to
+                break them.
                 <br />
                 <b>Fire Dots</b> ignite adjacent dots when cleared.
               </div>
-              <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.5, opacity: 0.9 }}>
-                <b>Bomb Booster</b>: Click once to arm, then tap a dot to clear a 3x3 area.
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                  opacity: 0.9,
+                }}
+              >
+                <b>Bomb Booster</b>: Click once to arm, then tap a dot to clear
+                a 3x3 area.
               </div>
-              <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+              <div
+                style={{
+                  marginTop: 14,
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                }}
+              >
                 <button
                   type="button"
                   onClick={() => setHelpOpen(false)}
@@ -788,16 +943,31 @@ export default function TwoDots() {
         )}
 
         {snap.phase === 'playing' && (
-          <div style={{ position: 'absolute', left: 16, bottom: 16, pointerEvents: 'auto' }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: 16,
+              bottom: 16,
+              pointerEvents: 'auto',
+            }}
+          >
             <button
               type="button"
               disabled={snap.bombs <= 0}
-              onClick={() => setBoosterMode((prev) => (prev === 'bomb' ? 'none' : 'bomb'))}
+              onClick={() =>
+                setBoosterMode((prev) => (prev === 'bomb' ? 'none' : 'bomb'))
+              }
               style={{
                 padding: '8px 12px',
                 borderRadius: 999,
-                border: boosterMode === 'bomb' ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.35)',
-                background: boosterMode === 'bomb' ? 'rgba(249,115,22,0.2)' : 'rgba(15,23,42,0.65)',
+                border:
+                  boosterMode === 'bomb'
+                    ? '2px solid #f97316'
+                    : '1px solid rgba(255,255,255,0.35)',
+                background:
+                  boosterMode === 'bomb'
+                    ? 'rgba(249,115,22,0.2)'
+                    : 'rgba(15,23,42,0.65)',
                 color: 'white',
                 fontSize: 12,
                 fontWeight: 700,
@@ -809,8 +979,18 @@ export default function TwoDots() {
           </div>
         )}
 
-        {(snap.phase === 'menu' || snap.phase === 'gameover' || snap.phase === 'levelComplete') && (
-          <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'auto' }}>
+        {(snap.phase === 'menu' ||
+          snap.phase === 'gameover' ||
+          snap.phase === 'levelComplete') && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              pointerEvents: 'auto',
+            }}
+          >
             <div
               style={{
                 textAlign: 'center',
@@ -826,10 +1006,19 @@ export default function TwoDots() {
               <div style={{ fontSize: 28, fontWeight: 900 }}>
                 {snap.phase === 'menu' && 'Connect the Dots'}
                 {snap.phase === 'gameover' && 'Out of Moves'}
-                {snap.phase === 'levelComplete' && `Level ${snap.level} Complete`}
+                {snap.phase === 'levelComplete' &&
+                  `Level ${snap.level} Complete`}
               </div>
-              <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9, lineHeight: 1.4 }}>
-                Connect 2+ dots of the same color. Make a loop to clear all dots of that color.
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 14,
+                  opacity: 0.9,
+                  lineHeight: 1.4,
+                }}
+              >
+                Connect 2+ dots of the same color. Make a loop to clear all dots
+                of that color.
                 <br />
                 Complete the objectives before your moves run out.
               </div>
@@ -838,7 +1027,14 @@ export default function TwoDots() {
                   Stars earned: <b>{snap.stars}</b> / 3
                 </div>
               )}
-              <div style={{ marginTop: 14, display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <div
+                style={{
+                  marginTop: 14,
+                  display: 'flex',
+                  gap: 10,
+                  justifyContent: 'center',
+                }}
+              >
                 {snap.phase === 'menu' && (
                   <button
                     type="button"

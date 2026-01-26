@@ -1,6 +1,6 @@
 /**
  * Components Barrel Export
- * 
+ *
  * Re-exports all arcade components.
  */
 

@@ -1,6 +1,6 @@
 /**
  * GameHUD
- * 
+ *
  * Score, health, and mode selection overlay for games.
  */
 'use client';
@@ -70,7 +70,9 @@ const ScoreDisplay: React.FC<{ score: number }> = ({ score }) => (
       boxShadow: 'var(--arcade-elevation-soft)',
     }}
   >
-    <span className="text-base font-semibold text-white/90">Score: {score}</span>
+    <span className="text-base font-semibold text-white/90">
+      Score: {score}
+    </span>
   </div>
 );
 
@@ -98,7 +100,8 @@ const HealthBar: React.FC<{ health: number }> = ({ health }) => (
         className="h-2 rounded-full transition-all duration-300"
         style={{
           width: `${Math.max(0, Math.min(100, health))}%`,
-          background: 'linear-gradient(90deg, var(--arcade-accent), rgba(247, 178, 103, 0.9))',
+          background:
+            'linear-gradient(90deg, var(--arcade-accent), rgba(247, 178, 103, 0.9))',
         }}
       />
     </div>
@@ -137,8 +140,12 @@ const ModeSelector: React.FC<{
             onClick={() => onSelect?.(mode)}
             className="text-[11px] rounded px-2 py-1 border transition-all duration-300 hover:-translate-y-0.5 hover:bg-white/10 active:translate-y-0 active:scale-95"
             style={{
-              borderColor: isActive ? 'var(--arcade-accent)' : 'var(--arcade-stroke)',
-              color: isActive ? 'var(--arcade-accent)' : 'rgba(255,255,255,0.8)',
+              borderColor: isActive
+                ? 'var(--arcade-accent)'
+                : 'var(--arcade-stroke)',
+              color: isActive
+                ? 'var(--arcade-accent)'
+                : 'rgba(255,255,255,0.8)',
               borderRadius: 'var(--arcade-radius-sm)',
             }}
           >
@@ -156,7 +163,7 @@ const ModeSelector: React.FC<{
 export function useHUDConfig(gameId: GameId) {
   const showHealth = gameId === 'skyblitz';
   const showModeSelection = gameId === 'skyblitz' || gameId === 'reactpong';
-  
+
   let modeOptions: string[] = [];
   if (gameId === 'skyblitz') {
     modeOptions = ['UfoMode', 'RunnerManMode'];

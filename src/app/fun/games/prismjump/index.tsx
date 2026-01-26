@@ -32,7 +32,14 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 function pickPlatformColor(rng: SeededRandom): string {
-  const palette = ['#22D3EE', '#FB7185', '#A78BFA', '#60A5FA', '#34D399', '#FBBF24'];
+  const palette = [
+    '#22D3EE',
+    '#FB7185',
+    '#A78BFA',
+    '#60A5FA',
+    '#34D399',
+    '#FBBF24',
+  ];
   return palette[rng.int(0, palette.length - 1)];
 }
 
@@ -40,18 +47,21 @@ function makePlatform(
   rng: SeededRandom,
   rowZ: number,
   difficulty01: number,
-  xCenter: number,
+  xCenter: number
 ): PlatformData {
   // Platform length scales with difficulty
   const lenMin = lerp(2.0, 1.2, difficulty01);
   const lenMax = lerp(3.5, 2.0, difficulty01);
 
   // Danger platforms increase with difficulty
-  const dangerChance = lerp(0.05, 0.30, difficulty01);
+  const dangerChance = lerp(0.05, 0.3, difficulty01);
   const cubeChance = lerp(0.45, 0.25, difficulty01);
 
-  const type: PlatformData['type'] = rng.bool(dangerChance) ? 'danger' : 'normal';
-  const cubeValue = type === 'danger' ? 0 : rng.bool(cubeChance) ? rng.int(1, 4) : 0;
+  const type: PlatformData['type'] = rng.bool(dangerChance)
+    ? 'danger'
+    : 'normal';
+  const cubeValue =
+    type === 'danger' ? 0 : rng.bool(cubeChance) ? rng.int(1, 4) : 0;
 
   return {
     x: xCenter,
@@ -64,10 +74,14 @@ function makePlatform(
   };
 }
 
-function makeRow(rng: SeededRandom, rowIndex: number, difficulty01: number): RowData {
+function makeRow(
+  rng: SeededRandom,
+  rowIndex: number,
+  difficulty01: number
+): RowData {
   // ALWAYS alternate direction for each row - this is crucial!
   const dir: 1 | -1 = rowIndex % 2 === 0 ? 1 : -1;
-  
+
   // Speed variation based on difficulty
   const speedVariation = lerp(0.1, 0.25, difficulty01);
   const speedMul = rng.float(1 - speedVariation, 1 + speedVariation);
@@ -82,7 +96,10 @@ function makeRow(rng: SeededRandom, rowIndex: number, difficulty01: number): Row
 
   for (let i = 0; i < numPlatforms; i++) {
     const posVariation = lerp(0.2, 0.35, difficulty01);
-    const center = -GAME.xWrap + step * (i + 0.5) + rng.float(-step * posVariation, step * posVariation);
+    const center =
+      -GAME.xWrap +
+      step * (i + 0.5) +
+      rng.float(-step * posVariation, step * posVariation);
     platforms.push(makePlatform(rng, z, difficulty01, center));
   }
 
@@ -109,7 +126,10 @@ function makeRow(rng: SeededRandom, rowIndex: number, difficulty01: number): Row
 }
 
 // Improved landing detection - checks if player X is within platform bounds
-function findLandingPlatform(row: RowData, playerX: number): { platform: PlatformData; slot: number } | null {
+function findLandingPlatform(
+  row: RowData,
+  playerX: number
+): { platform: PlatformData; slot: number } | null {
   let best: { platform: PlatformData; slot: number } | null = null;
   let bestDx = Infinity;
 
@@ -118,7 +138,7 @@ function findLandingPlatform(row: RowData, playerX: number): { platform: Platfor
     // More generous hitbox - use 55% of platform length for landing
     const halfLen = p.length * 0.55;
     const dx = Math.abs(playerX - p.x);
-    
+
     if (dx <= halfLen && dx < bestDx) {
       best = { platform: p, slot: i };
       bestDx = dx;
@@ -133,7 +153,15 @@ export default function PrismJump() {
   const ui = useGameUIState();
 
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'arrowdown',
+      'Enter',
+    ],
   });
 
   const { camera, gl, scene } = useThree();
@@ -158,7 +186,7 @@ export default function PrismJump() {
     rowIndex: 0,
     platformSlot: 0,
     localOffsetX: 0, // Offset from platform center
-    
+
     // Grace period at start to prevent immediate jump
     startGrace: 0,
 
@@ -208,7 +236,9 @@ export default function PrismJump() {
 
     // Find a safe starting platform on row 0
     const row0 = w.rows[0];
-    let safeSlot = row0.platforms.findIndex((p) => p.type !== 'danger' && Math.abs(p.x) < 3);
+    let safeSlot = row0.platforms.findIndex(
+      (p) => p.type !== 'danger' && Math.abs(p.x) < 3
+    );
     if (safeSlot < 0) {
       safeSlot = 0;
       row0.platforms[0].type = 'normal';
@@ -333,9 +363,12 @@ export default function PrismJump() {
       if (w.startGrace > 0) {
         w.startGrace -= d;
       }
-      
+
       const difficulty01 = clamp(prismJumpState.score / 80, 0, 1);
-      const speed = Math.min(GAME.baseSpeed + prismJumpState.score * GAME.speedPerScore, GAME.maxSpeed);
+      const speed = Math.min(
+        GAME.baseSpeed + prismJumpState.score * GAME.speedPerScore,
+        GAME.maxSpeed
+      );
 
       ensureRowsFor(w.rowIndex, difficulty01);
 
@@ -384,7 +417,11 @@ export default function PrismJump() {
           w.pos.z = p.z;
 
           // Check if player is carried off-screen (left/right)
-          const edgeSafe = clamp((GAME.xLimit - Math.abs(w.pos.x)) / GAME.xLimit, 0, 1);
+          const edgeSafe = clamp(
+            (GAME.xLimit - Math.abs(w.pos.x)) / GAME.xLimit,
+            0,
+            1
+          );
           prismJumpState.edgeSafe = edgeSafe;
 
           if (edgeSafe <= 0.001) {
@@ -416,7 +453,9 @@ export default function PrismJump() {
           ensureRowsFor(w.targetRow, difficulty01);
           const targetRow = w.rows[w.targetRow - w.firstRowIndex];
 
-          const landing = targetRow ? findLandingPlatform(targetRow, w.pos.x) : null;
+          const landing = targetRow
+            ? findLandingPlatform(targetRow, w.pos.x)
+            : null;
 
           if (!landing || landing.platform.type === 'danger') {
             // Miss or danger - fall
@@ -435,7 +474,11 @@ export default function PrismJump() {
             // Collect cubes
             if (landing.platform.cubeValue > 0) {
               prismJumpState.addRunCubes(landing.platform.cubeValue);
-              spawnPopup(`+${landing.platform.cubeValue}`, [w.pos.x, w.pos.y + 0.55, w.pos.z]);
+              spawnPopup(`+${landing.platform.cubeValue}`, [
+                w.pos.x,
+                w.pos.y + 0.55,
+                w.pos.z,
+              ]);
               landing.platform.cubeValue = 0;
             }
           }
@@ -451,7 +494,11 @@ export default function PrismJump() {
 
       // Input handling
       const input = inputRef.current;
-      if (input.pointerJustDown || input.justPressed.has(' ') || input.justPressed.has('Enter')) {
+      if (
+        input.pointerJustDown ||
+        input.justPressed.has(' ') ||
+        input.justPressed.has('Enter')
+      ) {
         tryJump();
       }
     }
@@ -460,7 +507,8 @@ export default function PrismJump() {
     if (playerRef.current) {
       playerRef.current.position.copy(w.pos);
       // Rotation for visual appeal
-      playerRef.current.rotation.y += (prismJumpState.phase === 'playing' ? 1.5 : 0.4) * d;
+      playerRef.current.rotation.y +=
+        (prismJumpState.phase === 'playing' ? 1.5 : 0.4) * d;
       playerRef.current.rotation.x = Math.sin(performance.now() * 0.003) * 0.08;
     }
 
@@ -469,15 +517,18 @@ export default function PrismJump() {
     {
       const targetZ = Math.max(w.pos.z, w.cameraMinZ);
       w.cameraZ = lerp(w.cameraZ, targetZ, 1 - Math.exp(-d * 3));
-      
+
       // Side-view camera: positioned to the right side, looking at the action
       // X offset puts camera to the side, Y is height, Z follows player progress
       const camX = 12; // Side offset (right side view)
-      const camY = 8;  // Height
+      const camY = 8; // Height
       const camZ = w.cameraZ - 2; // Slightly behind current row
-      
-      camera.position.lerp(new THREE.Vector3(camX, camY, camZ), 1 - Math.exp(-d * 4));
-      
+
+      camera.position.lerp(
+        new THREE.Vector3(camX, camY, camZ),
+        1 - Math.exp(-d * 4)
+      );
+
       // Look at a point slightly ahead of the player
       const lookTarget = new THREE.Vector3(0, 1, w.cameraZ + 3);
       camera.lookAt(lookTarget);
@@ -513,7 +564,11 @@ export default function PrismJump() {
 
             // Platform top (colored)
             dummy.position.set(p.x, GAME.topCenterY, p.z);
-            dummy.scale.set(p.length * 0.96, GAME.platformTopThickness, p.depth * 0.96);
+            dummy.scale.set(
+              p.length * 0.96,
+              GAME.platformTopThickness,
+              p.depth * 0.96
+            );
             dummy.updateMatrix();
             topMesh.setMatrixAt(idx, dummy.matrix);
             c.set(p.color);
@@ -525,7 +580,11 @@ export default function PrismJump() {
               dummy.position.set(p.x, arrowY, p.z);
               dummy.scale.set(0.2, 0.025, 0.15);
               // Arrow points in movement direction
-              dummy.rotation.set(0, row.dir > 0 ? -Math.PI / 2 : Math.PI / 2, 0);
+              dummy.rotation.set(
+                0,
+                row.dir > 0 ? -Math.PI / 2 : Math.PI / 2,
+                0
+              );
               dummy.updateMatrix();
               arrowMesh.setMatrixAt(idx, dummy.matrix);
               arrowMesh.setColorAt(idx, c.set('#FFFFFF'));
@@ -591,7 +650,7 @@ export default function PrismJump() {
       roughness: 0.8,
       metalness: 0.1,
     }),
-    [],
+    []
   );
 
   const cubeMaterialProps = useMemo(
@@ -602,46 +661,106 @@ export default function PrismJump() {
       emissiveIntensity: 0.4,
       vertexColors: true,
     }),
-    [],
+    []
   );
 
   return (
     <group>
       {/* Lighting */}
       <ambientLight intensity={0.55} color="#6080a0" />
-      <directionalLight position={[10, 15, 8]} intensity={0.9} color="#ffffff" castShadow />
-      <pointLight position={[0, 8, 5]} intensity={0.5} color="#22D3EE" distance={35} />
-      <pointLight position={[-8, 6, 10]} intensity={0.35} color="#A78BFA" distance={30} />
-      <pointLight position={[8, 6, 0]} intensity={0.35} color="#FB7185" distance={30} />
+      <directionalLight
+        position={[10, 15, 8]}
+        intensity={0.9}
+        color="#ffffff"
+        castShadow
+      />
+      <pointLight
+        position={[0, 8, 5]}
+        intensity={0.5}
+        color="#22D3EE"
+        distance={35}
+      />
+      <pointLight
+        position={[-8, 6, 10]}
+        intensity={0.35}
+        color="#A78BFA"
+        distance={30}
+      />
+      <pointLight
+        position={[8, 6, 0]}
+        intensity={0.35}
+        color="#FB7185"
+        distance={30}
+      />
 
       {/* Starfield backdrop */}
-      <Stars radius={120} depth={70} count={3000} factor={4} saturation={0} fade speed={0.8} />
+      <Stars
+        radius={120}
+        depth={70}
+        count={3000}
+        factor={4}
+        saturation={0}
+        fade
+        speed={0.8}
+      />
 
       {/* Platforms */}
       <group>
-        <instancedMesh ref={baseMeshRef} args={[undefined, undefined, instanceCount]}>
+        <instancedMesh
+          ref={baseMeshRef}
+          args={[undefined, undefined, instanceCount]}
+        >
           <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial {...baseMaterialProps} />
         </instancedMesh>
 
-        <instancedMesh ref={topMeshRef} args={[undefined, undefined, instanceCount]}>
+        <instancedMesh
+          ref={topMeshRef}
+          args={[undefined, undefined, instanceCount]}
+        >
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial vertexColors roughness={0.32} metalness={0.2} emissive="#000000" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.32}
+            metalness={0.2}
+            emissive="#000000"
+          />
         </instancedMesh>
 
-        <instancedMesh ref={cubeMeshRef} args={[undefined, undefined, instanceCount]}>
+        <instancedMesh
+          ref={cubeMeshRef}
+          args={[undefined, undefined, instanceCount]}
+        >
           <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial {...cubeMaterialProps} />
         </instancedMesh>
 
-        <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, instanceCount]}>
+        <instancedMesh
+          ref={spikeMeshRef}
+          args={[undefined, undefined, instanceCount]}
+        >
           <coneGeometry args={[1, 1.3, 4]} />
-          <meshStandardMaterial color="#FB7185" roughness={0.4} metalness={0.25} emissive="#3B0010" emissiveIntensity={0.65} />
+          <meshStandardMaterial
+            color="#FB7185"
+            roughness={0.4}
+            metalness={0.25}
+            emissive="#3B0010"
+            emissiveIntensity={0.65}
+          />
         </instancedMesh>
 
-        <instancedMesh ref={arrowMeshRef} args={[undefined, undefined, instanceCount]}>
+        <instancedMesh
+          ref={arrowMeshRef}
+          args={[undefined, undefined, instanceCount]}
+        >
           <coneGeometry args={[1, 2, 3]} />
-          <meshStandardMaterial vertexColors roughness={0.3} metalness={0.1} transparent opacity={0.8} />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.3}
+            metalness={0.1}
+            transparent
+            opacity={0.8}
+          />
         </instancedMesh>
       </group>
 
@@ -652,10 +771,16 @@ export default function PrismJump() {
 
       {/* Popup notifications */}
       {popups.map((p) => (
-        <Html key={p.id} position={p.position} center style={{ pointerEvents: 'none' }}>
+        <Html
+          key={p.id}
+          position={p.position}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
           <div
             style={{
-              fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+              fontFamily:
+                'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
               fontWeight: 900,
               fontSize: 20,
               letterSpacing: 0.5,

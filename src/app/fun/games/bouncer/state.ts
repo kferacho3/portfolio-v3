@@ -61,11 +61,46 @@ export type BallSkin = {
 };
 
 export const ballSkins: BallSkin[] = [
-  { id: 'rose', name: 'Rose', fill: '#FF5A8A', inner: '#FF88A9', ring: '#FFFFFF', price: 0 },
-  { id: 'mint', name: 'Mint', fill: '#33D6B1', inner: '#7FF0D8', ring: '#FFFFFF', price: 25 },
-  { id: 'sun', name: 'Sun', fill: '#FFB703', inner: '#FFD166', ring: '#FFFFFF', price: 50 },
-  { id: 'void', name: 'Void', fill: '#1B2330', inner: '#3B4A63', ring: '#FFFFFF', price: 75 },
-  { id: 'cloud', name: 'Cloud', fill: '#FFFFFF', inner: '#E8EEF6', ring: '#1B2330', price: 100 },
+  {
+    id: 'rose',
+    name: 'Rose',
+    fill: '#FF5A8A',
+    inner: '#FF88A9',
+    ring: '#FFFFFF',
+    price: 0,
+  },
+  {
+    id: 'mint',
+    name: 'Mint',
+    fill: '#33D6B1',
+    inner: '#7FF0D8',
+    ring: '#FFFFFF',
+    price: 25,
+  },
+  {
+    id: 'sun',
+    name: 'Sun',
+    fill: '#FFB703',
+    inner: '#FFD166',
+    ring: '#FFFFFF',
+    price: 50,
+  },
+  {
+    id: 'void',
+    name: 'Void',
+    fill: '#1B2330',
+    inner: '#3B4A63',
+    ring: '#FFFFFF',
+    price: 75,
+  },
+  {
+    id: 'cloud',
+    name: 'Cloud',
+    fill: '#FFFFFF',
+    inner: '#E8EEF6',
+    ring: '#1B2330',
+    price: 100,
+  },
 ];
 
 export type BouncerPhase = 'menu' | 'playing' | 'gameover';
@@ -96,9 +131,13 @@ function load(): SaveV1 {
     return {
       bestScore: typeof parsed.bestScore === 'number' ? parsed.bestScore : 0,
       squares: typeof parsed.squares === 'number' ? parsed.squares : 0,
-      paletteIndex: typeof parsed.paletteIndex === 'number' ? parsed.paletteIndex : 0,
-      selectedSkin: typeof parsed.selectedSkin === 'number' ? parsed.selectedSkin : 0,
-      unlockedSkinIds: Array.isArray(parsed.unlockedSkinIds) ? parsed.unlockedSkinIds.filter(Boolean) as string[] : ['rose'],
+      paletteIndex:
+        typeof parsed.paletteIndex === 'number' ? parsed.paletteIndex : 0,
+      selectedSkin:
+        typeof parsed.selectedSkin === 'number' ? parsed.selectedSkin : 0,
+      unlockedSkinIds: Array.isArray(parsed.unlockedSkinIds)
+        ? (parsed.unlockedSkinIds.filter(Boolean) as string[])
+        : ['rose'],
     };
   } catch {
     return {
@@ -119,7 +158,9 @@ export const bouncerState = proxy({
   squares: saved.squares,
   paletteIndex: Math.max(0, Math.min(palettes.length - 1, saved.paletteIndex)),
   selectedSkin: Math.max(0, Math.min(ballSkins.length - 1, saved.selectedSkin)),
-  unlockedSkinIds: new Set<string>(saved.unlockedSkinIds.length ? saved.unlockedSkinIds : ['rose']),
+  unlockedSkinIds: new Set<string>(
+    saved.unlockedSkinIds.length ? saved.unlockedSkinIds : ['rose']
+  ),
 });
 
 let saveTimer: number | null = null;
@@ -181,6 +222,9 @@ export function tryUnlockSkin(index: number) {
 }
 
 export function selectSkin(index: number) {
-  bouncerState.selectedSkin = Math.max(0, Math.min(ballSkins.length - 1, index));
+  bouncerState.selectedSkin = Math.max(
+    0,
+    Math.min(ballSkins.length - 1, index)
+  );
   scheduleSave();
 }

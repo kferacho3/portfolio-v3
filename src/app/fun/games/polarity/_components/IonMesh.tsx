@@ -13,13 +13,18 @@ export const IonMesh: React.FC<{ ion: Ion }> = ({ ion }) => {
   useFrame((state) => {
     const t = state.clock.elapsedTime;
     const bob = Math.sin(t * 2 + ion.pos.x * 0.2 + ion.pos.z * 0.2) * 0.18;
-    if (ref.current) ref.current.position.set(ion.pos.x, ion.pos.y + bob, ion.pos.z);
+    if (ref.current)
+      ref.current.position.set(ion.pos.x, ion.pos.y + bob, ion.pos.z);
   });
 
   return (
     <mesh ref={ref} position={[ion.pos.x, ion.pos.y, ion.pos.z]} castShadow>
       <sphereGeometry args={[0.42, 14, 14]} />
-      <meshStandardMaterial color={c.main} emissive={c.emissive} emissiveIntensity={0.55} />
+      <meshStandardMaterial
+        color={c.main}
+        emissive={c.emissive}
+        emissiveIntensity={0.55}
+      />
     </mesh>
   );
 };

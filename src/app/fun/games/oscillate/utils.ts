@@ -11,13 +11,19 @@ export function useOnMount(fn: () => void) {
 }
 
 export function segmentBasis(seg: OscillateSegment) {
-  const fwd = seg.axis === 'x' ? new THREE.Vector3(seg.dir, 0, 0) : new THREE.Vector3(0, 0, seg.dir);
-  const lat = seg.axis === 'x' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+  const fwd =
+    seg.axis === 'x'
+      ? new THREE.Vector3(seg.dir, 0, 0)
+      : new THREE.Vector3(0, 0, seg.dir);
+  const lat =
+    seg.axis === 'x' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
   return { fwd, lat };
 }
 
 export function ballWorldPos(lvl: OscillateLevel, r: RunStatus) {
   const seg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
   const { fwd, lat } = segmentBasis(seg);
-  return new THREE.Vector3(seg.x, 0, seg.z).addScaledVector(fwd, r.s).addScaledVector(lat, r.l);
+  return new THREE.Vector3(seg.x, 0, seg.z)
+    .addScaledVector(fwd, r.s)
+    .addScaledVector(lat, r.l);
 }

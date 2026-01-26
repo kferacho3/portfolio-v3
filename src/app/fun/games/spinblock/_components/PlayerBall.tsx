@@ -1,13 +1,17 @@
 import { useFrame } from '@react-three/fiber';
-import { BallCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  BallCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import React, { useRef } from 'react';
 import * as THREE from 'three';
 import { BALL_RADIUS, BALL_RESPAWN_POSITION } from '../constants';
 
-const PlayerBall: React.FC<{ hasShield: boolean; ballBodyRef: React.RefObject<RapierRigidBody> }> = ({
-  hasShield,
-  ballBodyRef,
-}) => {
+const PlayerBall: React.FC<{
+  hasShield: boolean;
+  ballBodyRef: React.RefObject<RapierRigidBody>;
+}> = ({ hasShield, ballBodyRef }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
@@ -48,7 +52,12 @@ const PlayerBall: React.FC<{ hasShield: boolean; ballBodyRef: React.RefObject<Ra
       {hasShield && (
         <mesh scale={1.5}>
           <sphereGeometry args={[BALL_RADIUS, 16, 16]} />
-          <meshBasicMaterial color="#4169E1" transparent opacity={0.3} side={THREE.DoubleSide} />
+          <meshBasicMaterial
+            color="#4169E1"
+            transparent
+            opacity={0.3}
+            side={THREE.DoubleSide}
+          />
         </mesh>
       )}
       <pointLight color={ballColor} intensity={1} distance={3} />

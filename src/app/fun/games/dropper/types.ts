@@ -22,7 +22,12 @@ export type ItemType =
   | 'spike'
   | 'poison';
 
-export type PowerUpType = 'heart' | 'shield' | 'magnet' | 'doublePoints' | 'slowTime';
+export type PowerUpType =
+  | 'heart'
+  | 'shield'
+  | 'magnet'
+  | 'doublePoints'
+  | 'slowTime';
 
 export interface ItemConfig {
   points: number;
@@ -35,7 +40,15 @@ export interface ItemConfig {
   isDangerous: boolean;
   isPowerUp: boolean;
   powerUpType?: PowerUpType;
-  shape: 'sphere' | 'box' | 'octahedron' | 'dodecahedron' | 'icosahedron' | 'torus' | 'cone' | 'heart';
+  shape:
+    | 'sphere'
+    | 'box'
+    | 'octahedron'
+    | 'dodecahedron'
+    | 'icosahedron'
+    | 'torus'
+    | 'cone'
+    | 'heart';
 }
 
 export interface FallingItem {

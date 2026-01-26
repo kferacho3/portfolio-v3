@@ -89,7 +89,10 @@ function optimizeTexture(texture: THREE.Texture): THREE.Texture {
   const ctx = canvas.getContext('2d');
   if (!ctx) return texture;
 
-  const scale = Math.min(MAX_TEXTURE_SIZE / img.width, MAX_TEXTURE_SIZE / img.height);
+  const scale = Math.min(
+    MAX_TEXTURE_SIZE / img.width,
+    MAX_TEXTURE_SIZE / img.height
+  );
   canvas.width = img.width * scale;
   canvas.height = img.height * scale;
 
@@ -98,10 +101,10 @@ function optimizeTexture(texture: THREE.Texture): THREE.Texture {
   // Create new texture from downscaled image
   const optimizedTexture = new THREE.Texture(canvas);
   optimizedTexture.needsUpdate = true;
-  
+
   // Dispose old texture
   texture.dispose();
-  
+
   return optimizedTexture;
 }
 
@@ -157,12 +160,12 @@ export function RachosArcade(props: ModelProps) {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
         const geometry = mesh.geometry;
-        
+
         // Merge vertices if possible to reduce memory
         if (geometry instanceof THREE.BufferGeometry) {
           // Enable frustum culling for better performance
           mesh.frustumCulled = true;
-          
+
           // Dispose unused attributes if any
           const attrs = geometry.attributes;
           for (const key in attrs) {
@@ -174,10 +177,10 @@ export function RachosArcade(props: ModelProps) {
 
         // Optimize materials
         if (mesh.material) {
-          const material = Array.isArray(mesh.material) 
-            ? mesh.material[0] 
+          const material = Array.isArray(mesh.material)
+            ? mesh.material[0]
             : mesh.material;
-          
+
           if (material instanceof THREE.MeshStandardMaterial) {
             // Reduce texture sizes if they exist
             if (material.map) {
@@ -238,9 +241,7 @@ export function RachosArcade(props: ModelProps) {
 
   const [modelScale, setModelScale] = useState(1);
   const [modelOffset, setModelOffset] = useState<[number, number, number]>([
-    0,
-    0,
-    0,
+    0, 0, 0,
   ]);
 
   useLayoutEffect(() => {
@@ -310,7 +311,12 @@ export function RachosArcade(props: ModelProps) {
 
     setScreenPlaneConfig({
       position: [localPosition.x, localPosition.y, localPosition.z],
-      quaternion: [planeLocalQuat.x, planeLocalQuat.y, planeLocalQuat.z, planeLocalQuat.w],
+      quaternion: [
+        planeLocalQuat.x,
+        planeLocalQuat.y,
+        planeLocalQuat.z,
+        planeLocalQuat.w,
+      ],
       width,
       height,
       radius,
@@ -379,7 +385,14 @@ export function RachosArcade(props: ModelProps) {
       onFocusReady(focus, radius, forward);
       focusRef.current = { focus, radius, forward };
     }
-  }, [scene, onFocusReady, screenMesh, screenSearchDone, modelScale, modelOffset]);
+  }, [
+    scene,
+    onFocusReady,
+    screenMesh,
+    screenSearchDone,
+    modelScale,
+    modelOffset,
+  ]);
 
   const setRefs = useCallback(
     (node: THREE.Group | null) => {
@@ -388,7 +401,8 @@ export function RachosArcade(props: ModelProps) {
       if (typeof arcadeRef === 'function') {
         arcadeRef(node);
       } else {
-        (arcadeRef as React.MutableRefObject<THREE.Group | null>).current = node;
+        (arcadeRef as React.MutableRefObject<THREE.Group | null>).current =
+          node;
       }
     },
     [arcadeRef]
@@ -410,7 +424,7 @@ export function RachosArcade(props: ModelProps) {
     if (!scene) return;
     let raycastCount = 0;
     const MAX_RAYCAST_MESHES = 20; // Limit number of meshes with raycast enabled
-    
+
     scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh && raycastCount < MAX_RAYCAST_MESHES) {
         child.raycast = THREE.Mesh.prototype.raycast;
@@ -444,13 +458,13 @@ export function RachosArcade(props: ModelProps) {
       (texture) => {
         // Optimize texture size
         const optimizedTexture = optimizeTexture(texture);
-        
+
         // Cache the texture with timestamp
         textureCache.set(posterUrl, {
           texture: optimizedTexture,
           lastUsed: Date.now(),
         });
-        
+
         applyTextureToMesh(mesh, optimizedTexture);
       },
       undefined,
@@ -471,10 +485,12 @@ export function RachosArcade(props: ModelProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft' || e.key === 'a') {
-        const newIndex = selectedIndex <= 0 ? games.length - 1 : selectedIndex - 1;
+        const newIndex =
+          selectedIndex <= 0 ? games.length - 1 : selectedIndex - 1;
         onSelectGame(newIndex);
       } else if (e.key === 'ArrowRight' || e.key === 'd') {
-        const newIndex = selectedIndex >= games.length - 1 ? 0 : selectedIndex + 1;
+        const newIndex =
+          selectedIndex >= games.length - 1 ? 0 : selectedIndex + 1;
         onSelectGame(newIndex);
       } else if (e.key === 'Enter' || e.key === ' ') {
         if (currentGame) {
@@ -511,7 +527,7 @@ export function RachosArcade(props: ModelProps) {
       // The LRU cache will handle eviction, but we can force cleanup of unused textures
       const currentTime = Date.now();
       const MAX_AGE = 5 * 60 * 1000; // 5 minutes
-      
+
       for (const [url, cached] of textureCache.entries()) {
         if (currentTime - cached.lastUsed > MAX_AGE) {
           cached.texture.dispose();
@@ -678,7 +694,12 @@ function normalizeMeshUVs(mesh: THREE.Mesh) {
   const rangeU = maxU - minU;
   const rangeV = maxV - minV;
 
-  if (!Number.isFinite(rangeU) || !Number.isFinite(rangeV) || rangeU === 0 || rangeV === 0) {
+  if (
+    !Number.isFinite(rangeU) ||
+    !Number.isFinite(rangeV) ||
+    rangeU === 0 ||
+    rangeV === 0
+  ) {
     return;
   }
 
@@ -738,10 +759,10 @@ function getMeshAspect(mesh: THREE.Mesh) {
 // This will be evaluated at module load time
 if (typeof window !== 'undefined') {
   try {
-    const isHighEndDevice = 
-      (navigator.hardwareConcurrency || 2) >= 4 && 
+    const isHighEndDevice =
+      (navigator.hardwareConcurrency || 2) >= 4 &&
       ((navigator as any).deviceMemory || 2) >= 4;
-    
+
     if (isHighEndDevice) {
       useGLTF.preload('/fun/models/rachoArcade.glb', true);
     }

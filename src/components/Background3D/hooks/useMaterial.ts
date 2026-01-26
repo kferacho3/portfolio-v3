@@ -12,7 +12,7 @@ export function pickMaterialIndex(): number {
   const roll = Math.random();
 
   // Common (original set 0-4): ~30%
-  if (roll < 0.30) return Math.floor(Math.random() * 5);
+  if (roll < 0.3) return Math.floor(Math.random() * 5);
 
   // Phase 4 materials (5-9): ~15%
   if (roll < 0.45) return 5 + Math.floor(Math.random() * 5);

@@ -24,7 +24,8 @@ const FlappyBird = () => {
   const [blocks, setBlocks] = useState([{ position: [0, 0, 0], speed: 0.1 }]);
   const [score, setScore] = useState(0);
   const [gameOver, setGameOver] = useState(false);
-  const BackgroundImage ='https://racho-devs.s3.us-east-2.amazonaws.com/fun/gameAssets/bg.gif';
+  const BackgroundImage =
+    'https://racho-devs.s3.us-east-2.amazonaws.com/fun/gameAssets/bg.gif';
   useEffect(() => {
     let p5Instance;
 
@@ -148,17 +149,19 @@ const FlappyBird = () => {
   }, []);
 
   return (
-    <FunContainer style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      background: 'linear-gradient(45deg, blue, yellow, green)',
-      padding: '20px',
-      width: '100%', // Ensure it takes full width
-      height: '100vh', // Adjust the height as needed
-      boxSizing: 'border-box', // Ensures padding doesn't add to the width
-      position: 'relative',
-    }}>
+    <FunContainer
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: 'linear-gradient(45deg, blue, yellow, green)',
+        padding: '20px',
+        width: '100%', // Ensure it takes full width
+        height: '100vh', // Adjust the height as needed
+        boxSizing: 'border-box', // Ensures padding doesn't add to the width
+        position: 'relative',
+      }}
+    >
       <div ref={sketchRef} style={{ position: 'absolute' }}></div>
     </FunContainer>
   );

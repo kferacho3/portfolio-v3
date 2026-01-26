@@ -9,7 +9,7 @@ export const ADD_ROW_COUNT = 16;
 export const ROW_BUFFER_BEHIND = 10;
 export const ROW_BUFFER_AHEAD = 14;
 export const BASE_STEP_TIME = 0.16;
-export const BOOST_STEP_TIME = 0.10;
+export const BOOST_STEP_TIME = 0.1;
 export const PLAYER_HEIGHT = 0.9;
 export const PLAYER_RADIUS = TILE_SIZE * 0.35;
 export const GROUND_Y = -0.12;
@@ -28,7 +28,14 @@ export const NEON_GREEN = '#39ff14';
 export const NEON_PURPLE = '#bf00ff';
 export const NEON_YELLOW = '#ffff00';
 
-export const VEHICLE_COLORS = ['#ff3366', '#00ccff', '#ff9500', '#00ff88', '#cc66ff', '#ffdd00'];
+export const VEHICLE_COLORS = [
+  '#ff3366',
+  '#00ccff',
+  '#ff9500',
+  '#00ff88',
+  '#cc66ff',
+  '#ffdd00',
+];
 export const GRASS_COLORS = ['#1a472a', '#0d3320'];
 export const GRASS_ACCENT = '#39ff14';
 export const ROAD_COLOR = '#0a0a12';

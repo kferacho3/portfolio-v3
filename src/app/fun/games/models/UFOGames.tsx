@@ -113,10 +113,15 @@ type UfoShipProps = JSX.IntrinsicElements['group'] & {
 const UfoShip: React.FC<UfoShipProps> = ({ playerRef, bodyRef, ...props }) => {
   const localBodyRef = useRef<THREE.Group>(null);
   const actualBodyRef = bodyRef || localBodyRef;
-  const { nodes, materials } = useGLTF('/fun/models/UFOgames.glb') as GLTFResult;
+  const { nodes, materials } = useGLTF(
+    '/fun/models/UFOgames.glb'
+  ) as GLTFResult;
 
   // Crosshair materials
-  const crossMaterial = new THREE.MeshBasicMaterial({ color: 'hotpink', fog: false });
+  const crossMaterial = new THREE.MeshBasicMaterial({
+    color: 'hotpink',
+    fog: false,
+  });
   const laserMaterial = new THREE.MeshBasicMaterial({ color: 'lightgreen' });
 
   return (
@@ -135,119 +140,362 @@ const UfoShip: React.FC<UfoShipProps> = ({ playerRef, bodyRef, ...props }) => {
 
         {/* Target reticle */}
         <group scale={0.005} position={[0, 0, -3]}>
-          <mesh position={[0, 20, 0]} renderOrder={1000} material={crossMaterial}>
+          <mesh
+            position={[0, 20, 0]}
+            renderOrder={1000}
+            material={crossMaterial}
+          >
             <boxGeometry args={[40, 2, 2]} />
           </mesh>
-          <mesh position={[0, -20, 0]} renderOrder={1000} material={crossMaterial}>
+          <mesh
+            position={[0, -20, 0]}
+            renderOrder={1000}
+            material={crossMaterial}
+          >
             <boxGeometry args={[40, 2, 2]} />
           </mesh>
-          <mesh position={[20, 0, 0]} renderOrder={1000} material={crossMaterial}>
+          <mesh
+            position={[20, 0, 0]}
+            renderOrder={1000}
+            material={crossMaterial}
+          >
             <boxGeometry args={[2, 40, 2]} />
           </mesh>
-          <mesh position={[-20, 0, 0]} renderOrder={1000} material={crossMaterial}>
+          <mesh
+            position={[-20, 0, 0]}
+            renderOrder={1000}
+            material={crossMaterial}
+          >
             <boxGeometry args={[2, 40, 2]} />
           </mesh>
         </group>
 
         {/* UFO Model - matching original UFOgames.js positions and rotations */}
-        <group position={[0.94, -1.01, 0.12]} rotation={[1.57, 0, 0]} scale={[0.57, 0.94, 0.57]}>
+        <group
+          position={[0.94, -1.01, 0.12]}
+          rotation={[1.57, 0, 0]}
+          scale={[0.57, 0.94, 0.57]}
+        >
           {/* AlienOrange */}
-          <group name="AlienOrange" position={[-2.65, 0.04, -1.47]} rotation={[0, 0, -Math.PI]} scale={[7.63, 1, 7.63]}>
-            <mesh geometry={nodes.Curve391.geometry} material={nodes.Curve391.material} />
-            <mesh geometry={nodes.Curve391_1.geometry} material={materials.PaletteMaterial002} />
-            <mesh geometry={nodes.Curve391_2.geometry} material={nodes.Curve391_2.material} />
-            <mesh geometry={nodes.Curve391_3.geometry} material={nodes.Curve391_3.material} />
+          <group
+            name="AlienOrange"
+            position={[-2.65, 0.04, -1.47]}
+            rotation={[0, 0, -Math.PI]}
+            scale={[7.63, 1, 7.63]}
+          >
+            <mesh
+              geometry={nodes.Curve391.geometry}
+              material={nodes.Curve391.material}
+            />
+            <mesh
+              geometry={nodes.Curve391_1.geometry}
+              material={materials.PaletteMaterial002}
+            />
+            <mesh
+              geometry={nodes.Curve391_2.geometry}
+              material={nodes.Curve391_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve391_3.geometry}
+              material={nodes.Curve391_3.material}
+            />
           </group>
-          
+
           {/* AlienPurple */}
-          <group name="AlienPurple" position={[-0.74, 0.01, -1.59]} rotation={[0, 0, -3.14]} scale={[7.63, 1, 7.63]}>
-            <mesh geometry={nodes.Curve123.geometry} material={nodes.Curve123.material} />
-            <mesh geometry={nodes.Curve123_1.geometry} material={nodes.Curve123_1.material} />
-            <mesh geometry={nodes.Curve123_2.geometry} material={materials.PaletteMaterial003} />
-            <mesh geometry={nodes.Curve123_3.geometry} material={nodes.Curve123_3.material} />
-            <mesh geometry={nodes.Curve123_4.geometry} material={nodes.Curve123_4.material} />
-            <mesh geometry={nodes.Curve123_5.geometry} material={nodes.Curve123_5.material} />
-            <mesh geometry={nodes.Curve123_6.geometry} material={nodes.Curve123_6.material} />
-            <mesh geometry={nodes.Curve123_7.geometry} material={nodes.Curve123_7.material} />
-            <mesh geometry={nodes.Curve123_8.geometry} material={nodes.Curve123_8.material} />
-            <mesh geometry={nodes.Curve123_9.geometry} material={nodes.Curve123_9.material} />
-            <mesh geometry={nodes.Curve123_10.geometry} material={nodes.Curve123_10.material} />
-            <mesh geometry={nodes.Curve123_11.geometry} material={nodes.Curve123_11.material} />
-            <mesh geometry={nodes.Curve123_12.geometry} material={nodes.Curve123_12.material} />
-            <mesh geometry={nodes.Curve123_13.geometry} material={nodes.Curve123_13.material} />
-            <mesh geometry={nodes.Curve123_14.geometry} material={nodes.Curve123_14.material} />
-            <mesh geometry={nodes.Curve123_15.geometry} material={nodes.Curve123_15.material} />
-            <mesh geometry={nodes.Curve123_16.geometry} material={nodes.Curve123_16.material} />
-            <mesh geometry={nodes.Curve123_17.geometry} material={nodes.Curve123_17.material} />
-            <mesh geometry={nodes.Curve123_18.geometry} material={nodes.Curve123_18.material} />
-            <mesh geometry={nodes.Curve123_19.geometry} material={nodes.Curve123_19.material} />
-            <mesh geometry={nodes.Curve123_20.geometry} material={nodes.Curve123_20.material} />
-            <mesh geometry={nodes.Curve123_21.geometry} material={nodes.Curve123_21.material} />
-            <mesh geometry={nodes.Curve123_22.geometry} material={nodes.Curve123_22.material} />
-            <mesh geometry={nodes.Curve123_23.geometry} material={nodes.Curve123_23.material} />
-            <mesh geometry={nodes.Curve123_24.geometry} material={nodes.Curve123_24.material} />
-            <mesh geometry={nodes.Curve123_25.geometry} material={nodes.Curve123_25.material} />
-            <mesh geometry={nodes.Curve123_26.geometry} material={nodes.Curve123_26.material} />
-            <mesh geometry={nodes.Curve123_27.geometry} material={nodes.Curve123_27.material} />
-            <mesh geometry={nodes.Curve123_28.geometry} material={nodes.Curve123_28.material} />
-            <mesh geometry={nodes.Curve123_29.geometry} material={nodes.Curve123_29.material} />
-            <mesh geometry={nodes.Curve123_30.geometry} material={nodes.Curve123_30.material} />
-            <mesh geometry={nodes.Curve123_31.geometry} material={nodes.Curve123_31.material} />
-            <mesh geometry={nodes.Curve123_32.geometry} material={nodes.Curve123_32.material} />
+          <group
+            name="AlienPurple"
+            position={[-0.74, 0.01, -1.59]}
+            rotation={[0, 0, -3.14]}
+            scale={[7.63, 1, 7.63]}
+          >
+            <mesh
+              geometry={nodes.Curve123.geometry}
+              material={nodes.Curve123.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_1.geometry}
+              material={nodes.Curve123_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_2.geometry}
+              material={materials.PaletteMaterial003}
+            />
+            <mesh
+              geometry={nodes.Curve123_3.geometry}
+              material={nodes.Curve123_3.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_4.geometry}
+              material={nodes.Curve123_4.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_5.geometry}
+              material={nodes.Curve123_5.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_6.geometry}
+              material={nodes.Curve123_6.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_7.geometry}
+              material={nodes.Curve123_7.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_8.geometry}
+              material={nodes.Curve123_8.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_9.geometry}
+              material={nodes.Curve123_9.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_10.geometry}
+              material={nodes.Curve123_10.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_11.geometry}
+              material={nodes.Curve123_11.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_12.geometry}
+              material={nodes.Curve123_12.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_13.geometry}
+              material={nodes.Curve123_13.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_14.geometry}
+              material={nodes.Curve123_14.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_15.geometry}
+              material={nodes.Curve123_15.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_16.geometry}
+              material={nodes.Curve123_16.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_17.geometry}
+              material={nodes.Curve123_17.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_18.geometry}
+              material={nodes.Curve123_18.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_19.geometry}
+              material={nodes.Curve123_19.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_20.geometry}
+              material={nodes.Curve123_20.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_21.geometry}
+              material={nodes.Curve123_21.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_22.geometry}
+              material={nodes.Curve123_22.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_23.geometry}
+              material={nodes.Curve123_23.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_24.geometry}
+              material={nodes.Curve123_24.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_25.geometry}
+              material={nodes.Curve123_25.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_26.geometry}
+              material={nodes.Curve123_26.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_27.geometry}
+              material={nodes.Curve123_27.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_28.geometry}
+              material={nodes.Curve123_28.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_29.geometry}
+              material={nodes.Curve123_29.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_30.geometry}
+              material={nodes.Curve123_30.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_31.geometry}
+              material={nodes.Curve123_31.material}
+            />
+            <mesh
+              geometry={nodes.Curve123_32.geometry}
+              material={nodes.Curve123_32.material}
+            />
           </group>
-          
+
           {/* AlienRLeft */}
-          <group name="AlienRLeft" position={[-1.66, -0.18, -2.16]} rotation={[1.57, 0, -3.14]} scale={[3, 0.11, 3]}>
-            <mesh geometry={nodes.Curve063.geometry} material={nodes.Curve063.material} />
-            <mesh geometry={nodes.Curve063_1.geometry} material={nodes.Curve063_1.material} />
-            <mesh geometry={nodes.Curve063_2.geometry} material={nodes.Curve063_2.material} />
-            <mesh geometry={nodes.Curve063_3.geometry} material={nodes.Curve063_3.material} />
+          <group
+            name="AlienRLeft"
+            position={[-1.66, -0.18, -2.16]}
+            rotation={[1.57, 0, -3.14]}
+            scale={[3, 0.11, 3]}
+          >
+            <mesh
+              geometry={nodes.Curve063.geometry}
+              material={nodes.Curve063.material}
+            />
+            <mesh
+              geometry={nodes.Curve063_1.geometry}
+              material={nodes.Curve063_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve063_2.geometry}
+              material={nodes.Curve063_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve063_3.geometry}
+              material={nodes.Curve063_3.material}
+            />
           </group>
-          
+
           {/* AlienRMiddle */}
-          <group name="AlienRMiddle" position={[-1.66, -0.18, -2.16]} rotation={[0, 0, Math.PI]} scale={[3, 0.11, 3]}>
-            <mesh geometry={nodes.Curve011.geometry} material={nodes.Curve011.material} />
-            <mesh geometry={nodes.Curve011_1.geometry} material={nodes.Curve011_1.material} />
-            <mesh geometry={nodes.Curve011_2.geometry} material={nodes.Curve011_2.material} />
-            <mesh geometry={nodes.Curve011_3.geometry} material={nodes.Curve011_3.material} />
+          <group
+            name="AlienRMiddle"
+            position={[-1.66, -0.18, -2.16]}
+            rotation={[0, 0, Math.PI]}
+            scale={[3, 0.11, 3]}
+          >
+            <mesh
+              geometry={nodes.Curve011.geometry}
+              material={nodes.Curve011.material}
+            />
+            <mesh
+              geometry={nodes.Curve011_1.geometry}
+              material={nodes.Curve011_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve011_2.geometry}
+              material={nodes.Curve011_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve011_3.geometry}
+              material={nodes.Curve011_3.material}
+            />
           </group>
-          
+
           {/* AlienRRight */}
-          <group name="AlienRRight" position={[-1.66, -0.18, -2.16]} rotation={[0, 0, -Math.PI]} scale={[3, 0.11, 3]}>
-            <mesh geometry={nodes.Curve125.geometry} material={nodes.Curve125.material} />
-            <mesh geometry={nodes.Curve125_1.geometry} material={nodes.Curve125_1.material} />
-            <mesh geometry={nodes.Curve125_2.geometry} material={nodes.Curve125_2.material} />
-            <mesh geometry={nodes.Curve125_3.geometry} material={nodes.Curve125_3.material} />
+          <group
+            name="AlienRRight"
+            position={[-1.66, -0.18, -2.16]}
+            rotation={[0, 0, -Math.PI]}
+            scale={[3, 0.11, 3]}
+          >
+            <mesh
+              geometry={nodes.Curve125.geometry}
+              material={nodes.Curve125.material}
+            />
+            <mesh
+              geometry={nodes.Curve125_1.geometry}
+              material={nodes.Curve125_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve125_2.geometry}
+              material={nodes.Curve125_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve125_3.geometry}
+              material={nodes.Curve125_3.material}
+            />
           </group>
         </group>
-        
+
         {/* Green aliens group */}
         <group position={[1.66, 2.46, 0.02]} rotation={[-1.69, 0, 0]}>
           {/* AliensGreenLeft */}
-          <group name="AliensGreenLeft" position={[-1.68, 0.2, -2.17]} rotation={[0, -0.26, -3.14]} scale={[2.85, 0.29, 2.84]}>
-            <mesh geometry={nodes.Curve127.geometry} material={nodes.Curve127.material} />
-            <mesh geometry={nodes.Curve127_1.geometry} material={nodes.Curve127_1.material} />
-            <mesh geometry={nodes.Curve127_2.geometry} material={nodes.Curve127_2.material} />
-            <mesh geometry={nodes.Curve127_3.geometry} material={nodes.Curve127_3.material} />
+          <group
+            name="AliensGreenLeft"
+            position={[-1.68, 0.2, -2.17]}
+            rotation={[0, -0.26, -3.14]}
+            scale={[2.85, 0.29, 2.84]}
+          >
+            <mesh
+              geometry={nodes.Curve127.geometry}
+              material={nodes.Curve127.material}
+            />
+            <mesh
+              geometry={nodes.Curve127_1.geometry}
+              material={nodes.Curve127_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve127_2.geometry}
+              material={nodes.Curve127_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve127_3.geometry}
+              material={nodes.Curve127_3.material}
+            />
           </group>
-          
+
           {/* AliensGreenMiddle */}
-          <group name="AliensGreenMiddle" position={[-1.67, 0.17, -2.24]} rotation={[0, -Math.PI / 4, -3.14]} scale={[3.88, 0.24, 2.84]}>
-            <mesh geometry={nodes.Curve294.geometry} material={nodes.Curve294.material} />
-            <mesh geometry={nodes.Curve294_1.geometry} material={nodes.Curve294_1.material} />
-            <mesh geometry={nodes.Curve294_2.geometry} material={nodes.Curve294_2.material} />
-            <mesh geometry={nodes.Curve294_3.geometry} material={nodes.Curve294_3.material} />
+          <group
+            name="AliensGreenMiddle"
+            position={[-1.67, 0.17, -2.24]}
+            rotation={[0, -Math.PI / 4, -3.14]}
+            scale={[3.88, 0.24, 2.84]}
+          >
+            <mesh
+              geometry={nodes.Curve294.geometry}
+              material={nodes.Curve294.material}
+            />
+            <mesh
+              geometry={nodes.Curve294_1.geometry}
+              material={nodes.Curve294_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve294_2.geometry}
+              material={nodes.Curve294_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve294_3.geometry}
+              material={nodes.Curve294_3.material}
+            />
           </group>
-          
+
           {/* AliensGreenRight */}
-          <group name="AliensGreenRight" position={[-1.68, 0.2, -2.17]} rotation={[3.14, -0.29, -3.14]} scale={[3, 0.18, 4.57]}>
-            <mesh geometry={nodes.Curve009.geometry} material={nodes.Curve009.material} />
-            <mesh geometry={nodes.Curve009_1.geometry} material={nodes.Curve009_1.material} />
-            <mesh geometry={nodes.Curve009_2.geometry} material={nodes.Curve009_2.material} />
-            <mesh geometry={nodes.Curve009_3.geometry} material={nodes.Curve009_3.material} />
+          <group
+            name="AliensGreenRight"
+            position={[-1.68, 0.2, -2.17]}
+            rotation={[3.14, -0.29, -3.14]}
+            scale={[3, 0.18, 4.57]}
+          >
+            <mesh
+              geometry={nodes.Curve009.geometry}
+              material={nodes.Curve009.material}
+            />
+            <mesh
+              geometry={nodes.Curve009_1.geometry}
+              material={nodes.Curve009_1.material}
+            />
+            <mesh
+              geometry={nodes.Curve009_2.geometry}
+              material={nodes.Curve009_2.material}
+            />
+            <mesh
+              geometry={nodes.Curve009_3.geometry}
+              material={nodes.Curve009_3.material}
+            />
           </group>
         </group>
-        
+
         {/* UFO Body */}
         <mesh
           geometry={nodes.UfoPurpleBod1.geometry}
@@ -256,7 +504,7 @@ const UfoShip: React.FC<UfoShipProps> = ({ playerRef, bodyRef, ...props }) => {
           rotation={[1.57, 0, -3.14]}
           scale={[4.88, 0.52, 4.88]}
         />
-        
+
         {/* Engine/Detail parts */}
         <mesh
           geometry={nodes['Cylinder015_02_-_Default_0010'].geometry}
@@ -286,7 +534,7 @@ const UfoShip: React.FC<UfoShipProps> = ({ playerRef, bodyRef, ...props }) => {
           rotation={[Math.PI / 2, 0, Math.PI]}
           scale={[0.03, 0.02, 0.03]}
         />
-        
+
         {/* Pistol/Weapon parts */}
         <mesh
           geometry={nodes.pCube1_PistolTrigger_0002.geometry}

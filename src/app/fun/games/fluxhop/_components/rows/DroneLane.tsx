@@ -1,7 +1,13 @@
 import { useFrame } from '@react-three/fiber';
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { DRONE_COLOR, GROUND_Y, PLAYER_RADIUS, ROW_WIDTH, TILE_SIZE } from '../../constants';
+import {
+  DRONE_COLOR,
+  GROUND_Y,
+  PLAYER_RADIUS,
+  ROW_WIDTH,
+  TILE_SIZE,
+} from '../../constants';
 import { fluxHopState } from '../../state';
 import type { DroneRowData } from '../../types';
 
@@ -14,7 +20,9 @@ const DroneLane: React.FC<{
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const rowZ = rowIndex * TILE_SIZE;
-  const positionsRef = useRef<{ x: number; z: number }[]>(data.drones.map((drone) => ({ x: drone.x, z: rowZ + drone.z })));
+  const positionsRef = useRef<{ x: number; z: number }[]>(
+    data.drones.map((drone) => ({ x: drone.x, z: rowZ + drone.z }))
+  );
 
   useEffect(() => {
     if (!meshRef.current || data.drones.length === 0) return;
@@ -22,7 +30,12 @@ const DroneLane: React.FC<{
   }, [data.drones.length]);
 
   useFrame(({ clock }) => {
-    if (fluxHopState.status !== 'running' || !meshRef.current || data.drones.length === 0) return;
+    if (
+      fluxHopState.status !== 'running' ||
+      !meshRef.current ||
+      data.drones.length === 0
+    )
+      return;
     const player = playerRef.current;
     const time = clock.elapsedTime;
 
@@ -49,7 +62,9 @@ const DroneLane: React.FC<{
     const playerZ = player.position.z;
     const hit = data.drones.some((_, index) => {
       const pos = positionsRef.current[index];
-      const dist = Math.sqrt(Math.pow(playerX - pos.x, 2) + Math.pow(playerZ - pos.z, 2));
+      const dist = Math.sqrt(
+        Math.pow(playerX - pos.x, 2) + Math.pow(playerZ - pos.z, 2)
+      );
       return dist < PLAYER_RADIUS + 0.3;
     });
 
@@ -66,11 +81,27 @@ const DroneLane: React.FC<{
       </mesh>
       <mesh position={[0, 0.02, 0]}>
         <boxGeometry args={[ROW_WIDTH, 0.02, TILE_SIZE * 0.8]} />
-        <meshStandardMaterial color={DRONE_COLOR} emissive={DRONE_COLOR} emissiveIntensity={0.15} transparent opacity={0.3} />
+        <meshStandardMaterial
+          color={DRONE_COLOR}
+          emissive={DRONE_COLOR}
+          emissiveIntensity={0.15}
+          transparent
+          opacity={0.3}
+        />
       </mesh>
-      <instancedMesh ref={meshRef} args={[undefined, undefined, data.drones.length]} castShadow>
+      <instancedMesh
+        ref={meshRef}
+        args={[undefined, undefined, data.drones.length]}
+        castShadow
+      >
         <octahedronGeometry args={[1]} />
-        <meshStandardMaterial color={DRONE_COLOR} emissive={DRONE_COLOR} emissiveIntensity={0.6} roughness={0.3} metalness={0.7} />
+        <meshStandardMaterial
+          color={DRONE_COLOR}
+          emissive={DRONE_COLOR}
+          emissiveIntensity={0.6}
+          roughness={0.3}
+          metalness={0.7}
+        />
       </instancedMesh>
     </group>
   );

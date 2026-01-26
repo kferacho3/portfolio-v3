@@ -30,23 +30,34 @@ const VehiclesLane: React.FC<{
     if (!meshRef.current || data.vehicles.length === 0) return;
     meshRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     if (!meshRef.current.instanceColor) {
-      meshRef.current.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(data.vehicles.length * 3), 3);
+      meshRef.current.instanceColor = new THREE.InstancedBufferAttribute(
+        new Float32Array(data.vehicles.length * 3),
+        3
+      );
     }
     data.vehicles.forEach((vehicle, index) => {
       meshRef.current?.setColorAt(index, new THREE.Color(vehicle.color));
     });
-    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
+    if (meshRef.current.instanceColor)
+      meshRef.current.instanceColor.needsUpdate = true;
   }, [data.vehicles]);
 
   useFrame((_, delta) => {
-    if (fluxHopState.status !== 'running' || !meshRef.current || data.vehicles.length === 0) return;
+    if (
+      fluxHopState.status !== 'running' ||
+      !meshRef.current ||
+      data.vehicles.length === 0
+    )
+      return;
     const player = playerRef.current;
 
     data.vehicles.forEach((vehicle, index) => {
       vehicle.x += data.speed * data.direction * delta;
       const wrapOffset = vehicle.length + TILE_SIZE * 2;
-      if (data.direction === 1 && vehicle.x > MAX_X + wrapOffset) vehicle.x = MIN_X - wrapOffset;
-      else if (data.direction === -1 && vehicle.x < MIN_X - wrapOffset) vehicle.x = MAX_X + wrapOffset;
+      if (data.direction === 1 && vehicle.x > MAX_X + wrapOffset)
+        vehicle.x = MIN_X - wrapOffset;
+      else if (data.direction === -1 && vehicle.x < MIN_X - wrapOffset)
+        vehicle.x = MAX_X + wrapOffset;
 
       dummy.position.set(vehicle.x, VEHICLE_Y, 0);
       dummy.scale.set(vehicle.length, 0.5, vehicle.width);
@@ -76,9 +87,18 @@ const VehiclesLane: React.FC<{
   if (data.vehicles.length === 0) return null;
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, data.vehicles.length]} castShadow>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, data.vehicles.length]}
+      castShadow
+    >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color="#ffffff" roughness={0.3} metalness={0.4} vertexColors />
+      <meshStandardMaterial
+        color="#ffffff"
+        roughness={0.3}
+        metalness={0.4}
+        vertexColors
+      />
     </instancedMesh>
   );
 };
@@ -100,11 +120,19 @@ const SlidingBarriers: React.FC<{
   }, [barriers.length]);
 
   useFrame(({ clock }) => {
-    if (fluxHopState.status !== 'running' || !meshRef.current || barriers.length === 0) return;
+    if (
+      fluxHopState.status !== 'running' ||
+      !meshRef.current ||
+      barriers.length === 0
+    )
+      return;
     const player = playerRef.current;
 
     barriers.forEach((barrier, index) => {
-      const newX = barrier.x + Math.sin(clock.elapsedTime * barrier.speed + barrier.phase) * barrier.slideRange;
+      const newX =
+        barrier.x +
+        Math.sin(clock.elapsedTime * barrier.speed + barrier.phase) *
+          barrier.slideRange;
       positionsRef.current[index] = newX;
 
       dummy.position.set(newX, 0.4, 0);
@@ -130,9 +158,19 @@ const SlidingBarriers: React.FC<{
   if (barriers.length === 0) return null;
 
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, barriers.length]} castShadow>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, barriers.length]}
+      castShadow
+    >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial color={NEON_ORANGE} emissive={NEON_ORANGE} emissiveIntensity={0.5} roughness={0.4} metalness={0.3} />
+      <meshStandardMaterial
+        color={NEON_ORANGE}
+        emissive={NEON_ORANGE}
+        emissiveIntensity={0.5}
+        roughness={0.4}
+        metalness={0.3}
+      />
     </instancedMesh>
   );
 };
@@ -152,11 +190,27 @@ const RoadRow: React.FC<{
       {[-3, -1, 1, 3].map((offset) => (
         <mesh key={offset} position={[offset * TILE_SIZE * 1.5, 0.01, 0]}>
           <boxGeometry args={[TILE_SIZE * 0.8, 0.02, 0.08]} />
-          <meshStandardMaterial color={ROAD_STRIPE} emissive={ROAD_STRIPE} emissiveIntensity={0.3} />
+          <meshStandardMaterial
+            color={ROAD_STRIPE}
+            emissive={ROAD_STRIPE}
+            emissiveIntensity={0.3}
+          />
         </mesh>
       ))}
-      <VehiclesLane rowIndex={rowIndex} data={data} playerRef={playerRef} onHit={onHit} />
-      {data.barriers && <SlidingBarriers rowIndex={rowIndex} barriers={data.barriers} playerRef={playerRef} onHit={onHit} />}
+      <VehiclesLane
+        rowIndex={rowIndex}
+        data={data}
+        playerRef={playerRef}
+        onHit={onHit}
+      />
+      {data.barriers && (
+        <SlidingBarriers
+          rowIndex={rowIndex}
+          barriers={data.barriers}
+          playerRef={playerRef}
+          onHit={onHit}
+        />
+      )}
     </group>
   );
 };

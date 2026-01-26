@@ -1,6 +1,6 @@
 /**
  * ArcadeDeck
- * 
+ *
  * Bottom game selector carousel for the home screen.
  * Allows browsing and launching games.
  */
@@ -37,7 +37,8 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
     preloadGame(selectedGame.id as GameId);
 
     const nextGame = GAME_CARDS[(selectedIndex + 1) % TOTAL_GAMES];
-    const prevGame = GAME_CARDS[(selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES];
+    const prevGame =
+      GAME_CARDS[(selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES];
     if (nextGame) preloadGame(nextGame.id as GameId);
     if (prevGame) preloadGame(prevGame.id as GameId);
   }, [selectedGame, selectedIndex]);
@@ -94,7 +95,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
                 direction="prev"
                 onClick={handleSelectPrevious}
               />
-              
+
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <span className="text-base font-semibold text-white/90 md:text-lg truncate">
                   {selectedGame.title}
@@ -104,11 +105,8 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
                   onClick={() => setShowInfo((prev) => !prev)}
                 />
               </div>
-              
-              <NavigationButton
-                direction="next"
-                onClick={handleSelectNext}
-              />
+
+              <NavigationButton direction="next" onClick={handleSelectNext} />
             </div>
 
             <div className="flex-shrink-0">
@@ -196,7 +194,8 @@ const LaunchButton: React.FC<{
     onFocus={onPreload}
     className="group inline-flex items-center gap-2 border px-4 py-2 text-[11px] uppercase tracking-[0.32em] text-white/70 transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95"
     style={{
-      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04))',
+      background:
+        'linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04))',
       borderColor: 'var(--arcade-stroke)',
       borderRadius: 'var(--arcade-radius-sm)',
       fontFamily: 'var(--arcade-mono)',

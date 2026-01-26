@@ -28,7 +28,11 @@ const RunnerManMode: React.FC = () => {
     for (let i = 0; i < 50; i++) {
       initialObstacles.push({
         id: i,
-        position: [Math.random() * 8 - 4, 0, -i * 8 - 20] as [number, number, number],
+        position: [Math.random() * 8 - 4, 0, -i * 8 - 20] as [
+          number,
+          number,
+          number,
+        ],
         active: true,
       });
     }
@@ -81,7 +85,11 @@ const RunnerManMode: React.FC = () => {
       const obstacle = obstaclesRef.current[i];
       const mesh = obstacleMeshRefs.current[i];
       if (obstacle.position[2] - playerPos.z > 20) {
-        obstacle.position = [Math.random() * 8 - 4, 0, playerPos.z - 400] as [number, number, number];
+        obstacle.position = [Math.random() * 8 - 4, 0, playerPos.z - 400] as [
+          number,
+          number,
+          number,
+        ];
       }
 
       const dx = playerPos.x - obstacle.position[0];
@@ -90,7 +98,11 @@ const RunnerManMode: React.FC = () => {
         if (now - lastDamageTime.current > 600) {
           lastDamageTime.current = now;
           skyBlitzState.health = Math.max(0, skyBlitzState.health - 15);
-          obstacle.position = [Math.random() * 8 - 4, 0, playerPos.z - 200] as [number, number, number];
+          obstacle.position = [Math.random() * 8 - 4, 0, playerPos.z - 200] as [
+            number,
+            number,
+            number,
+          ];
 
           if (skyBlitzState.health <= 0) {
             skyBlitzState.phase = 'gameover';
@@ -99,7 +111,11 @@ const RunnerManMode: React.FC = () => {
       }
 
       if (mesh) {
-        mesh.position.set(obstacle.position[0], obstacle.position[1], obstacle.position[2]);
+        mesh.position.set(
+          obstacle.position[0],
+          obstacle.position[1],
+          obstacle.position[2]
+        );
       }
     }
   });
@@ -115,7 +131,14 @@ const RunnerManMode: React.FC = () => {
         inclination={0.49}
         azimuth={0.25}
       />
-      <Stars radius={400} depth={60} count={3000} factor={2} saturation={0} fade />
+      <Stars
+        radius={400}
+        depth={60}
+        count={3000}
+        factor={2}
+        saturation={0}
+        fade
+      />
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
 

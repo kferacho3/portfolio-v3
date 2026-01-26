@@ -3,7 +3,14 @@
 
 import { Environment, OrbitControls } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import FloatingLight from './FloatingLight';
 import InspectModel from './InspectModel';
@@ -31,31 +38,43 @@ interface MyRoomSceneProps {
 
 // Lightweight selection highlight using emissive materials instead of heavy OutlinePass
 const useSelectionHighlight = (groups: GroupData[]) => {
-  const highlightedObjects = useRef<Map<THREE.Object3D, { material: THREE.Material; originalEmissive: THREE.Color; originalIntensity: number }[]>>(new Map());
-  
+  const highlightedObjects = useRef<
+    Map<
+      THREE.Object3D,
+      {
+        material: THREE.Material;
+        originalEmissive: THREE.Color;
+        originalIntensity: number;
+      }[]
+    >
+  >(new Map());
+
   useEffect(() => {
     // Clear previous highlights
     highlightedObjects.current.forEach((materials, obj) => {
       materials.forEach(({ material, originalEmissive, originalIntensity }) => {
-        if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhysicalMaterial) {
+        if (
+          material instanceof THREE.MeshStandardMaterial ||
+          material instanceof THREE.MeshPhysicalMaterial
+        ) {
           material.emissive.copy(originalEmissive);
           material.emissiveIntensity = originalIntensity;
         }
       });
     });
     highlightedObjects.current.clear();
-    
+
     // Apply new highlights
     groups.forEach((group) => {
       if (!group.object) return;
-      
+
       const name = group.name;
       const isActive = meBitsGroups.includes(name)
         ? group.isFound && group.isSelected
         : group.isSelected || group.isHovered;
-      
+
       if (!isActive) return;
-      
+
       // Determine highlight color
       let highlightColor: THREE.Color;
       if (meBitsGroups.includes(name)) {
@@ -69,14 +88,23 @@ const useSelectionHighlight = (groups: GroupData[]) => {
       } else {
         highlightColor = new THREE.Color(0xffffff);
       }
-      
-      const materialsData: { material: THREE.Material; originalEmissive: THREE.Color; originalIntensity: number }[] = [];
-      
+
+      const materialsData: {
+        material: THREE.Material;
+        originalEmissive: THREE.Color;
+        originalIntensity: number;
+      }[] = [];
+
       group.object.traverse((child) => {
         if (child instanceof THREE.Mesh && child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material];
           materials.forEach((mat) => {
-            if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshPhysicalMaterial) {
+            if (
+              mat instanceof THREE.MeshStandardMaterial ||
+              mat instanceof THREE.MeshPhysicalMaterial
+            ) {
               materialsData.push({
                 material: mat,
                 originalEmissive: mat.emissive.clone(),
@@ -88,21 +116,26 @@ const useSelectionHighlight = (groups: GroupData[]) => {
           });
         }
       });
-      
+
       if (materialsData.length > 0) {
         highlightedObjects.current.set(group.object, materialsData);
       }
     });
-    
+
     return () => {
       // Cleanup on unmount
       highlightedObjects.current.forEach((materials) => {
-        materials.forEach(({ material, originalEmissive, originalIntensity }) => {
-          if (material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhysicalMaterial) {
-            material.emissive.copy(originalEmissive);
-            material.emissiveIntensity = originalIntensity;
+        materials.forEach(
+          ({ material, originalEmissive, originalIntensity }) => {
+            if (
+              material instanceof THREE.MeshStandardMaterial ||
+              material instanceof THREE.MeshPhysicalMaterial
+            ) {
+              material.emissive.copy(originalEmissive);
+              material.emissiveIntensity = originalIntensity;
+            }
           }
-        });
+        );
       });
     };
   }, [groups]);
@@ -119,7 +152,7 @@ const MyRoomScene = ({
   onMeBitFound,
 }: MyRoomSceneProps) => {
   const { gl, scene, size } = useThree();
-  
+
   // Use lightweight selection highlighting instead of heavy OutlinePass
   useSelectionHighlight(groups);
 
@@ -128,18 +161,18 @@ const MyRoomScene = ({
     // Aggressive pixel ratio cap for performance
     const maxDpr = Math.min(window.devicePixelRatio, 1.25);
     gl.setPixelRatio(maxDpr);
-    
+
     // Use basic shadow map for performance
     gl.shadowMap.enabled = true;
     gl.shadowMap.type = THREE.BasicShadowMap;
     gl.shadowMap.autoUpdate = false; // Manual shadow update
-    
+
     // Optimize renderer
     gl.info.autoReset = false;
-    
+
     // Initial shadow map render
     gl.shadowMap.needsUpdate = true;
-    
+
     // No cleanup needed - React Three Fiber handles WebGL context
   }, [gl]);
 
@@ -166,49 +199,52 @@ const MyRoomScene = ({
   }, [groups]);
 
   // Memoized lighting configuration for better performance
-  const lightingConfig = useMemo(() => ({
-    ambient: { intensity: 0.7, color: 0xffffff },
-    key: {
-      intensity: 1.5,
-      position: [8, 12, 8] as [number, number, number],
-      color: 0xfff8f0,
-    },
-    fill: {
-      intensity: 0.6,
-      position: [-6, 8, -4] as [number, number, number],
-      color: 0xe8f4ff,
-    },
-    rim: {
-      intensity: 0.8,
-      position: [0, 6, -10] as [number, number, number],
-      color: 0xffe8dd,
-    },
-    accent1: {
-      intensity: 0.35,
-      position: [-8, 4, 6] as [number, number, number],
-      color: 0x4de1ff,
-    },
-    accent2: {
-      intensity: 0.35,
-      position: [8, 4, 6] as [number, number, number],
-      color: 0xff9f43,
-    },
-  }), []);
+  const lightingConfig = useMemo(
+    () => ({
+      ambient: { intensity: 0.7, color: 0xffffff },
+      key: {
+        intensity: 1.5,
+        position: [8, 12, 8] as [number, number, number],
+        color: 0xfff8f0,
+      },
+      fill: {
+        intensity: 0.6,
+        position: [-6, 8, -4] as [number, number, number],
+        color: 0xe8f4ff,
+      },
+      rim: {
+        intensity: 0.8,
+        position: [0, 6, -10] as [number, number, number],
+        color: 0xffe8dd,
+      },
+      accent1: {
+        intensity: 0.35,
+        position: [-8, 4, 6] as [number, number, number],
+        color: 0x4de1ff,
+      },
+      accent2: {
+        intensity: 0.35,
+        position: [8, 4, 6] as [number, number, number],
+        color: 0xff9f43,
+      },
+    }),
+    []
+  );
 
   return (
     <>
       <Suspense fallback={null}>
         {/* Environment for improved ambient lighting and reflections */}
         <Environment preset="apartment" background={false} />
-        
+
         {/* Optimized Lighting Setup - Studio-quality 3-point lighting */}
-        
+
         {/* Ambient - Increased for better base visibility */}
-        <ambientLight 
-          intensity={lightingConfig.ambient.intensity} 
-          color={lightingConfig.ambient.color} 
+        <ambientLight
+          intensity={lightingConfig.ambient.intensity}
+          color={lightingConfig.ambient.color}
         />
-        
+
         {/* Key light - Main light source, warm tone */}
         <directionalLight
           intensity={lightingConfig.key.intensity}
@@ -225,14 +261,14 @@ const MyRoomScene = ({
           shadow-bias={-0.001}
           color={lightingConfig.key.color}
         />
-        
+
         {/* Fill light - Softens shadows, cool tone for color contrast */}
         <directionalLight
           intensity={lightingConfig.fill.intensity}
           position={lightingConfig.fill.position}
           color={lightingConfig.fill.color}
         />
-        
+
         {/* Rim/Back light - Separates subject from background */}
         <pointLight
           intensity={lightingConfig.rim.intensity}
@@ -241,7 +277,7 @@ const MyRoomScene = ({
           distance={25}
           decay={2}
         />
-        
+
         {/* Accent lights - Add color interest and visual depth */}
         <pointLight
           intensity={lightingConfig.accent1.intensity}
@@ -257,21 +293,19 @@ const MyRoomScene = ({
           distance={18}
           decay={2}
         />
-        
+
         {/* Hemisphere light - Natural sky/ground gradient */}
         <hemisphereLight
           intensity={0.5}
           color={0xffeeff}
           groundColor={0x333344}
         />
-        
+
         {/* Animated floating light for dynamic feel */}
         <FloatingLight />
 
         {/* Audio visualizer - only render when playing to save GPU */}
-        {analyser && isPlaying && (
-          <Track analyser={analyser} />
-        )}
+        {analyser && isPlaying && <Track analyser={analyser} />}
 
         {/* Main room or inspect view */}
         {!inspectedModel ? (

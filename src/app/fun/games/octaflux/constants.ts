@@ -45,11 +45,41 @@ export const GAME = {
 };
 
 export const RIDER_SKINS: RiderSkin[] = [
-  { id: 'pulse', name: 'Pulse', color: '#F43F5E', emissive: '#25040B', shape: 'diamond' },
-  { id: 'cobalt', name: 'Cobalt', color: '#38BDF8', emissive: '#052035', shape: 'disc' },
-  { id: 'jade', name: 'Jade', color: '#34D399', emissive: '#053225', shape: 'capsule' },
-  { id: 'amber', name: 'Amber', color: '#F59E0B', emissive: '#331A02', shape: 'disc' },
-  { id: 'violet', name: 'Violet', color: '#A78BFA', emissive: '#1C0A33', shape: 'diamond' },
+  {
+    id: 'pulse',
+    name: 'Pulse',
+    color: '#F43F5E',
+    emissive: '#25040B',
+    shape: 'diamond',
+  },
+  {
+    id: 'cobalt',
+    name: 'Cobalt',
+    color: '#38BDF8',
+    emissive: '#052035',
+    shape: 'disc',
+  },
+  {
+    id: 'jade',
+    name: 'Jade',
+    color: '#34D399',
+    emissive: '#053225',
+    shape: 'capsule',
+  },
+  {
+    id: 'amber',
+    name: 'Amber',
+    color: '#F59E0B',
+    emissive: '#331A02',
+    shape: 'disc',
+  },
+  {
+    id: 'violet',
+    name: 'Violet',
+    color: '#A78BFA',
+    emissive: '#1C0A33',
+    shape: 'diamond',
+  },
 ];
 
 export const PALETTES = [

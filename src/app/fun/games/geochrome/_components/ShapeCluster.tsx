@@ -11,7 +11,11 @@ interface ShapeClusterProps {
   onCollect: (clusterId: string, shapeId: string, shapeType: ShapeType) => void;
 }
 
-const ShapeCluster: React.FC<ShapeClusterProps> = ({ cluster, playerPosition, onCollect }) => {
+const ShapeCluster: React.FC<ShapeClusterProps> = ({
+  cluster,
+  playerPosition,
+  onCollect,
+}) => {
   const groupRef = useRef<THREE.Group>(null);
   const shapeRefs = useRef<Map<string, THREE.Group>>(new Map());
 
@@ -36,7 +40,11 @@ const ShapeCluster: React.FC<ShapeClusterProps> = ({ cluster, playerPosition, on
   });
 
   return (
-    <group ref={groupRef} position={cluster.worldPosition} rotation={[0, cluster.rotation, 0]}>
+    <group
+      ref={groupRef}
+      position={cluster.worldPosition}
+      rotation={[0, cluster.rotation, 0]}
+    >
       {cluster.shapes.map((shape) =>
         !shape.collected ? (
           <group

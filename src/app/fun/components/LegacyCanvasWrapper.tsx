@@ -6,17 +6,44 @@ import React, { Suspense } from 'react';
 // Dynamically import legacy games with no SSR to avoid hydration issues
 // These games have their own Canvas and physics providers
 const legacyGames: Record<string, React.ComponentType<any>> = {
-  rollette: dynamic(() => import('../../Fun(JavaScript)/Games/Rollette'), { ssr: false }),
-  skyblitz: dynamic(() => import('../../Fun(JavaScript)/Games/SkyBlitz'), { ssr: false }),
-  reactpong: dynamic(() => import('../../Fun(JavaScript)/Games/ReactPong'), { ssr: false }),
-  spinblock: dynamic(() => import('../../Fun(JavaScript)/Games/SpinBlock'), { ssr: false }),
-  shapeshifter: dynamic(() => import('../../Fun(JavaScript)/Games/ShapeShift'), { ssr: false }),
-  dropper: dynamic(() => import('../../Fun(JavaScript)/Games/Dropper'), { ssr: false }),
-  stackz: dynamic(() => import('../../Fun(JavaScript)/Games/Stackz'), { ssr: false }),
-  geochrome: dynamic(() => import('../../Fun(JavaScript)/Games/GeoChrome'), { ssr: false }),
-  pinball: dynamic(() => import('../../Fun(JavaScript)/Games/Pinball3D').then(mod => ({ default: mod.Pinball })), { ssr: false }),
-  flappybird: dynamic(() => import('../../Fun(JavaScript)/Games/FlappyBird'), { ssr: false }),
-  runningman: dynamic(() => import('../../Fun(JavaScript)/Games/RunningMan'), { ssr: false }),
+  rollette: dynamic(() => import('../../Fun(JavaScript)/Games/Rollette'), {
+    ssr: false,
+  }),
+  skyblitz: dynamic(() => import('../../Fun(JavaScript)/Games/SkyBlitz'), {
+    ssr: false,
+  }),
+  reactpong: dynamic(() => import('../../Fun(JavaScript)/Games/ReactPong'), {
+    ssr: false,
+  }),
+  spinblock: dynamic(() => import('../../Fun(JavaScript)/Games/SpinBlock'), {
+    ssr: false,
+  }),
+  shapeshifter: dynamic(
+    () => import('../../Fun(JavaScript)/Games/ShapeShift'),
+    { ssr: false }
+  ),
+  dropper: dynamic(() => import('../../Fun(JavaScript)/Games/Dropper'), {
+    ssr: false,
+  }),
+  stackz: dynamic(() => import('../../Fun(JavaScript)/Games/Stackz'), {
+    ssr: false,
+  }),
+  geochrome: dynamic(() => import('../../Fun(JavaScript)/Games/GeoChrome'), {
+    ssr: false,
+  }),
+  pinball: dynamic(
+    () =>
+      import('../../Fun(JavaScript)/Games/Pinball3D').then((mod) => ({
+        default: mod.Pinball,
+      })),
+    { ssr: false }
+  ),
+  flappybird: dynamic(() => import('../../Fun(JavaScript)/Games/FlappyBird'), {
+    ssr: false,
+  }),
+  runningman: dynamic(() => import('../../Fun(JavaScript)/Games/RunningMan'), {
+    ssr: false,
+  }),
 };
 
 interface LegacyCanvasWrapperProps {
@@ -26,13 +53,16 @@ interface LegacyCanvasWrapperProps {
 
 /**
  * LegacyCanvasWrapper
- * 
+ *
  * Mounts legacy JavaScript games in a full-screen overlay.
  * Used for A/B comparison between legacy and TSX implementations.
- * 
+ *
  * Usage: Add ?legacy=1&game=rollette to the URL
  */
-export function LegacyCanvasWrapper({ game, onClose }: LegacyCanvasWrapperProps) {
+export function LegacyCanvasWrapper({
+  game,
+  onClose,
+}: LegacyCanvasWrapperProps) {
   const normalizedGame = game.toLowerCase();
   const GameComponent = legacyGames[normalizedGame];
 
@@ -41,7 +71,9 @@ export function LegacyCanvasWrapper({ game, onClose }: LegacyCanvasWrapperProps)
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
         <div className="text-white text-center">
           <h2 className="text-2xl mb-4">Legacy Game Not Found</h2>
-          <p className="text-gray-400 mb-4">Game &quot;{game}&quot; is not available in legacy mode.</p>
+          <p className="text-gray-400 mb-4">
+            Game &quot;{game}&quot; is not available in legacy mode.
+          </p>
           <p className="text-sm text-gray-500">
             Available games: {Object.keys(legacyGames).join(', ')}
           </p>

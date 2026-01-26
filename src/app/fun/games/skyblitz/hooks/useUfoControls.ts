@@ -6,7 +6,10 @@ interface UfoControlsOptions {
   tryShoot: (now: number) => void;
 }
 
-export const useUfoControls = ({ shootingRef, tryShoot }: UfoControlsOptions) => {
+export const useUfoControls = ({
+  shootingRef,
+  tryShoot,
+}: UfoControlsOptions) => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {

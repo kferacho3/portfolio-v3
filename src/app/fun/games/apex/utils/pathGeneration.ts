@@ -66,7 +66,8 @@ const curveHashKey = (x: number, z: number) => {
 const isCurvePosTooClose = (pos: THREE.Vector3) => {
   const gx = Math.round(pos.x / CURVE_HASH_CELL);
   const gz = Math.round(pos.z / CURVE_HASH_CELL);
-  const minDistSq = CURVE_SELF_INTERSECTION_DISTANCE * CURVE_SELF_INTERSECTION_DISTANCE;
+  const minDistSq =
+    CURVE_SELF_INTERSECTION_DISTANCE * CURVE_SELF_INTERSECTION_DISTANCE;
 
   for (let ix = -1; ix <= 1; ix++) {
     for (let iz = -1; iz <= 1; iz++) {
@@ -98,8 +99,10 @@ export const advanceCurvedState = (
   step: number
 ) => {
   const boundaryForce =
-    THREE.MathUtils.clamp(Math.abs(pos.x) / CURVE_BOUNDARY_HARD, 0, 1) * Math.sign(pos.x);
-  const targetCurvature = directionSign * CURVE_BASE_CURVATURE - boundaryForce * CURVE_BOUNDARY_GAIN;
+    THREE.MathUtils.clamp(Math.abs(pos.x) / CURVE_BOUNDARY_HARD, 0, 1) *
+    Math.sign(pos.x);
+  const targetCurvature =
+    directionSign * CURVE_BASE_CURVATURE - boundaryForce * CURVE_BOUNDARY_GAIN;
 
   curvatureVel += (targetCurvature - curvature) * CURVE_SPRING * step;
   curvatureVel *= Math.exp(-CURVE_DAMPING * step);
@@ -137,8 +140,14 @@ const chooseGridDirection = (preferRight: boolean) => {
   return forward;
 };
 
-const advanceTile = (direction: THREE.Vector3, y = -TILE_DEPTH / 2, step = TILE_SIZE) => {
-  const nextPos = tempPos.copy(mutation.lastTilePos).addScaledVector(direction, step);
+const advanceTile = (
+  direction: THREE.Vector3,
+  y = -TILE_DEPTH / 2,
+  step = TILE_SIZE
+) => {
+  const nextPos = tempPos
+    .copy(mutation.lastTilePos)
+    .addScaledVector(direction, step);
   nextPos.y = y;
   mutation.lastTilePos.copy(nextPos);
   return nextPos.clone();
@@ -155,7 +164,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_RANGE[0],
       CURVE_SEGMENT_RANGE[1]
     );
-    mutation.pathCurveDirection = mutation.pathCurveDirection === 0 ? 1 : mutation.pathCurveDirection * -1;
+    mutation.pathCurveDirection =
+      mutation.pathCurveDirection === 0 ? 1 : mutation.pathCurveDirection * -1;
   }
 
   const nearYawLimit = Math.abs(mutation.pathCurveTheta) > CURVE_MAX_YAW * 0.92;
@@ -220,7 +230,9 @@ export const generateCurvedTiles = () => {
   recordCurvePos(center);
 
   const left = center.clone().addScaledVector(result.normal, CURVE_LANE_OFFSET);
-  const right = center.clone().addScaledVector(result.normal, -CURVE_LANE_OFFSET);
+  const right = center
+    .clone()
+    .addScaledVector(result.normal, -CURVE_LANE_OFFSET);
   const rotationY = Math.atan2(result.tangent.x, result.tangent.z);
 
   return { center, left, right, rotationY };
@@ -255,7 +267,9 @@ export const generateSpiralTile = (): THREE.Vector3 => {
   const direction = tangent.add(radial.multiplyScalar(radialBias));
   direction.z -= SPIRAL_FORWARD_DRIFT;
   direction.normalize();
-  const nextPos = tempPos.copy(mutation.lastTilePos).addScaledVector(direction, TILE_SIZE);
+  const nextPos = tempPos
+    .copy(mutation.lastTilePos)
+    .addScaledVector(direction, TILE_SIZE);
   nextPos.y = -TILE_DEPTH / 2;
 
   mutation.pathSpiralSwitchRemaining -= 1;
@@ -277,7 +291,8 @@ export const generateGravityTile = (): THREE.Vector3 => {
   );
   const direction = chooseGridDirection(Math.random() < turnBias);
   const heightOffset =
-    Math.sin(mutation.gravityPhase * GRAVITY_WAVE_HEIGHT_MULTIPLIER) * GRAVITY_WAVE_AMPLITUDE;
+    Math.sin(mutation.gravityPhase * GRAVITY_WAVE_HEIGHT_MULTIPLIER) *
+    GRAVITY_WAVE_AMPLITUDE;
   return advanceTile(direction, -TILE_DEPTH / 2 + heightOffset);
 };
 
@@ -290,7 +305,11 @@ export const generateSpeedRushTile = (): THREE.Vector3 => {
 export const generateZenTile = (): THREE.Vector3 => {
   mutation.zenPhase += ZEN_WAVE_STEP;
   const wave = Math.sin(mutation.zenPhase);
-  const turnBias = THREE.MathUtils.clamp(ZEN_TURN_BASE + wave * ZEN_TURN_SWING, 0.05, 0.75);
+  const turnBias = THREE.MathUtils.clamp(
+    ZEN_TURN_BASE + wave * ZEN_TURN_SWING,
+    0.05,
+    0.75
+  );
   const direction = chooseGridDirection(Math.random() < turnBias);
   return advanceTile(direction);
 };

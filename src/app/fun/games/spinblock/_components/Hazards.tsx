@@ -1,5 +1,10 @@
 import { useFrame } from '@react-three/fiber';
-import { CuboidCollider, CylinderCollider, RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import {
+  CuboidCollider,
+  CylinderCollider,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import React, { useCallback, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { spinBlockState } from '../state';
@@ -22,7 +27,12 @@ export const Spike: React.FC<HazardProps> = ({ position, onHit }) => {
   });
 
   return (
-    <RigidBody type="fixed" position={position} colliders={false} onCollisionEnter={onHit}>
+    <RigidBody
+      type="fixed"
+      position={position}
+      colliders={false}
+      onCollisionEnter={onHit}
+    >
       <CylinderCollider args={[0.3, 0.4]} />
       <group ref={meshRef}>
         {[0, 72, 144, 216, 288].map((angle, i) => (
@@ -36,12 +46,22 @@ export const Spike: React.FC<HazardProps> = ({ position, onHit }) => {
             rotation={[0, 0, Math.PI]}
           >
             <coneGeometry args={[0.15, 0.5, 4]} />
-            <meshPhysicalMaterial color="#FF0000" emissive="#FF0000" emissiveIntensity={0.5} metalness={0.7} roughness={0.3} />
+            <meshPhysicalMaterial
+              color="#FF0000"
+              emissive="#FF0000"
+              emissiveIntensity={0.5}
+              metalness={0.7}
+              roughness={0.3}
+            />
           </mesh>
         ))}
         <mesh position={[0, 0, 0]}>
           <cylinderGeometry args={[0.4, 0.4, 0.15, 16]} />
-          <meshPhysicalMaterial color="#4a0000" metalness={0.5} roughness={0.5} />
+          <meshPhysicalMaterial
+            color="#4a0000"
+            metalness={0.5}
+            roughness={0.5}
+          />
         </mesh>
       </group>
       <pointLight color="#FF0000" intensity={0.6} distance={2} />
@@ -49,21 +69,39 @@ export const Spike: React.FC<HazardProps> = ({ position, onHit }) => {
   );
 };
 
-export const HazardZone: React.FC<HazardProps & { size?: [number, number] }> = ({ position, onHit, size = [1.5, 1.5] }) => {
+export const HazardZone: React.FC<
+  HazardProps & { size?: [number, number] }
+> = ({ position, onHit, size = [1.5, 1.5] }) => {
   const meshRef = useRef<THREE.Mesh>(null);
 
   useFrame((state) => {
     if (meshRef.current) {
-      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(state.clock.elapsedTime * 5) * 0.2;
+      (meshRef.current.material as THREE.MeshBasicMaterial).opacity =
+        0.3 + Math.sin(state.clock.elapsedTime * 5) * 0.2;
     }
   });
 
   return (
-    <RigidBody type="fixed" position={position} colliders={false} sensor onIntersectionEnter={onHit}>
+    <RigidBody
+      type="fixed"
+      position={position}
+      colliders={false}
+      sensor
+      onIntersectionEnter={onHit}
+    >
       <CuboidCollider args={[size[0] / 2, 0.1, size[1] / 2]} sensor />
-      <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+      <mesh
+        ref={meshRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.02, 0]}
+      >
         <planeGeometry args={size} />
-        <meshBasicMaterial color="#FF0000" transparent opacity={0.4} side={THREE.DoubleSide} />
+        <meshBasicMaterial
+          color="#FF0000"
+          transparent
+          opacity={0.4}
+          side={THREE.DoubleSide}
+        />
       </mesh>
     </RigidBody>
   );

@@ -13,7 +13,14 @@ const Polarity: React.FC<{ soundsOn?: boolean }> = () => (
     <PolarityHUD />
     <NeonDome accentA="#22d3ee" accentB="#2d1b54" />
     <fog attach="fog" args={['#040816', 35, 130]} />
-    <Stars radius={220} depth={60} count={1600} factor={4} saturation={0} fade />
+    <Stars
+      radius={220}
+      depth={60}
+      count={1600}
+      factor={4}
+      saturation={0}
+      fade
+    />
     <ambientLight intensity={0.45} />
     <directionalLight position={[25, 35, 15]} intensity={1.15} castShadow />
 

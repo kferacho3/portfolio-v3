@@ -15,7 +15,8 @@ function cubeIconStyle(size = 12): CSSProperties {
     display: 'inline-block',
     transform: 'rotate(45deg)',
     borderRadius: 2,
-    background: 'linear-gradient(135deg, #67E8F9 0%, #22D3EE 55%, #0EA5E9 100%)',
+    background:
+      'linear-gradient(135deg, #67E8F9 0%, #22D3EE 55%, #0EA5E9 100%)',
     boxShadow: '0 0 10px rgba(34,211,238,0.35)',
     marginLeft: 6,
   };
@@ -63,12 +64,15 @@ export function PrismJumpUI() {
 
   const unlocked = snap.unlocked;
   const selectedIdx = Math.max(0, unlocked.indexOf(snap.selected));
-  const prevId = unlocked[(selectedIdx - 1 + unlocked.length) % unlocked.length] ?? unlocked[0];
+  const prevId =
+    unlocked[(selectedIdx - 1 + unlocked.length) % unlocked.length] ??
+    unlocked[0];
   const nextId = unlocked[(selectedIdx + 1) % unlocked.length] ?? unlocked[0];
 
   const cubesDisplay = snap.totalCubes + snap.runCubes;
 
-  const canUnlock = snap.totalCubes >= 100 && unlocked.length < CHARACTERS.length;
+  const canUnlock =
+    snap.totalCubes >= 100 && unlocked.length < CHARACTERS.length;
 
   const toastVisible = snap.toastUntil > Date.now() && snap.toast.length > 0;
 
@@ -117,25 +121,30 @@ export function PrismJumpUI() {
               borderRadius: 999,
               background: 'rgba(255,255,255,0.22)',
               overflow: 'hidden',
-              border: snap.edgeSafe < 0.4 ? '2px solid rgba(251,113,133,0.8)' : '1px solid rgba(255,255,255,0.12)',
-              boxShadow: snap.edgeSafe < 0.4 ? '0 0 20px rgba(251,113,133,0.6)' : 'none',
+              border:
+                snap.edgeSafe < 0.4
+                  ? '2px solid rgba(251,113,133,0.8)'
+                  : '1px solid rgba(255,255,255,0.12)',
+              boxShadow:
+                snap.edgeSafe < 0.4 ? '0 0 20px rgba(251,113,133,0.6)' : 'none',
             }}
           >
             <div
               style={{
                 height: '100%',
                 width: `${Math.max(0, Math.min(1, snap.edgeSafe)) * 100}%`,
-                background: snap.edgeSafe < 0.4 
-                  ? 'linear-gradient(90deg, #FB7185 0%, #F43F5E 100%)'
-                  : snap.edgeSafe < 0.7
-                  ? 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)'
-                  : 'linear-gradient(90deg, #34D399 0%, #10B981 100%)',
+                background:
+                  snap.edgeSafe < 0.4
+                    ? 'linear-gradient(90deg, #FB7185 0%, #F43F5E 100%)'
+                    : snap.edgeSafe < 0.7
+                      ? 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)'
+                      : 'linear-gradient(90deg, #34D399 0%, #10B981 100%)',
                 borderRadius: 999,
                 transition: 'background 0.2s ease',
               }}
             />
           </div>
-          
+
           {/* Edge warning text */}
           {snap.edgeSafe < 0.5 && (
             <div
@@ -218,7 +227,8 @@ export function PrismJumpUI() {
                 padding: '0 20px',
               }}
             >
-              TAP to jump forward • Rows alternate ← → • Stay ahead of camera • Jump to switch directions • Avoid red spikes
+              TAP to jump forward • Rows alternate ← → • Stay ahead of camera •
+              Jump to switch directions • Avoid red spikes
             </div>
           )}
         </div>
@@ -251,11 +261,30 @@ export function PrismJumpUI() {
               boxShadow: '0 18px 60px rgba(0,0,0,0.55)',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
               <div>
-                <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 0.6 }}>{PRISM_JUMP_TITLE}</div>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 4 }}>
-                  One-tap jump across constantly moving platforms in an interstellar world. Each row alternates direction. Collect cubes to unlock one of {CHARACTERS.length} unique characters (100 cubes lottery).
+                <div
+                  style={{ fontSize: 34, fontWeight: 900, letterSpacing: 0.6 }}
+                >
+                  {PRISM_JUMP_TITLE}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: 'rgba(255,255,255,0.75)',
+                    marginTop: 4,
+                  }}
+                >
+                  One-tap jump across constantly moving platforms in an
+                  interstellar world. Each row alternates direction. Collect
+                  cubes to unlock one of {CHARACTERS.length} unique characters
+                  (100 cubes lottery).
                 </div>
               </div>
 
@@ -265,7 +294,14 @@ export function PrismJumpUI() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                marginTop: 14,
+                flexWrap: 'wrap',
+              }}
+            >
               <div style={{ ...pillStyle(), gap: 10 }}>
                 <span style={{ opacity: 0.8 }}>Best</span>
                 <span style={{ fontSize: 16 }}>{snap.best}</span>
@@ -296,10 +332,21 @@ export function PrismJumpUI() {
                 background: 'rgba(255,255,255,0.04)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>Character</div>
-                  <div style={{ fontSize: 18, fontWeight: 900 }}>{selectedDef.name}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
+                    Character
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 900 }}>
+                    {selectedDef.name}
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -320,27 +367,59 @@ export function PrismJumpUI() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  marginTop: 12,
+                  flexWrap: 'wrap',
+                }}
+              >
                 <button
-                  style={{ ...buttonStyle(false), opacity: canUnlock ? 1 : 0.55 }}
+                  style={{
+                    ...buttonStyle(false),
+                    opacity: canUnlock ? 1 : 0.55,
+                  }}
                   onClick={() => prismJumpState.unlockRandom()}
                   disabled={!canUnlock}
                 >
                   Unlock random • 100 cubes
                 </button>
 
-                <button style={buttonStyle(true)} onClick={() => prismJumpState.startGame()}>
+                <button
+                  style={buttonStyle(true)}
+                  onClick={() => prismJumpState.startGame()}
+                >
                   {snap.phase === 'gameover' ? 'Play again' : 'Play'}
                 </button>
               </div>
 
-              <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.68)' }}>
-                <strong>How to play:</strong> Tap/Space to hop forward. Platforms constantly move left or right, alternating each row. Jump to the next row to change your drift direction. Stay ahead of the camera - if you fall behind, game over! Avoid red spike platforms.
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 12,
+                  color: 'rgba(255,255,255,0.68)',
+                }}
+              >
+                <strong>How to play:</strong> Tap/Space to hop forward.
+                Platforms constantly move left or right, alternating each row.
+                Jump to the next row to change your drift direction. Stay ahead
+                of the camera - if you fall behind, game over! Avoid red spike
+                platforms.
               </div>
             </div>
 
             {toastVisible && (
-              <div style={{ marginTop: 12, ...pillStyle(), justifyContent: 'center' }}>{snap.toast}</div>
+              <div
+                style={{
+                  marginTop: 12,
+                  ...pillStyle(),
+                  justifyContent: 'center',
+                }}
+              >
+                {snap.toast}
+              </div>
             )}
           </div>
         </div>

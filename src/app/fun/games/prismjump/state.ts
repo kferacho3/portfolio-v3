@@ -44,22 +44,36 @@ export const prismJumpState = proxy({
   load: () => {
     if (typeof window === 'undefined') return;
 
-    prismJumpState.best = Number(localStorage.getItem(STORAGE_KEYS.best) ?? '0') || 0;
-    prismJumpState.totalCubes = Number(localStorage.getItem(STORAGE_KEYS.cubes) ?? '0') || 0;
+    prismJumpState.best =
+      Number(localStorage.getItem(STORAGE_KEYS.best) ?? '0') || 0;
+    prismJumpState.totalCubes =
+      Number(localStorage.getItem(STORAGE_KEYS.cubes) ?? '0') || 0;
 
-    const unlocked = safeJSONParse<string[]>(localStorage.getItem(STORAGE_KEYS.unlocked), [DEFAULT_CHARACTER_ID]);
-    prismJumpState.unlocked = uniq(unlocked).filter((id) => CHARACTERS.some((c) => c.id === id));
-    if (!prismJumpState.unlocked.includes(DEFAULT_CHARACTER_ID)) prismJumpState.unlocked.unshift(DEFAULT_CHARACTER_ID);
+    const unlocked = safeJSONParse<string[]>(
+      localStorage.getItem(STORAGE_KEYS.unlocked),
+      [DEFAULT_CHARACTER_ID]
+    );
+    prismJumpState.unlocked = uniq(unlocked).filter((id) =>
+      CHARACTERS.some((c) => c.id === id)
+    );
+    if (!prismJumpState.unlocked.includes(DEFAULT_CHARACTER_ID))
+      prismJumpState.unlocked.unshift(DEFAULT_CHARACTER_ID);
 
-    const selected = localStorage.getItem(STORAGE_KEYS.selected) ?? DEFAULT_CHARACTER_ID;
-    prismJumpState.selected = prismJumpState.unlocked.includes(selected) ? selected : prismJumpState.unlocked[0];
+    const selected =
+      localStorage.getItem(STORAGE_KEYS.selected) ?? DEFAULT_CHARACTER_ID;
+    prismJumpState.selected = prismJumpState.unlocked.includes(selected)
+      ? selected
+      : prismJumpState.unlocked[0];
   },
 
   save: () => {
     if (typeof window === 'undefined') return;
     localStorage.setItem(STORAGE_KEYS.best, String(prismJumpState.best));
     localStorage.setItem(STORAGE_KEYS.cubes, String(prismJumpState.totalCubes));
-    localStorage.setItem(STORAGE_KEYS.unlocked, JSON.stringify(prismJumpState.unlocked));
+    localStorage.setItem(
+      STORAGE_KEYS.unlocked,
+      JSON.stringify(prismJumpState.unlocked)
+    );
     localStorage.setItem(STORAGE_KEYS.selected, prismJumpState.selected);
   },
 
@@ -81,7 +95,9 @@ export const prismJumpState = proxy({
       return;
     }
 
-    const locked = CHARACTERS.map((c) => c.id).filter((id) => !prismJumpState.unlocked.includes(id));
+    const locked = CHARACTERS.map((c) => c.id).filter(
+      (id) => !prismJumpState.unlocked.includes(id)
+    );
     if (locked.length === 0) {
       prismJumpState.setToast('All characters unlocked!');
       return;
@@ -103,11 +119,11 @@ export const prismJumpState = proxy({
     prismJumpState.edgeSafe = 1;
     prismJumpState.phase = 'playing';
   },
-  
+
   startGame: () => {
     prismJumpState.start();
   },
-  
+
   addRunCubes: (amount: number) => {
     prismJumpState.runCubes += amount;
   },

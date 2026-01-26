@@ -42,7 +42,7 @@ function rk4Step(
   derivatives: (x: number, y: number, z: number) => Vec3
 ): Vec3 {
   const [x, y, z] = state;
-  
+
   const k1 = derivatives(x, y, z);
   const k2 = derivatives(
     x + k1[0] * dt * 0.5,
@@ -54,16 +54,12 @@ function rk4Step(
     y + k2[1] * dt * 0.5,
     z + k2[2] * dt * 0.5
   );
-  const k4 = derivatives(
-    x + k3[0] * dt,
-    y + k3[1] * dt,
-    z + k3[2] * dt
-  );
-  
+  const k4 = derivatives(x + k3[0] * dt, y + k3[1] * dt, z + k3[2] * dt);
+
   return [
-    x + (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) * dt / 6,
-    y + (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) * dt / 6,
-    z + (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]) * dt / 6,
+    x + ((k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) * dt) / 6,
+    y + ((k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) * dt) / 6,
+    z + ((k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]) * dt) / 6,
   ];
 }
 
@@ -75,25 +71,23 @@ function integrateAttractor(
   params: Required<AttractorParams>
 ): THREE.Vector3[] {
   const { steps, dt, initialPosition, scale, skipSteps } = params;
-  
+
   let state: Vec3 = [...initialPosition];
   const points: THREE.Vector3[] = [];
-  
+
   // Skip initial transient
   for (let i = 0; i < skipSteps; i++) {
     state = rk4Step(state, dt, derivatives);
   }
-  
+
   // Collect points
   for (let i = 0; i < steps; i++) {
     state = rk4Step(state, dt, derivatives);
-    points.push(new THREE.Vector3(
-      state[0] * scale,
-      state[1] * scale,
-      state[2] * scale
-    ));
+    points.push(
+      new THREE.Vector3(state[0] * scale, state[1] * scale, state[2] * scale)
+    );
   }
-  
+
   return points;
 }
 
@@ -109,7 +103,7 @@ function createTubeFromPoints(
     console.warn('[attractors] Not enough points for tube');
     return new THREE.SphereGeometry(1, 16, 16);
   }
-  
+
   try {
     const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
     const geometry = new THREE.TubeGeometry(
@@ -119,10 +113,10 @@ function createTubeFromPoints(
       radialSegments,
       false
     );
-    
+
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    
+
     return geometry;
   } catch {
     console.warn('[attractors] TubeGeometry creation failed');
@@ -150,7 +144,9 @@ export interface LorenzParams extends AttractorParams {
 /**
  * Create Lorenz attractor tube geometry
  */
-export function lorenzAttractorGeometry(params: LorenzParams = {}): THREE.BufferGeometry {
+export function lorenzAttractorGeometry(
+  params: LorenzParams = {}
+): THREE.BufferGeometry {
   const {
     sigma = 10,
     rho = 28,
@@ -163,17 +159,23 @@ export function lorenzAttractorGeometry(params: LorenzParams = {}): THREE.Buffer
     radialSegments = 8,
     skipSteps = 500,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     sigma * (y - x),
     x * (rho - z) - y,
     x * y - beta * z,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -195,7 +197,9 @@ export interface AizawaParams extends AttractorParams {
 /**
  * Create Aizawa attractor tube geometry
  */
-export function aizawaAttractorGeometry(params: AizawaParams = {}): THREE.BufferGeometry {
+export function aizawaAttractorGeometry(
+  params: AizawaParams = {}
+): THREE.BufferGeometry {
   const {
     a = 0.95,
     b = 0.7,
@@ -211,17 +215,27 @@ export function aizawaAttractorGeometry(params: AizawaParams = {}): THREE.Buffer
     radialSegments = 8,
     skipSteps = 500,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     (z - b) * x - d * y,
     d * x + (z - b) * y,
-    c + a * z - (z * z * z) / 3 - (x * x + y * y) * (1 + e * z) + f * z * x * x * x,
+    c +
+      a * z -
+      (z * z * z) / 3 -
+      (x * x + y * y) * (1 + e * z) +
+      f * z * x * x * x,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -242,7 +256,9 @@ export interface ThomasParams extends AttractorParams {
 /**
  * Create Thomas attractor tube geometry
  */
-export function thomasAttractorGeometry(params: ThomasParams = {}): THREE.BufferGeometry {
+export function thomasAttractorGeometry(
+  params: ThomasParams = {}
+): THREE.BufferGeometry {
   const {
     b = 0.208186,
     steps = 15000,
@@ -253,17 +269,23 @@ export function thomasAttractorGeometry(params: ThomasParams = {}): THREE.Buffer
     radialSegments = 8,
     skipSteps = 1000,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     Math.sin(y) - b * x,
     Math.sin(z) - b * y,
     Math.sin(x) - b * z,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -280,7 +302,9 @@ export interface HalvorsenParams extends AttractorParams {
 /**
  * Create Halvorsen attractor tube geometry
  */
-export function halvorsenAttractorGeometry(params: HalvorsenParams = {}): THREE.BufferGeometry {
+export function halvorsenAttractorGeometry(
+  params: HalvorsenParams = {}
+): THREE.BufferGeometry {
   const {
     a = 1.89,
     steps = 12000,
@@ -291,17 +315,23 @@ export function halvorsenAttractorGeometry(params: HalvorsenParams = {}): THREE.
     radialSegments = 8,
     skipSteps = 500,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     -a * x - 4 * y - 4 * z - y * y,
     -a * y - 4 * z - 4 * x - z * z,
     -a * z - 4 * x - 4 * y - x * x,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -320,7 +350,9 @@ export interface ChenParams extends AttractorParams {
 /**
  * Create Chen attractor tube geometry
  */
-export function chenAttractorGeometry(params: ChenParams = {}): THREE.BufferGeometry {
+export function chenAttractorGeometry(
+  params: ChenParams = {}
+): THREE.BufferGeometry {
   const {
     a = 40,
     b = 3,
@@ -333,17 +365,23 @@ export function chenAttractorGeometry(params: ChenParams = {}): THREE.BufferGeom
     radialSegments = 8,
     skipSteps = 500,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     a * (y - x),
     (c - a) * x - x * z + c * y,
     x * y - b * z,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -362,7 +400,9 @@ export interface RosslerParams extends AttractorParams {
 /**
  * Create Rossler attractor tube geometry
  */
-export function rosslerAttractorGeometry(params: RosslerParams = {}): THREE.BufferGeometry {
+export function rosslerAttractorGeometry(
+  params: RosslerParams = {}
+): THREE.BufferGeometry {
   const {
     a = 0.2,
     b = 0.2,
@@ -375,17 +415,23 @@ export function rosslerAttractorGeometry(params: RosslerParams = {}): THREE.Buff
     radialSegments = 8,
     skipSteps = 500,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     -y - z,
     x + a * y,
     b + z * (x - c),
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -406,7 +452,9 @@ export interface DadrasParams extends AttractorParams {
 /**
  * Create Dadras attractor tube geometry
  */
-export function dadrasAttractorGeometry(params: DadrasParams = {}): THREE.BufferGeometry {
+export function dadrasAttractorGeometry(
+  params: DadrasParams = {}
+): THREE.BufferGeometry {
   const {
     a = 3,
     b = 2.7,
@@ -421,17 +469,23 @@ export function dadrasAttractorGeometry(params: DadrasParams = {}): THREE.Buffer
     radialSegments = 8,
     skipSteps = 500,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     y - a * x + b * y * z,
     c * y - x * z + z,
     d * x * y - e * z,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -448,7 +502,9 @@ export interface SprottParams extends AttractorParams {
 /**
  * Create Sprott attractor tube geometry
  */
-export function sprottAttractorGeometry(params: SprottParams = {}): THREE.BufferGeometry {
+export function sprottAttractorGeometry(
+  params: SprottParams = {}
+): THREE.BufferGeometry {
   const {
     a = 2.07,
     steps = 20000,
@@ -459,17 +515,23 @@ export function sprottAttractorGeometry(params: SprottParams = {}): THREE.Buffer
     radialSegments = 8,
     skipSteps = 1000,
   } = params;
-  
+
   const derivatives = (x: number, y: number, z: number): Vec3 => [
     y + a * x * y + x * z,
     1 - a * x * x + y * z,
     x - x * x - y * y,
   ];
-  
+
   const fullParams: Required<AttractorParams> = {
-    steps, dt, initialPosition, scale, tubeRadius, radialSegments, skipSteps
+    steps,
+    dt,
+    initialPosition,
+    scale,
+    tubeRadius,
+    radialSegments,
+    skipSteps,
   };
-  
+
   const points = integrateAttractor(derivatives, fullParams);
   return createTubeFromPoints(points, tubeRadius, radialSegments);
 }
@@ -478,13 +540,13 @@ export function sprottAttractorGeometry(params: SprottParams = {}): THREE.Buffer
    FACTORY FUNCTIONS
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type AttractorType = 
-  | 'lorenz' 
-  | 'aizawa' 
-  | 'thomas' 
-  | 'halvorsen' 
-  | 'chen' 
-  | 'rossler' 
+export type AttractorType =
+  | 'lorenz'
+  | 'aizawa'
+  | 'thomas'
+  | 'halvorsen'
+  | 'chen'
+  | 'rossler'
   | 'dadras'
   | 'sprott';
 
@@ -522,8 +584,14 @@ export function createAttractor(
  */
 export function randomAttractorType(): AttractorType {
   const types: AttractorType[] = [
-    'lorenz', 'aizawa', 'thomas', 'halvorsen', 
-    'chen', 'rossler', 'dadras', 'sprott'
+    'lorenz',
+    'aizawa',
+    'thomas',
+    'halvorsen',
+    'chen',
+    'rossler',
+    'dadras',
+    'sprott',
   ];
   return types[Math.floor(Math.random() * types.length)];
 }
@@ -533,29 +601,29 @@ export function randomAttractorType(): AttractorType {
  */
 export function createRandomAttractor(): THREE.BufferGeometry {
   const type = randomAttractorType();
-  
+
   // Slightly randomize parameters for variety
   const scaleVariation = 0.8 + Math.random() * 0.4; // 0.8 - 1.2
   const radiusVariation = 0.8 + Math.random() * 0.4;
-  
+
   const baseParams: AttractorParams = {
     scale: undefined, // Will be set per-attractor
     tubeRadius: undefined,
   };
-  
+
   const geometry = createAttractor(type, baseParams);
-  
+
   // Apply variation by scaling the geometry
   const scale = new THREE.Matrix4().makeScale(
-    scaleVariation, 
-    scaleVariation, 
+    scaleVariation,
+    scaleVariation,
     scaleVariation
   );
   geometry.applyMatrix4(scale);
-  
+
   // Update tube radius indirectly through userData for reference
   geometry.userData.tubeRadiusScale = radiusVariation;
   geometry.userData.attractorType = type;
-  
+
   return geometry;
 }

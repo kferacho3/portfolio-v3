@@ -87,26 +87,88 @@ export function OctaSurgeUI() {
       )}
 
       {snap.phase !== 'playing' && (
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
           <div style={panel}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-              <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: 0.6 }}>{OCTA_SURGE_TITLE}</div>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>{GAME.runSeconds}s run</div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                gap: 12,
+              }}
+            >
+              <div
+                style={{ fontSize: 26, fontWeight: 900, letterSpacing: 0.6 }}
+              >
+                {OCTA_SURGE_TITLE}
+              </div>
+              <div style={{ fontSize: 13, opacity: 0.8 }}>
+                {GAME.runSeconds}s run
+              </div>
             </div>
 
-            <div style={{ marginTop: 10, display: 'flex', gap: 16, fontSize: 14, opacity: 0.9, flexWrap: 'wrap' }}>
-              <span>Best: <span style={{ fontWeight: 900 }}>{bestPercent}%</span></span>
-              <span><span style={{ color: '#FBBF24' }}>◆</span> <span style={{ fontWeight: 900 }}>{snap.totalCollectibles}</span></span>
-              <span><span style={{ color: '#A78BFA' }}>◆</span> <span style={{ fontWeight: 900 }}>{snap.totalSpecial}</span></span>
+            <div
+              style={{
+                marginTop: 10,
+                display: 'flex',
+                gap: 16,
+                fontSize: 14,
+                opacity: 0.9,
+                flexWrap: 'wrap',
+              }}
+            >
+              <span>
+                Best: <span style={{ fontWeight: 900 }}>{bestPercent}%</span>
+              </span>
+              <span>
+                <span style={{ color: '#FBBF24' }}>◆</span>{' '}
+                <span style={{ fontWeight: 900 }}>
+                  {snap.totalCollectibles}
+                </span>
+              </span>
+              <span>
+                <span style={{ color: '#A78BFA' }}>◆</span>{' '}
+                <span style={{ fontWeight: 900 }}>{snap.totalSpecial}</span>
+              </span>
             </div>
 
             {snap.phase === 'gameover' && (
-              <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.06)' }}>
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.06)',
+                }}
+              >
                 <div style={{ fontSize: 14, opacity: 0.9 }}>Progress</div>
-                <div style={{ fontSize: 34, fontWeight: 900, marginTop: 4 }}>{percent}%</div>
-                <div style={{ marginTop: 8, display: 'flex', gap: 12, fontSize: 13, opacity: 0.85 }}>
-                  <span><span style={{ color: '#FBBF24' }}>◆</span> +{snap.runCollectibles}</span>
-                  <span><span style={{ color: '#A78BFA' }}>◆</span> +{snap.runSpecial}</span>
+                <div style={{ fontSize: 34, fontWeight: 900, marginTop: 4 }}>
+                  {percent}%
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    display: 'flex',
+                    gap: 12,
+                    fontSize: 13,
+                    opacity: 0.85,
+                  }}
+                >
+                  <span>
+                    <span style={{ color: '#FBBF24' }}>◆</span> +
+                    {snap.runCollectibles}
+                  </span>
+                  <span>
+                    <span style={{ color: '#A78BFA' }}>◆</span> +
+                    {snap.runSpecial}
+                  </span>
                 </div>
               </div>
             )}
@@ -115,7 +177,8 @@ export function OctaSurgeUI() {
               <button
                 style={{
                   ...btn,
-                  background: 'linear-gradient(135deg, rgba(34,211,238,0.35), rgba(250,204,21,0.20))',
+                  background:
+                    'linear-gradient(135deg, rgba(34,211,238,0.35), rgba(250,204,21,0.20))',
                 }}
                 onClick={() => octaSurgeState.start()}
               >
@@ -123,9 +186,13 @@ export function OctaSurgeUI() {
               </button>
 
               <div style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.82 }}>
-                Rotate the tunnel to dodge bumps and holes. Grab <span style={{ color: '#FBBF24' }}>◆</span> collectibles and <span style={{ color: '#A78BFA' }}>◆</span> specials (hard but achievable). Speed increases over time.
+                Rotate the tunnel to dodge bumps and holes. Grab{' '}
+                <span style={{ color: '#FBBF24' }}>◆</span> collectibles and{' '}
+                <span style={{ color: '#A78BFA' }}>◆</span> specials (hard but
+                achievable). Speed increases over time.
                 <br />
-                <b>Drag</b> left/right or <b>A/D</b> / <b>←/→</b>. Survive {GAME.runSeconds}s.
+                <b>Drag</b> left/right or <b>A/D</b> / <b>←/→</b>. Survive{' '}
+                {GAME.runSeconds}s.
               </div>
             </div>
           </div>

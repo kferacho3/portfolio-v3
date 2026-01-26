@@ -1,9 +1,24 @@
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ARENA_PRESETS, GEM_RADIUS, GEM_SCORE_COLORS, GEM_SCORE_STEP, SPHERE_RADIUS, THEMES, getArenaTheme } from '../constants';
+import {
+  ARENA_PRESETS,
+  GEM_RADIUS,
+  GEM_SCORE_COLORS,
+  GEM_SCORE_STEP,
+  SPHERE_RADIUS,
+  THEMES,
+  getArenaTheme,
+} from '../constants';
 import { apexState, mutation } from '../state';
 import type { GemType } from '../types';
 
@@ -11,7 +26,13 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 const hexToRgb = (hex: string) => {
   const cleaned = hex.replace('#', '');
-  const full = cleaned.length === 3 ? cleaned.split('').map((c) => c + c).join('') : cleaned;
+  const full =
+    cleaned.length === 3
+      ? cleaned
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : cleaned;
   const num = parseInt(full, 16);
   return {
     r: (num >> 16) & 255,
@@ -21,7 +42,10 @@ const hexToRgb = (hex: string) => {
 };
 
 const rgbToHex = (r: number, g: number, b: number) => {
-  const toHex = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  const toHex = (v: number) =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
@@ -69,7 +93,14 @@ const segmentPointDistanceSq = (
   return dx * dx + dy * dy + dz * dz;
 };
 
-const segmentPointDistanceSq2D = (ax: number, az: number, bx: number, bz: number, px: number, pz: number) => {
+const segmentPointDistanceSq2D = (
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  px: number,
+  pz: number
+) => {
   const abx = bx - ax;
   const abz = bz - az;
   const apx = px - ax;
@@ -99,7 +130,15 @@ type PickupFx = {
   color: string;
 };
 
-const GemPickupFX: React.FC<PickupFx & { onDone: (id: number) => void }> = ({ id, x, y, z, label, color, onDone }) => {
+const GemPickupFX: React.FC<PickupFx & { onDone: (id: number) => void }> = ({
+  id,
+  x,
+  y,
+  z,
+  label,
+  color,
+  onDone,
+}) => {
   const groupRef = useRef<THREE.Group>(null);
   const ringMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const sparkMatRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -138,16 +177,29 @@ const GemPickupFX: React.FC<PickupFx & { onDone: (id: number) => void }> = ({ id
     <group ref={groupRef} position={[x, y, z]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.12, 0.22, 24]} />
-        <meshBasicMaterial ref={ringMatRef} color={color} transparent opacity={0.8} depthWrite={false} />
+        <meshBasicMaterial
+          ref={ringMatRef}
+          color={color}
+          transparent
+          opacity={0.8}
+          depthWrite={false}
+        />
       </mesh>
       <mesh>
         <icosahedronGeometry args={[0.08, 0]} />
-        <meshBasicMaterial ref={sparkMatRef} color={color} transparent opacity={0.9} depthWrite={false} />
+        <meshBasicMaterial
+          ref={sparkMatRef}
+          color={color}
+          transparent
+          opacity={0.9}
+          depthWrite={false}
+        />
       </mesh>
       <Html transform distanceFactor={10} style={{ pointerEvents: 'none' }}>
         <div
           style={{
-            fontFamily: '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+            fontFamily:
+              '"Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
             fontWeight: 800,
             letterSpacing: '0.08em',
             fontSize: 16,
@@ -172,7 +224,10 @@ const GemSystem: React.FC = () => {
   const powerUp = snap.powerUp;
   const gemsCollected = snap.gems;
   const preset = ARENA_PRESETS[snap.arena];
-  const arenaTheme = useMemo(() => getArenaTheme(preset, THEMES[snap.currentTheme]), [preset, snap.currentTheme]);
+  const arenaTheme = useMemo(
+    () => getArenaTheme(preset, THEMES[snap.currentTheme]),
+    [preset, snap.currentTheme]
+  );
   void phase;
   void powerUp;
   void gemsCollected;
@@ -192,7 +247,12 @@ const GemSystem: React.FC = () => {
     () => ({
       normal: new THREE.OctahedronGeometry(GEM_RADIUS * 0.75, 0),
       prism: new THREE.IcosahedronGeometry(GEM_RADIUS * 0.82, 0),
-      fractal: new THREE.TorusKnotGeometry(GEM_RADIUS * 0.35, GEM_RADIUS * 0.12, 80, 12),
+      fractal: new THREE.TorusKnotGeometry(
+        GEM_RADIUS * 0.35,
+        GEM_RADIUS * 0.12,
+        80,
+        12
+      ),
       nova: new THREE.DodecahedronGeometry(GEM_RADIUS * 0.85, 0),
     }),
     []
@@ -238,11 +298,15 @@ const GemSystem: React.FC = () => {
       scoreTierRef.current = nextTier;
       needsRender = true;
     }
-    const tierColor = GEM_SCORE_COLORS[scoreTierRef.current % GEM_SCORE_COLORS.length];
+    const tierColor =
+      GEM_SCORE_COLORS[scoreTierRef.current % GEM_SCORE_COLORS.length];
     const baseGemColor = mixHex(tierColor, arenaTheme.gemHex, 0.35);
     const fxColor = baseGemColor;
 
-    if (nextGemCount !== countsRef.current.gems || nextPowerUpCount !== countsRef.current.powerUps) {
+    if (
+      nextGemCount !== countsRef.current.gems ||
+      nextPowerUpCount !== countsRef.current.powerUps
+    ) {
       countsRef.current.gems = nextGemCount;
       countsRef.current.powerUps = nextPowerUpCount;
       needsRender = true;
@@ -256,7 +320,8 @@ const GemSystem: React.FC = () => {
       if (gem.absorbing === undefined) gem.absorbing = false;
       if (gem.absorbProgress === undefined) gem.absorbProgress = 0;
 
-      const rotationSpeed = gem.type === 'fractal' ? 1.6 : gem.type === 'nova' ? 2.1 : 1.2;
+      const rotationSpeed =
+        gem.type === 'fractal' ? 1.6 : gem.type === 'nova' ? 2.1 : 1.2;
       gem.rotation += delta * rotationSpeed;
 
       const dx = gem.x - spherePos.x;
@@ -284,7 +349,10 @@ const GemSystem: React.FC = () => {
         gem.z
       );
 
-      if (sweptDistSq2D <= collectRadiusSq2D || sweptDistSq <= collectRadiusSq) {
+      if (
+        sweptDistSq2D <= collectRadiusSq2D ||
+        sweptDistSq <= collectRadiusSq
+      ) {
         gem.collected = true;
         const awarded = apexState.collectGem(gem.type);
         spawnedFx.push({
@@ -305,7 +373,10 @@ const GemSystem: React.FC = () => {
       }
 
       if (gem.absorbing) {
-        gem.absorbProgress = Math.min(1, gem.absorbProgress + delta * absorbSpeed);
+        gem.absorbProgress = Math.min(
+          1,
+          gem.absorbProgress + delta * absorbSpeed
+        );
         const pull = absorbLerp + gem.absorbProgress * 0.55;
         gem.x = THREE.MathUtils.lerp(gem.x, spherePos.x, pull);
         gem.y = THREE.MathUtils.lerp(gem.y, spherePos.y + 0.1, pull);
@@ -314,7 +385,9 @@ const GemSystem: React.FC = () => {
         const absorbDx = gem.x - spherePos.x;
         const absorbDy = gem.y - spherePos.y;
         const absorbDz = gem.z - spherePos.z;
-        const absorbDist = Math.sqrt(absorbDx * absorbDx + absorbDy * absorbDy + absorbDz * absorbDz);
+        const absorbDist = Math.sqrt(
+          absorbDx * absorbDx + absorbDy * absorbDy + absorbDz * absorbDz
+        );
 
         if (gem.absorbProgress >= 1 || absorbDist <= SPHERE_RADIUS * 0.6) {
           gem.collected = true;
@@ -336,7 +409,8 @@ const GemSystem: React.FC = () => {
       if (powerUp.collected) continue;
 
       const powerUpCollectRadius = SPHERE_RADIUS + 0.55;
-      const powerUpCollectRadiusSq = powerUpCollectRadius * powerUpCollectRadius;
+      const powerUpCollectRadiusSq =
+        powerUpCollectRadius * powerUpCollectRadius;
       const powerUpSweptDistSq = segmentPointDistanceSq(
         prevSpherePos.x,
         prevSpherePos.y,
@@ -373,8 +447,16 @@ const GemSystem: React.FC = () => {
   const scoreTier = scoreTierRef.current;
   const tierColor = GEM_SCORE_COLORS[scoreTier % GEM_SCORE_COLORS.length];
   const baseGemColor = mixHex(tierColor, theme.gemHex, 0.35);
-  const gemPalette: Record<GemType, { color: string; emissive: string; metalness: number; roughness: number }> = {
-    normal: { color: baseGemColor, emissive: mixHex(baseGemColor, '#ffffff', 0.3), metalness: 0.3, roughness: 0.35 },
+  const gemPalette: Record<
+    GemType,
+    { color: string; emissive: string; metalness: number; roughness: number }
+  > = {
+    normal: {
+      color: baseGemColor,
+      emissive: mixHex(baseGemColor, '#ffffff', 0.3),
+      metalness: 0.3,
+      roughness: 0.35,
+    },
     prism: {
       color: mixHex(baseGemColor, '#7dd3fc', 0.45),
       emissive: mixHex(baseGemColor, '#67e8f9', 0.55),
@@ -403,9 +485,12 @@ const GemSystem: React.FC = () => {
       {visibleGems.map((gem) => {
         const pulse = 1 + Math.sin(gem.rotation * 2) * 0.02;
         const absorbScale = gem.absorbing ? 1 - gem.absorbProgress * 0.6 : 1;
-        const opacity = gem.absorbing ? Math.max(0, 0.85 - gem.absorbProgress * 0.9) : 0.9;
+        const opacity = gem.absorbing
+          ? Math.max(0, 0.85 - gem.absorbProgress * 0.9)
+          : 0.9;
         const bob = Math.sin(gem.rotation * 1.2) * 0.05;
-        const skinScale = gem.type === 'fractal' ? 0.92 : gem.type === 'nova' ? 1.05 : 1;
+        const skinScale =
+          gem.type === 'fractal' ? 0.92 : gem.type === 'nova' ? 1.05 : 1;
         const gemStyle = gemPalette[gem.type];
 
         return (
@@ -443,9 +528,17 @@ const GemSystem: React.FC = () => {
                 />
               )}
             </mesh>
-            <mesh rotation={[-Math.PI / 2, 0, 0]} scale={gem.type === 'normal' ? 0.8 : 1}>
+            <mesh
+              rotation={[-Math.PI / 2, 0, 0]}
+              scale={gem.type === 'normal' ? 0.8 : 1}
+            >
               <ringGeometry args={[0.18, 0.28, 28]} />
-              <meshBasicMaterial color={gemStyle.emissive} transparent opacity={0.55} depthWrite={false} />
+              <meshBasicMaterial
+                color={gemStyle.emissive}
+                transparent
+                opacity={0.55}
+                depthWrite={false}
+              />
             </mesh>
           </group>
         );
@@ -454,16 +547,28 @@ const GemSystem: React.FC = () => {
       {visiblePowerUps.map((powerUp) => (
         <mesh
           key={powerUp.id}
-          position={[powerUp.x, powerUp.y + Math.sin(Date.now() * 0.003) * 0.15, powerUp.z]}
+          position={[
+            powerUp.x,
+            powerUp.y + Math.sin(Date.now() * 0.003) * 0.15,
+            powerUp.z,
+          ]}
           rotation={[0, Date.now() * 0.002, 0]}
         >
           <icosahedronGeometry args={[0.35, 0]} />
           <meshStandardMaterial
             color={
-              powerUp.type === 'shield' ? '#00ff88' : powerUp.type === 'magnet' ? '#ff00ff' : '#ffcc00'
+              powerUp.type === 'shield'
+                ? '#00ff88'
+                : powerUp.type === 'magnet'
+                  ? '#ff00ff'
+                  : '#ffcc00'
             }
             emissive={
-              powerUp.type === 'shield' ? '#00ff88' : powerUp.type === 'magnet' ? '#ff00ff' : '#ffcc00'
+              powerUp.type === 'shield'
+                ? '#00ff88'
+                : powerUp.type === 'magnet'
+                  ? '#ff00ff'
+                  : '#ffcc00'
             }
             emissiveIntensity={0.8}
             transparent

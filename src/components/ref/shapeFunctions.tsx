@@ -1444,11 +1444,8 @@ export const mandelbulbSliceGeometry = () => {
   return geometry;
 };
 
-const makePrismGeometry = (
-  sides: number,
-  radius = 0.95,
-  height = 1.6
-) => new THREE.CylinderGeometry(radius, radius, height, sides, 1, false);
+const makePrismGeometry = (sides: number, radius = 0.95, height = 1.6) =>
+  new THREE.CylinderGeometry(radius, radius, height, sides, 1, false);
 
 export const triPrismGeometry = () => makePrismGeometry(3);
 export const pentPrismGeometry = () => makePrismGeometry(5);
@@ -2596,7 +2593,7 @@ export const sphericalHarmonicsGeometry = (
 
   const w1 = 0.22 + rnd() * 0.15;
   const w2 = 0.12 + rnd() * 0.12;
-  const w3 = 0.08 + rnd() * 0.10;
+  const w3 = 0.08 + rnd() * 0.1;
 
   for (let i = 0; i < pos.length; i += 3) {
     const x = pos[i];
@@ -2671,7 +2668,7 @@ export const twistedSuperEllipsoidGeometry = (
       const sv = Math.sin(V);
 
       let x = spow(cu, e1) * spow(cv, e2);
-      let y = spow(su, e1);
+      const y = spow(su, e1);
       let z = spow(cu, e1) * spow(sv, e2);
 
       // Twist around Y by height

@@ -14,9 +14,12 @@ export default function CameraRig() {
     _target.set(0, py, 0);
 
     const desiredY = py + CAMERA_Y_OFFSET;
-    camera.position.y += (desiredY - camera.position.y) * (1 - Math.exp(-CAMERA_LERP * delta));
-    camera.position.x += (0 - camera.position.x) * (1 - Math.exp(-CAMERA_LERP * delta));
-    camera.position.z += (CAMERA_Z - camera.position.z) * (1 - Math.exp(-CAMERA_LERP * delta));
+    camera.position.y +=
+      (desiredY - camera.position.y) * (1 - Math.exp(-CAMERA_LERP * delta));
+    camera.position.x +=
+      (0 - camera.position.x) * (1 - Math.exp(-CAMERA_LERP * delta));
+    camera.position.z +=
+      (CAMERA_Z - camera.position.z) * (1 - Math.exp(-CAMERA_LERP * delta));
 
     const now = Date.now();
     if (mutation.shakeUntil > now) {

@@ -27,8 +27,10 @@ export const CameraRig: React.FC<{
     if (r.shake > 0.001) {
       const s = r.shake;
       r.shake = Math.max(0, r.shake - dt * 2.6);
-      camera.position.x += (Math.sin(r.t * 40.0) * 0.06 + (Math.random() - 0.5) * 0.04) * s;
-      camera.position.y += (Math.cos(r.t * 33.0) * 0.04 + (Math.random() - 0.5) * 0.03) * s;
+      camera.position.x +=
+        (Math.sin(r.t * 40.0) * 0.06 + (Math.random() - 0.5) * 0.04) * s;
+      camera.position.y +=
+        (Math.cos(r.t * 33.0) * 0.04 + (Math.random() - 0.5) * 0.03) * s;
     }
   });
 

@@ -186,10 +186,22 @@ import {
 } from './Background3DHelpers/shapes/exotic';
 
 /* NEW: Phase 4 - Shape Registry */
-import { SHAPE_META, getDeformParams, isStaticShape } from './Background3DHelpers/shapeRegistry';
+import {
+  SHAPE_META,
+  getDeformParams,
+  isStaticShape,
+} from './Background3DHelpers/shapeRegistry';
 
 /* NEW: Phase 4 - Geometry Recipes */
-import { getRecipe, get4DRotation, getLorenzParams, getHarmonicParams, getFourierParams, getLissajousParams, getTorusLinkParams } from './Background3DHelpers/geometryRecipes';
+import {
+  getRecipe,
+  get4DRotation,
+  getLorenzParams,
+  getHarmonicParams,
+  getFourierParams,
+  getLissajousParams,
+  getTorusLinkParams,
+} from './Background3DHelpers/geometryRecipes';
 
 /* NEW: Phase 4 - Advanced Materials */
 import {
@@ -300,7 +312,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
 
 const PROCEDURAL_PRESET_META: Record<
   ProceduralPreset,
-  { envIntensity: number; transparent?: boolean; palette?: [string, string, string, string] }
+  {
+    envIntensity: number;
+    transparent?: boolean;
+    palette?: [string, string, string, string];
+  }
 > = {
   InkSplatter: { envIntensity: 1.55 },
   VoronoiStainedGlass: { envIntensity: 1.75 },
@@ -369,7 +385,10 @@ const PROCEDURAL_PRESET_META: Record<
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 /** Derive a vivid 4-color palette from a single base color. */
-const derivePalette = (hex: string, seed: number): [THREE.Color, THREE.Color, THREE.Color, THREE.Color] => {
+const derivePalette = (
+  hex: string,
+  seed: number
+): [THREE.Color, THREE.Color, THREE.Color, THREE.Color] => {
   const base = new THREE.Color(hex);
   const hsl = { h: 0, s: 0, l: 0 };
   base.getHSL(hsl);
@@ -378,9 +397,21 @@ const derivePalette = (hex: string, seed: number): [THREE.Color, THREE.Color, TH
   const j = (Math.sin(seed * 12.9898) * 43758.5453) % 1;
   const jit = (j - 0.5) * 0.08;
 
-  const c2 = new THREE.Color().setHSL((hsl.h + 0.33 + jit + 1) % 1, clamp01(hsl.s * 0.95 + 0.12), clamp01(hsl.l * 1.05));
-  const c3 = new THREE.Color().setHSL((hsl.h + 0.66 - jit + 1) % 1, clamp01(hsl.s * 1.1 + 0.05), clamp01(hsl.l * 0.9 + 0.05));
-  const accent = new THREE.Color().setHSL((hsl.h + 0.5 + jit + 1) % 1, clamp01(0.92), clamp01(0.62));
+  const c2 = new THREE.Color().setHSL(
+    (hsl.h + 0.33 + jit + 1) % 1,
+    clamp01(hsl.s * 0.95 + 0.12),
+    clamp01(hsl.l * 1.05)
+  );
+  const c3 = new THREE.Color().setHSL(
+    (hsl.h + 0.66 - jit + 1) % 1,
+    clamp01(hsl.s * 1.1 + 0.05),
+    clamp01(hsl.l * 0.9 + 0.05)
+  );
+  const accent = new THREE.Color().setHSL(
+    (hsl.h + 0.5 + jit + 1) % 1,
+    clamp01(0.92),
+    clamp01(0.62)
+  );
 
   return [base, c2, c3, accent];
 };
@@ -889,10 +920,17 @@ const ProceduralMeshMaterial: React.FC<ProceduralMeshMaterialProps> = ({
   const meta = PROCEDURAL_PRESET_META[preset];
   const transparent = !!meta.transparent;
 
-  const palette = useMemo<[THREE.Color, THREE.Color, THREE.Color, THREE.Color]>(() => {
+  const palette = useMemo<
+    [THREE.Color, THREE.Color, THREE.Color, THREE.Color]
+  >(() => {
     if (meta.palette) {
       const [a, b, c, d] = meta.palette;
-      return [new THREE.Color(a), new THREE.Color(b), new THREE.Color(c), new THREE.Color(d)];
+      return [
+        new THREE.Color(a),
+        new THREE.Color(b),
+        new THREE.Color(c),
+        new THREE.Color(d),
+      ];
     }
     return derivePalette(baseColor, seed);
   }, [baseColor, seed, meta.palette]);
@@ -1196,11 +1234,7 @@ function displace(
     z * 1.1 + 5.4,
     tFlow * 1.4
   );
-  const detail = noise3D(
-    x * 2.4 - tFlow * 2.0,
-    y * 2.4 + tFlow * 1.4,
-    z * 2.4
-  );
+  const detail = noise3D(x * 2.4 - tFlow * 2.0, y * 2.4 + tFlow * 1.4, z * 2.4);
 
   let n = base * 0.55 + mid * 0.32 + detail * 0.13;
 
@@ -1209,54 +1243,67 @@ function displace(
   n *= 1 + scrollOffset * 0.35;
 
   /* ═══════════════════ LIQUID SIMULATION EFFECTS ═══════════════════ */
-  const effectiveHoverDistance = isMobileView && isDragging ? 0.3 : hoverDistance;
-  
-  if (effectiveHoverDistance < 3.5) { // INCREASED detection range
+  const effectiveHoverDistance =
+    isMobileView && isDragging ? 0.3 : hoverDistance;
+
+  if (effectiveHoverDistance < 3.5) {
+    // INCREASED detection range
     const hoverFactor = 1 - Math.min(effectiveHoverDistance / 3.5, 1);
     const hoverFactorSq = hoverFactor * hoverFactor; // Quadratic falloff for smoother feel
-    
+
     /* ─── Concentric ripples (like water droplet) ─── */
-    const ripplePhase = effectiveHoverDistance * LIQUID_WAVE_SPEED * 3 - t * 2.5;
-    const rippleDecay = Math.exp(-effectiveHoverDistance * LIQUID_RIPPLE_DECAY * 0.5);
+    const ripplePhase =
+      effectiveHoverDistance * LIQUID_WAVE_SPEED * 3 - t * 2.5;
+    const rippleDecay = Math.exp(
+      -effectiveHoverDistance * LIQUID_RIPPLE_DECAY * 0.5
+    );
     const ripple = Math.sin(ripplePhase) * 0.18 * rippleDecay;
-    
+
     /* ─── Secondary harmonic ripples ─── */
     const ripple2 = Math.sin(ripplePhase * 2.3 + 1.2) * 0.08 * rippleDecay;
-    
+
     /* ─── Surface tension blob effect ─── */
     const blobPhase = t * 1.5 + effectiveHoverDistance * 2;
-    const blobEffect = Math.sin(blobPhase) * Math.cos(blobPhase * 0.7) * LIQUID_BLOB_INTENSITY;
-    
+    const blobEffect =
+      Math.sin(blobPhase) * Math.cos(blobPhase * 0.7) * LIQUID_BLOB_INTENSITY;
+
     /* ─── Viscous bulge toward cursor ─── */
     const bulgeIntensity = hoverFactorSq * 0.25 * (1 + cursorVelocity * 0.5);
-    
+
     /* ─── Combine liquid effects ─── */
-    n += (ripple + ripple2 + blobEffect * hoverFactor + bulgeIntensity) * hoverFactorSq;
-    
+    n +=
+      (ripple + ripple2 + blobEffect * hoverFactor + bulgeIntensity) *
+      hoverFactorSq;
+
     /* ═══════════════════ PARTICLE BREAKDOWN EFFECT ═══════════════════ */
     if (effectiveHoverDistance < PARTICLE_DETACH_THRESHOLD && amp > 0.15) {
       // Particles near cursor start to "detach" and orbit
-      const detachFactor = 1 - effectiveHoverDistance / PARTICLE_DETACH_THRESHOLD;
+      const detachFactor =
+        1 - effectiveHoverDistance / PARTICLE_DETACH_THRESHOLD;
       const detachFactorCubed = detachFactor * detachFactor * detachFactor;
-      
+
       // Chaotic scatter noise
       const scatterNoise = noise3D(
         x * 8 + t * 3,
         y * 8 - t * 2.5,
         z * 8 + t * 2
       );
-      
+
       // Orbital motion around cursor
       const orbitAngle = Math.atan2(v.y, v.x) + t * PARTICLE_FLOAT_SPEED;
-      const orbitOffset = Math.sin(orbitAngle * 3 + t * 4) * PARTICLE_ORBIT_RADIUS;
-      
+      const orbitOffset =
+        Math.sin(orbitAngle * 3 + t * 4) * PARTICLE_ORBIT_RADIUS;
+
       // Vertical float
       const floatOffset = Math.sin(t * PARTICLE_FLOAT_SPEED + v.x * 5) * 0.12;
-      
+
       // Particle scatter
-      const scatter = scatterNoise * PARTICLE_SCATTER_INTENSITY * detachFactorCubed;
-      
-      n += (scatter + orbitOffset + floatOffset * detachFactor) * detachFactorCubed;
+      const scatter =
+        scatterNoise * PARTICLE_SCATTER_INTENSITY * detachFactorCubed;
+
+      n +=
+        (scatter + orbitOffset + floatOffset * detachFactor) *
+        detachFactorCubed;
     }
   }
 
@@ -1265,13 +1312,13 @@ function displace(
     const dragAmp = (isMobileView ? 0.22 : 0.55 * dragIntensity) * noiseScale; // INCREASED
     const angle = Math.atan2(v.y, v.x);
     const radius = Math.hypot(v.x, v.y);
-    
+
     // Enhanced rhythmic pulse
     const pulse = Math.sin(t * 2.8) * Math.cos(t * 2.0) * 0.25;
-    
+
     // Spiral wave propagation
     const spiral = Math.sin(radius * 6 - t * 2.0 + angle * 3) * 0.28;
-    
+
     // Liquid turbulence layers
     const turbulence1 = noise4D(
       x * 3.2 + tFlow * 5,
@@ -1279,15 +1326,12 @@ function displace(
       z * 3.2 + tFlow * 3,
       tFlow * 4
     );
-    const turbulence2 = noise3D(
-      x * 5.5 + t * 2,
-      y * 5.5 - t * 1.5,
-      z * 5.5
-    ) * 0.35;
-    
+    const turbulence2 =
+      noise3D(x * 5.5 + t * 2, y * 5.5 - t * 1.5, z * 5.5) * 0.35;
+
     // Vortex effect during drag
     const vortex = Math.sin(angle * 4 + t * 3 - radius * 2) * 0.18;
-    
+
     n += (pulse + spiral + turbulence1 * 0.35 + turbulence2 + vortex) * dragAmp;
   }
 
@@ -1383,9 +1427,14 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* Random initial shape */
   /* Random initial shape - updated with ultra-rare shapes */
   const getRandomShape = (exclude?: ShapeName): ShapeName => {
-    const safePool = (pool: readonly ShapeName[] | ShapeName[], fallback: readonly ShapeName[] | ShapeName[]) => {
+    const safePool = (
+      pool: readonly ShapeName[] | ShapeName[],
+      fallback: readonly ShapeName[] | ShapeName[]
+    ) => {
       if (!isMobileView) return pool;
-      const filtered = (pool as ShapeName[]).filter((s) => !MOBILE_HEAVY_SHAPES.has(s));
+      const filtered = (pool as ShapeName[]).filter(
+        (s) => !MOBILE_HEAVY_SHAPES.has(s)
+      );
       return filtered.length ? filtered : fallback;
     };
 
@@ -1399,7 +1448,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
       // ~35% chance of fractal shapes
       if (roll < 0.35) return fractalPool;
       // ~15% chance of prism shapes
-      if (roll < 0.50) return prismPool;
+      if (roll < 0.5) return prismPool;
       // ~12% chance of ultra-rare shapes (surfaces, attractors, etc.)
       if (roll < 0.62) return ultraRarePool;
       // ~38% chance of any base shape
@@ -1433,57 +1482,71 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* Track mesh initialization stages */
   const hasNormalizedRef = useRef(false);
-  const [isMeshReady, setIsMeshReady] = useState(false);      // Mesh normalized, can show
+  const [isMeshReady, setIsMeshReady] = useState(false); // Mesh normalized, can show
   const [isDropComplete, setIsDropComplete] = useState(false); // Drop-in done, wait then scale
   const [shouldScaleDown, setShouldScaleDown] = useState(false); // Time to scale down
 
   /* Entrance animation config */
   const ENTRANCE_SCALE_FROM = 1.35; // Start 35% larger
-  const ENTRANCE_SCALE_TO = 1.0;    // Scale to normal
-  const SCALE_DELAY_MS = 400;       // Wait 0.4 seconds after drop before scaling (faster)
-  
+  const ENTRANCE_SCALE_TO = 1.0; // Scale to normal
+  const SCALE_DELAY_MS = 400; // Wait 0.4 seconds after drop before scaling (faster)
+
   /* DROP-IN position animation - starts when mesh is ready */
-  const [{ dropY }] = useSpring(() => ({
-    dropY: isMeshReady ? 0 : 5, // Drop from above
-    config: { 
-      mass: 1.2, 
-      tension: 120, 
-      friction: 20,
-    },
-    onRest: () => {
-      if (isMeshReady && !isDropComplete) {
-        setIsDropComplete(true);
-        // Wait 1.5 seconds, then trigger scale animation
-        setTimeout(() => {
-          setShouldScaleDown(true);
-        }, SCALE_DELAY_MS);
-      }
-    },
-  }), [isMeshReady, isDropComplete]);
-  
+  const [{ dropY }] = useSpring(
+    () => ({
+      dropY: isMeshReady ? 0 : 5, // Drop from above
+      config: {
+        mass: 1.2,
+        tension: 120,
+        friction: 20,
+      },
+      onRest: () => {
+        if (isMeshReady && !isDropComplete) {
+          setIsDropComplete(true);
+          // Wait 1.5 seconds, then trigger scale animation
+          setTimeout(() => {
+            setShouldScaleDown(true);
+          }, SCALE_DELAY_MS);
+        }
+      },
+    }),
+    [isMeshReady, isDropComplete]
+  );
+
   /* SCALE animation - only triggers after delay */
-  const [{ entranceScale }] = useSpring(() => ({
-    entranceScale: shouldScaleDown ? ENTRANCE_SCALE_TO : ENTRANCE_SCALE_FROM,
-    config: { 
-      mass: 1.2, 
-      tension: 120, 
-      friction: 22,
-    }, // Faster, snappier scale animation
-    onRest: shouldScaleDown ? onAnimationComplete : undefined,
-  }), [shouldScaleDown, onAnimationComplete]);
-  
+  const [{ entranceScale }] = useSpring(
+    () => ({
+      entranceScale: shouldScaleDown ? ENTRANCE_SCALE_TO : ENTRANCE_SCALE_FROM,
+      config: {
+        mass: 1.2,
+        tension: 120,
+        friction: 22,
+      }, // Faster, snappier scale animation
+      onRest: shouldScaleDown ? onAnimationComplete : undefined,
+    }),
+    [shouldScaleDown, onAnimationComplete]
+  );
+
   /* Animated scale for the 3D SHAPE ONLY (not icons) */
   const shapeEntranceScale = entranceScale.to((s) => {
     return [s, s, s] as [number, number, number];
   });
-  
+
   /* Animated position for drop-in */
   const shapeDropPosition = dropY.to((y) => {
-    return [targetPosition[0], targetPosition[1] + y, targetPosition[2]] as [number, number, number];
+    return [targetPosition[0], targetPosition[1] + y, targetPosition[2]] as [
+      number,
+      number,
+      number,
+    ];
   });
-  
+
   /* Static scale for the outer group (includes icons) */
-  const outerScale: [number, number, number] = [targetScale, targetScale, targetScale];
+  const outerScale: [number, number, number] = [
+    targetScale,
+    targetScale,
+    targetScale,
+  ];
 
   /* shape morph spring */
   const [shapeScale, shapeApi] = useSpring(() => ({
@@ -1767,9 +1830,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={apollonianPackingGeometry()} />;
       case 'ApollonianPyramid':
         return (
-          <primitive
-            object={apollonianPackingGeometry(3, 3, 0.5, 'pyramid')}
-          />
+          <primitive object={apollonianPackingGeometry(3, 3, 0.5, 'pyramid')} />
         );
       case 'MengerSponge':
         return <primitive object={mengerSpongeGeometry()} />;
@@ -1870,14 +1931,28 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'TorusLink': {
         const recipe = getRecipe(kind);
         const params = getTorusLinkParams(recipe);
-        return <primitive object={torusLinkGeometry(params.p, params.q, params.loops)} />;
+        return (
+          <primitive
+            object={torusLinkGeometry(params.p, params.q, params.loops)}
+          />
+        );
       }
       case 'BorromeanRings':
         return <primitive object={borromeanRingsGeometry()} />;
       case 'LissajousKnot': {
         const recipe = getRecipe(kind);
         const params = getLissajousParams(recipe);
-        return <primitive object={lissajousKnotGeometry(params.nx, params.ny, params.nz, params.phaseX, params.phaseY)} />;
+        return (
+          <primitive
+            object={lissajousKnotGeometry(
+              params.nx,
+              params.ny,
+              params.nz,
+              params.phaseX,
+              params.phaseY
+            )}
+          />
+        );
       }
       case 'RhombicDodecahedron':
         return <primitive object={rhombicDodecahedronGeometry()} />;
@@ -1892,22 +1967,34 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'TesseractHull': {
         const recipe = getRecipe(kind);
         const rot = get4DRotation(recipe);
-        return <primitive object={tesseractHullGeometry(rot, recipe.proj4D_distance)} />;
+        return (
+          <primitive
+            object={tesseractHullGeometry(rot, recipe.proj4D_distance)}
+          />
+        );
       }
       case 'Cell16Hull': {
         const recipe = getRecipe(kind);
         const rot = get4DRotation(recipe);
-        return <primitive object={cell16HullGeometry(rot, recipe.proj4D_distance)} />;
+        return (
+          <primitive object={cell16HullGeometry(rot, recipe.proj4D_distance)} />
+        );
       }
       case 'Cell24Hull': {
         const recipe = getRecipe(kind);
         const rot = get4DRotation(recipe);
-        return <primitive object={cell24HullGeometry(rot, recipe.proj4D_distance)} />;
+        return (
+          <primitive object={cell24HullGeometry(rot, recipe.proj4D_distance)} />
+        );
       }
       case 'Cell600Hull': {
         const recipe = getRecipe(kind);
         const rot = get4DRotation(recipe);
-        return <primitive object={cell600HullGeometry(rot, recipe.proj4D_distance, 0.8)} />;
+        return (
+          <primitive
+            object={cell600HullGeometry(rot, recipe.proj4D_distance, 0.8)}
+          />
+        );
       }
 
       /* ═══════════════════════════════════════════════════════════════════
@@ -2088,7 +2175,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   // Add mobile touch position tracking
   const mobileHoverPos = useRef(new THREE.Vector3());
   const lastTouchPos = useRef<{ x: number; y: number } | null>(null);
-  
+
   /* ═══════════════════ CURSOR VELOCITY TRACKING ═══════════════════ */
   const prevCursorPos = useRef(new THREE.Vector3());
   const cursorVelocityRef = useRef(0);
@@ -2297,7 +2384,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
           /* enlarge invisible hover shell by 10 % (if you have it) */
           if (hoverShellRef.current)
             hoverShellRef.current.scale.setScalar(TARGET_R * 1.05);
-          
+
           /* Trigger entrance animation AFTER normalization is done */
           if (!hasNormalizedRef.current) {
             hasNormalizedRef.current = true;
@@ -2317,7 +2404,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     const roll = Math.random();
 
     // Common (original set 0-4): ~30%
-    if (roll < 0.30) return Math.floor(Math.random() * 5);
+    if (roll < 0.3) return Math.floor(Math.random() * 5);
 
     // Phase 4 materials (5-9): ~15%
     if (roll < 0.45) return 5 + Math.floor(Math.random() * 5);
@@ -2412,7 +2499,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
       wireframe ? (
         <meshBasicMaterial color={color} wireframe />
       ) : (
-        <TriplanarMarbleMaterial color1="#1a1a2e" color2="#16213e" color3={color} />
+        <TriplanarMarbleMaterial
+          color1="#1a1a2e"
+          color2="#16213e"
+          color3={color}
+        />
       ),
     // 8: Matcap Stylized (NEW - Phase 4)
     () =>
@@ -2495,28 +2586,44 @@ export default function Background3D({ onAnimationComplete }: Props) {
       wireframe ? (
         <meshBasicMaterial color="#D4AF37" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="GoldGilded" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="GoldGilded"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     // 16: Silver Mercury
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#C0C0C0" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="SilverMercury" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="SilverMercury"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     // 17: Platinum Frost
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#E5E4E2" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="PlatinumFrost" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="PlatinumFrost"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     // 18: Diamond Caustics
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#D7F2FF" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="DiamondCaustics" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="DiamondCaustics"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     /* ───── NEW: 5 Unique Pattern Shaders ───── */
     // 19: Plasma Flow
@@ -2524,35 +2631,60 @@ export default function Background3D({ onAnimationComplete }: Props) {
       wireframe ? (
         <meshBasicMaterial color="#FF00FF" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="PlasmaFlow" envMap={env} baseColor={color} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="PlasmaFlow"
+          envMap={env}
+          baseColor={color}
+          seed={shaderSeed}
+        />
       ),
     // 20: Crystal Geode
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#9B59B6" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="CrystalGeode" envMap={env} baseColor={color} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="CrystalGeode"
+          envMap={env}
+          baseColor={color}
+          seed={shaderSeed}
+        />
       ),
     // 21: Nebula Swirl
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#4B0082" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="NebulaSwirl" envMap={env} baseColor={color} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="NebulaSwirl"
+          envMap={env}
+          baseColor={color}
+          seed={shaderSeed}
+        />
       ),
     // 22: Oil Slick
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#000000" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="OilSlick" envMap={env} baseColor={color} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="OilSlick"
+          envMap={env}
+          baseColor={color}
+          seed={shaderSeed}
+        />
       ),
     // 23: Magma Core
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#FF4500" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="MagmaCore" envMap={env} baseColor={color} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="MagmaCore"
+          envMap={env}
+          baseColor={color}
+          seed={shaderSeed}
+        />
       ),
     /* ───── NEW: 4 Precious Metal Variations ───── */
     // 24: Gold Liquid (molten flowing gold)
@@ -2560,28 +2692,44 @@ export default function Background3D({ onAnimationComplete }: Props) {
       wireframe ? (
         <meshBasicMaterial color="#FFD700" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="GoldLiquid" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="GoldLiquid"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     // 25: Silver Chrome (perfect mirror)
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#C0C0C0" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="SilverChrome" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="SilverChrome"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     // 26: Platinum Mirror (flawless surface)
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#E8E8E8" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="PlatinumMirror" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="PlatinumMirror"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
     // 27: Diamond Rainbow (chromatic dispersion)
     (env: THREE.Texture | null) =>
       wireframe ? (
         <meshBasicMaterial color="#FFFFFF" wireframe />
       ) : (
-        <ProceduralMeshMaterial preset="DiamondRainbow" envMap={env} seed={shaderSeed} />
+        <ProceduralMeshMaterial
+          preset="DiamondRainbow"
+          envMap={env}
+          seed={shaderSeed}
+        />
       ),
   ] as const;
 
@@ -2614,13 +2762,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
     // Push icons much further out - they orbit at the edges
     const R = isMobileView ? 2.8 : 3.5; // Increased radius significantly
     const ySpread = isMobileView ? 0.6 : 0.8; // Limit vertical spread
-    
+
     icons.forEach((_, i) => {
       const θ = (2 * Math.PI * i) / icons.length; // Even distribution around circle
       // Alternate between upper and lower ring, avoiding center Y
-      const yOffset = (i % 2 === 0 ? 1 : -1) * (ySpread * 0.5 + Math.random() * ySpread * 0.5);
+      const yOffset =
+        (i % 2 === 0 ? 1 : -1) *
+        (ySpread * 0.5 + Math.random() * ySpread * 0.5);
       const depthOffset = Math.sin(θ * 2) * 0.5; // Slight depth variation
-      
+
       list.push(
         new THREE.Vector3(
           Math.cos(θ) * R,
@@ -2731,17 +2881,23 @@ export default function Background3D({ onAnimationComplete }: Props) {
           /* Uses smooth exponential falloff for more natural liquid feel */
           const d2 = tmpV.distanceToSquared(localHoverPos);
           const d = Math.sqrt(d2);
-          
+
           // Exponential falloff for smoother, more accurate response
           const fallOffRadius = rMax * 1.5; // Extended influence radius
-          const expFalloff = Math.exp(-d2 / (fallOffRadius * fallOffRadius * 0.8));
-          const linearFalloff = THREE.MathUtils.clamp(1 - d / fallOffRadius, 0, 1);
-          
+          const expFalloff = Math.exp(
+            -d2 / (fallOffRadius * fallOffRadius * 0.8)
+          );
+          const linearFalloff = THREE.MathUtils.clamp(
+            1 - d / fallOffRadius,
+            0,
+            1
+          );
+
           // Blend exponential and linear for best of both worlds
           const fallOff = isDragging.current
             ? 1
             : expFalloff * 0.7 + linearFalloff * 0.3;
-          
+
           const hoverDistance = d < 4 ? d : Infinity;
 
           /* Extra kick for specific shapes */
@@ -2905,7 +3061,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
           <group scale={outerScale}>
             {/* 3D SHAPE with drop-in + scale animations */}
             <a.group
-              position={shapeDropPosition as unknown as [number, number, number]}
+              position={
+                shapeDropPosition as unknown as [number, number, number]
+              }
               visible={isMeshReady}
             >
               <group ref={spinGroupRef}>
@@ -2923,12 +3081,22 @@ export default function Background3D({ onAnimationComplete }: Props) {
                   >
                     {/* ENTRANCE SCALE - smooth scale down animation */}
                     <a.group
-                      scale={shapeEntranceScale as unknown as [number, number, number]}
+                      scale={
+                        shapeEntranceScale as unknown as [
+                          number,
+                          number,
+                          number,
+                        ]
+                      }
                     >
                       {/* Inner morph spring (for shape changes on click) */}
                       <a.group
                         scale={
-                          shapeScale.scale as unknown as [number, number, number]
+                          shapeScale.scale as unknown as [
+                            number,
+                            number,
+                            number,
+                          ]
                         }
                       >
                         {hdr && (
@@ -2958,10 +3126,14 @@ export default function Background3D({ onAnimationComplete }: Props) {
                                   ref={hoverShellRef}
                                   visible={false}
                                   onPointerEnter={
-                                    isMobileView ? undefined : handlePointerEnter
+                                    isMobileView
+                                      ? undefined
+                                      : handlePointerEnter
                                   }
                                   onPointerLeave={
-                                    isMobileView ? undefined : handlePointerLeave
+                                    isMobileView
+                                      ? undefined
+                                      : handlePointerLeave
                                   }
                                   onPointerDown={onPointerDownMesh}
                                   onClick={handleModelClick}

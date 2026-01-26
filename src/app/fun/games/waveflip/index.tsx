@@ -1,129 +1,138 @@
-'use client'
+'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Html, OrthographicCamera } from '@react-three/drei'
-import * as THREE from 'three'
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Html, OrthographicCamera } from '@react-three/drei';
+import * as THREE from 'three';
 
-import { SeededRandom } from '../../utils/seededRandom'
-import { clearFrameInput, useInputRef } from '../../hooks/useInput'
+import { SeededRandom } from '../../utils/seededRandom';
+import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
-type GameStatus = 'menu' | 'countdown' | 'playing' | 'gameover'
+type GameStatus = 'menu' | 'countdown' | 'playing' | 'gameover';
 
 type Spike = {
-  z: number
-  up: boolean
-  h: number
-  w: number
-}
+  z: number;
+  up: boolean;
+  h: number;
+  w: number;
+};
 
 type Pickup = {
-  z: number
-  y: number
-}
+  z: number;
+  y: number;
+};
 
-const STORAGE_KEY = 'waveflip_best_v1'
+const STORAGE_KEY = 'waveflip_best_v1';
 
-const WORLD_HALF_H = 2.1
-const BALL_R = 0.22
-const AMP = 1.15
-const PHASE_SPEED = 2.55
-const FORWARD_SPEED = 4.8
-const SPIKE_SPACING = 2.15
-const LOOK_AHEAD = 34
+const WORLD_HALF_H = 2.1;
+const BALL_R = 0.22;
+const AMP = 1.15;
+const PHASE_SPEED = 2.55;
+const FORWARD_SPEED = 4.8;
+const SPIKE_SPACING = 2.15;
+const LOOK_AHEAD = 34;
 
-const PALETTE = ['#ff5a7a', '#1bbbd3', '#7c5cff', '#ffb020', '#20c46b']
+const PALETTE = ['#ff5a7a', '#1bbbd3', '#7c5cff', '#ffb020', '#20c46b'];
 
 function clamp(v: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, v))
+  return Math.max(a, Math.min(b, v));
 }
 
 function hashSeed(seed: number, i: number) {
   // deterministic 32-bit-ish mix
-  let x = (seed ^ (i * 0x9e3779b1)) >>> 0
-  x ^= x << 13
-  x ^= x >>> 17
-  x ^= x << 5
-  return x >>> 0
+  let x = (seed ^ (i * 0x9e3779b1)) >>> 0;
+  x ^= x << 13;
+  x ^= x >>> 17;
+  x ^= x << 5;
+  return x >>> 0;
 }
 
 function getSpike(i: number, seed: number, out: Spike): Spike {
-  const r = new SeededRandom(hashSeed(seed, i))
-  out.z = i * SPIKE_SPACING
-  out.up = r.bool(0.5)
-  out.h = r.float(0.65, 2.05)
-  out.w = r.float(0.25, 0.45)
-  return out
+  const r = new SeededRandom(hashSeed(seed, i));
+  out.z = i * SPIKE_SPACING;
+  out.up = r.bool(0.5);
+  out.h = r.float(0.65, 2.05);
+  out.w = r.float(0.25, 0.45);
+  return out;
 }
 
 function getPickup(i: number, seed: number, out: Pickup): Pickup | null {
-  const r = new SeededRandom(hashSeed(seed, i) ^ 0xa5a5a5a5)
-  if (!r.bool(0.36)) return null
-  out.z = i * SPIKE_SPACING + r.float(-0.45, 0.45)
-  out.y = r.float(-0.75, 0.75)
-  return out
+  const r = new SeededRandom(hashSeed(seed, i) ^ 0xa5a5a5a5);
+  if (!r.bool(0.36)) return null;
+  out.z = i * SPIKE_SPACING + r.float(-0.45, 0.45);
+  out.y = r.float(-0.75, 0.75);
+  return out;
 }
 
 export default function WaveFlip() {
-  const [status, setStatus] = useState<GameStatus>('menu')
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9))
-  const [score, setScore] = useState(0)
-  const [best, setBest] = useState(0)
-  const [rising, setRising] = useState(true)
-  const [gemFlash, setGemFlash] = useState(false)
-  const [countdown, setCountdown] = useState<3 | 2 | 1 | 0 | null>(null)
+  const [status, setStatus] = useState<GameStatus>('menu');
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [rising, setRising] = useState(true);
+  const [gemFlash, setGemFlash] = useState(false);
+  const [countdown, setCountdown] = useState<3 | 2 | 1 | 0 | null>(null);
 
   useEffect(() => {
     try {
-      const v = Number(window.localStorage.getItem(STORAGE_KEY) ?? '0')
-      if (!Number.isNaN(v)) setBest(v)
+      const v = Number(window.localStorage.getItem(STORAGE_KEY) ?? '0');
+      if (!Number.isNaN(v)) setBest(v);
     } catch {
       // ignore
     }
-  }, [])
+  }, []);
 
   const start = useCallback(() => {
-    setSeed((Date.now() ^ (Math.random() * 1e9)) >>> 0)
-    setScore(0)
-    setCountdown(3)
-    setStatus('countdown')
-  }, [])
+    setSeed((Date.now() ^ (Math.random() * 1e9)) >>> 0);
+    setScore(0);
+    setCountdown(3);
+    setStatus('countdown');
+  }, []);
 
   const backToMenu = useCallback(() => {
-    setStatus('menu')
-  }, [])
+    setStatus('menu');
+  }, []);
 
   useEffect(() => {
-    if (!gemFlash) return
-    const t = setTimeout(() => setGemFlash(false), 500)
-    return () => clearTimeout(t)
-  }, [gemFlash])
+    if (!gemFlash) return;
+    const t = setTimeout(() => setGemFlash(false), 500);
+    return () => clearTimeout(t);
+  }, [gemFlash]);
 
   useEffect(() => {
-    if (status !== 'countdown' || countdown === null) return
+    if (status !== 'countdown' || countdown === null) return;
     if (countdown === 0) {
       const t = setTimeout(() => {
-        setStatus('playing')
-        setCountdown(null)
-      }, 400)
-      return () => clearTimeout(t)
+        setStatus('playing');
+        setCountdown(null);
+      }, 400);
+      return () => clearTimeout(t);
     }
-    const t = setTimeout(() => setCountdown((c) => (c === 3 ? 2 : c === 2 ? 1 : 0)), 800)
-    return () => clearTimeout(t)
-  }, [status, countdown])
+    const t = setTimeout(
+      () => setCountdown((c) => (c === 3 ? 2 : c === 2 ? 1 : 0)),
+      800
+    );
+    return () => clearTimeout(t);
+  }, [status, countdown]);
 
   const onGameOver = useCallback((finalScore: number) => {
-    setStatus('gameover')
+    setStatus('gameover');
     setBest((b) => {
-      const next = Math.max(b, finalScore)
+      const next = Math.max(b, finalScore);
       try {
-        window.localStorage.setItem(STORAGE_KEY, String(next))
+        window.localStorage.setItem(STORAGE_KEY, String(next));
       } catch {
         // ignore
       }
-      return next
-    })
-  }, [])
+      return next;
+    });
+  }, []);
 
   return (
     <div className="relative w-full h-full select-none">
@@ -144,8 +153,8 @@ export default function WaveFlip() {
           onGameOver={onGameOver}
           onDirectionChange={setRising}
           onGem={() => {
-            setScore((s) => s + 1)
-            setGemFlash(true)
+            setScore((s) => s + 1);
+            setGemFlash(true);
           }}
           frozen={status === 'countdown'}
         />
@@ -155,7 +164,9 @@ export default function WaveFlip() {
         <div className="flex items-start justify-between">
           <div className="rounded-lg bg-black/8 px-4 py-2 text-sm text-black/80">
             <div className="font-bold tracking-wide">WaveFlip</div>
-            <div className="text-black/55">score: {score} · best: {best}</div>
+            <div className="text-black/55">
+              score: {score} · best: {best}
+            </div>
           </div>
           {status === 'playing' && (
             <div className="flex items-center gap-2">
@@ -175,7 +186,8 @@ export default function WaveFlip() {
             <div className="rounded-lg bg-black/10 px-4 py-2 text-center text-sm font-medium text-black/75">
               <span className="font-bold">OBJECTIVE:</span> Go forward → · Avoid{' '}
               <span className="font-semibold text-red-600">red</span> (floor) &{' '}
-              <span className="font-semibold text-blue-600">blue</span> (ceiling) spikes · Tap/Space to flip · Green = +1
+              <span className="font-semibold text-blue-600">blue</span>{' '}
+              (ceiling) spikes · Tap/Space to flip · Green = +1
             </div>
             <div className="text-2xl font-bold text-black/40">→</div>
           </div>
@@ -189,9 +201,12 @@ export default function WaveFlip() {
             Objective: Go forward · Avoid spikes · Collect gems
           </p>
           <p className="mt-3 text-black/70 max-w-sm">
-            <strong>Tap or Space</strong> flips your direction: you rise or fall. Avoid spikes:{' '}
-            <span className="font-semibold text-red-600">Red = floor</span> → flip to rise.{' '}
-            <span className="font-semibold text-blue-600">Blue = ceiling</span> → flip to fall. Green = +1.
+            <strong>Tap or Space</strong> flips your direction: you rise or
+            fall. Avoid spikes:{' '}
+            <span className="font-semibold text-red-600">Red = floor</span> →
+            flip to rise.{' '}
+            <span className="font-semibold text-blue-600">Blue = ceiling</span>{' '}
+            → flip to fall. Green = +1.
           </p>
           <button
             className="mt-6 rounded-lg bg-black px-5 py-3 text-white font-semibold pointer-events-auto"
@@ -214,11 +229,14 @@ export default function WaveFlip() {
 
       {status === 'gameover' && (
         <Overlay>
-          <h2 className="text-4xl font-extrabold tracking-tight">You hit a spike!</h2>
+          <h2 className="text-4xl font-extrabold tracking-tight">
+            You hit a spike!
+          </h2>
           <p className="mt-2 text-black/70">Score: {score}</p>
           <p className="mt-1 text-sm text-black/60">
-            <span className="font-semibold text-red-600">Red</span> = floor (flip ↑) ·{' '}
-            <span className="font-semibold text-blue-600">Blue</span> = ceiling (flip ↓)
+            <span className="font-semibold text-red-600">Red</span> = floor
+            (flip ↑) · <span className="font-semibold text-blue-600">Blue</span>{' '}
+            = ceiling (flip ↓)
           </p>
           <div className="mt-6 flex gap-3">
             <button
@@ -237,7 +255,7 @@ export default function WaveFlip() {
         </Overlay>
       )}
     </div>
-  )
+  );
 }
 
 function Overlay({ children }: { children: React.ReactNode }) {
@@ -247,28 +265,32 @@ function Overlay({ children }: { children: React.ReactNode }) {
         {children}
       </div>
     </div>
-  )
+  );
 }
 
-function WaveTrail({ trailRef }: { trailRef: React.MutableRefObject<THREE.Vector3[]> }) {
-  const lineRef = useRef<THREE.Line>(null)
+function WaveTrail({
+  trailRef,
+}: {
+  trailRef: React.MutableRefObject<THREE.Vector3[]>;
+}) {
+  const lineRef = useRef<THREE.Line>(null);
   useFrame(() => {
-    if (!lineRef.current || trailRef.current.length < 2) return
-    const prev = lineRef.current.geometry
-    const geo = new THREE.BufferGeometry().setFromPoints(trailRef.current)
-    lineRef.current.geometry = geo
-    prev.dispose()
-  })
+    if (!lineRef.current || trailRef.current.length < 2) return;
+    const prev = lineRef.current.geometry;
+    const geo = new THREE.BufferGeometry().setFromPoints(trailRef.current);
+    lineRef.current.geometry = geo;
+    prev.dispose();
+  });
   return (
     <line ref={lineRef}>
       <bufferGeometry />
       <lineBasicMaterial color="#94a3b8" transparent opacity={0.45} />
     </line>
-  )
+  );
 }
 
-const SPIKE_FLOOR_COLOR = '#dc2626'
-const SPIKE_CEILING_COLOR = '#2563eb'
+const SPIKE_FLOOR_COLOR = '#dc2626';
+const SPIKE_CEILING_COLOR = '#2563eb';
 
 function WaveFlipScene({
   status,
@@ -279,25 +301,28 @@ function WaveFlipScene({
   onGem,
   frozen,
 }: {
-  status: GameStatus
-  seed: number
-  onScore: (score: number) => void
-  onGameOver: (score: number) => void
-  onDirectionChange?: (rising: boolean) => void
-  onGem?: () => void
-  frozen?: boolean
+  status: GameStatus;
+  seed: number;
+  onScore: (score: number) => void;
+  onGameOver: (score: number) => void;
+  onDirectionChange?: (rising: boolean) => void;
+  onGem?: () => void;
+  frozen?: boolean;
 }) {
-  const active = status === 'playing' && !frozen
-  const input = useInputRef({ enabled: active, preventDefault: [' ', 'Space'] })
-  const { camera } = useThree()
+  const active = status === 'playing' && !frozen;
+  const input = useInputRef({
+    enabled: active,
+    preventDefault: [' ', 'Space'],
+  });
+  const { camera } = useThree();
 
-  const ballGroupRef = useRef<THREE.Group>(null)
-  const ball = useRef<THREE.Mesh>(null)
-  const floor = useRef<THREE.Mesh>(null)
-  const ceiling = useRef<THREE.Mesh>(null)
-  const camPos = useRef(new THREE.Vector3(0, 0, 10))
-  const camLook = useRef(new THREE.Vector3(0, 0, 0))
-  const flipPulse = useRef(0)
+  const ballGroupRef = useRef<THREE.Group>(null);
+  const ball = useRef<THREE.Mesh>(null);
+  const floor = useRef<THREE.Mesh>(null);
+  const ceiling = useRef<THREE.Mesh>(null);
+  const camPos = useRef(new THREE.Vector3(0, 0, 10));
+  const camLook = useRef(new THREE.Vector3(0, 0, 0));
+  const flipPulse = useRef(0);
 
   const sim = useRef({
     z: 0,
@@ -307,156 +332,168 @@ function WaveFlipScene({
     colorIndex: 0,
     alive: true,
     startTime: 0,
-  })
-  const lastRising = useRef(true)
-  const collectedGems = useRef<Set<number>>(new Set())
-  const easeInDur = 2.0
+  });
+  const lastRising = useRef(true);
+  const collectedGems = useRef<Set<number>>(new Set());
+  const easeInDur = 2.0;
 
-  const tmpSpike = useMemo<Spike>(() => ({ z: 0, up: true, h: 1, w: 0.35 }), [])
-  const tmpPickup = useMemo<Pickup>(() => ({ z: 0, y: 0 }), [])
-  const tmp = useMemo(() => new THREE.Vector3(), [])
-  const trail = useRef<THREE.Vector3[]>([])
+  const tmpSpike = useMemo<Spike>(
+    () => ({ z: 0, up: true, h: 1, w: 0.35 }),
+    []
+  );
+  const tmpPickup = useMemo<Pickup>(() => ({ z: 0, y: 0 }), []);
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+  const trail = useRef<THREE.Vector3[]>([]);
 
-  const [worldIndex, setWorldIndex] = useState(0)
+  const [worldIndex, setWorldIndex] = useState(0);
 
   useEffect(() => {
-    if (status !== 'playing') return
-    sim.current.z = 0
-    sim.current.phase = 0
-    sim.current.phaseVel = PHASE_SPEED
-    sim.current.passed = 0
-    sim.current.colorIndex = 0
-    sim.current.alive = true
-    setWorldIndex(0)
-    onScore(0)
-    camPos.current.set(0, 0, 10)
-    camLook.current.set(0, 0, 0)
-    flipPulse.current = 0
-    lastRising.current = true
-    collectedGems.current.clear()
-    trail.current = []
-    sim.current.startTime = performance.now() / 1000
-    onDirectionChange?.(true)
-  }, [seed, status, onScore, onDirectionChange])
+    if (status !== 'playing') return;
+    sim.current.z = 0;
+    sim.current.phase = 0;
+    sim.current.phaseVel = PHASE_SPEED;
+    sim.current.passed = 0;
+    sim.current.colorIndex = 0;
+    sim.current.alive = true;
+    setWorldIndex(0);
+    onScore(0);
+    camPos.current.set(0, 0, 10);
+    camLook.current.set(0, 0, 0);
+    flipPulse.current = 0;
+    lastRising.current = true;
+    collectedGems.current.clear();
+    trail.current = [];
+    sim.current.startTime = performance.now() / 1000;
+    onDirectionChange?.(true);
+  }, [seed, status, onScore, onDirectionChange]);
 
   useFrame((state, dt) => {
     if (status !== 'playing' || frozen || !sim.current.alive) {
-      clearFrameInput(input.current)
-      return
+      clearFrameInput(input.current);
+      return;
     }
 
-    dt = Math.min(dt, 1 / 30)
+    dt = Math.min(dt, 1 / 30);
 
-    const just = input.current.justPressed
+    const just = input.current.justPressed;
     const flip =
-      input.current.pointerJustDown || (just && (just.has(' ') || just.has('space')))
+      input.current.pointerJustDown ||
+      (just && (just.has(' ') || just.has('space')));
     if (flip) {
-      sim.current.phaseVel *= -1
-      flipPulse.current = 1
+      sim.current.phaseVel *= -1;
+      flipPulse.current = 1;
     }
-    flipPulse.current = Math.max(0, flipPulse.current - dt * 6)
-    const nowRising = sim.current.phaseVel > 0
+    flipPulse.current = Math.max(0, flipPulse.current - dt * 6);
+    const nowRising = sim.current.phaseVel > 0;
     if (nowRising !== lastRising.current) {
-      lastRising.current = nowRising
-      onDirectionChange?.(nowRising)
+      lastRising.current = nowRising;
+      onDirectionChange?.(nowRising);
     }
 
-    const elapsed = performance.now() / 1000 - sim.current.startTime
-    const ease = Math.min(1, elapsed / easeInDur)
-    const speedMul = 0.55 + 0.45 * ease
-    const phaseMul = 0.6 + 0.4 * ease
+    const elapsed = performance.now() / 1000 - sim.current.startTime;
+    const ease = Math.min(1, elapsed / easeInDur);
+    const speedMul = 0.55 + 0.45 * ease;
+    const phaseMul = 0.6 + 0.4 * ease;
 
-    sim.current.phase += sim.current.phaseVel * phaseMul * dt
-    sim.current.z += FORWARD_SPEED * speedMul * dt
+    sim.current.phase += sim.current.phaseVel * phaseMul * dt;
+    sim.current.z += FORWARD_SPEED * speedMul * dt;
 
-    const y = AMP * Math.sin(sim.current.phase)
-    const z = sim.current.z
+    const y = AMP * Math.sin(sim.current.phase);
+    const z = sim.current.z;
 
     // update visuals (group = position, ball = local scale)
     if (ballGroupRef.current) {
-      ballGroupRef.current.position.set(0, y, -z)
+      ballGroupRef.current.position.set(0, y, -z);
     }
     if (ball.current) {
-      const scale = 1 + flipPulse.current * 0.15
-      ball.current.scale.setScalar(scale)
+      const scale = 1 + flipPulse.current * 0.15;
+      ball.current.scale.setScalar(scale);
     }
 
-    const nextPassed = Math.floor(z / SPIKE_SPACING)
+    const nextPassed = Math.floor(z / SPIKE_SPACING);
     if (nextPassed !== sim.current.passed) {
-      sim.current.passed = nextPassed
-      onScore(nextPassed)
-      setWorldIndex(nextPassed)
+      sim.current.passed = nextPassed;
+      onScore(nextPassed);
+      setWorldIndex(nextPassed);
     }
 
     // collision checks: current and next spike
     for (const i of [nextPassed, nextPassed + 1]) {
-      const spike = getSpike(i, seed, tmpSpike)
-      const dz = Math.abs(z - spike.z)
-      if (dz > 0.55) continue
+      const spike = getSpike(i, seed, tmpSpike);
+      const dz = Math.abs(z - spike.z);
+      if (dz > 0.55) continue;
 
       if (spike.up) {
-        const top = -WORLD_HALF_H + spike.h
+        const top = -WORLD_HALF_H + spike.h;
         if (y - BALL_R <= top) {
-          sim.current.alive = false
-          onGameOver(sim.current.passed)
-          break
+          sim.current.alive = false;
+          onGameOver(sim.current.passed);
+          break;
         }
       } else {
-        const bottom = WORLD_HALF_H - spike.h
+        const bottom = WORLD_HALF_H - spike.h;
         if (y + BALL_R >= bottom) {
-          sim.current.alive = false
-          onGameOver(sim.current.passed)
-          break
+          sim.current.alive = false;
+          onGameOver(sim.current.passed);
+          break;
         }
       }
     }
 
     // pickup: one per segment (sometimes) — +1 score, color change, track collected
-    const pickupIdx = nextPassed + 1
-    const pickup = getPickup(pickupIdx, seed, tmpPickup)
+    const pickupIdx = nextPassed + 1;
+    const pickup = getPickup(pickupIdx, seed, tmpPickup);
     if (pickup && !collectedGems.current.has(pickupIdx)) {
-      const dz = Math.abs(z - pickup.z)
-      const dy = Math.abs(y - pickup.y)
+      const dz = Math.abs(z - pickup.z);
+      const dy = Math.abs(y - pickup.y);
       if (dz < 0.45 && dy < 0.45) {
-        collectedGems.current.add(pickupIdx)
-        sim.current.colorIndex = (sim.current.colorIndex + 1) % PALETTE.length
-        onGem?.()
+        collectedGems.current.add(pickupIdx);
+        sim.current.colorIndex = (sim.current.colorIndex + 1) % PALETTE.length;
+        onGem?.();
       }
     }
 
     // wave trail: recent positions behind ball
-    trail.current.push(new THREE.Vector3(0, y, -z))
-    const maxTrail = 14
-    if (trail.current.length > maxTrail) trail.current.shift()
+    trail.current.push(new THREE.Vector3(0, y, -z));
+    const maxTrail = 14;
+    if (trail.current.length > maxTrail) trail.current.shift();
 
     // gentle parallax band drift
-    if (floor.current) floor.current.position.z = -z
-    if (ceiling.current) ceiling.current.position.z = -z
+    if (floor.current) floor.current.position.z = -z;
+    if (ceiling.current) ceiling.current.position.z = -z;
 
     // camera follow: keep ball centered, look ahead
-    const targetZ = 10 - z
-    const targetY = y * 0.25
-    camPos.current.lerp(new THREE.Vector3(0, targetY, targetZ), 1 - Math.exp(-10 * dt))
-    camLook.current.lerp(new THREE.Vector3(0, y * 0.4, -z - 2), 1 - Math.exp(-10 * dt))
-    camera.position.copy(camPos.current)
-    camera.lookAt(camLook.current)
+    const targetZ = 10 - z;
+    const targetY = y * 0.25;
+    camPos.current.lerp(
+      new THREE.Vector3(0, targetY, targetZ),
+      1 - Math.exp(-10 * dt)
+    );
+    camLook.current.lerp(
+      new THREE.Vector3(0, y * 0.4, -z - 2),
+      1 - Math.exp(-10 * dt)
+    );
+    camera.position.copy(camPos.current);
+    camera.lookAt(camLook.current);
 
-    clearFrameInput(input.current)
-  })
+    clearFrameInput(input.current);
+  });
 
   const spikesToRender = useMemo(() => {
-    const arr: number[] = []
-    for (let i = Math.max(0, worldIndex - 2); i <= worldIndex + 18; i++) arr.push(i)
-    return arr
-  }, [worldIndex])
+    const arr: number[] = [];
+    for (let i = Math.max(0, worldIndex - 2); i <= worldIndex + 18; i++)
+      arr.push(i);
+    return arr;
+  }, [worldIndex]);
 
   const pickupsToRender = useMemo(() => {
-    const arr: number[] = []
-    for (let i = Math.max(0, worldIndex - 1); i <= worldIndex + 18; i++) arr.push(i)
-    return arr
-  }, [worldIndex])
+    const arr: number[] = [];
+    for (let i = Math.max(0, worldIndex - 1); i <= worldIndex + 18; i++)
+      arr.push(i);
+    return arr;
+  }, [worldIndex]);
 
-  const ballColor = PALETTE[sim.current.colorIndex]
+  const ballColor = PALETTE[sim.current.colorIndex];
 
   return (
     <group>
@@ -487,7 +524,11 @@ function WaveFlipScene({
           <torusGeometry args={[BALL_R * 1.35, 0.04, 8, 24]} />
           <meshBasicMaterial color="#fff" transparent opacity={0.5} />
         </mesh>
-        <Html position={[0, BALL_R + 0.5, 0]} center className="pointer-events-none select-none">
+        <Html
+          position={[0, BALL_R + 0.5, 0]}
+          center
+          className="pointer-events-none select-none"
+        >
           <div className="rounded bg-black/80 px-2 py-0.5 text-xs font-bold text-white whitespace-nowrap -translate-y-1">
             YOU
           </div>
@@ -496,33 +537,45 @@ function WaveFlipScene({
 
       {/* spikes */}
       {spikesToRender.map((i) => {
-        const spike = getSpike(i, seed, { ...tmpSpike })
-        const z = -spike.z
-        const yBase = spike.up ? -WORLD_HALF_H : WORLD_HALF_H
-        const y = spike.up ? yBase + spike.h * 0.5 : yBase - spike.h * 0.5
-        const rotX = spike.up ? Math.PI : 0
-        const color = spike.up ? SPIKE_FLOOR_COLOR : SPIKE_CEILING_COLOR
+        const spike = getSpike(i, seed, { ...tmpSpike });
+        const z = -spike.z;
+        const yBase = spike.up ? -WORLD_HALF_H : WORLD_HALF_H;
+        const y = spike.up ? yBase + spike.h * 0.5 : yBase - spike.h * 0.5;
+        const rotX = spike.up ? Math.PI : 0;
+        const color = spike.up ? SPIKE_FLOOR_COLOR : SPIKE_CEILING_COLOR;
         return (
           <mesh key={`spike-${i}`} position={[0, y, z]} rotation={[rotX, 0, 0]}>
             <coneGeometry args={[spike.w, spike.h, 5]} />
-            <meshStandardMaterial color={color} roughness={0.7} metalness={0.1} />
+            <meshStandardMaterial
+              color={color}
+              roughness={0.7}
+              metalness={0.1}
+            />
           </mesh>
-        )
+        );
       })}
 
       {/* pickups */}
       {pickupsToRender.map((i) => {
-        if (collectedGems.current.has(i)) return null
-        const pickup = getPickup(i, seed, { ...tmpPickup })
-        if (!pickup) return null
-        tmp.set(0, pickup.y, -pickup.z)
+        if (collectedGems.current.has(i)) return null;
+        const pickup = getPickup(i, seed, { ...tmpPickup });
+        if (!pickup) return null;
+        tmp.set(0, pickup.y, -pickup.z);
         return (
-          <mesh key={`p-${i}`} position={tmp.clone()} rotation={[0, 0, Math.PI / 4]}>
+          <mesh
+            key={`p-${i}`}
+            position={tmp.clone()}
+            rotation={[0, 0, Math.PI / 4]}
+          >
             <boxGeometry args={[0.22, 0.22, 0.22]} />
-            <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.25} />
+            <meshStandardMaterial
+              color="#22c55e"
+              emissive="#22c55e"
+              emissiveIntensity={0.25}
+            />
           </mesh>
-        )
+        );
       })}
     </group>
-  )
+  );
 }

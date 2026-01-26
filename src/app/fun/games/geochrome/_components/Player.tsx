@@ -22,13 +22,15 @@ const Player: React.FC<PlayerProps> = ({ position, onMove }) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      if (key in keysRef.current) keysRef.current[key as keyof typeof keysRef.current] = true;
+      if (key in keysRef.current)
+        keysRef.current[key as keyof typeof keysRef.current] = true;
       if (key === ' ' || key === 'e') geoState.cycleShape();
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
-      if (key in keysRef.current) keysRef.current[key as keyof typeof keysRef.current] = false;
+      if (key in keysRef.current)
+        keysRef.current[key as keyof typeof keysRef.current] = false;
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -56,7 +58,9 @@ const Player: React.FC<PlayerProps> = ({ position, onMove }) => {
     if (inputDir.length() > 0) {
       inputDir.normalize();
 
-      const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), cameraDir).normalize();
+      const right = new THREE.Vector3()
+        .crossVectors(new THREE.Vector3(0, 1, 0), cameraDir)
+        .normalize();
 
       const moveDir = new THREE.Vector3()
         .addScaledVector(cameraDir, -inputDir.z)
@@ -77,7 +81,11 @@ const Player: React.FC<PlayerProps> = ({ position, onMove }) => {
 
     const up = position.clone().normalize();
     meshRef.current.up.copy(up);
-    const lookTarget = position.clone().add(velocityRef.current.length() > 0.01 ? velocityRef.current : cameraDir);
+    const lookTarget = position
+      .clone()
+      .add(
+        velocityRef.current.length() > 0.01 ? velocityRef.current : cameraDir
+      );
     lookTarget.normalize().multiplyScalar(WORLD_RADIUS);
     meshRef.current.lookAt(lookTarget);
 
@@ -87,13 +95,27 @@ const Player: React.FC<PlayerProps> = ({ position, onMove }) => {
   return (
     <group ref={meshRef} position={position.toArray()}>
       <group scale={[1.5, 1.5, 1.5]}>
-        <GameShape type={snap.currentShape} color="#00d4ff" materialType="neon" glowColor="#00ffff" />
+        <GameShape
+          type={snap.currentShape}
+          color="#00d4ff"
+          materialType="neon"
+          glowColor="#00ffff"
+        />
       </group>
 
       <pointLight color="#00d4ff" intensity={2} distance={15} />
 
-      <Ring args={[2, 2.3, 32]} rotation={[Math.PI / 2, 0, 0]} position={[0, -0.5, 0]}>
-        <meshBasicMaterial color="#00ffaa" transparent opacity={0.5} side={THREE.DoubleSide} />
+      <Ring
+        args={[2, 2.3, 32]}
+        rotation={[Math.PI / 2, 0, 0]}
+        position={[0, -0.5, 0]}
+      >
+        <meshBasicMaterial
+          color="#00ffaa"
+          transparent
+          opacity={0.5}
+          side={THREE.DoubleSide}
+        />
       </Ring>
     </group>
   );

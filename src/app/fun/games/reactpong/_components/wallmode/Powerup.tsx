@@ -30,12 +30,17 @@ const Powerup: React.FC<PowerupProps> = ({ type, position, onCollect }) => {
   useFrame(({ clock }) => {
     if (meshRef.current) {
       meshRef.current.rotation.y = clock.getElapsedTime();
-      meshRef.current.position.y = position[1] + Math.sin(clock.getElapsedTime() * 2) * 0.2;
+      meshRef.current.position.y =
+        position[1] + Math.sin(clock.getElapsedTime() * 2) * 0.2;
     }
   });
 
   return (
-    <mesh ref={meshRef} position={[position[0], position[1], position[2]]} onClick={onCollect}>
+    <mesh
+      ref={meshRef}
+      position={[position[0], position[1], position[2]]}
+      onClick={onCollect}
+    >
       <octahedronGeometry args={[0.4, 0]} />
       <meshStandardMaterial
         color={getColor()}

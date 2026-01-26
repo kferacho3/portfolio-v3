@@ -6,23 +6,26 @@ source: https://sketchfab.com/3d-models/stylized-crystal-0a0c75dab0844e7fa5b299d
 title: Stylized Crystal
 */
 
-import React, { useRef } from 'react'
-import { useGLTF } from '@react-three/drei'
+import React, { useRef } from 'react';
+import { useGLTF } from '@react-three/drei';
 
 export default function Model(props) {
-  const group = useRef()
-  const { nodes, materials } = useGLTF('/stylized_crystal.glb')
+  const group = useRef();
+  const { nodes, materials } = useGLTF('/stylized_crystal.glb');
   return (
     <group ref={group} {...props} dispose={null}>
       <group rotation={[-Math.PI / 2, 0, 0]}>
         <group rotation={[Math.PI / 2, 0, 0]}>
           <group position={[0, 18.49, 0]} scale={16.99}>
-            <mesh geometry={nodes.crystal17_2_crystal_17_2_0.geometry} material={materials.crystal_17_2} />
+            <mesh
+              geometry={nodes.crystal17_2_crystal_17_2_0.geometry}
+              material={materials.crystal_17_2}
+            />
           </group>
         </group>
       </group>
     </group>
-  )
+  );
 }
 
-useGLTF.preload('/stylized_crystal.glb')
+useGLTF.preload('/stylized_crystal.glb');

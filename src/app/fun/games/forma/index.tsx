@@ -1,6 +1,6 @@
 /**
  * Forma.tsx (Vertex Merge)
- * 
+ *
  * 2048-like polygon evolution game with multiple grid sizes
  * Merge same-sided polygons to evolve: triangle → square → pentagon → ...
  * Grid sizes: 4x4 (Classic), 8x8 (Extended), 12x12 (Challenge), 16x16 (Extreme)
@@ -9,7 +9,13 @@
 
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 import { SeededRandom } from '../../utils/seededRandom';
@@ -117,23 +123,23 @@ export const formaState = proxy({
   mergeCount: 0,
   gridSize: 4 as GridSizeOption,
   started: false,
-  
+
   reset: () => {
     formaState.score = 0;
     formaState.gameOver = false;
     formaState.highestSides = 3;
     formaState.mergeCount = 0;
   },
-  
+
   setGridSize: (size: GridSizeOption) => {
     formaState.gridSize = size;
     formaState.reset();
   },
-  
+
   start: () => {
     formaState.started = true;
   },
-  
+
   backToMenu: () => {
     formaState.started = false;
     formaState.reset();
@@ -145,20 +151,20 @@ export const formaState = proxy({
 // ═══════════════════════════════════════════════════════════════════════════
 
 const POLYGON_COLORS: Record<number, string> = {
-  3: '#ff6b6b',   // Triangle - Red
-  4: '#feca57',   // Square - Yellow
-  5: '#48dbfb',   // Pentagon - Cyan
-  6: '#ff9ff3',   // Hexagon - Pink
-  7: '#54a0ff',   // Heptagon - Blue
-  8: '#5f27cd',   // Octagon - Purple
-  9: '#00d2d3',   // Nonagon - Teal
-  10: '#ff6348',  // Decagon - Orange
-  11: '#26de81',  // 11-gon - Green
-  12: '#fd79a8',  // Dodecagon - Light Pink
-  13: '#a29bfe',  // 13-gon - Lavender
-  14: '#ffeaa7',  // 14-gon - Light Yellow
-  15: '#81ecec',  // 15-gon - Light Cyan
-  16: '#fab1a0',  // 16-gon - Peach
+  3: '#ff6b6b', // Triangle - Red
+  4: '#feca57', // Square - Yellow
+  5: '#48dbfb', // Pentagon - Cyan
+  6: '#ff9ff3', // Hexagon - Pink
+  7: '#54a0ff', // Heptagon - Blue
+  8: '#5f27cd', // Octagon - Purple
+  9: '#00d2d3', // Nonagon - Teal
+  10: '#ff6348', // Decagon - Orange
+  11: '#26de81', // 11-gon - Green
+  12: '#fd79a8', // Dodecagon - Light Pink
+  13: '#a29bfe', // 13-gon - Lavender
+  14: '#ffeaa7', // 14-gon - Light Yellow
+  15: '#81ecec', // 15-gon - Light Cyan
+  16: '#fab1a0', // 16-gon - Peach
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -187,10 +193,21 @@ const buildTilesFromGrid = (grid: (Tile | null)[][]): Tile[] => {
   return tiles;
 };
 
-const getGridPosition = (row: number, col: number, config: GridConfig): [number, number, number] => {
-  const totalWidth = config.size * (config.cellSize + config.cellGap) - config.cellGap;
-  const x = col * (config.cellSize + config.cellGap) - totalWidth / 2 + config.cellSize / 2;
-  const y = (config.size - 1 - row) * (config.cellSize + config.cellGap) - totalWidth / 2 + config.cellSize / 2;
+const getGridPosition = (
+  row: number,
+  col: number,
+  config: GridConfig
+): [number, number, number] => {
+  const totalWidth =
+    config.size * (config.cellSize + config.cellGap) - config.cellGap;
+  const x =
+    col * (config.cellSize + config.cellGap) -
+    totalWidth / 2 +
+    config.cellSize / 2;
+  const y =
+    (config.size - 1 - row) * (config.cellSize + config.cellGap) -
+    totalWidth / 2 +
+    config.cellSize / 2;
   return [x, y, 0];
 };
 
@@ -206,11 +223,16 @@ const PolygonTile: React.FC<{
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
   const targetPos = useRef(getGridPosition(tile.row, tile.col, config));
-  const [position, setPosition] = useState(getGridPosition(tile.row, tile.col, config));
+  const [position, setPosition] = useState(
+    getGridPosition(tile.row, tile.col, config)
+  );
   const [scale, setScale] = useState(tile.isNew ? 0 : 1);
   const [rotation, setRotation] = useState(0);
 
-  const color = POLYGON_COLORS[tile.sides] || POLYGON_COLORS[Math.min(tile.sides, 16)] || '#ffffff';
+  const color =
+    POLYGON_COLORS[tile.sides] ||
+    POLYGON_COLORS[Math.min(tile.sides, 16)] ||
+    '#ffffff';
   const isUnstable = tile.unstable !== undefined;
 
   // Update target position when tile moves
@@ -250,8 +272,16 @@ const PolygonTile: React.FC<{
   useFrame((_, delta) => {
     // Smooth position transition
     setPosition((prev) => [
-      THREE.MathUtils.lerp(prev[0], targetPos.current[0], Math.min(delta * 15, 1)),
-      THREE.MathUtils.lerp(prev[1], targetPos.current[1], Math.min(delta * 15, 1)),
+      THREE.MathUtils.lerp(
+        prev[0],
+        targetPos.current[0],
+        Math.min(delta * 15, 1)
+      ),
+      THREE.MathUtils.lerp(
+        prev[1],
+        targetPos.current[1],
+        Math.min(delta * 15, 1)
+      ),
       prev[2],
     ]);
 
@@ -263,7 +293,8 @@ const PolygonTile: React.FC<{
     // Merge pop animation
     if (tile.merging) {
       setScale((prev) => {
-        if (prev > 1.15) return THREE.MathUtils.lerp(prev, 1, Math.min(delta * 10, 1));
+        if (prev > 1.15)
+          return THREE.MathUtils.lerp(prev, 1, Math.min(delta * 10, 1));
         return Math.min(1.2, prev + delta * 20);
       });
     }
@@ -273,7 +304,11 @@ const PolygonTile: React.FC<{
 
     // Unstable tile shake
     if (meshRef.current && isUnstable) {
-      const shake = Math.sin(Date.now() * 0.02) * config.cellSize * 0.02 * (1 - (tile.unstable || 0));
+      const shake =
+        Math.sin(Date.now() * 0.02) *
+        config.cellSize *
+        0.02 *
+        (1 - (tile.unstable || 0));
       meshRef.current.position.x = position[0] + shake;
     }
 
@@ -309,8 +344,14 @@ const PolygonTile: React.FC<{
 
       {/* Glow effect for unstable tiles */}
       {isUnstable && (
-        <mesh ref={glowRef} rotation={[0, 0, rotation]} scale={[scale * 1.1, scale * 1.1, 1]}>
-          <circleGeometry args={[config.cellSize * 0.45, Math.min(tile.sides, 16)]} />
+        <mesh
+          ref={glowRef}
+          rotation={[0, 0, rotation]}
+          scale={[scale * 1.1, scale * 1.1, 1]}
+        >
+          <circleGeometry
+            args={[config.cellSize * 0.45, Math.min(tile.sides, 16)]}
+          />
           <meshBasicMaterial color="#ff0000" transparent opacity={0.3} />
         </mesh>
       )}
@@ -318,21 +359,31 @@ const PolygonTile: React.FC<{
       {/* Unstable decay indicator */}
       {isUnstable && (
         <mesh position={[0, 0, config.cellSize * 0.2]} rotation={[0, 0, 0]}>
-          <ringGeometry args={[
-            config.cellSize * 0.35,
-            config.cellSize * 0.4,
-            32, 1, 0,
-            Math.PI * 2 * (tile.unstable || 0)
-          ]} />
+          <ringGeometry
+            args={[
+              config.cellSize * 0.35,
+              config.cellSize * 0.4,
+              32,
+              1,
+              0,
+              Math.PI * 2 * (tile.unstable || 0),
+            ]}
+          />
           <meshBasicMaterial color="#ff4444" />
         </mesh>
       )}
 
       {/* Side count indicator for higher polygons */}
       {tile.sides >= 6 && (
-        <Html center position={[0, 0, config.cellSize * 0.25]} style={{ pointerEvents: 'none' }}>
-          <div className="text-white font-bold text-xs bg-black/50 rounded px-1"
-               style={{ fontSize: `${Math.max(8, 14 - config.size)}px` }}>
+        <Html
+          center
+          position={[0, 0, config.cellSize * 0.25]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div
+            className="text-white font-bold text-xs bg-black/50 rounded px-1"
+            style={{ fontSize: `${Math.max(8, 14 - config.size)}px` }}
+          >
             {tile.sides}
           </div>
         </Html>
@@ -349,14 +400,16 @@ const GridBackground: React.FC<{ config: GridConfig }> = ({ config }) => {
       for (let col = 0; col < config.size; col++) {
         const pos = getGridPosition(row, col, config);
         const key = `${row}-${col}`;
-        
+
         // Checkerboard pattern for visual clarity
         const isDark = (row + col) % 2 === 0;
         const cellColor = isDark ? '#1a1a2e' : '#1f1f3a';
 
         result.push(
           <mesh key={`cell-${key}`} position={[pos[0], pos[1], -0.1]}>
-            <boxGeometry args={[config.cellSize * 0.95, config.cellSize * 0.95, 0.05]} />
+            <boxGeometry
+              args={[config.cellSize * 0.95, config.cellSize * 0.95, 0.05]}
+            />
             <meshStandardMaterial color={cellColor} transparent opacity={0.9} />
           </mesh>
         );
@@ -366,14 +419,19 @@ const GridBackground: React.FC<{ config: GridConfig }> = ({ config }) => {
   }, [config]);
 
   // Grid border
-  const totalWidth = config.size * (config.cellSize + config.cellGap) - config.cellGap;
+  const totalWidth =
+    config.size * (config.cellSize + config.cellGap) - config.cellGap;
 
   return (
     <group position={[0, 0, -0.2]}>
       {cells}
       {/* Border frame */}
       <lineSegments>
-        <edgesGeometry args={[new THREE.BoxGeometry(totalWidth + 0.2, totalWidth + 0.2, 0.1)]} />
+        <edgesGeometry
+          args={[
+            new THREE.BoxGeometry(totalWidth + 0.2, totalWidth + 0.2, 0.1),
+          ]}
+        />
         <lineBasicMaterial color="#3a3a5a" linewidth={2} />
       </lineSegments>
     </group>
@@ -397,7 +455,7 @@ const ModeSelection: React.FC<{
             {([4, 8, 12, 16] as GridSizeOption[]).map((size) => {
               const config = GRID_CONFIGS[size];
               const isHovered = hoveredSize === size;
-              
+
               return (
                 <button
                   key={size}
@@ -411,13 +469,21 @@ const ModeSelection: React.FC<{
                   }`}
                 >
                   <div className="flex items-baseline justify-between">
-                    <div className="text-3xl font-bold text-white">{size}×{size}</div>
-                    <div className="text-[11px] uppercase tracking-wider text-white/60">{config.name}</div>
+                    <div className="text-3xl font-bold text-white">
+                      {size}×{size}
+                    </div>
+                    <div className="text-[11px] uppercase tracking-wider text-white/60">
+                      {config.name}
+                    </div>
                   </div>
-                  <div className="text-xs text-white/60 mt-2">{config.description}</div>
+                  <div className="text-xs text-white/60 mt-2">
+                    {config.description}
+                  </div>
                   <div className="mt-4 flex items-center justify-between text-[11px] text-white/40">
                     <span>{config.initialTiles} start</span>
-                    <span>{(config.unstableDecayRate * 100).toFixed(0)}% decay</span>
+                    <span>
+                      {(config.unstableDecayRate * 100).toFixed(0)}% decay
+                    </span>
                   </div>
                 </button>
               );
@@ -443,8 +509,10 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const { camera, scene } = useThree();
 
   const config = GRID_CONFIGS[snap.gridSize];
-  
-  const [grid, setGrid] = useState<(Tile | null)[][]>(() => createEmptyGrid(config.size));
+
+  const [grid, setGrid] = useState<(Tile | null)[][]>(() =>
+    createEmptyGrid(config.size)
+  );
   const [tiles, setTiles] = useState<Tile[]>([]);
 
   const rngRef = useRef(new SeededRandom(Date.now()));
@@ -459,38 +527,43 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   }, [camera, scene, config.cameraZ]);
 
   // Spawn new tile
-  const spawnTile = useCallback((currentGrid: (Tile | null)[][], cfg: GridConfig) => {
-    const emptyCells: [number, number][] = [];
-    for (let row = 0; row < cfg.size; row++) {
-      for (let col = 0; col < cfg.size; col++) {
-        if (!currentGrid[row]?.[col]) {
-          emptyCells.push([row, col]);
+  const spawnTile = useCallback(
+    (currentGrid: (Tile | null)[][], cfg: GridConfig) => {
+      const emptyCells: [number, number][] = [];
+      for (let row = 0; row < cfg.size; row++) {
+        for (let col = 0; col < cfg.size; col++) {
+          if (!currentGrid[row]?.[col]) {
+            emptyCells.push([row, col]);
+          }
         }
       }
-    }
 
-    if (emptyCells.length === 0) return null;
+      if (emptyCells.length === 0) return null;
 
-    const [row, col] = rngRef.current.pick(emptyCells);
-    
-    // Higher chance of 4-sided on larger grids
-    const sides = rngRef.current.bool(1 - cfg.spawnHigherChance) ? 3 : 4;
-    
-    // Unstable chance scales with score and grid size
-    const unstableChance = cfg.unstableChance + formaState.score * 0.00005;
-    const isUnstable = rngRef.current.bool(Math.min(cfg.maxUnstableChance, unstableChance));
+      const [row, col] = rngRef.current.pick(emptyCells);
 
-    const tile: Tile = {
-      id: `tile-${tileIdCounter.current++}`,
-      sides,
-      row,
-      col,
-      isNew: true,
-      unstable: isUnstable ? 1.0 : undefined,
-    };
+      // Higher chance of 4-sided on larger grids
+      const sides = rngRef.current.bool(1 - cfg.spawnHigherChance) ? 3 : 4;
 
-    return tile;
-  }, []);
+      // Unstable chance scales with score and grid size
+      const unstableChance = cfg.unstableChance + formaState.score * 0.00005;
+      const isUnstable = rngRef.current.bool(
+        Math.min(cfg.maxUnstableChance, unstableChance)
+      );
+
+      const tile: Tile = {
+        id: `tile-${tileIdCounter.current++}`,
+        sides,
+        row,
+        col,
+        isNew: true,
+        unstable: isUnstable ? 1.0 : undefined,
+      };
+
+      return tile;
+    },
+    []
+  );
 
   // Initialize game when starting
   const initializeGame = useCallback(() => {
@@ -528,172 +601,203 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   }, [snap.started, snap.gridSize]);
 
   // Move tiles with proper boundary checking
-  const moveTiles = useCallback((direction: Direction) => {
-    if (!canMove.current || snap.gameOver || !snap.started) return;
-    canMove.current = false;
+  const moveTiles = useCallback(
+    (direction: Direction) => {
+      if (!canMove.current || snap.gameOver || !snap.started) return;
+      canMove.current = false;
 
-    const cfg = GRID_CONFIGS[snap.gridSize];
+      const cfg = GRID_CONFIGS[snap.gridSize];
 
-    setGrid((prevGrid) => {
-      const newGrid = createEmptyGrid(cfg.size);
-      let moved = false;
-      let scoreGain = 0;
-      let mergesThisMove = 0;
+      setGrid((prevGrid) => {
+        const newGrid = createEmptyGrid(cfg.size);
+        let moved = false;
+        let scoreGain = 0;
+        let mergesThisMove = 0;
 
-      // Determine traversal order based on direction
-      const rows = direction === 'down'
-        ? Array.from({ length: cfg.size }, (_, i) => cfg.size - 1 - i)
-        : Array.from({ length: cfg.size }, (_, i) => i);
-      const cols = direction === 'right'
-        ? Array.from({ length: cfg.size }, (_, i) => cfg.size - 1 - i)
-        : Array.from({ length: cfg.size }, (_, i) => i);
+        // Determine traversal order based on direction
+        const rows =
+          direction === 'down'
+            ? Array.from({ length: cfg.size }, (_, i) => cfg.size - 1 - i)
+            : Array.from({ length: cfg.size }, (_, i) => i);
+        const cols =
+          direction === 'right'
+            ? Array.from({ length: cfg.size }, (_, i) => cfg.size - 1 - i)
+            : Array.from({ length: cfg.size }, (_, i) => i);
 
-      const processLine = (line: (Tile | null)[], setCell: (idx: number, tile: Tile | null) => void) => {
-        const compacted: Tile[] = [];
+        const processLine = (
+          line: (Tile | null)[],
+          setCell: (idx: number, tile: Tile | null) => void
+        ) => {
+          const compacted: Tile[] = [];
 
-        // Compact tiles and handle unstable decay
-        for (const tile of line) {
-          if (tile) {
-            let newTile = { ...tile, isNew: false, merging: false };
-            
-            // Decay unstable tiles
-            if (newTile.unstable !== undefined) {
-              newTile.unstable -= cfg.unstableDecayRate;
-              if (newTile.unstable <= 0) {
-                moved = true;
-                continue; // Tile decayed
+          // Compact tiles and handle unstable decay
+          for (const tile of line) {
+            if (tile) {
+              let newTile = { ...tile, isNew: false, merging: false };
+
+              // Decay unstable tiles
+              if (newTile.unstable !== undefined) {
+                newTile.unstable -= cfg.unstableDecayRate;
+                if (newTile.unstable <= 0) {
+                  moved = true;
+                  continue; // Tile decayed
+                }
+              }
+              compacted.push(newTile);
+            }
+          }
+
+          // Merge adjacent matching tiles
+          const merged: Tile[] = [];
+          let i = 0;
+          while (i < compacted.length) {
+            if (
+              i + 1 < compacted.length &&
+              compacted[i].sides === compacted[i + 1].sides
+            ) {
+              const newSides = compacted[i].sides + 1;
+              merged.push({
+                ...compacted[i],
+                sides: newSides,
+                merging: true,
+                unstable: undefined, // Merging removes unstable
+              });
+              scoreGain += newSides * newSides * (cfg.size / 4); // Scale score with grid size
+              mergesThisMove++;
+              if (newSides > formaState.highestSides) {
+                formaState.highestSides = newSides;
+              }
+              moved = true;
+              i += 2;
+            } else {
+              merged.push(compacted[i]);
+              i++;
+            }
+          }
+
+          // Place merged tiles
+          for (let j = 0; j < merged.length; j++) {
+            setCell(j, merged[j]);
+          }
+        };
+
+        // Process based on direction
+        if (direction === 'up' || direction === 'down') {
+          for (const col of cols) {
+            const line: (Tile | null)[] = [];
+            for (const row of rows) {
+              if (row >= 0 && row < cfg.size && col >= 0 && col < cfg.size) {
+                line.push(prevGrid[row]?.[col] || null);
               }
             }
-            compacted.push(newTile);
-          }
-        }
 
-        // Merge adjacent matching tiles
-        const merged: Tile[] = [];
-        let i = 0;
-        while (i < compacted.length) {
-          if (i + 1 < compacted.length && compacted[i].sides === compacted[i + 1].sides) {
-            const newSides = compacted[i].sides + 1;
-            merged.push({
-              ...compacted[i],
-              sides: newSides,
-              merging: true,
-              unstable: undefined, // Merging removes unstable
+            processLine(line, (idx, tile) => {
+              const targetRow = direction === 'up' ? idx : cfg.size - 1 - idx;
+              // Boundary check
+              if (
+                targetRow >= 0 &&
+                targetRow < cfg.size &&
+                col >= 0 &&
+                col < cfg.size &&
+                tile
+              ) {
+                const originalRow = tile.row;
+                tile.row = targetRow;
+                tile.col = col;
+                if (originalRow !== targetRow) moved = true;
+                newGrid[targetRow][col] = tile;
+              }
             });
-            scoreGain += newSides * newSides * (cfg.size / 4); // Scale score with grid size
-            mergesThisMove++;
-            if (newSides > formaState.highestSides) {
-              formaState.highestSides = newSides;
-            }
-            moved = true;
-            i += 2;
-          } else {
-            merged.push(compacted[i]);
-            i++;
           }
-        }
-
-        // Place merged tiles
-        for (let j = 0; j < merged.length; j++) {
-          setCell(j, merged[j]);
-        }
-      };
-
-      // Process based on direction
-      if (direction === 'up' || direction === 'down') {
-        for (const col of cols) {
-          const line: (Tile | null)[] = [];
+        } else {
           for (const row of rows) {
-            if (row >= 0 && row < cfg.size && col >= 0 && col < cfg.size) {
-              line.push(prevGrid[row]?.[col] || null);
+            const line: (Tile | null)[] = [];
+            for (const col of cols) {
+              if (row >= 0 && row < cfg.size && col >= 0 && col < cfg.size) {
+                line.push(prevGrid[row]?.[col] || null);
+              }
             }
-          }
-          
-          processLine(line, (idx, tile) => {
-            const targetRow = direction === 'up' ? idx : cfg.size - 1 - idx;
-            // Boundary check
-            if (targetRow >= 0 && targetRow < cfg.size && col >= 0 && col < cfg.size && tile) {
-              const originalRow = tile.row;
-              tile.row = targetRow;
-              tile.col = col;
-              if (originalRow !== targetRow) moved = true;
-              newGrid[targetRow][col] = tile;
-            }
-          });
-        }
-      } else {
-        for (const row of rows) {
-          const line: (Tile | null)[] = [];
-          for (const col of cols) {
-            if (row >= 0 && row < cfg.size && col >= 0 && col < cfg.size) {
-              line.push(prevGrid[row]?.[col] || null);
-            }
-          }
-          
-          processLine(line, (idx, tile) => {
-            const targetCol = direction === 'left' ? idx : cfg.size - 1 - idx;
-            // Boundary check
-            if (row >= 0 && row < cfg.size && targetCol >= 0 && targetCol < cfg.size && tile) {
-              const originalCol = tile.col;
-              tile.row = row;
-              tile.col = targetCol;
-              if (originalCol !== targetCol) moved = true;
-              newGrid[row][targetCol] = tile;
-            }
-          });
-        }
-      }
 
-      // If moved, update score and spawn new tile
-      if (moved) {
-        formaState.score += Math.round(scoreGain);
-        formaState.mergeCount += mergesThisMove;
-
-        if (formaState.score > formaState.highScore) {
-          formaState.highScore = formaState.score;
-        }
-
-        // Spawn new tile
-        const newTile = spawnTile(newGrid, cfg);
-        if (newTile) {
-          // Verify spawn position is valid
-          if (newTile.row >= 0 && newTile.row < cfg.size && 
-              newTile.col >= 0 && newTile.col < cfg.size &&
-              !newGrid[newTile.row][newTile.col]) {
-            newGrid[newTile.row][newTile.col] = newTile;
+            processLine(line, (idx, tile) => {
+              const targetCol = direction === 'left' ? idx : cfg.size - 1 - idx;
+              // Boundary check
+              if (
+                row >= 0 &&
+                row < cfg.size &&
+                targetCol >= 0 &&
+                targetCol < cfg.size &&
+                tile
+              ) {
+                const originalCol = tile.col;
+                tile.row = row;
+                tile.col = targetCol;
+                if (originalCol !== targetCol) moved = true;
+                newGrid[row][targetCol] = tile;
+              }
+            });
           }
         }
-      }
 
-      setTiles(buildTilesFromGrid(newGrid));
+        // If moved, update score and spawn new tile
+        if (moved) {
+          formaState.score += Math.round(scoreGain);
+          formaState.mergeCount += mergesThisMove;
 
-      // Check game over
-      const hasEmpty = newGrid.some((row) => row.some((cell) => !cell));
-      const canMerge = () => {
-        for (let r = 0; r < cfg.size; r++) {
-          for (let c = 0; c < cfg.size; c++) {
-            const cell = newGrid[r]?.[c];
-            if (!cell) continue;
-            if (r > 0 && newGrid[r - 1]?.[c]?.sides === cell.sides) return true;
-            if (c > 0 && newGrid[r]?.[c - 1]?.sides === cell.sides) return true;
-            if (r < cfg.size - 1 && newGrid[r + 1]?.[c]?.sides === cell.sides) return true;
-            if (c < cfg.size - 1 && newGrid[r]?.[c + 1]?.sides === cell.sides) return true;
+          if (formaState.score > formaState.highScore) {
+            formaState.highScore = formaState.score;
+          }
+
+          // Spawn new tile
+          const newTile = spawnTile(newGrid, cfg);
+          if (newTile) {
+            // Verify spawn position is valid
+            if (
+              newTile.row >= 0 &&
+              newTile.row < cfg.size &&
+              newTile.col >= 0 &&
+              newTile.col < cfg.size &&
+              !newGrid[newTile.row][newTile.col]
+            ) {
+              newGrid[newTile.row][newTile.col] = newTile;
+            }
           }
         }
-        return false;
-      };
 
-      if (!hasEmpty && !canMerge()) {
-        formaState.gameOver = true;
-      }
+        setTiles(buildTilesFromGrid(newGrid));
 
-      setTimeout(() => {
-        canMove.current = true;
-      }, 80);
+        // Check game over
+        const hasEmpty = newGrid.some((row) => row.some((cell) => !cell));
+        const canMerge = () => {
+          for (let r = 0; r < cfg.size; r++) {
+            for (let c = 0; c < cfg.size; c++) {
+              const cell = newGrid[r]?.[c];
+              if (!cell) continue;
+              if (r > 0 && newGrid[r - 1]?.[c]?.sides === cell.sides)
+                return true;
+              if (c > 0 && newGrid[r]?.[c - 1]?.sides === cell.sides)
+                return true;
+              if (r < cfg.size - 1 && newGrid[r + 1]?.[c]?.sides === cell.sides)
+                return true;
+              if (c < cfg.size - 1 && newGrid[r]?.[c + 1]?.sides === cell.sides)
+                return true;
+            }
+          }
+          return false;
+        };
 
-      return newGrid;
-    });
-  }, [snap.gameOver, snap.started, snap.gridSize, spawnTile]);
+        if (!hasEmpty && !canMerge()) {
+          formaState.gameOver = true;
+        }
+
+        setTimeout(() => {
+          canMove.current = true;
+        }, 80);
+
+        return newGrid;
+      });
+    },
+    [snap.gameOver, snap.started, snap.gridSize, spawnTile]
+  );
 
   // Keyboard handling
   useEffect(() => {
@@ -759,11 +863,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
   // Mode selection screen
   if (!snap.started) {
-    return (
-      <ModeSelection
-        onSelect={handleModeSelect}
-      />
-    );
+    return <ModeSelection onSelect={handleModeSelect} />;
   }
 
   return (
@@ -796,15 +896,21 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         <div className="absolute top-4 right-4 z-50">
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm">
             <div className="font-medium text-cyan-400">{config.name}</div>
-            <div className="text-xs text-white/50">{snap.gridSize}×{snap.gridSize} Grid</div>
-            <div className="text-xs text-white/40 mt-1">Merges: {snap.mergeCount}</div>
+            <div className="text-xs text-white/50">
+              {snap.gridSize}×{snap.gridSize} Grid
+            </div>
+            <div className="text-xs text-white/40 mt-1">
+              Merges: {snap.mergeCount}
+            </div>
           </div>
         </div>
 
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
           <div>WASD or Arrow Keys to merge</div>
-          <div className="text-xs mt-1 text-white/40">Red tiles decay - merge them fast!</div>
-          <button 
+          <div className="text-xs mt-1 text-white/40">
+            Red tiles decay - merge them fast!
+          </div>
+          <button
             onClick={() => formaState.backToMenu()}
             className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
           >
@@ -815,19 +921,31 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         {/* Legend */}
         <div className="absolute bottom-4 right-4 text-white/40 text-xs">
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[3] }} />
+            <div
+              className="w-3 h-3 rounded"
+              style={{ background: POLYGON_COLORS[3] }}
+            />
             <span>3 sides</span>
           </div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[4] }} />
+            <div
+              className="w-3 h-3 rounded"
+              style={{ background: POLYGON_COLORS[4] }}
+            />
             <span>4 sides</span>
           </div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[5] }} />
+            <div
+              className="w-3 h-3 rounded"
+              style={{ background: POLYGON_COLORS[5] }}
+            />
             <span>5 sides</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ background: POLYGON_COLORS[6] }} />
+            <div
+              className="w-3 h-3 rounded"
+              style={{ background: POLYGON_COLORS[6] }}
+            />
             <span>6+ sides</span>
           </div>
         </div>
@@ -837,10 +955,18 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
             <div className="text-center">
               <h1 className="text-5xl font-bold text-white mb-4">GAME OVER</h1>
               <p className="text-3xl text-white/80 mb-2">{snap.score}</p>
-              <p className="text-lg text-white/60 mb-1">Best: {snap.highScore}</p>
-              <p className="text-lg text-white/60 mb-1">Max Polygon: {snap.highestSides} sides</p>
-              <p className="text-lg text-white/60 mb-1">Mode: {config.name} ({snap.gridSize}×{snap.gridSize})</p>
-              <p className="text-lg text-white/60 mb-6">Total Merges: {snap.mergeCount}</p>
+              <p className="text-lg text-white/60 mb-1">
+                Best: {snap.highScore}
+              </p>
+              <p className="text-lg text-white/60 mb-1">
+                Max Polygon: {snap.highestSides} sides
+              </p>
+              <p className="text-lg text-white/60 mb-1">
+                Mode: {config.name} ({snap.gridSize}×{snap.gridSize})
+              </p>
+              <p className="text-lg text-white/60 mb-6">
+                Total Merges: {snap.mergeCount}
+              </p>
               <div className="flex gap-4 justify-center">
                 <button
                   onClick={() => {

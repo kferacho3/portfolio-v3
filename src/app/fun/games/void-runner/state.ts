@@ -1,12 +1,22 @@
 /**
  * VoidRunner Game State
- * 
+ *
  * Valtio proxy state for VoidRunner game.
  */
 import * as THREE from 'three';
 import { proxy } from 'valtio';
-import type { VoidRunnerGameState, MutationState, Difficulty, GameMode } from './types';
-import { COLORS, INITIAL_GAME_SPEED, GAME_SPEED_MULTIPLIER, DIFFICULTY_SETTINGS } from './constants';
+import type {
+  VoidRunnerGameState,
+  MutationState,
+  Difficulty,
+  GameMode,
+} from './types';
+import {
+  COLORS,
+  INITIAL_GAME_SPEED,
+  GAME_SPEED_MULTIPLIER,
+  DIFFICULTY_SETTINGS,
+} from './constants';
 
 // Fast mutation object for per-frame updates (not reactive)
 export const mutation: MutationState = {
@@ -21,16 +31,18 @@ export const mutation: MutationState = {
   globalColor: new THREE.Color(0xff2190),
 };
 
-export const voidRunnerState = proxy<VoidRunnerGameState & {
-  reset: () => void;
-  startGame: () => void;
-  endGame: () => void;
-  setDifficulty: (d: Difficulty) => void;
-  setMode: (m: GameMode) => void;
-  incrementLevel: () => void;
-  addNearMiss: () => void;
-  loadHighScore: () => void;
-}>({
+export const voidRunnerState = proxy<
+  VoidRunnerGameState & {
+    reset: () => void;
+    startGame: () => void;
+    endGame: () => void;
+    setDifficulty: (d: Difficulty) => void;
+    setMode: (m: GameMode) => void;
+    incrementLevel: () => void;
+    addNearMiss: () => void;
+    loadHighScore: () => void;
+  }
+>({
   phase: 'menu',
   score: 0,
   level: 1,
@@ -69,7 +81,8 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
     this.nearMissCount = 0;
     this.comboMultiplier = 1;
     mutation.gameOver = false;
-    mutation.desiredSpeed = INITIAL_GAME_SPEED * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
+    mutation.desiredSpeed =
+      INITIAL_GAME_SPEED * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
   },
 
   endGame() {
@@ -79,7 +92,9 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
       this.highScore = this.score;
       try {
         localStorage.setItem('voidrunner-highscore', String(this.score));
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
     mutation.gameOver = true;
     mutation.gameSpeed = 0;
@@ -96,7 +111,8 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
   incrementLevel() {
     this.level += 1;
     mutation.colorLevel = (mutation.colorLevel + 1) % COLORS.length;
-    mutation.desiredSpeed += GAME_SPEED_MULTIPLIER * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
+    mutation.desiredSpeed +=
+      GAME_SPEED_MULTIPLIER * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
   },
 
   addNearMiss() {
@@ -111,6 +127,8 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
     try {
       const saved = localStorage.getItem('voidrunner-highscore');
       if (saved) this.highScore = parseInt(saved, 10);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
   },
 });

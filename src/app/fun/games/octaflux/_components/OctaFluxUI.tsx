@@ -36,13 +36,17 @@ export function OctaFluxUI() {
   const snap = useSnapshot(octaFluxState);
 
   const riderDef = useMemo(
-    () => RIDER_SKINS.find((r) => r.id === snap.selectedRider) ?? RIDER_SKINS[0],
-    [snap.selectedRider],
+    () =>
+      RIDER_SKINS.find((r) => r.id === snap.selectedRider) ?? RIDER_SKINS[0],
+    [snap.selectedRider]
   );
 
   const unlockedRiders = snap.unlockedRiders;
   const riderIdx = Math.max(0, unlockedRiders.indexOf(snap.selectedRider));
-  const prevRider = unlockedRiders[(riderIdx - 1 + unlockedRiders.length) % unlockedRiders.length];
+  const prevRider =
+    unlockedRiders[
+      (riderIdx - 1 + unlockedRiders.length) % unlockedRiders.length
+    ];
   const nextRider = unlockedRiders[(riderIdx + 1) % unlockedRiders.length];
 
   return (
@@ -101,37 +105,85 @@ export function OctaFluxUI() {
       )}
 
       {snap.phase !== 'playing' && (
-        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+          }}
+        >
           <div style={panel}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-              <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: 0.6 }}>{OCTA_FLUX_TITLE}</div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                gap: 12,
+              }}
+            >
+              <div
+                style={{ fontSize: 26, fontWeight: 900, letterSpacing: 0.6 }}
+              >
+                {OCTA_FLUX_TITLE}
+              </div>
               <div style={{ fontSize: 13, opacity: 0.8 }}>Infinite run</div>
             </div>
 
-            <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: 14,
+                opacity: 0.9,
+                display: 'flex',
+                gap: 14,
+                flexWrap: 'wrap',
+              }}
+            >
               <div>
                 Best: <span style={{ fontWeight: 900 }}>{snap.best}</span>
               </div>
               <div>
-                Total Gems: <span style={{ fontWeight: 900 }}>{snap.totalGems}</span>
+                Total Gems:{' '}
+                <span style={{ fontWeight: 900 }}>{snap.totalGems}</span>
               </div>
               <div>
-                Riders: <span style={{ fontWeight: 900 }}>{unlockedRiders.length}</span>/{RIDER_SKINS.length}
+                Riders:{' '}
+                <span style={{ fontWeight: 900 }}>{unlockedRiders.length}</span>
+                /{RIDER_SKINS.length}
               </div>
             </div>
 
             {snap.phase === 'gameover' && (
-              <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.08)' }}>
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: '10px 12px',
+                  borderRadius: 12,
+                  background: 'rgba(255,255,255,0.08)',
+                }}
+              >
                 <div style={{ fontSize: 13, opacity: 0.9 }}>Run score</div>
-                <div style={{ fontSize: 34, fontWeight: 900, marginTop: 4 }}>{snap.score}</div>
+                <div style={{ fontSize: 34, fontWeight: 900, marginTop: 4 }}>
+                  {snap.score}
+                </div>
               </div>
             )}
 
             <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                }}
+              >
                 <div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>Rider</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 10 }}
+                  >
                     <span
                       style={{
                         width: 12,
@@ -141,14 +193,22 @@ export function OctaFluxUI() {
                         boxShadow: `0 0 10px ${riderDef.color}99`,
                       }}
                     />
-                    <span style={{ fontSize: 18, fontWeight: 900 }}>{riderDef.name}</span>
+                    <span style={{ fontSize: 18, fontWeight: 900 }}>
+                      {riderDef.name}
+                    </span>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button style={btn} onClick={() => octaFluxState.setRider(prevRider)}>
+                  <button
+                    style={btn}
+                    onClick={() => octaFluxState.setRider(prevRider)}
+                  >
                     ◀
                   </button>
-                  <button style={btn} onClick={() => octaFluxState.setRider(nextRider)}>
+                  <button
+                    style={btn}
+                    onClick={() => octaFluxState.setRider(nextRider)}
+                  >
                     ▶
                   </button>
                 </div>
@@ -160,7 +220,8 @@ export function OctaFluxUI() {
                     ...btn,
                     flex: 1,
                     minWidth: 140,
-                    background: 'linear-gradient(135deg, rgba(34,211,238,0.35), rgba(244,63,94,0.25))',
+                    background:
+                      'linear-gradient(135deg, rgba(34,211,238,0.35), rgba(244,63,94,0.25))',
                   }}
                   onClick={() => octaFluxState.start()}
                 >
@@ -183,7 +244,8 @@ export function OctaFluxUI() {
               <div style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.8 }}>
                 Rotate the tunnel to dodge bumps and holes.
                 <br />
-                <b>Drag</b> left/right or use <b>A/D</b> / <b>←/→</b>. Collect gems to unlock new riders.
+                <b>Drag</b> left/right or use <b>A/D</b> / <b>←/→</b>. Collect
+                gems to unlock new riders.
               </div>
             </div>
           </div>

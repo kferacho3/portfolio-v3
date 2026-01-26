@@ -1,6 +1,6 @@
 /**
  * Arcade Shell Type Definitions
- * 
+ *
  * Core types for the arcade shell UI state and actions.
  */
 
@@ -128,13 +128,13 @@ export interface ArcadeShellActions {
   launchGame: (gameId: GameId) => void;
   selectNextGame: () => void;
   selectPreviousGame: () => void;
-  
+
   // Audio
   toggleMusic: () => void;
   toggleSounds: () => void;
   setMusicOn: (on: boolean) => void;
   setSoundsOn: (on: boolean) => void;
-  
+
   // Game state
   togglePause: () => void;
   setPaused: (paused: boolean) => void;
@@ -142,12 +142,12 @@ export interface ArcadeShellActions {
   setShowGameRules: (show: boolean) => void;
   restartGame: () => void;
   setHealth: (health: number) => void;
-  
+
   // Mode switching
   setSkyBlitzMode: (mode: SkyBlitzMode) => void;
   setReactPongMode: (mode: ReactPongMode) => void;
   setShapeShifterMode: (mode: ShapeShifterMode) => void;
-  
+
   // Random game
   launchRandomGame: () => void;
 }

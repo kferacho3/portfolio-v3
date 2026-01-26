@@ -34,12 +34,7 @@ export interface Rotation4D {
 function rotateXY(v: Vec4, angle: number): Vec4 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return [
-    v[0] * c - v[1] * s,
-    v[0] * s + v[1] * c,
-    v[2],
-    v[3],
-  ];
+  return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2], v[3]];
 }
 
 /**
@@ -48,12 +43,7 @@ function rotateXY(v: Vec4, angle: number): Vec4 {
 function rotateXZ(v: Vec4, angle: number): Vec4 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return [
-    v[0] * c - v[2] * s,
-    v[1],
-    v[0] * s + v[2] * c,
-    v[3],
-  ];
+  return [v[0] * c - v[2] * s, v[1], v[0] * s + v[2] * c, v[3]];
 }
 
 /**
@@ -62,12 +52,7 @@ function rotateXZ(v: Vec4, angle: number): Vec4 {
 function rotateXW(v: Vec4, angle: number): Vec4 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return [
-    v[0] * c - v[3] * s,
-    v[1],
-    v[2],
-    v[0] * s + v[3] * c,
-  ];
+  return [v[0] * c - v[3] * s, v[1], v[2], v[0] * s + v[3] * c];
 }
 
 /**
@@ -76,12 +61,7 @@ function rotateXW(v: Vec4, angle: number): Vec4 {
 function rotateYZ(v: Vec4, angle: number): Vec4 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return [
-    v[0],
-    v[1] * c - v[2] * s,
-    v[1] * s + v[2] * c,
-    v[3],
-  ];
+  return [v[0], v[1] * c - v[2] * s, v[1] * s + v[2] * c, v[3]];
 }
 
 /**
@@ -90,12 +70,7 @@ function rotateYZ(v: Vec4, angle: number): Vec4 {
 function rotateYW(v: Vec4, angle: number): Vec4 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return [
-    v[0],
-    v[1] * c - v[3] * s,
-    v[2],
-    v[1] * s + v[3] * c,
-  ];
+  return [v[0], v[1] * c - v[3] * s, v[2], v[1] * s + v[3] * c];
 }
 
 /**
@@ -104,12 +79,7 @@ function rotateYW(v: Vec4, angle: number): Vec4 {
 function rotateZW(v: Vec4, angle: number): Vec4 {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
-  return [
-    v[0],
-    v[1],
-    v[2] * c - v[3] * s,
-    v[2] * s + v[3] * c,
-  ];
+  return [v[0], v[1], v[2] * c - v[3] * s, v[2] * s + v[3] * c];
 }
 
 /**
@@ -134,11 +104,7 @@ export function rotate4D(v: Vec4, rotation: Rotation4D): Vec4 {
 export function project4Dto3D(v: Vec4, distance: number = 2): THREE.Vector3 {
   // Perspective projection from 4D to 3D
   const w = 1 / (distance - v[3]);
-  return new THREE.Vector3(
-    v[0] * w,
-    v[1] * w,
-    v[2] * w
-  );
+  return new THREE.Vector3(v[0] * w, v[1] * w, v[2] * w);
 }
 
 /**
@@ -157,22 +123,20 @@ export function project4Dto3DStereo(v: Vec4): THREE.Vector3 {
     // Point at infinity, clamp it
     return new THREE.Vector3(v[0] * 10, v[1] * 10, v[2] * 10);
   }
-  return new THREE.Vector3(
-    v[0] / denom,
-    v[1] / denom,
-    v[2] / denom
-  );
+  return new THREE.Vector3(v[0] / denom, v[1] / denom, v[2] / denom);
 }
 
 /**
  * Create convex hull geometry from 3D points
  */
-export function convexHullFromPoints(points: THREE.Vector3[]): THREE.BufferGeometry {
+export function convexHullFromPoints(
+  points: THREE.Vector3[]
+): THREE.BufferGeometry {
   if (points.length < 4) {
     console.warn('[projection4D] Not enough points for convex hull');
     return new THREE.SphereGeometry(1, 16, 16);
   }
-  
+
   try {
     return new ConvexGeometry(points);
   } catch {
@@ -190,7 +154,7 @@ export function convexHullFromPoints(points: THREE.Vector3[]): THREE.BufferGeome
  */
 export function getTesseractVertices(): Vec4[] {
   const vertices: Vec4[] = [];
-  
+
   // All combinations of ±1 in 4 dimensions
   for (let x = -1; x <= 1; x += 2) {
     for (let y = -1; y <= 1; y += 2) {
@@ -201,7 +165,7 @@ export function getTesseractVertices(): Vec4[] {
       }
     }
   }
-  
+
   return vertices;
 }
 
@@ -225,18 +189,18 @@ export function tesseractHullGeometry(
     zw: Math.PI / 8,
     ...rotation,
   };
-  
+
   const vertices4D = getTesseractVertices();
-  
-  const points3D = vertices4D.map(v => {
+
+  const points3D = vertices4D.map((v) => {
     const rotated = rotate4D(v, fullRotation);
     return project4Dto3D(rotated, projectionDistance).multiplyScalar(scale);
   });
-  
+
   const geometry = convexHullFromPoints(points3D);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -257,16 +221,16 @@ export function tesseractEdgesGeometry(
     zw: Math.PI / 8,
     ...rotation,
   };
-  
+
   const vertices4D = getTesseractVertices();
-  const points3D = vertices4D.map(v => {
+  const points3D = vertices4D.map((v) => {
     const rotated = rotate4D(v, fullRotation);
     return project4Dto3D(rotated, projectionDistance).multiplyScalar(scale);
   });
-  
+
   // Find edges: vertices that differ by exactly one coordinate
   const positions: number[] = [];
-  
+
   for (let i = 0; i < vertices4D.length; i++) {
     for (let j = i + 1; j < vertices4D.length; j++) {
       let diffCount = 0;
@@ -275,16 +239,23 @@ export function tesseractEdgesGeometry(
       }
       if (diffCount === 1) {
         positions.push(
-          points3D[i].x, points3D[i].y, points3D[i].z,
-          points3D[j].x, points3D[j].y, points3D[j].z
+          points3D[i].x,
+          points3D[i].y,
+          points3D[i].z,
+          points3D[j].x,
+          points3D[j].y,
+          points3D[j].z
         );
       }
     }
   }
-  
+
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  
+  geometry.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(positions, 3)
+  );
+
   return geometry;
 }
 
@@ -327,18 +298,18 @@ export function cell16HullGeometry(
     zw: Math.PI / 4,
     ...rotation,
   };
-  
+
   const vertices4D = get16CellVertices();
-  
-  const points3D = vertices4D.map(v => {
+
+  const points3D = vertices4D.map((v) => {
     const rotated = rotate4D(v, fullRotation);
     return project4Dto3D(rotated, projectionDistance).multiplyScalar(scale);
   });
-  
+
   const geometry = convexHullFromPoints(points3D);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -352,23 +323,28 @@ export function cell16HullGeometry(
  */
 export function get24CellVertices(): Vec4[] {
   const vertices: Vec4[] = [];
-  
+
   // 8 vertices from 16-cell (axis-aligned)
   const axisVerts = get16CellVertices();
   vertices.push(...axisVerts);
-  
+
   // 16 vertices with ±1/2 in all coordinates (demitesseract)
   const half = 1;
   for (let x = -1; x <= 1; x += 2) {
     for (let y = -1; y <= 1; y += 2) {
       for (let z = -1; z <= 1; z += 2) {
         for (let w = -1; w <= 1; w += 2) {
-          vertices.push([x * half / Math.sqrt(2), y * half / Math.sqrt(2), z * half / Math.sqrt(2), w * half / Math.sqrt(2)]);
+          vertices.push([
+            (x * half) / Math.sqrt(2),
+            (y * half) / Math.sqrt(2),
+            (z * half) / Math.sqrt(2),
+            (w * half) / Math.sqrt(2),
+          ]);
         }
       }
     }
   }
-  
+
   return vertices;
 }
 
@@ -389,18 +365,18 @@ export function cell24HullGeometry(
     zw: Math.PI / 5,
     ...rotation,
   };
-  
+
   const vertices4D = get24CellVertices();
-  
-  const points3D = vertices4D.map(v => {
+
+  const points3D = vertices4D.map((v) => {
     const rotated = rotate4D(v, fullRotation);
     return project4Dto3D(rotated, projectionDistance).multiplyScalar(scale);
   });
-  
+
   const geometry = convexHullFromPoints(points3D);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   return geometry;
 }
 
@@ -416,7 +392,7 @@ export function cell24HullGeometry(
 export function get600CellVertices(): Vec4[] {
   const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
   const vertices: Vec4[] = [];
-  
+
   // 8 vertices: axis-aligned (16-cell)
   const s = [1, 0, 0, 0];
   for (let i = 0; i < 4; i++) {
@@ -426,7 +402,7 @@ export function get600CellVertices(): Vec4[] {
     v2[i] = -s[0];
     vertices.push(v1, v2);
   }
-  
+
   // 16 vertices: tesseract vertices scaled
   const h = 0.5;
   for (let x = -1; x <= 1; x += 2) {
@@ -438,15 +414,15 @@ export function get600CellVertices(): Vec4[] {
       }
     }
   }
-  
+
   // 96 vertices: even permutations of (±φ, ±1, ±1/φ, 0) / 2
   const a = phi / 2;
   const b = 0.5;
   const c = 1 / (2 * phi);
-  
+
   const baseCoords = [a, b, c, 0];
   const permutations = getEvenPermutations(baseCoords);
-  
+
   for (const perm of permutations) {
     // All sign combinations
     for (let sx = -1; sx <= 1; sx += 2) {
@@ -470,7 +446,7 @@ export function get600CellVertices(): Vec4[] {
       }
     }
   }
-  
+
   return vertices;
 }
 
@@ -480,7 +456,7 @@ export function get600CellVertices(): Vec4[] {
 function getEvenPermutations(coords: number[]): number[][] {
   const perms: number[][] = [];
   const n = coords.length;
-  
+
   // Generate all permutations and filter for even ones
   function permute(arr: number[], start: number, parity: boolean): void {
     if (start === n - 1) {
@@ -493,7 +469,7 @@ function getEvenPermutations(coords: number[]): number[][] {
       [arr[start], arr[i]] = [arr[i], arr[start]];
     }
   }
-  
+
   permute([...coords], 0, true);
   return perms;
 }
@@ -501,7 +477,11 @@ function getEvenPermutations(coords: number[]): number[][] {
 /**
  * Check if a vertex is already in the list (within tolerance)
  */
-function isDuplicateVertex(vertices: Vec4[], v: Vec4, tol: number = 0.001): boolean {
+function isDuplicateVertex(
+  vertices: Vec4[],
+  v: Vec4,
+  tol: number = 0.001
+): boolean {
   for (const existing of vertices) {
     let same = true;
     for (let i = 0; i < 4; i++) {
@@ -533,14 +513,14 @@ export function cell600HullGeometry(
     zw: Math.PI / 5,
     ...rotation,
   };
-  
+
   const vertices4D = get600CellVertices();
-  
-  const points3D = vertices4D.map(v => {
+
+  const points3D = vertices4D.map((v) => {
     const rotated = rotate4D(v, fullRotation);
     return project4Dto3D(rotated, projectionDistance).multiplyScalar(scale);
   });
-  
+
   // Filter out duplicates after projection
   const uniquePoints: THREE.Vector3[] = [];
   for (const p of points3D) {
@@ -553,15 +533,15 @@ export function cell600HullGeometry(
     }
     if (!isDupe) uniquePoints.push(p);
   }
-  
+
   const geometry = convexHullFromPoints(uniquePoints);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
-  
+
   // Mark as extreme complexity
   geometry.userData.complexity = 'extreme';
   geometry.userData.lowNoise = true;
-  
+
   return geometry;
 }
 
@@ -585,9 +565,9 @@ export function createAnimatedRotation(
     yw: 0.25,
     zw: 0.22,
   };
-  
+
   const s = { ...defaultSpeeds, ...speeds };
-  
+
   return {
     xy: time * s.xy,
     xz: time * s.xz,
@@ -611,18 +591,18 @@ export function updateProjectedGeometry(
 ): void {
   const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute;
   if (!posAttr) return;
-  
+
   const positions = posAttr.array;
-  
+
   for (let i = 0; i < vertices4D.length && i * 3 < positions.length; i++) {
     const rotated = rotate4D(vertices4D[i], rotation);
     const projected = project4Dto3D(rotated, projectionDistance);
-    
+
     positions[i * 3] = projected.x * scale;
     positions[i * 3 + 1] = projected.y * scale;
     positions[i * 3 + 2] = projected.z * scale;
   }
-  
+
   posAttr.needsUpdate = true;
   geometry.computeBoundingSphere();
 }

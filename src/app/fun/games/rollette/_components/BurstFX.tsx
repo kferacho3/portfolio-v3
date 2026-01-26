@@ -23,7 +23,12 @@ export const BurstFX: React.FC<{ burst: Burst }> = ({ burst }) => {
       const a = (i / burst.count) * Math.PI * 2 + Math.random() * 0.6;
       const r = 0.35 + Math.random() * 0.75;
       const y = 0.15 + Math.random() * 0.65;
-      return { x: Math.cos(a) * r, y, z: Math.sin(a) * r, s: 0.18 + Math.random() * 0.22 };
+      return {
+        x: Math.cos(a) * r,
+        y,
+        z: Math.sin(a) * r,
+        s: 0.18 + Math.random() * 0.22,
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [burst.id]);
@@ -61,7 +66,12 @@ export const BurstFX: React.FC<{ burst: Burst }> = ({ burst }) => {
   return (
     <group ref={groupRef} position={burst.pos as unknown as THREE.Vector3Tuple}>
       {parts.map((p, i) => (
-        <mesh key={`${burst.id}-${i}`} position={[p.x, p.y, p.z]} scale={[p.s, p.s, p.s]} material={material}>
+        <mesh
+          key={`${burst.id}-${i}`}
+          position={[p.x, p.y, p.z]}
+          scale={[p.s, p.s, p.s]}
+          material={material}
+        >
           {shape === 'box' && <boxGeometry args={[1, 1, 1]} />}
           {shape === 'tetra' && <tetrahedronGeometry args={[0.9, 0]} />}
           {shape === 'spark' && <sphereGeometry args={[0.6, 8, 8]} />}
@@ -70,4 +80,3 @@ export const BurstFX: React.FC<{ burst: Burst }> = ({ burst }) => {
     </group>
   );
 };
-

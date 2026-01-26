@@ -1,6 +1,6 @@
 /**
  * useGameLifecycle Hook
- * 
+ *
  * Domain hook for managing game lifecycle events.
  * Handles mount/unmount, pause/resume, and restart logic.
  */

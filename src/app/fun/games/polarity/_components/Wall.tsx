@@ -3,7 +3,10 @@
 import { useBox } from '@react-three/cannon';
 import React from 'react';
 
-export const Wall: React.FC<{ position: [number, number, number]; size: [number, number, number] }> = ({ position, size }) => {
+export const Wall: React.FC<{
+  position: [number, number, number];
+  size: [number, number, number];
+}> = ({ position, size }) => {
   const [ref] = useBox(() => ({
     type: 'Static',
     position,

@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { Dir, TileKind, Tile } from './types';
 import { GRID, TILE, HALF, START_TILE, MIN_GOAL_DIST } from './constants';
 
-export const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+export const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 export const dirVec = (d: Dir) => {
   switch (d) {
@@ -29,7 +30,8 @@ export const posToTile = (p: THREE.Vector3) => {
   return { ix, iz };
 };
 
-export const inBounds = (ix: number, iz: number) => ix >= 0 && ix < GRID && iz >= 0 && iz < GRID;
+export const inBounds = (ix: number, iz: number) =>
+  ix >= 0 && ix < GRID && iz >= 0 && iz < GRID;
 
 export function randomDir(): Dir {
   return Math.floor(Math.random() * 4) as Dir;
@@ -49,10 +51,20 @@ export function makeInitialBoard(): Tile[] {
   const tiles: Tile[] = [];
   for (let i = 0; i < GRID * GRID; i++) {
     const kind = Math.random() < 0.85 ? 'belt' : randomTileKind();
-    tiles.push({ kind, dir: randomDir(), phase: Math.random() * 10, override: 0 });
+    tiles.push({
+      kind,
+      dir: randomDir(),
+      phase: Math.random() * 10,
+      override: 0,
+    });
   }
   const startIdx = START_TILE.iz * GRID + START_TILE.ix;
-  tiles[startIdx] = { ...tiles[startIdx], kind: 'belt', dir: randomDir(), override: 0 };
+  tiles[startIdx] = {
+    ...tiles[startIdx],
+    kind: 'belt',
+    dir: randomDir(),
+    override: 0,
+  };
   return tiles;
 }
 
@@ -62,14 +74,16 @@ export function pickGoalTile(tiles: Tile[]): { ix: number; iz: number } {
     const iz = Math.floor(Math.random() * GRID);
     const t = tiles[iz * GRID + ix];
     if (t.kind === 'hole' || t.kind === 'crusher') continue;
-    if (Math.hypot(ix - START_TILE.ix, iz - START_TILE.iz) < MIN_GOAL_DIST) continue;
+    if (Math.hypot(ix - START_TILE.ix, iz - START_TILE.iz) < MIN_GOAL_DIST)
+      continue;
     return { ix, iz };
   }
   for (let iz = 0; iz < GRID; iz++) {
     for (let ix = 0; ix < GRID; ix++) {
       const t = tiles[iz * GRID + ix];
       if (t.kind === 'hole' || t.kind === 'crusher') continue;
-      if (Math.hypot(ix - START_TILE.ix, iz - START_TILE.iz) < MIN_GOAL_DIST) continue;
+      if (Math.hypot(ix - START_TILE.ix, iz - START_TILE.iz) < MIN_GOAL_DIST)
+        continue;
       return { ix, iz };
     }
   }

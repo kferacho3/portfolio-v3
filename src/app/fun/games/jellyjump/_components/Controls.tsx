@@ -19,7 +19,10 @@ export default function Controls() {
 
       if (code === 'Space' || key === ' ') {
         // Only start game if explicitly in menu/gameover phase
-        if (jellyJumpState.phase === 'menu' || jellyJumpState.phase === 'gameover') {
+        if (
+          jellyJumpState.phase === 'menu' ||
+          jellyJumpState.phase === 'gameover'
+        ) {
           jellyJumpState.startGame();
         } else if (jellyJumpState.phase === 'playing') {
           // When playing, space should jump, not reset
@@ -55,13 +58,21 @@ export default function Controls() {
     const handlePointerDown = (e: PointerEvent) => {
       // Only handle clicks if not clicking on UI elements
       const target = e.target as HTMLElement;
-      if (target && (target.closest('button') || target.closest('[role="button"]') || target.closest('a'))) {
+      if (
+        target &&
+        (target.closest('button') ||
+          target.closest('[role="button"]') ||
+          target.closest('a'))
+      ) {
         return; // Let UI elements handle their own clicks
       }
 
       // Allow click/tap to start/jump. If the user clicks an explicit UI element,
       // it will still work because the game loop is simple and jump is idempotent.
-      if (jellyJumpState.phase === 'menu' || jellyJumpState.phase === 'gameover') {
+      if (
+        jellyJumpState.phase === 'menu' ||
+        jellyJumpState.phase === 'gameover'
+      ) {
         jellyJumpState.startGame();
       } else if (jellyJumpState.phase === 'playing') {
         jellyJumpState.controls.jump = true;
@@ -75,7 +86,9 @@ export default function Controls() {
 
     window.addEventListener('keydown', handleKeyDown, { passive: false });
     window.addEventListener('keyup', handleKeyUp, { passive: false });
-    window.addEventListener('pointerdown', handlePointerDown, { passive: false });
+    window.addEventListener('pointerdown', handlePointerDown, {
+      passive: false,
+    });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);

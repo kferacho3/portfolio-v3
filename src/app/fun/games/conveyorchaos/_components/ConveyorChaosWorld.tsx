@@ -6,13 +6,18 @@ import * as THREE from 'three';
 import { useGameUIState } from '../../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../../hooks/useInput';
 import { conveyorChaosState } from '../state';
+import { GRID, TILE, HALF, START_TILE } from '../constants';
 import {
-  GRID,
-  TILE,
-  HALF,
-  START_TILE,
-} from '../constants';
-import { clamp, dirVec, tileCenter, posToTile, inBounds, randomDir, randomTileKind, pickGoalTile, makeInitialBoard } from '../utils';
+  clamp,
+  dirVec,
+  tileCenter,
+  posToTile,
+  inBounds,
+  randomDir,
+  randomTileKind,
+  pickGoalTile,
+  makeInitialBoard,
+} from '../utils';
 import type { Tile, TileKind, Dir } from '../types';
 import { TileMesh } from './TileMesh';
 import { FactoryFrame } from './FactoryFrame';
@@ -24,11 +29,21 @@ export const ConveyorChaosWorld: React.FC = () => {
 
   const inputRef = useInputRef({
     enabled: !paused,
-    preventDefault: [' ', 'Space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowup',
+      'arrowdown',
+      'arrowleft',
+      'arrowright',
+    ],
   });
 
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
-  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), []);
+  const plane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    []
+  );
   const tmp = useMemo(() => new THREE.Vector3(), []);
 
   const playerMesh = useRef<THREE.Mesh | null>(null);
@@ -46,7 +61,9 @@ export const ConveyorChaosWorld: React.FC = () => {
   const tilesRef = useRef<Tile[]>(tiles);
   useEffect(() => void (tilesRef.current = tiles), [tiles]);
 
-  const [goal, setGoal] = useState<{ ix: number; iz: number }>(() => pickGoalTile(tilesRef.current));
+  const [goal, setGoal] = useState<{ ix: number; iz: number }>(() =>
+    pickGoalTile(tilesRef.current)
+  );
   const goalRef = useRef(goal);
   useEffect(() => void (goalRef.current = goal), [goal]);
 
@@ -71,7 +88,7 @@ export const ConveyorChaosWorld: React.FC = () => {
         const next = [...prev];
         const t = next[idx];
         const rotateSteps = e.shiftKey ? 2 : e.button === 2 ? -1 : 1;
-        next[idx] = { ...t, dir: (((t.dir + rotateSteps + 4) % 4) as Dir) };
+        next[idx] = { ...t, dir: ((t.dir + rotateSteps + 4) % 4) as Dir };
         return next;
       });
     };
@@ -89,7 +106,10 @@ export const ConveyorChaosWorld: React.FC = () => {
     velRef.current.set(0, 0, 0);
   };
 
-  const mutateBoardOnLevelUp = (playerPos: THREE.Vector3, goalPos: { ix: number; iz: number }) => {
+  const mutateBoardOnLevelUp = (
+    playerPos: THREE.Vector3,
+    goalPos: { ix: number; iz: number }
+  ) => {
     setTiles((prev) => {
       const next = [...prev];
       const flips = clamp(2 + Math.floor(conveyorChaosState.level / 3), 2, 8);
@@ -138,7 +158,10 @@ export const ConveyorChaosWorld: React.FC = () => {
   };
 
   useFrame((_, dt) => {
-    camera.position.lerp(new THREE.Vector3(posRef.current.x, 22, posRef.current.z + 18), 0.08);
+    camera.position.lerp(
+      new THREE.Vector3(posRef.current.x, 22, posRef.current.z + 18),
+      0.08
+    );
     camera.lookAt(posRef.current.x, 0, posRef.current.z);
 
     if (paused) {
@@ -161,7 +184,8 @@ export const ConveyorChaosWorld: React.FC = () => {
       goalBeaconRef.current.position.set(center.x, 2.4, center.z);
       const pulse = 0.45 + Math.sin(conveyorChaosState.elapsed * 2.4) * 0.15;
       if (goalBeaconMatRef.current) {
-        goalBeaconMatRef.current.emissiveIntensity = pulse + (conveyorChaosState.event === 'Overdrive' ? 0.2 : 0);
+        goalBeaconMatRef.current.emissiveIntensity =
+          pulse + (conveyorChaosState.event === 'Overdrive' ? 0.2 : 0);
         goalBeaconMatRef.current.opacity = 0.25 + pulse * 0.2;
       }
       const scale = 1 + pulse * 0.35;
@@ -170,7 +194,10 @@ export const ConveyorChaosWorld: React.FC = () => {
 
     if (reverseBurstRef.current) {
       if (reverseBurstTimeRef.current > 0) {
-        reverseBurstTimeRef.current = Math.max(0, reverseBurstTimeRef.current - step);
+        reverseBurstTimeRef.current = Math.max(
+          0,
+          reverseBurstTimeRef.current - step
+        );
         const t = 1 - reverseBurstTimeRef.current / 0.45;
         const scale = 1 + t * 6.5;
         reverseBurstRef.current.position.copy(reverseBurstPosRef.current);
@@ -192,7 +219,11 @@ export const ConveyorChaosWorld: React.FC = () => {
       const didReverse = conveyorChaosState.tryReverse();
       if (didReverse) {
         reverseBurstTimeRef.current = 0.45;
-        reverseBurstPosRef.current.set(posRef.current.x, 0.12, posRef.current.z);
+        reverseBurstPosRef.current.set(
+          posRef.current.x,
+          0.12,
+          posRef.current.z
+        );
       }
     }
 
@@ -204,7 +235,7 @@ export const ConveyorChaosWorld: React.FC = () => {
         t.phase += step;
         if (t.phase >= 2.2) {
           t.phase = 0;
-          t.dir = (((t.dir + 1) % 4) as Dir);
+          t.dir = ((t.dir + 1) % 4) as Dir;
         }
         continue;
       }
@@ -228,7 +259,8 @@ export const ConveyorChaosWorld: React.FC = () => {
 
     const tilePos = posToTile(posRef.current);
     let tile: Tile | null = null;
-    if (inBounds(tilePos.ix, tilePos.iz)) tile = tilesRef.current[tilePos.iz * GRID + tilePos.ix];
+    if (inBounds(tilePos.ix, tilePos.iz))
+      tile = tilesRef.current[tilePos.iz * GRID + tilePos.ix];
 
     if (justPressed.has('e') && tile && conveyorChaosState.tryOverride()) {
       const idx = tilePos.iz * GRID + tilePos.ix;
@@ -240,7 +272,8 @@ export const ConveyorChaosWorld: React.FC = () => {
       });
     }
 
-    const effectiveKind: TileKind | null = tile && tile.override > 0 ? 'belt' : tile?.kind ?? null;
+    const effectiveKind: TileKind | null =
+      tile && tile.override > 0 ? 'belt' : (tile?.kind ?? null);
 
     let beltStrength = 11;
     if (effectiveKind === 'booster') beltStrength = 18;
@@ -257,12 +290,20 @@ export const ConveyorChaosWorld: React.FC = () => {
       if (conveyorChaosState.reverseTime > 0) beltForce.multiplyScalar(-1);
     }
 
-    const nx = (keys.has('d') || keys.has('arrowright') ? 1 : 0) - (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
-    const nz = (keys.has('s') || keys.has('arrowdown') ? 1 : 0) - (keys.has('w') || keys.has('arrowup') ? 1 : 0);
+    const nx =
+      (keys.has('d') || keys.has('arrowright') ? 1 : 0) -
+      (keys.has('a') || keys.has('arrowleft') ? 1 : 0);
+    const nz =
+      (keys.has('s') || keys.has('arrowdown') ? 1 : 0) -
+      (keys.has('w') || keys.has('arrowup') ? 1 : 0);
     const nudge = new THREE.Vector3(nx, 0, nz);
     if (nudge.lengthSq() > 0.0001) nudge.normalize().multiplyScalar(8);
 
-    if (effectiveKind === 'booster' && nudge.lengthSq() < 0.0001 && conveyorChaosState.reverseTime <= 0) {
+    if (
+      effectiveKind === 'booster' &&
+      nudge.lengthSq() < 0.0001 &&
+      conveyorChaosState.reverseTime <= 0
+    ) {
       boosterScoreRef.current += step * 6;
       if (boosterScoreRef.current >= 1) {
         const pts = Math.floor(boosterScoreRef.current);
@@ -317,7 +358,10 @@ export const ConveyorChaosWorld: React.FC = () => {
 
     const g = goalRef.current;
     const gCenter = tileCenter(g.ix, g.iz);
-    const dGoal = Math.hypot(posRef.current.x - gCenter.x, posRef.current.z - gCenter.z);
+    const dGoal = Math.hypot(
+      posRef.current.x - gCenter.x,
+      posRef.current.z - gCenter.z
+    );
     if (dGoal < 1.25) {
       conveyorChaosState.onDelivery();
       mutateBoardOnLevelUp(posRef.current, goalRef.current);
@@ -371,7 +415,11 @@ export const ConveyorChaosWorld: React.FC = () => {
         />
       </mesh>
 
-      <mesh ref={reverseBurstRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+      <mesh
+        ref={reverseBurstRef}
+        rotation={[-Math.PI / 2, 0, 0]}
+        visible={false}
+      >
         <ringGeometry args={[0.8, 1.5, 40]} />
         <meshStandardMaterial
           ref={reverseBurstMatRef}
@@ -385,7 +433,11 @@ export const ConveyorChaosWorld: React.FC = () => {
 
       <mesh ref={playerMesh} castShadow>
         <sphereGeometry args={[1.1, 28, 28]} />
-        <meshStandardMaterial color="#a78bfa" emissive="#7c3aed" emissiveIntensity={0.14} />
+        <meshStandardMaterial
+          color="#a78bfa"
+          emissive="#7c3aed"
+          emissiveIntensity={0.14}
+        />
       </mesh>
     </>
   );

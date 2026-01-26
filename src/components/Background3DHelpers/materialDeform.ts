@@ -297,7 +297,7 @@ export interface DeformOptions {
 /**
  * Apply simplex deformation to a material via onBeforeCompile
  * Works with MeshStandardMaterial, MeshPhysicalMaterial, MeshBasicMaterial
- * 
+ *
  * @param material - The material to patch
  * @param options - Optional configuration overrides
  */
@@ -518,10 +518,7 @@ export function updateDeformUniforms(
 /**
  * Set noise parameters
  */
-export function setNoiseParams(
-  scale: number = 1.2,
-  warp: number = 0.35
-): void {
+export function setNoiseParams(scale: number = 1.2, warp: number = 0.35): void {
   DEFORM_UNIFORMS.uNoiseScale.value = scale;
   DEFORM_UNIFORMS.uWarp.value = warp;
 }
@@ -529,9 +526,7 @@ export function setNoiseParams(
 /**
  * Set pointer interaction parameters
  */
-export function setPointerParams(
-  radius: number = 1.6
-): void {
+export function setPointerParams(radius: number = 1.6): void {
   DEFORM_UNIFORMS.uPointerRadius.value = radius;
 }
 

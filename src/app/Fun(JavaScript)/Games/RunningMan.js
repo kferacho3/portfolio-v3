@@ -1,7 +1,13 @@
 import { Physics, useBox, usePlane } from '@react-three/cannon';
 import { Sky, Stars } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Bloom, DepthOfField, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import {
+  Bloom,
+  DepthOfField,
+  EffectComposer,
+  Noise,
+  Vignette,
+} from '@react-three/postprocessing';
 import React, { forwardRef, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
@@ -15,7 +21,9 @@ const REPOSITION_THRESHOLD = -20; // Z position threshold for repositioning obst
 // Generate initial positions for obstacles
 const generateInitialObstacles = () => {
   return Array.from({ length: NUM_OBSTACLES }, (_, index) => ({
-    position: generateRandomPosition(-index * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES)),
+    position: generateRandomPosition(
+      -index * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES)
+    ),
     scale: Math.random() < 0.5 ? 0.5 : 1, // Randomly scale some obstacles to half height
   }));
 };
@@ -23,7 +31,9 @@ const generateInitialObstacles = () => {
 const generateNewObstacles = (playerZ) => {
   // Generate a new set of obstacles based on the player's current Z position
   return Array.from({ length: NUM_OBSTACLES }, (_, index) => ({
-    position: generateRandomPosition(playerZ - (-index * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES))),
+    position: generateRandomPosition(
+      playerZ - -index * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES)
+    ),
     scale: Math.random() < 0.5 ? 0.5 : 1, // Randomly scale some obstacles to half height
   }));
 };
@@ -37,10 +47,13 @@ const generateRandomPosition = (zOffset) => [
 
 // Obstacle component
 const Obstacle = forwardRef(({ position, scale }, ref) => {
-  const [boxRef] = useBox(() => ({
-    type: 'Static',
-    position,
-  }), ref);
+  const [boxRef] = useBox(
+    () => ({
+      type: 'Static',
+      position,
+    }),
+    ref
+  );
 
   return (
     <mesh ref={boxRef} scale={[1, scale, 1]}>
@@ -69,7 +82,11 @@ const Obstacles = ({ playerRef }) => {
   return (
     <>
       {obstacles.map((obstacle, index) => (
-        <Obstacle key={index} position={obstacle.position} scale={obstacle.scale} />
+        <Obstacle
+          key={index}
+          position={obstacle.position}
+          scale={obstacle.scale}
+        />
       ))}
     </>
   );
@@ -140,12 +157,26 @@ const Player = ({ setScore, playerRef }) => {
     setScore((prevScore) => prevScore + delta);
   });
 
-  return <EndermanMeBit ref={playerRef} scale={[0.5, 0.5, 0.5]} position={[0, 0, 0]} />;
+  return (
+    <EndermanMeBit
+      ref={playerRef}
+      scale={[0.5, 0.5, 0.5]}
+      position={[0, 0, 0]}
+    />
+  );
 };
 
 const ScoreDisplay = ({ score }) => {
   return (
-    <div style={{ position: 'absolute', bottom: 10, right: 10, fontSize: 36, color: 'white' }}>
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 10,
+        right: 10,
+        fontSize: 36,
+        color: 'white',
+      }}
+    >
       Score: {Math.floor(score)}
     </div>
   );
@@ -183,8 +214,17 @@ const RunningMan = () => {
           <Obstacles playerRef={playerRef} />
         </Physics>
         <EffectComposer>
-          <DepthOfField focusDistance={0} focalLength={0.02} bokehScale={2} height={480} />
-          <Bloom luminanceThreshold={0.6} luminanceSmoothing={0.9} intensity={0.8} />
+          <DepthOfField
+            focusDistance={0}
+            focalLength={0.02}
+            bokehScale={2}
+            height={480}
+          />
+          <Bloom
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.9}
+            intensity={0.8}
+          />
           <Noise opacity={0.02} />
           <Vignette eskil={false} offset={0.1} darkness={1.1} />
         </EffectComposer>

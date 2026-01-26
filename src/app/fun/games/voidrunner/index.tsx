@@ -35,7 +35,11 @@ const VoidRunner: React.FC<VoidRunnerProps> = ({ soundsOn = true }) => {
   return (
     <>
       <ambientLight intensity={0.2} />
-      <directionalLight position={[0, 50, -100]} intensity={0.8} color="#ff2190" />
+      <directionalLight
+        position={[0, 50, -100]}
+        intensity={0.8}
+        color="#ff2190"
+      />
       <pointLight position={[0, 30, 0]} intensity={0.5} color="#00ffff" />
 
       <CameraSetup phase={snap.phase} />

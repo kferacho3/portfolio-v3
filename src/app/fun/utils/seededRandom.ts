@@ -1,6 +1,6 @@
 /**
  * Seeded Random Number Generator
- * 
+ *
  * Provides deterministic random number generation for gameplay-critical spawning.
  * Uses the mulberry32 algorithm for fast, high-quality pseudorandom numbers.
  */
@@ -28,7 +28,7 @@ export function stringToSeed(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
     const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32bit integer
   }
   return Math.abs(hash);
@@ -48,7 +48,7 @@ export function generateSeed(): number {
 
 /**
  * SeededRandom class for game usage
- * 
+ *
  * Provides a convenient API for seeded random number generation
  * with methods matching common game use cases.
  */
@@ -119,12 +119,12 @@ export class SeededRandom {
   weighted<T>(items: { item: T; weight: number }[]): T {
     const totalWeight = items.reduce((sum, { weight }) => sum + weight, 0);
     let r = this.rng() * totalWeight;
-    
+
     for (const { item, weight } of items) {
       r -= weight;
       if (r <= 0) return item;
     }
-    
+
     return items[items.length - 1].item;
   }
 
@@ -227,7 +227,9 @@ export class SeededRandom {
    * Create a child RNG with a derived seed (useful for subsystems)
    */
   child(offset = 0): SeededRandom {
-    return new SeededRandom(this._seed + offset + Math.floor(this.rng() * 1000000));
+    return new SeededRandom(
+      this._seed + offset + Math.floor(this.rng() * 1000000)
+    );
   }
 }
 

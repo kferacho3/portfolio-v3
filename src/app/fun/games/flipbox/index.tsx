@@ -3,10 +3,20 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Html, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import {
+  Bloom,
+  ChromaticAberration,
+  EffectComposer,
+  Noise,
+  Vignette,
+} from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
+import {
+  ArcadeHudCard,
+  ArcadeHudPill,
+  ArcadeHudShell,
+} from '../../components/shell/ArcadeHudPanel';
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { flipBoxState, type FlipBoxEvent } from './state';
@@ -19,7 +29,8 @@ const CORE_R = 1.7;
 const MAX_HAZARDS = 22;
 const BEST_SCORE_KEY = 'flipbox-best-score';
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
 type AimDir = 'left' | 'right' | 'forward' | 'back' | 'up' | 'down';
 
@@ -88,13 +99,18 @@ function spawnCoreCluster(base: THREE.Vector3): Core[] {
     if (Math.abs(base.x) === ax) p.x = base.x;
     if (Math.abs(base.y) === ax) p.y = base.y;
     if (Math.abs(base.z) === ax) p.z = base.z;
-    cores.push({ id: `c-${Math.random().toString(36).slice(2, 8)}`, pos: p, value: i === 0 ? 1 : 0 });
+    cores.push({
+      id: `c-${Math.random().toString(36).slice(2, 8)}`,
+      pos: p,
+      value: i === 0 ? 1 : 0,
+    });
   }
   return cores;
 }
 
 function spawnHazardAway(from: THREE.Vector3, existing: Hazard[]): Hazard {
-  const kind: HazardKind = Math.random() < 0.25 ? 'laser' : Math.random() < 0.55 ? 'spike' : 'block';
+  const kind: HazardKind =
+    Math.random() < 0.25 ? 'laser' : Math.random() < 0.55 ? 'spike' : 'block';
   const id = `h-${Math.random().toString(36).slice(2, 8)}`;
   const tries = 32;
   for (let i = 0; i < tries; i++) {
@@ -114,7 +130,11 @@ function spawnHazardAway(from: THREE.Vector3, existing: Hazard[]): Hazard {
         id,
         kind,
         pos: p,
-        size: new THREE.Vector3(axis === 'x' ? BOX * 0.92 : 0.35, 0.35, axis === 'z' ? BOX * 0.92 : 0.35),
+        size: new THREE.Vector3(
+          axis === 'x' ? BOX * 0.92 : 0.35,
+          0.35,
+          axis === 'z' ? BOX * 0.92 : 0.35
+        ),
         vel: new THREE.Vector3(0, 0, 0),
         axis,
         phase: Math.random() * Math.PI * 2,
@@ -159,7 +179,10 @@ function spawnHazardAway(from: THREE.Vector3, existing: Hazard[]): Hazard {
   };
 }
 
-const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({ accentA, accentB }) => {
+const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({
+  accentA,
+  accentB,
+}) => {
   const mat = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -226,7 +249,10 @@ const ScenePostFX: React.FC<{ boost: number }> = ({ boost }) => {
   );
 };
 
-const FlipBoxHUD: React.FC<{ aim: AimDir; event: FlipBoxEvent }> = ({ aim, event }) => {
+const FlipBoxHUD: React.FC<{ aim: AimDir; event: FlipBoxEvent }> = ({
+  aim,
+  event,
+}) => {
   const s = useSnapshot(flipBoxState);
 
   useEffect(() => {
@@ -243,29 +269,58 @@ const FlipBoxHUD: React.FC<{ aim: AimDir; event: FlipBoxEvent }> = ({ aim, event
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <ArcadeHudShell gameId="flipbox" className="absolute top-4 left-4 pointer-events-auto">
+      <ArcadeHudShell
+        gameId="flipbox"
+        className="absolute top-4 left-4 pointer-events-auto"
+      >
         <ArcadeHudCard className="min-w-[280px]">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
-          <div className="text-2xl font-semibold text-white">{s.score.toLocaleString()}</div>
-          <div className="text-[11px] text-white/50">Best {s.bestScore.toLocaleString()}</div>
-
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <ArcadeHudPill label={`Health ${Math.round(s.health)}%`} tone={s.health < 35 ? 'danger' : 'neutral'} />
-            <ArcadeHudPill label={`Chain x${s.chain}`} tone={s.chain >= 6 ? 'good' : 'neutral'} />
-            <ArcadeHudPill label={`Aim ${aim.toUpperCase()}`} />
-            {event && <ArcadeHudPill label={event.toUpperCase()} tone="warn" />}
-            <ArcadeHudPill label={`Brake ${s.brakeCd <= 0 ? 'READY' : `${s.brakeCd.toFixed(1)}s`}`} tone={s.brakeCd <= 0 ? 'good' : 'neutral'} />
+          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">
+            Score
+          </div>
+          <div className="text-2xl font-semibold text-white">
+            {s.score.toLocaleString()}
+          </div>
+          <div className="text-[11px] text-white/50">
+            Best {s.bestScore.toLocaleString()}
           </div>
 
-          <div className="mt-2 text-xs text-white/60">WASD/QE aim • Space snap • Shift brake</div>
-          {s.gameOver && <div className="mt-2 text-sm font-semibold text-red-300">Game Over</div>}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <ArcadeHudPill
+              label={`Health ${Math.round(s.health)}%`}
+              tone={s.health < 35 ? 'warn' : undefined}
+            />
+            <ArcadeHudPill
+              label={`Chain x${s.chain}`}
+              tone={s.chain >= 6 ? 'accent' : undefined}
+            />
+            <ArcadeHudPill label={`Aim ${aim.toUpperCase()}`} />
+            {event && <ArcadeHudPill label={event.toUpperCase()} tone="warn" />}
+            <ArcadeHudPill
+              label={`Brake ${s.brakeCd <= 0 ? 'READY' : `${s.brakeCd.toFixed(1)}s`}`}
+              tone={s.brakeCd <= 0 ? 'accent' : undefined}
+            />
+          </div>
+
+          <div className="mt-2 text-xs text-white/60">
+            WASD/QE aim • Space snap • Shift brake
+          </div>
+          {s.gameOver && (
+            <div className="mt-2 text-sm font-semibold text-red-300">
+              Game Over
+            </div>
+          )}
         </ArcadeHudCard>
       </ArcadeHudShell>
 
       {s.toastTime > 0 && (
-        <div className="absolute left-1/2 top-[12%] -translate-x-1/2" style={{ opacity: toastOpacity }}>
+        <div
+          className="absolute left-1/2 top-[12%] -translate-x-1/2"
+          style={{ opacity: toastOpacity }}
+        >
           <ArcadeHudShell gameId="flipbox">
-            <ArcadeHudCard className="px-4 py-2 text-xs font-semibold tracking-[0.25em]">{s.toastText}</ArcadeHudCard>
+            <ArcadeHudCard className="px-4 py-2 text-xs font-semibold tracking-[0.25em]">
+              {s.toastText}
+            </ArcadeHudCard>
           </ArcadeHudShell>
         </div>
       )}
@@ -280,7 +335,14 @@ const FlipBox: React.FC = () => {
 
   const inputRef = useInputRef({
     enabled: !paused,
-    preventDefault: [' ', 'Space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'arrowup',
+      'arrowdown',
+      'arrowleft',
+      'arrowright',
+    ],
   });
 
   const ballRef = useRef<THREE.Mesh | null>(null);
@@ -289,7 +351,9 @@ const FlipBox: React.FC = () => {
   const gravityRef = useRef(new THREE.Vector3(0, -22, 0));
   const aimRef = useRef<AimDir>('forward');
 
-  const [cores, setCores] = useState<Core[]>(() => spawnCoreCluster(randomCoreOnFace()));
+  const [cores, setCores] = useState<Core[]>(() =>
+    spawnCoreCluster(randomCoreOnFace())
+  );
   const hazardsRef = useRef<Hazard[]>([]);
   const hazardMeshesRef = useRef(new Map<string, THREE.Mesh>());
   const [hazardsVersion, setHazardsVersion] = useState(0);
@@ -298,13 +362,23 @@ const FlipBox: React.FC = () => {
   const snapFx = useRef<{ t: number; pos: THREE.Vector3 }[]>([]);
 
   const cubeMat = useMemo(() => {
-    return new THREE.MeshStandardMaterial({ color: '#111827', transparent: true, opacity: 0.08, wireframe: true });
+    return new THREE.MeshStandardMaterial({
+      color: '#111827',
+      transparent: true,
+      opacity: 0.08,
+      wireframe: true,
+    });
   }, []);
 
   const aimAllowed = (dir: AimDir) => {
     if (flipBoxState.event !== 'AxisLock') return true;
     const mask = flipBoxState.axisLockMask;
-    const axisBit = dir === 'left' || dir === 'right' ? 1 : dir === 'up' || dir === 'down' ? 2 : 4;
+    const axisBit =
+      dir === 'left' || dir === 'right'
+        ? 1
+        : dir === 'up' || dir === 'down'
+          ? 2
+          : 4;
     return (mask & axisBit) !== 0;
   };
 
@@ -314,7 +388,8 @@ const FlipBox: React.FC = () => {
       return;
     }
     // If locked out, pick an allowed axis closest to current aim
-    const candidates: AimDir[] = ['left', 'right', 'forward', 'back', 'up', 'down'].filter(aimAllowed);
+    const allDirs: AimDir[] = ['left', 'right', 'forward', 'back', 'up', 'down'];
+    const candidates: AimDir[] = allDirs.filter(aimAllowed);
     if (candidates.length === 0) return;
     const cur = dirToVec(aimRef.current);
     let best = candidates[0];
@@ -352,7 +427,11 @@ const FlipBox: React.FC = () => {
     }
 
     // Snap gravity
-    if ((inputRef.current.justPressed.has(' ') || inputRef.current.justPressed.has('space')) && !paused) {
+    if (
+      (inputRef.current.justPressed.has(' ') ||
+        inputRef.current.justPressed.has('space')) &&
+      !paused
+    ) {
       lastSnapAt.current = flipBoxState.elapsed;
       // Perfect window starts at snap
       flipBoxState.chainTime = flipBoxState.perfectWindow;
@@ -366,7 +445,12 @@ const FlipBox: React.FC = () => {
     }
 
     // Integrate
-    const damping = flipBoxState.brakeTime > 0 ? 0.88 : flipBoxState.event === 'Sticky' ? 0.985 : 0.992;
+    const damping =
+      flipBoxState.brakeTime > 0
+        ? 0.88
+        : flipBoxState.event === 'Sticky'
+          ? 0.985
+          : 0.992;
     const brakeExtra = flipBoxState.event === 'Sticky' ? 0.82 : 0.88;
     velRef.current.addScaledVector(gravityRef.current, step);
     velRef.current.multiplyScalar(damping);
@@ -437,7 +521,10 @@ const FlipBox: React.FC = () => {
     // Hazard collisions
     for (const h of hazardsRef.current) {
       if (h.kind === 'laser' && h.axis) {
-        const dist = h.axis === 'x' ? Math.abs(posRef.current.x - h.pos.x) : Math.abs(posRef.current.z - h.pos.z);
+        const dist =
+          h.axis === 'x'
+            ? Math.abs(posRef.current.x - h.pos.x)
+            : Math.abs(posRef.current.z - h.pos.z);
         if (dist < 0.55 && Math.abs(posRef.current.y) < HALF - 1.2) {
           flipBoxState.damage(12 * step);
         }
@@ -463,7 +550,10 @@ const FlipBox: React.FC = () => {
 
         // Add hazard
         const existing = hazardsRef.current;
-        const next = [...existing, spawnHazardAway(posRef.current, existing)].slice(-MAX_HAZARDS);
+        const next = [
+          ...existing,
+          spawnHazardAway(posRef.current, existing),
+        ].slice(-MAX_HAZARDS);
         hazardsRef.current = next;
         setHazardsVersion((v) => v + 1);
 
@@ -479,7 +569,14 @@ const FlipBox: React.FC = () => {
       .filter((f) => f.t > 0);
 
     // Camera
-    camera.position.lerp(new THREE.Vector3(posRef.current.x + 22, posRef.current.y + 18, posRef.current.z + 22), 0.06);
+    camera.position.lerp(
+      new THREE.Vector3(
+        posRef.current.x + 22,
+        posRef.current.y + 18,
+        posRef.current.z + 22
+      ),
+      0.06
+    );
     camera.lookAt(posRef.current);
 
     if (ballRef.current) ballRef.current.position.copy(posRef.current);
@@ -500,7 +597,14 @@ const FlipBox: React.FC = () => {
       <FlipBoxHUD aim={aimRef.current} event={snap.event} />
       <NeonDome accentA="#facc15" accentB="#1b1030" />
       <fog attach="fog" args={['#070b12', 25, 120]} />
-      <Stars radius={240} depth={60} count={1200} factor={4} saturation={0} fade />
+      <Stars
+        radius={240}
+        depth={60}
+        count={1200}
+        factor={4}
+        saturation={0}
+        fade
+      />
       <ambientLight intensity={0.35} />
       <directionalLight position={[30, 30, 30]} intensity={1.15} castShadow />
       <ScenePostFX boost={boost} />
@@ -514,7 +618,11 @@ const FlipBox: React.FC = () => {
       {cores.map((c) => (
         <mesh key={c.id} position={[c.pos.x, c.pos.y, c.pos.z]} castShadow>
           <octahedronGeometry args={[0.95, 0]} />
-          <meshStandardMaterial color={c.value > 0 ? '#22d3ee' : '#a78bfa'} emissive={c.value > 0 ? '#22d3ee' : '#a78bfa'} emissiveIntensity={0.75} />
+          <meshStandardMaterial
+            color={c.value > 0 ? '#22d3ee' : '#a78bfa'}
+            emissive={c.value > 0 ? '#22d3ee' : '#a78bfa'}
+            emissiveIntensity={0.75}
+          />
         </mesh>
       ))}
 
@@ -531,7 +639,13 @@ const FlipBox: React.FC = () => {
               position={[h.pos.x, h.pos.y, h.pos.z]}
             >
               <boxGeometry args={[h.size.x, 0.35, h.size.z]} />
-              <meshStandardMaterial color="#fb7185" emissive="#fb7185" emissiveIntensity={0.6} transparent opacity={0.8} />
+              <meshStandardMaterial
+                color="#fb7185"
+                emissive="#fb7185"
+                emissiveIntensity={0.6}
+                transparent
+                opacity={0.8}
+              />
             </mesh>
           );
         }
@@ -547,7 +661,12 @@ const FlipBox: React.FC = () => {
               castShadow
             >
               <coneGeometry args={[0.9, 1.8, 8]} />
-              <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.25} flatShading />
+              <meshStandardMaterial
+                color="#ef4444"
+                emissive="#7f1d1d"
+                emissiveIntensity={0.25}
+                flatShading
+              />
             </mesh>
           );
         }
@@ -562,7 +681,12 @@ const FlipBox: React.FC = () => {
             castShadow
           >
             <boxGeometry args={[h.size.x, h.size.y, h.size.z]} />
-            <meshStandardMaterial color="#111827" emissive="#a78bfa" emissiveIntensity={0.08} flatShading />
+            <meshStandardMaterial
+              color="#111827"
+              emissive="#a78bfa"
+              emissiveIntensity={0.08}
+              flatShading
+            />
           </mesh>
         );
       })}
@@ -572,9 +696,19 @@ const FlipBox: React.FC = () => {
         const a = clamp(f.t / 0.55, 0, 1);
         const s = 1 + (1 - a) * 6.5;
         return (
-          <mesh key={`fx-${idx}`} position={[f.pos.x, f.pos.y, f.pos.z]} scale={[s, s, s]}>
+          <mesh
+            key={`fx-${idx}`}
+            position={[f.pos.x, f.pos.y, f.pos.z]}
+            scale={[s, s, s]}
+          >
             <torusGeometry args={[1.0, 0.08, 10, 28]} />
-            <meshStandardMaterial color="#22d3ee" emissive="#22d3ee" emissiveIntensity={0.55} transparent opacity={a * 0.45} />
+            <meshStandardMaterial
+              color="#22d3ee"
+              emissive="#22d3ee"
+              emissiveIntensity={0.55}
+              transparent
+              opacity={a * 0.45}
+            />
           </mesh>
         );
       })}
@@ -582,7 +716,11 @@ const FlipBox: React.FC = () => {
       {/* Player */}
       <mesh ref={ballRef} castShadow>
         <sphereGeometry args={[BALL_R, 24, 24]} />
-        <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.12} />
+        <meshStandardMaterial
+          color="#facc15"
+          emissive="#f59e0b"
+          emissiveIntensity={0.12}
+        />
       </mesh>
     </>
   );

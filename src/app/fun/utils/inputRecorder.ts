@@ -1,11 +1,16 @@
 /**
  * Input Recorder / Replay Harness
- * 
+ *
  * Records pointer and keyboard events with timestamps for deterministic replay.
  * Used to compare behavior between legacy JS and TSX implementations.
  */
 
-export type InputEventType = 'keydown' | 'keyup' | 'pointermove' | 'pointerdown' | 'pointerup';
+export type InputEventType =
+  | 'keydown'
+  | 'keyup'
+  | 'pointermove'
+  | 'pointerdown'
+  | 'pointerup';
 
 export interface RecordedInputEvent {
   t: number; // timestamp in ms since recording start
@@ -133,7 +138,9 @@ class InputRecorder {
     window.addEventListener('pointerdown', this.pointerdownHandler);
     window.addEventListener('pointerup', this.pointerupHandler);
 
-    console.log(`[InputRecorder] Started recording for ${game}${seed ? ` with seed ${seed}` : ''}`);
+    console.log(
+      `[InputRecorder] Started recording for ${game}${seed ? ` with seed ${seed}` : ''}`
+    );
   }
 
   /**
@@ -177,7 +184,9 @@ class InputRecorder {
       },
     };
 
-    console.log(`[InputRecorder] Stopped recording. ${this.events.length} events, ${this.snapshots.length} snapshots`);
+    console.log(
+      `[InputRecorder] Stopped recording. ${this.events.length} events, ${this.snapshots.length} snapshots`
+    );
 
     return {
       recording,
@@ -216,7 +225,9 @@ class InputReplayer {
     this.onEvent = onEvent;
     this.timeouts = [];
 
-    console.log(`[InputReplayer] Starting replay of ${recording.events.length} events over ${recording.duration}ms`);
+    console.log(
+      `[InputReplayer] Starting replay of ${recording.events.length} events over ${recording.duration}ms`
+    );
 
     return new Promise((resolve) => {
       for (const event of recording.events) {
@@ -251,11 +262,15 @@ class InputReplayer {
         bubbles: true,
       });
       window.dispatchEvent(keyEvent);
-    } else if (event.type === 'pointermove' || event.type === 'pointerdown' || event.type === 'pointerup') {
+    } else if (
+      event.type === 'pointermove' ||
+      event.type === 'pointerdown' ||
+      event.type === 'pointerup'
+    ) {
       // Convert normalized coords back to screen coords
-      const clientX = ((event.x ?? 0) + 1) / 2 * window.innerWidth;
-      const clientY = (1 - (event.y ?? 0)) / 2 * window.innerHeight;
-      
+      const clientX = (((event.x ?? 0) + 1) / 2) * window.innerWidth;
+      const clientY = ((1 - (event.y ?? 0)) / 2) * window.innerHeight;
+
       const pointerEvent = new PointerEvent(event.type, {
         clientX,
         clientY,
@@ -271,7 +286,7 @@ class InputReplayer {
    */
   stop(): void {
     if (!this.isReplaying) return;
-    
+
     for (const timeout of this.timeouts) {
       clearTimeout(timeout);
     }
@@ -307,30 +322,38 @@ export function compareRecordings(
   const differences: string[] = [];
 
   // Compare final scores
-  const scores1 = session1.snapshots.map(s => s.score);
-  const scores2 = session2.snapshots.map(s => s.score);
-  
+  const scores1 = session1.snapshots.map((s) => s.score);
+  const scores2 = session2.snapshots.map((s) => s.score);
+
   const finalScore1 = scores1[scores1.length - 1] ?? 0;
   const finalScore2 = scores2[scores2.length - 1] ?? 0;
   const scoreDiff = Math.abs(finalScore1 - finalScore2);
 
   if (scoreDiff > scoreTolerance) {
-    differences.push(`Score difference: ${scoreDiff} (${finalScore1} vs ${finalScore2})`);
+    differences.push(
+      `Score difference: ${scoreDiff} (${finalScore1} vs ${finalScore2})`
+    );
   }
 
   // Compare position snapshots at similar timestamps
-  for (let i = 0; i < Math.min(session1.snapshots.length, session2.snapshots.length); i++) {
+  for (
+    let i = 0;
+    i < Math.min(session1.snapshots.length, session2.snapshots.length);
+    i++
+  ) {
     const s1 = session1.snapshots[i];
     const s2 = session2.snapshots[i];
 
     if (s1.position && s2.position) {
       const posDiff = Math.sqrt(
         Math.pow(s1.position.x - s2.position.x, 2) +
-        Math.pow(s1.position.y - s2.position.y, 2) +
-        Math.pow(s1.position.z - s2.position.z, 2)
+          Math.pow(s1.position.y - s2.position.y, 2) +
+          Math.pow(s1.position.z - s2.position.z, 2)
       );
       if (posDiff > positionTolerance) {
-        differences.push(`Position drift at t=${s1.t.toFixed(0)}ms: ${posDiff.toFixed(3)} units`);
+        differences.push(
+          `Position drift at t=${s1.t.toFixed(0)}ms: ${posDiff.toFixed(3)} units`
+        );
       }
     }
   }

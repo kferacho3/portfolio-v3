@@ -61,9 +61,17 @@ export const NeonMaterial: React.FC<NeonMaterialProps> = ({
     if (t < 1) {
       col.lerpColors(new THREE.Color('#39FF14'), new THREE.Color('#FF5F1F'), t);
     } else if (t < 2) {
-      col.lerpColors(new THREE.Color('#FF5F1F'), new THREE.Color('#B026FF'), t - 1);
+      col.lerpColors(
+        new THREE.Color('#FF5F1F'),
+        new THREE.Color('#B026FF'),
+        t - 1
+      );
     } else {
-      col.lerpColors(new THREE.Color('#B026FF'), new THREE.Color('#39FF14'), t - 2);
+      col.lerpColors(
+        new THREE.Color('#B026FF'),
+        new THREE.Color('#39FF14'),
+        t - 2
+      );
     }
     ref.current.emissive = col;
   });
@@ -190,7 +198,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
 
 const PROCEDURAL_PRESET_META: Record<
   ProceduralPreset,
-  { envIntensity: number; transparent?: boolean; palette?: [string, string, string, string] }
+  {
+    envIntensity: number;
+    transparent?: boolean;
+    palette?: [string, string, string, string];
+  }
 > = {
   InkSplatter: { envIntensity: 1.55 },
   VoronoiStainedGlass: { envIntensity: 1.75 },
@@ -256,7 +268,10 @@ const PROCEDURAL_PRESET_META: Record<
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
-const derivePalette = (hex: string, seed: number): [THREE.Color, THREE.Color, THREE.Color, THREE.Color] => {
+const derivePalette = (
+  hex: string,
+  seed: number
+): [THREE.Color, THREE.Color, THREE.Color, THREE.Color] => {
   const base = new THREE.Color(hex);
   const hsl = { h: 0, s: 0, l: 0 };
   base.getHSL(hsl);
@@ -659,10 +674,17 @@ export const ProceduralMeshMaterial: React.FC<ProceduralMeshMaterialProps> = ({
   const meta = PROCEDURAL_PRESET_META[preset];
   const transparent = !!meta.transparent;
 
-  const palette = useMemo<[THREE.Color, THREE.Color, THREE.Color, THREE.Color]>(() => {
+  const palette = useMemo<
+    [THREE.Color, THREE.Color, THREE.Color, THREE.Color]
+  >(() => {
     if (meta.palette) {
       const [a, b, c, d] = meta.palette;
-      return [new THREE.Color(a), new THREE.Color(b), new THREE.Color(c), new THREE.Color(d)];
+      return [
+        new THREE.Color(a),
+        new THREE.Color(b),
+        new THREE.Color(c),
+        new THREE.Color(d),
+      ];
     }
     return derivePalette(baseColor, seed);
   }, [baseColor, seed, meta.palette]);
@@ -710,13 +732,7 @@ export const ArcadeMaterial: React.FC<{
   envMap?: THREE.Texture | null;
   seed?: number;
   wireframe?: boolean;
-}> = ({
-  preset,
-  color = '#9d4edd',
-  envMap,
-  seed = 1,
-  wireframe = false,
-}) => {
+}> = ({ preset, color = '#9d4edd', envMap, seed = 1, wireframe = false }) => {
   if (wireframe) {
     return <meshBasicMaterial color={color} wireframe />;
   }
@@ -737,7 +753,13 @@ export const ArcadeMaterial: React.FC<{
     case 'RimGlow':
       return <RimGlowNeonMaterial color="#111111" glowColor={color} />;
     case 'Marble':
-      return <TriplanarMarbleMaterial color1="#1a1a2e" color2="#16213e" color3={color} />;
+      return (
+        <TriplanarMarbleMaterial
+          color1="#1a1a2e"
+          color2="#16213e"
+          color3={color}
+        />
+      );
     case 'Matcap':
       return <MatcapStylizedMaterial warmColor={color} coolColor="#4ecdc4" />;
     case 'Chromatic':
@@ -811,14 +833,17 @@ export const AuroraBackdropMaterial: React.FC<{
     <shaderMaterial
       ref={materialRef}
       uniforms={uniforms}
-      vertexShader={/* glsl */ `
+      vertexShader={
+        /* glsl */ `
         varying vec2 vUv;
         void main() {
           vUv = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
-      `}
-      fragmentShader={/* glsl */ `
+      `
+      }
+      fragmentShader={
+        /* glsl */ `
         uniform float uTime;
         uniform vec3 uColorA;
         uniform vec3 uColorB;
@@ -945,7 +970,8 @@ export const AuroraBackdropMaterial: React.FC<{
             gl_FragColor = vec4(col, alpha);
           }
         }
-      `}
+      `
+      }
       transparent
       depthWrite={false}
       blending={THREE.NormalBlending}
@@ -957,11 +983,7 @@ export const PulseGridMaterial: React.FC<{
   gridColor?: string;
   glowColor?: string;
   density?: number;
-}> = ({
-  gridColor = '#38bdf8',
-  glowColor = '#f472b6',
-  density = 14,
-}) => {
+}> = ({ gridColor = '#38bdf8', glowColor = '#f472b6', density = 14 }) => {
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const uniforms = useMemo(
     () => ({
@@ -983,14 +1005,17 @@ export const PulseGridMaterial: React.FC<{
     <shaderMaterial
       ref={materialRef}
       uniforms={uniforms}
-      vertexShader={/* glsl */ `
+      vertexShader={
+        /* glsl */ `
         varying vec2 vUv;
         void main() {
           vUv = uv;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
-      `}
-      fragmentShader={/* glsl */ `
+      `
+      }
+      fragmentShader={
+        /* glsl */ `
         uniform float uTime;
         uniform vec3 uGridColor;
         uniform vec3 uGlowColor;
@@ -1014,7 +1039,8 @@ export const PulseGridMaterial: React.FC<{
 
           gl_FragColor = vec4(col, grid);
         }
-      `}
+      `
+      }
       transparent
       depthWrite={false}
       blending={THREE.AdditiveBlending}

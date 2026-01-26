@@ -1,6 +1,6 @@
 /**
  * Store Types Barrel Export
- * 
+ *
  * All type definitions for the arcade store.
  */
 

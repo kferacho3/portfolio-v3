@@ -79,11 +79,23 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     rotateMat.emissive.set(palette.platformRotate);
     ghostMat.color.set(palette.accent);
     ghostMat.emissive.set(palette.accent);
-  }, [palette.platformSlide, palette.platformRotate, palette.accent, slideMat, rotateMat, ghostMat]);
+  }, [
+    palette.platformSlide,
+    palette.platformRotate,
+    palette.accent,
+    slideMat,
+    rotateMat,
+    ghostMat,
+  ]);
 
   // Geometry reused across both instanced meshes
   const geometry = useMemo(
-    () => new THREE.BoxGeometry(PLATFORM_PIECE_LENGTH, PLATFORM_THICKNESS, PLATFORM_DEPTH),
+    () =>
+      new THREE.BoxGeometry(
+        PLATFORM_PIECE_LENGTH,
+        PLATFORM_THICKNESS,
+        PLATFORM_DEPTH
+      ),
     []
   );
 
@@ -91,7 +103,8 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     if (!slideRef.current || !rotateRef.current || !ghostRef.current) return;
 
     // Time in seconds since run start
-    const timeS = snap.phase === 'playing' ? (Date.now() - snap.startTime) / 1000 : 0;
+    const timeS =
+      snap.phase === 'playing' ? (Date.now() - snap.startTime) / 1000 : 0;
 
     const py = mutation.playerPos[1];
     const currentRow = Math.floor(py / PLATFORM_SPACING);
@@ -107,8 +120,13 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
       // Check if this row requires a lever to be activated (levers unlock their target row)
       let isLocked = false;
       if (row > 0) {
-        const requiredLever = pattern.levers.find(l => l.targetRowIndex === row);
-        if (requiredLever && !snap.activatedLevers.has(requiredLever.rowIndex)) {
+        const requiredLever = pattern.levers.find(
+          (l) => l.targetRowIndex === row
+        );
+        if (
+          requiredLever &&
+          !snap.activatedLevers.has(requiredLever.rowIndex)
+        ) {
           isLocked = true;
         }
       }
@@ -155,9 +173,21 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
 
   return (
     <group>
-      <instancedMesh ref={slideRef} args={[geometry, slideMat, maxInstances]} frustumCulled={false} />
-      <instancedMesh ref={rotateRef} args={[geometry, rotateMat, maxInstances]} frustumCulled={false} />
-      <instancedMesh ref={ghostRef} args={[geometry, ghostMat, maxInstances]} frustumCulled={false} />
+      <instancedMesh
+        ref={slideRef}
+        args={[geometry, slideMat, maxInstances]}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={rotateRef}
+        args={[geometry, rotateMat, maxInstances]}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={ghostRef}
+        args={[geometry, ghostMat, maxInstances]}
+        frustumCulled={false}
+      />
     </group>
   );
 }

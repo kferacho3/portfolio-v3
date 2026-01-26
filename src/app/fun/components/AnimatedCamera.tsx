@@ -1,6 +1,6 @@
 /**
  * AnimatedCamera.tsx
- * 
+ *
  * Premium cinematic intro camera system
  * Uses provided positions as key waypoints with ultra-smooth interpolation
  * Final position locks onto monitor for immersive experience
@@ -83,7 +83,7 @@ const AnimatedCamera: React.FC<AnimatedCameraProps> = ({
   const startTimeRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const durationRef = useRef(duration);
-  
+
   // Store callbacks in refs to avoid stale closures
   const onCompleteRef = useRef(onAnimationComplete);
   const activeRef = useRef(active);
@@ -119,7 +119,7 @@ const AnimatedCamera: React.FC<AnimatedCameraProps> = ({
     }
 
     const focus = lookAtRef.current.clone();
-    const points = positions.map(p => new Vector3(...p));
+    const points = positions.map((p) => new Vector3(...p));
 
     // Create a smooth spline through all provided positions
     // Using centripetal parameterization for more uniform speed
@@ -136,10 +136,10 @@ const AnimatedCamera: React.FC<AnimatedCameraProps> = ({
     const up = new Vector3(0, 1, 0);
     const toCamera = new Vector3().subVectors(points[0], focus).normalize();
     const right = new Vector3().crossVectors(up, toCamera).normalize();
-    
+
     // Start looking slightly to the side, then lock onto center
     lookAtStart.addScaledVector(right, 0.3).addScaledVector(up, 0.15);
-    
+
     lookAtCurveRef.current = new CatmullRomCurve3(
       [
         lookAtStart,
@@ -183,7 +183,7 @@ const AnimatedCamera: React.FC<AnimatedCameraProps> = ({
     const elapsed = state.clock.elapsedTime - startTimeRef.current;
     const totalDuration = durationRef.current;
     const rawT = Math.min(elapsed / totalDuration, 1);
-    
+
     // Apply premium easing for ultra-smooth motion
     const easedT = premiumEase(rawT);
 
