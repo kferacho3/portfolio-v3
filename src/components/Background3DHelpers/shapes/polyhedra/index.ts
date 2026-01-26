@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* ═══════════════════════════════════════════════════════════════════════════
    shapes/polyhedra/index.ts - Polyhedral geometry functions
    

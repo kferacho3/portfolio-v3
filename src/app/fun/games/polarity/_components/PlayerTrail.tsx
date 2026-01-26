@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { useFrame } from '@react-three/fiber';

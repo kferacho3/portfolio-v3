@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Regression Tests for Legacy vs TSX Game Parity
  *

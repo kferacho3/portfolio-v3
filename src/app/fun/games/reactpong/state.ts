@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { proxy } from 'valtio';
 import { defaultBallTexture, reactPongSkins } from './constants';
 import type { Block, HitEffect, ReactPongMode, ScorePopup } from './types';

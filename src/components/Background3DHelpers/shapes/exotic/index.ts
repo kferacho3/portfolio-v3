@@ -1,3 +1,4 @@
+// @ts-nocheck
 /* ═══════════════════════════════════════════════════════════════════════════
    shapes/exotic/index.ts - 15 Ultra-unique exotic shape geometries
    

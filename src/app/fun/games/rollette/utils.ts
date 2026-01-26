@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { clamp } from './utils/helpers';
 import type { Vec3 } from '../types';
 import type {

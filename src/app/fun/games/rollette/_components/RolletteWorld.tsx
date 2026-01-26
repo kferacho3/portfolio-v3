@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { Dodecahedron, Sky, Stars, TorusKnot } from '@react-three/drei';

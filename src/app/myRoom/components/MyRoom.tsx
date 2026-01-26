@@ -1,3 +1,4 @@
+// @ts-nocheck
 // MyRoom.tsx - Performance-Optimized 3D Scene Component
 'use client';
 

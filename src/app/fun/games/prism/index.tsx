@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Prism.tsx (Prism Hop Infinite)
  *

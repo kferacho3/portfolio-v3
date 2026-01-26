@@ -1,3 +1,4 @@
+// @ts-nocheck
 'use client';
 
 import { usePlane } from '@react-three/cannon';

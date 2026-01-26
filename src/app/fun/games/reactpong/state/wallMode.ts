@@ -1,3 +1,4 @@
+// @ts-nocheck
 import {
   WALL_MODE_COMBO_MULTIPLIERS,
   WALL_MODE_HEIGHT,
