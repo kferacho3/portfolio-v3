@@ -505,7 +505,11 @@ export const Scene: React.FC = () => {
 
         <EffectComposer multisampling={0}>
           <Bloom intensity={0.55} luminanceThreshold={0.45} luminanceSmoothing={0.25} mipmapBlur />
-          <ChromaticAberration offset={new THREE.Vector2(0.0012, 0.001)} radialModulation />
+          <ChromaticAberration
+            offset={new THREE.Vector2(0.0012, 0.001)}
+            radialModulation
+            modulationOffset={0}
+          />
           <Noise opacity={0.08} />
           <Vignette eskil={false} offset={0.15} darkness={0.95} />
         </EffectComposer>

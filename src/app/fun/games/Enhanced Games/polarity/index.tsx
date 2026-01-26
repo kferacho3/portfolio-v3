@@ -220,7 +220,11 @@ const ScenePostFX: React.FC<{ boost: number }> = ({ boost }) => {
   return (
     <EffectComposer multisampling={0}>
       <Bloom intensity={strength} luminanceThreshold={0.18} mipmapBlur />
-      <ChromaticAberration offset={new THREE.Vector2(0.0009, 0.00075)} />
+      <ChromaticAberration
+        offset={new THREE.Vector2(0.0009, 0.00075)}
+        radialModulation={false}
+        modulationOffset={0}
+      />
       <Noise opacity={0.045} />
       <Vignette eskil={false} offset={0.28} darkness={0.78} />
     </EffectComposer>
