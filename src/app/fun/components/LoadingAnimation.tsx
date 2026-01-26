@@ -37,12 +37,28 @@ const Pacman: React.FC = () => {
 
 interface PacmanLoadingProps {
   progress: number;
+  className?: string;
+  backdrop?: boolean;
+  showLabel?: boolean;
 }
 
 // PacmanLoading Component - NO Html wrapper, expects to be wrapped by parent
-const PacmanLoading: React.FC<PacmanLoadingProps> = ({ progress }) => {
+const PacmanLoading: React.FC<PacmanLoadingProps> = ({
+  progress,
+  className,
+  backdrop = true,
+  showLabel = true,
+}) => {
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-black">
+    <div
+      className={[
+        'flex flex-col items-center justify-center',
+        backdrop ? 'min-h-screen bg-black' : 'bg-transparent',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="relative w-24 h-24">
         <Pacman />
         {/* Position the ghosts relative to Pacman */}
@@ -53,9 +69,11 @@ const PacmanLoading: React.FC<PacmanLoadingProps> = ({ progress }) => {
           <circle cx="15" cy="15" r="5" fill="#00bfff" />
         </svg>
       </div>
-      <div className="mt-4 text-white text-lg">
-        Loading... {Math.floor(progress)}%
-      </div>
+      {showLabel && (
+        <div className="mt-4 text-white text-lg">
+          Loading... {Math.floor(progress)}%
+        </div>
+      )}
     </div>
   );
 };

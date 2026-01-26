@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Html, Sky, Stars } from '@react-three/drei';
+import { Html, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import { Physics, usePlane, useSphere, useBox } from '@react-three/cannon';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
@@ -33,6 +34,25 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 type PortalPair = { a: THREE.Vector3 | null; b: THREE.Vector3 | null };
 type Target = { id: string; pos: THREE.Vector3; active: boolean };
 type NullZone = { id: string; pos: THREE.Vector3; r: number };
+
+function spawnTargetSafe(avoid: THREE.Vector3, portals: PortalPair, nullZones: NullZone[]): THREE.Vector3 {
+  for (let i = 0; i < 30; i++) {
+    const p = new THREE.Vector3(THREE.MathUtils.randFloat(-HALF + 5, HALF - 5), 0, THREE.MathUtils.randFloat(-HALF + 5, HALF - 5));
+    if (p.distanceTo(avoid) < 8) continue;
+    if (portals.a && p.distanceTo(portals.a) < 6) continue;
+    if (portals.b && p.distanceTo(portals.b) < 6) continue;
+    let blocked = false;
+    for (const z of nullZones) {
+      if (Math.hypot(p.x - z.pos.x, p.z - z.pos.z) < z.r + 1) {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+    return p;
+  }
+  return new THREE.Vector3(THREE.MathUtils.randFloat(-HALF + 5, HALF - 5), 0, THREE.MathUtils.randFloat(-HALF + 5, HALF - 5));
+}
 
 const Ground: React.FC = () => {
   const [ref] = usePlane(() => ({ rotation: [-Math.PI / 2, 0, 0], position: [0, 0, 0] }));
@@ -122,7 +142,9 @@ const PortalPunchHUD: React.FC = () => {
     <Html fullscreen style={{ pointerEvents: 'none' }}>
       <ArcadeHudShell gameId="portalpunch" className="absolute top-4 left-4 pointer-events-auto">
         <ArcadeHudCard className="min-w-[260px]">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
+          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Portal Combo</div>
+          <div className="text-[9px] uppercase tracking-[0.26em] text-white/40">Place → Punch → Chain</div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
           <div className="text-2xl font-semibold text-white">{s.score.toLocaleString()}</div>
           <div className="text-[11px] text-white/50">Best {s.bestScore.toLocaleString()}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -189,7 +211,8 @@ const Player: React.FC<{
   portalsRef: React.MutableRefObject<PortalPair>;
   targetsRef: React.MutableRefObject<Target[]>;
   setTargets: React.Dispatch<React.SetStateAction<Target[]>>;
-}> = ({ portalsRef, targetsRef, setTargets }) => {
+  nullZones: NullZone[];
+}> = ({ portalsRef, targetsRef, setTargets, nullZones }) => {
   const { camera } = useThree();
   const { paused } = useGameUIState();
 
@@ -373,11 +396,7 @@ const Player: React.FC<{
           const next = prev.map((it, idx) => {
             const pos =
               idx === i
-                ? new THREE.Vector3(
-                    THREE.MathUtils.randFloat(-HALF + 4, HALF - 4),
-                    0,
-                    THREE.MathUtils.randFloat(-HALF + 4, HALF - 4)
-                  )
+                ? spawnTargetSafe(p, portalsRef.current, nullZones)
                 : it.pos;
 
             const active = doubleTargets ? it.active || idx === i : idx === i;
@@ -547,6 +566,7 @@ const PortalPlacementController: React.FC<{
 
 const PortalPunch: React.FC = () => {
   const { paused } = useGameUIState();
+  const snap = useSnapshot(portalPunchState);
   const [portals, setPortals] = useState<PortalPair>({ a: null, b: null });
   const portalsRef = useRef<PortalPair>(portals);
   const lastEventRef = useRef(portalPunchState.event);
@@ -659,16 +679,26 @@ const PortalPunch: React.FC = () => {
   return (
     <>
       <PortalPunchHUD />
-      <Sky />
+      <NeonDome accentA="#22d3ee" accentB="#2d0a3b" />
       <fog attach="fog" args={['#050814', 35, 110]} />
       <Stars radius={240} depth={60} count={1200} factor={4} saturation={0} fade />
       <ambientLight intensity={0.38} />
       <directionalLight position={[22, 30, 14]} intensity={1.1} castShadow />
 
+      <ScenePostFX
+        boost={
+          Math.min(0.95, snap.chain / 22) +
+          (1 - snap.integrity / 100) * 0.35 +
+          (snap.punchTime > 0 ? 0.45 : 0) +
+          (snap.event ? 0.35 : 0)
+        }
+      />
+
       <PortalPlacementController portalsRef={portalsRef} setPortals={setPortals} nullZones={nullZones} />
 
       <Physics gravity={[0, -22, 0]} iterations={6}>
         <Ground />
+        <LowPolyGroundVisual />
         {walls.map((w, idx) => (
           <Wall key={idx} position={w.position} size={w.size} />
         ))}
@@ -684,7 +714,7 @@ const PortalPunch: React.FC = () => {
           <TargetOrb key={t.id} t={t} />
         ))}
 
-        <Player portalsRef={portalsRef} targetsRef={targetsRef} setTargets={setTargets} />
+        <Player portalsRef={portalsRef} targetsRef={targetsRef} setTargets={setTargets} nullZones={nullZones} />
       </Physics>
 
       <LaserVisual />

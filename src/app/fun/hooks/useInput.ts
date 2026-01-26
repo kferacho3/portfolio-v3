@@ -193,12 +193,33 @@ export function useInput(options: UseInputOptions = {}): InputState {
 /**
  * Call this at the end of each frame to clear "just" states
  * Should be called in useFrame after processing input
+ * Accepts either a ref or the state object directly
  */
-export function clearFrameInput(stateRef: React.MutableRefObject<InputStateInternal>): void {
-  stateRef.current.justPressed.clear();
-  stateRef.current.justReleased.clear();
-  stateRef.current.pointerJustDown = false;
-  stateRef.current.pointerJustUp = false;
+export function clearFrameInput(
+  stateRefOrState: React.MutableRefObject<InputStateInternal> | InputStateInternal | null | undefined
+): void {
+  if (!stateRefOrState) return;
+  
+  let state: InputStateInternal | null = null;
+  
+  // Check if it's a ref (has .current property) or the state object directly
+  if (typeof stateRefOrState === 'object' && 'current' in stateRefOrState) {
+    // It's a ref
+    const ref = stateRefOrState as React.MutableRefObject<InputStateInternal>;
+    if (ref.current && typeof ref.current === 'object') {
+      state = ref.current;
+    }
+  } else if (typeof stateRefOrState === 'object' && 'justPressed' in stateRefOrState) {
+    // It's the state object directly
+    state = stateRefOrState as InputStateInternal;
+  }
+  
+  if (!state || !state.justPressed || !state.justReleased) return;
+  
+  state.justPressed.clear();
+  state.justReleased.clear();
+  state.pointerJustDown = false;
+  state.pointerJustUp = false;
 }
 
 /**

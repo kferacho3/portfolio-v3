@@ -123,7 +123,8 @@ export const conveyorChaosState = proxy({
     const chainMult = 1 + clamp(this.chain, 0, 10) * 0.15;
     const streakMult = 1 + clamp(this.deliveryStreak, 0, 6) * 0.12;
     const timeBonus = Math.round(this.goalTime * 12);
-    const base = 100 + timeBonus;
+    const perfectBurst = grade === 'Perfect' ? Math.round(80 + timeRemaining * 18 + this.deliveryStreak * 20) : 0;
+    const base = 100 + timeBonus + perfectBurst;
     const overdriveMult = this.event === 'Overdrive' ? 1.2 : 1;
     const gradeMult = grade === 'Perfect' ? 1.35 : grade === 'Clean' ? 1.05 : 0.85;
     this.addScore(base * chainMult * streakMult * overdriveMult * gradeMult);
@@ -133,7 +134,7 @@ export const conveyorChaosState = proxy({
     }
 
     if (grade === 'Perfect') {
-      const label = this.deliveryStreak > 1 ? `EXPRESS x${this.deliveryStreak}` : 'EXPRESS DELIVERY!';
+      const label = this.deliveryStreak > 1 ? `EXPRESS DELIVERY x${this.deliveryStreak}` : 'EXPRESS DELIVERY!';
       this.setToast(label, 1.2, true);
     } else if (grade === 'Clean') {
       this.setToast('CLEAN DELIVERY', 1.0, false);

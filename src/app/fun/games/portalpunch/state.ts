@@ -14,6 +14,7 @@ export const portalPunchState = proxy({
 
   integrity: 100, // 0..100
   integrityDecay: 2.2, // per second
+  idleTime: 0, // seconds without portal charge
 
   chargedTime: 0, // seconds remaining
   dashPrimeTime: 0, // seconds remaining
@@ -36,6 +37,7 @@ export const portalPunchState = proxy({
     this.chain = 0;
     this.chainTime = 0;
     this.integrity = 100;
+    this.idleTime = 0;
     this.chargedTime = 0;
     this.dashPrimeTime = 0;
     this.punchTime = 0;
@@ -63,7 +65,13 @@ export const portalPunchState = proxy({
     this.dashPrimeTime = Math.max(0, this.dashPrimeTime - dt);
     this.punchTime = Math.max(0, this.punchTime - dt);
 
-    this.integrity = clamp(this.integrity - this.integrityDecay * dt, 0, 100);
+    if (this.chargedTime > 0) {
+      this.idleTime = 0;
+    } else {
+      this.idleTime = Math.min(this.idleTime + dt, 6);
+    }
+    const idlePenalty = this.idleTime > 1.4 ? (this.idleTime - 1.4) * 0.6 : 0;
+    this.integrity = clamp(this.integrity - (this.integrityDecay + idlePenalty) * dt, 0, 100);
     if (this.integrity <= 0) {
       this.integrity = 0;
       this.gameOver = true;

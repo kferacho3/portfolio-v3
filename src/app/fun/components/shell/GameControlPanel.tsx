@@ -42,15 +42,16 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
   return (
     <div className="fixed right-4 top-4 z-[9999] pointer-events-none">
       <div
-        className="pointer-events-auto w-[min(92vw,280px)] animate-in fade-in slide-in-from-right-4 duration-500"
+        className="pointer-events-auto w-[min(92vw,280px)] animate-in fade-in slide-in-from-right-3 duration-500"
         style={panelStyles}
       >
         <div
-          className="rounded-2xl border p-3 backdrop-blur-xl"
+          className="border p-4 backdrop-blur-2xl"
           style={{
             borderColor: 'var(--arcade-stroke)',
             background: 'var(--arcade-panel)',
-            boxShadow: '0 18px 40px rgba(0, 0, 0, 0.45)',
+            boxShadow: 'var(--arcade-elevation)',
+            borderRadius: 'var(--arcade-radius)',
           }}
         >
           {/* Game Name Header */}
@@ -60,7 +61,7 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
                 className="h-2 w-2 rounded-full animate-pulse"
                 style={{ background: 'var(--arcade-accent)' }}
               />
-              <span className="text-sm font-semibold text-white">
+              <span className="text-sm font-semibold text-white/90">
                 {gameCard?.title || 'Game'}
               </span>
             </div>
@@ -68,12 +69,12 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
             <button
               onClick={onToggleGameRules}
               aria-label="Game rules (I)"
-              className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] transition ${
+              className={`flex h-7 w-7 items-center justify-center border text-[11px] transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
                 showGameRules
                   ? 'border-[var(--arcade-accent)] text-[var(--arcade-accent)] bg-[var(--arcade-accent)]/10'
                   : 'border-white/30 text-white/50 hover:text-white hover:border-white/50'
               }`}
-              style={{ fontFamily: '"Geist Mono", monospace' }}
+              style={{ fontFamily: 'var(--arcade-mono)', borderRadius: '999px' }}
             >
               ?
             </button>
@@ -82,7 +83,7 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
           <div className="flex items-center justify-between">
             <span
               className="text-[10px] uppercase tracking-[0.32em] text-white/40"
-              style={{ fontFamily: '"Geist Mono", monospace' }}
+              style={{ fontFamily: 'var(--arcade-mono)' }}
             >
               Arcade Deck
             </span>
@@ -94,7 +95,7 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
           )}
 
           {/* Action buttons with keyboard hints */}
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2">
             <ControlButton onClick={onGoHome} label="Home" hotkey="H" />
             <ControlButton onClick={onRestart} label="Restart" hotkey="R" />
           </div>
@@ -113,11 +114,12 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
           </div>
 
           {/* Keyboard shortcuts hint */}
-          <div className="mt-3 pt-2 border-t border-white/10">
+          <div className="mt-4 pt-2 border-t border-white/10">
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-white/40">
               <KeyboardHint hotkey="I" label="Info" />
               <KeyboardHint hotkey="G" label="Random" />
               <KeyboardHint hotkey="P" label="Pause" />
+              <KeyboardHint hotkey="Esc" label="Pause" />
             </div>
           </div>
         </div>
@@ -131,8 +133,12 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
  */
 const GameRulesPanel: React.FC<{ rules: GameRules }> = ({ rules }) => (
   <div
-    className="mt-3 rounded-xl border px-3 py-2.5 text-xs"
-    style={{ borderColor: 'var(--arcade-stroke)', background: 'rgba(0,0,0,0.3)' }}
+    className="mt-3 border px-3 py-2.5 text-xs"
+    style={{
+      borderColor: 'var(--arcade-stroke)',
+      background: 'rgba(10, 12, 18, 0.55)',
+      borderRadius: 'var(--arcade-radius-sm)',
+    }}
   >
     <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">
       How to Play
@@ -165,11 +171,17 @@ const ControlButton: React.FC<{
 }> = ({ onClick, label, hotkey }) => (
   <button
     onClick={onClick}
-    className="rounded-xl border px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-white/80 transition hover:text-white hover:bg-white/5 flex items-center justify-center gap-1.5"
-    style={{ borderColor: 'var(--arcade-stroke)' }}
+    className="border px-3 py-2 text-[10px] uppercase tracking-[0.22em] text-white/70 transition-all duration-300 hover:-translate-y-0.5 hover:text-white hover:bg-white/5 active:translate-y-0 active:scale-95 flex items-center justify-center gap-1.5"
+    style={{ borderColor: 'var(--arcade-stroke)', borderRadius: 'var(--arcade-radius-sm)' }}
   >
     <span>{label}</span>
-    <span className="text-[9px] text-white/40 border border-white/20 rounded px-1">
+    <span
+      className="text-[9px] text-white/40 border border-white/20 px-1"
+      style={{
+        fontFamily: 'var(--arcade-mono)',
+        borderRadius: 'var(--arcade-radius-sm)',
+      }}
+    >
       {hotkey}
     </span>
   </button>
@@ -185,10 +197,14 @@ const AudioToggleButton: React.FC<{
 }> = ({ label, isOn, onClick }) => (
   <button
     onClick={onClick}
-    className={`rounded-lg border px-2 py-2 text-[10px] uppercase tracking-[0.22em] transition hover:text-white ${
+    className={`border px-2 py-2 text-[10px] uppercase tracking-[0.22em] transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95 ${
       isOn ? 'text-white/90 bg-white/5' : 'text-white/50'
     }`}
-    style={{ borderColor: 'var(--arcade-stroke)' }}
+    style={{
+      borderColor: 'var(--arcade-stroke)',
+      borderRadius: 'var(--arcade-radius-sm)',
+      fontFamily: 'var(--arcade-mono)',
+    }}
   >
     {label} {isOn ? 'On' : 'Off'}
   </button>
@@ -202,7 +218,15 @@ const KeyboardHint: React.FC<{ hotkey: string; label: string }> = ({
   label,
 }) => (
   <span>
-    <span className="border border-white/20 rounded px-1 mr-1">{hotkey}</span>
+    <span
+      className="border border-white/20 px-1 mr-1"
+      style={{
+        fontFamily: 'var(--arcade-mono)',
+        borderRadius: 'var(--arcade-radius-sm)',
+      }}
+    >
+      {hotkey}
+    </span>
     {label}
   </span>
 );

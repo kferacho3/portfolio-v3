@@ -139,10 +139,10 @@ export const polarityState = proxy({
     if (this.score > this.bestScore) this.bestScore = this.score;
   },
 
-  setToast(text: string, time = 1.1) {
+  setToast(text: string, time = 1.1, slowMo = 0.12) {
     this.toastText = text;
     this.toastTime = Math.max(this.toastTime, time);
-    this.slowMoTime = Math.max(this.slowMoTime, 0.12);
+    this.slowMoTime = Math.max(this.slowMoTime, slowMo);
   },
 
   addResonance(amount: number) {
@@ -172,7 +172,6 @@ export const polarityState = proxy({
     if (burst) {
       this.resonance = 0;
       this.burstReady = false;
-      this.setToast('RESONANCE!');
       this.pulseCooldown = this.pulseCooldownMax + 0.35;
       return 'burst';
     }
@@ -226,12 +225,12 @@ export const polarityState = proxy({
     this.refreshCombo(0.3);
     this.addResonance(10 * resonanceMult);
     this.pulseCooldown = Math.max(0, this.pulseCooldown - 0.4);
-    this.setToast('FLIP PERFECT');
+    this.setToast('FLIP PERFECT!', 1.0, 0.16);
   },
 
   onResonanceBurst(zoneMult: number = 1) {
     this.addScore(140, zoneMult);
-    this.setToast('RESONANCE!');
+    this.setToast('RESONANCE!', 1.3, 0.24);
   },
 
   takeDamage(amount: number) {

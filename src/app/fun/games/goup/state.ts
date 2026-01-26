@@ -1,6 +1,7 @@
 import { proxy } from 'valtio';
 
 export type GoUpPhase = 'menu' | 'playing' | 'gameover';
+export type CrashType = 'none' | 'fell' | 'spike';
 
 const BEST_KEY = 'rachos-fun-goup-best';
 const ARENA_KEY = 'rachos-fun-goup-arena';
@@ -11,10 +12,16 @@ export const goUpState = proxy({
   score: 0,
   best: 0,
   gems: 0,
+  gapsJumped: 0,
+  wallsClimbed: 0,
   arenaIndex: 0,
   arenaMode: 'auto' as 'auto' | 'fixed',
 
-  // Used by the React component to regenerate the world.
+  crashType: 'none' as CrashType,
+  crashX: 0,
+  crashY: 0,
+  crashZ: 0,
+
   worldSeed: Math.floor(Math.random() * 1_000_000_000),
 
   loadBest: () => {
@@ -55,12 +62,19 @@ export const goUpState = proxy({
     goUpState.phase = 'playing';
     goUpState.score = 0;
     goUpState.gems = 0;
+    goUpState.gapsJumped = 0;
+    goUpState.wallsClimbed = 0;
+    goUpState.crashType = 'none';
     goUpState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
-  endGame: () => {
+  endGame: (crashType: CrashType = 'none', x = 0, y = 0, z = 0) => {
     if (goUpState.phase === 'gameover') return;
     goUpState.phase = 'gameover';
+    goUpState.crashType = crashType;
+    goUpState.crashX = x;
+    goUpState.crashY = y;
+    goUpState.crashZ = z;
     if (goUpState.score > goUpState.best) {
       goUpState.best = goUpState.score;
       if (typeof window !== 'undefined') {
@@ -69,10 +83,21 @@ export const goUpState = proxy({
     }
   },
 
+  addGapBonus: () => {
+    goUpState.gapsJumped += 1;
+  },
+
+  addWallBonus: () => {
+    goUpState.wallsClimbed += 1;
+  },
+
   reset: () => {
     goUpState.phase = 'menu';
     goUpState.score = 0;
     goUpState.gems = 0;
+    goUpState.gapsJumped = 0;
+    goUpState.wallsClimbed = 0;
+    goUpState.crashType = 'none';
     goUpState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 });

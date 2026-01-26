@@ -12,6 +12,7 @@ const Walls: React.FC = () => {
 
   useFrame(() => {
     if (snap.phase !== 'playing') return;
+    if (mutation.hitStop > 0) return;
 
     const playerZ = mutation.playerZ;
 

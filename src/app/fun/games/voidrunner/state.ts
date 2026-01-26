@@ -9,11 +9,32 @@ import type { VoidRunnerGameState, MutationState, Difficulty, GameMode, Characte
 import {
   COLORS,
   INITIAL_GAME_SPEED,
-  GAME_SPEED_MULTIPLIER,
   DIFFICULTY_SETTINGS,
   PLAYER_START_X,
   PLAYER_START_Z,
 } from './constants';
+
+const BREATHER_INTERVAL = 6;
+const BREATHER_SPEED_SCALE = 0.92;
+const BREATHER_SPACING_SCALE = 1.18;
+const GENTLE_LEVELS = 7;
+const GENTLE_STEP = 0.045;
+const LATE_STEP = 0.028;
+const LATE_EXPONENT = 1.35;
+
+const getBreatherSpeedScale = (level: number) =>
+  level % BREATHER_INTERVAL === 0 ? BREATHER_SPEED_SCALE : 1;
+
+const getBreatherSpacingScale = (level: number) =>
+  level % BREATHER_INTERVAL === 0 ? BREATHER_SPACING_SCALE : 1;
+
+const getSpeedForLevel = (level: number, difficulty: Difficulty) => {
+  const gentle = Math.min(level, GENTLE_LEVELS) * GENTLE_STEP;
+  const lateLevels = Math.max(0, level - GENTLE_LEVELS);
+  const late = Math.pow(lateLevels, LATE_EXPONENT) * LATE_STEP;
+  const baseSpeed = INITIAL_GAME_SPEED + gentle + late;
+  return baseSpeed * DIFFICULTY_SETTINGS[difficulty].speedMult * getBreatherSpeedScale(level);
+};
 
 // Fast mutation object for per-frame updates (not reactive)
 export const mutation: MutationState = {
@@ -26,6 +47,10 @@ export const mutation: MutationState = {
   playerX: 0,
   currentLevelLength: 0,
   globalColor: new THREE.Color(0xff2190),
+  spacingScalar: 1,
+  shake: 0,
+  shakeDecay: 2.6,
+  hitStop: 0,
 };
 
 export const voidRunnerState = proxy<VoidRunnerGameState & {
@@ -69,6 +94,9 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
     mutation.playerX = PLAYER_START_X;
     mutation.gameOver = false;
     mutation.globalColor.copy(COLORS[0].three);
+    mutation.spacingScalar = 1;
+    mutation.shake = 0;
+    mutation.hitStop = 0;
   },
 
   startGame() {
@@ -80,10 +108,13 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
     this.comboMultiplier = 1;
     mutation.gameOver = false;
     mutation.gameSpeed = 0;
-    mutation.desiredSpeed = INITIAL_GAME_SPEED * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
+    mutation.desiredSpeed = getSpeedForLevel(this.level, this.difficulty);
     mutation.playerZ = PLAYER_START_Z;
     mutation.playerX = PLAYER_START_X;
     mutation.horizontalVelocity = 0;
+    mutation.spacingScalar = getBreatherSpacingScale(this.level);
+    mutation.shake = 0;
+    mutation.hitStop = 0;
   },
 
   setCharacter(c: Character) {
@@ -101,6 +132,8 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
     }
     mutation.gameOver = true;
     mutation.gameSpeed = 0;
+    mutation.hitStop = 0.05;
+    mutation.shake = 0.8;
   },
 
   setDifficulty(d: Difficulty) {
@@ -114,11 +147,13 @@ export const voidRunnerState = proxy<VoidRunnerGameState & {
   incrementLevel() {
     this.level += 1;
     mutation.colorLevel = (mutation.colorLevel + 1) % COLORS.length;
-    mutation.desiredSpeed += GAME_SPEED_MULTIPLIER * DIFFICULTY_SETTINGS[this.difficulty].speedMult;
+    mutation.desiredSpeed = getSpeedForLevel(this.level, this.difficulty);
+    mutation.spacingScalar = getBreatherSpacingScale(this.level);
   },
 
   addNearMiss() {
     this.nearMissCount += 1;
+    mutation.shake = Math.min(0.45, mutation.shake + 0.12);
     if (this.nearMissCount >= 3) {
       this.comboMultiplier = Math.min(this.comboMultiplier + 0.5, 5);
       this.nearMissCount = 0;

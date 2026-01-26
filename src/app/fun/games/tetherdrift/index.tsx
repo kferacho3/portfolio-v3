@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Html, Sky, Stars, Torus } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
@@ -84,11 +85,19 @@ const GateMesh: React.FC<{ pos: THREE.Vector3; active: boolean }> = ({ pos, acti
 const PylonMesh: React.FC<{ pylon: Pylon; shock?: boolean }> = ({ pylon, shock }) => (
   <group position={[pylon.pos.x, 0, pylon.pos.z]}>
     <mesh castShadow>
-      <cylinderGeometry args={[0.6, 0.8, 3.2, 12]} />
-      <meshStandardMaterial color="#0b1226" metalness={0.2} roughness={0.9} />
+      <cylinderGeometry args={[0.55, 0.75, 3.0, 12]} />
+      <meshStandardMaterial color="#0f172a" metalness={0.35} roughness={0.85} />
     </mesh>
-    <mesh castShadow position={[0, 2.0, 0]}>
-      <sphereGeometry args={[0.28, 16, 16]} />
+    <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.25, 0]}>
+      <torusGeometry args={[0.9, 0.09, 10, 24]} />
+      <meshStandardMaterial color="#1e293b" emissive="#38bdf8" emissiveIntensity={0.25} />
+    </mesh>
+    <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 1.7, 0]}>
+      <torusGeometry args={[0.75, 0.08, 10, 24]} />
+      <meshStandardMaterial color={shock ? '#fb7185' : '#7dd3fc'} emissive={shock ? '#fb7185' : '#38bdf8'} emissiveIntensity={0.55} />
+    </mesh>
+    <mesh castShadow position={[0, 2.05, 0]}>
+      <sphereGeometry args={[0.25, 16, 16]} />
       <meshStandardMaterial
         color={shock ? '#fb7185' : '#a78bfa'}
         emissive={shock ? '#fb7185' : '#a78bfa'}
@@ -132,11 +141,184 @@ const LaserBar: React.FC<{
   );
 };
 
+const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({ accentA, accentB }) => {
+  const mat = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uA: { value: new THREE.Color(accentA) },
+        uB: { value: new THREE.Color(accentB) },
+      },
+      vertexShader: `
+        varying vec3 vPos;
+        varying vec3 vN;
+        void main(){
+          vPos = position;
+          vN = normal;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uA;
+        uniform vec3 uB;
+        varying vec3 vPos;
+        varying vec3 vN;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+        void main(){
+          vec3 n = normalize(vN);
+          float h = clamp(n.y*0.5+0.5, 0.0, 1.0);
+          float bands = sin((vPos.z*0.025) + uTime*0.8) * 0.08;
+          float stars = step(0.988, hash(floor(vPos.xz*0.28))) * 0.85;
+          vec3 col = mix(uB, uA, h + bands);
+          col += stars * vec3(0.9, 0.95, 1.0);
+          float v = smoothstep(240.0, 80.0, length(vPos.xz));
+          col *= mix(0.55, 1.0, v);
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+  }, [accentA, accentB]);
+
+  useFrame((_, dt) => {
+    mat.uniforms.uTime.value += dt;
+  });
+
+  return (
+    <mesh>
+      <icosahedronGeometry args={[260, 2]} />
+      <primitive object={mat} attach="material" />
+    </mesh>
+  );
+};
+
+const LowPolyGround: React.FC = () => {
+  const geom = useMemo(() => {
+    const g = new THREE.PlaneGeometry(ARENA_SIZE, ARENA_SIZE, 22, 22);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const ripple = Math.sin((x + z) * 0.16) * 0.12;
+      const bowl = -Math.hypot(x, z) / (ARENA_SIZE * 0.65) * 0.55;
+      pos.setY(i, -0.02 + ripple + bowl);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    return g;
+  }, []);
+  return (
+    <mesh geometry={geom} receiveShadow>
+      <meshStandardMaterial color="#070b12" roughness={0.95} metalness={0.05} flatShading />
+    </mesh>
+  );
+};
+
+const ScenePostFX: React.FC<{ boost: number }> = ({ boost }) => {
+  const strength = clamp(0.55 + boost * 1.05, 0.55, 1.7);
+  return (
+    <EffectComposer multisampling={0}>
+      <Bloom intensity={strength} luminanceThreshold={0.2} mipmapBlur />
+      <ChromaticAberration offset={new THREE.Vector2(0.00085, 0.0007)} />
+      <Noise opacity={0.05} />
+      <Vignette eskil={false} offset={0.3} darkness={0.75} />
+    </EffectComposer>
+  );
+};
+
+const PlayerTrail: React.FC<{ target: React.RefObject<THREE.Object3D>; color: string }> = ({ target, color }) => {
+  const geomRef = useRef<THREE.BufferGeometry | null>(null);
+  const attrRef = useRef<THREE.BufferAttribute | null>(null);
+  const ring = useMemo(() => new Float32Array(70 * 3), []);
+  const ordered = useMemo(() => new Float32Array(70 * 3), []);
+  const countRef = useRef(0);
+  const headRef = useRef(0);
+  const tmp = useMemo(() => new THREE.Vector3(), []);
+
+  useEffect(() => {
+    if (!geomRef.current) return;
+    const attr = new THREE.BufferAttribute(ordered, 3);
+    attrRef.current = attr;
+    geomRef.current.setAttribute('position', attr);
+    geomRef.current.setDrawRange(0, 0);
+  }, [ordered]);
+
+  useFrame(() => {
+    const obj = target.current;
+    const geom = geomRef.current;
+    const attr = attrRef.current;
+    if (!obj || !geom || !attr) return;
+    obj.getWorldPosition(tmp);
+
+    const head = headRef.current;
+    ring[head * 3] = tmp.x;
+    ring[head * 3 + 1] = tmp.y + 0.12;
+    ring[head * 3 + 2] = tmp.z;
+
+    headRef.current = (head + 1) % 70;
+    countRef.current = Math.min(70, countRef.current + 1);
+    const n = countRef.current;
+    if (n <= 0) {
+      geom.setDrawRange(0, 0);
+      return;
+    }
+    const start = headRef.current;
+    for (let i = 0; i < n; i++) {
+      const src = ((start + i) % 70) * 3;
+      const dst = i * 3;
+      ordered[dst] = ring[src];
+      ordered[dst + 1] = ring[src + 1];
+      ordered[dst + 2] = ring[src + 2];
+    }
+    for (let i = n; i < 70; i++) {
+      const dst = i * 3;
+      const last = (n - 1) * 3;
+      ordered[dst] = ordered[last];
+      ordered[dst + 1] = ordered[last + 1];
+      ordered[dst + 2] = ordered[last + 2];
+    }
+    geom.setDrawRange(0, n);
+    attr.needsUpdate = true;
+  });
+
+  return (
+    <line frustumCulled={false}>
+      <bufferGeometry ref={geomRef} />
+      <lineBasicMaterial color={color} transparent opacity={0.45} />
+    </line>
+  );
+};
+
+const OrbitRings: React.FC = () => {
+  const rings = [12, 20, 28];
+  return (
+    <group position={[0, 0.02, 0]}>
+      {rings.map((r) => (
+        <mesh key={`orbit-ring-${r}`} rotation={[-Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[r, 0.06, 8, 64]} />
+          <meshStandardMaterial
+            color="#1e293b"
+            emissive="#38bdf8"
+            emissiveIntensity={0.18}
+            transparent
+            opacity={0.35}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
 const TetherDriftHUD: React.FC<{ event: EventType; eventTime: number }> = ({ event, eventTime }) => {
   const s = useSnapshot(tetherDriftState);
   const heat = Math.round(s.heat);
   const heatMult = 1 + (s.heat / 100) * 0.75;
   const flash = s.perfectFlash > 0 ? Math.min(1, s.perfectFlash / 0.2) : 0;
+  const eventLabel =
+    event === 'TwinLasers' ? 'Laser Sweep' : event === 'ShockPylon' ? 'Shock Anchor' : event === 'LowGravity' ? 'Low Gravity' : '';
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const stored = window.localStorage.getItem(BEST_SCORE_KEY);
@@ -157,7 +339,9 @@ const TetherDriftHUD: React.FC<{ event: EventType; eventTime: number }> = ({ eve
       )}
       <ArcadeHudShell gameId="tetherdrift" className="absolute top-4 left-4 pointer-events-auto">
         <ArcadeHudCard className="min-w-[260px]">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
+          <div className="text-[11px] uppercase tracking-[0.32em] text-white/60">Orbit Sling</div>
+          <div className="text-[11px] text-white/45">Latch → Orbit → Release</div>
+          <div className="mt-3 text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
           <div className="text-2xl font-semibold text-white">{s.score.toLocaleString()}</div>
           <div className="text-[11px] text-white/50">Best {s.bestScore.toLocaleString()}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -165,7 +349,7 @@ const TetherDriftHUD: React.FC<{ event: EventType; eventTime: number }> = ({ eve
             <ArcadeHudPill label={`Timer ${s.chainTime.toFixed(1)}s`} />
             <ArcadeHudPill label={`Heat ${heat}%`} tone={heat >= 80 ? 'warn' : 'default'} />
             {heat > 0 && <ArcadeHudPill label={`Heat x${heatMult.toFixed(2)}`} tone="accent" />}
-            {event && <ArcadeHudPill label={`${event} ${Math.ceil(eventTime)}s`} tone="accent" />}
+            {event && <ArcadeHudPill label={`${eventLabel} ${Math.ceil(eventTime)}s`} tone="accent" />}
           </div>
 
           <div className="mt-3 space-y-2 text-[11px] text-white/70">
@@ -190,7 +374,7 @@ const TetherDriftHUD: React.FC<{ event: EventType; eventTime: number }> = ({ eve
           </div>
 
           <div className="mt-2 text-[10px] uppercase tracking-[0.28em] text-white/50">
-            Hold Click tether • Release fling • WASD adjust • Space boost • Shift brake
+            Hold Click latch • Release sling • WASD trim • Space boost • Shift brake
           </div>
         </ArcadeHudCard>
       </ArcadeHudShell>
@@ -253,9 +437,14 @@ const TetherDrift: React.FC = () => {
   const ropeGeom = useMemo(() => new THREE.BufferGeometry(), []);
   const ropePoints = useMemo(() => [new THREE.Vector3(), new THREE.Vector3()], []);
   const arrowRef = useRef<THREE.Group | null>(null);
+  const constellationBurstRef = useRef({ time: 0, pos: new THREE.Vector3() });
+  const burstMeshRef = useRef<THREE.Mesh | null>(null);
+  const burstMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
 
   const [gates, setGates] = useState<THREE.Vector3[]>([]);
   const [activeGateIdx, setActiveGateIdx] = useState(0);
+  const pathRef = useRef<THREE.Line | null>(null);
+  const pathGeom = useMemo(() => new THREE.BufferGeometry(), []);
 
   const perfectArmedUntilRef = useRef(0);
   const eventRef = useRef<{
@@ -295,6 +484,16 @@ const TetherDrift: React.FC = () => {
     rebuildConstellation(posRef.current, velRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const points = gates.slice(activeGateIdx).map((g) => new THREE.Vector3(g.x, 1.12, g.z));
+    if (points.length < 2) {
+      if (pathRef.current) pathRef.current.visible = false;
+      return;
+    }
+    pathGeom.setFromPoints(points);
+    if (pathRef.current) pathRef.current.visible = true;
+  }, [activeGateIdx, gates, pathGeom]);
 
   const findNearestPylon = (p: THREE.Vector3): Pylon => {
     let best = pylons[0];
@@ -485,6 +684,8 @@ const TetherDrift: React.FC = () => {
         tetherDriftState.onGatePassed({ perfect, constellationDone: done });
 
         if (done) {
+          constellationBurstRef.current.pos.copy(gate);
+          constellationBurstRef.current.time = 0.6;
           rebuildConstellation(posRef.current, velRef.current);
         } else {
           setActiveGateIdx(nextIdx);
@@ -545,6 +746,22 @@ const TetherDrift: React.FC = () => {
       }
     }
 
+    if (constellationBurstRef.current.time > 0 && burstMeshRef.current && burstMatRef.current) {
+      constellationBurstRef.current.time = Math.max(0, constellationBurstRef.current.time - step);
+      const t = 1 - constellationBurstRef.current.time / 0.6;
+      burstMeshRef.current.visible = true;
+      burstMeshRef.current.position.set(
+        constellationBurstRef.current.pos.x,
+        0.2,
+        constellationBurstRef.current.pos.z
+      );
+      const scale = 1 + t * 3.2;
+      burstMeshRef.current.scale.set(scale, scale, scale);
+      burstMatRef.current.opacity = 0.45 * (1 - t);
+    } else if (burstMeshRef.current) {
+      burstMeshRef.current.visible = false;
+    }
+
     clearFrameInput(inputRef);
   });
 
@@ -565,11 +782,16 @@ const TetherDrift: React.FC = () => {
         <planeGeometry args={[ARENA_SIZE, ARENA_SIZE]} />
         <meshStandardMaterial color="#070b12" />
       </mesh>
+      <OrbitRings />
 
       {/* Pylons */}
       {pylons.map((p) => (
         <PylonMesh key={p.id} pylon={p} shock={eventRef.current.type === 'ShockPylon' && eventRef.current.shockPylonId === p.id} />
       ))}
+
+      <line ref={pathRef} geometry={pathGeom} visible={false}>
+        <lineBasicMaterial color="#38bdf8" transparent opacity={0.4} />
+      </line>
 
       {/* Gates */}
       {gates.map((g, idx) => (
@@ -590,6 +812,18 @@ const TetherDrift: React.FC = () => {
           <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.5} />
         </mesh>
       </group>
+
+      <mesh ref={burstMeshRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[1.2, 1.9, 32]} />
+        <meshStandardMaterial
+          ref={burstMatRef}
+          color="#22d3ee"
+          emissive="#22d3ee"
+          emissiveIntensity={0.65}
+          transparent
+          opacity={0}
+        />
+      </mesh>
 
       {/* Lasers */}
       <LaserBar angleRef={laserAngleRef} strengthRef={laserStrengthRef} />

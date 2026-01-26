@@ -44,7 +44,7 @@ const GROUND_Y = 0.5; // Slightly raised
 // Rotate the screen upright with a slight backward tilt to match arcade cabinet angle
 const SCREEN_ROTATION = new THREE.Quaternion().setFromAxisAngle(
   new THREE.Vector3(1, 0, 0),
-  Math.PI / 2 - 0.2  // ~78 degrees - tilts top of screen backward
+  Math.PI / 2 - 0.2 // ~78 degrees - tilts top of screen backward
 );
 // Texture cache to avoid reloading
 const textureCache = new Map<string, THREE.Texture>();
@@ -203,7 +203,9 @@ export function RachosArcade(props: ModelProps) {
 
     const planeLocalQuat = localQuat.clone().multiply(SCREEN_ROTATION);
 
-    const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(planeLocalQuat).normalize();
+    const normal = new THREE.Vector3(0, 0, 1)
+      .applyQuaternion(planeLocalQuat)
+      .normalize();
     localPosition.addScaledVector(normal, Math.min(width, height) * 0.02);
 
     setScreenPlaneConfig({
@@ -265,14 +267,14 @@ export function RachosArcade(props: ModelProps) {
 
     const prev = focusRef.current;
     if (
-      (!prev ||
-        prev.radius !== radius ||
-        prev.focus[0] !== focus[0] ||
-        prev.focus[1] !== focus[1] ||
-        prev.focus[2] !== focus[2] ||
-        prev.forward[0] !== forward[0] ||
-        prev.forward[1] !== forward[1] ||
-        prev.forward[2] !== forward[2])
+      !prev ||
+      prev.radius !== radius ||
+      prev.focus[0] !== focus[0] ||
+      prev.focus[1] !== focus[1] ||
+      prev.focus[2] !== focus[2] ||
+      prev.forward[0] !== forward[0] ||
+      prev.forward[1] !== forward[1] ||
+      prev.forward[2] !== forward[2]
     ) {
       onFocusReady(focus, radius, forward);
       focusRef.current = { focus, radius, forward };
@@ -320,14 +322,14 @@ export function RachosArcade(props: ModelProps) {
 
     const posterUrl = currentGame.poster;
     const proxyUrl = getProxyUrl(posterUrl);
-    
+
     // Check cache first
     if (textureCache.has(posterUrl)) {
       const cachedTexture = textureCache.get(posterUrl)!;
       applyTextureToMesh(mesh, cachedTexture);
       return;
     }
-    
+
     // Load texture via proxy
     textureLoader.load(
       proxyUrl,
@@ -478,9 +480,9 @@ function applyTextureToMesh(mesh: THREE.Mesh, texture: THREE.Texture) {
 
   texture.needsUpdate = true;
 
-  const existingMaterial = mesh.material as THREE.MeshBasicMaterial | undefined;
+  const existingMaterial = mesh.material as THREE.Material | undefined;
   const material =
-    existingMaterial && existingMaterial.isMeshBasicMaterial
+    existingMaterial instanceof THREE.MeshBasicMaterial
       ? existingMaterial
       : new THREE.MeshBasicMaterial({
           toneMapped: false,

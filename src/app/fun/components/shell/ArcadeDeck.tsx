@@ -9,7 +9,8 @@
 import React, { useState, useEffect } from 'react';
 import { GAME_CARDS, TOTAL_GAMES } from '../../config/games';
 import { getArcadePanelCSS } from '../../config/themes';
-import type { GameCard } from '../../store/types';
+import { preloadGame } from '../../games/registry';
+import type { GameCard, GameId } from '../../store/types';
 
 export interface ArcadeDeckProps {
   selectedIndex: number;
@@ -31,6 +32,16 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
     setShowInfo(false);
   }, [selectedIndex]);
 
+  useEffect(() => {
+    if (!selectedGame) return;
+    preloadGame(selectedGame.id as GameId);
+
+    const nextGame = GAME_CARDS[(selectedIndex + 1) % TOTAL_GAMES];
+    const prevGame = GAME_CARDS[(selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES];
+    if (nextGame) preloadGame(nextGame.id as GameId);
+    if (prevGame) preloadGame(prevGame.id as GameId);
+  }, [selectedGame, selectedIndex]);
+
   const handleSelectPrevious = () => {
     onSelectGame((selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES);
   };
@@ -45,18 +56,25 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
     }
   };
 
+  const handlePreloadSelected = () => {
+    if (selectedGame) {
+      preloadGame(selectedGame.id as GameId);
+    }
+  };
+
   return (
     <div className="fixed inset-x-0 bottom-6 z-[9999] flex justify-center px-4 pointer-events-none">
       <div
-        className="pointer-events-auto w-full max-w-[760px] animate-in fade-in slide-in-from-bottom-6 duration-700"
+        className="pointer-events-auto w-full max-w-[760px] animate-in fade-in slide-in-from-bottom-4 duration-700"
         style={panelStyles}
       >
         <div
-          className="relative overflow-hidden rounded-[26px] border px-4 py-3 backdrop-blur-xl"
+          className="relative overflow-hidden border px-5 py-4 backdrop-blur-2xl"
           style={{
             borderColor: 'var(--arcade-stroke)',
             background: 'var(--arcade-surface)',
-            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.45), 0 0 30px var(--arcade-glow)',
+            boxShadow: 'var(--arcade-elevation), 0 0 30px var(--arcade-glow)',
+            borderRadius: 'var(--arcade-radius)',
           }}
         >
           {/* Gradient overlay */}
@@ -70,7 +88,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
           />
 
           {/* Main content */}
-          <div className="relative flex flex-wrap items-center justify-between gap-3">
+          <div className="relative flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <NavigationButton
                 direction="prev"
@@ -78,7 +96,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
               />
               
               <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-lg font-semibold text-white md:text-xl truncate">
+                <span className="text-base font-semibold text-white/90 md:text-lg truncate">
                   {selectedGame.title}
                 </span>
                 <InfoButton
@@ -94,17 +112,21 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
             </div>
 
             <div className="flex-shrink-0">
-              <LaunchButton onClick={handleLaunchSelected} />
+              <LaunchButton
+                onClick={handleLaunchSelected}
+                onPreload={handlePreloadSelected}
+              />
             </div>
           </div>
 
           {/* Info panel */}
           {showInfo && (
             <div
-              className="relative mt-3 rounded-xl border px-3 py-2 text-sm text-white/80"
+              className="relative mt-3 border px-3 py-2 text-sm text-white/70"
               style={{
                 borderColor: 'var(--arcade-stroke)',
-                background: 'rgba(10, 12, 18, 0.6)',
+                background: 'rgba(10, 12, 18, 0.55)',
+                borderRadius: 'var(--arcade-radius-sm)',
               }}
             >
               {selectedGame.description}
@@ -126,11 +148,11 @@ const NavigationButton: React.FC<{
   <button
     onClick={onClick}
     aria-label={direction === 'prev' ? 'Previous game' : 'Next game'}
-    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border text-base font-semibold text-white/90 transition-all hover:scale-110 hover:text-white hover:bg-white/10 active:scale-95"
+    className="flex h-10 w-10 flex-shrink-0 items-center justify-center border text-base font-semibold text-white/80 transition-all duration-300 hover:-translate-y-0.5 hover:text-white hover:bg-white/10 active:translate-y-0 active:scale-95"
     style={{
       borderColor: 'var(--arcade-stroke)',
       background: 'rgba(10, 12, 18, 0.7)',
-      fontFamily: '"Geist Mono", monospace',
+      borderRadius: 'var(--arcade-radius-sm)',
       boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
     }}
   >
@@ -149,11 +171,12 @@ const InfoButton: React.FC<{
     onClick={onClick}
     aria-label="Toggle game info"
     aria-pressed={isActive}
-    className="flex h-8 w-8 items-center justify-center rounded-full border text-[11px] text-white/70 transition hover:text-white"
+    className="flex h-8 w-8 items-center justify-center border text-[11px] text-white/60 transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95"
     style={{
       borderColor: 'var(--arcade-stroke)',
       background: 'rgba(10, 12, 18, 0.45)',
-      fontFamily: '"Geist Mono", monospace',
+      borderRadius: 'var(--arcade-radius-sm)',
+      fontFamily: 'var(--arcade-mono)',
     }}
   >
     i
@@ -163,16 +186,30 @@ const InfoButton: React.FC<{
 /**
  * Launch/Start button
  */
-const LaunchButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+const LaunchButton: React.FC<{
+  onClick: () => void;
+  onPreload: () => void;
+}> = ({ onClick, onPreload }) => (
   <button
     onClick={onClick}
-    className="rounded-full px-5 py-2 text-[11px] uppercase tracking-[0.35em] text-black transition hover:brightness-110"
+    onMouseEnter={onPreload}
+    onFocus={onPreload}
+    className="group inline-flex items-center gap-2 border px-4 py-2 text-[11px] uppercase tracking-[0.32em] text-white/70 transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95"
     style={{
-      background: 'linear-gradient(135deg, var(--arcade-accent), #f7b267)',
-      fontFamily: '"Geist Mono", monospace',
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04))',
+      borderColor: 'var(--arcade-stroke)',
+      borderRadius: 'var(--arcade-radius-sm)',
+      fontFamily: 'var(--arcade-mono)',
+      boxShadow: '0 12px 30px rgba(0, 0, 0, 0.35)',
     }}
   >
-    Start
+    Play
+    <span
+      className="transition-opacity duration-300 group-hover:opacity-80"
+      style={{ color: 'var(--arcade-accent)' }}
+    >
+      ↗
+    </span>
   </button>
 );
 

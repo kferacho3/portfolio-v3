@@ -2,7 +2,7 @@
 
 import { Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
@@ -12,7 +12,12 @@ import { SeededRandom } from '../../utils/seededRandom';
 import { GAME } from './constants';
 import { OctaSurgeUI } from './_components/OctaSurgeUI';
 import { octaSurgeState } from './state';
-import type { ObstacleData, ObstacleType } from './types';
+import type {
+  CollectibleData,
+  CollectionEffect,
+  ObstacleData,
+  ObstacleType,
+} from './types';
 
 const TWO_PI = Math.PI * 2;
 
@@ -24,8 +29,7 @@ function wrapAngle(a: number) {
 }
 
 function smallestAngleDiff(a: number, b: number) {
-  const d = wrapAngle(a - b);
-  return d;
+  return wrapAngle(a - b);
 }
 
 function faceAngle() {
@@ -33,16 +37,110 @@ function faceAngle() {
 }
 
 function pickObstacleType(rng: SeededRandom, hazard: number): ObstacleType {
-  // Holes become more common as hazard rises.
   if (rng.random() < hazard * 0.55) return 'hole';
   return 'bump';
+}
+
+/** Z-ranges overlap? */
+function zOverlap(
+  aCenter: number,
+  aHalf: number,
+  bCenter: number,
+  bHalf: number
+): boolean {
+  return aCenter - aHalf < bCenter + bHalf && aCenter + aHalf > bCenter - bHalf;
+}
+
+/** Which tunnel face is at the bottom (player face)? worldRot in rad. */
+function playerFaceIndex(worldRot: number): number {
+  const fA = faceAngle();
+  let idx = Math.round((Math.PI - worldRot) / fA);
+  idx = idx % GAME.faces;
+  if (idx < 0) idx += GAME.faces;
+  return idx;
+}
+
+/** Same face (obstacle vs player)? Use angular tolerance for sub-frame blur. */
+function sameFaceObstacle(
+  obsFace: number,
+  worldRot: number,
+  faceTol: number
+): boolean {
+  const diff = Math.abs(
+    smallestAngleDiff(obsFace * faceAngle(), Math.PI - worldRot)
+  );
+  return diff < faceAngle() * faceTol;
+}
+
+/** Place normal collectibles in safe gaps, on faces with NO obstacle in that z-band. Reachable. */
+function placeNormalCollectible(
+  c: CollectibleData,
+  obstacles: ObstacleData[],
+  rng: SeededRandom
+) {
+  if (obstacles.length < 2) return;
+  const depth = GAME.obstacleDepth;
+  const half = depth / 2;
+  const sorted = [...obstacles].sort((a, b) => a.z - b.z);
+  const gaps: { z: number; excludedFaces: Set<number> }[] = [];
+  const band = 3;
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const a = sorted[i];
+    const b = sorted[i + 1];
+    const gapSize = b.z - a.z - depth;
+    if (gapSize < 3) continue;
+    const mid = (a.z + b.z) / 2;
+    const excludedFaces = new Set<number>();
+    for (const o of obstacles) {
+      if (zOverlap(o.z, half, mid, band)) excludedFaces.add(o.faceIndex);
+    }
+    gaps.push({ z: mid, excludedFaces });
+  }
+  if (gaps.length === 0) return;
+  const g = rng.pick(gaps);
+  const lead = rng.float(GAME.collectibleGapLeadMin, GAME.collectibleGapLeadMax);
+  const safeFaces = Array.from({ length: GAME.faces }, (_, i) => i).filter(
+    (f) => !g.excludedFaces.has(f)
+  );
+  const face = safeFaces.length > 0 ? rng.pick(safeFaces) : rng.int(0, GAME.faces - 1);
+  c.faceIndex = face;
+  c.z = g.z + lead;
+  c.collected = false;
+  delete c.respawnAt;
+}
+
+/** Specials: just AHEAD of obstacle (we see collectible first), same face. Hard but achievable. */
+function placeSpecialCollectible(
+  c: CollectibleData,
+  obstacles: ObstacleData[],
+  rng: SeededRandom
+) {
+  if (obstacles.length === 0) return;
+  const ob = rng.pick(obstacles);
+  const lead = rng.float(GAME.specialZOffsetMin, GAME.specialZOffsetMax);
+  c.faceIndex = ob.faceIndex;
+  c.z = ob.z + GAME.obstacleDepth / 2 + lead;
+  c.collected = false;
+  delete c.respawnAt;
+}
+
+function respawnCollectible(
+  collectible: CollectibleData,
+  obstacles: ObstacleData[],
+  rng: SeededRandom
+) {
+  if (collectible.type === 'special') {
+    placeSpecialCollectible(collectible, obstacles, rng);
+  } else {
+    placeNormalCollectible(collectible, obstacles, rng);
+  }
 }
 
 export default function OctaSurge() {
   const snap = useSnapshot(octaSurgeState);
 
   // Player token is slightly in front of the tunnel opening.
-  const playerZ = 0.7;
+  const playerZ = GAME.playerZ;
   const { paused, restartSeed } = useGameUIState();
 
   const { camera, scene, gl } = useThree();
@@ -54,7 +152,10 @@ export default function OctaSurge() {
   // Visual refs
   const tunnelGroup = useRef<THREE.Group>(null);
   const faceMaterials = useRef<THREE.MeshStandardMaterial[]>([]);
-  const obstacleRefs = useRef<(THREE.Object3D | null)[]>([]);
+  const obstacleRefs = useRef<(THREE.Group | null)[]>([]);
+  const bumpRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const holeRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const collectibleRefs = useRef<(THREE.Group | null)[]>([]);
   const ringRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   const geom = useMemo(() => {
@@ -65,27 +166,42 @@ export default function OctaSurge() {
       side,
       faceGeo: new THREE.PlaneGeometry(side, GAME.tunnelLength),
       ringGeo: new THREE.CylinderGeometry(ap, ap, 0.18, GAME.faces, 1, true),
-      bumpGeo: new THREE.BoxGeometry(side * 0.72, 0.8, 2.2),
-      holeGeo: new THREE.PlaneGeometry(side * 0.78, 2.2),
+      bumpGeo: new THREE.BoxGeometry(side * 0.72, 0.8, GAME.obstacleDepth),
+      holeGeo: new THREE.PlaneGeometry(side * 0.78, GAME.obstacleDepth),
       playerGeo: new THREE.CylinderGeometry(0.52, 0.52, 0.25, GAME.faces),
       innerGeo: new THREE.CylinderGeometry(0.28, 0.28, 0.13, GAME.faces),
+      collectibleGeo: new THREE.OctahedronGeometry(0.14, 0),
+      specialGeo: new THREE.OctahedronGeometry(0.2, 1),
+      effectRingGeo: new THREE.RingGeometry(0.08, 0.22, 16),
     };
   }, []);
 
   const world = useRef({
     rng: new SeededRandom(1),
     worldRot: 0,
+    rotationVel: 0,
+    targetRotationVel: 0,
     elapsed: 0,
     speed: GAME.baseSpeed,
+    invulnUntil: 0,
+    effectId: 0,
+    collectedThisFrame: false,
     obstacles: [] as ObstacleData[],
+    collectibles: [] as CollectibleData[],
     ringZ: [] as number[],
   });
+  const [collectionEffects, setCollectionEffects] = useState<CollectionEffect[]>([]);
+  const collectionEffectsRef = useRef<CollectionEffect[]>([]);
+  const pendingEffectsRef = useRef<CollectionEffect[]>([]);
+  useEffect(() => {
+    collectionEffectsRef.current = collectionEffects;
+  }, [collectionEffects]);
 
   useEffect(() => {
     gl.domElement.style.touchAction = 'none';
 
-    scene.background = new THREE.Color('#000000');
-    scene.fog = new THREE.Fog('#000000', 10, 90);
+    scene.background = new THREE.Color('#0a0612');
+    scene.fog = new THREE.Fog('#0a0612', 12, 95);
 
     camera.position.set(0, 1.1, 10.5);
     camera.lookAt(0, 0, -40);
@@ -102,16 +218,19 @@ export default function OctaSurge() {
   useEffect(() => {
     if (snap.phase !== 'playing') return;
 
-    // (Re)initialize run
     const w = world.current;
     w.rng = new SeededRandom(snap.worldSeed);
     w.elapsed = 0;
     w.worldRot = 0;
+    w.rotationVel = 0;
+    w.targetRotationVel = 0;
+    w.invulnUntil = 0;
+    w.effectId = 0;
+    w.collectedThisFrame = false;
+    setCollectionEffects([]);
 
     w.obstacles = [];
-    const fA = faceAngle();
-
-    // Place obstacles from back to front with spacing
+    const depth = GAME.obstacleDepth;
     const startZ = -GAME.spawnDistance;
     const spacing = GAME.spawnDistance / GAME.obstacleCount;
     for (let i = 0; i < GAME.obstacleCount; i++) {
@@ -124,12 +243,36 @@ export default function OctaSurge() {
         faceIndex,
         z,
         type,
-        depth: 2.2,
+        depth,
         protrusion: type === 'bump' ? 0.8 : 0,
       });
     }
 
-    // Rings: a stack of outlines to sell speed
+    w.collectibles = [];
+    let cId = 0;
+    for (let i = 0; i < GAME.collectibleCount; i++) {
+      const collectible: CollectibleData = {
+        id: cId++,
+        faceIndex: 0,
+        z: 0,
+        type: 'normal',
+        collected: false,
+      };
+      respawnCollectible(collectible, w.obstacles, w.rng);
+      w.collectibles.push(collectible);
+    }
+    for (let i = 0; i < GAME.specialCollectibleCount; i++) {
+      const collectible: CollectibleData = {
+        id: cId++,
+        faceIndex: 0,
+        z: 0,
+        type: 'special',
+        collected: false,
+      };
+      respawnCollectible(collectible, w.obstacles, w.rng);
+      w.collectibles.push(collectible);
+    }
+
     w.ringZ = [];
     const ringCount = 26;
     const ringSpacing = GAME.tunnelLength / ringCount;
@@ -150,6 +293,7 @@ export default function OctaSurge() {
     }
 
     const delta = Math.min(0.033, Math.max(0.001, dt));
+    w.collectedThisFrame = false;
 
     // Time + speed ramp
     w.elapsed += delta;
@@ -165,29 +309,30 @@ export default function OctaSurge() {
     const hazard = Math.min(0.55, GAME.baseHazard + progress * GAME.hazardRamp);
     w.speed = GAME.baseSpeed * (1 + progress * GAME.speedRamp);
 
-    // Rotation controls
+    // Rotation: smooth easing (lower ease = silkier)
     const keyLeft = input.current.keysDown.has('arrowleft') || input.current.keysDown.has('a');
     const keyRight = input.current.keysDown.has('arrowright') || input.current.keysDown.has('d');
-
-    if (keyLeft) w.worldRot += GAME.keyRotationSpeed * delta;
-    if (keyRight) w.worldRot -= GAME.keyRotationSpeed * delta;
-
+    w.targetRotationVel = 0;
+    if (keyLeft) w.targetRotationVel = GAME.keyRotationSpeed;
+    if (keyRight) w.targetRotationVel = -GAME.keyRotationSpeed;
     if (input.current.pointerDown) {
-      // Use pointerX delta for drag rotation (simplified - could track previous frame)
-      const dragDelta = input.current.pointerX * GAME.dragRotationFactor * 100;
-      w.worldRot -= dragDelta * delta;
+      const drag = -input.current.pointerX * GAME.dragRotationFactor * 100;
+      w.targetRotationVel += drag;
     }
-
-    w.worldRot = wrapAngle(w.worldRot);
+    const ease = 1 - Math.exp(-GAME.rotationEase * delta);
+    w.rotationVel += (w.targetRotationVel - w.rotationVel) * ease;
+    w.worldRot = wrapAngle(w.worldRot + w.rotationVel * delta);
     if (tunnelGroup.current) tunnelGroup.current.rotation.z = w.worldRot;
 
-    // Animate face palette (psychedelic drift)
+    // Animate face palette (neon drift — cyan / magenta / yellow)
     const t = w.elapsed;
-    for (let i = 0; i < faceMaterials.current.length; i++) {
+    for (let i = 0; i < GAME.faces; i++) {
       const mat = faceMaterials.current[i];
-      const hue = 0.17 + (i / GAME.faces) * 0.14 + t * 0.035;
-      mat.color.setHSL(hue % 1, 0.95, 0.54);
-      mat.emissive.setHSL((hue + 0.08) % 1, 0.75, 0.12);
+      if (!mat) continue;
+      const hue = 0.52 + (i / GAME.faces) * 0.18 + t * 0.04;
+      mat.color.setHSL(hue % 1, 0.7, 0.62);
+      mat.emissive.setHSL((hue + 0.06) % 1, 0.8, 0.18);
+      mat.emissiveIntensity = 0.35 + 0.1 * Math.sin(t * 2 + i * 0.5);
     }
 
     // Move rings toward player and wrap
@@ -200,38 +345,113 @@ export default function OctaSurge() {
       if (r) r.position.z = w.ringZ[i];
     }
 
-    // Obstacles
     const fA = faceAngle();
-    const playerAngle = Math.PI; // bottom
+    const playerAngle = Math.PI;
+    const collectFaceTol = fA * GAME.collectibleFaceTolerance;
+    const playerHalf = GAME.playerDepth / 2;
+    const obsHalf = GAME.obstacleDepth / 2;
+    const invuln = w.elapsed < w.invulnUntil;
 
+    // --- Move obstacles ---
     for (let i = 0; i < w.obstacles.length; i++) {
       const o = w.obstacles[i];
-      const prevZ = o.z;
       o.z += w.speed * delta;
-
-      // Collision check when crossing the player's plane
-      if (prevZ < playerZ && o.z >= playerZ) {
-        const a = o.faceIndex * fA + w.worldRot;
-        const diff = smallestAngleDiff(a, playerAngle);
-        if (Math.abs(diff) < fA * 0.46) {
-          octaSurgeState.end();
-          break;
-        }
-      }
-
-      // Recycle to back
       if (o.z > 4.5) {
         o.z -= GAME.spawnDistance;
         o.faceIndex = w.rng.int(0, GAME.faces - 1);
         o.type = pickObstacleType(w.rng, hazard);
         o.protrusion = o.type === 'bump' ? 0.8 : 0;
       }
+    }
+
+    // --- Move collectibles (only non-collected), check collect first, then respawn ---
+    for (let i = 0; i < w.collectibles.length; i++) {
+      const c = w.collectibles[i];
+      if (c.collected) {
+        if (c.respawnAt != null && w.elapsed >= c.respawnAt) {
+          respawnCollectible(c, w.obstacles, w.rng);
+        }
+        const g = collectibleRefs.current[i];
+        if (g) g.visible = false;
+        continue;
+      }
+      c.z += w.speed * delta;
+
+      const radius = c.type === 'special' ? GAME.specialHitRadius : GAME.collectibleHitRadius;
+      const overlap = zOverlap(playerZ, playerHalf, c.z, radius);
+      const diff = Math.abs(smallestAngleDiff(c.faceIndex * fA + w.worldRot, playerAngle));
+      const sameFace = diff < collectFaceTol;
+      if (overlap && sameFace) {
+        octaSurgeState.collect(c.type);
+        c.collected = true;
+        c.respawnAt = w.elapsed + GAME.collectionEffectLife + 0.08;
+        w.invulnUntil = w.elapsed + GAME.invulnDuration;
+        w.collectedThisFrame = true;
+        const eff: CollectionEffect = {
+          id: w.effectId++,
+          type: c.type,
+          faceIndex: c.faceIndex,
+          z: c.z,
+          bornAt: w.elapsed,
+          life: GAME.collectionEffectLife,
+        };
+        pendingEffectsRef.current.push(eff);
+        setCollectionEffects((prev) => [...prev.slice(-8), eff]);
+      }
+
+      if (c.z > 5) {
+        respawnCollectible(c, w.obstacles, w.rng);
+      }
+
+      const g = collectibleRefs.current[i];
+      if (g) {
+        g.position.z = c.z;
+        g.rotation.z = (c.faceIndex / GAME.faces) * Math.PI * 2;
+        g.visible = true;
+      }
+    }
+
+    // --- Obstacle hit (after collectibles). Never end when overlapping a collectible. ---
+    for (let i = 0; i < w.obstacles.length; i++) {
+      const o = w.obstacles[i];
+      const prevZ = o.z - w.speed * delta;
+      const segMin = Math.min(prevZ, o.z) - obsHalf;
+      const segMax = Math.max(prevZ, o.z) + obsHalf;
+      const sweptOverlap =
+        playerZ - playerHalf < segMax && playerZ + playerHalf > segMin;
+      const sameFace = sameFaceObstacle(o.faceIndex, w.worldRot, GAME.faceHitTightness);
+      const skipHit = invuln || w.collectedThisFrame;
+      if (!skipHit && sweptOverlap && sameFace) {
+        octaSurgeState.end();
+        endFrame();
+        return;
+      }
 
       const ref = obstacleRefs.current[i];
       if (ref) {
         ref.position.z = o.z;
+        ref.rotation.z = (o.faceIndex / GAME.faces) * Math.PI * 2;
         ref.visible = true;
       }
+      const bump = bumpRefs.current[i];
+      const hole = holeRefs.current[i];
+      if (bump) bump.visible = o.type === 'bump';
+      if (hole) hole.visible = o.type === 'hole';
+    }
+
+    // --- Update collection effects (move with world, cull expired, set age) ---
+    const now = w.elapsed;
+    const pending = pendingEffectsRef.current;
+    pendingEffectsRef.current = [];
+    const base = [...collectionEffectsRef.current, ...pending];
+    const updated = base
+      .filter((e) => now - e.bornAt < e.life)
+      .map((e) => {
+        const age = now - e.bornAt;
+        return { ...e, z: e.z + w.speed * delta, age };
+      });
+    if (updated.length > 0 || base.length > 0) {
+      setCollectionEffects(updated);
     }
 
     endFrame();
@@ -247,10 +467,11 @@ export default function OctaSurge() {
     <group>
       <OctaSurgeUI />
 
-      {/* Lights */}
-      <ambientLight intensity={0.55} />
-      <pointLight position={[0, 0, -60]} intensity={2.8} distance={140} />
-      <directionalLight position={[6, 8, 10]} intensity={0.9} />
+      {/* Lights — bright end glow + fill */}
+      <ambientLight intensity={0.4} />
+      <pointLight position={[0, 0, -70]} intensity={4} distance={160} color="#e0f0ff" />
+      <pointLight position={[0, 0, -40]} intensity={1.5} distance={80} color="#ffb3d9" />
+      <directionalLight position={[6, 8, 10]} intensity={0.85} />
 
       {/* Tunnel */}
       <group ref={tunnelGroup}>
@@ -269,9 +490,10 @@ export default function OctaSurge() {
                   ref={(m) => {
                     if (m) faceMaterials.current[i] = m;
                   }}
-                  roughness={0.35}
-                  metalness={0.05}
-                  emissive={'#00110A'}
+                  roughness={0.3}
+                  metalness={0.08}
+                  emissive={'#0d0820'}
+                  emissiveIntensity={0.4}
                   side={THREE.DoubleSide}
                 />
               </mesh>
@@ -290,54 +512,118 @@ export default function OctaSurge() {
             rotation={[Math.PI / 2, 0, 0]}
             position={[0, 0, -GAME.tunnelLength + (i / ringCount) * GAME.tunnelLength]}
           >
-            <meshBasicMaterial color={'white'} wireframe transparent opacity={0.25} />
+            <meshBasicMaterial color={'#88ccff'} wireframe transparent opacity={0.2} />
           </mesh>
         ))}
 
-        {/* Obstacles */}
-        {Array.from({ length: GAME.obstacleCount }, (_, i) => i).map((i) => {
-          // Place each obstacle under a face-rotated group. We update z each frame.
-          const faceIndex = i % GAME.faces;
-          const angle = (faceIndex / GAME.faces) * Math.PI * 2;
+        {/* Obstacles — position.z, rotation.z, bump/hole visibility set in useFrame */}
+        {Array.from({ length: GAME.obstacleCount }, (_, i) => i).map((i) => (
+          <group
+            key={i}
+            ref={(o) => {
+              if (o) obstacleRefs.current[i] = o;
+            }}
+            position={[0, 0, 0]}
+          >
+            <mesh
+              ref={(m) => {
+                if (m) bumpRefs.current[i] = m;
+              }}
+              position={[0, geom.apothem - 0.4, 0]}
+              geometry={geom.bumpGeo}
+              castShadow
+              receiveShadow
+            >
+              <meshStandardMaterial color={'#1a0a12'} emissive={'#8B1538'} emissiveIntensity={0.25} roughness={0.5} metalness={0.15} />
+            </mesh>
+            <mesh
+              ref={(m) => {
+                if (m) holeRefs.current[i] = m;
+              }}
+              position={[0, geom.apothem + 0.01, 0]}
+              rotation={[Math.PI / 2, 0, 0]}
+              geometry={geom.holeGeo}
+            >
+              <meshBasicMaterial color={'#000000'} transparent opacity={0.55} side={THREE.DoubleSide} />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Collectibles — position.z, rotation.z, visibility set in useFrame */}
+        {Array.from(
+          { length: GAME.collectibleCount + GAME.specialCollectibleCount },
+          (_, i) => i
+        ).map((i) => {
+          const isSpecial = i >= GAME.collectibleCount;
           return (
             <group
-              key={i}
-              rotation={[0, 0, angle]}
-              ref={(o) => {
-                if (o) obstacleRefs.current[i] = o;
+              key={`c-${i}`}
+              ref={(g) => {
+                if (g) collectibleRefs.current[i] = g;
               }}
               position={[0, 0, 0]}
             >
-              {/* Bump */}
               <mesh
-                position={[0, geom.apothem - 0.4, 0]}
-                geometry={geom.bumpGeo}
-                castShadow
-                receiveShadow
+                position={[0, geom.apothem - 0.15, 0]}
+                geometry={isSpecial ? geom.specialGeo : geom.collectibleGeo}
               >
-                <meshStandardMaterial color={'#0B1020'} emissive={'#020411'} roughness={0.55} metalness={0.1} />
+                <meshStandardMaterial
+                  color={isSpecial ? '#A78BFA' : '#FBBF24'}
+                  emissive={isSpecial ? '#7C3AED' : '#F59E0B'}
+                  emissiveIntensity={isSpecial ? 0.5 : 0.4}
+                  roughness={0.2}
+                  metalness={0.3}
+                />
               </mesh>
+            </group>
+          );
+        })}
 
-              {/* Hole overlay (dark patch) */}
+        {/* Collection effects — burst + glow that scale up and fade */}
+        {collectionEffects.map((e) => {
+          const age = e.age ?? 0;
+          const t = Math.min(1, age / Math.max(0.01, e.life));
+          const scale = 0.5 + 1.2 * Math.min(1, t * 2.5);
+          const opacity = 1 - t * t;
+          const isSpecial = e.type === 'special';
+          return (
+            <group
+              key={`eff-${e.id}`}
+              position={[0, 0, e.z]}
+              rotation={[0, 0, (e.faceIndex / GAME.faces) * Math.PI * 2]}
+              scale={[scale, scale, scale]}
+            >
+              <mesh position={[0, geom.apothem - 0.15, 0]} geometry={geom.collectibleGeo}>
+                <meshBasicMaterial
+                  color={isSpecial ? '#C4B5FD' : '#FDE68A'}
+                  transparent
+                  opacity={opacity * 0.95}
+                />
+              </mesh>
               <mesh
-                position={[0, geom.apothem + 0.01, 0]}
+                position={[0, geom.apothem - 0.15, 0]}
                 rotation={[Math.PI / 2, 0, 0]}
-                geometry={geom.holeGeo}
+                geometry={geom.effectRingGeo}
               >
-                <meshBasicMaterial color={'#000000'} transparent opacity={0.55} side={THREE.DoubleSide} />
+                <meshBasicMaterial
+                  color={isSpecial ? '#A78BFA' : '#FBBF24'}
+                  transparent
+                  opacity={opacity * 0.6}
+                  side={THREE.DoubleSide}
+                />
               </mesh>
             </group>
           );
         })}
       </group>
 
-      {/* Player marker (fixed) */}
+      {/* Player — faceted blue sphere (per reference) */}
       <group position={[0, -(GAME.apothem - GAME.playerInset), playerZ]}>
         <mesh geometry={geom.playerGeo}>
-          <meshStandardMaterial color={'#F43F5E'} roughness={0.25} emissive={'#29000A'} />
+          <meshStandardMaterial color={'#3B82F6'} emissive={'#1E40AF'} emissiveIntensity={0.2} roughness={0.2} metalness={0.4} />
         </mesh>
         <mesh geometry={geom.innerGeo} position={[0, 0.16, 0]}>
-          <meshStandardMaterial color={'#FFFFFF'} roughness={0.18} emissive={'#111111'} />
+          <meshStandardMaterial color={'#E0F0FF'} roughness={0.15} emissive={'#1a2744'} />
         </mesh>
       </group>
 

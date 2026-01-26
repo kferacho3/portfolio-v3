@@ -71,6 +71,7 @@ const Obstacles: React.FC = () => {
 
   useFrame((state) => {
     if (!meshRef.current) return;
+    if (mutation.hitStop > 0) return;
 
     const playerZ = mutation.playerZ;
     const playerX = mutation.playerX;
@@ -80,7 +81,8 @@ const Obstacles: React.FC = () => {
     cubes.forEach((cube, i) => {
       if (isPlaying) {
         if (cube.z - playerZ > 50) {
-          const spacing = DIFFICULTY_SETTINGS[voidRunnerState.difficulty].obstacleSpacing;
+          const spacing =
+            DIFFICULTY_SETTINGS[voidRunnerState.difficulty].obstacleSpacing * mutation.spacingScalar;
           cube.z = playerZ - PLANE_SIZE + randomInRange(-200, 0) * spacing;
           cube.x = randomInRange(negativeBound, positiveBound);
         }

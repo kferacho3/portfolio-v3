@@ -476,6 +476,7 @@ const TileSystem: React.FC = () => {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const voxelDummy = useMemo(() => new THREE.Object3D(), []);
   const clockRef = useRef(0);
+  const tilesToRemoveRef = useRef<number[]>([]);
 
   const tileGeometry = useMemo(
     () =>
@@ -805,7 +806,8 @@ const TileSystem: React.FC = () => {
       mutation.activeTileId = currentTileId;
       mutation.activeTileY = currentTileY;
 
-      const tilesToRemove: number[] = [];
+      const tilesToRemove = tilesToRemoveRef.current;
+      tilesToRemove.length = 0;
       let platformShouldFall = false;
       const fallDelay = MODE_SETTINGS[snap.mode].fallDelay;
 

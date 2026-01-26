@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSnapshot } from 'valtio';
 
@@ -238,7 +240,7 @@ function makeRuntime(): Runtime {
 // -----------------------------
 
 export default function Bouncer() {
-  const inputRef = useInputRef();
+  const inputRef = useInputRef({ preventDefault: [' ', 'Space'] });
   const snap = useSnapshot(bouncerState);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -313,9 +315,13 @@ export default function Bouncer() {
 
       // Controls (Bouncer):
       // Tap = drop (adds downward velocity).
-      // Holding keeps extra gravity on *while falling* so you can re-time the bounce.
+      // Holding adds extra gravity to cut the bounce arc.
       const input = inputRef.current;
-      rt.dropHeld = snap.phase === 'playing' ? input.pointerDown : false;
+      const spaceHeld =
+        input.keysDown.has(' ') ||
+        input.keysDown.has('space') ||
+        input.keysDown.has('spacebar');
+      rt.dropHeld = snap.phase === 'playing' ? input.pointerDown || spaceHeld : false;
 
       const dt = dtReal;
       // Tap to start/restart. While playing, a tap "invokes gravity" (cuts the upward arc so you can
@@ -500,6 +506,9 @@ function updateIdle(rt: Runtime, dt: number, dtReal: number) {
     spawnDust(rt, 10);
   }
 
+  // Keep the world scrolling for continuous motion even outside gameplay.
+  advanceScroller(rt, dt, false);
+
   // Particles
   rt.particles = rt.particles.filter((p) => {
     p.age += dtReal;
@@ -517,46 +526,26 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
 
   // Ball physics
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
-  const gMult = rt.dropHeld && rt.vy > 0 ? 2.8 : 1;
+  const gMult = rt.dropHeld ? 2.6 : 1;
   rt.vy += rt.g * gMult * dt;
   rt.ballY += rt.vy * dt;
+
+  // Cap max height so the ball never floats too high.
+  const maxRise = Math.max(rt.h * 0.38, rt.ballR * 6);
+  const minY = floorY - maxRise;
+  if (rt.ballY < minY) {
+    rt.ballY = minY;
+    if (rt.vy < 0) rt.vy = 0;
+  }
+
   if (rt.ballY > floorY) {
     rt.ballY = floorY;
     rt.vy = -rt.bounceVy;
     spawnDust(rt, 14);
   }
 
-  // Move obstacles / pickups
-  const dx = rt.speed * dt;
-  rt.obstacles.forEach((o) => (o.x -= dx));
-  rt.pickups.forEach((p) => (p.x -= dx));
-
-  // Spawn
-  rt.distToNextObstacle -= dx;
-  if (rt.distToNextObstacle <= 0) {
-    rt.obstacles.push({
-      id: idCounter++,
-      x: rt.w + 60,
-      spikes: choice([1, 1, 2, 2, 3]),
-      scored: false,
-    });
-    rt.distToNextObstacle = rand(240, 520) + Math.abs(rt.distToNextObstacle);
-  }
-
-  rt.distToNextPickup -= dx;
-  if (rt.distToNextPickup <= 0) {
-    rt.pickups.push({
-      id: idCounter++,
-      x: rt.w + rand(120, 320),
-      y: rt.groundY - rt.platformH / 2 - rt.ballR - rand(rt.h * 0.08, rt.h * 0.22),
-      size: Math.max(14, Math.round(rt.ballR * 0.95)),
-    });
-    rt.distToNextPickup = rand(520, 980) + Math.abs(rt.distToNextPickup);
-  }
-
-  // Cleanup
-  rt.obstacles = rt.obstacles.filter((o) => o.x > -200);
-  rt.pickups = rt.pickups.filter((p) => p.x > -200);
+  // Scroll world + spawn obstacles/pickups.
+  advanceScroller(rt, dt, true);
 
   // Scoring: when obstacle passes the ball
   const obstacleBase = Math.max(18, Math.round(rt.ballR * 1.45));
@@ -628,6 +617,45 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
 
   rt.shownScore = lerp(rt.shownScore, rt.score, 1 - Math.pow(0.001, dtReal));
   rt.hitFlash = Math.max(0, rt.hitFlash - dtReal * 3);
+}
+
+function advanceScroller(rt: Runtime, dt: number, active: boolean) {
+  const baseSpeed = active ? 340 + rt.score * 6 : 240;
+  rt.speed = baseSpeed;
+  const dx = baseSpeed * dt;
+
+  rt.obstacles.forEach((o) => (o.x -= dx));
+  rt.pickups.forEach((p) => (p.x -= dx));
+
+  const obstacleMin = active ? 240 : 320;
+  const obstacleMax = active ? 520 : 740;
+  const pickupMin = active ? 520 : 680;
+  const pickupMax = active ? 980 : 1240;
+
+  rt.distToNextObstacle -= dx;
+  if (rt.distToNextObstacle <= 0) {
+    rt.obstacles.push({
+      id: idCounter++,
+      x: rt.w + 60,
+      spikes: choice([1, 1, 2, 2, 3]),
+      scored: false,
+    });
+    rt.distToNextObstacle = rand(obstacleMin, obstacleMax) + Math.abs(rt.distToNextObstacle);
+  }
+
+  rt.distToNextPickup -= dx;
+  if (rt.distToNextPickup <= 0) {
+    rt.pickups.push({
+      id: idCounter++,
+      x: rt.w + rand(120, 320),
+      y: rt.groundY - rt.platformH / 2 - rt.ballR - rand(rt.h * 0.08, rt.h * 0.22),
+      size: Math.max(14, Math.round(rt.ballR * 0.95)),
+    });
+    rt.distToNextPickup = rand(pickupMin, pickupMax) + Math.abs(rt.distToNextPickup);
+  }
+
+  rt.obstacles = rt.obstacles.filter((o) => o.x > -200);
+  rt.pickups = rt.pickups.filter((p) => p.x > -200);
 }
 
 // -----------------------------

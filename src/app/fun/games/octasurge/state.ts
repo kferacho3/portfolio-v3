@@ -14,19 +14,39 @@ export const octaSurgeState = proxy({
   best: 0, // best progress (0..1)
   worldSeed: Math.floor(Math.random() * 1_000_000_000),
 
+  runCollectibles: 0,
+  runSpecial: 0,
+  totalCollectibles: 0,
+  totalSpecial: 0,
+
   load: () => {
     if (typeof localStorage === 'undefined') return;
     octaSurgeState.best = safeNumber(localStorage.getItem(STORAGE_KEYS.best), 0);
+    octaSurgeState.totalCollectibles = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.totalCollectibles),
+      0
+    );
+    octaSurgeState.totalSpecial = safeNumber(
+      localStorage.getItem(STORAGE_KEYS.totalSpecial),
+      0
+    );
   },
 
   save: () => {
     if (typeof localStorage === 'undefined') return;
     localStorage.setItem(STORAGE_KEYS.best, String(octaSurgeState.best));
+    localStorage.setItem(
+      STORAGE_KEYS.totalCollectibles,
+      String(octaSurgeState.totalCollectibles)
+    );
+    localStorage.setItem(STORAGE_KEYS.totalSpecial, String(octaSurgeState.totalSpecial));
   },
 
   start: () => {
     octaSurgeState.phase = 'playing';
     octaSurgeState.progress = 0;
+    octaSurgeState.runCollectibles = 0;
+    octaSurgeState.runSpecial = 0;
     octaSurgeState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
@@ -34,7 +54,14 @@ export const octaSurgeState = proxy({
     octaSurgeState.phase = 'gameover';
     if (octaSurgeState.progress > octaSurgeState.best) {
       octaSurgeState.best = octaSurgeState.progress;
-      octaSurgeState.save();
     }
+    octaSurgeState.totalCollectibles += octaSurgeState.runCollectibles;
+    octaSurgeState.totalSpecial += octaSurgeState.runSpecial;
+    octaSurgeState.save();
+  },
+
+  collect: (type: 'normal' | 'special') => {
+    if (type === 'normal') octaSurgeState.runCollectibles += 1;
+    else octaSurgeState.runSpecial += 1;
   },
 });

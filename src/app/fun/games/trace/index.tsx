@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Html, Sky, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Bloom, ChromaticAberration, EffectComposer, Noise } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { ArcadeHudCard, ArcadeHudPill, ArcadeHudShell } from '../../components/shell/ArcadeHudPanel';
@@ -58,6 +59,94 @@ function spawnShardAwayFrom(player: THREE.Vector3): THREE.Vector3 {
 
 const cellKey = (x: number, z: number) => `${Math.floor(x / HASH_CELL)}:${Math.floor(z / HASH_CELL)}`;
 
+const NeonDome: React.FC<{ accentA: string; accentB: string }> = ({ accentA, accentB }) => {
+  const mat = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uA: { value: new THREE.Color(accentA) },
+        uB: { value: new THREE.Color(accentB) },
+      },
+      vertexShader: `
+        varying vec3 vPos;
+        varying vec3 vN;
+        void main(){
+          vPos = position;
+          vN = normal;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uA;
+        uniform vec3 uB;
+        varying vec3 vPos;
+        varying vec3 vN;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+        void main(){
+          vec3 n = normalize(vN);
+          float h = clamp(n.y*0.5+0.5, 0.0, 1.0);
+          float bands = sin((vPos.x*0.02) + uTime*0.7) * 0.07;
+          float stars = step(0.988, hash(floor(vPos.xz*0.26))) * 0.85;
+          vec3 col = mix(uB, uA, h + bands);
+          col += stars * vec3(0.9, 0.95, 1.0);
+          float v = smoothstep(240.0, 90.0, length(vPos.xz));
+          col *= mix(0.6, 1.0, v);
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+    });
+  }, [accentA, accentB]);
+
+  useFrame((_, dt) => {
+    mat.uniforms.uTime.value += dt;
+  });
+
+  return (
+    <mesh>
+      <icosahedronGeometry args={[240, 2]} />
+      <primitive object={mat} attach="material" />
+    </mesh>
+  );
+};
+
+const LowPolyGround: React.FC = () => {
+  const geom = useMemo(() => {
+    const g = new THREE.PlaneGeometry(ARENA_SIZE, ARENA_SIZE, 18, 18);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const ridge = Math.sin(x * 0.22) * Math.cos(z * 0.18) * 0.11;
+      const bowl = -Math.hypot(x, z) / (ARENA_SIZE * 0.7) * 0.42;
+      pos.setY(i, -0.02 + ridge + bowl);
+    }
+    pos.needsUpdate = true;
+    g.computeVertexNormals();
+    return g;
+  }, []);
+  return (
+    <mesh geometry={geom} receiveShadow>
+      <meshStandardMaterial color="#060913" roughness={0.95} metalness={0.05} flatShading />
+    </mesh>
+  );
+};
+
+const ScenePostFX: React.FC<{ boost: number }> = ({ boost }) => {
+  const strength = clamp(0.55 + boost * 1.05, 0.55, 1.75);
+  return (
+    <EffectComposer multisampling={0}>
+      <Bloom intensity={strength} luminanceThreshold={0.2} mipmapBlur />
+      <ChromaticAberration offset={new THREE.Vector2(0.00085, 0.0007)} />
+      <Noise opacity={0.05} />
+      <Vignette eskil={false} offset={0.3} darkness={0.78} />
+    </EffectComposer>
+  );
+};
+
 const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
   const s = useSnapshot(traceState);
   useEffect(() => {
@@ -70,11 +159,20 @@ const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
     window.localStorage.setItem(BEST_SCORE_KEY, `${s.bestScore}`);
   }, [s.bestScore]);
   const toastOpacity = clamp(s.toastTime / 1.1, 0, 1);
+  const flash = s.slowMoTime > 0 ? clamp(s.slowMoTime / 0.12, 0, 1) : 0;
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
+      {flash > 0 && (
+        <div
+          className="fixed inset-0 pointer-events-none"
+          style={{ background: 'rgba(34, 211, 238, 0.2)', opacity: flash }}
+        />
+      )}
       <ArcadeHudShell gameId="trace" className="absolute top-4 left-4 pointer-events-auto">
         <ArcadeHudCard className="min-w-[260px]">
-          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
+          <div className="text-[10px] uppercase tracking-[0.32em] text-white/50">Neon Etch</div>
+          <div className="text-[9px] uppercase tracking-[0.26em] text-white/40">Carve → Phase → Seal</div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.32em] text-white/50">Score</div>
           <div className="text-2xl font-semibold text-white">{s.score.toLocaleString()}</div>
           <div className="text-[11px] text-white/50">Best {s.bestScore.toLocaleString()}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -82,6 +180,8 @@ const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
             <ArcadeHudPill label={`Window ${s.comboTime.toFixed(1)}s`} />
             <ArcadeHudPill label={`Phase ${s.phaseCharges}/${s.phaseMaxCharges}`} />
             <ArcadeHudPill label={`Solidify ${Math.round(solidifyMs)}ms`} />
+            <ArcadeHudPill label={`Seals ${s.seals}`} tone="accent" />
+            <ArcadeHudPill label={`Perfect ${s.perfectPhases}`} />
             {s.event && <ArcadeHudPill label={`${s.event} ${Math.ceil(s.eventTime)}s`} tone="accent" />}
           </div>
           <div className="mt-2 space-y-2 text-[11px] text-white/70">
@@ -93,6 +193,17 @@ const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
               <div
                 className="h-full bg-sky-300/70"
                 style={{ width: `${clamp((1 - s.purgeCooldown / s.purgeCooldownMax) * 100, 0, 100)}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span>Seal</span>
+              <span>{s.sealCooldown > 0 ? s.sealCooldown.toFixed(1) : 'ready'}</span>
+            </div>
+            <div className="h-2 w-56 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full bg-cyan-400/70"
+                style={{ width: `${clamp((1 - s.sealCooldown / s.sealCooldownMax) * 100, 0, 100)}%` }}
               />
             </div>
           </div>
@@ -128,6 +239,7 @@ const TraceHUD: React.FC<{ solidifyMs: number }> = ({ solidifyMs }) => {
 const Trace: React.FC = () => {
   const { camera } = useThree();
   const { paused } = useGameUIState();
+  const snap = useSnapshot(traceState);
 
   const inputRef = useInputRef({
     enabled: !paused,
@@ -147,6 +259,24 @@ const Trace: React.FC = () => {
 
   const lastGrazeAtRef = useRef(0);
   const tmpObj = useMemo(() => new THREE.Object3D(), []);
+  const sealFxRef = useRef<THREE.Mesh | null>(null);
+  const sealFxMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const sealFxTimeRef = useRef(0);
+  const sealFxPosRef = useRef(new THREE.Vector3(0, 0.1, 0));
+  const gridHelper = useMemo(() => {
+    const grid = new THREE.GridHelper(ARENA_SIZE, 24, '#0ea5e9', '#0ea5e9');
+    const mat = grid.material;
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => {
+        m.transparent = true;
+        m.opacity = 0.18;
+      });
+    } else {
+      mat.transparent = true;
+      mat.opacity = 0.18;
+    }
+    return grid;
+  }, []);
 
   const [shards, setShards] = useState<Shard[]>(() =>
     Array.from({ length: SHARD_COUNT }, (_, i) => ({
@@ -383,6 +513,8 @@ const Trace: React.FC = () => {
         }
         rebuildInstances(solidifyMs);
         traceState.onSeal(cleared);
+        sealFxTimeRef.current = 0.5;
+        sealFxPosRef.current.set(cx, 0.12, cz);
       };
 
       for (let gx = -1; gx <= 1; gx++) {
@@ -428,6 +560,23 @@ const Trace: React.FC = () => {
       playerMesh.current.position.set(posRef.current.x, 1.05, posRef.current.z);
     }
 
+    if (sealFxRef.current) {
+      if (sealFxTimeRef.current > 0) {
+        sealFxTimeRef.current = Math.max(0, sealFxTimeRef.current - step);
+        const t = 1 - sealFxTimeRef.current / 0.5;
+        const scale = 1 + t * 6.2;
+        sealFxRef.current.position.copy(sealFxPosRef.current);
+        sealFxRef.current.scale.set(scale, scale, scale);
+        if (sealFxMatRef.current) {
+          sealFxMatRef.current.opacity = 0.45 * (1 - t);
+          sealFxMatRef.current.emissiveIntensity = 0.6 * (1 - t);
+        }
+        sealFxRef.current.visible = true;
+      } else {
+        sealFxRef.current.visible = false;
+      }
+    }
+
     clearFrameInput(inputRef);
   });
 
@@ -437,17 +586,28 @@ const Trace: React.FC = () => {
   return (
     <>
       <TraceHUD solidifyMs={hudSolidify} />
-      <Sky />
+      <NeonDome accentA="#a78bfa" accentB="#1e1b2e" />
       <fog attach="fog" args={['#031019', 30, 120]} />
       <Stars radius={240} depth={60} count={1500} factor={4} saturation={0} fade />
       <ambientLight intensity={0.35} />
       <directionalLight position={[18, 32, 14]} intensity={1.1} castShadow />
+
+      <ScenePostFX
+        boost={
+          Math.min(0.9, snap.combo / 20) +
+          (snap.phaseCharges / snap.phaseMaxCharges) * 0.4 +
+          (snap.sealTime > 0 ? 0.5 : 0) +
+          (snap.event ? 0.35 : 0)
+        }
+      />
 
       {/* Ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[ARENA_SIZE, ARENA_SIZE]} />
         <meshStandardMaterial color="#070b12" />
       </mesh>
+      <LowPolyGround />
+      <primitive object={gridHelper} position={[0, 0.02, 0]} />
 
       {/* Trail instanced boxes */}
       <instancedMesh ref={trailMesh} args={[undefined as any, undefined as any, MAX_SEGS]}>
@@ -462,6 +622,18 @@ const Trace: React.FC = () => {
           <meshStandardMaterial color="#facc15" emissive="#f59e0b" emissiveIntensity={0.55} />
         </mesh>
       ))}
+
+      <mesh ref={sealFxRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.8, 1.5, 40]} />
+        <meshStandardMaterial
+          ref={sealFxMatRef}
+          color="#22d3ee"
+          emissive="#22d3ee"
+          emissiveIntensity={0.6}
+          transparent
+          opacity={0}
+        />
+      </mesh>
 
       {/* Player */}
       <mesh ref={playerMesh} castShadow>

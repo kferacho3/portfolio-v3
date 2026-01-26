@@ -14,6 +14,10 @@ export const ARCADE_PANEL_STYLES = {
   panel: 'linear-gradient(135deg, rgba(22, 26, 36, 0.96), rgba(12, 14, 22, 0.94))',
   stroke: 'rgba(255, 255, 255, 0.14)',
   glow: 'rgba(255, 180, 102, 0.35)',
+  radius: '22px',
+  radiusSm: '14px',
+  elevation: '0 22px 60px rgba(0, 0, 0, 0.45)',
+  elevationSoft: '0 12px 30px rgba(0, 0, 0, 0.35)',
 } as const;
 
 /**
@@ -27,6 +31,11 @@ export function getArcadePanelCSS(accent: string): React.CSSProperties {
     ['--arcade-panel' as string]: ARCADE_PANEL_STYLES.panel,
     ['--arcade-stroke' as string]: ARCADE_PANEL_STYLES.stroke,
     ['--arcade-glow' as string]: ARCADE_PANEL_STYLES.glow,
+    ['--arcade-mono' as string]: ARCADE_PANEL_STYLES.monoFontFamily,
+    ['--arcade-radius' as string]: ARCADE_PANEL_STYLES.radius,
+    ['--arcade-radius-sm' as string]: ARCADE_PANEL_STYLES.radiusSm,
+    ['--arcade-elevation' as string]: ARCADE_PANEL_STYLES.elevation,
+    ['--arcade-elevation-soft' as string]: ARCADE_PANEL_STYLES.elevationSoft,
   };
 }
 

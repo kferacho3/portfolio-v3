@@ -1,0 +1,9 @@
+export const GRID = 10;
+export const TILE = 3.2;
+export const ARENA = GRID * TILE;
+export const HALF = ARENA / 2;
+export const REVERSE_DURATION = 1.35;
+export const REVERSE_COOLDOWN = 3.5;
+export const MIN_GOAL_DIST = 5;
+export const START_TILE = { ix: Math.floor(HALF / TILE), iz: Math.floor(HALF / TILE) };
+export const BEST_SCORE_KEY = 'conveyorchaos-best-score';

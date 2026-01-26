@@ -59,10 +59,10 @@ export const tetherDriftState = proxy({
     if (this.score > this.bestScore) this.bestScore = this.score;
   },
 
-  setToast(text: string, time = 1.1) {
+  setToast(text: string, time = 1.1, slowMo = 0.12) {
     this.toastText = text;
     this.toastTime = Math.max(this.toastTime, time);
-    this.slowMoTime = Math.max(this.slowMoTime, 0.12);
+    this.slowMoTime = Math.max(this.slowMoTime, slowMo);
   },
 
   damage(amount: number) {
@@ -86,17 +86,17 @@ export const tetherDriftState = proxy({
     const chainMult = 1 + clamp(this.chain, 0, 18) * 0.08;
     const base = 25 + this.chain * 6;
     const perfectBonus = opts.perfect ? 35 : 0;
-    const constellationBonus = opts.constellationDone ? 90 : 0;
+    const constellationBonus = opts.constellationDone ? 140 : 0;
     const heatMult = 1 + (this.heat / 100) * 0.75;
     this.addScore((base + perfectBonus + constellationBonus) * chainMult * heatMult);
     if (opts.perfect) {
       this.perfectFlash = 0.2;
       this.perfects += 1;
-      this.setToast('PERFECT RELEASE!');
+      this.setToast('PERFECT RELEASE!', 1.1, 0.2);
     }
     if (opts.constellationDone) {
       this.constellationsCleared += 1;
-      this.setToast('CONSTELLATION!');
+      this.setToast('CONSTELLATION!', 1.2, 0.22);
       this.heal(6);
     }
   },

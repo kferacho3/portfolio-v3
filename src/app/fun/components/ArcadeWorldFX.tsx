@@ -111,81 +111,159 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
       fillColor: '#45f5a6',
       rimColor: '#9b6bff',
     },
-    post: { bloom: 0.75, chromatic: 0.0016, vignette: 0.55, noise: 0.02, saturation: 0.12 },
+    post: {
+      bloom: 0.75,
+      chromatic: 0.0016,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.12,
+    },
   }),
   geochrome: makeTheme({
     palette: ['#60a5fa', '#38bdf8', '#22d3ee'],
     shaderPresets: ['Neon', 'CircuitTraces'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.55, chromatic: 0.0012, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.55,
+      chromatic: 0.0012,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   shapeshifter: makeTheme({
     palette: ['#a78bfa', '#f472b6', '#f59e0b'],
     shaderPresets: ['Holographic', 'VoronoiStainedGlass'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.75, chromatic: 0.0018, vignette: 0.55, noise: 0.02, saturation: 0.08 },
+    post: {
+      bloom: 0.75,
+      chromatic: 0.0018,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.08,
+    },
   }),
   skyblitz: makeTheme({
     palette: ['#f472b6', '#38bdf8', '#facc15'],
     shaderPresets: ['PlasmaFlow', 'RimGlow'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.8, chromatic: 0.0016, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.8,
+      chromatic: 0.0016,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   dropper: makeTheme({
     palette: ['#f59e0b', '#f97316', '#facc15'],
     shaderPresets: ['InkSplatter', 'GoldGilded'],
     backdropStyle: 'grid',
-    post: { bloom: 0.6, chromatic: 0.001, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.6,
+      chromatic: 0.001,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   stackz: makeTheme({
     palette: ['#f97316', '#fb7185', '#facc15'],
     shaderPresets: ['TopographicRings', 'SilverMercury'],
     backdropStyle: 'grid',
-    post: { bloom: 0.55, chromatic: 0.001, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.55,
+      chromatic: 0.001,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   sizr: makeTheme({
     palette: ['#a855f7', '#22d3ee', '#f472b6'],
     shaderPresets: ['Matcap', 'PlatinumFrost'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.65, chromatic: 0.0013, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.65,
+      chromatic: 0.0013,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   pinball: makeTheme({
     palette: ['#38bdf8', '#22d3ee', '#f472b6'],
     shaderPresets: ['Glass', 'GoldLiquid'],
     backdropStyle: 'grid',
-    post: { bloom: 0.7, chromatic: 0.0014, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.7,
+      chromatic: 0.0014,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   rollette: makeTheme({
     palette: ['#fda4af', '#f43f5e', '#fb7185'],
     shaderPresets: ['Diamond', 'DiamondCaustics'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.65, chromatic: 0.0015, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.65,
+      chromatic: 0.0015,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   flappybird: makeTheme({
     palette: ['#34d399', '#10b981', '#facc15'],
     shaderPresets: ['GlitchMosaic', 'OilSlick'],
     backdropStyle: 'aurora',
     stars: false,
-    post: { bloom: 0.55, chromatic: 0.0011, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.55,
+      chromatic: 0.0011,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   fluxhop: makeTheme({
     palette: ['#06b6d4', '#a855f7', '#f472b6'],
     shaderPresets: ['NebulaSwirl', 'Chromatic'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.7, chromatic: 0.0018, vignette: 0.55, noise: 0.02, saturation: 0.08 },
+    post: {
+      bloom: 0.7,
+      chromatic: 0.0018,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.08,
+    },
   }),
   reactpong: makeTheme({
     palette: ['#60a5fa', '#22d3ee', '#e2e8f0'],
     shaderPresets: ['Normal', 'CrystalGeode'],
     backdropStyle: 'none',
     stars: false,
-    post: { bloom: 0.45, chromatic: 0.0008, vignette: 0.55, noise: 0.02, saturation: 0.02 },
+    post: {
+      bloom: 0.45,
+      chromatic: 0.0008,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.02,
+    },
   }),
   spinblock: makeTheme({
     palette: ['#f59e0b', '#f97316', '#f43f5e'],
     shaderPresets: ['MagmaCore', 'SilverChrome'],
     backdropStyle: 'grid',
-    post: { bloom: 0.75, chromatic: 0.0013, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.75,
+      chromatic: 0.0013,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   museum: makeTheme({
     palette: ['#94a3b8', '#e2e8f0', '#a78bfa'],
@@ -205,68 +283,134 @@ const GAME_THEMES: Record<string, GameFXTheme> = {
     palette: ['#fb7185', '#fda4af', '#f43f5e'],
     shaderPresets: ['DiamondRainbow'],
     backdropStyle: 'grid',
-    post: { bloom: 0.6, chromatic: 0.0012, vignette: 0.55, noise: 0.03, saturation: 0.05 },
+    post: {
+      bloom: 0.6,
+      chromatic: 0.0012,
+      vignette: 0.55,
+      noise: 0.03,
+      saturation: 0.05,
+    },
   }),
   skyblitzClassic: makeTheme({
     palette: ['#38bdf8', '#f472b6', '#facc15'],
     shaderPresets: ['PlasmaFlow', 'RimGlow'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.85, chromatic: 0.0016, vignette: 0.55, noise: 0.03, saturation: 0.05 },
+    post: {
+      bloom: 0.85,
+      chromatic: 0.0016,
+      vignette: 0.55,
+      noise: 0.03,
+      saturation: 0.05,
+    },
   }),
   dropperClassic: makeTheme({
     palette: ['#f59e0b', '#fbbf24', '#f97316'],
     shaderPresets: ['InkSplatter', 'GoldGilded'],
     backdropStyle: 'grid',
-    post: { bloom: 0.6, chromatic: 0.0011, vignette: 0.55, noise: 0.03, saturation: 0.05 },
+    post: {
+      bloom: 0.6,
+      chromatic: 0.0011,
+      vignette: 0.55,
+      noise: 0.03,
+      saturation: 0.05,
+    },
   }),
   stackzCatchClassic: makeTheme({
     palette: ['#f97316', '#fb7185', '#facc15'],
     shaderPresets: ['TopographicRings', 'SilverMercury'],
     backdropStyle: 'grid',
-    post: { bloom: 0.6, chromatic: 0.0011, vignette: 0.55, noise: 0.03, saturation: 0.05 },
+    post: {
+      bloom: 0.6,
+      chromatic: 0.0011,
+      vignette: 0.55,
+      noise: 0.03,
+      saturation: 0.05,
+    },
   }),
   gyro: makeTheme({
     palette: ['#22d3ee', '#f472b6', '#a855f7'],
     shaderPresets: ['ThinFilm', 'DiamondRainbow'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.75, chromatic: 0.0017, vignette: 0.55, noise: 0.02, saturation: 0.08 },
+    post: {
+      bloom: 0.75,
+      chromatic: 0.0017,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.08,
+    },
   }),
   prism: makeTheme({
     palette: ['#38bdf8', '#a78bfa', '#f472b6'],
     shaderPresets: ['Chromatic', 'ThinFilm'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.8, chromatic: 0.0019, vignette: 0.55, noise: 0.02, saturation: 0.08 },
+    post: {
+      bloom: 0.8,
+      chromatic: 0.0019,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.08,
+    },
   }),
   forma: makeTheme({
     palette: ['#34d399', '#22c55e', '#facc15'],
     shaderPresets: ['Glass', 'VoronoiStainedGlass'],
     backdropStyle: 'grid',
-    post: { bloom: 0.6, chromatic: 0.001, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.6,
+      chromatic: 0.001,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   weave: makeTheme({
     palette: ['#60a5fa', '#f472b6', '#c4b5fd'],
     shaderPresets: ['RimGlow', 'CircuitTraces'],
     backdropStyle: 'aurora',
-    post: { bloom: 0.7, chromatic: 0.0013, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.7,
+      chromatic: 0.0013,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   pave: makeTheme({
     palette: ['#f97316', '#38bdf8', '#facc15'],
     shaderPresets: ['TopographicRings', 'GlitchMosaic'],
     backdropStyle: 'grid',
-    post: { bloom: 0.65, chromatic: 0.0011, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.65,
+      chromatic: 0.0011,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
   voidrunner: makeTheme({
     palette: ['#0ea5e9', '#7c3aed', '#f43f5e'],
     shaderPresets: ['PlasmaFlow', 'MagmaCore'],
     backdropStyle: 'none',
     stars: false,
-    post: { bloom: 0.9, chromatic: 0.0019, vignette: 0.55, noise: 0.02, saturation: 0.1 },
+    post: {
+      bloom: 0.9,
+      chromatic: 0.0019,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.1,
+    },
   }),
   apex: makeTheme({
     palette: ['#f472b6', '#a855f7', '#22d3ee'],
     shaderPresets: ['SilverChrome', 'DiamondRainbow'],
     backdropStyle: 'none',
-    post: { bloom: 0.8, chromatic: 0.0018, vignette: 0.55, noise: 0.02, saturation: 0.05 },
+    post: {
+      bloom: 0.8,
+      chromatic: 0.0018,
+      vignette: 0.55,
+      noise: 0.02,
+      saturation: 0.05,
+    },
   }),
 };
 
@@ -324,8 +468,15 @@ const BackdropShape: React.FC<{
       {config.geometry === 'icosa' && <icosahedronGeometry args={[1, 2]} />}
       {config.geometry === 'octa' && <octahedronGeometry args={[1, 1]} />}
       {config.geometry === 'dodeca' && <dodecahedronGeometry args={[1, 0]} />}
-      {config.geometry === 'torus' && <torusGeometry args={[0.9, 0.25, 18, 40]} />}
-      <ArcadeMaterial preset={config.preset} color={config.color} envMap={envMap} seed={config.seed} />
+      {config.geometry === 'torus' && (
+        <torusGeometry args={[0.9, 0.25, 18, 40]} />
+      )}
+      <ArcadeMaterial
+        preset={config.preset}
+        color={config.color}
+        envMap={envMap}
+        seed={config.seed}
+      />
     </mesh>
   );
 };
@@ -341,8 +492,16 @@ const BackdropCluster: React.FC<{
   const shapes = useMemo(() => {
     const rng = makeRng(hashString(gameId));
     const radius = theme.backdropRadius * (isMobile ? 0.75 : 1);
-    const maxShapes = isMobile ? Math.min(2, theme.shaderPresets.length) : theme.shaderPresets.length;
-    const geometries: BackdropShapeConfig['geometry'][] = ['sphere', 'icosa', 'octa', 'dodeca', 'torus'];
+    const maxShapes = isMobile
+      ? Math.min(2, theme.shaderPresets.length)
+      : theme.shaderPresets.length;
+    const geometries: BackdropShapeConfig['geometry'][] = [
+      'sphere',
+      'icosa',
+      'octa',
+      'dodeca',
+      'torus',
+    ];
 
     return theme.shaderPresets.slice(0, maxShapes).map((preset, index) => {
       const theta = rng() * Math.PI * 2;
@@ -356,7 +515,11 @@ const BackdropCluster: React.FC<{
       ];
 
       const scale = (isMobile ? 1.6 : 2.6) + rng() * (isMobile ? 1.2 : 2.4);
-      const rotation: [number, number, number] = [rng() * Math.PI, rng() * Math.PI, rng() * Math.PI];
+      const rotation: [number, number, number] = [
+        rng() * Math.PI,
+        rng() * Math.PI,
+        rng() * Math.PI,
+      ];
       const spin: [number, number, number] = [
         (rng() * 0.2 + 0.05) * (index % 2 === 0 ? 1 : -1),
         (rng() * 0.2 + 0.05) * (index % 3 === 0 ? -1 : 1),
@@ -384,7 +547,11 @@ const BackdropCluster: React.FC<{
   return (
     <group ref={groupRef}>
       {shapes.map((shape) => (
-        <BackdropShape key={`${shape.preset}-${shape.position.join('-')}`} config={shape} envMap={envMap} />
+        <BackdropShape
+          key={`${shape.preset}-${shape.position.join('-')}`}
+          config={shape}
+          envMap={envMap}
+        />
       ))}
     </group>
   );
@@ -402,7 +569,9 @@ const BackdropPlane: React.FC<{
   useFrame(({ camera }) => {
     if (!planeRef.current) return;
     forwardRef.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-    planeRef.current.position.copy(camera.position).addScaledVector(forwardRef.current, 40);
+    planeRef.current.position
+      .copy(camera.position)
+      .addScaledVector(forwardRef.current, 40);
     planeRef.current.quaternion.copy(camera.quaternion);
   });
 
@@ -420,7 +589,11 @@ const BackdropPlane: React.FC<{
           mode={mode}
         />
       ) : (
-        <PulseGridMaterial gridColor={palette[0]} glowColor={palette[2]} density={16} />
+        <PulseGridMaterial
+          gridColor={palette[0]}
+          glowColor={palette[2]}
+          density={16}
+        />
       )}
     </mesh>
   );
@@ -456,9 +629,12 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const fluxHopSnap = useSnapshot(fluxHopState);
 
   const useTiltShift =
-    gameId === 'reactpong' && reactPongSnap.graphicsMode === 'classic' && !!theme.post.tiltShift;
+    gameId === 'reactpong' &&
+    reactPongSnap.graphicsMode === 'classic' &&
+    !!theme.post.tiltShift;
   const useClassicSkyFx =
-    gameId === 'skyblitzClassic' && skyBlitzClassicSnap.graphicsMode === 'classic';
+    gameId === 'skyblitzClassic' &&
+    skyBlitzClassicSnap.graphicsMode === 'classic';
   const fluxHopBoost = gameId === 'fluxhop' && fluxHopSnap.nearMiss ? 1.35 : 1;
 
   // Games that manage their own scene.background - don't override
@@ -498,7 +674,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   // Set scene background color based on fog color (or a default dark color)
   useEffect(() => {
     if (!shouldSetSceneFX) return;
-    
+
     const prevBackground = scene.background;
     const bgColor = isLightMode ? '#f6f7ff' : (theme.fog?.color ?? '#05070f');
     scene.background = new THREE.Color(bgColor);
@@ -529,8 +705,12 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const chromaticOffset = useMemo(
     () =>
       new THREE.Vector2(
-        (isLightMode ? 0.00035 : theme.post.chromatic) * qualityScale * fluxHopBoost,
-        (isLightMode ? 0.00035 : theme.post.chromatic) * qualityScale * fluxHopBoost
+        (isLightMode ? 0.00035 : theme.post.chromatic) *
+          qualityScale *
+          fluxHopBoost,
+        (isLightMode ? 0.00035 : theme.post.chromatic) *
+          qualityScale *
+          fluxHopBoost
       ),
     [theme.post.chromatic, qualityScale, fluxHopBoost, isLightMode]
   );
@@ -549,7 +729,8 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     (isLightMode ? 0.08 : theme.post.vignette) *
     (useClassicSkyFx ? 1.1 : 1) *
     (fluxHopBoost > 1 ? 1.05 : 1);
-  const saturation = (isLightMode ? 0.06 : theme.post.saturation) + (useClassicSkyFx ? 0.03 : 0);
+  const saturation =
+    (isLightMode ? 0.06 : theme.post.saturation) + (useClassicSkyFx ? 0.03 : 0);
 
   const lights = useMemo(() => {
     if (!isLightMode) return theme.lights;
@@ -568,7 +749,10 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     <>
       {envMap && <Environment map={envMap} background={false} />}
 
-      <ambientLight intensity={lights.ambient * qualityScale} color={lights.fillColor} />
+      <ambientLight
+        intensity={lights.ambient * qualityScale}
+        color={lights.fillColor}
+      />
       <directionalLight
         position={[6, 10, 4]}
         intensity={lights.keyIntensity * qualityScale}
@@ -606,7 +790,14 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
           mode={isLightMode ? 'light' : 'dark'}
         />
       )}
-      {showBackdropCluster && <BackdropCluster gameId={gameId} theme={theme} envMap={envMap} isMobile={isMobile} />}
+      {showBackdropCluster && (
+        <BackdropCluster
+          gameId={gameId}
+          theme={theme}
+          envMap={envMap}
+          isMobile={isMobile}
+        />
+      )}
 
       <EffectComposer disableNormalPass multisampling={0}>
         <HueSaturation saturation={saturation} />
@@ -616,8 +807,14 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
           luminanceSmoothing={0.8}
           mipmapBlur={!isMobile}
         />
-        <ChromaticAberration offset={chromaticOffset} />
-        {useTiltShift && !isMobile && <TiltShift2 blur={theme.post.tiltShift ?? 0.12} />}
+        <ChromaticAberration
+          offset={chromaticOffset}
+          radialModulation={false}
+          modulationOffset={0}
+        />
+        {useTiltShift && !isMobile && (
+          <TiltShift2 blur={theme.post.tiltShift ?? 0.12} />
+        )}
         {theme.post.dof && !isMobile && (
           <DepthOfField
             focusDistance={theme.post.dof.focusDistance}

@@ -56,7 +56,12 @@ export type GameId =
   | 'prismjump'
   | 'octasurge'
   | 'knothop'
-  | 'oscillate';
+  | 'oscillate'
+  | 'waveflip'
+  | 'slipstream'
+  | 'runeroll'
+  | 'pulseparry'
+  | 'orbitlatch';
 
 /**
  * Game type including home state

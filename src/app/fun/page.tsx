@@ -9,11 +9,11 @@
 import { OrbitControls } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import { easeCubicInOut } from 'd3-ease';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
-import CanvasProvider from '../../components/CanvasProvider';
 import AnimatedCamera from './components/AnimatedCamera';
 import { RachosArcade, GameCard } from './components/RachosArcade';
 import ArcadeWorldFX from './components/ArcadeWorldFX';
@@ -27,6 +27,10 @@ import {
 } from './store/selectors';
 import { useAutoCycleGames } from './hooks';
 import type { GameId } from './store/types';
+
+const CanvasProvider = dynamic(() => import('../../components/CanvasProvider'), {
+  ssr: false,
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Arcade Orbit Controls

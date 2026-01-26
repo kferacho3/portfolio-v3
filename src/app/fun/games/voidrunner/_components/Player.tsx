@@ -49,6 +49,10 @@ const Player: React.FC = () => {
 
   useFrame((state, delta) => {
     if (!playerRef.current || snap.phase !== 'playing') return;
+    if (mutation.hitStop > 0) {
+      mutation.hitStop = Math.max(0, mutation.hitStop - delta);
+      return;
+    }
 
     const mesh = playerRef.current;
     const { left, right } = voidRunnerState.controls;
@@ -83,10 +87,19 @@ const Player: React.FC = () => {
       }
     }
 
+    if (mutation.shake > 0) {
+      mutation.shake = Math.max(0, mutation.shake - delta * mutation.shakeDecay);
+    }
+    const wobble = Math.sin(state.clock.elapsedTime * 0.9) * 0.08;
+    const shake = mutation.shake;
+    const shakeX = Math.sin(state.clock.elapsedTime * 40) * shake * 0.6;
+    const shakeY = Math.cos(state.clock.elapsedTime * 48) * shake * 0.4;
+    const shakeZ = Math.sin(state.clock.elapsedTime * 55) * shake * 0.3;
+
     camera.position.set(
-      mesh.position.x + CAMERA_OFFSET_X,
-      mesh.position.y + CAMERA_OFFSET_Y,
-      mesh.position.z + CAMERA_OFFSET_Z
+      mesh.position.x + CAMERA_OFFSET_X + shakeX + wobble,
+      mesh.position.y + CAMERA_OFFSET_Y + shakeY + wobble * 0.4,
+      mesh.position.z + CAMERA_OFFSET_Z + shakeZ
     );
     camera.lookAt(mesh.position.x, mesh.position.y, mesh.position.z - CAMERA_LOOK_AHEAD);
 
@@ -99,8 +112,10 @@ const Player: React.FC = () => {
         0.3 + mutation.gameSpeed * 0.3;
     }
 
-    if (mutation.gameSpeed < mutation.desiredSpeed) {
-      mutation.gameSpeed = Math.min(mutation.desiredSpeed, mutation.gameSpeed + delta * 0.15);
+    const speedDelta = mutation.desiredSpeed - mutation.gameSpeed;
+    if (Math.abs(speedDelta) > 0.0001) {
+      const accel = speedDelta > 0 ? 0.15 : 0.08;
+      mutation.gameSpeed += Math.sign(speedDelta) * Math.min(Math.abs(speedDelta), delta * accel);
       voidRunnerState.speed = Math.floor(mutation.gameSpeed * 400);
     }
 

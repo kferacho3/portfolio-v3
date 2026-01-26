@@ -6,14 +6,18 @@
 'use client';
 
 import { Scroll, ScrollControls } from '@react-three/drei';
+import dynamic from 'next/dynamic';
 import { Suspense, useEffect, useState } from 'react';
 
 import Background3D from '../components/Background3D';
-import CanvasProvider from '../components/CanvasProvider';
 import SectionFour from '../components/SectionFour';
 import SectionOne from '../components/SectionOne';
 import SectionThree from '../components/SectionThree';
 import SectionTwo from '../components/SectionTwo';
+
+const CanvasProvider = dynamic(() => import('../components/CanvasProvider'), {
+  ssr: false,
+});
 
 function HomePage() {
   /* ─────────────────────── 1. Animation flags ──────────────────────── */

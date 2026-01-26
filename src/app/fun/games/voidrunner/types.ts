@@ -48,4 +48,8 @@ export interface MutationState {
   playerX: number;
   currentLevelLength: number;
   globalColor: import('three').Color;
+  spacingScalar: number;
+  shake: number;
+  shakeDecay: number;
+  hitStop: number;
 }

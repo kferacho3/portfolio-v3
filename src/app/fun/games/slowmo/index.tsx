@@ -129,7 +129,7 @@ function pickupX(o: Obstacle) {
 // -----------------------------
 function SlowMoScene() {
   const snap = useSnapshot(persistState)
-  const inputRef = useInputRef()
+  const inputRef = useInputRef({ preventDefault: [' ', 'Space'] })
 
   const cameraRef = useRef<THREE.OrthographicCamera>(null!)
   const ballRef = useRef<THREE.Mesh>(null!)
@@ -159,6 +159,7 @@ function SlowMoScene() {
   const world = useRef({
     x: -1,
     z: 0,
+    renderZ: 0,
     vx: BALL_BOUNCE_SPEED,
     timeScale: 1,
     farZ: 0,
@@ -178,6 +179,7 @@ function SlowMoScene() {
 
     world.current.x = -((TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06) - BALL_RADIUS)
     world.current.z = 0
+    world.current.renderZ = 0
     world.current.vx = BALL_BOUNCE_SPEED
     world.current.timeScale = 1
 
@@ -205,7 +207,7 @@ function SlowMoScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap.phase])
 
-  function syncObstacleVisual(i: number) {
+  function syncObstacleVisual(i: number, zOffset = 0) {
     const o = obstacles[i]
     const group = obstacleGroupRefs.current[i]
     const block = obstacleMeshRefs.current[i]
@@ -213,7 +215,7 @@ function SlowMoScene() {
     const gift = giftRefs.current[i]
     if (!group || !block) return
 
-    group.position.set(0, 0, o.z)
+    group.position.set(0, 0, o.z + zOffset)
 
     // Block size/position
     const { xMin, xMax } = obstacleXRange(o)
@@ -244,15 +246,19 @@ function SlowMoScene() {
     if (snap.phase !== 'playing') {
       // Keep camera looking at track so menu/finish screens show the scene
       const lx = world.current.x
-      const lz = Math.max(0, world.current.z) + LOOK_AHEAD
+      const lz = Math.max(0, world.current.renderZ) + LOOK_AHEAD
       cam.position.set(lx + 4.6, 5.5, lz - 4.6)
       cam.lookAt(lx, 0, lz)
       clearFrameInput(inputRef)
       return
     }
 
-    // Smooth time scale: hold to slow
-    const target = input.pointerDown ? SLOW_TARGET : 1
+    // Smooth time scale: hold to slow (mouse/touch or spacebar)
+    const spaceHeld =
+      input.keysDown.has(' ') ||
+      input.keysDown.has('space') ||
+      input.keysDown.has('spacebar')
+    const target = input.pointerDown || spaceHeld ? SLOW_TARGET : 1
     world.current.timeScale = THREE.MathUtils.lerp(world.current.timeScale, target, 1 - Math.exp(-SLOW_LERP * delta))
     const worldDt = delta * world.current.timeScale
 
@@ -261,13 +267,15 @@ function SlowMoScene() {
     // Speed ramps with score (feels like "leveling")
     run.speed = BASE_SPEED + run.score * SPEED_RAMP
 
-    // Move forward (world time)
-    world.current.z += run.speed * worldDt
+    // Forward gameplay progress (constant speed) vs. visual forward motion (time-scaled).
+    world.current.z += run.speed * delta
+    world.current.renderZ += run.speed * worldDt
+    const zOffset = world.current.renderZ - world.current.z
 
-    // Bounce sideways (real time, so slowing gives you more time to "line up")
+    // Bounce sideways (time-scaled so slow-mo affects the lateral motion only).
     const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06
     const bound = laneHalf - BALL_RADIUS
-    world.current.x += world.current.vx * delta
+    world.current.x += world.current.vx * worldDt
     if (world.current.x > bound) {
       world.current.x = bound
       world.current.vx *= -1
@@ -278,15 +286,15 @@ function SlowMoScene() {
     }
 
     // Update ball + shadow + slow ring
-    ballRef.current.position.set(world.current.x, BALL_RADIUS + 0.02, world.current.z)
-    shadowRef.current.position.set(world.current.x, 0.01, world.current.z)
-    slowRingRef.current.position.set(world.current.x, BALL_RADIUS + 0.02, world.current.z)
+    ballRef.current.position.set(world.current.x, BALL_RADIUS + 0.02, world.current.renderZ)
+    shadowRef.current.position.set(world.current.x, 0.01, world.current.renderZ)
+    slowRingRef.current.position.set(world.current.x, BALL_RADIUS + 0.02, world.current.renderZ)
     slowRingRef.current.scale.setScalar(run.slow ? 1.15 : 0.95)
     ;(slowRingRef.current.material as THREE.MeshBasicMaterial).opacity = run.slow ? 0.35 : 0.15
 
     // Camera follow
-    cam.position.set(world.current.x + 4.6, 5.5, world.current.z - 4.6)
-    cam.lookAt(world.current.x, 0.0, world.current.z + LOOK_AHEAD)
+    cam.position.set(world.current.x + 4.6, 5.5, world.current.renderZ - 4.6)
+    cam.lookAt(world.current.x, 0.0, world.current.renderZ + LOOK_AHEAD)
 
     // Recycle track segments
     for (let i = 0; i < segments.length; i++) {
@@ -295,7 +303,7 @@ function SlowMoScene() {
         seg.z += SEG_COUNT * SEG_LEN
       }
       const g = segmentGroupRefs.current[i]
-      if (g) g.position.z = seg.z
+      if (g) g.position.z = seg.z + zOffset
     }
 
     // Obstacle logic
@@ -354,12 +362,12 @@ function SlowMoScene() {
         world.current.farZ += rand(2.25, 4.0)
         const fresh = makeObstacle(o.id, world.current.farZ)
         Object.assign(o, fresh)
-        syncObstacleVisual(i)
+        syncObstacleVisual(i, zOffset)
       }
 
       // Keep visuals synced (position only)
       const g = obstacleGroupRefs.current[i]
-      if (g) g.position.z = o.z
+      if (g) g.position.z = o.z + zOffset
 
       const star = starRefs.current[i]
       if (star && star.visible) {

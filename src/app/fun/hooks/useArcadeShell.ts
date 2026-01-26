@@ -198,6 +198,11 @@ export function useArcadeKeyboard() {
           e.preventDefault();
           togglePause();
         }
+        // Esc = Pause/resume
+        if (key === 'escape') {
+          e.preventDefault();
+          togglePause();
+        }
       } else {
         // Home screen - game shortcuts
         const gameType = KEY_TO_GAME[key];

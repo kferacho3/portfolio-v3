@@ -205,7 +205,7 @@ export function PrismJumpUI() {
           )}
 
           {/* hint */}
-          {snap.score < 3 && (
+          {snap.score < 5 && (
             <div
               style={{
                 position: 'absolute',
@@ -213,11 +213,12 @@ export function PrismJumpUI() {
                 left: 0,
                 right: 0,
                 textAlign: 'center',
-                fontSize: 14,
-                color: 'rgba(255,255,255,0.7)',
+                fontSize: 13,
+                color: 'rgba(255,255,255,0.75)',
+                padding: '0 20px',
               }}
             >
-              Tap / Space to jump • Platforms ALWAYS MOVING • Each row alternates direction • Don&apos;t get carried off-screen • Avoid spikes
+              TAP to jump forward • Rows alternate ← → • Stay ahead of camera • Jump to switch directions • Avoid red spikes
             </div>
           )}
         </div>
@@ -334,7 +335,7 @@ export function PrismJumpUI() {
               </div>
 
               <div style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.68)' }}>
-                Tap / Space to jump. Platforms are ALWAYS MOVING! Each row alternates direction (→ ← → ←). You lose by missing a platform (fall) or by staying on a platform too long and being carried off-screen. Speed increases with score!
+                <strong>How to play:</strong> Tap/Space to hop forward. Platforms constantly move left or right, alternating each row. Jump to the next row to change your drift direction. Stay ahead of the camera - if you fall behind, game over! Avoid red spike platforms.
               </div>
             </div>
 

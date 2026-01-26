@@ -26,9 +26,10 @@ function makePlatform(
   rng: SeededRandom,
   prev: PlatformData | null,
   id: number,
-  difficulty: number,
+  difficulty: number
 ): PlatformData {
-  const length = rng.float(GAME.lengthMin, GAME.lengthMax) * (1 - difficulty * 0.12);
+  const length =
+    rng.float(GAME.lengthMin, GAME.lengthMax) * (1 - difficulty * 0.12);
   const width = GAME.platformWidth * (1 - difficulty * 0.06);
   const gap = rng.float(GAME.gapMin, GAME.gapMax);
 
@@ -37,10 +38,14 @@ function makePlatform(
   const yaw = baseYaw + delta;
 
   const prevEnd = prev
-    ? new THREE.Vector3(prev.x, 0, prev.z).add(forwardFromYaw(prev.baseYaw).multiplyScalar(prev.length / 2 + gap))
+    ? new THREE.Vector3(prev.x, 0, prev.z).add(
+        forwardFromYaw(prev.baseYaw).multiplyScalar(prev.length / 2 + gap)
+      )
     : new THREE.Vector3(0, 0, 0);
 
-  const center = prevEnd.clone().add(forwardFromYaw(yaw).multiplyScalar(length / 2));
+  const center = prevEnd
+    .clone()
+    .add(forwardFromYaw(yaw).multiplyScalar(length / 2));
 
   const twistDir = rng.bool() ? 1 : -1;
   const twistSpeed = twistDir * rng.float(0.25, 0.6) * (1 + difficulty * 0.9);
@@ -67,7 +72,15 @@ export default function KnotHop() {
   const { camera, gl, scene } = useThree();
 
   const input = useInputRef({
-    preventDefault: [' ', 'Space', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'Enter',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'arrowdown',
+    ],
   });
 
   const rngRef = useRef(new SeededRandom(1));
@@ -91,18 +104,24 @@ export default function KnotHop() {
     gravity: -12,
     // Popup
     popupId: 1,
-    popups: [] as { id: number; text: string; position: [number, number, number] }[],
+    popups: [] as {
+      id: number;
+      text: string;
+      position: [number, number, number];
+    }[],
     dummy: new THREE.Object3D(),
   });
 
   const theme = useMemo(
-    () => PLATFORM_THEMES.find((t) => t.id === snap.selectedTheme) ?? PLATFORM_THEMES[0],
-    [snap.selectedTheme],
+    () =>
+      PLATFORM_THEMES.find((t) => t.id === snap.selectedTheme) ??
+      PLATFORM_THEMES[0],
+    [snap.selectedTheme]
   );
 
   const ballSkin = useMemo(
     () => BALL_SKINS.find((b) => b.id === snap.selectedBall) ?? BALL_SKINS[0],
-    [snap.selectedBall],
+    [snap.selectedBall]
   );
 
   // One-time setup
@@ -113,8 +132,8 @@ export default function KnotHop() {
   useEffect(() => {
     gl.domElement.style.touchAction = 'none';
 
-    scene.background = new THREE.Color('#f6f7ff');
-    scene.fog = new THREE.Fog('#f6f7ff', 8, 46);
+    scene.background = new THREE.Color('#e8ecf7');
+    scene.fog = new THREE.FogExp2('#c5d4f0', 0.038);
 
     return () => {
       gl.domElement.style.touchAction = 'auto';
@@ -164,11 +183,12 @@ export default function KnotHop() {
 
   function addPopup(text: string, position: THREE.Vector3) {
     const id = world.current.popupId++;
-    const p: { id: number; text: string; position: [number, number, number] } = {
-      id,
-      text,
-      position: [position.x, position.y, position.z],
-    };
+    const p: { id: number; text: string; position: [number, number, number] } =
+      {
+        id,
+        text,
+        position: [position.x, position.y, position.z],
+      };
     world.current.popups.push(p);
     setTimeout(() => {
       world.current.popups = world.current.popups.filter((pp) => pp.id !== id);
@@ -179,8 +199,10 @@ export default function KnotHop() {
     const w = world.current;
     const isPaused = uiSnap.paused;
 
-    // Keep input in sync even while paused
-    const tapped = input.current.pointerJustDown || input.current.justPressed.has(' ');
+    // Space (or Enter) = hop only; click platform = flip twist direction
+    const hop =
+      input.current.justPressed.has(' ') ||
+      input.current.justPressed.has('Enter');
 
     if (snap.phase !== 'playing' || isPaused) {
       clearFrameInput(input);
@@ -202,8 +224,8 @@ export default function KnotHop() {
       if (current.yaw < -Math.PI * 2) current.yaw += Math.PI * 2;
     }
 
-    // Jump input
-    if (tapped && w.grounded && current) {
+    // Hop input (Space / Enter only)
+    if (hop && w.grounded && current) {
       w.grounded = false;
       const fwd = forwardFromYaw(current.yaw);
       w.vel.copy(fwd.multiplyScalar(runSpeed));
@@ -246,7 +268,10 @@ export default function KnotHop() {
         const lx = dx * c - dz * s;
         const lz = dx * s + dz * c;
 
-        if (Math.abs(lx) <= next.width / 2 - w.radius * 0.6 && Math.abs(lz) <= next.length / 2 - w.radius * 0.6) {
+        if (
+          Math.abs(lx) <= next.width / 2 - w.radius * 0.6 &&
+          Math.abs(lz) <= next.length / 2 - w.radius * 0.6
+        ) {
           // Land
           w.grounded = true;
           w.currentIndex++;
@@ -274,7 +299,12 @@ export default function KnotHop() {
             let prev = trimmed[trimmed.length - 1] ?? null;
             const baseId = (prev?.id ?? 0) + 1;
             for (let i = 0; i < removeCount; i++) {
-              const p = makePlatform(rngRef.current, prev, baseId + i, difficulty);
+              const p = makePlatform(
+                rngRef.current,
+                prev,
+                baseId + i,
+                difficulty
+              );
               trimmed.push(p);
               prev = p;
             }
@@ -338,15 +368,45 @@ export default function KnotHop() {
       roughness: ballSkin.roughness ?? 0.35,
       metalness: ballSkin.metalness ?? 0.12,
     });
-  }, [ballSkin.color, ballSkin.emissive, ballSkin.roughness, ballSkin.metalness]);
+  }, [
+    ballSkin.color,
+    ballSkin.emissive,
+    ballSkin.roughness,
+    ballSkin.metalness,
+  ]);
+
+  const flipPlatformTwist = (i: number) => {
+    if (snap.phase !== 'playing' || uiSnap.paused) return;
+    if (i !== world.current.currentIndex) return;
+    const p = platforms[i];
+    if (p) p.twistSpeed *= -1;
+  };
 
   return (
     <>
       <KnotHopUI />
 
       {/* World lights */}
-      <ambientLight intensity={0.85} />
-      <directionalLight position={[6, 10, 6]} intensity={0.65} castShadow={false} />
+      <ambientLight intensity={0.72} color="#e8f0ff" />
+      <directionalLight
+        position={[8, 14, 6]}
+        intensity={1.1}
+        color="#fffaf5"
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-far={50}
+        shadow-camera-left={-12}
+        shadow-camera-right={12}
+        shadow-camera-top={12}
+        shadow-camera-bottom={-12}
+        shadow-bias={-0.0002}
+      />
+      <directionalLight
+        position={[-4, 6, -3]}
+        intensity={0.35}
+        color="#a8c8ff"
+      />
 
       {/* Platforms */}
       {platforms.map((p, i) => (
@@ -359,14 +419,43 @@ export default function KnotHop() {
           rotation={[0, p.baseYaw, 0]}
         >
           {/* Base */}
-          <mesh position={[0, -GAME.platformHeight / 2, 0]}>
+          <mesh
+            position={[0, -GAME.platformHeight / 2, 0]}
+            castShadow
+            receiveShadow
+          >
             <boxGeometry args={[p.width, GAME.platformHeight, p.length]} />
-            <meshStandardMaterial color={theme.edgeColor} roughness={0.55} metalness={0.05} />
+            <meshStandardMaterial
+              color={theme.edgeColor}
+              roughness={0.5}
+              metalness={0.08}
+            />
           </mesh>
-          {/* Top */}
-          <mesh position={[0, 0.02, 0]}>
+          {/* Top — click to flip twist direction */}
+          <mesh
+            position={[0, 0.02, 0]}
+            castShadow
+            receiveShadow
+            onClick={(e) => {
+              e.stopPropagation();
+              flipPlatformTwist(i);
+            }}
+            onPointerOver={() => {
+              if (snap.phase === 'playing' && i === world.current.currentIndex)
+                gl.domElement.style.cursor = 'pointer';
+            }}
+            onPointerOut={() => {
+              gl.domElement.style.cursor = 'default';
+            }}
+          >
             <boxGeometry args={[p.width * 0.96, 0.08, p.length * 0.96]} />
-            <meshStandardMaterial color={theme.topColor} roughness={0.35} metalness={0.08} />
+            <meshStandardMaterial
+              color={theme.topColor}
+              roughness={0.3}
+              metalness={0.12}
+              emissive={new THREE.Color(theme.topColor)}
+              emissiveIntensity={0.06}
+            />
           </mesh>
 
           {/* Gem */}
@@ -376,24 +465,47 @@ export default function KnotHop() {
             }}
             position={[0, 0.48, 0]}
             rotation={[0, Math.PI / 4, 0]}
+            castShadow
           >
             <octahedronGeometry args={[0.17, 0]} />
-            <meshStandardMaterial color={'#FB7185'} emissive={'#FB7185'} emissiveIntensity={0.5} roughness={0.15} />
+            <meshStandardMaterial
+              color="#FB7185"
+              emissive="#FB7185"
+              emissiveIntensity={0.55}
+              roughness={0.12}
+              metalness={0.15}
+            />
           </mesh>
         </group>
       ))}
 
+      {/* Ground — soft shadow */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -0.5, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[120, 120]} />
+        <shadowMaterial transparent opacity={0.2} />
+      </mesh>
+
       {/* Player */}
-      <mesh ref={ballRef} material={ballMaterial}>
+      <mesh ref={ballRef} material={ballMaterial} castShadow>
         <sphereGeometry args={[world.current.radius, 32, 32]} />
       </mesh>
 
       {/* Popups */}
       {world.current.popups.map((p) => (
-        <Html key={p.id} position={p.position} center style={{ pointerEvents: 'none' }}>
+        <Html
+          key={p.id}
+          position={p.position}
+          center
+          style={{ pointerEvents: 'none' }}
+        >
           <div
             style={{
-              fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+              fontFamily:
+                'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
               fontWeight: 900,
               fontSize: 18,
               color: 'rgba(0,0,0,0.75)',
