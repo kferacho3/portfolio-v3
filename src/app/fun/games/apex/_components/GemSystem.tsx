@@ -230,6 +230,9 @@ const GemSystem: React.FC = () => {
     // More forgiving horizontal pickup (players tend to "clip" visually in X/Z).
     const collectRadiusSq2D = (SPHERE_RADIUS + GEM_RADIUS * 0.95) ** 2;
 
+    const nextGemCount = mutation.gems.length;
+    const nextPowerUpCount = mutation.powerUps.length;
+    let needsRender = false;
     const nextTier = Math.floor(apexState.score / GEM_SCORE_STEP);
     if (nextTier !== scoreTierRef.current) {
       scoreTierRef.current = nextTier;
@@ -239,9 +242,6 @@ const GemSystem: React.FC = () => {
     const baseGemColor = mixHex(tierColor, arenaTheme.gemHex, 0.35);
     const fxColor = baseGemColor;
 
-    const nextGemCount = mutation.gems.length;
-    const nextPowerUpCount = mutation.powerUps.length;
-    let needsRender = false;
     if (nextGemCount !== countsRef.current.gems || nextPowerUpCount !== countsRef.current.powerUps) {
       countsRef.current.gems = nextGemCount;
       countsRef.current.powerUps = nextPowerUpCount;
