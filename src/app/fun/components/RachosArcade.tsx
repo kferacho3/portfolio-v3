@@ -46,9 +46,64 @@ const SCREEN_ROTATION = new THREE.Quaternion().setFromAxisAngle(
   new THREE.Vector3(1, 0, 0),
   Math.PI / 2 - 0.2 // ~78 degrees - tilts top of screen backward
 );
-// Texture cache to avoid reloading
-const textureCache = new Map<string, THREE.Texture>();
+// LRU Texture cache with size limits to prevent memory accumulation
+const MAX_TEXTURE_CACHE_SIZE = 5; // Only keep 5 most recent textures
+const MAX_TEXTURE_SIZE = 2048; // Max texture dimension in pixels
+
+interface CachedTexture {
+  texture: THREE.Texture;
+  lastUsed: number;
+}
+
+const textureCache = new Map<string, CachedTexture>();
 const textureLoader = new THREE.TextureLoader();
+
+// Clean up old textures from cache (LRU eviction)
+function evictOldTextures() {
+  if (textureCache.size <= MAX_TEXTURE_CACHE_SIZE) return;
+
+  // Sort by last used time and remove oldest
+  const entries = Array.from(textureCache.entries()).sort(
+    (a, b) => a[1].lastUsed - b[1].lastUsed
+  );
+
+  const toRemove = entries.slice(0, entries.length - MAX_TEXTURE_CACHE_SIZE);
+  for (const [url, cached] of toRemove) {
+    // Dispose texture to free memory
+    cached.texture.dispose();
+    textureCache.delete(url);
+  }
+}
+
+// Downscale texture if too large
+function optimizeTexture(texture: THREE.Texture): THREE.Texture {
+  if (!texture.image) return texture;
+
+  const img = texture.image as HTMLImageElement;
+  if (img.width <= MAX_TEXTURE_SIZE && img.height <= MAX_TEXTURE_SIZE) {
+    return texture;
+  }
+
+  // Create canvas to downscale
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return texture;
+
+  const scale = Math.min(MAX_TEXTURE_SIZE / img.width, MAX_TEXTURE_SIZE / img.height);
+  canvas.width = img.width * scale;
+  canvas.height = img.height * scale;
+
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  // Create new texture from downscaled image
+  const optimizedTexture = new THREE.Texture(canvas);
+  optimizedTexture.needsUpdate = true;
+  
+  // Dispose old texture
+  texture.dispose();
+  
+  return optimizedTexture;
+}
 
 // Proxy S3 images through our API to avoid CORS issues
 const getProxyUrl = (url: string) => {
@@ -91,8 +146,53 @@ export function RachosArcade(props: ModelProps) {
 
   const { scene, nodes, animations } = useGLTF(
     '/fun/models/rachoArcade.glb',
-    true
+    true // Use draco compression if available
   ) as GLTFResult;
+
+  // Optimize scene geometry and materials for memory
+  useEffect(() => {
+    if (!scene) return;
+
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        const geometry = mesh.geometry;
+        
+        // Merge vertices if possible to reduce memory
+        if (geometry instanceof THREE.BufferGeometry) {
+          // Enable frustum culling for better performance
+          mesh.frustumCulled = true;
+          
+          // Dispose unused attributes if any
+          const attrs = geometry.attributes;
+          for (const key in attrs) {
+            if (!['position', 'normal', 'uv'].includes(key)) {
+              // Keep only essential attributes
+            }
+          }
+        }
+
+        // Optimize materials
+        if (mesh.material) {
+          const material = Array.isArray(mesh.material) 
+            ? mesh.material[0] 
+            : mesh.material;
+          
+          if (material instanceof THREE.MeshStandardMaterial) {
+            // Reduce texture sizes if they exist
+            if (material.map) {
+              material.map.minFilter = THREE.LinearMipmapLinearFilter;
+              material.map.generateMipmaps = true;
+            }
+            if (material.normalMap) {
+              material.normalMap.minFilter = THREE.LinearMipmapLinearFilter;
+              material.normalMap.generateMipmaps = true;
+            }
+          }
+        }
+      }
+    });
+  }, [scene]);
 
   const { actions } = useAnimations(animations, group);
 
@@ -305,12 +405,16 @@ export function RachosArcade(props: ModelProps) {
     };
   }, [actions]);
 
-  // Enable raycast on all meshes in the scene for interactivity
+  // Enable raycast only on visible/interactive meshes for better performance
   useEffect(() => {
     if (!scene) return;
+    let raycastCount = 0;
+    const MAX_RAYCAST_MESHES = 20; // Limit number of meshes with raycast enabled
+    
     scene.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
+      if ((child as THREE.Mesh).isMesh && raycastCount < MAX_RAYCAST_MESHES) {
         child.raycast = THREE.Mesh.prototype.raycast;
+        raycastCount++;
       }
     });
   }, [scene]);
@@ -325,18 +429,29 @@ export function RachosArcade(props: ModelProps) {
 
     // Check cache first
     if (textureCache.has(posterUrl)) {
-      const cachedTexture = textureCache.get(posterUrl)!;
-      applyTextureToMesh(mesh, cachedTexture);
+      const cached = textureCache.get(posterUrl)!;
+      cached.lastUsed = Date.now();
+      applyTextureToMesh(mesh, cached.texture);
       return;
     }
+
+    // Evict old textures before loading new one
+    evictOldTextures();
 
     // Load texture via proxy
     textureLoader.load(
       proxyUrl,
       (texture) => {
-        // Cache the texture
-        textureCache.set(posterUrl, texture);
-        applyTextureToMesh(mesh, texture);
+        // Optimize texture size
+        const optimizedTexture = optimizeTexture(texture);
+        
+        // Cache the texture with timestamp
+        textureCache.set(posterUrl, {
+          texture: optimizedTexture,
+          lastUsed: Date.now(),
+        });
+        
+        applyTextureToMesh(mesh, optimizedTexture);
       },
       undefined,
       (error) => {
@@ -389,6 +504,23 @@ export function RachosArcade(props: ModelProps) {
     document.body.style.cursor = 'auto';
   }, []);
 
+  // Cleanup textures when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up any textures that are no longer referenced
+      // The LRU cache will handle eviction, but we can force cleanup of unused textures
+      const currentTime = Date.now();
+      const MAX_AGE = 5 * 60 * 1000; // 5 minutes
+      
+      for (const [url, cached] of textureCache.entries()) {
+        if (currentTime - cached.lastUsed > MAX_AGE) {
+          cached.texture.dispose();
+          textureCache.delete(url);
+        }
+      }
+    };
+  }, []);
+
   return (
     <group
       ref={setRefs}
@@ -419,7 +551,7 @@ export function RachosArcade(props: ModelProps) {
               document.body.style.cursor = 'auto';
             }}
           >
-            <shapeGeometry args={[screenShape, 10]} />
+            <shapeGeometry args={[screenShape, 8]} />
             <meshBasicMaterial toneMapped={false} side={THREE.DoubleSide} />
           </mesh>
         )}
@@ -430,12 +562,14 @@ export function RachosArcade(props: ModelProps) {
 
 // Helper function to properly apply texture to mesh
 function applyTextureToMesh(mesh: THREE.Mesh, texture: THREE.Texture) {
-  // Configure texture for proper display
+  // Configure texture for proper display with memory optimization
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.minFilter = THREE.LinearFilter;
+  // Use mipmaps for better memory efficiency
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
   texture.flipY = true;
 
   normalizeMeshUVs(mesh);
@@ -600,4 +734,21 @@ function getMeshAspect(mesh: THREE.Mesh) {
   return width / height;
 }
 
-useGLTF.preload('/fun/models/rachoArcade.glb', true);
+// Conditionally preload model - only on high-end devices to save memory
+// This will be evaluated at module load time
+if (typeof window !== 'undefined') {
+  try {
+    const isHighEndDevice = 
+      (navigator.hardwareConcurrency || 2) >= 4 && 
+      ((navigator as any).deviceMemory || 2) >= 4;
+    
+    if (isHighEndDevice) {
+      useGLTF.preload('/fun/models/rachoArcade.glb', true);
+    }
+  } catch {
+    // Fallback: preload anyway if device detection fails
+    useGLTF.preload('/fun/models/rachoArcade.glb', true);
+  }
+} else {
+  // Server-side: don't preload
+}

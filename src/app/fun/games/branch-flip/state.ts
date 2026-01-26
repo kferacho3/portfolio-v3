@@ -10,6 +10,7 @@ export const branchFlipState = proxy<BranchFlipGameState & {
   resume: () => void;
   flip: () => void;
   collectGem: () => void;
+  loadBestScore: () => void;
 }>({
   phase: 'menu',
   paused: false,

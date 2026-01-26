@@ -470,12 +470,13 @@ const BackdropShape: React.FC<{
       renderOrder={-5}
       frustumCulled={false}
     >
-      {config.geometry === 'sphere' && <sphereGeometry args={[1, 20, 20]} />}
-      {config.geometry === 'icosa' && <icosahedronGeometry args={[1, 2]} />}
-      {config.geometry === 'octa' && <octahedronGeometry args={[1, 1]} />}
+      {/* Reduced geometry complexity for memory optimization */}
+      {config.geometry === 'sphere' && <sphereGeometry args={[1, 16, 16]} />}
+      {config.geometry === 'icosa' && <icosahedronGeometry args={[1, 1]} />}
+      {config.geometry === 'octa' && <octahedronGeometry args={[1, 0]} />}
       {config.geometry === 'dodeca' && <dodecahedronGeometry args={[1, 0]} />}
       {config.geometry === 'torus' && (
-        <torusGeometry args={[0.9, 0.25, 18, 40]} />
+        <torusGeometry args={[0.9, 0.25, 12, 24]} />
       )}
       <ArcadeMaterial
         preset={config.preset}
@@ -498,9 +499,10 @@ const BackdropCluster: React.FC<{
   const shapes = useMemo(() => {
     const rng = makeRng(hashString(gameId));
     const radius = theme.backdropRadius * (isMobile ? 0.75 : 1);
+    // Reduce number of shapes for memory optimization
     const maxShapes = isMobile
-      ? Math.min(2, theme.shaderPresets.length)
-      : theme.shaderPresets.length;
+      ? Math.min(1, theme.shaderPresets.length) // Only 1 shape on mobile
+      : Math.min(2, theme.shaderPresets.length); // Max 2 shapes on desktop
     const geometries: BackdropShapeConfig['geometry'][] = [
       'sphere',
       'icosa',
@@ -520,7 +522,8 @@ const BackdropCluster: React.FC<{
         Math.cos(phi) * dist,
       ];
 
-      const scale = (isMobile ? 1.6 : 2.6) + rng() * (isMobile ? 1.2 : 2.4);
+      // Reduce scale to save memory
+      const scale = (isMobile ? 1.2 : 2.0) + rng() * (isMobile ? 0.8 : 1.5);
       const rotation: [number, number, number] = [
         rng() * Math.PI,
         rng() * Math.PI,
@@ -605,29 +608,72 @@ const BackdropPlane: React.FC<{
   );
 };
 
-const useEnvMap = () => {
+// Lazy load HDR environment map only when needed
+const useEnvMap = (shouldLoad: boolean) => {
   const [envMap, setEnvMap] = React.useState<THREE.DataTexture | null>(null);
+  const loaderRef = React.useRef<RGBELoader | null>(null);
 
   useEffect(() => {
-    new RGBELoader().load(
-      'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/2k/studio_small_08_2k.hdr',
+    if (!shouldLoad) {
+      // Dispose if no longer needed
+      if (envMap) {
+        envMap.dispose();
+        setEnvMap(null);
+      }
+      return;
+    }
+
+    // Only load if not already loaded
+    if (envMap) return;
+
+    // Use lower resolution HDR for memory savings (1k instead of 2k)
+    if (!loaderRef.current) {
+      loaderRef.current = new RGBELoader();
+    }
+
+    loaderRef.current.load(
+      'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_08_1k.hdr',
       (texture) => {
         texture.mapping = THREE.EquirectangularReflectionMapping;
+        // Reduce texture size further if needed
+        if (texture.image) {
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+        }
         setEnvMap(texture);
+      },
+      undefined,
+      (error) => {
+        console.warn('Failed to load HDR environment map:', error);
       }
     );
-  }, []);
+
+    return () => {
+      // Cleanup on unmount
+      if (envMap && !shouldLoad) {
+        envMap.dispose();
+      }
+    };
+  }, [shouldLoad, envMap]);
 
   return envMap;
 };
 
 const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { scene, size } = useThree();
-  const envMap = useEnvMap();
   const theme = GAME_THEMES[gameId] ?? DEFAULT_THEME;
+  const isMobile = size.width < 768;
+  
+  // Only load env map if backdrop cluster is needed
+  const showBackdropCluster = useMemo(() => {
+    const gamesWithoutBackdrop = ['voidrunner', 'apex'];
+    const shouldShow = !gamesWithoutBackdrop.includes(gameId);
+    return shouldShow;
+  }, [gameId]);
+  
+  const envMap = useEnvMap(showBackdropCluster && !isMobile);
   const { theme: uiTheme } = useContext(ThemeContext);
   const isLightMode = uiTheme === 'light';
-  const isMobile = size.width < 768;
   const qualityScale = isMobile ? 0.65 : 1;
 
   const reactPongSnap = useSnapshot(reactPongState);
@@ -780,7 +826,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         <Stars
           radius={300}
           depth={60}
-          count={isMobile ? 4000 : 9000}
+          count={isMobile ? 2000 : 5000} // Reduced star count for memory
           factor={isMobile ? 5 : 7}
           saturation={0}
           fade
@@ -796,7 +842,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
           mode={isLightMode ? 'light' : 'dark'}
         />
       )}
-      {showBackdropCluster && (
+      {showBackdropCluster && envMap && (
         <BackdropCluster
           gameId={gameId}
           theme={theme}
@@ -805,7 +851,10 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
       )}
 
-      <EffectComposer enableNormalPass={false} multisampling={0}>
+      <EffectComposer 
+        enableNormalPass={false} 
+        multisampling={isMobile ? 0 : 2} // Reduce multisampling on mobile
+      >
         <HueSaturation saturation={saturation} />
         <Bloom
           intensity={bloomIntensity}
