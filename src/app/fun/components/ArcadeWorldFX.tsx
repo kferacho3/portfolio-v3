@@ -805,7 +805,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
       )}
 
-      <EffectComposer disableNormalPass multisampling={0}>
+      <EffectComposer enableNormalPass={false} multisampling={0}>
         <HueSaturation saturation={saturation} />
         <Bloom
           intensity={bloomIntensity}
