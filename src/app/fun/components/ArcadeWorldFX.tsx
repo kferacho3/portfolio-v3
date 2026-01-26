@@ -820,7 +820,9 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
         {useTiltShift && !isMobile ? (
           <TiltShift2 blur={theme.post.tiltShift ?? 0.12} />
-        ) : null}
+        ) : (
+          <></>
+        )}
         {theme.post.dof && !isMobile ? (
           <DepthOfField
             focusDistance={theme.post.dof.focusDistance}
@@ -828,7 +830,9 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
             bokehScale={theme.post.dof.bokehScale}
             height={480}
           />
-        ) : null}
+        ) : (
+          <></>
+        )}
         <Noise opacity={noiseOpacity} />
         <Vignette eskil={false} offset={0.1} darkness={vignetteDarkness} />
       </EffectComposer>
