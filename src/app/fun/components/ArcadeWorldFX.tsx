@@ -87,12 +87,18 @@ type GameFXThemeOverrides = Partial<Omit<GameFXTheme, 'lights' | 'post'>> & {
   post?: Partial<GameFXTheme['post']>;
 };
 
-const makeTheme = (overrides: GameFXThemeOverrides): GameFXTheme => ({
-  ...DEFAULT_THEME,
-  ...overrides,
-  lights: { ...DEFAULT_THEME.lights, ...(overrides.lights || {}) },
-  post: { ...DEFAULT_THEME.post, ...(overrides.post || {}) },
-});
+const makeTheme = (overrides: GameFXThemeOverrides): GameFXTheme => {
+  const mergedPost: GameFXTheme['post'] = {
+    ...DEFAULT_THEME.post,
+    ...(overrides.post || {}),
+  };
+  return {
+    ...DEFAULT_THEME,
+    ...overrides,
+    lights: { ...DEFAULT_THEME.lights, ...(overrides.lights || {}) },
+    post: mergedPost,
+  };
+};
 
 const GAME_THEMES: Record<string, GameFXTheme> = {
   home: makeTheme({
