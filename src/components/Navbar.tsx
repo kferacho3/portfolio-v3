@@ -6,7 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useContext, useEffect, useState } from 'react';
-import { FaGithub, FaLinkedin } from 'react-icons/fa';
+import { FaGamepad, FaGithub, FaLinkedin } from 'react-icons/fa';
 import { ThemeContext } from '../contexts/ThemeContext';
 import Sidebar from './Sidebar';
 
@@ -116,13 +116,20 @@ const Navbar: React.FC = () => {
                   link.href.startsWith('/') &&
                   (pathname === link.href ||
                     pathname?.startsWith(`${link.href}/`));
+                const isArcade = link.href === '/fun';
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={navLinkClass(isActive)}
+                    className={`${navLinkClass(isActive)} gap-1.5`}
                     aria-current={isActive ? 'page' : undefined}
                   >
+                    {isArcade && (
+                      <FaGamepad
+                        className="h-3.5 w-3.5 shrink-0 opacity-90"
+                        aria-hidden
+                      />
+                    )}
                     {link.label}
                   </Link>
                 );
