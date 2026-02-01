@@ -35,6 +35,9 @@ const CanvasProvider = dynamic(
   () => import('../../components/CanvasProvider'),
   {
     ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud" aria-hidden="true" />
+    ),
   }
 );
 

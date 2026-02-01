@@ -15,9 +15,15 @@ import SectionOne from '../components/SectionOne';
 import SectionThree from '../components/SectionThree';
 import SectionTwo from '../components/SectionTwo';
 
-const CanvasProvider = dynamic(() => import('../components/CanvasProvider'), {
-  ssr: false,
-});
+const CanvasProvider = dynamic(
+  () => import('../components/CanvasProvider'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud" aria-hidden="true" />
+    ),
+  }
+);
 
 function HomePage() {
   /* ─────────────────────── 1. Animation flags ──────────────────────── */
@@ -27,8 +33,6 @@ function HomePage() {
   /* ─────────────────────── 2. Scroll page count ─────────────────────── */
   // Use a stable value for both SSR and the very first client paint
   const [pages, setPages] = useState<number>(7.5);
-  const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
     const updatePages = () => {
       const next = window.innerWidth <= 768 ? 9 : 7.5;
@@ -37,7 +41,6 @@ function HomePage() {
 
     updatePages(); // first client pass
     window.addEventListener('resize', updatePages);
-    setMounted(true); // we’re on the client
 
     return () => window.removeEventListener('resize', updatePages);
   }, []);
@@ -46,10 +49,7 @@ function HomePage() {
   const handleBackgroundComplete = () => setBgAnimationDone(true);
   const handleSectionOneComplete = () => setSectionOneDone(true);
 
-  /* ─────────────────────── 4. Hydration guard ───────────────────────── */
-  if (!mounted) return null; // prevents SSR/CSR markup mismatch flashes
-
-  /* ─────────────────────── 5. Render ────────────────────────────────── */
+  /* ─────────────────────── 4. Render ────────────────────────────────── */
   return (
     <CanvasProvider>
       <Suspense fallback={null}>

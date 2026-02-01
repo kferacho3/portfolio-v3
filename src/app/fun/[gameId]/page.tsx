@@ -86,7 +86,12 @@ const EMPTY_PROXY = proxy({});
 /** Loaded with ssr: false to avoid @react-three vendor-chunk errors during page generation */
 const SharedCanvasContent = dynamic(
   () => import('./SharedCanvasContent').then((m) => m.default),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud" aria-hidden="true" />
+    ),
+  }
 );
 
 interface GamePageProps {
