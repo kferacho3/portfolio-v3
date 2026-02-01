@@ -14,6 +14,7 @@ export const goUpState = proxy({
   gems: 0,
   gapsJumped: 0,
   wallsClimbed: 0,
+  spikesAvoided: 0,
   arenaIndex: 0,
   arenaMode: 'auto' as 'auto' | 'fixed',
 
@@ -64,6 +65,7 @@ export const goUpState = proxy({
     goUpState.gems = 0;
     goUpState.gapsJumped = 0;
     goUpState.wallsClimbed = 0;
+    goUpState.spikesAvoided = 0;
     goUpState.crashType = 'none';
     goUpState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
@@ -91,12 +93,17 @@ export const goUpState = proxy({
     goUpState.wallsClimbed += 1;
   },
 
+  addSpikeAvoidBonus: () => {
+    goUpState.spikesAvoided += 1;
+  },
+
   reset: () => {
     goUpState.phase = 'menu';
     goUpState.score = 0;
     goUpState.gems = 0;
     goUpState.gapsJumped = 0;
     goUpState.wallsClimbed = 0;
+    goUpState.spikesAvoided = 0;
     goUpState.crashType = 'none';
     goUpState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },

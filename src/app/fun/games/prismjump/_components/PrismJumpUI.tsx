@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
 
-import { CHARACTERS, PRISM_JUMP_TITLE } from '../constants';
+import { CHARACTERS, GAME, PRISM_JUMP_TITLE } from '../constants';
 import { prismJumpState } from '../state';
 
 function cubeIconStyle(size = 12): CSSProperties {
@@ -99,6 +99,33 @@ export function PrismJumpUI() {
               'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
           }}
         >
+          {/* Thin progress bar at very top (reference style) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 6,
+              background: 'rgba(255,255,255,0.18)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${Math.max(0, Math.min(1, snap.edgeSafe)) * 100}%`,
+                background:
+                  snap.edgeSafe < 0.4
+                    ? 'linear-gradient(90deg, #FB7185 0%, #F43F5E 100%)'
+                    : snap.edgeSafe < 0.7
+                      ? 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)'
+                      : 'linear-gradient(90deg, #34D399 0%, #10B981 100%)',
+                transition: 'width 0.15s ease, background 0.2s ease',
+              }}
+            />
+          </div>
+
           {/* Danger vignette when close to edge */}
           {snap.edgeSafe < 0.6 && (
             <div
@@ -213,6 +240,67 @@ export function PrismJumpUI() {
             </div>
           )}
 
+          {/* Minimap - bottom right */}
+          {snap.minimapRows.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 18,
+                right: 18,
+                width: 100,
+                height: 64,
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(0,0,0,0.45)',
+                overflow: 'hidden',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <svg
+                width="100%"
+                height="100%"
+                viewBox="0 0 100 64"
+                preserveAspectRatio="none"
+                style={{ display: 'block' }}
+              >
+                {(() => {
+                  const zRange = 12;
+                  const minZ = snap.minimapPlayerZ - 4;
+                  const maxZ = snap.minimapPlayerZ + zRange;
+                  const xScale = 100 / (2 * GAME.xWrap);
+                  const xOff = 50;
+                  const zToY = (z: number) =>
+                    64 * (1 - Math.max(0, Math.min(1, (z - minZ) / (maxZ - minZ))));
+                  return (
+                    <>
+                      {snap.minimapRows.map((row, ri) =>
+                        row.platforms.map((plat, pi) => (
+                          <rect
+                            key={`${ri}-${pi}`}
+                            x={xOff + plat.x * xScale - 4}
+                            y={zToY(row.z)}
+                            width={8}
+                            height={2}
+                            fill="rgba(255,255,255,0.35)"
+                            rx={1}
+                          />
+                        ))
+                      )}
+                      <circle
+                        cx={xOff + snap.minimapPlayerX * xScale}
+                        cy={zToY(snap.minimapPlayerZ)}
+                        r={3}
+                        fill="rgba(255,255,255,0.95)"
+                        stroke="rgba(0,0,0,0.5)"
+                        strokeWidth={1}
+                      />
+                    </>
+                  );
+                })()}
+              </svg>
+            </div>
+          )}
+
           {/* hint */}
           {snap.score < 5 && (
             <div
@@ -227,8 +315,7 @@ export function PrismJumpUI() {
                 padding: '0 20px',
               }}
             >
-              TAP to jump forward • Rows alternate ← → • Stay ahead of camera •
-              Jump to switch directions • Avoid red spikes
+              WASD / Arrows: jump (W/↑), left/right on row (A/D), backward (S/↓) • Rows alternate left/right • Avoid spikes and hazards
             </div>
           )}
         </div>
@@ -402,11 +489,10 @@ export function PrismJumpUI() {
                   color: 'rgba(255,255,255,0.68)',
                 }}
               >
-                <strong>How to play:</strong> Tap/Space to hop forward.
-                Platforms constantly move left or right, alternating each row.
-                Jump to the next row to change your drift direction. Stay ahead
-                of the camera - if you fall behind, game over! Avoid red spike
-                platforms.
+                <strong>How to play:</strong> W/↑ or tap to jump forward; A/D or ←/→ to move
+                left/right on the row; S/↓ to jump backward. Platforms move
+                left (even rows) or right (odd rows). Stay ahead of the camera.
+                Avoid red spikes and orange sliding hazards.
               </div>
             </div>
 

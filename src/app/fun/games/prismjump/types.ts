@@ -2,6 +2,11 @@ export type PrismJumpPhase = 'menu' | 'playing' | 'gameover';
 
 export type PlatformType = 'normal' | 'danger' | 'bonus';
 
+export type SlidingHazard = {
+  phase: number;
+  range: number;
+};
+
 export type PlatformData = {
   // World-space center position
   x: number;
@@ -18,6 +23,9 @@ export type PlatformData = {
 
   // Visuals
   color: string;
+
+  // Moving hazard on this platform (normal platforms only); player loses if they overlap it
+  slidingHazard?: SlidingHazard;
 };
 
 export type RowData = {
@@ -25,6 +33,8 @@ export type RowData = {
   dir: 1 | -1;
   speedMul: number;
   platforms: PlatformData[];
+  /** When this row went out of frame (for lifecycle cleanup) */
+  outOfFrameSince?: number;
 };
 
 export type Popup = {

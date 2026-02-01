@@ -68,9 +68,9 @@ export const TURN_COOLDOWN_MIN = 8;
 export const TURN_COOLDOWN_MAX = 16;
 export const TURN_ANGLE = Math.PI / 2; // 90 degree turns like ZigZag
 
-// === SPIKE HAZARDS ===
-export const SPIKE_START_SCORE = 60;
-export const SPIKE_FULL_SCORE = 180;
+// === SPIKE HAZARDS (avoid for +1 point) ===
+export const SPIKE_START_SCORE = 12;
+export const SPIKE_FULL_SCORE = 80;
 export const SPIKE_CHANCE_MIN = 0.02;
 export const SPIKE_CHANCE_MAX = 0.12;
 export const SPIKE_TALL_CHANCE = 0.22;

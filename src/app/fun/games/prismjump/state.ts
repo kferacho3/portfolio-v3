@@ -34,6 +34,11 @@ export const prismJumpState = proxy({
   // HUD helper (0..1)
   edgeSafe: 1,
 
+  // Minimap (updated each frame when playing)
+  minimapPlayerX: 0,
+  minimapPlayerZ: 0,
+  minimapRows: [] as { z: number; platforms: { x: number }[] }[],
+
   // Lightweight toast messaging
   toast: '' as string,
   toastUntil: 0,

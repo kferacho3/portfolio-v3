@@ -62,7 +62,7 @@ export const GoUpMenu: React.FC<{
               lineHeight: 1.5,
             }}
           >
-            Tap to jump • Double-tap for double jump
+            Tap to jump • Double-tap or touch walls for double jump
           </div>
 
           <div
@@ -152,7 +152,7 @@ export const GoUpMenu: React.FC<{
               </div>
               <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>
                 Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps:{' '}
-                {snap.wallsClimbed}
+                {snap.wallsClimbed} • Spikes: {snap.spikesAvoided}
               </div>
             </div>
           )}
@@ -165,7 +165,8 @@ export const GoUpMenu: React.FC<{
               lineHeight: 1.5,
             }}
           >
-            Jump gaps and climb steps to score. Avoid spikes!
+            Jump gaps and climb steps. Avoid spikes for +1 each. Touch wall
+            pillars in air to restore double jump.
           </div>
 
           <div style={{ marginTop: 12, fontSize: 11, opacity: 0.4 }}>

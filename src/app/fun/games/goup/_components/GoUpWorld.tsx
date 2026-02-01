@@ -180,6 +180,8 @@ export const GoUpWorld: React.FC<{
     airJumpsLeft: 1,
     lastJumpMs: 0,
     jumpQueuedUntilMs: 0,
+    spikeAvoidAwarded: new Set<number>(),
+    wallPillarsUsedThisJump: new Set<number>(),
 
     // Time & crash
     timeMs: 0,
@@ -1050,6 +1052,8 @@ export const GoUpWorld: React.FC<{
     w.airJumpsLeft = 1;
     w.lastJumpMs = 0;
     w.jumpQueuedUntilMs = 0;
+    w.spikeAvoidAwarded.clear();
+    w.wallPillarsUsedThisJump.clear();
 
     w.timeMs = 0;
     w.crashTimer = -1;
@@ -1274,6 +1278,7 @@ export const GoUpWorld: React.FC<{
             w.lastGroundedY = tile.y;
             w.lastGroundedMs = w.timeMs;
             w.airJumpsLeft = 1;
+            w.wallPillarsUsedThisJump.clear();
             tile.lastContactMs = w.timeMs;
 
             // Scoring
@@ -1301,7 +1306,6 @@ export const GoUpWorld: React.FC<{
               }
 
               w.lastScoredIndex = tile.index;
-              goUpState.score = w.lastScoredIndex + w.bonusScore;
             }
 
             // Prune old gap indices
@@ -1333,6 +1337,52 @@ export const GoUpWorld: React.FC<{
         const pathY = w.pathPoints[currentIndex]?.y ?? 0;
         if (w.py < pathY - 5 && !w.crashActive) {
           triggerCrash('fell');
+        }
+
+        // Spike-avoid scoring: +1 when we pass a spike without touching it
+        const currentProgressIndex = Math.floor(w.progress);
+        for (const tile of w.tileList) {
+          if (
+            tile.spikeTier > 0 &&
+            tile.index < currentProgressIndex &&
+            !w.spikeAvoidAwarded.has(tile.index)
+          ) {
+            w.spikeAvoidAwarded.add(tile.index);
+            w.bonusScore += 1;
+            goUpState.addSpikeAvoidBonus();
+            const spikeH =
+              tile.spikeTier === 2 ? SPIKE_MODEL_TALL : SPIKE_MODEL_SHORT;
+            spawnGemBurst(
+              tile.x,
+              tile.y + TILE_HEIGHT + spikeH / 2,
+              tile.z,
+              arena.spikeHue
+            );
+          }
+        }
+        goUpState.score = w.lastScoredIndex + w.bonusScore;
+
+        // Double walls: touching a wall pillar in air restores double jump
+        if (!w.grounded && !w.crashActive) {
+          const touchRadius = WALL_PILLAR_WIDTH * 0.5 + BALL_RADIUS + 0.08;
+          for (const pillar of w.wallPillars) {
+            if (w.wallPillarsUsedThisJump.has(pillar.instanceId)) continue;
+            const dx = w.px - pillar.x;
+            const dz = w.pz - pillar.z;
+            const dist2D = Math.sqrt(dx * dx + dz * dz);
+            const inVertical =
+              w.py >= pillar.y && w.py <= pillar.y + pillar.height;
+            if (dist2D < touchRadius && inVertical) {
+              w.airJumpsLeft = 1;
+              w.wallPillarsUsedThisJump.add(pillar.instanceId);
+              spawnGemBurst(
+                pillar.x,
+                pillar.y + pillar.height * 0.5,
+                pillar.z,
+                arena.gemHue
+              );
+            }
+          }
         }
 
         updateDecayedTiles(dt);
@@ -1445,7 +1495,7 @@ export const GoUpWorld: React.FC<{
         args={[undefined, undefined, MAX_RENDER_TILES]}
         castShadow
       >
-        <coneGeometry args={[SPIKE_RADIUS_SHORT, 1, 6]} />
+        <coneGeometry args={[SPIKE_RADIUS_SHORT, 1, 4]} />
         <meshStandardMaterial
           vertexColors
           roughness={0.28}

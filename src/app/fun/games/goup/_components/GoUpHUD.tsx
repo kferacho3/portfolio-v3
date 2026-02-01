@@ -49,6 +49,11 @@ export const GoUpHUD: React.FC<{ arena: Arena }> = ({ arena }) => {
         </div>
         <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
           <span style={{ marginRight: 12 }}>Gems {snap.gems}</span>
+          {snap.phase === 'playing' && snap.spikesAvoided > 0 && (
+            <span style={{ marginRight: 12, color: '#e65100' }}>
+              Spikes +{snap.spikesAvoided}
+            </span>
+          )}
           <span>Best {snap.best}</span>
         </div>
       </div>

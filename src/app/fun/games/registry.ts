@@ -89,6 +89,7 @@ const scoreGetters: Partial<Record<GameId, (snap: any) => number>> = {
   sizr: (snap) => snap.score ?? 0,
   shapeshifter: (snap) => snap.score ?? 0,
   fluxhop: (snap) => snap.score ?? 0,
+  prismjump: (snap) => snap.score ?? 0,
 };
 
 const stateGetters: Partial<Record<GameId, (mod: GameModule) => any>> = {

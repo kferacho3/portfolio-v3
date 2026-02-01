@@ -11,21 +11,22 @@ export const STORAGE_KEYS = {
 
 export const GAME = {
   // World sizing
-  rowSpacing: 1.35,
-  xLimit: 5.2, // player dies if carried beyond this
-  xWrap: 7.6, // platforms wrap beyond this
+  rowSpacing: 1.5,
+  xLimit: 5.0, // player dies if carried beyond this
+  xWrap: 5.5, // platforms wrap beyond this; keep lanes clear
 
-  // Platform sizing
-  platformDepth: 1.05,
-  platformHeight: 0.55,
-  platformTopThickness: 0.14,
-  topThickness: 0.14, // alias for platformTopThickness
-  baseCenterY: 0.275, // platformHeight / 2
-  topCenterY: 0.345, // platformHeight / 2 + platformTopThickness / 2
+  // Platform sizing - single prism per platform (bright colored block on thin dark base)
+  platformDepth: 1.0,
+  platformHeight: 0.5,
+  platformTopThickness: 0.2,
+  topThickness: 0.2,
+  baseCenterY: 0.25,
+  topCenterY: 0.4,
+  platformTopY: 0.66, // top face of prism (baseH + prismH)
 
-  // Spawn
+  // Spawn - fewer platforms per row, no overlap; alternating positions
   visibleRows: 16,
-  platformsPerRow: 6,
+  platformsPerRow: 3,
 
   // Movement / difficulty - PLATFORMS ALWAYS MOVE!
   baseSpeed: 1.85, // Increased from 1.35 to make movement more obvious
@@ -39,6 +40,9 @@ export const GAME = {
 
   // Collectibles / economy
   unlockCost: 100,
+
+  // Platform lifecycle: remove rows after this many seconds out of frame
+  platformOutOfFrameTTL: 13,
 };
 
 export const PLATFORM_TOP_COLORS = [
@@ -301,6 +305,30 @@ export const CHARACTERS: CharacterDef[] = [
     color: '#10B981',
     roughness: 0.5,
     emissive: '#022C22',
+  },
+  {
+    id: 'aurora',
+    name: 'Aurora',
+    kind: 'sphere',
+    color: '#A78BFA',
+    roughness: 0.2,
+    emissive: '#2E1065',
+  },
+  {
+    id: 'ember',
+    name: 'Ember',
+    kind: 'box',
+    color: '#F97316',
+    roughness: 0.38,
+    emissive: '#431407',
+  },
+  {
+    id: 'crystal',
+    name: 'Crystal',
+    kind: 'octa',
+    color: '#E0F2FE',
+    roughness: 0.08,
+    metalness: 0.4,
   },
 ];
 
