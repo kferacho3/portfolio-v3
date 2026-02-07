@@ -1,7 +1,8 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 'use client';
 
-import { Dodecahedron, Sky, Stars, TorusKnot } from '@react-three/drei';
+import { Sky, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Physics, type RapierRigidBody } from '@react-three/rapier';
 import React, {
@@ -22,7 +23,6 @@ import {
   PLAYER_RADIUS,
   SPRING_POINTS,
   TETRA_HEAL,
-  TORUS_MATERIAL,
   ZONE_MULTIPLIER,
 } from '../constants';
 import { rolletteState } from '../state';
@@ -70,6 +70,7 @@ export const RolletteWorld: React.FC<{
   const keysRef = useRef({ w: false, a: false, s: false, d: false });
   const brakeRef = useRef(false);
   const dashQueuedRef = useRef(false);
+  const pausedRef = useRef(paused);
 
   const [rings, setRings] = useState<RingItem[]>([]);
   const [pyramids, setPyramids] = useState<PyramidItem[]>([]);
@@ -113,6 +114,32 @@ export const RolletteWorld: React.FC<{
   const lastBlockHitAtRef = useRef<Record<string, number>>({});
   const lastNearMissAtRef = useRef<Record<string, number>>({});
 
+  const laserGroupRef = useRef<THREE.Group>(null);
+  const laserSegARef = useRef<THREE.Mesh>(null);
+  const laserSegBRef = useRef<THREE.Mesh>(null);
+  const laserMatARef = useRef<THREE.MeshStandardMaterial>(null);
+  const laserMatBRef = useRef<THREE.MeshStandardMaterial>(null);
+  const laserGlowRef = useRef<THREE.PointLight>(null);
+  const laserGapRef = useRef<THREE.Mesh>(null);
+  const laserGapMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const laserStateRef = useRef({
+    phase: 'idle' as 'idle' | 'warmup' | 'active',
+    t: 0,
+    nextIn: 8,
+    angle: 0,
+    dir: 1,
+    offset: 0,
+    span: ARENA_HALF + 10,
+    length: ARENA_SIZE * 1.6,
+    gapCenter: 0,
+    gapWidth: 10,
+    warmupDur: 1.1,
+    activeDur: 2.2,
+    didHit: false,
+    gapRewarded: false,
+  });
+  const lastLaserHitAtRef = useRef(0);
+
   const dodecaMeshRefs = useRef<Record<string, THREE.Object3D | null>>({});
   const dodecaMotionRef = useRef<
     Record<string, { pos: Vec3; vel: [number, number] }>
@@ -148,9 +175,46 @@ export const RolletteWorld: React.FC<{
     return avoids;
   }, []);
 
+  type SoundKey = 'point' | 'hit' | 'dash' | 'zone';
+  const audioRef = useRef<null | Record<SoundKey, HTMLAudioElement[]>>(null);
+  const audioIndexRef = useRef<Record<SoundKey, number>>({
+    point: 0,
+    hit: 0,
+    dash: 0,
+    zone: 0,
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mk = (src: string, count: number, volume: number) =>
+      Array.from({ length: count }, () => {
+        const a = new Audio(src);
+        a.volume = volume;
+        a.preload = 'auto';
+        return a;
+      });
+
+    audioRef.current = {
+      point: mk('/fun/audio/sfx_point.wav', 4, 0.35),
+      hit: mk('/fun/audio/sfx_hit.wav', 2, 0.42),
+      dash: mk('/fun/audio/sfx_swooshing.wav', 2, 0.3),
+      zone: mk('/fun/resources/ping.mp3', 2, 0.28),
+    };
+    return () => {
+      audioRef.current = null;
+    };
+  }, []);
+
   const playSound = useCallback(
-    (type: 'point' | 'hit' | 'dash' | 'zone') => {
-      // Sound handling would go here if needed
+    (type: SoundKey) => {
+      if (!soundsOn || !audioRef.current) return;
+      const list = audioRef.current[type];
+      if (!list?.length) return;
+      const idx = audioIndexRef.current[type] % list.length;
+      audioIndexRef.current[type] = (idx + 1) % list.length;
+      const a = list[idx];
+      a.currentTime = 0;
+      a.play().catch(() => undefined);
     },
     [soundsOn]
   );
@@ -191,9 +255,85 @@ export const RolletteWorld: React.FC<{
     rolletteState.reset();
     resetBall();
 
+    // Clear transient refs so long sessions don't accumulate stale ids.
+    lastPyramidHitAtRef.current = {};
+    lastSpringHitAtRef.current = {};
+    lastKnotHitAtRef.current = {};
+    lastTetraHitAtRef.current = {};
+    lastRingHitAtRef.current = {};
+    lastBlockHitAtRef.current = {};
+    lastNearMissAtRef.current = {};
+    lastStarHitAtRef.current = 0;
+    lastLaserHitAtRef.current = 0;
+
+    blockBodyRefs.current = {};
+    blockWorldPosRef.current = {};
+    dodecaMeshRefs.current = {};
+    dodecaMotionRef.current = {};
+    setBursts([]);
+
+    laserStateRef.current = {
+      phase: 'idle',
+      t: 0,
+      nextIn: 7,
+      angle: 0,
+      dir: 1,
+      offset: 0,
+      span: ARENA_HALF + 10,
+      length: ARENA_SIZE * 1.6,
+      gapCenter: 0,
+      gapWidth: 10,
+      warmupDur: 1.1,
+      activeDur: 2.2,
+      didHit: false,
+      gapRewarded: false,
+    };
+
     const level = 1;
     const playerPos = playerPosRef.current;
-    const avoid = avoidList();
+    const avoid: Array<{ center: Vec3; radius: number }> = [];
+
+    // Spawn sweep hazards first so everything else avoids them.
+    const newBlocks: MovingBlockItem[] = Array.from({ length: 6 }, (_, i) => {
+      const id = `block-${i}`;
+      const pos = pickSpawnPoint(playerPos, {
+        minDist: 14,
+        maxDist: 35,
+        y: ITEM_Y + 0.3,
+        avoid,
+      });
+      avoid.push({ center: pos, radius: 3.8 });
+      blockWorldPosRef.current[id] = pos;
+      return {
+        id,
+        kind: 'block',
+        pos,
+        axis: Math.random() < 0.5 ? 'x' : 'z',
+        amp: 6 + Math.random() * 5,
+        speed: 0.55 + Math.random() * 0.5,
+        phase: Math.random() * Math.PI * 2,
+        glass: Math.random() < 0.35,
+      };
+    });
+
+    const newPyramids: PyramidItem[] = Array.from({ length: 26 }, () => {
+      const pos = pickSpawnPoint(playerPos, {
+        minDist: 10,
+        maxDist: 30,
+        y: ITEM_Y,
+        avoid,
+      });
+      avoid.push({ center: pos, radius: 2.2 });
+      return {
+        id: randId('pyr'),
+        kind: 'pyramid',
+        type: pickPyramidType(level),
+        pos,
+      };
+    });
+
+    setBlocks(newBlocks);
+    setPyramids(newPyramids);
 
     rolletteState.zoneCenter = pickSpawnPoint(playerPos, {
       minDist: 8,
@@ -204,32 +344,6 @@ export const RolletteWorld: React.FC<{
     zoneMoveIdRef.current = rolletteState.zoneMoveId;
     difficultyRef.current = rolletteState.difficultyLevel;
 
-    setRings(
-      Array.from({ length: 46 }, () => ({
-        id: randId('ring'),
-        kind: 'ring',
-        color: pickRingColor(level),
-        pos: pickSpawnPoint(playerPos, {
-          minDist: 10,
-          maxDist: 30,
-          y: ITEM_Y,
-          avoid,
-        }),
-      }))
-    );
-    setPyramids(
-      Array.from({ length: 26 }, () => ({
-        id: randId('pyr'),
-        kind: 'pyramid',
-        type: pickPyramidType(level),
-        pos: pickSpawnPoint(playerPos, {
-          minDist: 10,
-          maxDist: 30,
-          y: ITEM_Y,
-          avoid,
-        }),
-      }))
-    );
     setSprings(
       Array.from({ length: 10 }, () => ({
         id: randId('spring'),
@@ -254,23 +368,6 @@ export const RolletteWorld: React.FC<{
           avoid,
         }),
         vel: [(Math.random() - 0.5) * 5, (Math.random() - 0.5) * 5],
-      }))
-    );
-    setBlocks(
-      Array.from({ length: 6 }, (_, i) => ({
-        id: `block-${i}`,
-        kind: 'block',
-        pos: pickSpawnPoint(playerPos, {
-          minDist: 14,
-          maxDist: 35,
-          y: ITEM_Y + 0.3,
-          avoid,
-        }),
-        axis: Math.random() < 0.5 ? 'x' : 'z',
-        amp: 6 + Math.random() * 5,
-        speed: 0.55 + Math.random() * 0.5,
-        phase: Math.random() * Math.PI * 2,
-        glass: Math.random() < 0.35,
       }))
     );
     setTetras(
@@ -309,14 +406,31 @@ export const RolletteWorld: React.FC<{
         avoid,
       }),
     });
-    setBursts([]);
-  }, [avoidList, resetBall]);
+    setRings(
+      Array.from({ length: 46 }, () => ({
+        id: randId('ring'),
+        kind: 'ring',
+        color: pickRingColor(level),
+        pos: pickSpawnPoint(playerPos, {
+          minDist: 10,
+          maxDist: 30,
+          y: ITEM_Y,
+          avoid,
+        }),
+      }))
+    );
+  }, [resetBall]);
 
   useEffect(() => {
     resetWorld();
     camera.position.set(0, 9, 12);
     camera.lookAt(0, 1, 0);
   }, [camera, resetWorld]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    if (paused) dashQueuedRef.current = false;
+  }, [paused]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -327,7 +441,7 @@ export const RolletteWorld: React.FC<{
       if (k === 'd' || k === 'arrowright') keysRef.current.d = true;
       if (e.code === 'Space') {
         e.preventDefault();
-        dashQueuedRef.current = true;
+        if (!e.repeat && !pausedRef.current) dashQueuedRef.current = true;
       }
       if (k === 'r') resetWorld();
     };
@@ -340,17 +454,22 @@ export const RolletteWorld: React.FC<{
     };
     const onDown = () => (brakeRef.current = true);
     const onUp = () => (brakeRef.current = false);
+    const onBlur = () => {
+      keysRef.current = { w: false, a: false, s: false, d: false };
+      dashQueuedRef.current = false;
+      brakeRef.current = false;
+    };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointerup', onUp);
-    window.addEventListener('blur', onUp);
+    window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('blur', onUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, [resetWorld]);
 
@@ -482,6 +601,115 @@ export const RolletteWorld: React.FC<{
       );
     }
 
+    // Laser sweep event (warmup -> active) with a safe "gap".
+    const laser = laserStateRef.current;
+    laser.t += dt;
+    if (laser.phase === 'idle') {
+      laser.nextIn -= dt;
+      if (laser.nextIn <= 0) {
+        const level = rolletteState.difficultyLevel;
+        laser.phase = 'warmup';
+        laser.t = 0;
+        laser.angle = Math.random() * Math.PI * 2;
+        laser.dir = Math.random() < 0.5 ? 1 : -1;
+        laser.span = ARENA_HALF + 12;
+        laser.offset = -laser.dir * laser.span;
+        laser.length = ARENA_SIZE * 1.65;
+        laser.gapWidth = clamp(10 - level * 0.25, 6.8, 10);
+        laser.warmupDur = 1.05;
+        laser.activeDur = clamp(2.35 - level * 0.03, 1.65, 2.35);
+        laser.didHit = false;
+        laser.gapRewarded = false;
+
+        const halfLen = laser.length / 2;
+        const margin = 12;
+        const range = Math.max(0, halfLen - laser.gapWidth / 2 - margin);
+        laser.gapCenter = (Math.random() * 2 - 1) * range;
+
+        rolletteState.setToast('LASER INCOMING', 1);
+      }
+    } else if (laser.phase === 'warmup') {
+      laser.offset = -laser.dir * laser.span;
+      if (laser.t >= laser.warmupDur) {
+        laser.phase = 'active';
+        laser.t = 0;
+        rolletteState.setToast('THREAD THE GAP', 0.9);
+      }
+    } else if (laser.phase === 'active') {
+      const sweepDist = laser.span * 2;
+      const prog = laser.activeDur > 0 ? laser.t / laser.activeDur : 1;
+      laser.offset =
+        -laser.dir * laser.span +
+        laser.dir * sweepDist * THREE.MathUtils.clamp(prog, 0, 1);
+      if (laser.t >= laser.activeDur) {
+        laser.phase = 'idle';
+        laser.t = 0;
+        const level = rolletteState.difficultyLevel;
+        laser.nextIn = clamp(12 - level * 0.55, 5.5, 12) + Math.random() * 3.5;
+      }
+    }
+
+    const lg = laserGroupRef.current;
+    if (lg) {
+      const show = laser.phase !== 'idle';
+      lg.visible = show;
+      if (show) {
+        const nx = Math.cos(laser.angle);
+        const nz = Math.sin(laser.angle);
+        lg.position.set(nx * laser.offset, FLOOR_Y + 0.1, nz * laser.offset);
+        lg.rotation.set(0, Math.PI / 2 - laser.angle, 0);
+
+        const halfLen = laser.length / 2;
+        const gapHalf = laser.gapWidth / 2;
+        const minX = -halfLen + 4;
+        const maxX = halfLen - 4;
+        const leftEnd = clamp(laser.gapCenter - gapHalf, minX, maxX);
+        const rightStart = clamp(laser.gapCenter + gapHalf, minX, maxX);
+
+        const segALen = Math.max(0.001, leftEnd - -halfLen);
+        const segBLen = Math.max(0.001, halfLen - rightStart);
+        const segACenter = (-halfLen + leftEnd) / 2;
+        const segBCenter = (rightStart + halfLen) / 2;
+
+        if (laserSegARef.current) {
+          laserSegARef.current.position.set(segACenter, 0, 0);
+          laserSegARef.current.scale.set(segALen, 1, 1);
+        }
+        if (laserSegBRef.current) {
+          laserSegBRef.current.position.set(segBCenter, 0, 0);
+          laserSegBRef.current.scale.set(segBLen, 1, 1);
+        }
+        if (laserGapRef.current) {
+          laserGapRef.current.position.set(laser.gapCenter, 0.2, 0);
+        }
+
+        const warmup = laser.phase === 'warmup';
+        const active = laser.phase === 'active';
+        const pulse = warmup
+          ? 0.7 + Math.sin(state.clock.elapsedTime * 10.5) * 0.2
+          : 1;
+        const alpha = warmup ? 0.14 * pulse : active ? 0.36 : 0;
+        const emiss = warmup ? 0.6 * pulse : 1.15;
+
+        if (laserMatARef.current) {
+          laserMatARef.current.opacity = alpha;
+          laserMatARef.current.emissiveIntensity = emiss;
+        }
+        if (laserMatBRef.current) {
+          laserMatBRef.current.opacity = alpha;
+          laserMatBRef.current.emissiveIntensity = emiss;
+        }
+        if (laserGlowRef.current) {
+          laserGlowRef.current.intensity = warmup ? 0.45 : active ? 0.85 : 0;
+          laserGlowRef.current.distance = 34;
+        }
+        if (laserGapMatRef.current) {
+          laserGapMatRef.current.opacity = warmup ? 0.55 : 0.75;
+          laserGapMatRef.current.emissiveIntensity = warmup ? 1.25 : 1.65;
+        }
+      }
+    }
+
     for (const b of blocksRef.current) {
       const body = blockBodyRefs.current[b.id];
       if (!body) continue;
@@ -515,9 +743,10 @@ export const RolletteWorld: React.FC<{
     const slippery = rolletteState.slipperyTime > 0;
 
     if (shieldLightRef.current) {
-      shieldLightRef.current.intensity =
-        rolletteState.shieldTime > 0 ? 0.95 : 0;
-      shieldLightRef.current.distance = 6;
+      const t = rolletteState.shieldTime;
+      const fade = THREE.MathUtils.clamp(t / 0.9, 0, 1);
+      shieldLightRef.current.intensity = t > 0 ? 0.3 + 0.65 * fade : 0;
+      shieldLightRef.current.distance = 6 + fade * 1.5;
     }
 
     if (tmpV.lengthSq() > 1e-4) lastMoveDirRef.current.copy(tmpV);
@@ -585,6 +814,64 @@ export const RolletteWorld: React.FC<{
     const level = rolletteState.difficultyLevel;
     const avoid = avoidList();
 
+    if (laserStateRef.current.phase === 'active') {
+      const laser = laserStateRef.current;
+      if (!laser.didHit && nowS - lastLaserHitAtRef.current > 0.8) {
+        const nx = Math.cos(laser.angle);
+        const nz = Math.sin(laser.angle);
+        const tx = -nz;
+        const tz = nx;
+
+        const signed = nx * p.x + nz * p.z - laser.offset;
+        const perp = Math.abs(signed);
+        const laserThickness = 0.48;
+        const hitBand = laserThickness * 0.5 + PLAYER_RADIUS * 0.75;
+
+        if (perp < hitBand) {
+          const tan = tx * p.x + tz * p.z;
+          const safeHalf = Math.max(
+            1.2,
+            laser.gapWidth * 0.5 - PLAYER_RADIUS * 0.85
+          );
+
+          if (Math.abs(tan - laser.gapCenter) <= safeHalf) {
+            if (!laser.gapRewarded) {
+              laser.gapRewarded = true;
+              rolletteState.addScore(
+                90 *
+                  (inZoneNow ? ZONE_MULTIPLIER : 1) *
+                  rolletteState.bonusMultiplier
+              );
+              spawnBurst(
+                [p.x, ITEM_Y + 0.25, p.z],
+                '#22d3ee',
+                10,
+                0.55,
+                'spark'
+              );
+            }
+          } else {
+            laser.didHit = true;
+            lastLaserHitAtRef.current = nowS;
+            rolletteState.takeDamage(14 + level * 0.8);
+            rolletteState.setToast('LASER HIT', 1);
+            playSound('hit');
+            damageFlashRef.current = Math.min(
+              0.75,
+              damageFlashRef.current + 0.45
+            );
+            spawnBurst([p.x, ITEM_Y + 0.35, p.z], '#fb7185', 22, 0.9, 'spark');
+
+            const push = signed >= 0 ? 1 : -1;
+            rb.applyImpulse(
+              { x: nx * push * 14, y: 0.55, z: nz * push * 14 },
+              true
+            );
+          }
+        }
+      }
+    }
+
     for (const ring of ringsRef.current) {
       const lastAt = lastRingHitAtRef.current[ring.id] ?? -999;
       if (nowS - lastAt < 0.12) continue;
@@ -623,6 +910,17 @@ export const RolletteWorld: React.FC<{
             if (Math.abs(x) > ARENA_HALF - 2 || Math.abs(z) > ARENA_HALF - 2)
               continue;
             if (dist2XZ(candidate, playerPos) < 8 * 8) continue;
+            let ok = true;
+            for (const av of avoid) {
+              const dx = x - av.center[0];
+              const dz = z - av.center[2];
+              const rr = (av.radius + 1.4) * (av.radius + 1.4);
+              if (dx * dx + dz * dz < rr) {
+                ok = false;
+                break;
+              }
+            }
+            if (!ok) continue;
             nextPos = candidate;
             break;
           }
@@ -748,15 +1046,73 @@ export const RolletteWorld: React.FC<{
           (Math.random() - 0.5) * (flock ? 7 : 5),
           (Math.random() - 0.5) * (flock ? 7 : 5),
         ];
-        motion.pos = [...base];
-        motion.vel = nextVel;
-        const obj = dodecaMeshRefs.current[d.id];
-        if (obj) obj.position.set(base[0], base[1], base[2]);
+        const updates: Record<string, { pos: Vec3; vel: [number, number] }> = {
+          [d.id]: { pos: base, vel: nextVel },
+        };
+
+        if (flock) {
+          rolletteState.setToast('BONUS FLOCK', 0.9);
+          const others = dodecasRef.current.filter((dd) => dd.id !== d.id);
+          const count = Math.min(
+            others.length,
+            2 + Math.floor(Math.random() * 3)
+          );
+          for (let i = 0; i < count; i++) {
+            const pick = others.splice(
+              Math.floor(Math.random() * others.length),
+              1
+            )[0];
+            if (!pick) continue;
+
+            let placed: Vec3 | null = null;
+            for (let a = 0; a < 12; a++) {
+              const ang = Math.random() * Math.PI * 2;
+              const rr = 0.6 + Math.random() * 2.6;
+              const x = base[0] + Math.cos(ang) * rr;
+              const z = base[2] + Math.sin(ang) * rr;
+              const limit = ARENA_HALF - 3;
+              const cand: Vec3 = [
+                THREE.MathUtils.clamp(x, -limit, limit),
+                base[1],
+                THREE.MathUtils.clamp(z, -limit, limit),
+              ];
+              let ok = true;
+              for (const av of avoid) {
+                const dx = cand[0] - av.center[0];
+                const dz = cand[2] - av.center[2];
+                const rr2 = (av.radius + 1.4) * (av.radius + 1.4);
+                if (dx * dx + dz * dz < rr2) {
+                  ok = false;
+                  break;
+                }
+              }
+              if (!ok) continue;
+              placed = cand;
+              break;
+            }
+            const pos = placed ?? base;
+            const vel: [number, number] = [
+              (Math.random() - 0.5) * 7,
+              (Math.random() - 0.5) * 7,
+            ];
+            updates[pick.id] = { pos, vel };
+          }
+        }
+
+        for (const [id, u] of Object.entries(updates)) {
+          const m = dodecaMotionRef.current[id];
+          if (m) {
+            m.pos = [...u.pos];
+            m.vel = u.vel;
+          } else {
+            dodecaMotionRef.current[id] = { pos: [...u.pos], vel: u.vel };
+          }
+          const obj = dodecaMeshRefs.current[id];
+          if (obj) obj.position.set(u.pos[0], u.pos[1], u.pos[2]);
+        }
 
         setDodecas((prev) =>
-          prev.map((dd) =>
-            dd.id === d.id ? { ...dd, pos: base, vel: nextVel } : dd
-          )
+          prev.map((dd) => (updates[dd.id] ? { ...dd, ...updates[dd.id] } : dd))
         );
         continue;
       }
@@ -956,6 +1312,55 @@ export const RolletteWorld: React.FC<{
       <Physics gravity={[0, -20, 0]}>
         <Arena />
         <ZoneVisual />
+        <group ref={laserGroupRef} visible={false}>
+          <mesh ref={laserSegARef} castShadow>
+            <boxGeometry args={[1, 0.18, 0.48]} />
+            <meshStandardMaterial
+              ref={laserMatARef}
+              color="#fb7185"
+              emissive="#fb7185"
+              emissiveIntensity={0.6}
+              transparent
+              opacity={0}
+              roughness={0.35}
+              metalness={0.1}
+            />
+          </mesh>
+          <mesh ref={laserSegBRef} castShadow>
+            <boxGeometry args={[1, 0.18, 0.48]} />
+            <meshStandardMaterial
+              ref={laserMatBRef}
+              color="#fb7185"
+              emissive="#fb7185"
+              emissiveIntensity={0.6}
+              transparent
+              opacity={0}
+              roughness={0.35}
+              metalness={0.1}
+            />
+          </mesh>
+          <mesh ref={laserGapRef}>
+            <sphereGeometry args={[0.55, 18, 18]} />
+            <meshStandardMaterial
+              ref={laserGapMatRef}
+              color="#22d3ee"
+              emissive="#22d3ee"
+              emissiveIntensity={1.4}
+              transparent
+              opacity={0.6}
+              roughness={0.18}
+              metalness={0.05}
+              depthWrite={false}
+            />
+          </mesh>
+          <pointLight
+            ref={laserGlowRef}
+            position={[0, 0.45, 0]}
+            color="#fb7185"
+            intensity={0}
+            distance={34}
+          />
+        </group>
         <MovingBlocks blocks={blocks} blockBodyRefs={blockBodyRefs} />
         <Player ballRef={ballRef} shieldLightRef={shieldLightRef} />
         <ItemsRenderer

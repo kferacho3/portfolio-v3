@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React from 'react';
 import {
   CuboidCollider,
   RigidBody,
@@ -20,6 +20,7 @@ export const MovingBlocks: React.FC<{
           key={b.id}
           type="kinematicPosition"
           colliders={false}
+          position={b.pos}
           ref={(rb) => {
             blockBodyRefs.current[b.id] = rb;
           }}
