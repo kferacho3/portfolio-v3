@@ -13,7 +13,7 @@ const InputHandler: React.FC = () => {
       const activeElement = document.activeElement as HTMLElement | null;
       const isUiEvent = Boolean(
         target?.closest?.('[data-apex-ui]') ||
-          activeElement?.closest?.('[data-apex-ui]')
+        activeElement?.closest?.('[data-apex-ui]')
       );
       if (isUiEvent) return;
 
@@ -26,8 +26,6 @@ const InputHandler: React.FC = () => {
 
       const isPrimaryPointer =
         e.type === 'pointerdown' && (e as PointerEvent).button === 0;
-      const isSecondaryPointer =
-        e.type === 'pointerdown' && (e as PointerEvent).button === 2;
       const keyCode = e.type === 'keydown' ? (e as KeyboardEvent).code : '';
       const isAction =
         isPrimaryPointer ||
@@ -66,29 +64,6 @@ const InputHandler: React.FC = () => {
           }
         }
       }
-
-      if (
-        snap.phase === 'playing' &&
-        snap.mode === 'curved' &&
-        mutation.isOnPlatform &&
-        !mutation.gameOver
-      ) {
-        if (
-          isSecondaryPointer ||
-          (e.type === 'keydown' &&
-            ['KeyQ', 'KeyE', 'ShiftLeft', 'ShiftRight'].includes(keyCode))
-        ) {
-          if (e.type === 'pointerdown') {
-            e.preventDefault();
-          }
-          mutation.curveLane =
-            keyCode === 'KeyQ'
-              ? -1
-              : keyCode === 'KeyE'
-                ? 1
-                : mutation.curveLane * -1;
-        }
-      }
     };
 
     window.addEventListener('pointerdown', handleInput);
@@ -100,7 +75,7 @@ const InputHandler: React.FC = () => {
       window.removeEventListener('contextmenu', handleInput);
       window.removeEventListener('keydown', handleInput);
     };
-  }, [snap.phase]);
+  }, [snap.phase, snap.mode]);
 
   usePowerUpTimer();
 

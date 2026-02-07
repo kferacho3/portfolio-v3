@@ -6,7 +6,7 @@ import {
   type RapierRigidBody,
 } from '@react-three/rapier';
 import clamp from 'lodash-es/clamp';
-import { easing } from 'maath';
+import { easing } from '@/lib/easing';
 import React, { useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';

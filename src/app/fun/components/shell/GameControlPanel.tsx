@@ -14,6 +14,7 @@ import type { GameId, GameRules } from '../../store/types';
 export interface GameControlPanelProps {
   gameId: GameId;
   showGameRules: boolean;
+  showPauseHints?: boolean;
   musicOn: boolean;
   soundsOn: boolean;
   onToggleGameRules: () => void;
@@ -26,6 +27,7 @@ export interface GameControlPanelProps {
 export const GameControlPanel: React.FC<GameControlPanelProps> = ({
   gameId,
   showGameRules,
+  showPauseHints = true,
   musicOn,
   soundsOn,
   onToggleGameRules,
@@ -121,8 +123,12 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
             <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-white/40">
               <KeyboardHint hotkey="I" label="Info" />
               <KeyboardHint hotkey="G" label="Random" />
-              <KeyboardHint hotkey="P" label="Pause" />
-              <KeyboardHint hotkey="Esc" label="Pause" />
+              {showPauseHints && (
+                <>
+                  <KeyboardHint hotkey="P" label="Pause" />
+                  <KeyboardHint hotkey="Esc" label="Pause" />
+                </>
+              )}
             </div>
           </div>
         </div>

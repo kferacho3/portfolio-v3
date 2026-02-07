@@ -6,41 +6,26 @@ import {
 } from '@react-three/rapier';
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { useSnapshot } from 'valtio';
 import { WALL_MODE_BALL_OFFSET, WALL_MODE_PLAYER_Z } from '../../constants';
 import { reactPongState } from '../../state';
 
 interface WallModeBallProps {
   position: readonly [number, number, number];
   ballColor: string;
-  shotSpinRef: React.MutableRefObject<{ x: number; y: number }>;
   onBodyReady?: (body: RapierRigidBody | null) => void;
 }
 
 const WallModeBall: React.FC<WallModeBallProps> = ({
   position,
   ballColor,
-  shotSpinRef,
   onBodyReady,
 }) => {
   const api = useRef<RapierRigidBody | null>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const frameCount = useRef(0);
-  const { wallMode } = useSnapshot(reactPongState);
+  const tmpDir = useRef(new THREE.Vector3());
 
   const handleMiss = useCallback(() => {
-    if (reactPongState.hasPowerup('shield')) {
-      reactPongState.usePowerup('shield');
-      if (api.current) {
-        const vel = api.current.linvel();
-        api.current.setLinvel(
-          { x: vel.x, y: vel.y, z: -Math.abs(vel.z) },
-          true
-        );
-      }
-      return;
-    }
-
     reactPongState.wallModeMiss();
 
     if (api.current) {
@@ -71,50 +56,73 @@ const WallModeBall: React.FC<WallModeBallProps> = ({
       return;
     }
 
+    const wm = reactPongState.wallMode;
+    if (wm.gameState !== 'playing') return;
+
+    // Auto-launch at run start (no click, no pause, no catch).
+    if (!wm.started) {
+      wm.started = true;
+      api.current.setTranslation(
+        { x: position[0], y: position[1], z: position[2] },
+        true
+      );
+      api.current.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      const jitterX = (Math.random() - 0.5) * 0.25;
+      const jitterY = (Math.random() - 0.5) * 0.25;
+      tmpDir.current.set(jitterX, jitterY, -1).normalize();
+      api.current.setLinvel(
+        {
+          x: tmpDir.current.x * wm.baseSpeed,
+          y: tmpDir.current.y * wm.baseSpeed,
+          z: tmpDir.current.z * wm.baseSpeed,
+        },
+        true
+      );
+      return;
+    }
+
+    reactPongState.wallModeTick(delta);
+
     const vel = api.current.linvel();
     const pos = api.current.translation();
     const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
+    const targetSpeed = wm.currentSpeed;
 
-    const hasSlowMo = reactPongState.hasPowerup('slowmo');
-    if (hasSlowMo && speed > 5) {
-      const slowFactor = 0.5;
-      api.current.setLinvel(
-        { x: vel.x * slowFactor, y: vel.y * slowFactor, z: vel.z * slowFactor },
-        true
-      );
+    // Apply persistent spin curvature (compounds until death).
+    const spin = wm.spin;
+    const spinScale = wm.spinStrength * (1 + targetSpeed / 26);
+    const vx = vel.x + spin.x * delta * spinScale;
+    const vy = vel.y + spin.y * delta * spinScale;
+    const vz = vel.z;
+
+    tmpDir.current.set(vx, vy, vz);
+    if (tmpDir.current.lengthSq() < 1e-6) tmpDir.current.set(0, 0, -1);
+    tmpDir.current.normalize();
+
+    // Keep the game "alive": avoid near-parallel z that can become too solvable.
+    if (Math.abs(tmpDir.current.z) < 0.22) {
+      tmpDir.current.z = Math.sign(tmpDir.current.z || -1) * 0.22;
+      tmpDir.current.normalize();
     }
 
-    const maxSpeed = wallMode.maxSpeed;
-    if (speed > maxSpeed) {
-      const scale = maxSpeed / speed;
-      api.current.setLinvel(
-        { x: vel.x * scale, y: vel.y * scale, z: vel.z * scale },
-        true
-      );
-    }
+    api.current.setLinvel(
+      {
+        x: tmpDir.current.x * targetSpeed,
+        y: tmpDir.current.y * targetSpeed,
+        z: tmpDir.current.z * targetSpeed,
+      },
+      true
+    );
 
-    if (wallMode.gameState === 'playing' && !wallMode.isBallCaptured) {
-      const spin = shotSpinRef.current;
-      if (Math.abs(spin.x) > 0.001 || Math.abs(spin.y) > 0.001) {
-        api.current.setLinvel(
-          {
-            x: vel.x + spin.x * delta * 15,
-            y: vel.y + spin.y * delta * 15,
-            z: vel.z,
-          },
-          true
-        );
-        shotSpinRef.current = { x: spin.x * 0.985, y: spin.y * 0.985 };
-      }
-    }
-
-    if (pos.z > WALL_MODE_PLAYER_Z + 2 && wallMode.gameState === 'playing') {
+    if (pos.z > WALL_MODE_PLAYER_Z + 2.2) {
       handleMiss();
     }
 
     if (meshRef.current) {
       const material = meshRef.current.material as THREE.MeshStandardMaterial;
-      material.emissiveIntensity = 0.3 + (speed / maxSpeed) * 0.7;
+      const chaos = wm.wallChaos;
+      const speedN = wm.maxSpeed > 0 ? speed / wm.maxSpeed : 0;
+      material.emissiveIntensity = 0.25 + speedN * 0.75 + chaos * 0.2;
     }
   });
 

@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 /**
  * useGameLifecycle Hook
@@ -8,7 +9,12 @@
 'use client';
 
 import { useEffect, useCallback, useRef } from 'react';
-import { useGameUIState, useGameStateActions } from '../store/selectors';
+import {
+  useCurrentGameId,
+  useGameStateActions,
+  useGameUIState,
+  useReactPongMode,
+} from '../store/selectors';
 import type { GameId } from '../store/types';
 
 // Import game state reset functions
@@ -27,7 +33,6 @@ import { formaState } from '../games/forma';
 import { weaveState } from '../games/weave';
 import { paveState } from '../games/pave';
 import { voidRunnerState } from '../games/voidrunner';
-import { gravityRushState } from '../games/gravityrush';
 import { apexState } from '../games/apex';
 import { onePathState } from '../games/onepath';
 import { slowMoState } from '../games/slowmo';
@@ -36,7 +41,6 @@ import { knotHopState } from '../games/knothop';
 import { octaSurgeState } from '../games/octasurge';
 import { prismJumpState } from '../games/prismjump';
 import { oscillateState } from '../games/oscillate';
-import { branchFlipState } from '../games/branch-flip';
 import { growthState } from '../games/growth';
 // Classic ports
 import { rolletteClassicState } from '../games/rolletteClassic';
@@ -212,10 +216,15 @@ export function useGameStateSync(
  */
 export function useVisibilityPause() {
   const { setPaused } = useGameStateActions();
+  const currentGame = useCurrentGameId();
+  const reactPongMode = useReactPongMode();
 
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        if (currentGame === 'reactpong' && reactPongMode === 'WallMode') {
+          return;
+        }
         setPaused(true);
       }
     };
@@ -224,7 +233,7 @@ export function useVisibilityPause() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [setPaused]);
+  }, [currentGame, reactPongMode, setPaused]);
 }
 
 export default useGameLifecycle;

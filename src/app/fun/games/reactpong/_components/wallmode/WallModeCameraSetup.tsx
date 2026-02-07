@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber';
-import { easing } from 'maath';
+import { easing } from '@/lib/easing';
 import React, { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { WALL_MODE_HEIGHT, WALL_MODE_WIDTH } from '../../constants';

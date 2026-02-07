@@ -2,7 +2,7 @@
 'use client';
 
 import { useFrame } from '@react-three/fiber';
-import { easing } from 'maath';
+import { easing } from '@/lib/easing';
 import { ReactNode, useRef } from 'react';
 import * as THREE from 'three';
 

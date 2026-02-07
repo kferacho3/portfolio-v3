@@ -2,18 +2,14 @@ import * as THREE from 'three';
 import {
   CLASSIC_TURN_CHANCE,
   CURVE_BASE_CURVATURE,
-  CURVE_BOUNDARY_GAIN,
   CURVE_BOUNDARY_HARD,
   CURVE_BOUNDARY_SOFT,
   CURVE_CENTER_PULL,
-  CURVE_DAMPING,
   CURVE_FORWARD_BIAS,
-  CURVE_LANE_OFFSET,
   CURVE_MAX_YAW,
   CURVE_SEGMENT_RANGE,
   CURVE_SEGMENT_SHORT_RANGE,
   CURVE_SELF_INTERSECTION_DISTANCE,
-  CURVE_SPRING,
   CURVE_TILE_STEP,
   DIRECTIONS,
   GRAVITY_TURN_BASE,
@@ -23,7 +19,6 @@ import {
   GRAVITY_WAVE_HEIGHT_MULTIPLIER,
   MAX_DIVERGENCE,
   SPEEDRUSH_FORWARD_CHANCE,
-  SPIRAL_FORWARD_DRIFT,
   SPIRAL_INWARD_DRIFT,
   SPIRAL_MAX_RADIUS,
   SPIRAL_MIN_RADIUS,
@@ -42,6 +37,8 @@ import type { GameMode } from '../types';
 
 const forward = DIRECTIONS[0];
 const right = DIRECTIONS[1];
+const curveForward = new THREE.Vector3(1, 0, -1).normalize();
+const curveRight = new THREE.Vector3(1, 0, 1).normalize();
 const tempPos = new THREE.Vector3();
 const tempRadial = new THREE.Vector3();
 const tempTangent = new THREE.Vector3();
@@ -93,32 +90,49 @@ const recordCurvePos = (pos: THREE.Vector3) => {
 export const advanceCurvedState = (
   pos: THREE.Vector3,
   theta: number,
-  curvature: number,
-  curvatureVel: number,
+  _curvature: number,
+  _curvatureVel: number,
   directionSign: number,
   step: number
 ) => {
+  // Curved Mode V2:
+  // - Track is generated along a diagonal-forward basis (classic ZigZag "feel").
+  // - Player + tiles share the exact same integrator (physically possible).
+  // - Use sign flips (tap) to change curvature direction.
+  const turnRate = CURVE_BASE_CURVATURE * 0.42; // rad per world-unit (tuned)
+
+  const lateral = pos.dot(curveRight);
   const boundaryForce =
-    THREE.MathUtils.clamp(Math.abs(pos.x) / CURVE_BOUNDARY_HARD, 0, 1) *
-    Math.sign(pos.x);
-  const targetCurvature =
-    directionSign * CURVE_BASE_CURVATURE - boundaryForce * CURVE_BOUNDARY_GAIN;
+    THREE.MathUtils.clamp(Math.abs(lateral) / CURVE_BOUNDARY_HARD, 0, 1) *
+    Math.sign(lateral);
 
-  curvatureVel += (targetCurvature - curvature) * CURVE_SPRING * step;
-  curvatureVel *= Math.exp(-CURVE_DAMPING * step);
-  curvature += curvatureVel * step;
-
-  theta += curvature * step;
+  theta += (directionSign - boundaryForce * 0.65) * turnRate * step;
   theta = THREE.MathUtils.damp(theta, 0, CURVE_FORWARD_BIAS, step);
   theta = THREE.MathUtils.clamp(theta, -CURVE_MAX_YAW, CURVE_MAX_YAW);
 
-  const tangent = tempTangent.set(Math.sin(theta), 0, -Math.cos(theta));
+  const c = Math.cos(theta);
+  const s = Math.sin(theta);
+  const tangent = tempTangent
+    .copy(curveForward)
+    .multiplyScalar(c)
+    .addScaledVector(curveRight, s)
+    .normalize();
   const normal = tempNormal.set(-tangent.z, 0, tangent.x);
   pos.addScaledVector(tangent, step);
-  pos.x = THREE.MathUtils.damp(pos.x, 0, CURVE_CENTER_PULL, step);
+
+  // Pull the path back toward the diagonal centerline (in curveRight-space),
+  // keeping long runs bounded without introducing discontinuities.
+  const lateralAfter = pos.dot(curveRight);
+  const lateralPulled = THREE.MathUtils.damp(
+    lateralAfter,
+    0,
+    CURVE_CENTER_PULL,
+    step
+  );
+  pos.addScaledVector(curveRight, lateralPulled - lateralAfter);
   pos.y = -TILE_DEPTH / 2;
 
-  return { theta, curvature, curvatureVel, tangent, normal };
+  return { theta, curvature: 0, curvatureVel: 0, tangent, normal };
 };
 
 const chooseGridDirection = (preferRight: boolean) => {
@@ -177,8 +191,9 @@ export const generateCurvedTiles = () => {
     );
   }
 
-  if (Math.abs(mutation.lastTilePos.x) > CURVE_BOUNDARY_SOFT) {
-    mutation.pathCurveDirection = mutation.lastTilePos.x > 0 ? -1 : 1;
+  const lateral = mutation.lastTilePos.dot(curveRight);
+  if (Math.abs(lateral) > CURVE_BOUNDARY_SOFT) {
+    mutation.pathCurveDirection = lateral > 0 ? -1 : 1;
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
@@ -189,6 +204,7 @@ export const generateCurvedTiles = () => {
   const prevTheta = mutation.pathCurveTheta;
   const prevCurvature = mutation.pathCurveCurvature;
   const prevCurvatureVel = mutation.pathCurveCurvatureVel;
+  const prevDirection = mutation.pathCurveDirection;
 
   let result = advanceCurvedState(
     mutation.lastTilePos,
@@ -200,15 +216,22 @@ export const generateCurvedTiles = () => {
   );
 
   let center = mutation.lastTilePos.clone();
-  if (Math.abs(center.x) > CURVE_BOUNDARY_HARD || isCurvePosTooClose(center)) {
+  const lateralAfter = center.dot(curveRight);
+  if (
+    Math.abs(lateralAfter) > CURVE_BOUNDARY_HARD ||
+    isCurvePosTooClose(center)
+  ) {
     mutation.lastTilePos.copy(prevPos);
     mutation.pathCurveTheta = prevTheta;
     mutation.pathCurveCurvature = prevCurvature;
     mutation.pathCurveCurvatureVel = prevCurvatureVel;
-    mutation.pathCurveDirection *= -1;
-    mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
-      CURVE_SEGMENT_SHORT_RANGE[0],
-      CURVE_SEGMENT_SHORT_RANGE[1]
+    mutation.pathCurveDirection = prevDirection * -1;
+    mutation.pathCurveSegmentRemaining = Math.max(
+      1,
+      THREE.MathUtils.randInt(
+        CURVE_SEGMENT_SHORT_RANGE[0],
+        CURVE_SEGMENT_SHORT_RANGE[1]
+      )
     );
 
     result = advanceCurvedState(
@@ -229,13 +252,9 @@ export const generateCurvedTiles = () => {
 
   recordCurvePos(center);
 
-  const left = center.clone().addScaledVector(result.normal, CURVE_LANE_OFFSET);
-  const right = center
-    .clone()
-    .addScaledVector(result.normal, -CURVE_LANE_OFFSET);
   const rotationY = Math.atan2(result.tangent.x, result.tangent.z);
 
-  return { center, left, right, rotationY };
+  return { center, rotationY };
 };
 
 export const generateSpiralTile = (): THREE.Vector3 => {
@@ -254,18 +273,21 @@ export const generateSpiralTile = (): THREE.Vector3 => {
     radial.divideScalar(radius);
   }
 
-  const tangent = tempTangent.set(-radial.z, 0, radial.x);
-  tangent.multiplyScalar(mutation.pathSpiralDirection * SPIRAL_TURN_RATE);
+  // Spiral Mode V2:
+  // A true spiral track around the origin with controllable in/out drift.
+  // Path + player share the same integrator; the tap flips radial drift sign.
+  const tangent = tempTangent.set(radial.z, 0, -radial.x);
+  tangent.multiplyScalar(SPIRAL_TURN_RATE);
 
-  let radialBias = -SPIRAL_INWARD_DRIFT;
-  if (radius < SPIRAL_MIN_RADIUS) {
-    radialBias = SPIRAL_OUTWARD_DRIFT;
-  } else if (radius > SPIRAL_MAX_RADIUS) {
+  let radialBias =
+    mutation.pathSpiralDirection >= 0
+      ? SPIRAL_OUTWARD_DRIFT
+      : -SPIRAL_INWARD_DRIFT;
+  if (radius < SPIRAL_MIN_RADIUS) radialBias = SPIRAL_OUTWARD_DRIFT;
+  else if (radius > SPIRAL_MAX_RADIUS)
     radialBias = -SPIRAL_INWARD_DRIFT * SPIRAL_OUTER_PULL;
-  }
 
   const direction = tangent.add(radial.multiplyScalar(radialBias));
-  direction.z -= SPIRAL_FORWARD_DRIFT;
   direction.normalize();
   const nextPos = tempPos
     .copy(mutation.lastTilePos)

@@ -89,7 +89,10 @@ const SharedCanvasContent = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud" aria-hidden="true" />
+      <div
+        className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud"
+        aria-hidden="true"
+      />
     ),
   }
 );
@@ -131,6 +134,13 @@ export default function GamePage({ params }: GamePageProps) {
       setCurrentGame(gameId);
     }
   }, [isValidGame, gameId, setCurrentGame]);
+
+  // ReactPong Wall Mode is a no-pause endurance mode.
+  useEffect(() => {
+    if (gameId === 'reactpong' && reactPongMode === 'WallMode' && paused) {
+      setPaused(false);
+    }
+  }, [gameId, reactPongMode, paused, setPaused]);
 
   // Redirect to home if invalid game
   useEffect(() => {
@@ -285,6 +295,7 @@ export default function GamePage({ params }: GamePageProps) {
       ? ((gameSnap as { health?: number }).health ?? health)
       : health;
   const showModeSelection = gameId === 'skyblitz' || gameId === 'reactpong';
+  const pauseDisabled = gameId === 'reactpong' && reactPongMode === 'WallMode';
   const modeOptions =
     gameId === 'skyblitz'
       ? ['UfoMode', 'RunnerManMode']
@@ -317,6 +328,7 @@ export default function GamePage({ params }: GamePageProps) {
       <GameControlPanel
         gameId={gameId}
         showGameRules={showGameRules}
+        showPauseHints={!pauseDisabled}
         musicOn={musicOn}
         soundsOn={soundsOn}
         onToggleGameRules={toggleGameRules}
@@ -341,7 +353,7 @@ export default function GamePage({ params }: GamePageProps) {
       )}
 
       {/* Pause Menu */}
-      {paused && (
+      {paused && !pauseDisabled && (
         <PauseMenu
           gameId={gameId}
           musicOn={musicOn}

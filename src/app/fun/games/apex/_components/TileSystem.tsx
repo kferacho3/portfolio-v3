@@ -593,93 +593,73 @@ const TileSystem: React.FC = () => {
     };
   }, [tileGeometry]);
 
-  const addNewTile = useCallback(
-    (mode: GameMode) => {
-      const modeSettings = MODE_SETTINGS[mode];
+  const addNewTile = useCallback((mode: GameMode) => {
+    const modeSettings = MODE_SETTINGS[mode];
 
-      const spawnTile = (
-        pos: THREE.Vector3,
-        rotationY: number,
-        scaleX: number,
-        scaleZ: number
-      ) => {
-        const tile: TileData = {
-          id: mutation.nextTileId++,
-          x: pos.x,
-          y: pos.y,
-          z: pos.z,
-          status: 'active',
-          lastContactTime: -1,
-          fallVelocity: 0,
-          rotationY,
-          scaleX,
-          scaleZ,
-        };
-        mutation.tiles.push(tile);
-        return tile;
+    const spawnTile = (
+      pos: THREE.Vector3,
+      rotationY: number,
+      scaleX: number,
+      scaleZ: number
+    ) => {
+      const tile: TileData = {
+        id: mutation.nextTileId++,
+        x: pos.x,
+        y: pos.y,
+        z: pos.z,
+        status: 'active',
+        lastContactTime: -1,
+        fallVelocity: 0,
+        rotationY,
+        scaleX,
+        scaleZ,
       };
+      mutation.tiles.push(tile);
+      return tile;
+    };
 
-      const spawnGemOnTile = (tile: TileData) => {
-        const specialRoll = Math.random();
-        const gemType: GemType =
-          specialRoll < SPECIAL_GEM_CHANCE
-            ? SPECIAL_GEM_TYPES[
-                Math.floor(Math.random() * SPECIAL_GEM_TYPES.length)
-              ]
-            : 'normal';
-        mutation.gems.push({
-          id: mutation.nextGemId++,
-          x: tile.x,
-          y: tile.y + GEM_HEIGHT_OFFSET,
-          z: tile.z,
-          tileId: tile.id,
-          type: gemType,
-          collected: false,
-          rotation: 0,
-          absorbing: false,
-          absorbProgress: 0,
-        });
-      };
+    const spawnGemOnTile = (tile: TileData) => {
+      const specialRoll = Math.random();
+      const gemType: GemType =
+        specialRoll < SPECIAL_GEM_CHANCE
+          ? SPECIAL_GEM_TYPES[
+              Math.floor(Math.random() * SPECIAL_GEM_TYPES.length)
+            ]
+          : 'normal';
+      mutation.gems.push({
+        id: mutation.nextGemId++,
+        x: tile.x,
+        y: tile.y + GEM_HEIGHT_OFFSET,
+        z: tile.z,
+        tileId: tile.id,
+        type: gemType,
+        collected: false,
+        rotation: 0,
+        absorbing: false,
+        absorbProgress: 0,
+      });
+    };
 
-      const spawnPowerUpOnTile = (tile: TileData) => {
-        const types: Exclude<PowerUpType, 'none'>[] = [
-          'shield',
-          'magnet',
-          'slowmo',
-        ];
-        mutation.powerUps.push({
-          id: mutation.nextGemId++,
-          type: types[Math.floor(Math.random() * types.length)],
-          x: tile.x,
-          y: tile.y + GEM_HEIGHT_OFFSET + POWERUP_HEIGHT_OFFSET,
-          z: tile.z,
-          tileId: tile.id,
-          collected: false,
-        });
-      };
+    const spawnPowerUpOnTile = (tile: TileData) => {
+      const types: Exclude<PowerUpType, 'none'>[] = [
+        'shield',
+        'magnet',
+        'slowmo',
+      ];
+      mutation.powerUps.push({
+        id: mutation.nextGemId++,
+        type: types[Math.floor(Math.random() * types.length)],
+        x: tile.x,
+        y: tile.y + GEM_HEIGHT_OFFSET + POWERUP_HEIGHT_OFFSET,
+        z: tile.z,
+        tileId: tile.id,
+        collected: false,
+      });
+    };
 
-      if (mode === 'curved') {
-        const { left, right, rotationY } = generateCurvedTiles();
-        const leftTile = spawnTile(left, rotationY, 1, CURVE_TILE_STRETCH);
-        const rightTile = spawnTile(right, rotationY, 1, CURVE_TILE_STRETCH);
-
-        if (Math.random() < modeSettings.gemSpawnChance) {
-          spawnGemOnTile(Math.random() < 0.5 ? leftTile : rightTile);
-        }
-
-        if (Math.random() < modeSettings.powerUpChance) {
-          spawnPowerUpOnTile(Math.random() < 0.5 ? leftTile : rightTile);
-        }
-        return;
-      }
-
-      const prevPos = mutation.lastTilePos.clone();
-      const pos = generateTileForMode(mode);
-      const delta = pos.clone().sub(prevPos);
-      const rotationY = Math.atan2(delta.x, delta.z);
-      const scaleX = 1;
-      const scaleZ = 1;
-      const tile = spawnTile(pos, rotationY, scaleX, scaleZ);
+    if (mode === 'curved') {
+      const { center, rotationY } = generateCurvedTiles();
+      const tile = spawnTile(center, rotationY, 1, CURVE_TILE_STRETCH);
 
       if (Math.random() < modeSettings.gemSpawnChance) {
         spawnGemOnTile(tile);
@@ -688,9 +668,25 @@ const TileSystem: React.FC = () => {
       if (Math.random() < modeSettings.powerUpChance) {
         spawnPowerUpOnTile(tile);
       }
-    },
-    [generateTileForMode]
-  );
+      return;
+    }
+
+    const prevPos = mutation.lastTilePos.clone();
+    const pos = generateTileForMode(mode);
+    const delta = pos.clone().sub(prevPos);
+    const rotationY = Math.atan2(delta.x, delta.z);
+    const scaleX = 1;
+    const scaleZ = 1;
+    const tile = spawnTile(pos, rotationY, scaleX, scaleZ);
+
+    if (Math.random() < modeSettings.gemSpawnChance) {
+      spawnGemOnTile(tile);
+    }
+
+    if (Math.random() < modeSettings.powerUpChance) {
+      spawnPowerUpOnTile(tile);
+    }
+  }, []);
 
   const initializeLevel = useCallback(() => {
     mutation.tiles = [];
@@ -757,7 +753,7 @@ const TileSystem: React.FC = () => {
       tileY,
       -(PLATFORM_LENGTH - 1) * TILE_SIZE
     );
-    if (apexState.mode === 'curved') {
+    if (apexState.mode === 'curved' || apexState.mode === 'spiral') {
       mutation.lastTilePos.set(0, tileY, 0);
     }
     mutation.curveCenterPos.set(

@@ -54,34 +54,32 @@ export interface HitEffect {
 }
 
 export interface WallModeState {
-  lives: number;
-  currentLevel: number;
-  gameState:
-    | 'ready'
-    | 'playing'
-    | 'captured'
-    | 'levelComplete'
-    | 'gameOver'
-    | 'victory';
+  gameState: 'playing' | 'gameOver';
+  /** Whether the ball has been launched for this run */
+  started: boolean;
+  /** Seconds survived (run timer) */
+  elapsed: number;
+
+  /** Time-based speed curve */
+  baseSpeed: number;
   currentSpeed: number;
   maxSpeed: number;
-  rallyStreak: number;
-  levelStreak: number;
-  isBallCaptured: boolean;
-  captureStartTime: number;
-  captureHoldTime: number;
-  chargeAmount: number;
-  spinIntensity: number;
-  lastPaddleVelocity: { x: number; y: number };
-  currentLevelConfig: (typeof import('./constants').WALL_MODE_LEVELS)[number];
-  wallZones: WallZone[];
-  activePowerups: ActivePowerup[];
-  availablePowerup: {
-    type: PowerupType;
-    position: [number, number, number];
-  } | null;
-  stabilizeMode: boolean;
-  lastCatchWasPerfect: boolean;
+  /** Per-second exponential multiplier (e.g. 1.0085) */
+  speedGrowth: number;
+
+  /** Persistent spin that curves trajectories (compounds until death) */
+  spin: { x: number; y: number };
+  /** How strongly spin bends velocity each frame */
+  spinStrength: number;
+  /** How much paddle motion/offset adds spin */
+  spinSensitivity: number;
+  /** Additional spin sensitivity per second */
+  spinSensitivityGrowth: number;
+
+  /** 0..1, used to ramp opposing wall deflection noise */
+  wallChaos: number;
+
+  paddleHits: number;
 }
 
 export interface SpacePongBallState {

@@ -1,21 +1,15 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import { proxy } from 'valtio';
 import { defaultBallTexture, reactPongSkins } from './constants';
 import type { Block, HitEffect, ReactPongMode, ScorePopup } from './types';
 import {
-  advanceWallModeLevel,
-  collectPowerup,
   createWallModeState,
-  generateWallZones,
-  getWallModeMultiplier,
-  hasPowerup,
   resetWallMode,
-  updatePowerups,
-  usePowerup,
-  wallModeCaptureBall,
-  wallModeHitWall,
+  wallModePaddleHit,
+  wallModeTick,
+  wallModeWallHit,
   wallModeMiss,
-  wallModeReleaseBall,
 } from './state/wallMode';
 import {
   addHitEffect,
@@ -60,6 +54,7 @@ export const reactPongState = proxy({
 
   skins: [...reactPongSkins],
   mode: 'SoloPaddle' as ReactPongMode,
+  graphicsMode: 'clean' as 'clean' | 'classic',
 
   wallMode: createWallModeState(),
 
@@ -69,23 +64,23 @@ export const reactPongState = proxy({
       reactPongState.resetWallMode();
     }
   },
+  setGraphicsMode: (mode: 'clean' | 'classic') => {
+    reactPongState.graphicsMode = mode;
+  },
 
   resetWallMode: () => resetWallMode(reactPongState),
-  generateWallZones: () => generateWallZones(reactPongState),
-  advanceWallModeLevel: () => advanceWallModeLevel(reactPongState),
-  wallModeCaptureBall: () => wallModeCaptureBall(reactPongState),
-  wallModeReleaseBall: () => wallModeReleaseBall(reactPongState),
-  wallModeHitWall: (zoneType?: string, isPerfectCatch: boolean = false) =>
-    wallModeHitWall(reactPongState, zoneType, isPerfectCatch),
+  wallModeTick: (delta: number) => wallModeTick(reactPongState, delta),
+  wallModePaddleHit: (opts: {
+    position: [number, number, number];
+    spinAdd: { x: number; y: number };
+    spinScale?: number;
+    intensity?: number;
+  }) => wallModePaddleHit(reactPongState, opts),
+  wallModeWallHit: (opts: {
+    position: [number, number, number];
+    intensity?: number;
+  }) => wallModeWallHit(reactPongState, opts),
   wallModeMiss: () => wallModeMiss(reactPongState),
-  getWallModeMultiplier: () => getWallModeMultiplier(reactPongState),
-  collectPowerup: (type: Parameters<typeof collectPowerup>[1]) =>
-    collectPowerup(reactPongState, type),
-  updatePowerups: (delta: number) => updatePowerups(reactPongState, delta),
-  hasPowerup: (type: Parameters<typeof hasPowerup>[1]) =>
-    hasPowerup(reactPongState, type),
-  usePowerup: (type: Parameters<typeof usePowerup>[1]) =>
-    usePowerup(reactPongState, type),
 
   addScorePopup: (
     value: number,

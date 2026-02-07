@@ -20,7 +20,7 @@ import {
   useRandomGameAction,
 } from '../store/selectors';
 import { GAME_CARDS, getGameCard, KEY_TO_GAME } from '../config/games';
-import type { GameId, GameType } from '../store/types';
+import type { GameId } from '../store/types';
 
 /**
  * Main arcade shell hook
@@ -37,7 +37,6 @@ export function useArcadeShell() {
 
   // Actions
   const {
-    setCurrentGame,
     setSelectedIndex,
     goHome: storeGoHome,
     launchGame: storeLaunchGame,
@@ -91,7 +90,7 @@ export function useArcadeShell() {
       if (currentGame === 'skyblitz') {
         setSkyBlitzMode(mode as 'UfoMode' | 'RunnerManMode');
       } else if (currentGame === 'reactpong') {
-        setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls');
+        setReactPongMode(mode as 'SoloPaddle' | 'SoloWalls' | 'WallMode');
       } else if (currentGame === 'shapeshifter') {
         setShapeShifterMode(mode as '3x3' | '4x4' | '5x5');
       }
@@ -166,6 +165,7 @@ export function useArcadeKeyboard() {
   const {
     currentGame,
     isHome,
+    reactPongMode,
     goHome,
     launchGame,
     restartGame,
@@ -203,11 +203,17 @@ export function useArcadeKeyboard() {
         // P = Pause/resume
         if (key === 'p') {
           e.preventDefault();
+          if (currentGame === 'reactpong' && reactPongMode === 'WallMode') {
+            return;
+          }
           togglePause();
         }
         // Esc = Pause/resume
         if (key === 'escape') {
           e.preventDefault();
+          if (currentGame === 'reactpong' && reactPongMode === 'WallMode') {
+            return;
+          }
           togglePause();
         }
       } else {
@@ -224,6 +230,8 @@ export function useArcadeKeyboard() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     isHome,
+    currentGame,
+    reactPongMode,
     goHome,
     restartGame,
     toggleGameRules,

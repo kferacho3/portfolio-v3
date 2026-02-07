@@ -1,164 +1,220 @@
-// @ts-nocheck
-import { Text } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import {
   CuboidCollider,
   RigidBody,
   type RapierRigidBody,
 } from '@react-three/rapier';
+import clamp from 'lodash-es/clamp';
 import React, { useCallback, useRef } from 'react';
 import * as THREE from 'three';
-import { useSnapshot } from 'valtio';
 import {
   WALL_MODE_HEIGHT,
   WALL_MODE_WALL_Z,
   WALL_MODE_WIDTH,
 } from '../../constants';
 import { reactPongState } from '../../state';
-import type { WallZone } from '../../types';
 
 interface OpposingWallProps {
   ballRef: React.MutableRefObject<RapierRigidBody | null>;
 }
 
-const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
-  const { wallMode } = useSnapshot(reactPongState);
-  const config = wallMode.currentLevelConfig;
-  const zones = wallMode.wallZones;
+type WallZone = {
+  id: string;
+  kind: 'angle' | 'spin' | 'hot';
+  cx: number;
+  cy: number;
+  sx: number;
+  sy: number;
+  vx: number;
+  vy: number;
+};
 
+const randBetween = (a: number, b: number) => a + Math.random() * (b - a);
+
+function inZone(p: { x: number; y: number }, z: WallZone) {
+  return Math.abs(p.x - z.cx) <= z.sx / 2 && Math.abs(p.y - z.cy) <= z.sy / 2;
+}
+
+const SPIN_MAX = 2.4;
+function addSpin(add: { x: number; y: number }) {
+  const spin = reactPongState.wallMode.spin;
+  spin.x += add.x;
+  spin.y += add.y;
+  const m = Math.hypot(spin.x, spin.y);
+  if (m > SPIN_MAX) {
+    const s = SPIN_MAX / Math.max(1e-6, m);
+    spin.x *= s;
+    spin.y *= s;
+  }
+}
+
+const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
   const wallWidth = WALL_MODE_WIDTH;
   const wallHeight = WALL_MODE_HEIGHT;
   const wallZ = WALL_MODE_WALL_Z;
   const wallThickness = 0.6;
 
-  const movingPanelRefs = useRef<THREE.Mesh[]>([]);
+  const wallMeshRef = useRef<THREE.Mesh>(null);
+  const wallMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
-  useFrame(({ clock }) => {
-    if (config.hasMovingPanels) {
-      movingPanelRefs.current.forEach((panel, i) => {
-        if (panel) {
-          const speed = 0.5 + i * 0.2;
-          const amplitude = 2 + i;
-          panel.position.x =
-            Math.sin(clock.getElapsedTime() * speed) * amplitude;
-        }
-      });
+  const zonesRef = useRef<WallZone[]>([]);
+  const zonesInitTokenRef = useRef(0);
+  const wasStartedRef = useRef(false);
+
+  const tmpDir = useRef(new THREE.Vector3());
+
+  const initZones = useCallback(() => {
+    const w = wallWidth - 2;
+    const h = wallHeight - 2;
+    zonesRef.current = [
+      {
+        id: 'angle',
+        kind: 'angle',
+        cx: randBetween(-w * 0.2, w * 0.2),
+        cy: randBetween(-h * 0.2, h * 0.2),
+        sx: w * 0.36,
+        sy: h * 0.22,
+        vx: randBetween(-0.35, 0.35),
+        vy: randBetween(-0.3, 0.3),
+      },
+      {
+        id: 'spin',
+        kind: 'spin',
+        cx: randBetween(-w * 0.25, w * 0.25),
+        cy: randBetween(-h * 0.25, h * 0.25),
+        sx: w * 0.28,
+        sy: h * 0.28,
+        vx: randBetween(-0.28, 0.28),
+        vy: randBetween(-0.28, 0.28),
+      },
+      {
+        id: 'hot',
+        kind: 'hot',
+        cx: randBetween(-w * 0.25, w * 0.25),
+        cy: randBetween(-h * 0.25, h * 0.25),
+        sx: w * 0.22,
+        sy: h * 0.2,
+        vx: randBetween(-0.22, 0.22),
+        vy: randBetween(-0.22, 0.22),
+      },
+    ];
+    zonesInitTokenRef.current = performance.now();
+  }, [wallHeight, wallWidth]);
+
+  useFrame(({ clock }, dt) => {
+    const wm = reactPongState.wallMode;
+    if (wm.gameState !== 'playing') return;
+
+    if (wasStartedRef.current && !wm.started && wm.elapsed === 0) initZones();
+    wasStartedRef.current = wm.started;
+
+    if (!zonesRef.current.length) initZones();
+
+    // Subtle micro-shifts: zones drift slowly over time (almost subconscious).
+    const t = clock.getElapsedTime();
+    const w = wallWidth - 2.5;
+    const h = wallHeight - 2.5;
+    for (const z of zonesRef.current) {
+      const drift = 0.45 + wm.wallChaos * 0.65;
+      z.cx += z.vx * dt * drift;
+      z.cy += z.vy * dt * drift;
+      // Gentle boundary bounce
+      const limX = w / 2 - z.sx / 2;
+      const limY = h / 2 - z.sy / 2;
+      if (z.cx < -limX || z.cx > limX) z.vx *= -1;
+      if (z.cy < -limY || z.cy > limY) z.vy *= -1;
+      z.cx = clamp(z.cx, -limX, limX);
+      z.cy = clamp(z.cy, -limY, limY);
+      // tiny oscillation to keep it alive
+      z.cx += Math.sin(t * 0.35 + z.sx) * 0.0015;
+      z.cy += Math.cos(t * 0.33 + z.sy) * 0.0015;
+    }
+
+    if (wallMatRef.current) {
+      wallMatRef.current.emissiveIntensity = 0.35 + wm.wallChaos * 0.55;
     }
   });
 
   const handleWallHit = useCallback(() => {
-    const ballPos = ballRef.current?.translation();
-    const ballVel = ballRef.current?.linvel();
-    if (!ballPos || !ballVel) return;
+    const wm = reactPongState.wallMode;
+    if (wm.gameState !== 'playing') return;
+    const ball = ballRef.current;
+    if (!ball) return;
 
-    let hitZone: WallZone | undefined;
-    for (const zone of zones) {
-      const dx = Math.abs(ballPos.x - zone.position[0]);
-      const dy = Math.abs(ballPos.y - zone.position[1]);
-      if (dx < zone.size[0] / 2 && dy < zone.size[1] / 2) {
-        hitZone = zone;
-        break;
+    const ballPos = ball.translation();
+    const ballVel = ball.linvel();
+    if (ballVel.z >= -0.4) return; // only when traveling toward the wall
+
+    // Base reflection (invert z) + organic chaos that ramps over time.
+    const edgeX = clamp(ballPos.x / (wallWidth / 2), -1, 1);
+    const edgeY = clamp(ballPos.y / (wallHeight / 2), -1, 1);
+
+    const chaos = wm.wallChaos;
+    const noiseAmp = chaos * 0.16;
+    const shiftAmp = chaos * 0.12;
+
+    // Start with a clean reflect direction.
+    tmpDir.current.set(ballVel.x, ballVel.y, Math.abs(ballVel.z));
+    if (tmpDir.current.lengthSq() < 1e-6) tmpDir.current.set(0, 0, 1);
+    tmpDir.current.normalize();
+
+    // Edge bias: hits near edges return slightly "hotter" angles.
+    tmpDir.current.x += edgeX * (0.12 + chaos * 0.12);
+    tmpDir.current.y += edgeY * (0.12 + chaos * 0.12);
+
+    // Reactive zones (subtle, not announced).
+    const p = { x: ballPos.x, y: ballPos.y };
+    for (const z of zonesRef.current) {
+      if (!inZone(p, z)) continue;
+      const k = z.kind === 'hot' ? 1.1 : 1;
+      if (z.kind === 'angle') {
+        tmpDir.current.x += edgeX * 0.18 * k;
+        tmpDir.current.y += edgeY * 0.18 * k;
+      } else if (z.kind === 'spin') {
+        addSpin({
+          x: (Math.random() - 0.5) * 0.12 * (0.5 + chaos),
+          y: (Math.random() - 0.5) * 0.12 * (0.5 + chaos),
+        });
+      } else if (z.kind === 'hot') {
+        tmpDir.current.x += (Math.random() - 0.5) * 0.18 * chaos * k;
+        tmpDir.current.y += (Math.random() - 0.5) * 0.18 * chaos * k;
       }
+      break;
     }
 
-    let newVelX = ballVel.x;
-    let newVelY = ballVel.y;
-    let newVelZ = Math.abs(ballVel.z);
-    let speedScale = 1;
+    // Micro shifts: tiny warping based on time + position.
+    const t = performance.now() / 1000;
+    const microX = Math.sin(t * 0.9 + ballPos.y * 0.6 + edgeX * 2.2) * shiftAmp;
+    const microY =
+      Math.cos(t * 0.85 + ballPos.x * 0.6 + edgeY * 2.2) * shiftAmp;
+    tmpDir.current.x += microX;
+    tmpDir.current.y += microY;
 
-    if (hitZone) {
-      switch (hitZone.type) {
-        case 'speed':
-          speedScale = hitZone.effect;
-          break;
-        case 'spin':
-          ballRef.current?.setAngvel(
-            { x: hitZone.effect * 4, y: 0, z: hitZone.effect * 6 },
-            true
-          );
-          newVelX += (Math.random() - 0.5) * hitZone.effect * 2;
-          newVelY += (Math.random() - 0.5) * hitZone.effect * 2;
-          break;
-        case 'bounce':
-          newVelX *= hitZone.effect;
-          newVelY *= hitZone.effect;
-          break;
-        case 'hazard': {
-          const angle = (Math.random() - 0.5) * Math.PI * 0.7;
-          const speed = Math.sqrt(
-            ballVel.x * ballVel.x +
-              ballVel.y * ballVel.y +
-              ballVel.z * ballVel.z
-          );
-          newVelX = Math.sin(angle) * speed * 0.6;
-          newVelY = Math.cos(angle) * speed * 0.6;
-          break;
-        }
-        case 'target':
-          break;
-      }
+    // Deflection noise: ramps gradually into late-run unpredictability.
+    tmpDir.current.x += (Math.random() - 0.5) * noiseAmp;
+    tmpDir.current.y += (Math.random() - 0.5) * noiseAmp;
+
+    tmpDir.current.normalize();
+    if (Math.abs(tmpDir.current.z) < 0.22) {
+      tmpDir.current.z = 0.22;
+      tmpDir.current.normalize();
     }
 
-    const result = reactPongState.wallModeHitWall(
-      hitZone?.type,
-      reactPongState.wallMode.lastCatchWasPerfect
-    );
-    const targetSpeed = Math.min(
-      reactPongState.wallMode.maxSpeed,
-      reactPongState.wallMode.currentSpeed * speedScale
-    );
-    const direction = new THREE.Vector3(newVelX, newVelY, newVelZ).normalize();
-    ballRef.current?.setLinvel(
+    const speed = wm.currentSpeed;
+    ball.setLinvel(
       {
-        x: direction.x * targetSpeed,
-        y: direction.y * targetSpeed,
-        z: direction.z * targetSpeed,
+        x: tmpDir.current.x * speed,
+        y: tmpDir.current.y * speed,
+        z: tmpDir.current.z * speed,
       },
       true
     );
 
-    reactPongState.addScorePopup(
-      result.score,
-      [ballPos.x, ballPos.y, ballPos.z],
-      hitZone?.type === 'target'
-        ? '#ffff00'
-        : hitZone?.type === 'hazard'
-          ? '#ff0000'
-          : '#00d4ff',
-      result.combo.name || undefined
-    );
-    reactPongState.addHitEffect(
-      [ballPos.x, ballPos.y, ballPos.z],
-      hitZone?.type === 'target' ? '#ffff00' : '#4080ff',
-      1
-    );
-
-    const sound = reactPongState.audio.wallHitSound;
-    if (sound) {
-      try {
-        sound.currentTime = 0;
-        sound.volume = 0.6;
-        void sound.play().catch(() => {});
-      } catch {}
-    }
-  }, [zones, ballRef]);
-
-  const getZoneColor = (type: string) => {
-    switch (type) {
-      case 'speed':
-        return '#ff8800';
-      case 'spin':
-        return '#00ff88';
-      case 'bounce':
-        return '#8800ff';
-      case 'target':
-        return '#ffff00';
-      case 'hazard':
-        return '#ff0044';
-      default:
-        return '#4080ff';
-    }
-  };
+    reactPongState.wallModeWallHit({
+      position: [ballPos.x, ballPos.y, ballPos.z],
+      intensity: 0.85 + chaos * 0.35,
+    });
+  }, [ballRef, wallHeight, wallWidth]);
 
   return (
     <>
@@ -172,96 +228,25 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
           restitution={1}
           friction={0}
         />
-        <mesh>
+        <mesh ref={wallMeshRef}>
           <boxGeometry args={[wallWidth, wallHeight, wallThickness]} />
           <meshStandardMaterial
-            color="#4080ff"
-            emissive="#4080ff"
-            emissiveIntensity={0.4}
+            ref={wallMatRef}
+            color="#2346ff"
+            emissive="#3b82f6"
+            emissiveIntensity={0.35}
             transparent
-            opacity={0.7}
+            opacity={0.72}
+            metalness={0.15}
+            roughness={0.65}
           />
         </mesh>
       </RigidBody>
 
-      {zones.map((zone) => (
-        <mesh
-          key={zone.id}
-          position={[
-            zone.position[0],
-            zone.position[1],
-            wallZ + wallThickness / 2 + 0.05,
-          ]}
-        >
-          <boxGeometry args={[zone.size[0], zone.size[1], 0.2]} />
-          <meshStandardMaterial
-            color={getZoneColor(zone.type)}
-            emissive={getZoneColor(zone.type)}
-            emissiveIntensity={zone.type === 'target' ? 0.8 : 0.5}
-            transparent
-            opacity={0.6}
-          />
-        </mesh>
-      ))}
-
-      {zones
-        .filter((zone) => zone.type !== 'hazard')
-        .map((zone) => (
-          <Text
-            key={`label-${zone.id}`}
-            position={[
-              zone.position[0],
-              zone.position[1],
-              wallZ + wallThickness / 2 + 0.2,
-            ]}
-            fontSize={0.3}
-            color="#ffffff"
-            anchorX="center"
-            anchorY="middle"
-          >
-            {zone.type.toUpperCase()}
-          </Text>
-        ))}
-
-      {config.hasMovingPanels && (
-        <>
-          <mesh
-            ref={(el) => {
-              if (el) movingPanelRefs.current[0] = el;
-            }}
-            position={[0, -wallHeight / 4, wallZ + wallThickness / 2 + 0.2]}
-          >
-            <boxGeometry args={[3, 0.5, 0.3]} />
-            <meshStandardMaterial
-              color="#ff4080"
-              emissive="#ff4080"
-              emissiveIntensity={0.5}
-            />
-          </mesh>
-          <mesh
-            ref={(el) => {
-              if (el) movingPanelRefs.current[1] = el;
-            }}
-            position={[
-              0,
-              -wallHeight / 2 + 1.2,
-              wallZ + wallThickness / 2 + 0.2,
-            ]}
-          >
-            <boxGeometry args={[2.5, 0.5, 0.3]} />
-            <meshStandardMaterial
-              color="#40ff80"
-              emissive="#40ff80"
-              emissiveIntensity={0.5}
-            />
-          </mesh>
-        </>
-      )}
-
       <pointLight
         position={[0, 0, wallZ + 2]}
-        color="#4080ff"
-        intensity={0.6}
+        color="#3b82f6"
+        intensity={0.7}
         distance={15}
       />
     </>

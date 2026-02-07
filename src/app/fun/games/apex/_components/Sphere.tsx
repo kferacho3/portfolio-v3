@@ -6,11 +6,9 @@ import { useSnapshot } from 'valtio';
 import {
   CAMERA_OFFSET_X,
   CAMERA_OFFSET_Z,
-  CURVE_LANE_DAMPING,
-  CURVE_LANE_OFFSET,
+  DIRECTIONS,
   LEVEL_DISTANCE,
   MODE_SETTINGS,
-  SPIRAL_FORWARD_DRIFT,
   SPIRAL_INWARD_DRIFT,
   SPIRAL_MAX_RADIUS,
   SPIRAL_MIN_RADIUS,
@@ -22,6 +20,8 @@ import {
   SPEED_INCREMENT,
   SPEED_LIMIT,
   SPHERE_RADIUS,
+  TILE_DEPTH,
+  TILE_SIZE,
   ARENA_PRESETS,
   THEMES,
   PLAYER_SKIN_INFO,
@@ -159,21 +159,8 @@ const Sphere: React.FC = () => {
         mutation.targetDirection.copy(result.tangent);
         mutation.currentDirection.copy(result.tangent);
 
-        mutation.curveLaneOffset = THREE.MathUtils.damp(
-          mutation.curveLaneOffset,
-          mutation.curveLane * CURVE_LANE_OFFSET,
-          CURVE_LANE_DAMPING,
-          delta
-        );
-
-        mutation.spherePos
-          .copy(mutation.curveCenterPos)
-          .addScaledVector(result.normal, mutation.curveLaneOffset);
-
-        const moveDelta = result.tangent
-          .clone()
-          .multiplyScalar(mutation.speed * delta);
-        mutation.velocity.copy(moveDelta.divideScalar(delta));
+        mutation.spherePos.copy(mutation.curveCenterPos);
+        mutation.velocity.copy(result.tangent).multiplyScalar(mutation.speed);
 
         mutation.speed = Math.min(
           mutation.speed +
@@ -197,18 +184,18 @@ const Sphere: React.FC = () => {
       } else {
         radial.divideScalar(radius);
       }
-      tangent.set(-radial.z, 0, radial.x);
-      tangent.multiplyScalar(mutation.spiralDirection * SPIRAL_TURN_RATE);
+      tangent.set(radial.z, 0, -radial.x);
+      tangent.multiplyScalar(SPIRAL_TURN_RATE);
 
-      let radialBias = -SPIRAL_INWARD_DRIFT;
-      if (radius < SPIRAL_MIN_RADIUS) {
-        radialBias = SPIRAL_OUTWARD_DRIFT;
-      } else if (radius > SPIRAL_MAX_RADIUS) {
+      let radialBias =
+        mutation.spiralDirection >= 0
+          ? SPIRAL_OUTWARD_DRIFT
+          : -SPIRAL_INWARD_DRIFT;
+      if (radius < SPIRAL_MIN_RADIUS) radialBias = SPIRAL_OUTWARD_DRIFT;
+      else if (radius > SPIRAL_MAX_RADIUS)
         radialBias = -SPIRAL_INWARD_DRIFT * SPIRAL_OUTER_PULL;
-      }
 
       const direction = tangent.add(radial.multiplyScalar(radialBias));
-      direction.z -= SPIRAL_FORWARD_DRIFT;
       direction.normalize();
       mutation.targetDirection.copy(direction);
     }
@@ -240,15 +227,96 @@ const Sphere: React.FC = () => {
 
     if (!mutation.isOnPlatform && !mutation.gameOver) {
       if (snap.mode === 'zen') {
-        const activeTile = mutation.tiles.find((t) => t.status === 'active');
-        if (activeTile) {
-          mutation.spherePos.set(
-            activeTile.x,
-            activeTile.y + SPHERE_RADIUS,
-            activeTile.z
-          );
-          mutation.velocity.set(0, 0, 0);
-          mutation.isOnPlatform = true;
+        const activeTiles = mutation.tiles.filter((t) => t.status === 'active');
+        if (activeTiles.length > 0) {
+          activeTiles.sort((a, b) => a.id - b.id);
+
+          const maxGap = TILE_SIZE * 1.75;
+
+          const headIdx = activeTiles.length - 1;
+          let headSegmentStart = headIdx;
+          while (headSegmentStart > 0) {
+            const prev = activeTiles[headSegmentStart - 1];
+            const cur = activeTiles[headSegmentStart];
+            const dist = Math.hypot(prev.x - cur.x, prev.z - cur.z);
+            if (dist > maxGap) break;
+            headSegmentStart--;
+          }
+
+          const touched = activeTiles.filter((t) => t.lastContactTime > 0);
+          const mostRecentTouched = touched.length
+            ? touched.reduce((best, tile) =>
+                tile.lastContactTime > best.lastContactTime ? tile : best
+              )
+            : null;
+          const touchedIdx = mostRecentTouched
+            ? activeTiles.findIndex((t) => t.id === mostRecentTouched.id)
+            : -1;
+
+          let anchorIdx = headIdx;
+          let anchorSegmentStart = headSegmentStart;
+
+          if (touchedIdx >= 0) {
+            // Identify the touched tile's contiguous segment.
+            let touchedStart = touchedIdx;
+            while (touchedStart > 0) {
+              const prev = activeTiles[touchedStart - 1];
+              const cur = activeTiles[touchedStart];
+              const dist = Math.hypot(prev.x - cur.x, prev.z - cur.z);
+              if (dist > maxGap) break;
+              touchedStart--;
+            }
+
+            let touchedEnd = touchedIdx;
+            while (touchedEnd < activeTiles.length - 1) {
+              const cur = activeTiles[touchedEnd];
+              const next = activeTiles[touchedEnd + 1];
+              const dist = Math.hypot(next.x - cur.x, next.z - cur.z);
+              if (dist > maxGap) break;
+              touchedEnd++;
+            }
+
+            // If the touched segment is the current "head" segment, respawn near where the player fell.
+            // Otherwise, respawn into the head segment so the run can continue (no reset-to-gap loops).
+            if (touchedEnd === headIdx) {
+              anchorIdx = touchedIdx;
+              anchorSegmentStart = touchedStart;
+            }
+          }
+
+          const safeBack = 30;
+          const respawnIdx = Math.max(anchorSegmentStart, anchorIdx - safeBack);
+          const respawnTile = activeTiles[respawnIdx];
+
+          if (respawnTile) {
+            mutation.spherePos.set(
+              respawnTile.x,
+              respawnTile.y + TILE_DEPTH / 2 + SPHERE_RADIUS,
+              respawnTile.z
+            );
+            mutation.velocity.set(0, 0, 0);
+            mutation.isOnPlatform = true;
+
+            // Align the travel direction to the next tile in the current segment so the player
+            // doesn't instantly run backwards into a missing section after a Zen reset.
+            if (respawnIdx < activeTiles.length - 1) {
+              const next = activeTiles[respawnIdx + 1];
+              const dist = Math.hypot(
+                next.x - respawnTile.x,
+                next.z - respawnTile.z
+              );
+              if (dist <= maxGap) {
+                const dx = next.x - respawnTile.x;
+                const dz = next.z - respawnTile.z;
+                const useRight = Math.abs(dx) >= Math.abs(dz);
+                mutation.directionIndex = useRight ? 1 : 0;
+                mutation.targetDirection.copy(
+                  DIRECTIONS[mutation.directionIndex]
+                );
+                mutation.currentDirection.copy(mutation.targetDirection);
+              }
+            }
+          }
         }
       } else {
         apexState.endGame();
