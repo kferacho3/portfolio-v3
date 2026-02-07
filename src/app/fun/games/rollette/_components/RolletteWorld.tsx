@@ -957,7 +957,7 @@ export const RolletteWorld: React.FC<{
         <Arena />
         <ZoneVisual />
         <MovingBlocks blocks={blocks} blockBodyRefs={blockBodyRefs} />
-        <Player ballRef={ballRef} />
+        <Player ballRef={ballRef} shieldLightRef={shieldLightRef} />
         <ItemsRenderer
           rings={rings}
           pyramids={pyramids}

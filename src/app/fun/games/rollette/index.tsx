@@ -7,16 +7,17 @@ import { rolletteState } from './state';
 import { HudLayer } from './_components/HudLayer';
 import { DamageVignette } from './_components/DamageVignette';
 import { RolletteWorld } from './_components/RolletteWorld';
+import { useGameUIState } from '../../store/selectors';
 
 export { rolletteState } from './state';
 
 const BEST_SCORE_KEY = 'rollette_overdrive_best_v1';
 
-const RolletteOverdrive: React.FC<{ soundsOn?: boolean; paused?: boolean }> = ({
+const RolletteOverdrive: React.FC<{ soundsOn?: boolean }> = ({
   soundsOn = true,
-  paused,
 }) => {
   const { gl } = useThree();
+  const { paused } = useGameUIState();
   const damageFlashRef = useRef(0);
   const shieldLightRef = useRef<THREE.PointLight>(null);
 

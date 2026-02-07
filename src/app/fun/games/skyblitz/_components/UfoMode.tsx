@@ -1,11 +1,10 @@
 import { Sky, Stars } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
   ALIEN_COLLISION_RADIUS,
-  ALIEN_DESPAWN_Z,
   DEATH_ANIM_DURATION,
   MAX_FRAME_DELTA,
   MAX_PROJECTILES,
@@ -15,7 +14,6 @@ import {
   PLAYER_COLLISION_RADIUS,
   PLAYER_FIRE_COOLDOWN,
   PLAYER_HIT_COOLDOWN,
-  PLAYER_SPEED,
   PROJECTILE_RADIUS,
   PROJECTILE_SPEED,
   PROJECTILE_SPAWN_OFFSET,
@@ -33,12 +31,14 @@ import UfoPlayer from './UfoPlayer';
 
 const UfoMode: React.FC = () => {
   const snap = useSnapshot(skyBlitzState);
+  const { camera, pointer } = useThree();
   const playerRef = useRef<THREE.Group>(null!);
 
   const [initialized, setInitialized] = useState(false);
 
   const aliensRef = useRef<AlienData[]>([]);
   const alienMeshRefs = useRef<(THREE.Group | null)[]>([]);
+  const starsGroupRef = useRef<THREE.Group | null>(null);
 
   const projectilesRef = useRef<ProjectileData[]>([]);
   const projectileMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -51,15 +51,46 @@ const UfoMode: React.FC = () => {
   const killsThisWave = useRef(0);
   const lastScoreSync = useRef(0);
 
+  const aimRaycaster = useRef(new THREE.Raycaster());
   const tmpDir = useRef(new THREE.Vector3());
   const tmpPos = useRef(new THREE.Vector3());
+  const tmpTarget = useRef(new THREE.Vector3());
+  const tmpPrevPos = useRef(new THREE.Vector3());
+  const tmpAB = useRef(new THREE.Vector3());
+  const tmpAP = useRef(new THREE.Vector3());
+  const tmpClosest = useRef(new THREE.Vector3());
+
+  const SPAWN_AHEAD = 60;
+  const DESPAWN_BEHIND = 28;
+  const AIM_DISTANCE = 220;
+
+  const respawnAlien = useCallback((alien: AlienData, z: number) => {
+    const pos = generateRandomPosition(z);
+    alien.position.set(...pos);
+    alien.baseX = pos[0];
+    alien.baseY = pos[1];
+    alien.driftAmpX = 0.6 + Math.random() * 1.8;
+    alien.driftAmpY = 0.25 + Math.random() * 1.1;
+    alien.driftSpeed = 0.55 + Math.random() * 0.9;
+    alien.driftPhase = Math.random() * Math.PI * 2;
+
+    alien.health = skyBlitzState.wave;
+    alien.maxHealth = skyBlitzState.wave;
+    alien.alive = true;
+    alien.scale = 1;
+    alien.deathStart = 0;
+    alien.respawnAt = 0;
+  }, []);
 
   useEffect(() => {
     const initialAliens: AlienData[] = [];
     for (let i = 0; i < NUM_OBSTACLES; i++) {
-      const z = -20 - i * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES);
+      const z =
+        -SPAWN_AHEAD -
+        i * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES) -
+        Math.random() * OBSTACLE_RESPAWN_BUFFER;
       const pos = generateRandomPosition(z);
-      initialAliens.push({
+      const alien: AlienData = {
         id: i,
         position: new THREE.Vector3(...pos),
         health: 1,
@@ -68,7 +99,14 @@ const UfoMode: React.FC = () => {
         scale: 1,
         deathStart: 0,
         respawnAt: 0,
-      });
+        baseX: pos[0],
+        baseY: pos[1],
+        driftAmpX: 0.8 + Math.random() * 1.2,
+        driftAmpY: 0.25 + Math.random() * 0.8,
+        driftSpeed: 0.55 + Math.random() * 0.9,
+        driftPhase: Math.random() * Math.PI * 2,
+      };
+      initialAliens.push(alien);
     }
     aliensRef.current = initialAliens;
 
@@ -104,14 +142,17 @@ const UfoMode: React.FC = () => {
       if (now - lastShotTime.current < PLAYER_FIRE_COOLDOWN) return;
       lastShotTime.current = now;
 
-      tmpDir.current
-        .set(0, 0, -1)
-        .applyQuaternion(playerRef.current.quaternion)
-        .normalize();
-      tmpPos.current
-        .copy(playerRef.current.position)
-        .addScaledVector(tmpDir.current, PROJECTILE_SPAWN_OFFSET);
+      // Shoot through the crosshair (camera ray) while spawning from the ship.
+      aimRaycaster.current.setFromCamera(pointer, camera);
+      tmpDir.current.copy(aimRaycaster.current.ray.direction).normalize();
+      tmpTarget.current
+        .copy(aimRaycaster.current.ray.origin)
+        .addScaledVector(tmpDir.current, AIM_DISTANCE);
+
+      tmpPos.current.copy(playerRef.current.position);
       tmpPos.current.y += 0.25;
+      tmpDir.current.subVectors(tmpTarget.current, tmpPos.current).normalize();
+      tmpPos.current.addScaledVector(tmpDir.current, PROJECTILE_SPAWN_OFFSET);
 
       const idx = projectileWriteIndex.current;
       projectileWriteIndex.current = (idx + 1) % MAX_PROJECTILES;
@@ -123,12 +164,16 @@ const UfoMode: React.FC = () => {
       p.velocity.copy(tmpDir.current).multiplyScalar(PROJECTILE_SPEED);
     },
     [
+      camera,
+      pointer,
       playerRef,
       projectilesRef,
       projectileWriteIndex,
       lastShotTime,
+      aimRaycaster,
       tmpDir,
       tmpPos,
+      tmpTarget,
     ]
   );
 
@@ -136,6 +181,9 @@ const UfoMode: React.FC = () => {
 
   useFrame((_, delta) => {
     if (!playerRef.current) return;
+    if (starsGroupRef.current) {
+      starsGroupRef.current.position.copy(camera.position);
+    }
 
     const dt = Math.min(delta, MAX_FRAME_DELTA);
     const now = performance.now();
@@ -165,6 +213,7 @@ const UfoMode: React.FC = () => {
         continue;
       }
 
+      tmpPrevPos.current.copy(proj.position);
       proj.position.addScaledVector(proj.velocity, dt);
 
       if (now - proj.spawnedAt > PROJECTILE_TTL) {
@@ -173,22 +222,36 @@ const UfoMode: React.FC = () => {
         continue;
       }
 
+      // Continuous collision: fast projectiles can tunnel through at low FPS.
+      tmpAB.current.subVectors(proj.position, tmpPrevPos.current);
+      const abLenSq = tmpAB.current.lengthSq();
       for (const alien of aliensRef.current) {
         if (!alien.alive) continue;
-        if (alien.position.distanceToSquared(proj.position) <= projHitDistSq) {
-          proj.active = false;
-          scoreAccumulator.current += 10;
 
-          alien.health -= 1;
-          if (alien.health <= 0) {
-            alien.alive = false;
-            alien.deathStart = now;
-            alien.respawnAt = now + DEATH_ANIM_DURATION;
-            killsThisWave.current += 1;
-            scoreAccumulator.current += 50 * skyBlitzState.wave;
-          }
-          break;
+        let hit = false;
+        if (abLenSq < 1e-9) {
+          hit = alien.position.distanceToSquared(proj.position) <= projHitDistSq;
+        } else {
+          tmpAP.current.subVectors(alien.position, tmpPrevPos.current);
+          const t = THREE.MathUtils.clamp(tmpAP.current.dot(tmpAB.current) / abLenSq, 0, 1);
+          tmpClosest.current.copy(tmpPrevPos.current).addScaledVector(tmpAB.current, t);
+          hit = alien.position.distanceToSquared(tmpClosest.current) <= projHitDistSq;
         }
+
+        if (!hit) continue;
+
+        proj.active = false;
+        scoreAccumulator.current += 10;
+
+        alien.health -= 1;
+        if (alien.health <= 0) {
+          alien.alive = false;
+          alien.deathStart = now;
+          alien.respawnAt = now + DEATH_ANIM_DURATION;
+          killsThisWave.current += 1;
+          scoreAccumulator.current += 50 * skyBlitzState.wave;
+        }
+        break;
       }
 
       if (mesh) {
@@ -196,6 +259,10 @@ const UfoMode: React.FC = () => {
         mesh.position.copy(proj.position);
       }
     }
+
+    const t = now * 0.001;
+    const approachSpeed = Math.min(14, 6 + skyBlitzState.wave * 0.55);
+    const chase = Math.min(1, dt * (0.55 + skyBlitzState.wave * 0.03));
 
     for (let i = 0; i < aliensRef.current.length; i++) {
       const alien = aliensRef.current[i];
@@ -208,27 +275,32 @@ const UfoMode: React.FC = () => {
 
         if (now >= alien.respawnAt) {
           const z =
-            -OBSTACLE_SPREAD_Z - Math.random() * OBSTACLE_RESPAWN_BUFFER;
-          const newPos = generateRandomPosition(z);
-          alien.position.set(...newPos);
-          alien.health = skyBlitzState.wave;
-          alien.maxHealth = skyBlitzState.wave;
-          alien.alive = true;
-          alien.scale = 1;
-          alien.deathStart = 0;
-          alien.respawnAt = 0;
+            playerPos.z -
+            OBSTACLE_SPREAD_Z -
+            Math.random() * OBSTACLE_RESPAWN_BUFFER;
+          respawnAlien(alien, z);
         }
       } else {
-        alien.position.z += PLAYER_SPEED * dt;
+        // Aliens drift organically while "coming at" the player.
+        alien.position.z += approachSpeed * dt;
 
-        if (alien.position.z > ALIEN_DESPAWN_Z) {
+        alien.baseX = THREE.MathUtils.lerp(alien.baseX, playerPos.x, chase * 0.22);
+        alien.baseY = THREE.MathUtils.lerp(alien.baseY, playerPos.y, chase * 0.18);
+        alien.baseX = THREE.MathUtils.clamp(alien.baseX, -7.2, 7.2);
+        alien.baseY = THREE.MathUtils.clamp(alien.baseY, 0, 5.6);
+
+        const driftT = t * alien.driftSpeed + alien.driftPhase;
+        alien.position.x = alien.baseX + Math.sin(driftT) * alien.driftAmpX;
+        alien.position.y = alien.baseY + Math.cos(driftT * 1.1) * alien.driftAmpY;
+        alien.position.x = THREE.MathUtils.clamp(alien.position.x, -7.5, 7.5);
+        alien.position.y = THREE.MathUtils.clamp(alien.position.y, 0, 6);
+
+        if (alien.position.z - playerPos.z > DESPAWN_BEHIND) {
           const z =
-            -OBSTACLE_SPREAD_Z - Math.random() * OBSTACLE_RESPAWN_BUFFER;
-          const newPos = generateRandomPosition(z);
-          alien.position.set(...newPos);
-          alien.health = skyBlitzState.wave;
-          alien.maxHealth = skyBlitzState.wave;
-          alien.scale = 1;
+            playerPos.z -
+            OBSTACLE_SPREAD_Z -
+            Math.random() * OBSTACLE_RESPAWN_BUFFER;
+          respawnAlien(alien, z);
         }
 
         if (alien.position.distanceToSquared(playerPos) <= playerHitDistSq) {
@@ -259,16 +331,13 @@ const UfoMode: React.FC = () => {
       killsThisWave.current = 0;
 
       for (let i = 0; i < NUM_OBSTACLES; i++) {
-        const z = -20 - i * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES);
-        const pos = generateRandomPosition(z);
         const alien = aliensRef.current[i];
-        alien.position.set(...pos);
-        alien.health = skyBlitzState.wave;
-        alien.maxHealth = skyBlitzState.wave;
-        alien.alive = true;
-        alien.scale = 1;
-        alien.deathStart = 0;
-        alien.respawnAt = 0;
+        const z =
+          playerPos.z -
+          SPAWN_AHEAD -
+          i * (OBSTACLE_SPREAD_Z / NUM_OBSTACLES) -
+          Math.random() * OBSTACLE_RESPAWN_BUFFER;
+        respawnAlien(alien, z);
       }
     }
 
@@ -289,14 +358,16 @@ const UfoMode: React.FC = () => {
         inclination={0.49}
         azimuth={0.25}
       />
-      <Stars
-        radius={300}
-        depth={500}
-        count={5000}
-        factor={2}
-        saturation={0}
-        fade
-      />
+      <group ref={starsGroupRef}>
+        <Stars
+          radius={300}
+          depth={500}
+          count={5000}
+          factor={2}
+          saturation={0}
+          fade
+        />
+      </group>
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} />
       <pointLight

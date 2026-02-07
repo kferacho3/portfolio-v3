@@ -12,7 +12,7 @@ import {
   Torus,
   TorusKnot,
 } from '@react-three/drei';
-import { ThreeEvent, useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import React, {
   useCallback,
   useEffect,
@@ -114,6 +114,7 @@ const getRandomColor = () =>
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface ShapeProps {
+  index: number;
   position: [number, number, number];
   color: string;
   shapeType: ShapeType;
@@ -123,9 +124,13 @@ interface ShapeProps {
   gridSize: number;
   scale: number;
   isClickable: boolean;
+  onHover: (index: number) => void;
+  onUnhover: (index: number) => void;
+  onClick: (index: number) => void;
 }
 
 const Shape: React.FC<ShapeProps> = ({
+  index,
   position,
   color,
   shapeType,
@@ -135,6 +140,9 @@ const Shape: React.FC<ShapeProps> = ({
   gridSize,
   scale,
   isClickable,
+  onHover,
+  onUnhover,
+  onClick,
 }) => {
   const visualRef = useRef<THREE.Group>(null);
 
@@ -212,6 +220,26 @@ const Shape: React.FC<ShapeProps> = ({
 
   return (
     <group position={position} scale={finalScale}>
+      {/* Invisible hit mesh for reliable raycast-based interaction */}
+      <mesh
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          if (!isClickable) return;
+          onHover(index);
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation();
+          onUnhover(index);
+        }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          if (!isClickable) return;
+          onClick(index);
+        }}
+      >
+        <sphereGeometry args={[0.85, 12, 12]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
       {/* Visual shape - rotates independently */}
       <group ref={visualRef}>{renderShape()}</group>
     </group>
@@ -381,8 +409,10 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
     if (gamePhase !== 'input') {
       setHoveredIndex(null);
       document.body.style.cursor = 'auto';
+      return;
     }
-  }, [gamePhase]);
+    document.body.style.cursor = hoveredIndex !== null ? 'pointer' : 'auto';
+  }, [gamePhase, hoveredIndex]);
 
   // Show sequence animation - using refs to avoid stale closures
   const pulseSequenceRef = useRef(pulseSequence);
@@ -545,66 +575,20 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
   const spacing =
     currentGridSize === 3 ? 2.2 : currentGridSize === 4 ? 1.8 : 1.5;
   const offset = ((currentGridSize - 1) * spacing) / 2;
-  const planeSize = currentGridSize * spacing;
-  const hitRadius = spacing * 0.5;
-
-  const getGridIndexFromPoint = useCallback(
-    (x: number, y: number) => {
-      const col = Math.round((x + offset) / spacing);
-      const row = Math.round((offset - y) / spacing);
-
-      if (
-        col < 0 ||
-        col >= currentGridSize ||
-        row < 0 ||
-        row >= currentGridSize
-      ) {
-        return null;
-      }
-
-      const centerX = col * spacing - offset;
-      const centerY = (currentGridSize - 1 - row) * spacing - offset;
-      const dx = x - centerX;
-      const dy = y - centerY;
-
-      if (Math.sqrt(dx * dx + dy * dy) > hitRadius) {
-        return null;
-      }
-
-      return row * currentGridSize + col;
+  const handleShapeHover = useCallback(
+    (index: number) => {
+      if (gamePhase !== 'input') return;
+      setHoveredIndex((prev) => (prev === index ? prev : index));
     },
-    [currentGridSize, hitRadius, offset, spacing]
+    [gamePhase]
   );
 
-  const handleGridPointerMove = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      e.stopPropagation();
+  const handleShapeUnhover = useCallback(
+    (index: number) => {
       if (gamePhase !== 'input') return;
-
-      const nextIndex = getGridIndexFromPoint(e.point.x, e.point.y);
-      setHoveredIndex((prev) => (prev === nextIndex ? prev : nextIndex));
-      document.body.style.cursor = nextIndex !== null ? 'pointer' : 'auto';
+      setHoveredIndex((prev) => (prev === index ? null : prev));
     },
-    [gamePhase, getGridIndexFromPoint]
-  );
-
-  const handleGridPointerOut = useCallback((e: ThreeEvent<PointerEvent>) => {
-    e.stopPropagation();
-    setHoveredIndex(null);
-    document.body.style.cursor = 'auto';
-  }, []);
-
-  const handleGridPointerDown = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      e.stopPropagation();
-      if (gamePhase !== 'input') return;
-
-      const index = getGridIndexFromPoint(e.point.x, e.point.y);
-      if (index !== null) {
-        handleShapeClick(index);
-      }
-    },
-    [gamePhase, getGridIndexFromPoint, handleShapeClick]
+    [gamePhase]
   );
 
   // Don't render until initialized
@@ -619,16 +603,6 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
 
       {/* Grid of shapes - centered at origin */}
       <group position={[0, 0, 0]}>
-        {/* Interaction plane for consistent hover/click detection */}
-        <mesh
-          onPointerMove={handleGridPointerMove}
-          onPointerOut={handleGridPointerOut}
-          onPointerDown={handleGridPointerDown}
-          renderOrder={-2}
-        >
-          <planeGeometry args={[planeSize, planeSize]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
         {grid.map((item, i) => {
           const row = Math.floor(i / currentGridSize);
           const col = i % currentGridSize;
@@ -639,6 +613,7 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
           return (
             <Shape
               key={`shape-${item.index}-${gameKey}`}
+              index={item.index}
               position={[x, y, 0]}
               color={item.color}
               shapeType={item.shapeType}
@@ -648,6 +623,9 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
               gridSize={currentGridSize}
               scale={entryScale}
               isClickable={gamePhase === 'input'}
+              onHover={handleShapeHover}
+              onUnhover={handleShapeUnhover}
+              onClick={handleShapeClick}
             />
           );
         })}

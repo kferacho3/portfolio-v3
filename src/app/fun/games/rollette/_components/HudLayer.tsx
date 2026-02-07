@@ -26,6 +26,8 @@ export const HudLayer: React.FC<{ paused?: boolean }> = ({ paused }) => {
       dashCooldown={snap.dashCooldown}
       dashCooldownMax={snap.dashCooldownMax}
       shieldTime={snap.shieldTime}
+      slowTime={snap.slowTime}
+      slipperyTime={snap.slipperyTime}
       bonusMultiplier={snap.bonusMultiplier}
       bonusMultiplierTime={snap.bonusMultiplierTime}
       starChain={snap.starChain}

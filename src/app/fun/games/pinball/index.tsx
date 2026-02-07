@@ -41,6 +41,9 @@ function ScoreProvider({ children }) {
     'sphere-1': 'blue',
     'sphere-2': 'blue',
   });
+  const ballApiRef = useRef(null);
+  const ballPositionRef = useRef([0, 5, 0]);
+  const ballVelocityRef = useRef([0, 0, 0]);
   const [blockHits, setBlockHits] = useState({});
   const [sphereHits, setSphereHits] = useState({});
   const [activeBonus, setActiveBonus] = useState(false);
@@ -120,6 +123,9 @@ function ScoreProvider({ children }) {
         lastHitCount,
         currentAddedScore,
         sphereColors,
+        ballApiRef,
+        ballPositionRef,
+        ballVelocityRef,
       }}
     >
       {children}
@@ -141,6 +147,8 @@ function ScoreDisplay() {
       </div>
       <div className="absolute bottom-4 left-4 text-white/50 text-xs">
         <div>A/D or Arrow Keys to control flippers</div>
+        <div>Hit portals (green/blue) to teleport</div>
+        <div>Avoid the magnet ring (score penalty)</div>
       </div>
     </Html>
   );
@@ -239,13 +247,13 @@ const Sparks = ({ position, count, lifetime }) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BallAndCollisions({ args = [1.2, 32, 32], v = new THREE.Vector3() }) {
-  const { resetScore, lastHitCount } = useContext(ScoreContext);
+  const { resetScore, lastHitCount, ballApiRef, ballPositionRef, ballVelocityRef } =
+    useContext(ScoreContext);
   const cam = useRef();
   const [collisionPosition, setCollisionPosition] = useState([0, 0, 0]);
   const [showSparks, setShowSparks] = useState(false);
   const [showScore, setShowScore] = useState(false);
   const texture = useTexture(cross);
-  const ballPositionRef = useRef([0, 5, 0]);
 
   const [ref, api] = useSphere(() => ({
     args: [1.2],
@@ -262,6 +270,13 @@ function BallAndCollisions({ args = [1.2, 32, 32], v = new THREE.Vector3() }) {
       setTimeout(() => setShowSparks(false), 2000);
     },
   }));
+
+  useEffect(() => {
+    ballApiRef.current = api;
+    return () => {
+      ballApiRef.current = null;
+    };
+  }, [api, ballApiRef]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // BOUNDARY PLANES - Including FRONT and BACK to constrain Z axis
@@ -325,6 +340,7 @@ function BallAndCollisions({ args = [1.2, 32, 32], v = new THREE.Vector3() }) {
     });
 
     const unsubscribeVelocity = api.velocity.subscribe((vel) => {
+      ballVelocityRef.current = vel;
       // Kill any Z velocity to keep ball in 2D plane
       if (Math.abs(vel[2]) > 0.1) {
         api.velocity.set(vel[0], vel[1], 0);
@@ -434,6 +450,248 @@ function Flipper({
       <boxGeometry args={[FLIPPER_LENGTH, FLIPPER_THICKNESS, FLIPPER_DEPTH]} />
       <meshStandardMaterial color="#f8fafc" metalness={0.8} roughness={0.2} />
     </mesh>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PINBALL TOYS - Bumpers, Portals, Spinners, Magnets (all at Z = 0)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function Bumper({
+  bumperId,
+  position,
+  radius = 1.6,
+  power = 26,
+  restitution = 1.55,
+  color = '#22d3ee',
+}: {
+  bumperId: string;
+  position: [number, number, number];
+  radius?: number;
+  power?: number;
+  restitution?: number;
+  color?: string;
+}) {
+  const { increaseScore, ballApiRef, ballPositionRef } = useContext(ScoreContext);
+  const lastHitAt = useRef(0);
+  const hitPulse = useRef(0);
+  const materialRef = useRef(null);
+
+  const [ref] = useSphere(() => ({
+    mass: 0,
+    args: [radius],
+    position,
+    material: { restitution, friction: 0.02 },
+    onCollide: () => {
+      const now = performance.now();
+      if (now - lastHitAt.current < 120) return;
+      lastHitAt.current = now;
+      hitPulse.current = 1;
+      increaseScore(bumperId);
+
+      const api = ballApiRef?.current;
+      const p = ballPositionRef?.current;
+      if (!api || !p) return;
+
+      const dx = p[0] - position[0];
+      const dy = p[1] - position[1];
+      const len = Math.hypot(dx, dy) || 1;
+      api.applyImpulse(
+        [(dx / len) * power, (dy / len) * power + 6, 0],
+        [0, 0, 0]
+      );
+    },
+  }));
+
+  useFrame(() => {
+    hitPulse.current = THREE.MathUtils.lerp(hitPulse.current, 0, 0.12);
+    if (ref.current) {
+      const s = 1 + hitPulse.current * 0.25;
+      ref.current.scale.set(s, s, s);
+    }
+    if (materialRef.current) {
+      materialRef.current.emissiveIntensity = 0.35 + hitPulse.current * 0.85;
+    }
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <sphereGeometry args={[radius, 32, 32]} />
+      <meshStandardMaterial
+        ref={materialRef}
+        color={color}
+        emissive={color}
+        emissiveIntensity={0.35}
+        metalness={0.35}
+        roughness={0.25}
+      />
+    </mesh>
+  );
+}
+
+function Spinner({
+  position,
+  length = 10,
+  thickness = 0.55,
+  speed = 2.2,
+}: {
+  position: [number, number, number];
+  length?: number;
+  thickness?: number;
+  speed?: number;
+}) {
+  const [ref, api] = useBox(() => ({
+    type: 'Kinematic',
+    args: [length, thickness, 1.6],
+    position,
+    rotation: [0, 0, 0],
+    material: { restitution: 1.25, friction: 0.05 },
+  }));
+
+  useFrame((state, delta) => {
+    const a = state.clock.elapsedTime * speed;
+    api.rotation.set(0, 0, a);
+    api.angularVelocity.set(0, 0, speed);
+    if (ref.current) ref.current.rotation.z = a;
+  });
+
+  return (
+    <mesh ref={ref} castShadow>
+      <boxGeometry args={[length, thickness, 1.6]} />
+      <meshStandardMaterial
+        color="#f472b6"
+        emissive="#fb7185"
+        emissiveIntensity={0.2}
+        metalness={0.6}
+        roughness={0.25}
+      />
+    </mesh>
+  );
+}
+
+function MagnetWell({
+  position,
+  radius = 6,
+  strength = 900,
+  color = '#a78bfa',
+}: {
+  position: [number, number, number];
+  radius?: number;
+  strength?: number;
+  color?: string;
+}) {
+  const { ballApiRef, ballPositionRef, decreaseScore } = useContext(ScoreContext);
+  const lastTaxAt = useRef(0);
+
+  useFrame((_, delta) => {
+    const api = ballApiRef?.current;
+    const p = ballPositionRef?.current;
+    if (!api || !p) return;
+
+    const dx = position[0] - p[0];
+    const dy = position[1] - p[1];
+    const d2 = dx * dx + dy * dy;
+    if (d2 > radius * radius) return;
+
+    const falloff = 1 - Math.sqrt(d2) / radius;
+    api.applyForce([dx * strength * falloff, dy * strength * falloff, 0], [0, 0, 0]);
+
+    const now = performance.now();
+    if (now - lastTaxAt.current > 900) {
+      lastTaxAt.current = now;
+      // "Magnet tax" makes risky zones meaningful.
+      decreaseScore(25, 'magnet');
+    }
+
+    void delta;
+  });
+
+  return (
+    <mesh position={position}>
+      <torusGeometry args={[radius * 0.55, 0.25, 16, 64]} />
+      <meshStandardMaterial
+        color={color}
+        emissive={color}
+        emissiveIntensity={0.25}
+        metalness={0.2}
+        roughness={0.25}
+        transparent
+        opacity={0.9}
+      />
+    </mesh>
+  );
+}
+
+function PortalPair({
+  a,
+  b,
+  radius = 2.1,
+}: {
+  a: [number, number, number];
+  b: [number, number, number];
+  radius?: number;
+}) {
+  const { ballApiRef, ballPositionRef, ballVelocityRef, increaseScore } =
+    useContext(ScoreContext);
+  const cooldownUntil = useRef(0);
+  const aRef = useRef<THREE.Mesh>(null);
+  const bRef = useRef<THREE.Mesh>(null);
+
+  useFrame((state) => {
+    if (aRef.current) aRef.current.rotation.z = state.clock.elapsedTime * 1.2;
+    if (bRef.current) bRef.current.rotation.z = -state.clock.elapsedTime * 1.2;
+
+    const api = ballApiRef?.current;
+    const p = ballPositionRef?.current;
+    const v = ballVelocityRef?.current;
+    if (!api || !p || !v) return;
+
+    const now = performance.now();
+    if (now < cooldownUntil.current) return;
+
+    const r2 = radius * radius;
+    const hitA = (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2 < r2;
+    const hitB = (p[0] - b[0]) ** 2 + (p[1] - b[1]) ** 2 < r2;
+
+    if (!hitA && !hitB) return;
+
+    cooldownUntil.current = now + 450;
+    const to = hitA ? b : a;
+    const jitterX = (Math.random() - 0.5) * 0.6;
+    const jitterY = (Math.random() - 0.5) * 0.6;
+    api.position.set(to[0] + jitterX, to[1] + jitterY, 0);
+
+    // Preserve momentum, but add a "pinball kick" so the teleport feels intentional.
+    const vx = v[0];
+    const vy = v[1];
+    api.velocity.set(vx * 0.55 + jitterX * 6, Math.max(vy, 0) * 0.5 + 18, 0);
+
+    increaseScore(hitA ? 'portal-a' : 'portal-b');
+  });
+
+  return (
+    <>
+      <mesh ref={aRef} position={a}>
+        <torusGeometry args={[radius, 0.22, 16, 96]} />
+        <meshStandardMaterial
+          color="#22c55e"
+          emissive="#16a34a"
+          emissiveIntensity={0.65}
+          metalness={0.2}
+          roughness={0.25}
+        />
+      </mesh>
+      <mesh ref={bRef} position={b}>
+        <torusGeometry args={[radius, 0.22, 16, 96]} />
+        <meshStandardMaterial
+          color="#3b82f6"
+          emissive="#2563eb"
+          emissiveIntensity={0.65}
+          metalness={0.2}
+          roughness={0.25}
+        />
+      </mesh>
+    </>
   );
 }
 
@@ -794,6 +1052,35 @@ export const Pinball: React.FC = () => {
           <BallAndCollisions />
           <Flipper side="left" controlsRef={controlsRef} />
           <Flipper side="right" controlsRef={controlsRef} />
+
+          {/* Pinball toys */}
+          <PortalPair a={[-12, 52, 0]} b={[12, 16, 0]} />
+          <MagnetWell position={[0, 34, 0]} radius={6.2} strength={820} />
+          <Spinner position={[0, 27, 0]} length={9} speed={2.0} />
+          <Bumper
+            bumperId="bumper-left"
+            position={[-6, 44, 0]}
+            radius={1.75}
+            power={30}
+            restitution={1.65}
+            color="#22d3ee"
+          />
+          <Bumper
+            bumperId="bumper-mid"
+            position={[0, 50, 0]}
+            radius={1.85}
+            power={34}
+            restitution={1.7}
+            color="#f97316"
+          />
+          <Bumper
+            bumperId="bumper-right"
+            position={[6, 44, 0]}
+            radius={1.75}
+            power={30}
+            restitution={1.65}
+            color="#a78bfa"
+          />
 
           {/* Moving Blocks - all at Z=0 */}
           {Array.from({ length: 6 }, (_, i) => (

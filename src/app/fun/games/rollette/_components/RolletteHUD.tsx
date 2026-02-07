@@ -15,6 +15,8 @@ export interface RolletteHUDProps {
   dashCooldown: number;
   dashCooldownMax: number;
   shieldTime: number;
+  slowTime: number;
+  slipperyTime: number;
   bonusMultiplier: number;
   bonusMultiplierTime: number;
   starChain: number;
@@ -42,6 +44,8 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
   dashCooldown,
   dashCooldownMax,
   shieldTime,
+  slowTime,
+  slipperyTime,
   bonusMultiplier,
   bonusMultiplierTime,
   starChain,
@@ -153,6 +157,16 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
               )}
               {starChain > 0 && (
                 <span className="text-pink-300">STAR x{starChain}</span>
+              )}
+              {slipperyTime > 0 && (
+                <span className="text-red-300 font-mono">
+                  SLIPPERY {slipperyTime.toFixed(1)}s
+                </span>
+              )}
+              {slowTime > 0 && (
+                <span className="text-cyan-200 font-mono">
+                  SLOW {slowTime.toFixed(1)}s
+                </span>
               )}
             </div>
             {bonusMultiplier > 1 && (

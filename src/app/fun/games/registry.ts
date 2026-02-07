@@ -253,7 +253,7 @@ function renderGameContent(
     case 'pinball':
       return render({ key: buildKey(gameId, restartSeed) });
     case 'rollette':
-      return render({ key: buildKey(gameId, restartSeed) });
+      return render({ key: buildKey(gameId, restartSeed), soundsOn });
     case 'flappybird':
       return createElement(
         Html,

@@ -1,10 +1,22 @@
 import { Html } from '@react-three/drei';
-import React from 'react';
+import { useFrame } from '@react-three/fiber';
+import React, { useRef } from 'react';
 import { useSnapshot } from 'valtio';
 import { skyBlitzState } from '../state';
 
 const GameHUD: React.FC = () => {
   const snap = useSnapshot(skyBlitzState);
+  const crosshairRef = useRef<HTMLDivElement | null>(null);
+
+  useFrame(({ pointer, size }) => {
+    if (!crosshairRef.current) return;
+    if (snap.mode !== 'UfoMode' || snap.phase !== 'playing') return;
+
+    const x = (pointer.x * 0.5 + 0.5) * size.width;
+    const y = (-pointer.y * 0.5 + 0.5) * size.height;
+    crosshairRef.current.style.left = `${x}px`;
+    crosshairRef.current.style.top = `${y}px`;
+  });
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -15,6 +27,49 @@ const GameHUD: React.FC = () => {
           fontFamily: 'system-ui, sans-serif',
         }}
       >
+        {/* Crosshair (UFO mode) */}
+        <div
+          ref={crosshairRef}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: '28px',
+            height: '28px',
+            transform: 'translate(-50%, -50%)',
+            borderRadius: '9999px',
+            border: '2px solid rgba(34, 211, 238, 0.9)',
+            boxShadow: '0 0 26px rgba(34, 211, 238, 0.35)',
+            display:
+              snap.mode === 'UfoMode' && snap.phase === 'playing'
+                ? 'block'
+                : 'none',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: '2px',
+              height: '12px',
+              background: 'rgba(255, 255, 255, 0.85)',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: '12px',
+              height: '2px',
+              background: 'rgba(255, 255, 255, 0.85)',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        </div>
+
         <div
           style={{
             position: 'absolute',

@@ -24,6 +24,12 @@ export interface AlienData {
   scale: number;
   deathStart: number;
   respawnAt: number;
+  baseX: number;
+  baseY: number;
+  driftAmpX: number;
+  driftAmpY: number;
+  driftSpeed: number;
+  driftPhase: number;
 }
 
 export interface ProjectileData {
