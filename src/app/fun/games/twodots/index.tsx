@@ -7,173 +7,237 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Html, Line } from '@react-three/drei';
-import { useFrame, useThree } from '@react-three/fiber';
+import {
+  AdaptiveDpr,
+  Html,
+  Line,
+  PerformanceMonitor,
+  Stats,
+} from '@react-three/drei';
+import { type ThreeEvent, useFrame, useThree } from '@react-three/fiber';
+import {
+  Bloom,
+  ChromaticAberration,
+  EffectComposer,
+  Noise,
+} from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
-import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { useGameUIState } from '../../store/selectors';
 import { SeededRandom } from '../../utils/seededRandom';
 
 import { twoDotsState } from './state';
 
 export { twoDotsState } from './state';
 
-type Coord = { r: number; c: number };
-
-type DotSpecial = 'normal' | 'anchor' | 'fire';
-
-type Dot = {
-  color: number;
-  special: DotSpecial;
+type DotCell = {
+  colorIndex: number;
+  bomb: boolean;
 };
+
+type Board = DotCell[][];
 
 type LevelConfig = {
   moves: number;
   targets: number[];
-  anchors: number;
-  fireChance: number;
-  bombs: number;
+  bombChance: number;
   starThresholds: [number, number];
 };
 
+type MoveOutcome = {
+  board: Board;
+  fallOffsets: Float32Array;
+  clearedByColor: number[];
+  clearedTotal: number;
+  detonatedBombs: number;
+};
+
+type MutableLine = {
+  visible: boolean;
+  setPoints: (points: THREE.Vector3[]) => void;
+};
+
+type MutableBloom = {
+  intensity: number;
+};
+
+type MutableChromatic = {
+  offset: THREE.Vector2;
+};
+
+type SelectionState = {
+  active: boolean;
+  colorIndex: number | null;
+  path: number[];
+  loop: boolean;
+};
+
+const BEST_KEY = 'rachos-fun-twodots-best';
+const SETTINGS_KEY = 'rachos-fun-twodots-settings-v2';
+
 const ROWS = 6;
 const COLS = 6;
-const SPACING = 1.25;
-const DOT_RADIUS = 0.32;
+const CELL_COUNT = ROWS * COLS;
+const SPACING = 1.15;
+const DOT_RADIUS = 0.33;
+const HIT_RADIUS = 0.44;
+const MAGNET_RADIUS = 0.72;
 
 const PALETTE = [
-  { color: '#60a5fa', name: 'Azure' },
-  { color: '#34d399', name: 'Mint' },
-  { color: '#f472b6', name: 'Bloom' },
-  { color: '#facc15', name: 'Solar' },
+  { color: '#4EA8DE', name: 'Sky' },
+  { color: '#34D399', name: 'Mint' },
+  { color: '#F97316', name: 'Tangerine' },
+  { color: '#F43F5E', name: 'Rose' },
+  { color: '#FACC15', name: 'Sun' },
 ];
-
-const ANCHOR_COLOR = '#94a3b8';
-const FIRE_EMISSIVE = '#f97316';
 
 const LEVELS: LevelConfig[] = [
   {
-    moves: 18,
-    targets: [10, 0, 10, 0],
-    anchors: 0,
-    fireChance: 0.02,
-    bombs: 1,
-    starThresholds: [6, 10],
+    moves: 22,
+    targets: [14, 14, 14, 0, 0],
+    bombChance: 0.01,
+    starThresholds: [5, 10],
   },
   {
-    moves: 19,
-    targets: [0, 12, 0, 12],
-    anchors: 0,
-    fireChance: 0.03,
-    bombs: 1,
+    moves: 24,
+    targets: [0, 16, 16, 16, 0],
+    bombChance: 0.015,
     starThresholds: [6, 11],
   },
   {
-    moves: 20,
-    targets: [8, 8, 8, 0],
-    anchors: 4,
-    fireChance: 0.04,
-    bombs: 1,
+    moves: 26,
+    targets: [12, 12, 12, 12, 12],
+    bombChance: 0.02,
     starThresholds: [7, 12],
-  },
-  {
-    moves: 21,
-    targets: [0, 10, 10, 10],
-    anchors: 6,
-    fireChance: 0.05,
-    bombs: 1,
-    starThresholds: [7, 12],
-  },
-  {
-    moves: 22,
-    targets: [10, 10, 10, 10],
-    anchors: 8,
-    fireChance: 0.06,
-    bombs: 1,
-    starThresholds: [8, 13],
-  },
-  {
-    moves: 23,
-    targets: [12, 12, 0, 12],
-    anchors: 10,
-    fireChance: 0.07,
-    bombs: 1,
-    starThresholds: [8, 14],
   },
 ];
 
-function getLevelConfig(level: number): LevelConfig {
-  if (level <= LEVELS.length) return LEVELS[level - 1];
-  const base = LEVELS[LEVELS.length - 1];
-  const extra = level - LEVELS.length;
+const vec3A = new THREE.Vector3();
+const vec3B = new THREE.Vector3();
+const identityQuat = new THREE.Quaternion();
+const identityScale = new THREE.Vector3(1, 1, 1);
+
+class ZenAudio {
+  private ctx: AudioContext | null = null;
+  private unlocked = false;
+  private readonly scaleHz = [261.63, 293.66, 329.63, 392, 440, 523.25, 587.33];
+
+  ensureStarted() {
+    if (typeof window === 'undefined') return;
+    if (!this.ctx) {
+      const Ctx =
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!Ctx) return;
+      this.ctx = new Ctx();
+    }
+
+    if (!this.unlocked && this.ctx.state === 'suspended') {
+      void this.ctx.resume();
+    }
+    this.unlocked = true;
+  }
+
+  playConnection(length: number) {
+    if (!this.ctx || !this.unlocked) return;
+    const i = Math.min(this.scaleHz.length - 1, Math.max(0, length - 1));
+    this.playTone(this.scaleHz[i], 0.12 + Math.min(0.12, length * 0.01), 0.18);
+  }
+
+  playSquare() {
+    if (!this.ctx || !this.unlocked) return;
+    this.playTone(261.63, 0.22, 0.35);
+    this.playTone(392, 0.19, 0.35);
+    this.playTone(523.25, 0.16, 0.42);
+  }
+
+  private playTone(freq: number, gainPeak: number, duration: number) {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2200, now);
+    filter.Q.setValueAtTime(0.35, now);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(gainPeak, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + duration + 0.03);
+  }
+}
+
+const zenAudio = new ZenAudio();
+
+function vibrate(type: 'CONNECT' | 'BACKTRACK' | 'SQUARE') {
+  if (
+    typeof navigator === 'undefined' ||
+    typeof navigator.vibrate !== 'function'
+  ) {
+    return;
+  }
+
+  if (type === 'CONNECT') navigator.vibrate(10);
+  if (type === 'BACKTRACK') navigator.vibrate([5, 30, 5]);
+  if (type === 'SQUARE') navigator.vibrate([50, 30, 100]);
+}
+
+function toIndex(r: number, c: number) {
+  return r * COLS + c;
+}
+
+function fromIndex(index: number) {
   return {
-    moves: base.moves + extra,
-    targets: base.targets.map((t) => Math.round(t + extra * 1.5)),
-    anchors: base.anchors + Math.floor(extra * 0.8),
-    fireChance: Math.min(0.12, base.fireChance + extra * 0.01),
-    bombs: 1,
-    starThresholds: [
-      base.starThresholds[0] + Math.floor(extra * 0.5),
-      base.starThresholds[1] + Math.floor(extra * 0.6),
-    ],
+    r: Math.floor(index / COLS),
+    c: index % COLS,
   };
 }
 
-function keyOf(r: number, c: number) {
-  return `${r}|${c}`;
+function worldFromCell(r: number, c: number, target = new THREE.Vector3()) {
+  target.set((c - (COLS - 1) / 2) * SPACING, ((ROWS - 1) / 2 - r) * SPACING, 0);
+  return target;
 }
 
-function worldPos(r: number, c: number) {
-  const x = (c - (COLS - 1) / 2) * SPACING;
-  const y = (r - (ROWS - 1) / 2) * SPACING;
-  return new THREE.Vector3(x, y, 0);
+function manhattanIndex(a: number, b: number) {
+  const ac = fromIndex(a);
+  const bc = fromIndex(b);
+  return Math.abs(ac.r - bc.r) + Math.abs(ac.c - bc.c);
 }
 
-function manhattan(a: Coord, b: Coord) {
-  return Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
-}
-
-function createRandomDot(
-  rng: SeededRandom,
-  config: LevelConfig,
-  allowFire: boolean
-) {
-  const color = rng.int(0, PALETTE.length - 1);
-  if (allowFire && rng.bool(config.fireChance)) {
-    return { color, special: 'fire' } as Dot;
-  }
-  return { color, special: 'normal' } as Dot;
-}
-
-function generateBoard(seed: number, config: LevelConfig) {
-  const rng = new SeededRandom(seed);
-  const board: (Dot | null)[][] = [];
-
-  for (let r = 0; r < ROWS; r++) {
-    const row: Dot[] = [];
-    for (let c = 0; c < COLS; c++) {
-      row.push(createRandomDot(rng, config, true));
-    }
-    board.push(row);
+function getLevelConfig(level: number): LevelConfig {
+  if (level <= LEVELS.length) {
+    return LEVELS[level - 1];
   }
 
-  const anchorCount = Math.min(config.anchors, ROWS * COLS - 1);
-  const slots: Coord[] = [];
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      slots.push({ r, c });
-    }
-  }
-  rng.shuffle(slots);
-
-  for (let i = 0; i < anchorCount; i++) {
-    const { r, c } = slots[i];
-    board[r][c] = { color: -1, special: 'anchor' } as Dot;
-  }
-
-  return board;
+  const base = LEVELS[LEVELS.length - 1];
+  const extra = level - LEVELS.length;
+  return {
+    moves: base.moves + Math.floor(extra * 0.8),
+    targets: base.targets.map((target, i) =>
+      i < 4
+        ? Math.round(target + extra * 1.8)
+        : Math.round(target + extra * 1.2)
+    ),
+    bombChance: Math.min(0.06, base.bombChance + extra * 0.0035),
+    starThresholds: [
+      base.starThresholds[0] + Math.floor(extra * 0.6),
+      base.starThresholds[1] + Math.floor(extra * 0.9),
+    ],
+  };
 }
 
 function computeStars(movesLeft: number, thresholds: [number, number]) {
@@ -182,318 +246,920 @@ function computeStars(movesLeft: number, thresholds: [number, number]) {
   return 1;
 }
 
+function createRandomDot(rng: SeededRandom, config: LevelConfig): DotCell {
+  return {
+    colorIndex: rng.int(0, PALETTE.length - 1),
+    bomb: rng.bool(config.bombChance),
+  };
+}
+
+function createBoard(rng: SeededRandom, config: LevelConfig): Board {
+  const board: Board = [];
+  for (let r = 0; r < ROWS; r += 1) {
+    const row: DotCell[] = [];
+    for (let c = 0; c < COLS; c += 1) {
+      row.push(createRandomDot(rng, config));
+    }
+    board.push(row);
+  }
+  return board;
+}
+
+function hasAvailableMoves(board: Board) {
+  for (let r = 0; r < ROWS; r += 1) {
+    for (let c = 0; c < COLS; c += 1) {
+      const current = board[r]?.[c];
+      if (!current) continue;
+      const right = board[r]?.[c + 1];
+      const down = board[r + 1]?.[c];
+      if (right && right.colorIndex === current.colorIndex) return true;
+      if (down && down.colorIndex === current.colorIndex) return true;
+    }
+  }
+  return false;
+}
+
+function reshuffleBoard(board: Board, rng: SeededRandom) {
+  const colors: number[] = [];
+  for (let r = 0; r < ROWS; r += 1) {
+    for (let c = 0; c < COLS; c += 1) {
+      colors.push(board[r][c].colorIndex);
+    }
+  }
+
+  rng.shuffle(colors);
+
+  const next: Board = [];
+  let cursor = 0;
+  for (let r = 0; r < ROWS; r += 1) {
+    const row: DotCell[] = [];
+    for (let c = 0; c < COLS; c += 1) {
+      row.push({
+        colorIndex: colors[cursor],
+        bomb: board[r][c].bomb,
+      });
+      cursor += 1;
+    }
+    next.push(row);
+  }
+  return next;
+}
+
+function ensurePlayable(board: Board, rng: SeededRandom) {
+  let candidate = board;
+  let attempts = 0;
+  while (!hasAvailableMoves(candidate) && attempts < 18) {
+    candidate = reshuffleBoard(candidate, rng);
+    attempts += 1;
+  }
+
+  if (!hasAvailableMoves(candidate)) {
+    candidate[0][0].colorIndex = candidate[0][1].colorIndex;
+  }
+
+  return candidate;
+}
+
+function resolveMove(
+  board: Board,
+  path: number[],
+  loop: boolean,
+  colorIndex: number,
+  rng: SeededRandom,
+  config: LevelConfig
+): MoveOutcome {
+  const nullableBoard: (DotCell | null)[][] = board.map((row) =>
+    row.map((cell) => ({ ...cell }))
+  );
+
+  const clearSet = new Set<number>(path);
+
+  if (loop) {
+    for (let r = 0; r < ROWS; r += 1) {
+      for (let c = 0; c < COLS; c += 1) {
+        if (nullableBoard[r][c]?.colorIndex === colorIndex) {
+          clearSet.add(toIndex(r, c));
+        }
+      }
+    }
+  }
+
+  const bombQueue: number[] = [];
+
+  if (loop && path.length >= 4) {
+    const rows = path.map((idx) => fromIndex(idx).r);
+    const cols = path.map((idx) => fromIndex(idx).c);
+    const minR = Math.min(...rows);
+    const maxR = Math.max(...rows);
+    const minC = Math.min(...cols);
+    const maxC = Math.max(...cols);
+
+    for (let r = minR + 1; r < maxR; r += 1) {
+      for (let c = minC + 1; c < maxC; c += 1) {
+        const idx = toIndex(r, c);
+        clearSet.add(idx);
+        bombQueue.push(idx);
+      }
+    }
+  }
+
+  for (const idx of clearSet) {
+    const { r, c } = fromIndex(idx);
+    if (nullableBoard[r][c]?.bomb) {
+      bombQueue.push(idx);
+    }
+  }
+
+  const detonatedSet = new Set<number>();
+  while (bombQueue.length > 0) {
+    const idx = bombQueue.pop();
+    if (idx == null || detonatedSet.has(idx)) continue;
+
+    detonatedSet.add(idx);
+    const origin = fromIndex(idx);
+
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        const r = origin.r + dr;
+        const c = origin.c + dc;
+        if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+
+        const nextIdx = toIndex(r, c);
+        if (!clearSet.has(nextIdx)) {
+          clearSet.add(nextIdx);
+        }
+
+        if (nullableBoard[r][c]?.bomb && !detonatedSet.has(nextIdx)) {
+          bombQueue.push(nextIdx);
+        }
+      }
+    }
+  }
+
+  const clearedByColor = new Array(PALETTE.length).fill(0);
+  for (const idx of clearSet) {
+    const { r, c } = fromIndex(idx);
+    const cell = nullableBoard[r][c];
+    if (!cell) continue;
+    clearedByColor[cell.colorIndex] += 1;
+    nullableBoard[r][c] = null;
+  }
+
+  const nextBoard: Board = Array.from({ length: ROWS }, () =>
+    Array.from({ length: COLS }, () => ({ colorIndex: 0, bomb: false }))
+  );
+
+  const fallOffsets = new Float32Array(CELL_COUNT);
+
+  for (let c = 0; c < COLS; c += 1) {
+    let writeRow = ROWS - 1;
+
+    for (let r = ROWS - 1; r >= 0; r -= 1) {
+      const cell = nullableBoard[r][c];
+      if (!cell) continue;
+
+      nextBoard[writeRow][c] = { ...cell };
+      fallOffsets[toIndex(writeRow, c)] = (writeRow - r) * SPACING;
+      writeRow -= 1;
+    }
+
+    let spawnStep = 0;
+    while (writeRow >= 0) {
+      const spawnRow = -1 - spawnStep;
+      nextBoard[writeRow][c] = createRandomDot(rng, config);
+      fallOffsets[toIndex(writeRow, c)] = (writeRow - spawnRow) * SPACING;
+      spawnStep += 1;
+      writeRow -= 1;
+    }
+  }
+
+  const clearedTotal = clearedByColor.reduce((sum, value) => sum + value, 0);
+
+  return {
+    board: nextBoard,
+    fallOffsets,
+    clearedByColor,
+    clearedTotal,
+    detonatedBombs: detonatedSet.size,
+  };
+}
+
+function ZenBackdrop() {
+  const matRef = useRef<THREE.ShaderMaterial>(null);
+
+  useFrame((state) => {
+    const mat = matRef.current;
+    if (!mat) return;
+    mat.uniforms.uTime.value = state.clock.elapsedTime;
+  });
+
+  return (
+    <mesh position={[0, 0, -7]}>
+      <planeGeometry args={[42, 36]} />
+      <shaderMaterial
+        ref={matRef}
+        uniforms={{
+          uTime: { value: 0 },
+        }}
+        vertexShader={`
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `}
+        fragmentShader={`
+          varying vec2 vUv;
+          uniform float uTime;
+
+          float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+          }
+
+          void main() {
+            vec2 uv = vUv;
+            float t = uTime * 0.08;
+            float wave = sin((uv.y * 8.0) + t * 6.0) * 0.02;
+            float grain = hash(floor((uv + vec2(t * 0.05, 0.0)) * 130.0));
+
+            vec3 top = vec3(0.03, 0.08, 0.13);
+            vec3 bottom = vec3(0.01, 0.03, 0.06);
+            vec3 accent = vec3(0.09, 0.2, 0.25);
+
+            vec3 color = mix(bottom, top, smoothstep(0.0, 1.0, uv.y + wave));
+            color += accent * smoothstep(0.55, 1.0, uv.y) * 0.18;
+            color += (grain - 0.5) * 0.03;
+
+            gl_FragColor = vec4(color, 1.0);
+          }
+        `}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
 export default function TwoDots() {
   const snap = useSnapshot(twoDotsState);
   const { paused } = useGameUIState();
   const input = useInputRef();
   const { camera } = useThree();
 
-  const levelConfigRef = useRef<LevelConfig>(getLevelConfig(1));
-  const [board, setBoard] = useState<(Dot | null)[][]>(() =>
-    generateBoard(snap.worldSeed, levelConfigRef.current)
-  );
-  const boardRef = useRef(board);
-
-  const selectionRef = useRef({
-    dragging: false,
-    color: null as number | null,
-    path: [] as Coord[],
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [highQuality, setHighQuality] = useState(true);
+  const [showFps, setShowFps] = useState(false);
+  const [selectionVisual, setSelectionVisual] = useState({
+    active: false,
+    count: 0,
+    colorIndex: null as number | null,
     loop: false,
   });
 
-  const [path, setPath] = useState<Coord[]>([]);
-  const [loop, setLoop] = useState(false);
-  const [pathColor, setPathColor] = useState<number | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [boosterMode, setBoosterMode] = useState<'none' | 'bomb'>('none');
+  const levelConfigRef = useRef<LevelConfig>(getLevelConfig(1));
+  const boardRef = useRef<Board>(
+    createBoard(
+      new SeededRandom(twoDotsState.worldSeed),
+      levelConfigRef.current
+    )
+  );
 
-  const dotMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const selectionRef = useRef<SelectionState>({
+    active: false,
+    colorIndex: null,
+    path: [],
+    loop: false,
+  });
+
+  const hoveredIdRef = useRef<number | null>(null);
+  const lastHapticIdRef = useRef<number | null>(null);
+
+  const interactionPlane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),
+    []
+  );
   const raycaster = useMemo(() => new THREE.Raycaster(), []);
-  const mouse = useMemo(() => new THREE.Vector2(), []);
-  const lastHoveredRef = useRef<string | null>(null);
+  const ndc = useMemo(() => new THREE.Vector2(), []);
 
-  const halfCols = (COLS - 1) / 2;
-  const halfRows = (ROWS - 1) / 2;
+  const worldMouseRef = useRef(new THREE.Vector3());
+  const snappedMouseRef = useRef(new THREE.Vector3());
 
-  const points = useMemo(() => path.map((p) => worldPos(p.r, p.c)), [path]);
+  const inputLockedRef = useRef(false);
+  const pendingSettleRef = useRef(false);
 
-  const selectedSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const p of path) s.add(keyOf(p.r, p.c));
-    return s;
-  }, [path]);
+  const impactRef = useRef({
+    pulse: 0,
+    zoom: 0,
+    shake: 0,
+    aberration: 0,
+    whirl: 0,
+    targetColor: -1,
+  });
 
-  const coordFromPoint = (point: THREE.Vector3): Coord | null => {
-    // More accurate coordinate conversion - find closest grid cell
-    const rawC = point.x / SPACING + halfCols;
-    const rawR = point.y / SPACING + halfRows;
+  const centers = useMemo(() => {
+    return Array.from({ length: CELL_COUNT }, (_, idx) => {
+      const { r, c } = fromIndex(idx);
+      return worldFromCell(r, c);
+    });
+  }, []);
 
-    // Round to nearest integer for grid position
-    const c = Math.round(rawC);
-    const r = Math.round(rawR);
+  const colorAttr = useMemo(
+    () => new THREE.InstancedBufferAttribute(new Float32Array(CELL_COUNT), 1),
+    []
+  );
+  const bombAttr = useMemo(
+    () => new THREE.InstancedBufferAttribute(new Float32Array(CELL_COUNT), 1),
+    []
+  );
+  const hoverAttr = useMemo(
+    () => new THREE.InstancedBufferAttribute(new Float32Array(CELL_COUNT), 1),
+    []
+  );
+  const selectAttr = useMemo(
+    () => new THREE.InstancedBufferAttribute(new Float32Array(CELL_COUNT), 1),
+    []
+  );
+  const yOffsetAttr = useMemo(
+    () => new THREE.InstancedBufferAttribute(new Float32Array(CELL_COUNT), 1),
+    []
+  );
 
-    // Bounds check
-    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return null;
+  const hoverStrengthRef = useRef(new Float32Array(CELL_COUNT));
+  const selectStrengthRef = useRef(new Float32Array(CELL_COUNT));
+  const selectedMaskRef = useRef(new Uint8Array(CELL_COUNT));
+  const yVelocityRef = useRef(new Float32Array(CELL_COUNT));
 
-    // Calculate the center of the grid cell
-    const cx = (c - halfCols) * SPACING;
-    const cy = (r - halfRows) * SPACING;
+  const dotMeshRef = useRef<THREE.InstancedMesh>(null);
+  const shadowMeshRef = useRef<THREE.InstancedMesh>(null);
+  const hitMeshRef = useRef<THREE.InstancedMesh>(null);
 
-    // More forgiving distance check - allow clicks near the dot center
-    // Use larger tolerance for better user experience
-    const dist = Math.hypot(point.x - cx, point.y - cy);
-    const maxDist = DOT_RADIUS * 2.5; // Increased tolerance for easier clicking
-    if (dist > maxDist) return null;
+  const haloRef = useRef<THREE.Mesh>(null);
+  const tailRef = useRef<THREE.Mesh>(null);
+  const lineRef = useRef<MutableLine | null>(null);
 
-    return { r, c };
-  };
+  const dotMaterial = useMemo(() => {
+    const shader = new THREE.ShaderMaterial({
+      transparent: true,
+      uniforms: {
+        uTime: { value: 0 },
+        uPulse: { value: 0 },
+        uPulseColor: { value: -1 },
+        uZoom: { value: 0 },
+        uEmission: { value: 1 },
+        uWhirl: { value: 0 },
+        uColor0: { value: new THREE.Color(PALETTE[0].color) },
+        uColor1: { value: new THREE.Color(PALETTE[1].color) },
+        uColor2: { value: new THREE.Color(PALETTE[2].color) },
+        uColor3: { value: new THREE.Color(PALETTE[3].color) },
+        uColor4: { value: new THREE.Color(PALETTE[4].color) },
+      },
+      vertexShader: `
+        attribute float aColorIndex;
+        attribute float aBomb;
+        attribute float aHover;
+        attribute float aSelect;
+        attribute float aYOffset;
 
-  const resetSelection = () => {
+        uniform float uTime;
+        uniform float uPulse;
+        uniform float uPulseColor;
+        uniform float uZoom;
+        uniform float uWhirl;
+
+        varying float vColorIndex;
+        varying float vBomb;
+        varying float vHover;
+        varying float vSelect;
+        varying float vEdge;
+        varying float vPulseMask;
+
+        void main() {
+          vec3 p = position;
+          float isPulseColor = 1.0 - step(0.11, abs(aColorIndex - uPulseColor));
+          float pulse = (sin(uTime * 18.0 + aColorIndex * 1.37) * 0.5 + 0.5) * uPulse;
+
+          float scaleBoost = aHover * 0.08 + aSelect * 0.12 + pulse * isPulseColor * 0.28;
+          p.xy *= 1.0 + scaleBoost;
+          p.y += aYOffset;
+          p.z += isPulseColor * uZoom * uPulse * 0.42;
+
+          if (uWhirl > 0.001) {
+            float ang = uWhirl * (0.8 + aColorIndex * 0.17);
+            mat2 rot = mat2(cos(ang), -sin(ang), sin(ang), cos(ang));
+            p.xy = rot * p.xy;
+            p.xy *= 1.0 - uWhirl * 0.28;
+          }
+
+          vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+
+          vColorIndex = aColorIndex;
+          vBomb = aBomb;
+          vHover = aHover;
+          vSelect = aSelect;
+          vEdge = length(uv - vec2(0.5));
+          vPulseMask = pulse * isPulseColor;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor0;
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        uniform vec3 uColor3;
+        uniform vec3 uColor4;
+        uniform float uEmission;
+        uniform float uWhirl;
+
+        varying float vColorIndex;
+        varying float vBomb;
+        varying float vHover;
+        varying float vSelect;
+        varying float vEdge;
+        varying float vPulseMask;
+
+        vec3 getColor(float idx) {
+          if (idx < 0.5) return uColor0;
+          if (idx < 1.5) return uColor1;
+          if (idx < 2.5) return uColor2;
+          if (idx < 3.5) return uColor3;
+          return uColor4;
+        }
+
+        void main() {
+          float alpha = 1.0 - smoothstep(0.46, 0.5, vEdge);
+          if (alpha < 0.01) discard;
+
+          vec3 base = getColor(vColorIndex);
+
+          float inner = smoothstep(0.5, 0.0, vEdge);
+          float rim = smoothstep(0.42, 0.34, vEdge) - smoothstep(0.34, 0.29, vEdge);
+          float core = smoothstep(0.28, 0.0, vEdge);
+
+          vec3 color = mix(base * 0.78, base * 1.12, inner);
+          color += base * rim * (0.3 + vSelect * 0.45 + vHover * 0.2);
+
+          if (vBomb > 0.5) {
+            color = mix(color, vec3(1.0, 0.42, 0.12), core * 0.55);
+            color += vec3(1.0, 0.65, 0.2) * rim * 0.45;
+          }
+
+          float glow = (vHover * 0.16 + vSelect * 0.38 + vPulseMask * 1.2) * uEmission;
+          vec3 outColor = color + glow;
+
+          outColor = mix(outColor, vec3(0.95, 0.98, 1.0), uWhirl * 0.08);
+
+          gl_FragColor = vec4(outColor, alpha);
+        }
+      `,
+    });
+
+    return shader;
+  }, []);
+
+  const bloomRef = useRef<MutableBloom | null>(null);
+  const chromaRef = useRef<MutableChromatic | null>(null);
+
+  const applyInstanceMatrices = useCallback(
+    (mesh: THREE.InstancedMesh | null, z: number) => {
+      if (!mesh) return;
+      const matrix = new THREE.Matrix4();
+      for (let i = 0; i < CELL_COUNT; i += 1) {
+        const center = centers[i];
+        matrix.compose(
+          vec3A.set(center.x, center.y, z),
+          identityQuat,
+          identityScale
+        );
+        mesh.setMatrixAt(i, matrix);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+    },
+    [centers]
+  );
+
+  const syncSelectionVisual = useCallback(() => {
+    const selection = selectionRef.current;
+    setSelectionVisual({
+      active: selection.active,
+      count: selection.path.length,
+      colorIndex: selection.active ? selection.colorIndex : null,
+      loop: selection.loop,
+    });
+  }, []);
+
+  const updateBoardAttributes = useCallback(
+    (resetMotion = false) => {
+      const board = boardRef.current;
+      const colorArray = colorAttr.array as Float32Array;
+      const bombArray = bombAttr.array as Float32Array;
+      const yOffsets = yOffsetAttr.array as Float32Array;
+      const yVelocity = yVelocityRef.current;
+
+      let bombCount = 0;
+
+      for (let r = 0; r < ROWS; r += 1) {
+        for (let c = 0; c < COLS; c += 1) {
+          const idx = toIndex(r, c);
+          const cell = board[r][c];
+          colorArray[idx] = cell.colorIndex;
+          bombArray[idx] = cell.bomb ? 1 : 0;
+          if (cell.bomb) bombCount += 1;
+
+          if (resetMotion) {
+            yOffsets[idx] = 0;
+            yVelocity[idx] = 0;
+          }
+        }
+      }
+
+      colorAttr.needsUpdate = true;
+      bombAttr.needsUpdate = true;
+      if (resetMotion) yOffsetAttr.needsUpdate = true;
+
+      twoDotsState.bombs = bombCount;
+    },
+    [bombAttr, colorAttr, yOffsetAttr]
+  );
+
+  const resetSelection = useCallback(() => {
     selectionRef.current = {
-      dragging: false,
-      color: null,
+      active: false,
+      colorIndex: null,
       path: [],
       loop: false,
     };
-    setPath([]);
-    setLoop(false);
-    setPathColor(null);
-  };
+    syncSelectionVisual();
+  }, [syncSelectionVisual]);
 
-  const beginLevel = (level: number, resetScore = false) => {
-    const config = getLevelConfig(level);
-    levelConfigRef.current = config;
-    if (resetScore) twoDotsState.score = 0;
-    twoDotsState.phase = 'playing';
-    twoDotsState.setLevelState(
-      level,
-      config.moves,
-      config.targets,
-      config.anchors,
-      config.bombs
+  const triggerSquareImpact = useCallback((colorIndex: number) => {
+    impactRef.current.targetColor = colorIndex;
+    impactRef.current.pulse = 1;
+    impactRef.current.zoom = 1;
+    impactRef.current.shake = 1;
+    impactRef.current.aberration = 1;
+  }, []);
+
+  const commitBestScore = useCallback(() => {
+    if (twoDotsState.score <= twoDotsState.best) return;
+    twoDotsState.best = twoDotsState.score;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(BEST_KEY, String(twoDotsState.best));
+    }
+  }, []);
+
+  const runShuffle = useCallback(() => {
+    const cfg = levelConfigRef.current;
+    const rng = new SeededRandom(
+      twoDotsState.worldSeed + twoDotsState.score + twoDotsState.movesLeft * 13
     );
-    twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
-    setBoosterMode('none');
-    setHelpOpen(false);
-  };
 
-  // Camera
+    boardRef.current = ensurePlayable(
+      reshuffleBoard(boardRef.current, rng),
+      rng
+    );
+    updateBoardAttributes();
+
+    const yOffsets = yOffsetAttr.array as Float32Array;
+    const yVelocity = yVelocityRef.current;
+    for (let i = 0; i < CELL_COUNT; i += 1) {
+      yOffsets[i] = rng.float(0.15, 0.45);
+      yVelocity[i] = -rng.float(0.1, 0.25);
+    }
+    yOffsetAttr.needsUpdate = true;
+
+    impactRef.current.whirl = 1;
+    twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
+
+    if (!hasAvailableMoves(boardRef.current)) {
+      boardRef.current = ensurePlayable(
+        createBoard(rng.child(17), cfg),
+        rng.child(33)
+      );
+      updateBoardAttributes();
+    }
+  }, [updateBoardAttributes, yOffsetAttr]);
+
+  const beginLevel = useCallback(
+    (level: number, resetScore: boolean) => {
+      const config = getLevelConfig(level);
+      levelConfigRef.current = config;
+
+      twoDotsState.phase = 'playing';
+      if (resetScore) {
+        twoDotsState.score = 0;
+      }
+
+      twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
+      twoDotsState.setLevelState(level, config.moves, config.targets, 0, 0);
+
+      const rng = new SeededRandom(twoDotsState.worldSeed + level * 109);
+      boardRef.current = ensurePlayable(
+        createBoard(rng, config),
+        rng.child(41)
+      );
+
+      impactRef.current = {
+        pulse: 0,
+        zoom: 0,
+        shake: 0,
+        aberration: 0,
+        whirl: 0,
+        targetColor: -1,
+      };
+
+      inputLockedRef.current = false;
+      pendingSettleRef.current = false;
+      updateBoardAttributes(true);
+      resetSelection();
+    },
+    [resetSelection, updateBoardAttributes]
+  );
+
+  const completeMove = useCallback(
+    (path: number[], colorIndex: number, loop: boolean) => {
+      if (snap.phase !== 'playing') return;
+
+      const config = levelConfigRef.current;
+      const rng = new SeededRandom(
+        twoDotsState.worldSeed + twoDotsState.score + Date.now()
+      );
+
+      twoDotsState.movesLeft = Math.max(0, twoDotsState.movesLeft - 1);
+
+      const result = resolveMove(
+        boardRef.current,
+        path,
+        loop,
+        colorIndex,
+        rng,
+        config
+      );
+      boardRef.current = result.board;
+
+      const yOffsets = yOffsetAttr.array as Float32Array;
+      const yVelocity = yVelocityRef.current;
+      for (let i = 0; i < CELL_COUNT; i += 1) {
+        yOffsets[i] = result.fallOffsets[i];
+        yVelocity[i] = 0;
+      }
+      yOffsetAttr.needsUpdate = true;
+
+      updateBoardAttributes();
+
+      const loopBonus = loop ? 120 : 0;
+      const bombBonus = result.detonatedBombs * 35;
+      twoDotsState.score += result.clearedTotal * 10 + loopBonus + bombBonus;
+      commitBestScore();
+
+      twoDotsState.remainingColors = twoDotsState.remainingColors.map(
+        (left, i) => Math.max(0, left - result.clearedByColor[i])
+      );
+
+      if (loop) {
+        vibrate('SQUARE');
+        zenAudio.playSquare();
+        triggerSquareImpact(colorIndex);
+      }
+
+      const complete = twoDotsState.remainingColors.every(
+        (value) => value <= 0
+      );
+
+      if (complete) {
+        twoDotsState.stars = computeStars(
+          twoDotsState.movesLeft,
+          config.starThresholds
+        );
+        twoDotsState.phase = 'levelComplete';
+      } else if (twoDotsState.movesLeft <= 0) {
+        twoDotsState.endGame();
+      } else {
+        inputLockedRef.current = true;
+        pendingSettleRef.current = true;
+      }
+    },
+    [
+      commitBestScore,
+      snap.phase,
+      triggerSquareImpact,
+      updateBoardAttributes,
+      yOffsetAttr,
+    ]
+  );
+
+  const extendSelection = useCallback(
+    (instanceId: number) => {
+      const sel = selectionRef.current;
+      if (!sel.active || sel.colorIndex == null) return;
+
+      const { r, c } = fromIndex(instanceId);
+      const cell = boardRef.current[r]?.[c];
+      if (!cell) return;
+
+      if (cell.colorIndex !== sel.colorIndex) return;
+
+      const last = sel.path[sel.path.length - 1];
+      if (last === instanceId) return;
+
+      if (
+        sel.path.length >= 2 &&
+        sel.path[sel.path.length - 2] === instanceId
+      ) {
+        sel.path.pop();
+        if (sel.loop && sel.path.length < 4) {
+          sel.loop = false;
+        }
+        vibrate('BACKTRACK');
+        syncSelectionVisual();
+        return;
+      }
+
+      if (manhattanIndex(last, instanceId) !== 1) {
+        return;
+      }
+
+      if (sel.path.includes(instanceId)) {
+        if (sel.path.length >= 4) {
+          sel.loop = true;
+          syncSelectionVisual();
+        }
+        return;
+      }
+
+      sel.path.push(instanceId);
+      if (lastHapticIdRef.current !== instanceId) {
+        vibrate('CONNECT');
+        zenAudio.playConnection(sel.path.length);
+        lastHapticIdRef.current = instanceId;
+      }
+      syncSelectionVisual();
+    },
+    [syncSelectionVisual]
+  );
+
+  const startSelection = useCallback(
+    (instanceId: number) => {
+      if (
+        inputLockedRef.current ||
+        snap.phase !== 'playing' ||
+        paused ||
+        settingsOpen
+      ) {
+        return;
+      }
+
+      const { r, c } = fromIndex(instanceId);
+      const cell = boardRef.current[r]?.[c];
+      if (!cell) return;
+
+      zenAudio.ensureStarted();
+
+      selectionRef.current = {
+        active: true,
+        colorIndex: cell.colorIndex,
+        path: [instanceId],
+        loop: false,
+      };
+
+      lastHapticIdRef.current = instanceId;
+      hoveredIdRef.current = instanceId;
+      syncSelectionVisual();
+    },
+    [paused, settingsOpen, snap.phase, syncSelectionVisual]
+  );
+
+  const finishSelection = useCallback(() => {
+    const sel = selectionRef.current;
+    if (!sel.active) return;
+
+    const path = [...sel.path];
+    const color = sel.colorIndex;
+    const loop = sel.loop;
+
+    resetSelection();
+
+    if (path.length < 2 || color == null) {
+      return;
+    }
+
+    if (
+      snap.phase !== 'playing' ||
+      paused ||
+      settingsOpen ||
+      inputLockedRef.current
+    ) {
+      return;
+    }
+
+    completeMove(path, color, loop);
+  }, [completeMove, paused, resetSelection, settingsOpen, snap.phase]);
+
+  const onHitPointerDown = useCallback(
+    (event: ThreeEvent<PointerEvent>) => {
+      event.stopPropagation();
+
+      const id = event.instanceId;
+      if (typeof id !== 'number') return;
+
+      if (snap.phase === 'menu') {
+        beginLevel(1, true);
+        return;
+      }
+
+      startSelection(id);
+    },
+    [beginLevel, snap.phase, startSelection]
+  );
+
+  const onHitPointerMove = useCallback(
+    (event: ThreeEvent<PointerEvent>) => {
+      const id = event.instanceId;
+      if (typeof id !== 'number') return;
+      hoveredIdRef.current = id;
+
+      if (selectionRef.current.active && input.current.pointerDown) {
+        extendSelection(id);
+      }
+    },
+    [extendSelection, input]
+  );
+
+  const onHitPointerOut = useCallback(() => {
+    hoveredIdRef.current = null;
+  }, []);
+
   useEffect(() => {
     camera.position.set(0, 0, 10);
     camera.lookAt(0, 0, 0);
   }, [camera]);
 
-  // Best score
   useEffect(() => {
     twoDotsState.loadBest();
+
+    const rng = new SeededRandom(twoDotsState.worldSeed + 1);
+    boardRef.current = ensurePlayable(
+      createBoard(rng, levelConfigRef.current),
+      rng.child(9)
+    );
+
+    updateBoardAttributes(true);
+  }, [updateBoardAttributes]);
+
+  useEffect(() => {
+    applyInstanceMatrices(dotMeshRef.current, 0.1);
+    applyInstanceMatrices(shadowMeshRef.current, -0.04);
+    applyInstanceMatrices(hitMeshRef.current, 0.1);
+  }, [applyInstanceMatrices]);
+
+  useEffect(() => {
+    return () => {
+      dotMaterial.dispose();
+    };
+  }, [dotMaterial]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        highQuality?: boolean;
+        showFps?: boolean;
+      };
+
+      if (typeof parsed.highQuality === 'boolean') {
+        setHighQuality(parsed.highQuality);
+      }
+      if (typeof parsed.showFps === 'boolean') {
+        setShowFps(parsed.showFps);
+      }
+    } catch {
+      // Ignore malformed storage.
+    }
   }, []);
 
   useEffect(() => {
-    boardRef.current = board;
-  }, [board]);
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ highQuality, showFps })
+    );
+  }, [highQuality, showFps]);
 
-  // Reset board when seed changes
   useEffect(() => {
-    setBoard(generateBoard(snap.worldSeed, levelConfigRef.current));
-    resetSelection();
-  }, [snap.worldSeed]);
+    const onPointerUp = () => finishSelection();
+    window.addEventListener('pointerup', onPointerUp);
+    return () => window.removeEventListener('pointerup', onPointerUp);
+  }, [finishSelection]);
 
-  const commitClear = (
-    coords: Coord[],
-    colorToClear: number | null,
-    isLoop: boolean,
-    consumeMove: boolean
-  ) => {
-    const prev = boardRef.current;
-    const config = levelConfigRef.current;
-    if (consumeMove) {
-      twoDotsState.movesLeft = Math.max(0, twoDotsState.movesLeft - 1);
-    }
-
-    const toClear = new Map<string, Coord>();
-    const queue: Coord[] = [];
-
-    for (const coord of coords) {
-      const key = keyOf(coord.r, coord.c);
-      if (!toClear.has(key)) {
-        toClear.set(key, coord);
-        queue.push(coord);
-      }
-    }
-
-    if (isLoop && colorToClear != null) {
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
-          const dot = prev[r][c];
-          if (dot && dot.special !== 'anchor' && dot.color === colorToClear) {
-            const key = keyOf(r, c);
-            if (!toClear.has(key)) {
-              toClear.set(key, { r, c });
-              queue.push({ r, c });
-            }
-          }
-        }
-      }
-    }
-
-    while (queue.length > 0) {
-      const current = queue.pop();
-      if (!current) break;
-      const dot = prev[current.r]?.[current.c];
-      if (!dot || dot.special !== 'fire') continue;
-
-      const neighbors = [
-        { r: current.r + 1, c: current.c },
-        { r: current.r - 1, c: current.c },
-        { r: current.r, c: current.c + 1 },
-        { r: current.r, c: current.c - 1 },
-      ];
-
-      for (const next of neighbors) {
-        if (next.r < 0 || next.r >= ROWS || next.c < 0 || next.c >= COLS)
-          continue;
-        if (!prev[next.r][next.c]) continue;
-        const key = keyOf(next.r, next.c);
-        if (!toClear.has(key)) {
-          toClear.set(key, next);
-          queue.push(next);
-        }
-      }
-    }
-
-    for (const coord of toClear.values()) {
-      const neighbors = [
-        { r: coord.r + 1, c: coord.c },
-        { r: coord.r - 1, c: coord.c },
-        { r: coord.r, c: coord.c + 1 },
-        { r: coord.r, c: coord.c - 1 },
-      ];
-      for (const next of neighbors) {
-        if (next.r < 0 || next.r >= ROWS || next.c < 0 || next.c >= COLS)
-          continue;
-        const neighbor = prev[next.r]?.[next.c];
-        if (!neighbor || neighbor.special !== 'anchor') continue;
-        const key = keyOf(next.r, next.c);
-        if (!toClear.has(key)) {
-          toClear.set(key, next);
-        }
-      }
-    }
-
-    const clearedColors = Array(PALETTE.length).fill(0);
-    let clearedAnchors = 0;
-
-    const next = prev.map((row) => row.map((dot) => (dot ? { ...dot } : null)));
-    for (const coord of toClear.values()) {
-      const dot = prev[coord.r]?.[coord.c];
-      if (!dot) continue;
-      if (dot.special === 'anchor') {
-        clearedAnchors += 1;
-      } else {
-        clearedColors[dot.color] += 1;
-      }
-      next[coord.r][coord.c] = null;
-    }
-
-    const rng = new SeededRandom(
-      twoDotsState.worldSeed + twoDotsState.score + Date.now()
-    );
-    for (let c = 0; c < COLS; c++) {
-      const stack: Dot[] = [];
-      for (let r = 0; r < ROWS; r++) {
-        const dot = next[r][c];
-        if (dot) stack.push(dot);
-      }
-      for (let r = 0; r < ROWS; r++) {
-        if (r < stack.length) {
-          next[r][c] = stack[r];
-        } else {
-          next[r][c] = createRandomDot(rng, config, true);
-        }
-      }
-    }
-
-    const clearedTotal = clearedColors.reduce((sum, val) => sum + val, 0);
-    const loopBonus = isLoop ? 100 : 0;
-    twoDotsState.score += clearedTotal * 10 + clearedAnchors * 20 + loopBonus;
-
-    const remainingColors = twoDotsState.remainingColors.map((value, idx) =>
-      Math.max(0, value - clearedColors[idx])
-    );
-    const remainingAnchors = Math.max(
-      0,
-      twoDotsState.remainingAnchors - clearedAnchors
-    );
-
-    twoDotsState.remainingColors = remainingColors;
-    twoDotsState.remainingAnchors = remainingAnchors;
-
-    const goalsComplete =
-      remainingColors.every((value) => value <= 0) && remainingAnchors <= 0;
-    if (goalsComplete) {
-      twoDotsState.stars = computeStars(
-        twoDotsState.movesLeft,
-        config.starThresholds
-      );
-      twoDotsState.phase = 'levelComplete';
-    } else if (twoDotsState.movesLeft <= 0) {
-      twoDotsState.endGame();
-    }
-
-    setBoard(next);
-  };
-
-  const applyBomb = (coord: Coord) => {
-    if (twoDotsState.bombs <= 0) return;
-    const coords: Coord[] = [];
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        const r = coord.r + dr;
-        const c = coord.c + dc;
-        if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
-        coords.push({ r, c });
-      }
-    }
-    twoDotsState.bombs = Math.max(0, twoDotsState.bombs - 1);
-    commitClear(coords, null, false, false);
-    setBoosterMode('none');
-  };
-
-  // Global pointer up to commit the chain
-  useEffect(() => {
-    const onUp = () => {
-      const sel = selectionRef.current;
-      if (!sel.dragging) return;
-      sel.dragging = false;
-
-      if (sel.path.length < 2 || sel.color == null) {
-        resetSelection();
-        return;
-      }
-
-      if (snap.phase !== 'playing' || paused) {
-        resetSelection();
-        return;
-      }
-
-      commitClear(sel.path, sel.color, sel.loop, true);
-      resetSelection();
-    };
-
-    window.addEventListener('pointerup', onUp);
-    return () => window.removeEventListener('pointerup', onUp);
-  }, [paused, snap.phase]);
-
-  useFrame(() => {
+  useFrame((state, delta) => {
     const inputState = input.current;
-    const didTap = inputState.pointerJustDown || inputState.keysDown.has(' ');
 
-    if (helpOpen || paused) {
-      clearFrameInput(input);
-      return;
-    }
+    const didConfirm =
+      inputState.justPressed.has(' ') || inputState.justPressed.has('enter');
 
-    if (didTap) {
+    if (!paused && !settingsOpen && didConfirm) {
       if (snap.phase === 'menu') {
         beginLevel(1, true);
       } else if (snap.phase === 'gameover') {
@@ -503,347 +1169,459 @@ export default function TwoDots() {
       }
     }
 
-    // Continuous raycaster tracking during drag for better accuracy
-    const sel = selectionRef.current;
+    ndc.set(inputState.pointerX, inputState.pointerY);
+    raycaster.setFromCamera(ndc, camera);
+    raycaster.ray.intersectPlane(interactionPlane, worldMouseRef.current);
+
+    let hitId: number | null = null;
+    if (hitMeshRef.current) {
+      const intersections = raycaster.intersectObject(
+        hitMeshRef.current,
+        false
+      );
+      const first = intersections[0];
+      if (first && typeof first.instanceId === 'number') {
+        hitId = first.instanceId;
+      }
+    }
+
+    if (hitId != null) {
+      hoveredIdRef.current = hitId;
+    } else if (!selectionRef.current.active) {
+      hoveredIdRef.current = null;
+    }
+
     if (
-      sel.dragging &&
+      hitId != null &&
+      selectionRef.current.active &&
+      inputState.pointerDown &&
       snap.phase === 'playing' &&
       !paused &&
-      inputState.pointerDown
+      !settingsOpen &&
+      !inputLockedRef.current
     ) {
-      mouse.set(inputState.pointerX, inputState.pointerY);
-      raycaster.setFromCamera(mouse, camera);
-      const allDots = Array.from(dotMeshesRef.current.values());
-      const intersects = raycaster.intersectObjects(allDots, false);
+      extendSelection(hitId);
+    }
 
-      if (intersects.length > 0) {
-        const hitMesh = intersects[0].object as THREE.Mesh;
-        const key = hitMesh.userData.key as string | undefined;
-        if (key && key !== lastHoveredRef.current) {
-          lastHoveredRef.current = key;
-          const [r, c] = key.split('|').map(Number);
-          if (!isNaN(r) && !isNaN(c)) {
-            handleEnter(r, c);
-          }
-        }
-      } else {
-        lastHoveredRef.current = null;
+    const snapTarget = vec3B.copy(worldMouseRef.current);
+    if (hoveredIdRef.current != null) {
+      const center = centers[hoveredIdRef.current];
+      const distance = worldMouseRef.current.distanceTo(center);
+      if (distance < MAGNET_RADIUS) {
+        snapTarget.copy(center);
       }
     }
+
+    const snapLerp = 1 - Math.exp(-delta * 20);
+    snappedMouseRef.current.lerp(snapTarget, snapLerp);
+
+    const line = lineRef.current;
+    const selection = selectionRef.current;
+
+    if (line) {
+      if (selection.active && selection.path.length > 0) {
+        const points: THREE.Vector3[] = [];
+        for (let i = 0; i < selection.path.length; i += 1) {
+          const idx = selection.path[i];
+          points.push(centers[idx]);
+        }
+
+        points.push(snappedMouseRef.current.clone());
+        if (selection.loop && selection.path.length >= 4) {
+          points.push(centers[selection.path[0]]);
+        }
+
+        line.visible = true;
+        line.setPoints(points);
+      } else {
+        line.visible = false;
+      }
+    }
+
+    const halo = haloRef.current;
+    if (halo) {
+      halo.position.copy(snappedMouseRef.current);
+      halo.position.z = 0.18;
+
+      const haloVisible = selection.active || hoveredIdRef.current != null;
+      halo.visible = haloVisible;
+
+      const targetScale = hoveredIdRef.current != null ? 1 : 0.6;
+      const current = halo.scale.x;
+      const next = THREE.MathUtils.damp(current, targetScale, 14, delta);
+      halo.scale.setScalar(next);
+    }
+
+    const tail = tailRef.current;
+    if (tail) {
+      tail.position.copy(snappedMouseRef.current);
+      tail.position.z = 0.2;
+      tail.visible = selection.active;
+    }
+
+    selectedMaskRef.current.fill(0);
+    for (let i = 0; i < selection.path.length; i += 1) {
+      selectedMaskRef.current[selection.path[i]] = 1;
+    }
+
+    const hoverArray = hoverAttr.array as Float32Array;
+    const selectArray = selectAttr.array as Float32Array;
+    const hoverStrength = hoverStrengthRef.current;
+    const selectStrength = selectStrengthRef.current;
+
+    let hoverDirty = false;
+    for (let i = 0; i < CELL_COUNT; i += 1) {
+      const hoverTarget = hoveredIdRef.current === i ? 1 : 0;
+      const selectTarget = selectedMaskRef.current[i] ? 1 : 0;
+
+      const nextHover = THREE.MathUtils.damp(
+        hoverStrength[i],
+        hoverTarget,
+        16,
+        delta
+      );
+      const nextSelect = THREE.MathUtils.damp(
+        selectStrength[i],
+        selectTarget,
+        18,
+        delta
+      );
+
+      if (
+        Math.abs(nextHover - hoverArray[i]) > 0.0001 ||
+        Math.abs(nextSelect - selectArray[i]) > 0.0001
+      ) {
+        hoverDirty = true;
+      }
+
+      hoverStrength[i] = nextHover;
+      selectStrength[i] = nextSelect;
+      hoverArray[i] = nextHover;
+      selectArray[i] = nextSelect;
+    }
+
+    if (hoverDirty) {
+      hoverAttr.needsUpdate = true;
+      selectAttr.needsUpdate = true;
+    }
+
+    const yOffsets = yOffsetAttr.array as Float32Array;
+    const yVelocity = yVelocityRef.current;
+    let yDirty = false;
+    let anyMoving = false;
+
+    for (let i = 0; i < CELL_COUNT; i += 1) {
+      const offset = yOffsets[i];
+      const velocity = yVelocity[i];
+
+      if (Math.abs(offset) < 0.0001 && Math.abs(velocity) < 0.0001) {
+        continue;
+      }
+
+      const accel = -offset * 42 - velocity * 11.5;
+      const nextVelocity = velocity + accel * delta;
+      let nextOffset = offset + nextVelocity * delta;
+
+      if (Math.abs(nextOffset) < 0.0008 && Math.abs(nextVelocity) < 0.001) {
+        nextOffset = 0;
+        yVelocity[i] = 0;
+      } else {
+        yVelocity[i] = nextVelocity;
+        anyMoving = true;
+      }
+
+      yOffsets[i] = nextOffset;
+      yDirty = true;
+    }
+
+    if (yDirty) {
+      yOffsetAttr.needsUpdate = true;
+    }
+
+    if (pendingSettleRef.current && !anyMoving) {
+      pendingSettleRef.current = false;
+      inputLockedRef.current = false;
+
+      if (snap.phase === 'playing' && !hasAvailableMoves(boardRef.current)) {
+        inputLockedRef.current = true;
+        runShuffle();
+        pendingSettleRef.current = true;
+      }
+    }
+
+    impactRef.current.pulse = THREE.MathUtils.damp(
+      impactRef.current.pulse,
+      0,
+      4.5,
+      delta
+    );
+    impactRef.current.zoom = THREE.MathUtils.damp(
+      impactRef.current.zoom,
+      0,
+      7.5,
+      delta
+    );
+    impactRef.current.shake = THREE.MathUtils.damp(
+      impactRef.current.shake,
+      0,
+      9,
+      delta
+    );
+    impactRef.current.aberration = THREE.MathUtils.damp(
+      impactRef.current.aberration,
+      0,
+      8,
+      delta
+    );
+    impactRef.current.whirl = THREE.MathUtils.damp(
+      impactRef.current.whirl,
+      0,
+      3.2,
+      delta
+    );
+
+    dotMaterial.uniforms.uTime.value = state.clock.elapsedTime;
+    dotMaterial.uniforms.uPulse.value = impactRef.current.pulse;
+    dotMaterial.uniforms.uPulseColor.value = impactRef.current.targetColor;
+    dotMaterial.uniforms.uZoom.value = impactRef.current.zoom;
+    dotMaterial.uniforms.uEmission.value = highQuality ? 1.15 : 0.85;
+    dotMaterial.uniforms.uWhirl.value = impactRef.current.whirl;
+
+    if (bloomRef.current) {
+      bloomRef.current.intensity =
+        (highQuality ? 0.4 : 0.12) +
+        impactRef.current.pulse * (highQuality ? 2.2 : 0.9);
+    }
+
+    if (chromaRef.current?.offset) {
+      chromaRef.current.offset.x = impactRef.current.aberration * 0.004;
+      chromaRef.current.offset.y = impactRef.current.aberration * 0.003;
+    }
+
+    const idleDrift = snap.phase !== 'playing' ? 0.08 : 0;
+    const shakeMag = impactRef.current.shake * 0.07 + idleDrift;
+
+    const jitterX = (Math.random() - 0.5) * shakeMag;
+    const jitterY = (Math.random() - 0.5) * shakeMag;
+
+    camera.position.x = THREE.MathUtils.damp(
+      camera.position.x,
+      jitterX,
+      14,
+      delta
+    );
+    camera.position.y = THREE.MathUtils.damp(
+      camera.position.y,
+      jitterY,
+      14,
+      delta
+    );
+    camera.position.z = 10;
+    camera.lookAt(0, 0, 0);
 
     clearFrameInput(input);
-
-    if (snap.phase !== 'playing') {
-      const t = performance.now() * 0.0003;
-      camera.position.x = Math.sin(t) * 0.2;
-      camera.position.y = Math.cos(t) * 0.2;
-      camera.lookAt(0, 0, 0);
-    }
   });
 
-  const handleDown = React.useCallback(
-    (r: number, c: number) => {
-      if (paused || helpOpen) return;
+  const lineColor =
+    selectionVisual.colorIndex == null
+      ? '#ffffff'
+      : (PALETTE[selectionVisual.colorIndex]?.color ?? '#ffffff');
 
-      if (snap.phase === 'menu') {
-        beginLevel(1, true);
-        return;
-      }
-      if (snap.phase !== 'playing') return;
-
-      if (boosterMode === 'bomb') {
-        applyBomb({ r, c });
-        return;
-      }
-
-      const dot = boardRef.current[r]?.[c];
-      if (!dot || dot.special === 'anchor') return;
-
-      const sel = selectionRef.current;
-      sel.dragging = true;
-      sel.color = dot.color;
-      sel.path = [{ r, c }];
-      sel.loop = false;
-      lastHoveredRef.current = keyOf(r, c);
-      setPath(sel.path);
-      setLoop(false);
-      setPathColor(dot.color);
-    },
-    [paused, helpOpen, snap.phase, boosterMode]
-  );
-
-  const handleEnter = React.useCallback((r: number, c: number) => {
-    const sel = selectionRef.current;
-    if (!sel.dragging || sel.color == null) return;
-
-    const dot = boardRef.current[r]?.[c];
-    if (!dot || dot.special === 'anchor') return;
-    if (dot.color !== sel.color) return;
-
-    const last = sel.path[sel.path.length - 1];
-    if (last && last.r === r && last.c === c) return;
-
-    if (sel.path.length >= 2) {
-      const prev = sel.path[sel.path.length - 2];
-      if (prev.r === r && prev.c === c) {
-        sel.path.pop();
-        setPath([...sel.path]);
-        if (sel.loop && sel.path.length < 4) {
-          sel.loop = false;
-          setLoop(false);
-        }
-        return;
-      }
-    }
-
-    if (manhattan(last, { r, c }) !== 1) return;
-
-    const already = sel.path.find((p) => p.r === r && p.c === c);
-    if (already) {
-      if (sel.path.length >= 4) {
-        sel.loop = true;
-        setLoop(true);
-      }
-      return;
-    }
-
-    sel.path.push({ r, c });
-    setPath([...sel.path]);
-  }, []);
-
-  const colorLine =
-    pathColor == null ? '#ffffff' : (PALETTE[pathColor]?.color ?? '#ffffff');
+  const targetItems = snap.targetColors
+    .map((target, idx) => ({
+      color: PALETTE[idx]?.color,
+      label: PALETTE[idx]?.name,
+      target,
+      remaining: snap.remainingColors[idx] ?? target,
+    }))
+    .filter((item) => item.target > 0);
 
   return (
     <group>
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[3, 4, 6]} intensity={1.0} />
+      <PerformanceMonitor
+        ms={280}
+        iterations={8}
+        threshold={0.72}
+        onFallback={() => setHighQuality(false)}
+      />
+      <AdaptiveDpr pixelated />
 
-      <mesh position={[0, 0, -0.6]}>
-        <planeGeometry args={[COLS * SPACING + 1.5, ROWS * SPACING + 1.5]} />
+      <ZenBackdrop />
+
+      <ambientLight intensity={0.8} />
+      <directionalLight position={[3, 4, 6]} intensity={1.1} />
+      <pointLight position={[0, 0, 4]} intensity={0.6} color="#bfe7ff" />
+
+      <mesh position={[0, 0, -0.48]}>
+        <boxGeometry
+          args={[COLS * SPACING + 1.6, ROWS * SPACING + 1.6, 0.36]}
+        />
         <meshStandardMaterial
-          color={'#111827'}
-          roughness={0.9}
-          metalness={0.0}
+          color="#0A1620"
+          roughness={0.88}
+          metalness={0.08}
         />
       </mesh>
 
-      {/* Improved detection plane with better hit area - positioned behind dots for fallback */}
-      <mesh
-        position={[0, 0, -0.1]}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          // Use the intersection point directly
-          const coord = coordFromPoint(e.point);
-          if (coord) {
-            handleDown(coord.r, coord.c);
-          }
-        }}
-        onPointerMove={(e) => {
-          if (!selectionRef.current.dragging) return;
-          e.stopPropagation();
-          const coord = coordFromPoint(e.point);
-          if (coord) {
-            handleEnter(coord.r, coord.c);
-          }
-        }}
+      <instancedMesh
+        ref={shadowMeshRef}
+        args={[undefined, undefined, CELL_COUNT]}
       >
-        <planeGeometry args={[COLS * SPACING + 2, ROWS * SPACING + 2]} />
+        <circleGeometry args={[DOT_RADIUS * 1.14, 24]} />
+        <meshBasicMaterial
+          color="#000000"
+          transparent
+          opacity={0.22}
+          depthWrite={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={dotMeshRef}
+        args={[undefined, undefined, CELL_COUNT]}
+        frustumCulled={false}
+      >
+        <circleGeometry args={[DOT_RADIUS, 40]}>
+          <primitive attach="attributes-aColorIndex" object={colorAttr} />
+          <primitive attach="attributes-aBomb" object={bombAttr} />
+          <primitive attach="attributes-aHover" object={hoverAttr} />
+          <primitive attach="attributes-aSelect" object={selectAttr} />
+          <primitive attach="attributes-aYOffset" object={yOffsetAttr} />
+        </circleGeometry>
+        <primitive object={dotMaterial} attach="material" />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={hitMeshRef}
+        args={[undefined, undefined, CELL_COUNT]}
+        onPointerDown={onHitPointerDown}
+        onPointerMove={onHitPointerMove}
+        onPointerOut={onHitPointerOut}
+      >
+        <planeGeometry args={[HIT_RADIUS * 2, HIT_RADIUS * 2]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </instancedMesh>
+
+      <Line
+        ref={lineRef}
+        points={[new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]}
+        color={lineColor}
+        lineWidth={Math.min(8, 3 + selectionVisual.count * 0.45)}
+        dashed={selectionVisual.loop}
+        dashSize={0.15}
+        gapSize={0.12}
+        transparent
+        opacity={0.95}
+      />
+
+      <mesh ref={haloRef} visible={false} position={[0, 0, 0.18]}>
+        <ringGeometry args={[DOT_RADIUS * 0.95, DOT_RADIUS * 1.3, 36]} />
+        <meshBasicMaterial color="#E2F2FF" transparent opacity={0.7} />
       </mesh>
 
-      {points.length >= 2 && (
-        <Line points={points} color={colorLine} lineWidth={4} dashed={loop} />
-      )}
+      <mesh ref={tailRef} visible={false} position={[0, 0, 0.2]}>
+        <circleGeometry args={[DOT_RADIUS * 0.22, 24]} />
+        <meshBasicMaterial color="#F8FAFC" transparent opacity={0.85} />
+      </mesh>
 
-      {board.map((row, r) =>
-        row.map((dot, c) => {
-          if (!dot) return null;
-          const pos = worldPos(r, c);
-          const isSelected = selectedSet.has(keyOf(r, c));
-          const key = keyOf(r, c);
+      <EffectComposer disableNormalPass multisampling={0}>
+        {highQuality && (
+          <>
+            <Bloom
+              ref={bloomRef}
+              luminanceThreshold={0.9}
+              luminanceSmoothing={0.25}
+              intensity={0.4}
+              mipmapBlur
+              radius={0.45}
+            />
+            <ChromaticAberration
+              ref={chromaRef}
+              offset={new THREE.Vector2(0, 0)}
+              radialModulation
+            />
+          </>
+        )}
+        <Noise opacity={highQuality ? 0.035 : 0.02} />
+      </EffectComposer>
 
-          if (dot.special === 'anchor') {
-            return (
-              <mesh
-                key={`anchor-${key}`}
-                ref={(mesh) => {
-                  if (mesh) {
-                    dotMeshesRef.current.set(key, mesh);
-                    mesh.userData.key = key;
-                    mesh.raycast = THREE.Mesh.prototype.raycast;
-                  } else {
-                    dotMeshesRef.current.delete(key);
-                  }
-                }}
-                position={[pos.x, pos.y, 0.1]}
-                scale={1.05}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  if (snap.phase === 'playing' && !paused && !helpOpen) {
-                    handleDown(r, c);
-                  }
-                }}
-                onPointerEnter={(e) => {
-                  e.stopPropagation();
-                  if (
-                    selectionRef.current.dragging &&
-                    snap.phase === 'playing' &&
-                    !paused
-                  ) {
-                    handleEnter(r, c);
-                  }
-                }}
-              >
-                <boxGeometry
-                  args={[DOT_RADIUS * 1.4, DOT_RADIUS * 1.4, DOT_RADIUS * 1.4]}
-                />
-                <meshStandardMaterial
-                  color={ANCHOR_COLOR}
-                  roughness={0.8}
-                  metalness={0.15}
-                />
-              </mesh>
-            );
-          }
-
-          const isFire = dot.special === 'fire';
-          return (
-            <mesh
-              key={key}
-              ref={(mesh) => {
-                if (mesh) {
-                  dotMeshesRef.current.set(key, mesh);
-                  mesh.userData.key = key;
-                  mesh.raycast = THREE.Mesh.prototype.raycast;
-                } else {
-                  dotMeshesRef.current.delete(key);
-                }
-              }}
-              position={[pos.x, pos.y, 0.1]}
-              scale={isSelected ? 1.15 : 1}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                if (snap.phase === 'playing' && !paused && !helpOpen) {
-                  handleDown(r, c);
-                }
-              }}
-              onPointerEnter={(e) => {
-                e.stopPropagation();
-                if (
-                  selectionRef.current.dragging &&
-                  snap.phase === 'playing' &&
-                  !paused
-                ) {
-                  handleEnter(r, c);
-                }
-              }}
-            >
-              {isFire ? (
-                <octahedronGeometry args={[DOT_RADIUS * 0.9, 0]} />
-              ) : (
-                <sphereGeometry args={[DOT_RADIUS, 24, 24]} />
-              )}
-              <meshStandardMaterial
-                color={PALETTE[dot.color]?.color}
-                emissive={isFire ? FIRE_EMISSIVE : PALETTE[dot.color]?.color}
-                emissiveIntensity={isFire ? 0.7 : isSelected ? 0.35 : 0.15}
-                roughness={0.35}
-                metalness={0.1}
-              />
-            </mesh>
-          );
-        })
-      )}
+      {showFps && <Stats className="fps-counter" />}
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div
           style={{
             position: 'absolute',
+            top: 14,
             left: 16,
-            top: 12,
-            color: 'white',
-            fontFamily: 'ui-sans-serif, system-ui',
+            color: '#EFF6FF',
+            fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',
             userSelect: 'none',
-            maxWidth: '92vw',
+            textShadow: '0 1px 6px rgba(0,0,0,0.35)',
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 18 }}>Two Dots</div>
-          <div style={{ marginTop: 6, fontSize: 14, opacity: 0.9 }}>
-            Level: <b>{snap.level}</b> &nbsp;|&nbsp; Moves:{' '}
-            <b>{snap.movesLeft}</b>
+          <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.3 }}>
+            Dot Current
           </div>
-          <div style={{ marginTop: 6, fontSize: 14, opacity: 0.9 }}>
-            Score: <b>{snap.score}</b> &nbsp;|&nbsp; Best: <b>{snap.best}</b>
+          <div style={{ marginTop: 6, fontSize: 13, opacity: 0.95 }}>
+            Level <b>{snap.level}</b> · Moves <b>{snap.movesLeft}</b>
           </div>
-          <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
-            Objectives
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.95 }}>
+            Score <b>{snap.score}</b> · Best <b>{snap.best}</b>
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 11, opacity: 0.82 }}>
+            Targets
           </div>
           <div
-            style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}
+            style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}
           >
-            {snap.targetColors.map((target, idx) => {
-              if (target <= 0) return null;
-              const remaining = snap.remainingColors[idx] ?? target;
-              return (
-                <div
-                  key={`goal-${idx}`}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <span
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: 999,
-                      background: PALETTE[idx]?.color,
-                      boxShadow: '0 0 8px rgba(255,255,255,0.25)',
-                    }}
-                  />
-                  <span style={{ fontSize: 12 }}>
-                    {remaining}/{target}
-                  </span>
-                </div>
-              );
-            })}
-            {snap.targetAnchors > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {targetItems.map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 7px',
+                  borderRadius: 999,
+                  background: 'rgba(5, 14, 24, 0.5)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                }}
+              >
                 <span
                   style={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: 4,
-                    background: ANCHOR_COLOR,
+                    width: 10,
+                    height: 10,
+                    borderRadius: 999,
+                    background: item.color,
                   }}
                 />
-                <span style={{ fontSize: 12 }}>
-                  {snap.remainingAnchors}/{snap.targetAnchors}
+                <span style={{ fontSize: 11 }}>
+                  {item.remaining}/{item.target}
                 </span>
               </div>
-            )}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-            Bombs: <b>{snap.bombs}</b>
+            ))}
           </div>
         </div>
 
         <div
           style={{
             position: 'absolute',
+            top: 14,
             right: 16,
-            top: 12,
             pointerEvents: 'auto',
           }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <button
             type="button"
-            onClick={() => setHelpOpen((prev) => !prev)}
+            onClick={() => setSettingsOpen((prev) => !prev)}
             style={{
-              padding: '6px 10px',
+              padding: '7px 12px',
               borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.4)',
-              background: 'rgba(15,23,42,0.65)',
-              color: 'white',
+              border: '1px solid rgba(255,255,255,0.25)',
+              background: 'rgba(5, 14, 24, 0.62)',
+              color: '#F8FAFC',
               fontSize: 12,
               fontWeight: 700,
               cursor: 'pointer',
@@ -853,67 +1631,76 @@ export default function TwoDots() {
           </button>
         </div>
 
-        {helpOpen && (
+        {settingsOpen && (
           <div
             style={{
               position: 'absolute',
               inset: 0,
               display: 'grid',
               placeItems: 'center',
-              background: 'rgba(15,23,42,0.65)',
               pointerEvents: 'auto',
+              background: 'rgba(2, 8, 13, 0.62)',
             }}
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div
               style={{
-                width: 380,
+                width: 360,
                 maxWidth: '92vw',
-                background: 'rgba(15,23,42,0.9)',
                 borderRadius: 14,
+                background: 'rgba(7, 18, 30, 0.93)',
+                border: '1px solid rgba(255,255,255,0.16)',
+                color: '#F8FAFC',
                 padding: 18,
-                color: 'white',
-                textAlign: 'left',
               }}
             >
-              <div style={{ fontSize: 18, fontWeight: 800 }}>How to Play</div>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>Settings</div>
               <div
                 style={{
-                  marginTop: 10,
+                  marginTop: 8,
+                  opacity: 0.82,
                   fontSize: 13,
                   lineHeight: 1.5,
-                  opacity: 0.9,
                 }}
               >
-                Connect 2+ dots of the same color with horizontal or vertical
-                lines.
-                <br />
-                Make a loop to clear all dots of that color.
+                Drag through matching colors. Squares clear all of that color.
+                Large loops detonate enclosed bombs.
               </div>
-              <div
+
+              <label
                 style={{
-                  marginTop: 10,
+                  marginTop: 14,
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
                   fontSize: 13,
-                  lineHeight: 1.5,
-                  opacity: 0.9,
                 }}
               >
-                <b>Anchor Dots</b> are gray blocks. Clear dots next to them to
-                break them.
-                <br />
-                <b>Fire Dots</b> ignite adjacent dots when cleared.
-              </div>
-              <div
+                <input
+                  type="checkbox"
+                  checked={highQuality}
+                  onChange={() => setHighQuality((prev) => !prev)}
+                />
+                High Quality FX
+              </label>
+
+              <label
                 style={{
-                  marginTop: 10,
+                  marginTop: 8,
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'center',
                   fontSize: 13,
-                  lineHeight: 1.5,
-                  opacity: 0.9,
                 }}
               >
-                <b>Bomb Booster</b>: Click once to arm, then tap a dot to clear
-                a 3x3 area.
-              </div>
+                <input
+                  type="checkbox"
+                  checked={showFps}
+                  onChange={() => setShowFps((prev) => !prev)}
+                />
+                Show FPS
+              </label>
+
               <div
                 style={{
                   marginTop: 14,
@@ -923,13 +1710,13 @@ export default function TwoDots() {
               >
                 <button
                   type="button"
-                  onClick={() => setHelpOpen(false)}
+                  onClick={() => setSettingsOpen(false)}
                   style={{
-                    padding: '6px 12px',
+                    padding: '7px 12px',
                     borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.25)',
-                    background: 'rgba(255,255,255,0.1)',
-                    color: 'white',
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#F8FAFC',
                     fontSize: 12,
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -939,43 +1726,6 @@ export default function TwoDots() {
                 </button>
               </div>
             </div>
-          </div>
-        )}
-
-        {snap.phase === 'playing' && (
-          <div
-            style={{
-              position: 'absolute',
-              left: 16,
-              bottom: 16,
-              pointerEvents: 'auto',
-            }}
-          >
-            <button
-              type="button"
-              disabled={snap.bombs <= 0}
-              onClick={() =>
-                setBoosterMode((prev) => (prev === 'bomb' ? 'none' : 'bomb'))
-              }
-              style={{
-                padding: '8px 12px',
-                borderRadius: 999,
-                border:
-                  boosterMode === 'bomb'
-                    ? '2px solid #f97316'
-                    : '1px solid rgba(255,255,255,0.35)',
-                background:
-                  boosterMode === 'bomb'
-                    ? 'rgba(249,115,22,0.2)'
-                    : 'rgba(15,23,42,0.65)',
-                color: 'white',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: snap.bombs > 0 ? 'pointer' : 'not-allowed',
-              }}
-            >
-              Bomb {snap.bombs > 0 ? `(${snap.bombs})` : '(0)'}
-            </button>
           </div>
         )}
 
@@ -993,40 +1743,44 @@ export default function TwoDots() {
           >
             <div
               style={{
-                textAlign: 'center',
-                background: 'rgba(0,0,0,0.55)',
-                padding: '18px 22px',
-                borderRadius: 12,
-                width: 380,
+                width: 430,
                 maxWidth: '92vw',
-                color: 'white',
+                borderRadius: 16,
+                background: 'rgba(4, 12, 21, 0.88)',
+                border: '1px solid rgba(255,255,255,0.16)',
+                color: '#F8FAFC',
+                padding: 20,
+                textAlign: 'center',
               }}
               onPointerDown={(event) => event.stopPropagation()}
             >
-              <div style={{ fontSize: 28, fontWeight: 900 }}>
-                {snap.phase === 'menu' && 'Connect the Dots'}
+              <div
+                style={{ fontSize: 30, fontWeight: 900, letterSpacing: 0.4 }}
+              >
+                {snap.phase === 'menu' && 'Draw The Chain'}
                 {snap.phase === 'gameover' && 'Out of Moves'}
                 {snap.phase === 'levelComplete' &&
-                  `Level ${snap.level} Complete`}
+                  `Level ${snap.level} Cleared`}
               </div>
+
               <div
                 style={{
                   marginTop: 10,
                   fontSize: 14,
-                  opacity: 0.9,
-                  lineHeight: 1.4,
+                  opacity: 0.88,
+                  lineHeight: 1.45,
                 }}
               >
-                Connect 2+ dots of the same color. Make a loop to clear all dots
-                of that color.
-                <br />
-                Complete the objectives before your moves run out.
+                Connect neighboring dots with precision. Build a loop to trigger
+                global color clears and bomb cascades.
               </div>
+
               {snap.phase === 'levelComplete' && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.85 }}>
-                  Stars earned: <b>{snap.stars}</b> / 3
+                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.88 }}>
+                  Stars: <b>{snap.stars}</b> / 3
                 </div>
               )}
+
               <div
                 style={{
                   marginTop: 14,
@@ -1040,29 +1794,30 @@ export default function TwoDots() {
                     type="button"
                     onClick={() => beginLevel(1, true)}
                     style={{
-                      padding: '8px 14px',
+                      padding: '9px 14px',
                       borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.35)',
-                      background: 'rgba(59,130,246,0.35)',
-                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(14, 116, 144, 0.42)',
+                      color: '#F8FAFC',
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
                   >
-                    Start
+                    Start Run
                   </button>
                 )}
+
                 {snap.phase === 'gameover' && (
                   <>
                     <button
                       type="button"
                       onClick={() => beginLevel(snap.level, false)}
                       style={{
-                        padding: '8px 14px',
+                        padding: '9px 14px',
                         borderRadius: 999,
-                        border: '1px solid rgba(255,255,255,0.35)',
-                        background: 'rgba(59,130,246,0.35)',
-                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'rgba(14, 116, 144, 0.42)',
+                        color: '#F8FAFC',
                         fontWeight: 700,
                         cursor: 'pointer',
                       }}
@@ -1073,11 +1828,11 @@ export default function TwoDots() {
                       type="button"
                       onClick={() => beginLevel(1, true)}
                       style={{
-                        padding: '8px 14px',
+                        padding: '9px 14px',
                         borderRadius: 999,
-                        border: '1px solid rgba(255,255,255,0.35)',
-                        background: 'rgba(15,23,42,0.6)',
-                        color: 'white',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'rgba(255,255,255,0.06)',
+                        color: '#F8FAFC',
                         fontWeight: 700,
                         cursor: 'pointer',
                       }}
@@ -1086,16 +1841,17 @@ export default function TwoDots() {
                     </button>
                   </>
                 )}
+
                 {snap.phase === 'levelComplete' && (
                   <button
                     type="button"
                     onClick={() => beginLevel(snap.level + 1, false)}
                     style={{
-                      padding: '8px 14px',
+                      padding: '9px 14px',
                       borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.35)',
-                      background: 'rgba(59,130,246,0.35)',
-                      color: 'white',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'rgba(14, 116, 144, 0.42)',
+                      color: '#F8FAFC',
                       fontWeight: 700,
                       cursor: 'pointer',
                     }}
@@ -1104,8 +1860,9 @@ export default function TwoDots() {
                   </button>
                 )}
               </div>
-              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>
-                Tap / Space to continue.
+
+              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+                Tap, click, or press space to continue.
               </div>
             </div>
           </div>

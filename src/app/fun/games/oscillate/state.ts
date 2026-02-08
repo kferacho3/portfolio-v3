@@ -1,8 +1,11 @@
 import { proxy } from 'valtio';
-import { clamp } from './helpers';
+
+import { CONST } from './constants';
+import { clamp, hash32, mulberry32, randInt, randRange } from './helpers';
 
 export type OnePathPhase = 'menu' | 'playing' | 'cleared' | 'gameover' | 'shop';
 export type OnePathMode = 'levels' | 'endless';
+export type OnePathAxis = 'x' | 'z';
 
 export type OnePathWall = {
   id: string;
@@ -12,45 +15,51 @@ export type OnePathWall = {
   unbreakable?: boolean;
 };
 
-export type OnePathSegment = {
-  id: string;
-  origin: { x: number; z: number };
-  dir: { x: number; z: number };
-  lenNeg: number;
-  lenPos: number;
-  exit: number | null;
-  // Number of wall bounces required before the exit "turn" becomes valid.
-  // This models the corridor rhythm from "The Walls" (you can't turn immediately).
-  turnAfterHits: number;
-  walls: { neg: OnePathWall; pos: OnePathWall };
+export type OnePathGate = {
+  offset: number;
+  triggerStart: number;
+  triggerEnd: number;
+  requiredBounces: number;
+  isOpen: boolean;
 };
 
 export type OnePathGem = {
   id: string;
+  s: number;
+  l: number;
+  collected: boolean;
+};
+
+export type OnePathSegment = {
+  id: string;
+  axis: OnePathAxis;
+  dir: -1 | 1;
   x: number;
   z: number;
-  collected: boolean;
+  length: number;
+  halfWidth: number;
+  gate: OnePathGate | null;
+  walls: { neg: OnePathWall; pos: OnePathWall };
+  gems: OnePathGem[];
 };
 
 export type OnePathLevel = {
   id: string;
   level: number;
   mode: OnePathMode;
-
-  // A deterministic "course" represented as a chain of oscillation segments.
-  // The ball oscillates between two walls on the current segment and can turn
-  // at a perpendicular intersection placed between those walls.
+  seed: number;
   segments: OnePathSegment[];
-  gems: OnePathGem[];
-  goal: { segIndex: number; offset: number };
+  exit: { x: number; z: number; segIndex: number };
 
-  // gameplay tuning
+  // simulation tuning
   speed: number;
-  turnRadius: number;
-  snapRadius: number;
+  lateralSpeed: number;
+  tolerance: number;
+  perfectTol: number;
   bridgeWidth: number;
   baseHeight: number;
   deckHeight: number;
+  fallMargin: number;
 };
 
 export type OnePathSkin = {
@@ -74,7 +83,25 @@ type SaveData = {
   endlessBest: number;
 };
 
-const SAVE_KEY = 'oscillate_save_v1';
+type DifficultyProfile = {
+  widthMin: number;
+  widthMax: number;
+  lengthMin: number;
+  lengthMax: number;
+  speed: number;
+  lateralSpeed: number;
+  triggerWindowMin: number;
+  triggerWindowMax: number;
+  trapChance: number;
+  reqMin: number;
+  reqMax: number;
+  breakChance: number;
+  breakMin: number;
+  breakMax: number;
+  gemChance: number;
+};
+
+const SAVE_KEY = 'oscillate_save_v2';
 
 const DEFAULT_SKINS: OnePathSkin[] = [
   {
@@ -145,60 +172,216 @@ const DEFAULT_SKINS: OnePathSkin[] = [
   },
 ];
 
+function getDifficulty(level: number, mode: OnePathMode): DifficultyProfile {
+  const l = mode === 'endless' ? level + 10 : level;
+  if (l <= 20) {
+    return {
+      widthMin: 2.2,
+      widthMax: 2.8,
+      lengthMin: 3.6,
+      lengthMax: 4.9,
+      speed: 3.6,
+      lateralSpeed: 4.6,
+      triggerWindowMin: 0.55,
+      triggerWindowMax: 0.8,
+      trapChance: 0.15,
+      reqMin: 1,
+      reqMax: 3,
+      breakChance: 0.08,
+      breakMin: 8,
+      breakMax: 11,
+      gemChance: 0.48,
+    };
+  }
+  if (l <= 60) {
+    return {
+      widthMin: 1.8,
+      widthMax: 2.2,
+      lengthMin: 3.2,
+      lengthMax: 4.5,
+      speed: 4.5,
+      lateralSpeed: 5.6,
+      triggerWindowMin: 0.45,
+      triggerWindowMax: 0.68,
+      trapChance: 0.34,
+      reqMin: 2,
+      reqMax: 6,
+      breakChance: 0.2,
+      breakMin: 7,
+      breakMax: 10,
+      gemChance: 0.42,
+    };
+  }
+  if (l <= 140) {
+    return {
+      widthMin: 1.4,
+      widthMax: 1.8,
+      lengthMin: 2.8,
+      lengthMax: 4.1,
+      speed: 5.3,
+      lateralSpeed: 6.8,
+      triggerWindowMin: 0.36,
+      triggerWindowMax: 0.56,
+      trapChance: 0.56,
+      reqMin: 4,
+      reqMax: 10,
+      breakChance: 0.35,
+      breakMin: 6,
+      breakMax: 9,
+      gemChance: 0.36,
+    };
+  }
+  return {
+    widthMin: 1.1,
+    widthMax: 1.5,
+    lengthMin: 2.5,
+    lengthMax: 3.8,
+    speed: 6.4,
+    lateralSpeed: 7.8,
+    triggerWindowMin: 0.3,
+    triggerWindowMax: 0.5,
+    trapChance: 0.7,
+    reqMin: 6,
+    reqMax: 14,
+    breakChance: 0.44,
+    breakMin: 5,
+    breakMax: 8,
+    gemChance: 0.3,
+  };
+}
+
+function pointOnSegment(seg: OnePathSegment, s: number, l: number) {
+  if (seg.axis === 'x') {
+    return { x: seg.x + seg.dir * s, z: seg.z + l };
+  }
+  return { x: seg.x + l, z: seg.z + seg.dir * s };
+}
+
+function pickDirection(
+  axis: OnePathAxis,
+  cursor: { x: number; z: number },
+  rand: () => number
+): -1 | 1 {
+  const limit = CONST.WORLD_LIMIT * 0.66;
+  if (axis === 'x') {
+    if (cursor.x > limit) return -1;
+    if (cursor.x < -limit) return 1;
+  } else {
+    if (cursor.z > limit) return -1;
+    if (cursor.z < -limit) return 1;
+  }
+  return rand() < 0.5 ? -1 : 1;
+}
+
+function estimateMaxBouncesToTrigger(
+  triggerEnd: number,
+  halfWidth: number,
+  speed: number,
+  lateralSpeed: number
+) {
+  const time = Math.max(0, triggerEnd) / Math.max(0.0001, speed);
+  return Math.max(
+    1,
+    Math.floor((time * lateralSpeed) / Math.max(0.0001, halfWidth * 2)) + 1
+  );
+}
+
+function buildWalls(
+  level: number,
+  segIndex: number,
+  rand: () => number,
+  diff: DifficultyProfile
+) {
+  const base: OnePathWall = {
+    id: `w_${level}_${segIndex}`,
+    maxHp: CONST.DEFAULT_BREAK_HP,
+    hp: CONST.DEFAULT_BREAK_HP,
+    broken: false,
+    unbreakable: true,
+  };
+
+  const neg: OnePathWall = { ...base, id: `${base.id}_n` };
+  const pos: OnePathWall = { ...base, id: `${base.id}_p` };
+
+  if (segIndex === 0) {
+    return { neg, pos };
+  }
+
+  if (rand() > diff.breakChance) {
+    return { neg, pos };
+  }
+
+  const hp = randInt(rand, diff.breakMin, diff.breakMax);
+  const pattern = rand();
+  const breakNeg = pattern < 0.75;
+  const breakPos = pattern > 0.25;
+
+  if (breakNeg) {
+    neg.maxHp = hp;
+    neg.hp = hp;
+    neg.unbreakable = false;
+  }
+  if (breakPos) {
+    pos.maxHp = hp;
+    pos.hp = hp;
+    pos.unbreakable = false;
+  }
+
+  return { neg, pos };
+}
+
 export const onePathState = proxy({
-  // ui
   phase: 'menu' as OnePathPhase,
   mode: 'levels' as OnePathMode,
 
-  // progression
-  level: 1, // current level being played
-  selectedLevel: 1, // level picker on menu
+  level: 1,
+  selectedLevel: 1,
   bestLevel: 1,
   endlessBest: 0,
+  endlessSeed: 1,
 
-  // currency
   gems: 0,
   lastRunGems: 0,
 
-  // cosmetics
   selectedSkin: 'black',
-  // A plain array is easier to persist and valtio reliably reacts to mutations.
   unlockedSkins: ['black'] as string[],
-
   skins: DEFAULT_SKINS,
 
-  // --- persistence ---
   load: () => {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) return;
       const data = JSON.parse(raw) as Partial<SaveData>;
 
-      if (typeof data.bestLevel === 'number')
+      if (typeof data.bestLevel === 'number') {
         onePathState.bestLevel = Math.max(1, Math.floor(data.bestLevel));
-      if (typeof data.level === 'number')
+      }
+      if (typeof data.level === 'number') {
         onePathState.level = Math.max(1, Math.floor(data.level));
-      if (typeof data.selectedLevel === 'number')
-        onePathState.selectedLevel = Math.max(
-          1,
-          Math.floor(data.selectedLevel)
-        );
-      if (typeof data.gems === 'number')
+      }
+      if (typeof data.selectedLevel === 'number') {
+        onePathState.selectedLevel = Math.max(1, Math.floor(data.selectedLevel));
+      }
+      if (typeof data.gems === 'number') {
         onePathState.gems = Math.max(0, Math.floor(data.gems));
-      if (typeof data.endlessBest === 'number')
+      }
+      if (typeof data.endlessBest === 'number') {
         onePathState.endlessBest = Math.max(0, Math.floor(data.endlessBest));
-      if (typeof data.selectedSkin === 'string')
+      }
+      if (typeof data.selectedSkin === 'string') {
         onePathState.selectedSkin = data.selectedSkin;
+      }
       if (Array.isArray(data.unlockedSkins)) {
         const cleaned = Array.from(
           new Set(data.unlockedSkins.map((s) => String(s)))
         ).filter(Boolean);
         onePathState.unlockedSkins = cleaned;
       }
-      if (!onePathState.unlockedSkins.includes('black'))
+      if (!onePathState.unlockedSkins.includes('black')) {
         onePathState.unlockedSkins = ['black', ...onePathState.unlockedSkins];
+      }
     } catch {
-      // ignore
+      // no-op
     }
   },
 
@@ -215,11 +398,10 @@ export const onePathState = proxy({
       };
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
     } catch {
-      // ignore
+      // no-op
     }
   },
 
-  // --- navigation ---
   goMenu: () => {
     onePathState.phase = 'menu';
     onePathState.save();
@@ -238,11 +420,9 @@ export const onePathState = proxy({
   },
 
   selectLevel: (n: number) => {
-    const lvl = Math.max(1, Math.floor(n));
-    onePathState.selectedLevel = lvl;
+    onePathState.selectedLevel = Math.max(1, Math.floor(n));
   },
 
-  // --- game flow ---
   start: () => {
     onePathState.mode = 'levels';
     onePathState.level = onePathState.selectedLevel;
@@ -252,6 +432,7 @@ export const onePathState = proxy({
   startEndless: () => {
     onePathState.mode = 'endless';
     onePathState.level = 1;
+    onePathState.endlessSeed = hash32((Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0);
     onePathState.phase = 'playing';
   },
 
@@ -270,31 +451,20 @@ export const onePathState = proxy({
     onePathState.gems += gemsCollected;
 
     if (onePathState.mode === 'levels') {
-      onePathState.bestLevel = Math.max(
-        onePathState.bestLevel,
-        onePathState.level
-      );
+      onePathState.bestLevel = Math.max(onePathState.bestLevel, onePathState.level);
     } else {
-      onePathState.endlessBest = Math.max(
-        onePathState.endlessBest,
-        onePathState.level
-      );
+      onePathState.endlessBest = Math.max(onePathState.endlessBest, onePathState.level);
     }
 
     onePathState.save();
   },
 
-  // Endless progression without a "cleared" screen (classic-style flow).
-  // Called by the renderer when the portal is reached in endless mode.
   advanceEndless: (gemsCollected: number) => {
     if (onePathState.mode !== 'endless') return;
     onePathState.lastRunGems = gemsCollected;
     onePathState.gems += gemsCollected;
     onePathState.level += 1;
-    onePathState.endlessBest = Math.max(
-      onePathState.endlessBest,
-      onePathState.level
-    );
+    onePathState.endlessBest = Math.max(onePathState.endlessBest, onePathState.level);
     onePathState.phase = 'playing';
     onePathState.save();
   },
@@ -303,16 +473,10 @@ export const onePathState = proxy({
     if (onePathState.mode === 'levels') {
       onePathState.level += 1;
       onePathState.selectedLevel = onePathState.level;
-      onePathState.bestLevel = Math.max(
-        onePathState.bestLevel,
-        onePathState.level
-      );
+      onePathState.bestLevel = Math.max(onePathState.bestLevel, onePathState.level);
     } else {
       onePathState.level += 1;
-      onePathState.endlessBest = Math.max(
-        onePathState.endlessBest,
-        onePathState.level
-      );
+      onePathState.endlessBest = Math.max(onePathState.endlessBest, onePathState.level);
     }
     onePathState.phase = 'playing';
     onePathState.save();
@@ -323,20 +487,19 @@ export const onePathState = proxy({
     onePathState.save();
   },
 
-  // --- cosmetics ---
   canAfford: (skinId: string) => {
-    const s = DEFAULT_SKINS.find((x) => x.id === skinId);
-    if (!s) return false;
+    const skin = DEFAULT_SKINS.find((s) => s.id === skinId);
+    if (!skin) return false;
     if (onePathState.unlockedSkins.includes(skinId)) return true;
-    return onePathState.gems >= s.cost;
+    return onePathState.gems >= skin.cost;
   },
 
   unlockSkin: (skinId: string) => {
-    const s = DEFAULT_SKINS.find((x) => x.id === skinId);
-    if (!s) return;
+    const skin = DEFAULT_SKINS.find((s) => s.id === skinId);
+    if (!skin) return;
     if (onePathState.unlockedSkins.includes(skinId)) return;
-    if (onePathState.gems < s.cost) return;
-    onePathState.gems -= s.cost;
+    if (onePathState.gems < skin.cost) return;
+    onePathState.gems -= skin.cost;
     onePathState.unlockedSkins = [...onePathState.unlockedSkins, skinId];
     onePathState.selectedSkin = skinId;
     onePathState.save();
@@ -348,318 +511,130 @@ export const onePathState = proxy({
     onePathState.save();
   },
 
-  // --- level generator ---
-  // Deterministic: calling buildLevel(N) always returns the same layout for that level.
+  // Deterministic level generator.
   buildLevel: (level: number, mode: OnePathMode = 'levels'): OnePathLevel => {
     const lvl = Math.max(1, Math.floor(level));
-    const seed = mode === 'levels' ? lvl * 99991 : Date.now() >>> 0;
-    const rnd = mulberry32(seed);
+    const diff = getDifficulty(lvl, mode);
 
-    // How many turns are required? Higher levels require more.
-    const segments = clamp(3 + Math.floor(lvl * 1.15), 3, 22);
-
-    // Shorter distance between "walls" => tougher timing.
-    const baseLen = clamp(2.35 - lvl * 0.045, 1.05, 2.35);
-    const lenJitter = 0.55;
-
-    // Speed ramps with level, but keep it readable.
-    const speed = 2.15 + Math.min(1.55, lvl * 0.07);
-
-    // Turn window shrinks slightly with level.
-    const turnRadius = clamp(0.26 - lvl * 0.0035, 0.17, 0.26);
-    const snapRadius = turnRadius * 1.4;
-
-    // Geometry tuning (used by renderer)
-    const playerWidth = 0.26;
-    const bridgeWidth = Math.min(0.9, playerWidth * 3);
-    const baseHeight = 0.88;
-    const deckHeight = 0.14;
-
-    type Axis = 'x' | 'z';
-    const maxSpan = 4.2;
-    const minCoord = -maxSpan;
-    const maxCoord = maxSpan;
-    const minSide = clamp(baseLen * 0.45, 0.5, 0.95);
-    const exitMargin = clamp(turnRadius * 2.35, 0.24, 0.6);
-    const wallHits =
-      mode === 'levels' ? 8 : clamp(6 - Math.floor((lvl - 1) / 12), 3, 6);
-    const turnAfterBase =
+    const seed =
       mode === 'levels'
-        ? clamp(1 + Math.floor(lvl * 0.08), 1, 4)
-        : clamp(2 + Math.floor(lvl * 0.1), 2, 7);
-    const turnAfterMax = Math.max(1, wallHits * 2 - 1);
+        ? hash32(lvl * 0x9e3779b1)
+        : hash32(onePathState.endlessSeed ^ Math.imul(lvl, 0x85ebca6b));
+    const rand = mulberry32(seed);
 
-    const eps = 1e-4;
-    const segmentsOut: OnePathSegment[] = [];
-    let origin = { x: 0, z: 0 };
+    const segmentCount =
+      mode === 'levels'
+        ? clamp(7 + Math.floor(lvl * 0.42), 7, 24)
+        : clamp(9 + Math.floor(lvl * 0.48), 9, 30);
 
-    const getSegGeom = (seg: OnePathSegment) => {
-      const x1 = seg.origin.x - seg.dir.x * seg.lenNeg;
-      const z1 = seg.origin.z - seg.dir.z * seg.lenNeg;
-      const x2 = seg.origin.x + seg.dir.x * seg.lenPos;
-      const z2 = seg.origin.z + seg.dir.z * seg.lenPos;
-      const axis: Axis = Math.abs(seg.dir.x) > 0.5 ? 'x' : 'z';
-      return {
+    const segments: OnePathSegment[] = [];
+    let cursor = { x: 0, z: 0 };
+
+    for (let i = 0; i < segmentCount; i += 1) {
+      const axis: OnePathAxis = i % 2 === 0 ? 'z' : 'x';
+      const dir = pickDirection(axis, cursor, rand);
+      const length = randRange(rand, diff.lengthMin, diff.lengthMax);
+      const width = randRange(rand, diff.widthMin, diff.widthMax);
+      const halfWidth = width * 0.5;
+
+      const gateMargin = Math.min(0.35, halfWidth * 0.38);
+      const isLast = i === segmentCount - 1;
+      const bridgeOffset = isLast
+        ? 0
+        : randRange(rand, -halfWidth + gateMargin, halfWidth - gateMargin);
+
+      const triggerWindow = randRange(
+        rand,
+        diff.triggerWindowMin,
+        diff.triggerWindowMax
+      );
+      const triggerEnd = length - 0.06;
+      const triggerStart = Math.max(length * 0.56, triggerEnd - triggerWindow);
+
+      const maxHits = estimateMaxBouncesToTrigger(
+        triggerEnd,
+        halfWidth,
+        diff.speed,
+        diff.lateralSpeed
+      );
+      let requiredBounces = 0;
+      if (!isLast && rand() < diff.trapChance && maxHits > 1) {
+        const minReq = Math.min(maxHits - 1, diff.reqMin);
+        const maxReq = Math.max(minReq, Math.min(maxHits - 1, diff.reqMax));
+        requiredBounces = randInt(rand, minReq, maxReq);
+      }
+
+      const walls = buildWalls(lvl, i, rand, diff);
+
+      const gems: OnePathGem[] = [];
+      if (!isLast && rand() < diff.gemChance) {
+        const gemsOnSeg = rand() < 0.18 ? 2 : 1;
+        for (let g = 0; g < gemsOnSeg; g += 1) {
+          gems.push({
+            id: `g_${lvl}_${i}_${g}`,
+            s: randRange(rand, Math.max(0.25, length * 0.22), length - 0.2),
+            l: randRange(rand, -halfWidth * 0.72, halfWidth * 0.72),
+            collected: false,
+          });
+        }
+      }
+
+      segments.push({
+        id: `s_${lvl}_${i}`,
         axis,
-        x1,
-        z1,
-        x2,
-        z2,
-        minX: Math.min(x1, x2),
-        maxX: Math.max(x1, x2),
-        minZ: Math.min(z1, z2),
-        maxZ: Math.max(z1, z2),
-      };
-    };
+        dir,
+        x: cursor.x,
+        z: cursor.z,
+        length,
+        halfWidth,
+        gate: isLast
+          ? null
+          : {
+              offset: bridgeOffset,
+              triggerStart,
+              triggerEnd,
+              requiredBounces,
+              isOpen: requiredBounces <= 0,
+            },
+        walls,
+        gems,
+      });
 
-    const intersectSegs = (
-      a: ReturnType<typeof getSegGeom>,
-      b: ReturnType<typeof getSegGeom>
-    ) => {
-      if (a.axis === b.axis) {
-        if (a.axis === 'x') {
-          if (Math.abs(a.z1 - b.z1) > eps) return null;
-          if (a.maxX < b.minX - eps || b.maxX < a.minX - eps) return null;
-          return { x: Math.max(a.minX, b.minX), z: a.z1 };
-        }
-        if (Math.abs(a.x1 - b.x1) > eps) return null;
-        if (a.maxZ < b.minZ - eps || b.maxZ < a.minZ - eps) return null;
-        return { x: a.x1, z: Math.max(a.minZ, b.minZ) };
-      }
-
-      const h = a.axis === 'x' ? a : b;
-      const v = a.axis === 'x' ? b : a;
-      const ix = v.x1;
-      const iz = h.z1;
-      if (ix < h.minX - eps || ix > h.maxX + eps) return null;
-      if (iz < v.minZ - eps || iz > v.maxZ + eps) return null;
-      return { x: ix, z: iz };
-    };
-
-    const isCandidateValid = (
-      candidate: OnePathSegment,
-      currentOrigin: { x: number; z: number }
-    ) => {
-      const candGeom = getSegGeom(candidate);
-      for (let i = 0; i < segmentsOut.length; i++) {
-        const other = segmentsOut[i];
-        const otherGeom = getSegGeom(other);
-        const inter = intersectSegs(candGeom, otherGeom);
-        if (!inter) continue;
-        const isPrev = i === segmentsOut.length - 1;
-        const dist = Math.hypot(
-          inter.x - currentOrigin.x,
-          inter.z - currentOrigin.z
-        );
-        if (isPrev && dist <= eps * 10) continue;
-        return false;
-      }
-      return true;
-    };
-
-    const getSpace = (
-      axis: Axis,
-      dir: { x: number; z: number },
-      o: { x: number; z: number }
-    ) => {
-      if (axis === 'x') {
-        if (dir.x > 0) {
-          return { pos: maxCoord - o.x, neg: o.x - minCoord };
-        }
-        return { pos: o.x - minCoord, neg: maxCoord - o.x };
-      }
-      if (dir.z > 0) {
-        return { pos: maxCoord - o.z, neg: o.z - minCoord };
-      }
-      return { pos: o.z - minCoord, neg: maxCoord - o.z };
-    };
-
-    const pickDir = (axis: Axis, o: { x: number; z: number }) => {
-      let sign = axis === 'z' ? (rnd() < 0.78 ? 1 : -1) : rnd() < 0.5 ? 1 : -1;
-      let dir = axis === 'x' ? { x: sign, z: 0 } : { x: 0, z: sign };
-      const space = getSpace(axis, dir, o);
-      if (space.pos < minSide * 1.2) {
-        sign *= -1;
-        dir = axis === 'x' ? { x: sign, z: 0 } : { x: 0, z: sign };
-      }
-      return dir;
-    };
-
-    for (let i = 0; i < segments; i++) {
-      const axis: Axis = i % 2 === 0 ? 'z' : 'x';
-      const isFirst = i === 0;
-      const isLast = i === segments - 1;
-      const maxHp = wallHits;
-      const wallBase = {
-        maxHp,
-        hp: maxHp,
-        broken: false,
-        unbreakable: isFirst,
-      };
-
-      let built: OnePathSegment | null = null;
-      for (let attempt = 0; attempt < 24; attempt++) {
-        const dir = pickDir(axis, origin);
-        const { pos: maxPos, neg: maxNeg } = getSpace(axis, dir, origin);
-
-        const targetLen = baseLen * (1 - lenJitter * 0.5 + rnd() * lenJitter);
-        const capPos = Math.max(0.2, maxPos - 0.1);
-        const capNeg = Math.max(0.2, maxNeg - 0.1);
-        const minWall = Math.min(minSide, capPos, capNeg);
-        const total = clamp(targetLen, minWall * 2, capPos + capNeg);
-        const bias = 0.35 + rnd() * 0.3;
-
-        let lenPos = clamp(total * bias, minWall, capPos);
-        let lenNeg = clamp(total - lenPos, minWall, capNeg);
-
-        const used = lenPos + lenNeg;
-        if (used < total) {
-          const remaining = total - used;
-          const addPos = Math.min(
-            remaining,
-            Math.max(0, maxPos - 0.1 - lenPos)
-          );
-          lenPos += addPos;
-          lenNeg += Math.min(
-            remaining - addPos,
-            Math.max(0, maxNeg - 0.1 - lenNeg)
-          );
-        }
-
-        let exit: number | null = null;
-        const turnAfterHits = isLast
-          ? 0
-          : clamp(
-              turnAfterBase + (rnd() < 0.32 ? 1 : 0) - (rnd() < 0.14 ? 1 : 0),
-              1,
-              turnAfterMax
-            );
-        if (!isLast) {
-          const exitMin = -lenNeg + exitMargin;
-          const exitMax = lenPos - exitMargin;
-          exit = exitMax > exitMin ? exitMin + rnd() * (exitMax - exitMin) : 0;
-        }
-
-        const candidate: OnePathSegment = {
-          id: `s_${lvl}_${i}`,
-          origin: { x: origin.x, z: origin.z },
-          dir: { x: dir.x, z: dir.z },
-          lenNeg,
-          lenPos,
-          exit,
-          turnAfterHits,
-          walls: {
-            neg: { id: `w_${lvl}_${i}_n`, ...wallBase },
-            pos: { id: `w_${lvl}_${i}_p`, ...wallBase },
-          },
-        };
-
-        if (isCandidateValid(candidate, origin)) {
-          built = candidate;
-          break;
-        }
-      }
-
-      if (!built) {
-        const dir = pickDir(axis, origin);
-        const minWall = Math.min(minSide, 0.45);
-        const lenPos = minWall;
-        const lenNeg = minWall;
-        let exit: number | null = null;
-        const turnAfterHits = isLast
-          ? 0
-          : clamp(
-              turnAfterBase + (rnd() < 0.32 ? 1 : 0) - (rnd() < 0.14 ? 1 : 0),
-              1,
-              turnAfterMax
-            );
-        if (!isLast) {
-          const exitMin = -lenNeg + exitMargin;
-          const exitMax = lenPos - exitMargin;
-          exit = exitMax > exitMin ? exitMin + rnd() * (exitMax - exitMin) : 0;
-        }
-        built = {
-          id: `s_${lvl}_${i}`,
-          origin: { x: origin.x, z: origin.z },
-          dir: { x: dir.x, z: dir.z },
-          lenNeg,
-          lenPos,
-          exit,
-          turnAfterHits,
-          walls: {
-            neg: { id: `w_${lvl}_${i}_n`, ...wallBase },
-            pos: { id: `w_${lvl}_${i}_p`, ...wallBase },
-          },
-        };
-      }
-
-      segmentsOut.push(built);
-
-      if (!isLast && built.exit !== null) {
-        origin = {
-          x: origin.x + built.dir.x * built.exit,
-          z: origin.z + built.dir.z * built.exit,
-        };
+      if (!isLast) {
+        const nextOrigin = pointOnSegment(segments[i], length, bridgeOffset);
+        cursor = { x: nextOrigin.x, z: nextOrigin.z };
       }
     }
 
-    const lastSeg = segmentsOut[segmentsOut.length - 1];
-    let goalOffset = 0;
-    if (lastSeg) {
-      const goalMin = -lastSeg.lenNeg + exitMargin;
-      const goalMax = lastSeg.lenPos - exitMargin;
-      goalOffset =
-        goalMax > goalMin ? goalMin + rnd() * (goalMax - goalMin) : 0;
-    }
+    const finalSeg = segments[segments.length - 1];
+    const exitPoint = finalSeg
+      ? pointOnSegment(finalSeg, finalSeg.length, 0)
+      : { x: 0, z: 0 };
 
-    // Gems: placed along some bridges, deterministic.
-    const gems: OnePathGem[] = [];
-    const gemCount = clamp(1 + Math.floor(lvl / 2), 1, 7);
-    const usedSeg = new Set<number>();
-    for (let i = 0; i < gemCount; i++) {
-      let s = Math.floor(rnd() * segmentsOut.length);
-      let attempts = 0;
-      while (usedSeg.has(s) && attempts++ < 10)
-        s = Math.floor(rnd() * segmentsOut.length);
-      usedSeg.add(s);
-
-      const seg = segmentsOut[s];
-      const gemMargin = Math.max(0.28, turnRadius * 1.7);
-      const gMin = -seg.lenNeg + gemMargin;
-      const gMax = seg.lenPos - gemMargin;
-      const t = gMax > gMin ? gMin + rnd() * (gMax - gMin) : 0;
-      const gx = seg.origin.x + seg.dir.x * t;
-      const gz = seg.origin.z + seg.dir.z * t;
-
-      gems.push({ id: `g_${lvl}_${i}`, x: gx, z: gz, collected: false });
-    }
+    const tolBase = diff.widthMin * 0.12;
+    const frameSafety = diff.speed * CONST.FIXED_DT * 1.25;
+    const tolerance = Math.max(tolBase, frameSafety);
+    const perfectTol = tolerance * 0.45;
 
     return {
       id: `${mode}_lvl_${lvl}`,
       level: lvl,
       mode,
-      segments: segmentsOut,
-      gems,
-      goal: {
-        segIndex: Math.max(0, segmentsOut.length - 1),
-        offset: goalOffset,
+      seed,
+      segments,
+      exit: {
+        x: exitPoint.x,
+        z: exitPoint.z,
+        segIndex: Math.max(0, segments.length - 1),
       },
-      speed,
-      turnRadius,
-      snapRadius,
-      bridgeWidth,
-      baseHeight,
-      deckHeight,
+      speed: diff.speed,
+      lateralSpeed: diff.lateralSpeed,
+      tolerance,
+      perfectTol,
+      bridgeWidth: clamp(diff.widthMin * 0.72, 0.62, 1.18),
+      baseHeight: CONST.BASE_H,
+      deckHeight: CONST.DECK_H,
+      fallMargin: CONST.FALL_MARGIN,
     };
   },
 });
-
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return function () {
-    t += 0x6d2b79f5;
-    let x = Math.imul(t ^ (t >>> 15), 1 | t);
-    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
-    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
-  };
-}

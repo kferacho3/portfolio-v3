@@ -17,14 +17,20 @@ export function segmentBasis(seg: OscillateSegment) {
       ? new THREE.Vector3(seg.dir, 0, 0)
       : new THREE.Vector3(0, 0, seg.dir);
   const lat =
-    seg.axis === 'x' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+    seg.axis === 'x'
+      ? new THREE.Vector3(0, 0, 1)
+      : new THREE.Vector3(1, 0, 0);
   return { fwd, lat };
+}
+
+export function segmentWorldPos(seg: OscillateSegment, s: number, l: number) {
+  const { fwd, lat } = segmentBasis(seg);
+  return new THREE.Vector3(seg.x, 0, seg.z)
+    .addScaledVector(fwd, s)
+    .addScaledVector(lat, l);
 }
 
 export function ballWorldPos(lvl: OscillateLevel, r: RunStatus) {
   const seg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
-  const { fwd, lat } = segmentBasis(seg);
-  return new THREE.Vector3(seg.x, 0, seg.z)
-    .addScaledVector(fwd, r.s)
-    .addScaledVector(lat, r.l);
+  return segmentWorldPos(seg, r.s, r.l);
 }

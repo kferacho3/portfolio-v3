@@ -9,6 +9,9 @@ export type RunStatus = {
   vy: number;
   alive: boolean;
   cleared: boolean;
+  gateOpen: boolean;
+  bouncesOnSeg: number;
+  totalBounces: number;
 
   // scoring/juice
   score: number;
@@ -18,12 +21,18 @@ export type RunStatus = {
   pulseCdMax: number;
   perfectFlash: number;
   missFlash: number;
+  gateFlash: number;
   shake: number;
+  squash: number;
+  stretch: number;
   lastTapAt: number;
   gemsThisRun: number;
 };
 
 export type {
+  OnePathAxis as OscillateAxis,
+  OnePathWall as OscillateWall,
+  OnePathGate as OscillateGate,
   OnePathLevel as OscillateLevel,
   OnePathSegment as OscillateSegment,
   OnePathGem as OscillateGem,
