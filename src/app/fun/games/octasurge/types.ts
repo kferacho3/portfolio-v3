@@ -1,47 +1,28 @@
 export type OctaSurgePhase = 'menu' | 'playing' | 'gameover';
 
-export type ObstacleType = 'bump' | 'hole' | 'wedge';
+export type OctaSurgeMode = 'classic' | 'endless' | 'daily';
 
-export type ObstacleData = {
-  id: number;
+export type CollectibleType = 'gem' | 'boost' | 'shield';
+
+export type RingData = {
+  slot: number;
+  index: number;
   z: number;
-  prevZ: number;
-  faceFloat: number; // 0..faces, supports smooth drift
-  prevFaceFloat: number;
-  faceVel: number; // face units per second
-  span: number; // number of faces blocked (1 or 2)
-  type: ObstacleType;
-  depth: number; // along tunnel
-  protrusion: number; // into tunnel (for bumps)
-  scale: number;
-  nearMissed: boolean;
-};
-
-export type CollectibleType = 'normal' | 'special' | 'boost' | 'shield';
-
-export type CollectibleData = {
-  id: number;
-  faceIndex: number;
-  z: number;
-  prevZ: number;
-  type: CollectibleType;
+  solidMask: number;
+  bumpMask: number;
+  safeLane: number;
+  collectibleLane: number | null;
+  collectibleType: CollectibleType | null;
   collected: boolean;
-  bobPhase: number;
-  spinRate: number;
-  /** When to respawn after collection (elapsed time) */
-  respawnAt?: number;
+  crossed: boolean;
+  theme: number;
 };
 
-export type CollectionEffectKind = 'collect' | 'impact' | 'shield' | 'near';
-
-export type CollectionEffect = {
+export type CollectionFx = {
   id: number;
-  kind: CollectionEffectKind;
-  type: CollectibleType;
-  faceIndex: number;
+  type: CollectibleType | 'impact' | 'near';
+  lane: number;
   z: number;
-  bornAt: number;
+  age: number;
   life: number;
-  /** Current age in seconds (updated each frame) */
-  age?: number;
 };

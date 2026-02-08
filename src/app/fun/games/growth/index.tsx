@@ -1,933 +1,940 @@
-import * as React from 'react';
-import * as THREE from 'three';
+'use client';
+
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Environment, Html, OrthographicCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Environment, Html } from '@react-three/drei';
+import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
-import { useInputRef, clearFrameInput } from '../../hooks/useInput';
 import { useGameUIState } from '../../store/selectors';
+import { SeededRandom } from '../../utils/seededRandom';
 
-import { growthState, growthSkins } from './state';
+import {
+  BOOST_DURATION,
+  BOOST_MULTIPLIER,
+  CLEAR_SCORE,
+  COLLISION_WINDOW,
+  DESPAWN_WORLD_Z,
+  GEM_SCORE,
+  PERFECT_TURN_BONUS,
+  PLAYER_COLLISION_RADIUS,
+  SEGMENT_HALF,
+  SEGMENT_POOL,
+  SEGMENT_SIZE,
+  SEGMENT_SPACING,
+  SHIELD_DURATION,
+  SPAWN_START_Z,
+} from './constants';
+import { gameplayConfig } from './gameplayConfig';
+import { pickGraphicsPreset } from './graphicsPresets';
+import { growthState } from './state';
+import type { Face, GrowthSegment, PowerupType } from './types';
 import CharacterSelection from './_components/CharacterSelection';
+import { useCameraShake } from './useCameraShake';
+import { useJellySquash } from './useJellySquash';
+import { useKeyboardControls } from './useKeyboardControls';
+import { useSwipeControls } from './useSwipeControls';
+import { useWorldRotation } from './useWorldRotation';
 
 export { growthState } from './state';
+export * from './types';
+export * from './constants';
+export * from './gameplayConfig';
+export * from './graphicsPresets';
 
-type Segment = {
-  z: number;
-  obstacleFace: number; // 0..3
-  obstacleKind: 0 | 1; // 0 pillar, 1 spike
-  gemFace: number; // 0..3
-  gemActive: boolean;
-  branchGrowth: number; // 0..1, grows over time
-  branchTargetSize: number; // 0..1, random target size
-  branchGrowthSpeed: number; // growth rate
-  spawnTime: number; // when segment was spawned
+const FACE_LIST: Face[] = [0, 1, 2, 3];
+const PLAYER_FACE_BY_ROTATION: Face[] = [2, 0, 3, 1];
+
+const TILE_COLOR_LIGHT = new THREE.Color('#f8f5ec');
+const TILE_COLOR_DARK = new THREE.Color('#ebd9b8');
+const OBSTACLE_COLORS = [
+  new THREE.Color('#f97316'),
+  new THREE.Color('#ef4444'),
+  new THREE.Color('#c2410c'),
+];
+const GEM_COLOR = new THREE.Color('#fde047');
+const BOOST_COLOR = new THREE.Color('#22d3ee');
+const SHIELD_COLOR = new THREE.Color('#a78bfa');
+
+const OBSTACLE_INSTANCES_PER_SEGMENT = 3;
+const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
+
+const OBSTACLE_LENGTH = 0.72;
+const OBSTACLE_THICKNESS = 0.16;
+const OBSTACLE_RADIUS = SEGMENT_HALF + OBSTACLE_THICKNESS * 0.56;
+const GEM_RADIUS = SEGMENT_HALF + 0.16;
+const POWERUP_RADIUS = SEGMENT_HALF + 0.2;
+const HIDE_POSITION_Y = -9999;
+
+const normalizeFace = (face: number) => (((face % 4) + 4) % 4) as Face;
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+const getFaceOffset = (face: Face, radius: number): [number, number] => {
+  switch (face) {
+    case 0:
+      return [radius, 0];
+    case 1:
+      return [-radius, 0];
+    case 2:
+      return [0, radius];
+    default:
+      return [0, -radius];
+  }
 };
 
-const TAU = Math.PI * 2;
-const QUARTER = Math.PI / 2;
+const buildSafeFace = (
+  rng: SeededRandom,
+  previousSafeFace: Face,
+  difficulty: number,
+  density: number
+): Face => {
+  const keepWeight = clamp(0.7 - density * 0.4, 0.34, 0.7);
+  const turnWeight = clamp(0.15 + density * 0.14, 0.15, 0.36);
+  const oppositeWeight =
+    difficulty > gameplayConfig.hardPatternStart
+      ? clamp((difficulty - gameplayConfig.hardPatternStart) * 0.16, 0, 0.11)
+      : 0;
+  const choices = [
+    { item: previousSafeFace, weight: keepWeight },
+    { item: normalizeFace(previousSafeFace + 1), weight: turnWeight },
+    { item: normalizeFace(previousSafeFace - 1), weight: turnWeight },
+    {
+      item: normalizeFace(previousSafeFace + 2),
+      weight: oppositeWeight,
+    },
+  ];
+  return rng.weighted(choices);
+};
 
-// Aesthetic + scale (tuned to resemble the isometric, soft-lit screenshots)
-const BEAM_SIZE = 1.0;
-const BEAM_HALF = BEAM_SIZE / 2;
-const SEGMENT_LEN = 1.0;
-const SEGMENTS = 120;
-const TRACK_LENGTH = SEGMENTS * SEGMENT_LEN;
-
-const PLAYER_RADIUS = 0.18;
-const PLAYER_HOVER = 0.12;
-
-const OB_PILLAR_R = 0.24;
-const OB_PILLAR_H = 0.65;
-
-const OB_SPIKE_R = 0.24;
-const OB_SPIKE_H = 0.75;
-
-const GEM_R = 0.17;
-
-const COLLISION_Z = 0.38;
-
-// Speed progression
-const BASE_SPEED = 2.4;
-const MAX_SPEED = 6.5; // Cap for playability
-const SPEED_RAMP = 0.003; // Speed increase per score point
-
-// Branch growth
-const BRANCH_MIN_SIZE = 0.1;
-const BRANCH_MAX_SIZE = 1.0;
-const BRANCH_GROWTH_SPEED_MIN = 0.8; // seconds to fully grow
-const BRANCH_GROWTH_SPEED_MAX = 2.5;
-const CLOSE_CALL_CHANCE = 0.25; // 25% chance of close call growth
-
-function clamp(v: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, v));
-}
-
-function wrapAngle(a: number) {
-  // keep angle in [-PI, PI] to improve numerical stability
-  const w = ((((a + Math.PI) % TAU) + TAU) % TAU) - Math.PI;
-  return w;
-}
-
-function randInt(n: number) {
-  return Math.floor(Math.random() * n);
-}
-
-function choice<T>(arr: readonly T[]) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function facePos(face: number, r: number) {
-  // 0=+Y, 1=+X, 2=-Y, 3=-X
-  switch (face & 3) {
-    case 0:
-      return new THREE.Vector2(0, r);
-    case 1:
-      return new THREE.Vector2(r, 0);
-    case 2:
-      return new THREE.Vector2(0, -r);
-    default:
-      return new THREE.Vector2(-r, 0);
-  }
-}
-
-function makeSegments(): Segment[] {
-  const arr: Segment[] = [];
-  for (let i = 0; i < SEGMENTS; i++) {
-    arr.push({
-      z: i * SEGMENT_LEN + 6,
-      obstacleFace: randInt(4),
-      obstacleKind: (Math.random() < 0.18 ? 1 : 0) as 0 | 1,
-      gemFace: randInt(4),
-      gemActive: Math.random() < 0.45,
-      branchGrowth: 0,
-      branchTargetSize:
-        Math.random() * (BRANCH_MAX_SIZE - BRANCH_MIN_SIZE) + BRANCH_MIN_SIZE,
-      branchGrowthSpeed:
-        1 /
-        (Math.random() * (BRANCH_GROWTH_SPEED_MAX - BRANCH_GROWTH_SPEED_MIN) +
-          BRANCH_GROWTH_SPEED_MIN),
-      spawnTime: 0,
-    });
-  }
-  return arr;
-}
-
-function respawnSegment(
-  seg: Segment,
-  newZ: number,
-  difficulty01: number,
-  currentTime: number
-) {
-  seg.z = newZ;
-
-  // Difficulty ramps with score; keep it fun but fair
-  const obstacleChance = clamp(0.18 + difficulty01 * 0.55, 0.18, 0.82);
-  const gemChance = clamp(0.42 - difficulty01 * 0.18, 0.22, 0.48);
-
-  // Branches are pre-placed but grow in real-time
-  seg.obstacleFace = randInt(4);
-  seg.obstacleKind = (Math.random() < 0.22 + difficulty01 * 0.25 ? 1 : 0) as
-    | 0
-    | 1;
-
-  // Occasionally keep a short break
-  if (Math.random() > obstacleChance) {
-    // encode "no obstacle" by using face= -1-ish (we'll treat <0 as none)
-    seg.obstacleFace = -1;
+const buildBlockedFaces = (
+  rng: SeededRandom,
+  safeFace: Face,
+  difficulty: number,
+  density: number,
+  sequence: number
+): Face[] => {
+  if (sequence > 0 && sequence % gameplayConfig.breatherEverySegments === 0) {
+    const choices = FACE_LIST.filter((face) => face !== safeFace) as Face[];
+    return [rng.pick(choices)];
   }
 
-  // Initialize branch growth - starts at 0, grows to random target size
-  const isCloseCall = Math.random() < CLOSE_CALL_CHANCE;
-  if (isCloseCall) {
-    // Close call: starts smaller, grows faster to larger size
-    seg.branchTargetSize = Math.random() * 0.4 + 0.7; // 0.7-1.0
-    seg.branchGrowthSpeed = 1 / (Math.random() * 0.5 + 0.6); // Faster growth (0.6-1.1 seconds)
-  } else {
-    // Normal growth
-    seg.branchTargetSize =
-      Math.random() * (BRANCH_MAX_SIZE - BRANCH_MIN_SIZE) + BRANCH_MIN_SIZE;
-    seg.branchGrowthSpeed =
-      1 /
-      (Math.random() * (BRANCH_GROWTH_SPEED_MAX - BRANCH_GROWTH_SPEED_MIN) +
-        BRANCH_GROWTH_SPEED_MIN);
+  let blockedCount = 1;
+  if (difficulty > 0.16 && rng.bool(clamp((density - 0.28) * 1.2, 0.1, 0.7))) {
+    blockedCount = 2;
   }
-  seg.branchGrowth = 0;
-  seg.spawnTime = currentTime;
-
-  seg.gemActive = Math.random() < gemChance;
-  seg.gemFace = randInt(4);
-
-  // Avoid trivial "gem inside obstacle" too often.
   if (
-    seg.gemActive &&
-    seg.obstacleFace >= 0 &&
-    seg.gemFace === seg.obstacleFace &&
-    Math.random() < 0.7
+    difficulty > gameplayConfig.hardPatternStart &&
+    density > 0.56 &&
+    rng.bool(clamp((density - 0.54) * 0.95, 0.08, 0.38))
   ) {
-    seg.gemFace = (seg.gemFace + 1 + randInt(3)) & 3;
+    blockedCount = 3;
   }
-}
 
-function VoxelRunner({ wobble = 0 }: { wobble?: number }) {
-  const snap = useSnapshot(growthState);
-  const selectedSkin = growthSkins[snap.skin] || growthSkins[0];
-  const t = useRefTime();
-  const bob = Math.sin(t * 8) * 0.03;
+  const available = FACE_LIST.filter((face) => face !== safeFace) as Face[];
+  rng.shuffle(available);
+  return available.slice(0, blockedCount);
+};
 
-  return (
-    <group
-      position={[0, BEAM_HALF + PLAYER_HOVER + bob, 0]}
-      rotation={[0, 0, wobble]}
-    >
-      {/* shadow */}
-      <mesh position={[0, -0.14, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.22, 24]} />
-        <meshStandardMaterial color="#000000" transparent opacity={0.18} />
-      </mesh>
+type InputControllerProps = {
+  canStart: boolean;
+  canRotate: boolean;
+  rotateLeft: () => void;
+  rotateRight: () => void;
+  rotateFallback: () => void;
+  startOrRestart: () => void;
+};
 
-      {/* body */}
-      <mesh position={[0, 0.12, 0]}>
-        <boxGeometry args={[0.32, 0.24, 0.28]} />
-        <meshStandardMaterial
-          color={selectedSkin.accent}
-          roughness={0.65}
-          metalness={0.05}
-        />
-      </mesh>
-      {/* head */}
-      <mesh position={[0, 0.32, 0]}>
-        <boxGeometry args={[0.28, 0.22, 0.26]} />
-        <meshStandardMaterial
-          color={selectedSkin.primary}
-          roughness={0.7}
-          metalness={0.02}
-          emissive={selectedSkin.primary}
-          emissiveIntensity={0.2}
-        />
-      </mesh>
-      {/* little visor stripe */}
-      <mesh position={[0, 0.27, 0.15]}>
-        <boxGeometry args={[0.26, 0.06, 0.03]} />
-        <meshStandardMaterial
-          color="#f0f0f0"
-          roughness={0.35}
-          metalness={0.05}
-        />
-      </mesh>
-    </group>
-  );
-}
+const InputController: React.FC<InputControllerProps> = ({
+  canStart,
+  canRotate,
+  rotateLeft,
+  rotateRight,
+  rotateFallback,
+  startOrRestart,
+}) => {
+  const onLeft = useCallback(() => {
+    if (!canRotate) return;
+    rotateLeft();
+  }, [canRotate, rotateLeft]);
 
-function useRefTime() {
-  const tRef = React.useRef(0);
-  useFrame((_, dt) => {
-    tRef.current += dt;
-  });
-  return tRef.current;
-}
+  const onRight = useCallback(() => {
+    if (!canRotate) return;
+    rotateRight();
+  }, [canRotate, rotateRight]);
 
-function GrowthWorld() {
-  const input = useInputRef();
-  const snap = useSnapshot(growthState);
-  const { paused } = useGameUIState();
+  const onTapFallback = useCallback(() => {
+    if (!canRotate) return;
+    rotateFallback();
+  }, [canRotate, rotateFallback]);
 
-  const rollGroup = React.useRef<THREE.Group>(null!);
+  const onStart = useCallback(() => {
+    if (!canStart) return;
+    startOrRestart();
+  }, [canStart, startOrRestart]);
 
-  const beamRef = React.useRef<THREE.InstancedMesh>(null!);
-  const pillarRef = React.useRef<THREE.InstancedMesh>(null!);
-  const spikeRef = React.useRef<THREE.InstancedMesh>(null!);
-  const gemRef = React.useRef<THREE.InstancedMesh>(null!);
-
-  const segmentsRef = React.useRef<Segment[]>(makeSegments());
-
-  const tmpObj = React.useMemo(() => new THREE.Object3D(), []);
-  const tmpObj2 = React.useMemo(() => new THREE.Object3D(), []);
-  const tmpMat = React.useMemo(() => new THREE.Matrix4(), []);
-
-  const mutation = React.useRef({
-    roll: 0,
-    rollTarget: 0,
-    rollKick: 0,
-    speed: BASE_SPEED,
-    dist: 0,
-    time: 0,
-    seeded: false,
-    lastRotateAt: -999,
-    runSeed: Math.random() * 1000,
-    spaceWasDown: false,
-    leftWasDown: false,
-    rightWasDown: false,
+  useKeyboardControls({
+    onLeft,
+    onRight,
+    onTapFallback,
+    onStart,
   });
 
-  React.useEffect(() => {
-    // Make instancing updates efficient
-    if (beamRef.current)
-      beamRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (pillarRef.current)
-      pillarRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (spikeRef.current)
-      spikeRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (gemRef.current)
-      gemRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  }, []);
+  useSwipeControls({
+    enabled: canRotate,
+    onLeft: onRight,
+    onRight: onLeft,
+  });
 
-  // Initial render of segments - use a separate effect that runs after refs are set
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (
-        beamRef.current &&
-        pillarRef.current &&
-        spikeRef.current &&
-        gemRef.current
-      ) {
-        updateInstances(
-          tmpObj,
-          tmpObj2,
-          tmpMat,
-          segmentsRef.current,
-          beamRef.current,
-          pillarRef.current,
-          spikeRef.current,
-          gemRef.current,
-          mutation.current.roll
-        );
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [tmpObj, tmpObj2, tmpMat]);
-
-  const resetRun = React.useCallback(() => {
-    const m = mutation.current;
-    m.roll = 0;
-    m.rollTarget = 0;
-    m.rollKick = 0;
-    m.speed = BASE_SPEED;
-    m.dist = 0;
-    m.time = 0;
-    m.seeded = true;
-    m.lastRotateAt = -999;
-    m.spaceWasDown = false;
-    m.leftWasDown = false;
-    m.rightWasDown = false;
-
-    const segs = segmentsRef.current;
-    for (let i = 0; i < segs.length; i++) {
-      const z = i * SEGMENT_LEN + 6;
-      respawnSegment(segs[i], z, 0, m.time);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    if (snap.phase === 'playing') {
-      resetRun();
-      // Update instances after reset
-      if (
-        beamRef.current &&
-        pillarRef.current &&
-        spikeRef.current &&
-        gemRef.current
-      ) {
-        updateInstances(
-          tmpObj,
-          tmpObj2,
-          tmpMat,
-          segmentsRef.current,
-          beamRef.current,
-          pillarRef.current,
-          spikeRef.current,
-          gemRef.current,
-          mutation.current.roll
-        );
-      }
-    }
-  }, [snap.phase, resetRun, tmpObj, tmpObj2, tmpMat]);
-
-  useFrame((_, dt) => {
-    const m = mutation.current;
-    m.time += dt;
-
-    // Inputs - Space = clockwise, Left = left, Right = right
-    const inputState = input.current;
-    const tap = inputState.pointerJustDown;
-    const spaceDown = inputState.keysDown.has(' ');
-    const leftDown =
-      inputState.keysDown.has('arrowleft') || inputState.keysDown.has('a');
-    const rightDown =
-      inputState.keysDown.has('arrowright') || inputState.keysDown.has('d');
-
-    if (tap || spaceDown) {
-      if (growthState.phase === 'menu' || growthState.phase === 'gameover') {
-        growthState.start();
-        clearFrameInput(input);
+  useEffect(() => {
+    const handlePointerDown = () => {
+      if (canStart) {
+        startOrRestart();
         return;
       }
-    }
-
-    if (growthState.phase === 'playing' && !paused) {
-      // Rotation controls
-      if (spaceDown && !m.spaceWasDown) {
-        // Space = rotate clockwise
-        m.rollTarget = wrapAngle(m.rollTarget - QUARTER);
-        m.rollKick = 1;
-        m.lastRotateAt = m.time;
-      } else if (leftDown && !m.leftWasDown) {
-        // Left arrow = rotate left (counter-clockwise)
-        m.rollTarget = wrapAngle(m.rollTarget + QUARTER);
-        m.rollKick = 1;
-        m.lastRotateAt = m.time;
-      } else if (rightDown && !m.rightWasDown) {
-        // Right arrow = rotate right (clockwise)
-        m.rollTarget = wrapAngle(m.rollTarget - QUARTER);
-        m.rollKick = 1;
-        m.lastRotateAt = m.time;
+      if (canRotate) {
+        rotateFallback();
       }
-      m.spaceWasDown = spaceDown;
-      m.leftWasDown = leftDown;
-      m.rightWasDown = rightDown;
-    }
+    };
 
-    // Menu idle animation (gentle sway)
-    if (growthState.phase !== 'playing') {
-      const idle = Math.sin(m.time * 0.35) * 0.08;
-      m.roll = THREE.MathUtils.damp(m.roll, idle, 4.5, dt);
-      m.rollTarget = m.roll;
-      if (rollGroup.current) rollGroup.current.rotation.z = m.roll;
-      updateInstances(
-        tmpObj,
-        tmpObj2,
-        tmpMat,
-        segmentsRef.current,
-        beamRef.current,
-        pillarRef.current,
-        spikeRef.current,
-        gemRef.current,
-        m.roll
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [canRotate, canStart, rotateFallback, startOrRestart]);
+
+  return null;
+};
+
+const Growth: React.FC = () => {
+  const snap = useSnapshot(growthState);
+  const { paused } = useGameUIState();
+  const { camera, scene, gl } = useThree();
+
+  const graphicsPreset = useMemo(() => pickGraphicsPreset(), []);
+  const rotation = useWorldRotation();
+  const cameraShake = useCameraShake();
+  const jellySquash = useJellySquash();
+
+  const worldRef = useRef<THREE.Group>(null);
+  const playerRef = useRef<THREE.Group>(null);
+  const tileMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const gemMeshRef = useRef<THREE.InstancedMesh>(null);
+  const powerupMeshRef = useRef<THREE.InstancedMesh>(null);
+  const orthoRef = useRef<THREE.OrthographicCamera>(null);
+
+  const runtime = useRef({
+    rng: new SeededRandom(1),
+    segments: [] as GrowthSegment[],
+    farthestZ: SPAWN_START_Z,
+    nextSequence: 0,
+    lastSafeFace: 2 as Face,
+    hardStreak: 0,
+    scroll: 0,
+    elapsed: 0,
+  });
+
+  const matrixDummy = useMemo(() => new THREE.Object3D(), []);
+
+  const hideInstance = useCallback(
+    (mesh: THREE.InstancedMesh | null, instanceId: number) => {
+      if (!mesh) return;
+      matrixDummy.position.set(0, HIDE_POSITION_Y, 0);
+      matrixDummy.rotation.set(0, 0, 0);
+      matrixDummy.scale.set(0.001, 0.001, 0.001);
+      matrixDummy.updateMatrix();
+      mesh.setMatrixAt(instanceId, matrixDummy.matrix);
+    },
+    [matrixDummy]
+  );
+
+  const writeTileInstance = useCallback(
+    (segment: GrowthSegment) => {
+      if (!tileMeshRef.current) return;
+      matrixDummy.position.set(0, 0, segment.z);
+      matrixDummy.rotation.set(0, 0, 0);
+      matrixDummy.scale.set(1, 1, 1);
+      matrixDummy.updateMatrix();
+      tileMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
+      tileMeshRef.current.setColorAt(
+        segment.slot,
+        segment.sequence % 2 === 0 ? TILE_COLOR_LIGHT : TILE_COLOR_DARK
       );
-      clearFrameInput(input);
-      return;
-    }
+    },
+    [matrixDummy]
+  );
 
-    if (paused) {
-      clearFrameInput(input);
-      return;
-    }
+  const writeObstacleInstances = useCallback(
+    (segment: GrowthSegment) => {
+      const mesh = obstacleMeshRef.current;
+      if (!mesh) return;
 
-    // Animate roll
-    m.roll = THREE.MathUtils.damp(m.roll, m.rollTarget, 14, dt);
-    m.roll = wrapAngle(m.roll);
+      for (let i = 0; i < OBSTACLE_INSTANCES_PER_SEGMENT; i += 1) {
+        const instanceId = segment.slot * OBSTACLE_INSTANCES_PER_SEGMENT + i;
+        const face = segment.blockedFaces[i];
+        if (face == null) {
+          hideInstance(mesh, instanceId);
+          continue;
+        }
 
-    if (rollGroup.current) {
-      // Add a tiny "snap" feel
-      const kick = m.rollKick;
-      rollGroup.current.rotation.z =
-        m.roll + Math.sin(m.time * 24) * 0.01 * kick;
-      m.rollKick = THREE.MathUtils.damp(m.rollKick, 0, 8, dt);
-    }
-
-    // Speed increases over time with cap
-    const speedBoost = growthState.score * SPEED_RAMP;
-    const targetSpeed = Math.min(BASE_SPEED + speedBoost, MAX_SPEED);
-    m.speed = THREE.MathUtils.damp(m.speed, targetSpeed, 2.5, dt);
-
-    // Distance -> score
-    m.dist += m.speed * dt;
-    while (m.dist >= SEGMENT_LEN) {
-      m.dist -= SEGMENT_LEN;
-      growthState.score += 1;
-    }
-
-    // Move segments towards the player and grow branches in real-time
-    const segs = segmentsRef.current;
-    const difficulty01 = clamp(growthState.score / 220, 0, 1);
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i];
-      s.z -= m.speed * dt;
-
-      // Grow branches in real-time
-      if (s.obstacleFace >= 0 && s.branchGrowth < s.branchTargetSize) {
-        s.branchGrowth = Math.min(
-          s.branchTargetSize,
-          s.branchGrowth + s.branchGrowthSpeed * dt
+        const [ox, oy] = getFaceOffset(face, OBSTACLE_RADIUS);
+        const angle = face === 0 || face === 1 ? 0 : Math.PI / 2;
+        matrixDummy.position.set(ox, oy, segment.z);
+        matrixDummy.rotation.set(0, 0, angle);
+        matrixDummy.scale.set(1, 1, 1);
+        matrixDummy.updateMatrix();
+        mesh.setMatrixAt(instanceId, matrixDummy.matrix);
+        mesh.setColorAt(
+          instanceId,
+          OBSTACLE_COLORS[Math.min(i, OBSTACLE_COLORS.length - 1)]
         );
       }
+    },
+    [hideInstance, matrixDummy]
+  );
 
-      if (s.z < -6) {
-        s.z += TRACK_LENGTH;
-        respawnSegment(s, s.z, difficulty01, m.time);
+  const writeGemInstance = useCallback(
+    (segment: GrowthSegment) => {
+      if (!gemMeshRef.current) return;
+      if (segment.gemFace == null || segment.gemTaken) {
+        hideInstance(gemMeshRef.current, segment.slot);
+        return;
       }
+
+      const [gx, gy] = getFaceOffset(segment.gemFace, GEM_RADIUS);
+      matrixDummy.position.set(gx, gy, segment.z);
+      matrixDummy.rotation.set(0.4, 0.2, 0.1);
+      matrixDummy.scale.set(0.28, 0.28, 0.28);
+      matrixDummy.updateMatrix();
+      gemMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
+      gemMeshRef.current.setColorAt(segment.slot, GEM_COLOR);
+    },
+    [hideInstance, matrixDummy]
+  );
+
+  const writePowerupInstance = useCallback(
+    (segment: GrowthSegment) => {
+      if (!powerupMeshRef.current) return;
+      if (
+        segment.powerupFace == null ||
+        segment.powerupType == null ||
+        segment.powerupTaken
+      ) {
+        hideInstance(powerupMeshRef.current, segment.slot);
+        return;
+      }
+
+      const [px, py] = getFaceOffset(segment.powerupFace, POWERUP_RADIUS);
+      matrixDummy.position.set(px, py, segment.z);
+      matrixDummy.rotation.set(
+        0,
+        0,
+        segment.powerupType === 'boost' ? 0 : Math.PI * 0.25
+      );
+      matrixDummy.scale.set(0.26, 0.26, 0.26);
+      matrixDummy.updateMatrix();
+      powerupMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
+      powerupMeshRef.current.setColorAt(
+        segment.slot,
+        segment.powerupType === 'boost' ? BOOST_COLOR : SHIELD_COLOR
+      );
+    },
+    [hideInstance, matrixDummy]
+  );
+
+  const flushInstances = useCallback(() => {
+    if (tileMeshRef.current?.instanceMatrix) {
+      tileMeshRef.current.instanceMatrix.needsUpdate = true;
     }
+    if (tileMeshRef.current?.instanceColor) {
+      tileMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    if (obstacleMeshRef.current?.instanceMatrix) {
+      obstacleMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (obstacleMeshRef.current?.instanceColor) {
+      obstacleMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    if (gemMeshRef.current?.instanceMatrix) {
+      gemMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (gemMeshRef.current?.instanceColor) {
+      gemMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    if (powerupMeshRef.current?.instanceMatrix) {
+      powerupMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (powerupMeshRef.current?.instanceColor) {
+      powerupMeshRef.current.instanceColor.needsUpdate = true;
+    }
+  }, []);
 
-    // Collisions / collection in rollGroup local coords.
-    // Player is fixed in world at (0, BEAM_HALF+hover, 0). Convert that to rollGroup local by inverse-rolling.
-    const playerY = BEAM_HALF + PLAYER_HOVER;
-    const c = Math.cos(-m.roll);
-    const s = Math.sin(-m.roll);
-    const playerLocalX = -playerY * s;
-    const playerLocalY = playerY * c;
+  const createSegment = useCallback(
+    (
+      slot: number,
+      z: number,
+      sequence: number,
+      previousSafeFace: Face
+    ): GrowthSegment => {
+      const normalizedSequence = Math.max(
+        0,
+        sequence - gameplayConfig.warmupSegments
+      );
+      const difficulty = clamp(
+        normalizedSequence / gameplayConfig.difficultyRampSegments,
+        0,
+        1
+      );
+      const density =
+        difficulty < 0.45
+          ? lerp(
+              gameplayConfig.obstacleDensityCurve.early,
+              gameplayConfig.obstacleDensityCurve.mid,
+              difficulty / 0.45
+            )
+          : lerp(
+              gameplayConfig.obstacleDensityCurve.mid,
+              gameplayConfig.obstacleDensityCurve.late,
+              (difficulty - 0.45) / 0.55
+            );
+      const safeFace = buildSafeFace(
+        runtime.current.rng,
+        previousSafeFace,
+        difficulty,
+        density
+      );
+      let blockedFaces = buildBlockedFaces(
+        runtime.current.rng,
+        safeFace,
+        difficulty,
+        density,
+        sequence
+      );
 
-    for (let i = 0; i < segs.length; i++) {
-      const seg = segs[i];
-      const dz = seg.z;
-      if (Math.abs(dz) > COLLISION_Z) continue;
+      if (blockedFaces.length >= 2) {
+        if (runtime.current.hardStreak >= 2) {
+          blockedFaces = blockedFaces.slice(0, 1);
+          runtime.current.hardStreak = 0;
+        } else {
+          runtime.current.hardStreak += 1;
+        }
+      } else {
+        runtime.current.hardStreak = 0;
+      }
 
-      // Gems
-      if (seg.gemActive) {
-        const gp = facePos(seg.gemFace, BEAM_HALF + 0.28);
-        const dx = gp.x - playerLocalX;
-        const dy = gp.y - playerLocalY;
-        const rr = (PLAYER_RADIUS + GEM_R) * (PLAYER_RADIUS + GEM_R);
-        if (dx * dx + dy * dy < rr) {
-          seg.gemActive = false;
-          growthState.addGem(1);
-          // Small bonus for tight timing
-          const timing = m.time - m.lastRotateAt;
-          if (timing >= 0 && timing < 0.25) growthState.score += 2;
+      const availableForPickup = FACE_LIST.filter(
+        (face) => !blockedFaces.includes(face)
+      ) as Face[];
+
+      let gemFace: Face | null = null;
+      if (availableForPickup.length > 0) {
+        const gemChance = clamp(
+          gameplayConfig.gemChance - difficulty * 0.08,
+          0.15,
+          0.28
+        );
+        if (runtime.current.rng.bool(gemChance)) {
+          gemFace = runtime.current.rng.pick(availableForPickup);
         }
       }
 
-      // Obstacles - account for branch growth
-      if (seg.obstacleFace >= 0) {
-        const isSpike = seg.obstacleKind === 1;
-        const growthScale = seg.branchGrowth;
-        if (growthScale > 0.1) {
-          // Only check collision if branch has grown enough
-          const obR = (isSpike ? OB_SPIKE_R : OB_PILLAR_R) * growthScale;
-          const baseHeight = isSpike ? OB_SPIKE_H : OB_PILLAR_H;
-          const currentHeight = baseHeight * growthScale;
-          const obPos = facePos(
-            seg.obstacleFace,
-            BEAM_HALF + currentHeight * 0.5
-          );
-          const dx = obPos.x - playerLocalX;
-          const dy = obPos.y - playerLocalY;
-          const rr = (PLAYER_RADIUS + obR) * (PLAYER_RADIUS + obR);
-          if (dx * dx + dy * dy < rr) {
-            growthState.gameOver();
-            break;
+      let powerupFace: Face | null = null;
+      let powerupType: PowerupType | null = null;
+      if (
+        availableForPickup.length > 0 &&
+        runtime.current.rng.bool(gameplayConfig.powerupChance)
+      ) {
+        const pool = availableForPickup.filter((face) => face !== gemFace);
+        if (pool.length > 0) {
+          powerupFace = runtime.current.rng.pick(pool);
+          powerupType = runtime.current.rng.bool(
+            gameplayConfig.shieldChanceWithinPowerups
+          )
+            ? 'shield'
+            : 'boost';
+        }
+      }
+
+      return {
+        slot,
+        sequence,
+        z,
+        blockedFaces,
+        safeFace,
+        gemFace,
+        powerupFace,
+        powerupType,
+        gemTaken: false,
+        powerupTaken: false,
+        cleared: false,
+      };
+    },
+    []
+  );
+
+  const recycleSegment = useCallback(
+    (segment: GrowthSegment) => {
+      const nextSequence = runtime.current.nextSequence;
+      const nextZ = runtime.current.farthestZ + SEGMENT_SPACING;
+      const next = createSegment(
+        segment.slot,
+        nextZ,
+        nextSequence,
+        runtime.current.lastSafeFace
+      );
+
+      runtime.current.lastSafeFace = next.safeFace;
+      runtime.current.farthestZ = nextZ;
+      runtime.current.nextSequence += 1;
+      runtime.current.segments[segment.slot] = next;
+
+      writeTileInstance(next);
+      writeObstacleInstances(next);
+      writeGemInstance(next);
+      writePowerupInstance(next);
+    },
+    [
+      createSegment,
+      writeGemInstance,
+      writeObstacleInstances,
+      writePowerupInstance,
+      writeTileInstance,
+    ]
+  );
+
+  const resetWorld = useCallback(() => {
+    runtime.current.rng.reset(Math.floor(Math.random() * 1_000_000_000));
+    runtime.current.segments = [];
+    runtime.current.lastSafeFace = 2;
+    runtime.current.scroll = 0;
+    runtime.current.elapsed = 0;
+    runtime.current.nextSequence = SEGMENT_POOL;
+    runtime.current.hardStreak = 0;
+    runtime.current.farthestZ =
+      SPAWN_START_Z + SEGMENT_SPACING * (SEGMENT_POOL - 1);
+
+    for (let slot = 0; slot < SEGMENT_POOL; slot += 1) {
+      const z = SPAWN_START_Z + slot * SEGMENT_SPACING;
+      const segment = createSegment(
+        slot,
+        z,
+        slot,
+        runtime.current.lastSafeFace
+      );
+      runtime.current.lastSafeFace = segment.safeFace;
+      runtime.current.segments.push(segment);
+      writeTileInstance(segment);
+      writeObstacleInstances(segment);
+      writeGemInstance(segment);
+      writePowerupInstance(segment);
+    }
+
+    if (worldRef.current) {
+      worldRef.current.position.set(0, 0, 0);
+      worldRef.current.rotation.set(0, 0, 0);
+    }
+    rotation.reset(worldRef);
+    flushInstances();
+
+    growthState.time = 0;
+    growthState.speed = gameplayConfig.baseSpeed;
+    growthState.score = 0;
+    growthState.gems = 0;
+    growthState.boostMs = 0;
+    growthState.shieldMs = 0;
+    growthState.perfectTurns = 0;
+  }, [
+    createSegment,
+    flushInstances,
+    rotation,
+    writeGemInstance,
+    writeObstacleInstances,
+    writePowerupInstance,
+    writeTileInstance,
+  ]);
+
+  const startOrRestart = useCallback(() => {
+    growthState.startGame();
+    resetWorld();
+  }, [resetWorld]);
+
+  const rotateLeft = useCallback(() => {
+    if (growthState.phase !== 'playing' || paused) return;
+    rotation.rotateLeft();
+  }, [paused, rotation]);
+
+  const rotateRight = useCallback(() => {
+    if (growthState.phase !== 'playing' || paused) return;
+    rotation.rotateRight();
+  }, [paused, rotation]);
+
+  const rotateFallback = useCallback(() => {
+    if (growthState.phase !== 'playing' || paused) return;
+    rotation.rotateInLastDirection();
+  }, [paused, rotation]);
+
+  useEffect(() => {
+    growthState.loadBestScore();
+    resetWorld();
+  }, [resetWorld]);
+
+  useEffect(() => {
+    if (paused) growthState.pause();
+    else growthState.resume();
+  }, [paused]);
+
+  useEffect(() => {
+    if (graphicsPreset.fog) {
+      scene.fog = new THREE.Fog('#d6d6e3', 8, 56);
+    } else {
+      scene.fog = null;
+    }
+    scene.background = new THREE.Color('#c9d0dd');
+  }, [graphicsPreset.fog, scene]);
+
+  useEffect(() => {
+    gl.setPixelRatio(graphicsPreset.pixelRatio);
+  }, [gl, graphicsPreset.pixelRatio]);
+
+  useFrame((state, dt) => {
+    const nowMs = state.clock.elapsedTime * 1000;
+    rotation.update(nowMs, worldRef);
+    jellySquash.update(dt, playerRef);
+
+    if (growthState.phase === 'playing' && !paused) {
+      runtime.current.elapsed += dt;
+      growthState.time = runtime.current.elapsed;
+      growthState.tickTimers(dt);
+
+      let speed =
+        gameplayConfig.baseSpeed +
+        runtime.current.elapsed * gameplayConfig.speedRampPerSecond +
+        growthState.score * gameplayConfig.speedRampFromScore;
+
+      if (growthState.boostMs > 0) speed *= BOOST_MULTIPLIER;
+      speed = Math.min(gameplayConfig.maxSpeed, speed);
+      growthState.speed = speed;
+
+      runtime.current.scroll += speed * dt;
+      if (worldRef.current) {
+        worldRef.current.position.z = -runtime.current.scroll;
+      }
+
+      const activeFace = PLAYER_FACE_BY_ROTATION[rotation.rotationIndex];
+      let shouldEndRun = false;
+
+      for (let i = 0; i < runtime.current.segments.length; i += 1) {
+        const segment = runtime.current.segments[i];
+        const worldZ = segment.z - runtime.current.scroll;
+
+        if (!segment.cleared && worldZ <= COLLISION_WINDOW) {
+          const isBlocked = segment.blockedFaces.includes(activeFace);
+          segment.cleared = true;
+
+          if (isBlocked) {
+            if (growthState.shieldMs > 0) {
+              growthState.shieldMs = 0;
+              cameraShake.triggerShake(0.12, 110);
+              jellySquash.trigger();
+            } else {
+              shouldEndRun = true;
+              cameraShake.triggerShake(0.2, 150);
+              jellySquash.trigger();
+              break;
+            }
+          } else {
+            growthState.addClearScore(
+              CLEAR_SCORE +
+                Math.max(0, segment.blockedFaces.length - 1) +
+                (growthState.speed >= gameplayConfig.baseSpeed + 2.3 ? 1 : 0)
+            );
+
+            const turnDelta = nowMs - rotation.lastRotateAtMs;
+            if (
+              turnDelta > 0 &&
+              turnDelta <= gameplayConfig.perfectTurnWindowMs
+            ) {
+              growthState.addPerfectTurn();
+              growthState.addClearScore(PERFECT_TURN_BONUS);
+              cameraShake.triggerShake(0.07, 80);
+            } else if (segment.blockedFaces.length >= 2) {
+              cameraShake.triggerShake(0.04, 55);
+            }
+
+            if (segment.gemFace === activeFace && !segment.gemTaken) {
+              segment.gemTaken = true;
+              growthState.collectGem();
+              growthState.addClearScore(GEM_SCORE);
+              writeGemInstance(segment);
+            }
+
+            if (
+              segment.powerupFace === activeFace &&
+              segment.powerupType != null &&
+              !segment.powerupTaken
+            ) {
+              segment.powerupTaken = true;
+              if (segment.powerupType === 'boost') {
+                growthState.triggerBoost(BOOST_DURATION * 1000);
+              } else {
+                growthState.grantShield(SHIELD_DURATION * 1000);
+              }
+              writePowerupInstance(segment);
+            }
           }
         }
+
+        if (worldZ < DESPAWN_WORLD_Z) {
+          recycleSegment(segment);
+        }
+      }
+
+      if (shouldEndRun) {
+        growthState.endGame();
+      } else {
+        flushInstances();
       }
     }
 
-    // Update visuals
-    updateInstances(
-      tmpObj,
-      tmpObj2,
-      tmpMat,
-      segs,
-      beamRef.current,
-      pillarRef.current,
-      spikeRef.current,
-      gemRef.current,
-      m.roll
+    const shake = cameraShake.updateShake(dt, state.clock.elapsedTime);
+    const cam = orthoRef.current ?? (camera as THREE.OrthographicCamera);
+    const speedRatio = clamp(growthState.speed / gameplayConfig.maxSpeed, 0, 1);
+    const targetZoom = 94 + speedRatio * 10;
+    cam.zoom = THREE.MathUtils.lerp(
+      cam.zoom,
+      targetZoom,
+      1 - Math.exp(-dt * 7)
     );
-
-    // Clear frame input
-    clearFrameInput(input);
+    cam.position.x = THREE.MathUtils.lerp(
+      cam.position.x,
+      5.2 + shake.x,
+      1 - Math.exp(-dt * 8)
+    );
+    cam.position.y = THREE.MathUtils.lerp(
+      cam.position.y,
+      5.1 + shake.y,
+      1 - Math.exp(-dt * 8)
+    );
+    cam.position.z = THREE.MathUtils.lerp(
+      cam.position.z,
+      9 + shake.z,
+      1 - Math.exp(-dt * 8)
+    );
+    cam.rotation.z = THREE.MathUtils.lerp(
+      cam.rotation.z,
+      rotation.worldRotation * 0.06,
+      1 - Math.exp(-dt * 9)
+    );
+    cam.lookAt(0, 0, 0);
+    cam.updateProjectionMatrix();
   });
 
   return (
     <group>
-      {/* Soft gradient foggy world */}
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[6, 8, -4]} intensity={1.1} castShadow />
+      <InputController
+        canStart={snap.phase !== 'playing'}
+        canRotate={snap.phase === 'playing' && !paused}
+        rotateLeft={rotateLeft}
+        rotateRight={rotateRight}
+        rotateFallback={rotateFallback}
+        startOrRestart={startOrRestart}
+      />
 
-      <Environment preset="sunset" />
+      <OrthographicCamera
+        ref={orthoRef}
+        makeDefault
+        near={0.1}
+        far={120}
+        position={[5.2, 5.1, 9]}
+        zoom={92}
+      />
 
-      {/* Rolling track */}
-      <group ref={rollGroup}>
-        {/* beam segments */}
+      <ambientLight intensity={0.58} />
+      <directionalLight
+        position={[6, 9, 8]}
+        intensity={0.9}
+        castShadow={graphicsPreset.shadows}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
+      <directionalLight position={[-4, 3, 2]} intensity={0.45} />
+      <Environment preset="city" background={false} />
+
+      <group ref={worldRef}>
         <instancedMesh
-          ref={beamRef}
-          args={[undefined as any, undefined as any, SEGMENTS]}
-          castShadow
+          ref={tileMeshRef}
+          args={[undefined, undefined, SEGMENT_POOL]}
           receiveShadow
-          frustumCulled={false}
         >
-          <boxGeometry args={[BEAM_SIZE, BEAM_SIZE, SEGMENT_LEN]} />
+          <boxGeometry
+            args={[SEGMENT_SIZE, SEGMENT_SIZE, SEGMENT_SPACING * 0.9]}
+          />
           <meshStandardMaterial
-            color="#f6e6b6"
-            roughness={0.85}
-            metalness={0.02}
+            vertexColors
+            roughness={0.42}
+            metalness={0.08}
           />
         </instancedMesh>
 
-        {/* pillars */}
         <instancedMesh
-          ref={pillarRef}
-          args={[undefined as any, undefined as any, SEGMENTS]}
-          castShadow
+          ref={obstacleMeshRef}
+          args={[undefined, undefined, OBSTACLE_INSTANCE_COUNT]}
+          castShadow={graphicsPreset.shadows}
           receiveShadow
-          frustumCulled={false}
         >
-          <boxGeometry args={[0.48, OB_PILLAR_H, 0.48]} />
+          <boxGeometry
+            args={[OBSTACLE_THICKNESS, OBSTACLE_LENGTH, SEGMENT_SPACING * 0.64]}
+          />
           <meshStandardMaterial
-            color="#f2b190"
-            roughness={0.8}
-            metalness={0.02}
+            vertexColors
+            roughness={0.38}
+            metalness={0.06}
           />
         </instancedMesh>
 
-        {/* spikes */}
         <instancedMesh
-          ref={spikeRef}
-          args={[undefined as any, undefined as any, SEGMENTS]}
-          castShadow
-          receiveShadow
-          frustumCulled={false}
+          ref={gemMeshRef}
+          args={[undefined, undefined, SEGMENT_POOL]}
         >
-          <coneGeometry args={[0.32, OB_SPIKE_H, 5]} />
+          <octahedronGeometry args={[0.28, 0]} />
           <meshStandardMaterial
-            color="#f19b83"
-            roughness={0.78}
-            metalness={0.02}
+            vertexColors
+            roughness={0.28}
+            metalness={0.2}
+            emissive="#f59e0b"
+            emissiveIntensity={0.35}
           />
         </instancedMesh>
 
-        {/* gems */}
         <instancedMesh
-          ref={gemRef}
-          args={[undefined as any, undefined as any, SEGMENTS]}
-          castShadow
-          frustumCulled={false}
+          ref={powerupMeshRef}
+          args={[undefined, undefined, SEGMENT_POOL]}
         >
-          <octahedronGeometry args={[0.22, 0]} />
+          <icosahedronGeometry args={[0.26, 0]} />
           <meshStandardMaterial
-            color="#ffd15a"
-            roughness={0.25}
-            metalness={0.15}
-            emissive="#ffb300"
-            emissiveIntensity={0.25}
+            vertexColors
+            roughness={0.3}
+            metalness={0.18}
+            emissive="#60a5fa"
+            emissiveIntensity={0.3}
           />
         </instancedMesh>
       </group>
 
-      {/* runner (not rolled with the world) */}
-      <VoxelRunner
-        wobble={
-          Math.sin(mutation.current.time * 10) *
-          0.06 *
-          (growthState.phase === 'playing' ? 1 : 0.3)
-        }
-      />
-
-      {/* Background "floating blocks" for depth */}
-      <FloatingBlocks />
-    </group>
-  );
-}
-
-function updateInstances(
-  tmpObj: THREE.Object3D,
-  tmpObj2: THREE.Object3D,
-  tmpMat: THREE.Matrix4,
-  segs: Segment[],
-  beam: THREE.InstancedMesh | null,
-  pillars: THREE.InstancedMesh | null,
-  spikes: THREE.InstancedMesh | null,
-  gems: THREE.InstancedMesh | null,
-  roll: number
-) {
-  if (!beam || !pillars || !spikes || !gems) return;
-
-  const t = performance.now() / 1000;
-
-  for (let i = 0; i < segs.length; i++) {
-    const s = segs[i];
-
-    // Beam segment
-    tmpObj.position.set(0, 0, s.z);
-    tmpObj.rotation.set(0, 0, 0);
-    tmpObj.scale.set(1, 1, 1);
-    tmpObj.updateMatrix();
-    beam.setMatrixAt(i, tmpObj.matrix);
-
-    // Pillars & spikes (one obstacle per segment max) - with branch growth
-    if (s.obstacleFace >= 0) {
-      const isSpike = s.obstacleKind === 1;
-      const growthScale = s.branchGrowth; // 0..1, scales the obstacle size
-      const baseHeight = isSpike ? OB_SPIKE_H : OB_PILLAR_H;
-      const currentHeight = baseHeight * growthScale;
-      const p = facePos(s.obstacleFace, BEAM_HALF + currentHeight * 0.5);
-      tmpObj.position.set(p.x, p.y, s.z);
-
-      if (isSpike) {
-        // Orient cone away from beam center, scale by growth
-        const a = (s.obstacleFace & 3) * QUARTER;
-        tmpObj.rotation.set(0, 0, a);
-        tmpObj.scale.set(growthScale, growthScale, growthScale);
-        tmpObj.updateMatrix();
-        spikes.setMatrixAt(i, tmpObj.matrix);
-
-        // Hide pillar instance
-        tmpObj2.position.set(0, -999, 0);
-        tmpObj2.rotation.set(0, 0, 0);
-        tmpObj2.scale.set(0.001, 0.001, 0.001);
-        tmpObj2.updateMatrix();
-        pillars.setMatrixAt(i, tmpObj2.matrix);
-      } else {
-        tmpObj.rotation.set(0, 0, 0);
-        tmpObj.scale.set(growthScale, growthScale, growthScale);
-        tmpObj.updateMatrix();
-        pillars.setMatrixAt(i, tmpObj.matrix);
-
-        // Hide spike instance
-        tmpObj2.position.set(0, -999, 0);
-        tmpObj2.rotation.set(0, 0, 0);
-        tmpObj2.scale.set(0.001, 0.001, 0.001);
-        tmpObj2.updateMatrix();
-        spikes.setMatrixAt(i, tmpObj2.matrix);
-      }
-    } else {
-      // Hide both obstacle instances
-      tmpObj.position.set(0, -999, 0);
-      tmpObj.rotation.set(0, 0, 0);
-      tmpObj.scale.set(0.001, 0.001, 0.001);
-      tmpObj.updateMatrix();
-      pillars.setMatrixAt(i, tmpObj.matrix);
-      spikes.setMatrixAt(i, tmpObj.matrix);
-    }
-
-    // Gems
-    if (s.gemActive) {
-      const gp = facePos(s.gemFace, BEAM_HALF + 0.28);
-      tmpObj.position.set(gp.x, gp.y, s.z);
-      tmpObj.rotation.set(0, (t + i * 0.17) * 1.2, 0);
-      tmpObj.scale.set(1, 1, 1);
-      tmpObj.updateMatrix();
-      gems.setMatrixAt(i, tmpObj.matrix);
-    } else {
-      tmpObj.position.set(0, -999, 0);
-      tmpObj.rotation.set(0, 0, 0);
-      tmpObj.scale.set(0.001, 0.001, 0.001);
-      tmpObj.updateMatrix();
-      gems.setMatrixAt(i, tmpObj.matrix);
-    }
-  }
-
-  beam.instanceMatrix.needsUpdate = true;
-  pillars.instanceMatrix.needsUpdate = true;
-  spikes.instanceMatrix.needsUpdate = true;
-  gems.instanceMatrix.needsUpdate = true;
-
-  // Slightly "juice" the lighting by nudging emissive gems when rolled (subtle)
-  // Not strictly necessary; kept here for future tuning.
-  void roll;
-  void tmpMat;
-}
-
-function FloatingBlocks() {
-  const blocks = React.useMemo(() => {
-    const a: Array<{ pos: [number, number, number]; s: number; r: number }> =
-      [];
-    for (let i = 0; i < 30; i++) {
-      const x = (Math.random() - 0.5) * 14;
-      const y = (Math.random() - 0.2) * 6 - 2;
-      const z = Math.random() * 26 + 6;
-      a.push({
-        pos: [x, y, z],
-        s: 0.6 + Math.random() * 1.1,
-        r: Math.random() * TAU,
-      });
-    }
-    return a;
-  }, []);
-
-  const t = useRefTime();
-
-  return (
-    <group>
-      {blocks.map((b, i) => (
-        <mesh
-          key={i}
-          position={[
-            b.pos[0],
-            b.pos[1] + Math.sin(t * 0.3 + i) * 0.08,
-            b.pos[2],
-          ]}
-          rotation={[0, b.r + t * 0.05, 0]}
-        >
-          <boxGeometry args={[b.s, b.s, b.s]} />
+      <group ref={playerRef} position={[0, 0, 0]}>
+        <mesh castShadow={graphicsPreset.shadows}>
+          <boxGeometry
+            args={[
+              PLAYER_COLLISION_RADIUS * 1.35,
+              PLAYER_COLLISION_RADIUS * 1.35,
+              PLAYER_COLLISION_RADIUS * 1.35,
+            ]}
+          />
           <meshStandardMaterial
-            color="#f0c7a6"
-            roughness={0.9}
-            metalness={0.02}
-            transparent
-            opacity={0.22}
+            color="#ef4444"
+            roughness={0.5}
+            metalness={0.06}
           />
         </mesh>
-      ))}
-    </group>
-  );
-}
+        <mesh position={[0, -PLAYER_COLLISION_RADIUS * 0.84, 0]}>
+          <boxGeometry
+            args={[
+              PLAYER_COLLISION_RADIUS * 1.1,
+              PLAYER_COLLISION_RADIUS * 0.24,
+              PLAYER_COLLISION_RADIUS * 1.1,
+            ]}
+          />
+          <meshStandardMaterial color="#111827" roughness={0.62} />
+        </mesh>
+      </group>
 
-function GrowthHud() {
-  const snap = useSnapshot(growthState);
-
-  return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div
-        style={{
-          position: 'absolute',
-          left: 16,
-          top: 16,
-          padding: '8px 12px',
-          borderRadius: 12,
-          background: 'rgba(0,0,0,0.35)',
-          color: 'white',
-          fontFamily: 'system-ui',
-        }}
-      >
-        <div style={{ fontSize: 12, opacity: 0.8 }}>SCORE</div>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{snap.score}</div>
-      </div>
-
-      <div
-        style={{
-          position: 'absolute',
-          right: 16,
-          top: 16,
-          padding: '8px 12px',
-          borderRadius: 12,
-          background: 'rgba(0,0,0,0.35)',
-          color: 'white',
-          fontFamily: 'system-ui',
-        }}
-      >
-        <div style={{ fontSize: 12, opacity: 0.8 }}>GEMS</div>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{snap.runGems}</div>
-      </div>
-
-      {(snap.phase === 'menu' || snap.phase === 'gameover') && (
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div
           style={{
             position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            top: 14,
+            left: 14,
+            color: '#ffffff',
+            fontFamily: 'ui-sans-serif, system-ui',
+            textShadow: '0 2px 8px rgba(0,0,0,0.45)',
           }}
         >
+          <div style={{ fontSize: 13, opacity: 0.84 }}>GROWTH</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>{snap.score}</div>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>Gems: {snap.gems}</div>
+          <div style={{ fontSize: 12, opacity: 0.78 }}>
+            Best: {snap.bestScore}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.78 }}>
+            Speed: {snap.speed.toFixed(1)}
+          </div>
+          {snap.shieldMs > 0 && (
+            <div style={{ fontSize: 12, color: '#c4b5fd' }}>
+              Shield {Math.ceil(snap.shieldMs / 1000)}s
+            </div>
+          )}
+          {snap.boostMs > 0 && (
+            <div style={{ fontSize: 12, color: '#67e8f9' }}>
+              Boost {Math.ceil(snap.boostMs / 1000)}s
+            </div>
+          )}
+        </div>
+
+        {(snap.phase === 'menu' || snap.phase === 'gameover') && (
           <div
             style={{
-              width: 'min(520px, 92vw)',
-              borderRadius: 24,
-              background: 'rgba(0,0,0,0.55)',
-              padding: 24,
-              color: 'white',
-              fontFamily: 'system-ui',
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
             }}
           >
             <div
               style={{
-                fontSize: 14,
-                opacity: 0.8,
-                marginBottom: 4,
-                textTransform: 'uppercase',
-                letterSpacing: '0.2em',
-              }}
-            >
-              Growth
-            </div>
-            <div style={{ fontSize: 30, fontWeight: 600 }}>
-              Stay on the branch.
-            </div>
-            <div style={{ marginTop: 8, fontSize: 14, opacity: 0.85 }}>
-              Space = rotate clockwise • Left Arrow = rotate left • Right Arrow
-              = rotate right
-              <br />
-              Branches grow in real-time—watch for close calls! Collect gems to
-              unlock 31 unique characters.
-            </div>
-
-            <div
-              style={{
-                marginTop: 20,
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 12,
-              }}
-            >
-              <div
-                style={{
-                  borderRadius: 16,
-                  background: 'rgba(255,255,255,0.1)',
-                  padding: 12,
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.8 }}>BEST</div>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>
-                  {snap.bestScore}
-                </div>
-              </div>
-              <div
-                style={{
-                  borderRadius: 16,
-                  background: 'rgba(255,255,255,0.1)',
-                  padding: 12,
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.8 }}>BANK</div>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>
-                  {snap.bankGems}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: 20,
+                width: 380,
+                borderRadius: 18,
+                padding: '20px 22px',
+                background: 'rgba(17, 24, 39, 0.82)',
+                color: '#fff',
                 textAlign: 'center',
-                fontSize: 14,
-                opacity: 0.9,
+                boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
               }}
             >
+              <div style={{ fontSize: 30, fontWeight: 900 }}>Growth</div>
               <div
                 style={{
-                  display: 'inline-block',
-                  borderRadius: 9999,
-                  background: 'rgba(255,255,255,0.1)',
-                  padding: '4px 12px',
+                  marginTop: 9,
+                  fontSize: 13,
+                  opacity: 0.86,
+                  lineHeight: 1.45,
                 }}
               >
-                Tap / Space to {snap.phase === 'gameover' ? 'retry' : 'start'}
+                Rotate the world around your static runner. Dodge side walls,
+                collect gems, and chain perfect quarter-turns.
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                Left Arrow / Swipe Right: +90°
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Right Arrow / Swipe Left: -90°
+              </div>
+              {snap.phase === 'gameover' && (
+                <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>
+                  Run ended • Score {snap.score}
+                </div>
+              )}
+              <div style={{ marginTop: 13, fontSize: 12, opacity: 0.62 }}>
+                Tap / Space to {snap.phase === 'menu' ? 'start' : 'restart'}
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </Html>
-  );
-}
-
-export default function Growth() {
-  const { scene, camera } = useThree();
-
-  React.useEffect(() => {
-    scene.fog = new THREE.Fog('#d7c59d', 6, 34);
-    camera.position.set(4.8, 5.2, -6.2);
-    const perspCamera = camera as THREE.PerspectiveCamera;
-    perspCamera.fov = 45;
-    perspCamera.near = 0.1;
-    perspCamera.far = 120;
-    perspCamera.lookAt(0, 0.5, 0);
-    perspCamera.updateProjectionMatrix();
-  }, [scene, camera]);
-
-  // Reset game state on mount
-  React.useEffect(() => {
-    growthState.reset();
-  }, []);
-
-  return (
-    <>
-      <color attach="background" args={['#d7c59d']} />
-      <group position={[0, -0.2, 0]}>
-        <GrowthWorld />
-      </group>
-      <GrowthHud />
+        )}
+      </Html>
       <CharacterSelection />
-    </>
+    </group>
   );
-}
+};
+
+export default Growth;

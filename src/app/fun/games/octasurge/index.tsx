@@ -1,367 +1,556 @@
 'use client';
 
-import { Stars } from '@react-three/drei';
+import { Environment, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { useGameUIState } from '../../store/selectors';
-import { SeededRandom } from '../../utils/seededRandom';
 import { GAME } from './constants';
+import { generateRing } from './generator';
 import { OctaSurgeUI } from './_components/OctaSurgeUI';
 import { octaSurgeState } from './state';
 import type {
-  CollectibleData,
+  CollectionFx,
   CollectibleType,
-  CollectionEffect,
-  ObstacleData,
-  ObstacleType,
+  OctaSurgeMode,
+  RingData,
 } from './types';
+import { useKeyboardControls } from './useKeyboardControls';
+import { useSwipeControls } from './useSwipeControls';
 
-const TWO_PI = Math.PI * 2;
+export { octaSurgeState } from './state';
+export * from './types';
+export * from './constants';
 
-function clamp(v: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, v));
-}
+const clamp = (v: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, v));
 
-function wrapAngle(a: number) {
-  let x = a % TWO_PI;
-  if (x < -Math.PI) x += TWO_PI;
-  if (x > Math.PI) x -= TWO_PI;
-  return x;
-}
-
-function wrapFaceFloat(v: number) {
-  let x = v % GAME.faces;
-  if (x < 0) x += GAME.faces;
-  return x;
-}
-
-function smallestAngleDiff(a: number, b: number) {
-  return wrapAngle(a - b);
-}
-
-function sweptRelativeAngleAbsDiff(
-  targetPrevAngle: number,
-  targetNextAngle: number,
-  subjectPrevAngle: number,
-  subjectNextAngle: number
-) {
-  const fromPrev = smallestAngleDiff(targetPrevAngle, subjectPrevAngle);
-  const fromNext = smallestAngleDiff(targetNextAngle, subjectNextAngle);
-
-  // If the sweep crossed the target between frames, treat as an exact pass.
-  if (
-    (fromPrev < 0 && fromNext > 0) ||
-    (fromPrev > 0 && fromNext < 0) ||
-    fromPrev === 0 ||
-    fromNext === 0
-  ) {
-    return 0;
-  }
-
-  return Math.min(Math.abs(fromPrev), Math.abs(fromNext));
-}
-
-function faceAngle() {
-  return TWO_PI / GAME.faces;
-}
-
-function zOverlap(
-  aCenter: number,
-  aHalf: number,
-  bCenter: number,
-  bHalf: number
-): boolean {
-  return aCenter - aHalf < bCenter + bHalf && aCenter + aHalf > bCenter - bHalf;
-}
-
-function pickObstacleType(rng: SeededRandom, hazard: number): ObstacleType {
-  const r = rng.random();
-  if (r < 0.14 + hazard * 0.24) return 'wedge';
-  if (r < 0.48 + hazard * 0.26) return 'hole';
-  return 'bump';
-}
-
-function obstaclePrimaryFace(o: ObstacleData): number {
-  let idx = Math.round(o.faceFloat) % GAME.faces;
-  if (idx < 0) idx += GAME.faces;
-  return idx;
-}
-
-function obstacleBlockedFaces(o: ObstacleData): number[] {
-  const base = obstaclePrimaryFace(o);
-  if (o.span <= 1) return [base];
-  const dir = o.faceVel >= 0 ? 1 : -1;
-  const out: number[] = [base];
-  for (let i = 1; i < o.span; i++) {
-    let idx = (base + dir * i) % GAME.faces;
-    if (idx < 0) idx += GAME.faces;
-    out.push(idx);
-  }
+const normalizeLane = (lane: number) => {
+  let out = lane % GAME.faces;
+  if (out < 0) out += GAME.faces;
   return out;
-}
+};
 
-function collectibleTypeByIndex(i: number): CollectibleType {
-  if (i < GAME.collectibleCount) return 'normal';
-  if (i < GAME.collectibleCount + GAME.specialCollectibleCount)
-    return 'special';
-  if (
-    i <
-    GAME.collectibleCount +
-      GAME.specialCollectibleCount +
-      GAME.boostCollectibleCount
-  ) {
-    return 'boost';
-  }
-  return 'shield';
-}
+const laneBit = (lane: number) => 1 << normalizeLane(lane);
 
-function collectibleRadius(type: CollectibleType): number {
-  if (type === 'special') return GAME.specialHitRadius;
-  if (type === 'normal') return GAME.collectibleHitRadius;
-  return GAME.powerupHitRadius;
-}
+const cubicEase = (t: number) => {
+  const p = clamp(t, 0, 1);
+  return p * p * (3 - 2 * p);
+};
 
-function collectibleBasePoints(type: CollectibleType): number {
-  switch (type) {
-    case 'special':
-      return GAME.pointsSpecial;
-    case 'boost':
-      return GAME.pointsBoost;
-    case 'shield':
-      return GAME.pointsShield;
-    default:
-      return GAME.pointsNormal;
-  }
-}
+const lanePos = (lane: number, radius: number): [number, number] => {
+  const angle = lane * GAME.faceStep;
+  return [Math.cos(angle) * radius, Math.sin(angle) * radius];
+};
 
-function collectibleColors(type: CollectibleType) {
-  if (type === 'special') {
-    return {
-      color: '#A78BFA',
-      emissive: '#7C3AED',
-      glow: '#C4B5FD',
-    };
-  }
-  if (type === 'boost') {
-    return {
-      color: '#F97316',
-      emissive: '#EA580C',
-      glow: '#FDBA74',
-    };
-  }
-  if (type === 'shield') {
-    return {
-      color: '#2DD4BF',
-      emissive: '#0F766E',
-      glow: '#99F6E4',
-    };
-  }
-  return {
-    color: '#FBBF24',
-    emissive: '#F59E0B',
-    glow: '#FDE68A',
-  };
-}
+const COLLECTION_COLOR: Record<CollectibleType | 'impact' | 'near', string> = {
+  gem: '#facc15',
+  boost: '#22d3ee',
+  shield: '#a78bfa',
+  impact: '#fb7185',
+  near: '#67e8f9',
+};
 
-function placeCollectibleInGap(
-  c: CollectibleData,
-  obstacles: ObstacleData[],
-  rng: SeededRandom,
-  leadMin: number,
-  leadMax: number
-) {
-  if (obstacles.length < 2) return;
-  const depth = GAME.obstacleDepth;
-  const half = depth / 2;
-  const sorted = [...obstacles].sort((a, b) => a.z - b.z);
-  const gaps: { z: number; blocked: Set<number> }[] = [];
+type RotAnim = {
+  startMs: number;
+  from: number;
+  to: number;
+  durationMs: number;
+};
 
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const a = sorted[i];
-    const b = sorted[i + 1];
-    const gapSize = b.z - a.z - depth;
-    if (gapSize < 3.1) continue;
+type InputControllerProps = {
+  canStart: boolean;
+  canRotate: boolean;
+  onRotateClockwise: () => void;
+  onRotateCounterClockwise: () => void;
+  onFlip: () => void;
+  onTapFallback: () => void;
+  onStart: () => void;
+};
 
-    const mid = (a.z + b.z) / 2;
-    const blocked = new Set<number>();
-    for (const o of obstacles) {
-      if (zOverlap(o.z, half, mid, 3.4)) {
-        const faces = obstacleBlockedFaces(o);
-        for (const f of faces) blocked.add(f);
+const InputController: React.FC<InputControllerProps> = ({
+  canStart,
+  canRotate,
+  onRotateClockwise,
+  onRotateCounterClockwise,
+  onFlip,
+  onTapFallback,
+  onStart,
+}) => {
+  useKeyboardControls({
+    enabled: true,
+    onLeft: () => {
+      if (!canRotate) return;
+      onRotateClockwise();
+    },
+    onRight: () => {
+      if (!canRotate) return;
+      onRotateCounterClockwise();
+    },
+    onFlip: () => {
+      if (!canRotate) return;
+      onFlip();
+    },
+    onTapFallback: () => {
+      if (!canRotate) return;
+      onTapFallback();
+    },
+    onStart: () => {
+      if (!canStart) return;
+      onStart();
+    },
+  });
+
+  useSwipeControls({
+    enabled: canRotate,
+    onLeft: onRotateClockwise,
+    onRight: onRotateCounterClockwise,
+  });
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      if (canStart) {
+        onStart();
+        return;
       }
-    }
-    gaps.push({ z: mid, blocked });
-  }
+      if (canRotate && event.pointerType !== 'touch') {
+        onTapFallback();
+      }
+    };
 
-  if (gaps.length === 0) return;
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [canRotate, canStart, onStart, onTapFallback]);
 
-  const g = rng.pick(gaps);
-  const safeFaces = Array.from({ length: GAME.faces }, (_, i) => i).filter(
-    (f) => !g.blocked.has(f)
-  );
-  const face =
-    safeFaces.length > 0 ? rng.pick(safeFaces) : rng.int(0, GAME.faces - 1);
-
-  c.faceIndex = face;
-  c.z = g.z + rng.float(leadMin, leadMax);
-  c.prevZ = c.z;
-  c.collected = false;
-  c.bobPhase = rng.float(0, TWO_PI);
-  c.spinRate = rng.float(0.7, 1.6);
-  delete c.respawnAt;
-}
-
-function placeSpecialCollectible(
-  c: CollectibleData,
-  obstacles: ObstacleData[],
-  rng: SeededRandom
-) {
-  if (obstacles.length === 0) return;
-  const o = rng.pick(obstacles);
-  const blockedFaces = obstacleBlockedFaces(o);
-  c.faceIndex = rng.pick(blockedFaces);
-  c.z =
-    o.z +
-    GAME.obstacleDepth / 2 +
-    rng.float(GAME.specialZOffsetMin, GAME.specialZOffsetMax);
-  c.prevZ = c.z;
-  c.collected = false;
-  c.bobPhase = rng.float(0, TWO_PI);
-  c.spinRate = rng.float(1.4, 2.6);
-  delete c.respawnAt;
-}
-
-function respawnCollectible(
-  c: CollectibleData,
-  obstacles: ObstacleData[],
-  rng: SeededRandom
-) {
-  if (c.type === 'special') {
-    placeSpecialCollectible(c, obstacles, rng);
-    return;
-  }
-
-  if (c.type === 'boost' || c.type === 'shield') {
-    placeCollectibleInGap(
-      c,
-      obstacles,
-      rng,
-      GAME.powerupZOffsetMin,
-      GAME.powerupZOffsetMax
-    );
-    return;
-  }
-
-  placeCollectibleInGap(
-    c,
-    obstacles,
-    rng,
-    GAME.collectibleGapLeadMin,
-    GAME.collectibleGapLeadMax
-  );
-}
+  return null;
+};
 
 export default function OctaSurge() {
   const snap = useSnapshot(octaSurgeState);
-
   const { paused, restartSeed } = useGameUIState();
-  const { camera, scene, gl } = useThree();
+  const { camera, gl, scene } = useThree();
 
   const input = useInputRef({
-    preventDefault: [' ', 'Space', 'arrowleft', 'arrowright', 'a', 'd'],
+    preventDefault: [
+      ' ',
+      'space',
+      'spacebar',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'a',
+      'd',
+      'w',
+    ],
   });
 
-  const gameGroup = useRef<THREE.Group>(null);
-  const tunnelGroup = useRef<THREE.Group>(null);
-  const faceMaterials = useRef<THREE.MeshStandardMaterial[]>([]);
-  const obstacleRefs = useRef<(THREE.Group | null)[]>([]);
-  const bumpRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const holeRefs = useRef<(THREE.Mesh | null)[]>([]);
-  const collectibleRefs = useRef<(THREE.Group | null)[]>([]);
-  const ringRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const worldRef = useRef<THREE.Group>(null);
+  const tileRef = useRef<THREE.InstancedMesh>(null);
+  const bumpRef = useRef<THREE.InstancedMesh>(null);
+  const ringRef = useRef<THREE.InstancedMesh>(null);
+  const gemRef = useRef<THREE.InstancedMesh>(null);
+  const boostRef = useRef<THREE.InstancedMesh>(null);
+  const shieldRef = useRef<THREE.InstancedMesh>(null);
+  const fxRef = useRef<THREE.InstancedMesh>(null);
+  const playerRef = useRef<THREE.Group>(null);
 
-  const collectibleTotal =
-    GAME.collectibleCount +
-    GAME.specialCollectibleCount +
-    GAME.boostCollectibleCount +
-    GAME.shieldCollectibleCount;
+  const laneChord = useMemo(
+    () => 2 * GAME.radius * Math.tan(Math.PI / GAME.faces),
+    []
+  );
 
-  const geom = useMemo(() => {
-    const ap = GAME.apothem;
-    const side = 2 * ap * Math.tan(Math.PI / GAME.faces);
-    return {
-      apothem: ap,
-      side,
-      faceGeo: new THREE.PlaneGeometry(side, GAME.tunnelLength),
-      ringGeo: new THREE.CylinderGeometry(ap, ap, 0.2, GAME.faces, 1, true),
-      bumpGeo: new THREE.BoxGeometry(side * 0.7, 0.84, GAME.obstacleDepth),
-      holeGeo: new THREE.PlaneGeometry(side * 0.82, GAME.obstacleDepth),
-      playerGeo: new THREE.CylinderGeometry(0.52, 0.52, 0.24, GAME.faces),
-      playerCoreGeo: new THREE.IcosahedronGeometry(0.25, 0),
-      playerAuraGeo: new THREE.SphereGeometry(0.8, 16, 16),
-      collectibleGeo: new THREE.OctahedronGeometry(0.14, 0),
-      specialGeo: new THREE.OctahedronGeometry(0.2, 1),
-      boostGeo: new THREE.IcosahedronGeometry(0.2, 0),
-      shieldGeo: new THREE.DodecahedronGeometry(0.2, 0),
-      effectRingGeo: new THREE.RingGeometry(0.08, 0.24, 20),
-      nearGeo: new THREE.RingGeometry(0.16, 0.34, 24),
-      impactGeo: new THREE.IcosahedronGeometry(0.22, 0),
-    };
-  }, []);
+  const geom = useMemo(
+    () => ({
+      tile: new THREE.BoxGeometry(
+        laneChord * 0.95,
+        GAME.tileThickness,
+        GAME.ringDepth
+      ),
+      bump: new THREE.BoxGeometry(
+        laneChord * 0.72,
+        GAME.bumpHeight,
+        GAME.ringDepth * 0.62
+      ),
+      ring: new THREE.TorusGeometry(
+        GAME.radius + 0.04,
+        0.03,
+        6,
+        GAME.faces * 2
+      ),
+      gem: new THREE.OctahedronGeometry(0.19, 0),
+      boost: new THREE.IcosahedronGeometry(0.22, 0),
+      shield: new THREE.DodecahedronGeometry(0.21, 0),
+      fx: new THREE.IcosahedronGeometry(0.15, 0),
+      player: new THREE.IcosahedronGeometry(0.28, 1),
+      playerAura: new THREE.TorusGeometry(0.38, 0.06, 10, 32),
+    }),
+    [laneChord]
+  );
 
-  const world = useRef({
-    rng: new SeededRandom(1),
-    worldRot: 0,
-    prevWorldRot: 0,
-    rotationVel: 0,
-    targetRotationVel: 0,
-    lastPointerX: 0,
+  const runtime = useRef({
+    rings: [] as RingData[],
+    worldSeed: 0,
+    nextRingIndex: 0,
+    farthestBackZ: 0,
+    lastSafeLane: GAME.bottomFace,
 
     elapsed: 0,
+    scroll: 0,
+    prevScroll: 0,
+    score: 0,
     speed: GAME.baseSpeed,
-    invulnUntil: 0,
-    boostUntil: 0,
-    shieldCharges: 0,
-    surgeMeter: 32,
-
     combo: 0,
     comboTimer: 0,
-    score: 0,
-    nearMisses: 0,
+
+    surge: 100,
+    boostUntil: 0,
+    shieldCharges: 0,
+
+    rotationIndex: 0,
+    worldRotation: 0,
+    rotationQueue: [] as number[],
+    rotAnim: null as RotAnim | null,
+    lastDirection: 1 as 1 | -1,
+    lastRotateAt: 0,
 
     shake: 0,
-    effectId: 0,
-    collectedThisFrame: false,
-
-    obstacles: [] as ObstacleData[],
-    collectibles: [] as CollectibleData[],
-    ringZ: [] as number[],
+    fxCursor: 0,
+    effects: Array.from({ length: 36 }, () => ({
+      active: false,
+      lane: 0,
+      z: 0,
+      age: 0,
+      life: 0,
+      type: 'near' as CollectionFx['type'],
+    })),
   });
 
-  const [collectionEffects, setCollectionEffects] = useState<
-    CollectionEffect[]
-  >([]);
-  const collectionEffectsRef = useRef<CollectionEffect[]>([]);
-  const pendingEffectsRef = useRef<CollectionEffect[]>([]);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const color = useMemo(() => new THREE.Color(), []);
+
+  const tileInstances = GAME.ringBuffer * GAME.faces;
+  const bumpInstances = GAME.ringBuffer * GAME.faces;
+
+  const hideInstance = useCallback(
+    (mesh: THREE.InstancedMesh | null, id: number) => {
+      if (!mesh) return;
+      dummy.position.set(0, -9999, 0);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(0.0001, 0.0001, 0.0001);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(id, dummy.matrix);
+    },
+    [dummy]
+  );
+
+  const syncRingInstances = useCallback(
+    (ring: RingData) => {
+      const tile = tileRef.current;
+      const bump = bumpRef.current;
+      const ringMesh = ringRef.current;
+      const gem = gemRef.current;
+      const boost = boostRef.current;
+      const shield = shieldRef.current;
+
+      if (!tile || !bump || !ringMesh || !gem || !boost || !shield) return;
+
+      for (let lane = 0; lane < GAME.faces; lane += 1) {
+        const tileId = ring.slot * GAME.faces + lane;
+        const [x, y] = lanePos(lane, GAME.radius);
+        const angle = lane * GAME.faceStep + Math.PI / 2;
+        const bit = laneBit(lane);
+
+        if ((ring.solidMask & bit) !== 0) {
+          dummy.position.set(x, y, ring.z);
+          dummy.rotation.set(0, 0, angle);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          tile.setMatrixAt(tileId, dummy.matrix);
+
+          color.setHSL(
+            (0.55 + ring.theme * 0.07 + lane * 0.012) % 1,
+            0.5,
+            0.58 + ((ring.index + lane) % 2) * 0.03
+          );
+          tile.setColorAt(tileId, color);
+        } else {
+          hideInstance(tile, tileId);
+        }
+
+        const bumpId = ring.slot * GAME.faces + lane;
+        if ((ring.bumpMask & bit) !== 0) {
+          const [bx, by] = lanePos(lane, GAME.radius - GAME.bumpHeight * 0.48);
+          dummy.position.set(bx, by, ring.z);
+          dummy.rotation.set(0, 0, angle);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          bump.setMatrixAt(bumpId, dummy.matrix);
+          color.setHSL((0.02 + lane * 0.02) % 1, 0.82, 0.56);
+          bump.setColorAt(bumpId, color);
+        } else {
+          hideInstance(bump, bumpId);
+        }
+      }
+
+      dummy.position.set(0, 0, ring.z);
+      dummy.rotation.set(Math.PI / 2, 0, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      ringMesh.setMatrixAt(ring.slot, dummy.matrix);
+      color.setHSL((0.58 + ring.theme * 0.08) % 1, 0.68, 0.64);
+      ringMesh.setColorAt(ring.slot, color);
+
+      hideInstance(gem, ring.slot);
+      hideInstance(boost, ring.slot);
+      hideInstance(shield, ring.slot);
+
+      if (
+        ring.collectibleLane != null &&
+        !ring.collected &&
+        ring.collectibleType
+      ) {
+        const [cx, cy] = lanePos(ring.collectibleLane, GAME.radius - 0.56);
+        dummy.position.set(cx, cy, ring.z);
+        dummy.rotation.set(
+          0.2,
+          0.1,
+          ring.collectibleLane * GAME.faceStep * 0.6
+        );
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+
+        if (ring.collectibleType === 'gem') {
+          gem.setMatrixAt(ring.slot, dummy.matrix);
+          gem.setColorAt(ring.slot, color.set(COLLECTION_COLOR.gem));
+        } else if (ring.collectibleType === 'boost') {
+          boost.setMatrixAt(ring.slot, dummy.matrix);
+          boost.setColorAt(ring.slot, color.set(COLLECTION_COLOR.boost));
+        } else {
+          shield.setMatrixAt(ring.slot, dummy.matrix);
+          shield.setColorAt(ring.slot, color.set(COLLECTION_COLOR.shield));
+        }
+      }
+    },
+    [color, dummy, hideInstance]
+  );
+
+  const syncFxInstances = useCallback(() => {
+    const fx = fxRef.current;
+    if (!fx) return;
+
+    const r = runtime.current;
+    for (let i = 0; i < r.effects.length; i += 1) {
+      const effect = r.effects[i];
+      if (!effect.active) {
+        hideInstance(fx, i);
+        continue;
+      }
+
+      const lifeT = effect.age / effect.life;
+      const [x, y] = lanePos(effect.lane, GAME.radius - 0.45 - lifeT * 0.32);
+      const jitter = Math.sin((effect.age + i * 0.07) * 23) * 0.05;
+      const scale = 0.34 + lifeT * 0.9;
+      dummy.position.set(x + jitter, y - jitter, effect.z + effect.age * 2.8);
+      dummy.rotation.set(effect.age * 8.2, effect.age * 6.4, effect.age * 4.8);
+      dummy.scale.set(scale, scale, scale);
+      dummy.updateMatrix();
+      fx.setMatrixAt(i, dummy.matrix);
+      color.set(COLLECTION_COLOR[effect.type]);
+      fx.setColorAt(i, color);
+    }
+  }, [color, dummy, hideInstance]);
+
+  const flushInstanceChanges = useCallback(() => {
+    const meshes = [
+      tileRef.current,
+      bumpRef.current,
+      ringRef.current,
+      gemRef.current,
+      boostRef.current,
+      shieldRef.current,
+      fxRef.current,
+    ];
+    meshes.forEach((mesh) => {
+      if (!mesh) return;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    });
+  }, []);
+
+  const spawnFx = useCallback(
+    (
+      type: CollectionFx['type'],
+      lane: number,
+      z: number,
+      life = GAME.fxLife
+    ) => {
+      const r = runtime.current;
+      const slot = r.fxCursor % r.effects.length;
+      r.fxCursor += 1;
+      r.effects[slot] = {
+        active: true,
+        lane,
+        z,
+        age: 0,
+        life,
+        type,
+      };
+    },
+    []
+  );
+
+  const generateIntoSlot = useCallback(
+    (slot: number, index: number, z: number) => {
+      const ring = generateRing({
+        seed: runtime.current.worldSeed,
+        slot,
+        index,
+        z,
+        previousSafeLane: runtime.current.lastSafeLane,
+      });
+      runtime.current.lastSafeLane = ring.safeLane;
+      runtime.current.rings[slot] = ring;
+      syncRingInstances(ring);
+    },
+    [syncRingInstances]
+  );
+
+  const resetWorld = useCallback(() => {
+    const r = runtime.current;
+
+    r.worldSeed = octaSurgeState.worldSeed;
+    r.nextRingIndex = GAME.ringBuffer;
+    r.lastSafeLane = GAME.bottomFace;
+
+    r.elapsed = 0;
+    r.scroll = 0;
+    r.prevScroll = 0;
+    r.score = 0;
+    r.speed = GAME.baseSpeed;
+    r.combo = 0;
+    r.comboTimer = 0;
+
+    r.surge = 100;
+    r.boostUntil = 0;
+    r.shieldCharges = 0;
+
+    r.rotationIndex = 0;
+    r.worldRotation = 0;
+    r.rotationQueue = [];
+    r.rotAnim = null;
+    r.lastDirection = 1;
+    r.lastRotateAt = 0;
+
+    r.shake = 0;
+    r.fxCursor = 0;
+    r.effects.forEach((effect) => {
+      effect.active = false;
+      effect.age = 0;
+      effect.life = 0;
+    });
+
+    r.rings = [];
+    r.farthestBackZ =
+      GAME.spawnStartZ - (GAME.ringBuffer - 1) * GAME.ringSpacing;
+
+    for (let slot = 0; slot < GAME.ringBuffer; slot += 1) {
+      const index = slot;
+      const z = GAME.spawnStartZ - slot * GAME.ringSpacing;
+      generateIntoSlot(slot, index, z);
+    }
+
+    if (worldRef.current) {
+      worldRef.current.position.set(0, 0, 0);
+      worldRef.current.rotation.set(0, 0, 0);
+    }
+
+    octaSurgeState.score = 0;
+    octaSurgeState.combo = 0;
+    octaSurgeState.progress = 0;
+    octaSurgeState.time = 0;
+    octaSurgeState.speed = GAME.baseSpeed;
+    octaSurgeState.surgeMeter = 100;
+    octaSurgeState.shieldCharges = 0;
+    octaSurgeState.boostActive = false;
+
+    syncFxInstances();
+    flushInstanceChanges();
+  }, [flushInstanceChanges, generateIntoSlot, syncFxInstances]);
+
+  const startRotation = useCallback((step: number, nowMs: number) => {
+    const r = runtime.current;
+    r.rotationIndex += step;
+    const target = r.rotationIndex * GAME.faceStep;
+    r.rotAnim = {
+      startMs: nowMs,
+      from: r.worldRotation,
+      to: target,
+      durationMs: GAME.rotationDurationMs,
+    };
+
+    if (step > 0) r.lastDirection = 1;
+    if (step < 0) r.lastDirection = -1;
+    r.lastRotateAt = nowMs;
+  }, []);
+
+  const enqueueRotation = useCallback(
+    (step: number) => {
+      const r = runtime.current;
+      const nowMs = performance.now();
+      if (r.rotAnim) {
+        if (r.rotationQueue.length < GAME.rotationQueueLimit) {
+          r.rotationQueue.push(step);
+        } else {
+          r.rotationQueue[r.rotationQueue.length - 1] = step;
+        }
+        return;
+      }
+      startRotation(step, nowMs);
+    },
+    [startRotation]
+  );
+
+  const rotateClockwise = useCallback(() => {
+    if (octaSurgeState.phase !== 'playing' || paused) return;
+    enqueueRotation(1);
+  }, [enqueueRotation, paused]);
+
+  const rotateCounterClockwise = useCallback(() => {
+    if (octaSurgeState.phase !== 'playing' || paused) return;
+    enqueueRotation(-1);
+  }, [enqueueRotation, paused]);
+
+  const flipLane = useCallback(() => {
+    if (octaSurgeState.phase !== 'playing' || paused) return;
+    enqueueRotation(4);
+  }, [enqueueRotation, paused]);
+
+  const rotateFallback = useCallback(() => {
+    if (octaSurgeState.phase !== 'playing' || paused) return;
+    enqueueRotation(runtime.current.lastDirection);
+  }, [enqueueRotation, paused]);
+
+  const startRun = useCallback(() => {
+    octaSurgeState.start();
+  }, []);
 
   useEffect(() => {
-    collectionEffectsRef.current = collectionEffects;
-  }, [collectionEffects]);
-
-  useEffect(() => {
-    gl.domElement.style.touchAction = 'none';
-
-    scene.background = new THREE.Color('#070915');
-    scene.fog = new THREE.Fog('#070915', 10, 96);
-
-    camera.position.set(0, 1.1, 10.5);
-    camera.lookAt(0, 0, -42);
-
     octaSurgeState.load();
+
+    gl.domElement.style.touchAction = 'none';
+    scene.background = new THREE.Color('#050816');
+    scene.fog = new THREE.Fog('#050816', 9, 78);
+
+    camera.position.set(0, -0.55, 8.8);
+    camera.lookAt(0, 0, -18);
+
+    return () => {
+      gl.domElement.style.touchAction = '';
+    };
   }, [camera, gl.domElement, scene]);
 
   useEffect(() => {
@@ -371,752 +560,445 @@ export default function OctaSurge() {
 
   useEffect(() => {
     if (snap.phase !== 'playing') return;
+    resetWorld();
+  }, [resetWorld, snap.phase, snap.worldSeed]);
 
-    const w = world.current;
-    w.rng = new SeededRandom(snap.worldSeed);
-    w.worldRot = 0;
-    w.prevWorldRot = 0;
-    w.rotationVel = 0;
-    w.targetRotationVel = 0;
-    w.lastPointerX = 0;
-
-    w.elapsed = 0;
-    w.speed = GAME.baseSpeed;
-    w.invulnUntil = 0;
-    w.boostUntil = 0;
-    w.shieldCharges = 0;
-    w.surgeMeter = 32;
-
-    w.combo = 0;
-    w.comboTimer = 0;
-    w.score = 0;
-    w.nearMisses = 0;
-
-    w.shake = 0;
-    w.effectId = 0;
-    w.collectedThisFrame = false;
-
-    setCollectionEffects([]);
-
-    w.obstacles = [];
-    const spacing = GAME.spawnDistance / GAME.obstacleCount;
-    for (let i = 0; i < GAME.obstacleCount; i++) {
-      const z = -GAME.spawnDistance + i * spacing;
-      const type = pickObstacleType(w.rng, GAME.baseHazard * 0.75);
-      const faceFloat = w.rng.float(0, GAME.faces);
-      const faceVel = w.rng.bool(0.34) ? w.rng.float(-0.55, 0.55) : 0;
-      const span = type === 'wedge' ? 2 : 1;
-      w.obstacles.push({
-        id: i,
-        z,
-        prevZ: z,
-        faceFloat,
-        prevFaceFloat: faceFloat,
-        faceVel,
-        span,
-        type,
-        depth: GAME.obstacleDepth,
-        protrusion: type === 'hole' ? 0 : 0.8,
-        scale: type === 'wedge' ? GAME.wedgeScaleX : 1,
-        nearMissed: false,
-      });
+  useEffect(() => {
+    if (paused && snap.phase === 'playing') {
+      octaSurgeState.boostActive = false;
     }
+  }, [paused, snap.phase]);
 
-    w.collectibles = [];
-    let cId = 0;
+  useFrame((state, dt) => {
+    const r = runtime.current;
+    const realDt = clamp(dt, 0.001, 0.033);
+    const nowMs = state.clock.elapsedTime * 1000;
 
-    const createCollectible = (type: CollectibleType) => {
-      const c: CollectibleData = {
-        id: cId++,
-        faceIndex: 0,
-        z: 0,
-        prevZ: 0,
-        type,
-        collected: false,
-        bobPhase: w.rng.float(0, TWO_PI),
-        spinRate: w.rng.float(0.8, 1.8),
-      };
-      respawnCollectible(c, w.obstacles, w.rng);
-      w.collectibles.push(c);
+    const advanceRotation = () => {
+      if (!r.rotAnim) {
+        if (worldRef.current) worldRef.current.rotation.z = r.worldRotation;
+        return;
+      }
+      const t = (nowMs - r.rotAnim.startMs) / r.rotAnim.durationMs;
+      const eased = cubicEase(clamp(t, 0, 1));
+      r.worldRotation =
+        r.rotAnim.from + (r.rotAnim.to - r.rotAnim.from) * eased;
+      if (worldRef.current) worldRef.current.rotation.z = r.worldRotation;
+      if (t >= 1) {
+        r.worldRotation = r.rotAnim.to;
+        r.rotAnim = null;
+        if (r.rotationQueue.length > 0) {
+          const next = r.rotationQueue.shift() ?? 0;
+          startRotation(next, nowMs);
+        }
+      }
     };
 
-    for (let i = 0; i < GAME.collectibleCount; i++) createCollectible('normal');
-    for (let i = 0; i < GAME.specialCollectibleCount; i++)
-      createCollectible('special');
-    for (let i = 0; i < GAME.boostCollectibleCount; i++)
-      createCollectible('boost');
-    for (let i = 0; i < GAME.shieldCollectibleCount; i++)
-      createCollectible('shield');
+    advanceRotation();
 
-    w.ringZ = [];
-    const ringSpacing = GAME.tunnelLength / GAME.ringCount;
-    for (let i = 0; i < GAME.ringCount; i++) {
-      w.ringZ.push(-GAME.tunnelLength + i * ringSpacing);
-    }
-
-    octaSurgeState.score = 0;
-    octaSurgeState.combo = 0;
-    octaSurgeState.shieldCharges = 0;
-    octaSurgeState.surgeMeter = 32;
-    octaSurgeState.boostActive = false;
-  }, [snap.phase, snap.worldSeed]);
-
-  useFrame((_, dt) => {
-    const w = world.current;
-    const endFrame = () => clearFrameInput(input);
-
-    if (paused || snap.phase !== 'playing') {
-      endFrame();
+    if (snap.phase !== 'playing' || paused) {
+      clearFrameInput(input);
       return;
     }
 
-    const deltaReal = clamp(dt, 0.001, 0.033);
-    w.collectedThisFrame = false;
+    const isTimed = snap.mode !== 'endless';
+    const runSeconds =
+      snap.mode === 'daily' ? GAME.dailyRunSeconds : GAME.classicRunSeconds;
 
-    w.prevWorldRot = w.worldRot;
-    w.elapsed += deltaReal;
-
-    const progress = clamp(w.elapsed / GAME.runSeconds, 0, 1);
-    octaSurgeState.progress = progress;
-
-    if (progress >= 1) {
-      octaSurgeState.score = Math.floor(w.score);
-      octaSurgeState.combo = w.combo;
-      octaSurgeState.shieldCharges = w.shieldCharges;
-      octaSurgeState.surgeMeter = w.surgeMeter;
-      octaSurgeState.boostActive = false;
-      octaSurgeState.end();
-      endFrame();
-      return;
-    }
-
-    const keyLeft =
-      input.current.keysDown.has('arrowleft') ||
-      input.current.keysDown.has('a');
-    const keyRight =
-      input.current.keysDown.has('arrowright') ||
-      input.current.keysDown.has('d');
     const spaceHeld =
       input.current.keysDown.has(' ') ||
       input.current.keysDown.has('space') ||
       input.current.keysDown.has('spacebar');
 
+    r.prevScroll = r.scroll;
+    r.elapsed += realDt;
+
     let simScale = 1;
-    if (spaceHeld && w.surgeMeter > 0.1) {
+    if (spaceHeld && r.surge > 0.1) {
       simScale = GAME.surgeSlowScale;
-      w.surgeMeter = Math.max(
-        0,
-        w.surgeMeter - GAME.surgeDrainRate * deltaReal
-      );
+      r.surge = Math.max(0, r.surge - GAME.surgeDrainRate * realDt);
     }
 
-    const boostActive = w.elapsed < w.boostUntil;
-    const recharge =
-      GAME.surgeRechargeRate * deltaReal +
-      (boostActive ? GAME.surgeBoostRechargeRate * deltaReal : 0);
-    w.surgeMeter = clamp(w.surgeMeter + recharge, 0, 100);
+    const boostActive = r.elapsed < r.boostUntil;
+    r.surge = clamp(
+      r.surge +
+        GAME.surgeRechargeRate * realDt +
+        (boostActive ? GAME.surgeBoostRecharge * realDt : 0),
+      0,
+      100
+    );
 
-    const delta = deltaReal * simScale;
+    const delta = realDt * simScale;
+    const baseSpeed =
+      GAME.baseSpeed +
+      r.elapsed * GAME.speedRampPerSecond +
+      r.score * GAME.speedRampFromScore;
 
-    const baseSpeed = GAME.baseSpeed * (1 + progress * GAME.speedRamp);
-    w.speed = baseSpeed * (boostActive ? GAME.boostSpeedMultiplier : 1);
+    r.speed = clamp(baseSpeed, GAME.baseSpeed, GAME.maxSpeed);
+    if (boostActive) r.speed *= GAME.boostMultiplier;
 
-    const hazard = clamp(GAME.baseHazard + progress * GAME.hazardRamp, 0, 0.9);
+    r.scroll += r.speed * delta;
+    if (worldRef.current) worldRef.current.position.z = r.scroll;
 
-    let pointerVel = 0;
-    if (input.current.pointerDown) {
-      const pointerDelta = input.current.pointerX - w.lastPointerX;
-      pointerVel = -pointerDelta * GAME.dragRotationFactor * 80;
-    }
-    w.lastPointerX = input.current.pointerX;
+    r.comboTimer = Math.max(0, r.comboTimer - realDt);
+    if (r.comboTimer <= 0) r.combo = 0;
 
-    w.targetRotationVel = 0;
-    if (keyLeft) w.targetRotationVel += GAME.keyRotationSpeed;
-    if (keyRight) w.targetRotationVel -= GAME.keyRotationSpeed;
-    w.targetRotationVel += pointerVel;
+    const activeLane = normalizeLane(GAME.bottomFace - r.rotationIndex);
+    const activeBit = laneBit(activeLane);
 
-    const ease = 1 - Math.exp(-GAME.rotationEase * deltaReal);
-    w.rotationVel += (w.targetRotationVel - w.rotationVel) * ease;
-    w.worldRot = wrapAngle(w.worldRot + w.rotationVel * deltaReal);
+    let shouldEnd = false;
 
-    if (tunnelGroup.current) tunnelGroup.current.rotation.z = w.worldRot;
+    for (let i = 0; i < r.rings.length; i += 1) {
+      const ring = r.rings[i];
+      const prevWorldZ = ring.z + r.prevScroll;
+      const nextWorldZ = ring.z + r.scroll;
 
-    w.comboTimer = Math.max(0, w.comboTimer - deltaReal);
-    if (w.comboTimer <= 0 && w.combo > 0) w.combo = 0;
+      if (
+        !ring.crossed &&
+        prevWorldZ <= GAME.playerPlaneZ &&
+        nextWorldZ > GAME.playerPlaneZ
+      ) {
+        ring.crossed = true;
 
-    const comboMult =
-      1 + Math.max(0, Math.min(12, w.combo - 1)) * GAME.comboStep;
-    w.score +=
-      w.speed *
-      delta *
-      GAME.distanceScoreFactor *
-      (boostActive ? GAME.boostScoreMultiplier : 1) *
-      comboMult;
+        const holeHit = (ring.solidMask & activeBit) === 0;
+        const bumpHit = (ring.bumpMask & activeBit) !== 0;
 
-    const t = w.elapsed;
-    for (let i = 0; i < GAME.faces; i++) {
-      const mat = faceMaterials.current[i];
-      if (!mat) continue;
-      const hue = 0.52 + (i / GAME.faces) * 0.14 + t * 0.035;
-      const sat = boostActive ? 0.95 : 0.78;
-      const light = boostActive ? 0.67 : 0.6;
-      mat.color.setHSL(hue % 1, sat, light);
-      mat.emissive.setHSL((hue + 0.08) % 1, 0.9, boostActive ? 0.34 : 0.2);
-      mat.emissiveIntensity =
-        (boostActive ? 0.58 : 0.36) + 0.12 * Math.sin(t * 2.4 + i * 0.4);
-    }
+        if (holeHit || bumpHit) {
+          if (r.shieldCharges > 0) {
+            r.shieldCharges -= 1;
+            spawnFx('shield', activeLane, ring.z, 0.56);
+            r.shake = Math.max(r.shake, 0.12);
+          } else {
+            spawnFx('impact', activeLane, ring.z, 0.7);
+            r.shake = Math.max(r.shake, 0.2);
+            shouldEnd = true;
+          }
+        } else {
+          r.combo += 1;
+          r.comboTimer = GAME.comboWindow;
+          const comboMult =
+            1 + Math.max(0, Math.min(12, r.combo - 1)) * GAME.comboStep;
+          r.score += GAME.clearScore * comboMult;
 
-    for (let i = 0; i < w.ringZ.length; i++) {
-      w.ringZ[i] += w.speed * delta;
-      if (w.ringZ[i] > 1.4) w.ringZ[i] -= GAME.tunnelLength;
-      const r = ringRefs.current[i];
-      if (r) {
-        r.position.z = w.ringZ[i];
-        const m = r.material as THREE.MeshBasicMaterial;
-        if (m) {
-          m.opacity = boostActive ? 0.28 : 0.18;
-          m.color.set(boostActive ? '#fca5a5' : '#88ccff');
-        }
-      }
-    }
+          const nearMask = laneBit(activeLane - 1) | laneBit(activeLane + 1);
+          if ((ring.bumpMask & nearMask) !== 0) {
+            r.score += GAME.nearMissScore;
+            octaSurgeState.addNearMiss();
+            spawnFx('near', activeLane, ring.z, 0.48);
+            r.shake = Math.max(r.shake, 0.05);
+          }
 
-    const fA = faceAngle();
-    const playerAngleNow = Math.PI - w.worldRot;
-    const playerAnglePrev = Math.PI - w.prevWorldRot;
-    const playerHalf = GAME.playerDepth / 2;
+          if (
+            ring.collectibleLane != null &&
+            ring.collectibleLane === activeLane &&
+            ring.collectibleType &&
+            !ring.collected
+          ) {
+            ring.collected = true;
+            const type = ring.collectibleType;
+            octaSurgeState.addCollect(type);
 
-    for (let i = 0; i < w.obstacles.length; i++) {
-      const o = w.obstacles[i];
-      o.prevZ = o.z;
-      o.prevFaceFloat = o.faceFloat;
+            if (type === 'gem') {
+              r.score += GAME.gemScore;
+              r.surge = clamp(r.surge + 10, 0, 100);
+            } else if (type === 'boost') {
+              r.score += GAME.boostScore;
+              r.boostUntil = r.elapsed + GAME.boostDuration;
+            } else {
+              r.score += GAME.shieldScore;
+              r.shieldCharges = Math.min(
+                GAME.shieldMaxCharges,
+                r.shieldCharges + 1
+              );
+            }
 
-      o.z += w.speed * delta;
-      o.faceFloat = wrapFaceFloat(
-        o.faceFloat + o.faceVel * delta * (1 + progress * 0.75)
-      );
-
-      if (o.z > 6) {
-        o.z -= GAME.spawnDistance;
-        o.prevZ = o.z;
-        o.faceFloat = wrapFaceFloat(w.rng.float(0, GAME.faces));
-        o.prevFaceFloat = o.faceFloat;
-        o.type = pickObstacleType(w.rng, hazard);
-        o.faceVel = w.rng.bool(0.36) ? w.rng.float(-0.7, 0.7) : 0;
-        o.span = o.type === 'wedge' ? 2 : 1;
-        o.scale = o.type === 'wedge' ? GAME.wedgeScaleX : 1;
-        o.nearMissed = false;
-      }
-
-      const ref = obstacleRefs.current[i];
-      if (ref) {
-        ref.position.z = o.z;
-        ref.rotation.z = (o.faceFloat / GAME.faces) * TWO_PI;
-      }
-
-      const bump = bumpRefs.current[i];
-      if (bump) {
-        bump.visible = o.type !== 'hole';
-        bump.scale.x = o.scale;
-        bump.scale.y = o.type === 'wedge' ? 1.1 : 1;
-        const m = bump.material as THREE.MeshStandardMaterial;
-        if (m) {
-          m.color.set(o.type === 'wedge' ? '#8f2f4e' : '#521733');
-          m.emissive.set(o.type === 'wedge' ? '#b91c1c' : '#7f1d1d');
-          m.emissiveIntensity = 0.18 + progress * 0.2;
+            spawnFx(type, activeLane, ring.z, 0.62);
+            syncRingInstances(ring);
+          }
         }
       }
 
-      const hole = holeRefs.current[i];
-      if (hole) {
-        hole.visible = o.type === 'hole';
-        const m = hole.material as THREE.MeshBasicMaterial;
-        if (m) m.opacity = 0.58 + progress * 0.14;
-      }
-    }
+      if (ring.z + r.scroll > GAME.despawnWorldZ) {
+        const nextIndex = r.nextRingIndex;
+        const nextZ = r.farthestBackZ - GAME.ringSpacing;
+        r.nextRingIndex += 1;
+        r.farthestBackZ = nextZ;
 
-    for (let i = 0; i < w.collectibles.length; i++) {
-      const c = w.collectibles[i];
-      const g = collectibleRefs.current[i];
-
-      if (c.collected) {
-        if (c.respawnAt != null && w.elapsed >= c.respawnAt) {
-          respawnCollectible(c, w.obstacles, w.rng);
-        }
-        if (g) g.visible = false;
-        continue;
-      }
-
-      c.prevZ = c.z;
-      c.z += w.speed * delta;
-
-      const radius = collectibleRadius(c.type);
-      const segMin = Math.min(c.prevZ, c.z) - radius;
-      const segMax = Math.max(c.prevZ, c.z) + radius;
-      const sweptOverlap =
-        playerZ - playerHalf < segMax && playerZ + playerHalf > segMin;
-
-      const cAngle = (c.faceIndex / GAME.faces) * TWO_PI;
-      const diffMin = sweptRelativeAngleAbsDiff(
-        cAngle,
-        cAngle,
-        playerAnglePrev,
-        playerAngleNow
-      );
-
-      if (sweptOverlap && diffMin < fA * GAME.collectibleFaceTolerance) {
-        octaSurgeState.collect(c.type);
-
-        if (w.comboTimer > 0) w.combo += 1;
-        else w.combo = 1;
-        w.comboTimer = GAME.comboWindow;
-
-        const runComboMult =
-          1 + Math.max(0, Math.min(12, w.combo - 1)) * GAME.comboStep;
-        w.score +=
-          collectibleBasePoints(c.type) *
-          runComboMult *
-          (boostActive ? GAME.boostScoreMultiplier : 1);
-
-        if (c.type === 'normal') {
-          w.surgeMeter = clamp(w.surgeMeter + GAME.surgeGainNormal, 0, 100);
-        } else if (c.type === 'special') {
-          w.surgeMeter = clamp(w.surgeMeter + GAME.surgeGainSpecial, 0, 100);
-        } else if (c.type === 'boost') {
-          w.boostUntil = Math.max(w.boostUntil, w.elapsed + GAME.boostDuration);
-          w.surgeMeter = clamp(w.surgeMeter + GAME.surgeGainPowerup, 0, 100);
-        } else if (c.type === 'shield') {
-          w.shieldCharges = Math.min(
-            GAME.maxShieldCharges,
-            w.shieldCharges + 1
-          );
-          w.surgeMeter = clamp(w.surgeMeter + GAME.surgeGainPowerup, 0, 100);
-        }
-
-        w.invulnUntil = Math.max(
-          w.invulnUntil,
-          w.elapsed + GAME.invulnDuration
-        );
-        w.collectedThisFrame = true;
-        w.shake = Math.max(w.shake, c.type === 'special' ? 0.09 : 0.05);
-
-        c.collected = true;
-        c.respawnAt = w.elapsed + GAME.collectionEffectLife + 0.1;
-
-        pendingEffectsRef.current.push({
-          id: w.effectId++,
-          kind: 'collect',
-          type: c.type,
-          faceIndex: c.faceIndex,
-          z: c.z,
-          bornAt: w.elapsed,
-          life: GAME.collectionEffectLife,
-        });
-      }
-
-      if (c.z > 7) {
-        respawnCollectible(c, w.obstacles, w.rng);
-      }
-
-      if (g) {
-        g.visible = true;
-        const bob = Math.sin(w.elapsed * 3.2 + c.bobPhase) * 0.08;
-        g.position.z = c.z;
-        g.position.y = bob;
-        g.rotation.z = (c.faceIndex / GAME.faces) * TWO_PI;
-        g.rotation.y += delta * c.spinRate;
-      }
-    }
-
-    for (let i = 0; i < w.obstacles.length; i++) {
-      const o = w.obstacles[i];
-      const obsHalf = o.depth / 2;
-      const segMin = Math.min(o.prevZ, o.z) - obsHalf;
-      const segMax = Math.max(o.prevZ, o.z) + obsHalf;
-      const sweptOverlap =
-        playerZ - playerHalf < segMax && playerZ + playerHalf > segMin;
-
-      const oAngleNow = (o.faceFloat / GAME.faces) * TWO_PI;
-      const oAnglePrev = (o.prevFaceFloat / GAME.faces) * TWO_PI;
-      const diffMin = sweptRelativeAngleAbsDiff(
-        oAnglePrev,
-        oAngleNow,
-        playerAnglePrev,
-        playerAngleNow
-      );
-      const invuln = w.elapsed < w.invulnUntil;
-
-      const hitTol = fA * (GAME.faceHitTightness + (o.span - 1) * 0.5);
-      const nearTol = fA * (GAME.nearMissFaceTolerance + (o.span - 1) * 0.52);
-
-      if (!sweptOverlap) continue;
-
-      if (!invuln && !w.collectedThisFrame && diffMin < hitTol) {
-        if (w.shieldCharges > 0) {
-          w.shieldCharges -= 1;
-          w.invulnUntil = w.elapsed + GAME.shieldInvulnDuration;
-          w.shake = Math.max(w.shake, 0.16);
-
-          pendingEffectsRef.current.push({
-            id: w.effectId++,
-            kind: 'shield',
-            type: 'shield',
-            faceIndex: obstaclePrimaryFace(o),
-            z: playerZ,
-            bornAt: w.elapsed,
-            life: GAME.impactEffectLife,
-          });
-
-          o.z += o.depth * 1.4;
-          o.prevZ = o.z;
-          o.nearMissed = true;
-          continue;
-        }
-
-        pendingEffectsRef.current.push({
-          id: w.effectId++,
-          kind: 'impact',
-          type: 'special',
-          faceIndex: obstaclePrimaryFace(o),
-          z: playerZ,
-          bornAt: w.elapsed,
-          life: GAME.impactEffectLife,
+        const recycled = generateRing({
+          seed: r.worldSeed,
+          slot: ring.slot,
+          index: nextIndex,
+          z: nextZ,
+          previousSafeLane: r.lastSafeLane,
         });
 
-        octaSurgeState.score = Math.floor(w.score);
-        octaSurgeState.combo = w.combo;
-        octaSurgeState.shieldCharges = w.shieldCharges;
-        octaSurgeState.surgeMeter = w.surgeMeter;
-        octaSurgeState.boostActive = false;
-        octaSurgeState.end();
-        endFrame();
-        return;
+        r.lastSafeLane = recycled.safeLane;
+        r.rings[ring.slot] = recycled;
+        syncRingInstances(recycled);
       }
 
-      if (!o.nearMissed && diffMin >= hitTol && diffMin < nearTol) {
-        o.nearMissed = true;
-        w.nearMisses += 1;
-        octaSurgeState.addNearMiss();
-        w.score += GAME.nearMissScore;
+      if (shouldEnd) break;
+    }
 
-        pendingEffectsRef.current.push({
-          id: w.effectId++,
-          kind: 'near',
-          type: 'normal',
-          faceIndex: obstaclePrimaryFace(o),
-          z: playerZ - 0.1,
-          bornAt: w.elapsed,
-          life: GAME.collectionEffectLife,
-        });
+    for (let i = 0; i < r.effects.length; i += 1) {
+      const effect = r.effects[i];
+      if (!effect.active) continue;
+      effect.age += realDt;
+      if (effect.age >= effect.life) {
+        effect.active = false;
       }
     }
 
-    const pending = pendingEffectsRef.current;
-    pendingEffectsRef.current = [];
-    const now = w.elapsed;
+    syncFxInstances();
+    flushInstanceChanges();
 
-    const updatedEffects = [...collectionEffectsRef.current, ...pending]
-      .filter((e) => now - e.bornAt < e.life)
-      .map((e) => ({
-        ...e,
-        z: e.z + w.speed * delta,
-        age: now - e.bornAt,
-      }));
-
-    if (updatedEffects.length > 0 || pending.length > 0) {
-      setCollectionEffects(updatedEffects);
+    if (shouldEnd) {
+      octaSurgeState.score = Math.floor(r.score);
+      octaSurgeState.combo = r.combo;
+      octaSurgeState.shieldCharges = r.shieldCharges;
+      octaSurgeState.surgeMeter = r.surge;
+      octaSurgeState.boostActive = false;
+      octaSurgeState.progress = isTimed
+        ? clamp(r.elapsed / runSeconds, 0, 1)
+        : 0;
+      octaSurgeState.time = r.elapsed;
+      octaSurgeState.speed = r.speed;
+      octaSurgeState.end();
+      clearFrameInput(input);
+      return;
     }
 
-    w.shake = Math.max(0, w.shake - deltaReal * 3.4);
-    if (gameGroup.current) {
-      const jitter = w.shake * 0.08;
-      gameGroup.current.position.x = (Math.random() - 0.5) * jitter;
-      gameGroup.current.position.y = (Math.random() - 0.5) * jitter;
+    if (isTimed && r.elapsed >= runSeconds) {
+      octaSurgeState.score = Math.floor(r.score);
+      octaSurgeState.combo = r.combo;
+      octaSurgeState.shieldCharges = r.shieldCharges;
+      octaSurgeState.surgeMeter = r.surge;
+      octaSurgeState.boostActive = false;
+      octaSurgeState.progress = 1;
+      octaSurgeState.time = r.elapsed;
+      octaSurgeState.speed = r.speed;
+      octaSurgeState.end();
+      clearFrameInput(input);
+      return;
     }
 
-    octaSurgeState.score = Math.floor(w.score);
-    octaSurgeState.combo = w.combo;
-    octaSurgeState.shieldCharges = w.shieldCharges;
-    octaSurgeState.surgeMeter = w.surgeMeter;
+    octaSurgeState.score = Math.floor(r.score);
+    octaSurgeState.combo = r.combo;
+    octaSurgeState.shieldCharges = r.shieldCharges;
+    octaSurgeState.surgeMeter = r.surge;
     octaSurgeState.boostActive = boostActive;
-    if (w.combo > octaSurgeState.bestCombo) {
-      octaSurgeState.bestCombo = w.combo;
+    octaSurgeState.progress = isTimed ? clamp(r.elapsed / runSeconds, 0, 1) : 0;
+    octaSurgeState.time = r.elapsed;
+    octaSurgeState.speed = r.speed;
+
+    r.shake = Math.max(0, r.shake - realDt * 1.85);
+
+    const speedRatio = clamp(r.speed / GAME.maxSpeed, 0, 1);
+    const targetFov =
+      GAME.cameraBaseFov +
+      speedRatio * GAME.cameraMaxFovBoost +
+      (boostActive ? 3 : 0);
+
+    const cameraShakeX =
+      Math.sin(state.clock.elapsedTime * 34) * r.shake * 0.55;
+    const cameraShakeY =
+      Math.cos(state.clock.elapsedTime * 28) * r.shake * 0.42;
+
+    const cam = camera as THREE.PerspectiveCamera;
+    cam.fov = THREE.MathUtils.lerp(
+      cam.fov,
+      targetFov,
+      1 - Math.exp(-realDt * 8)
+    );
+    cam.position.x = THREE.MathUtils.lerp(
+      cam.position.x,
+      cameraShakeX + Math.sin(r.worldRotation * 0.35) * 0.22,
+      1 - Math.exp(-realDt * 10)
+    );
+    cam.position.y = THREE.MathUtils.lerp(
+      cam.position.y,
+      -0.52 + cameraShakeY,
+      1 - Math.exp(-realDt * 10)
+    );
+    cam.position.z = THREE.MathUtils.lerp(
+      cam.position.z,
+      8.8 - speedRatio * 0.9,
+      1 - Math.exp(-realDt * 10)
+    );
+    cam.lookAt(0, 0, -18 - speedRatio * 4);
+    cam.updateProjectionMatrix();
+
+    if (playerRef.current) {
+      const pulse =
+        1 +
+        Math.sin(state.clock.elapsedTime * 10) * 0.03 +
+        (boostActive ? 0.05 : 0);
+      playerRef.current.scale.setScalar(pulse);
     }
 
-    endFrame();
+    clearFrameInput(input);
   });
 
-  const faces = useMemo(
-    () => Array.from({ length: GAME.faces }, (_, i) => i),
-    []
-  );
-
-  const rings = useMemo(
-    () => Array.from({ length: GAME.ringCount }, (_, i) => i),
-    []
-  );
-
-  const collectibleSlots = useMemo(
-    () => Array.from({ length: collectibleTotal }, (_, i) => i),
-    [collectibleTotal]
-  );
-
-  const playerAuraOpacity = snap.boostActive
-    ? 0.22
-    : snap.shieldCharges > 0
-      ? 0.14
-      : 0.06;
-  const playerAuraColor = snap.boostActive
-    ? '#fb7185'
-    : snap.shieldCharges > 0
-      ? '#2dd4bf'
-      : '#60a5fa';
-
-  const playerZ = GAME.playerZ;
-
   return (
-    <group ref={gameGroup}>
-      <OctaSurgeUI />
-
-      <ambientLight intensity={0.42} />
-      <pointLight
-        position={[0, 0, -72]}
-        intensity={4.2}
-        distance={170}
-        color="#dbeafe"
+    <group>
+      <InputController
+        canStart={snap.phase !== 'playing'}
+        canRotate={snap.phase === 'playing' && !paused}
+        onRotateClockwise={rotateClockwise}
+        onRotateCounterClockwise={rotateCounterClockwise}
+        onFlip={flipLane}
+        onTapFallback={rotateFallback}
+        onStart={startRun}
       />
-      <pointLight
-        position={[0, 0, -44]}
-        intensity={1.7}
-        distance={84}
-        color={snap.boostActive ? '#fb7185' : '#f0abfc'}
+
+      <OctaSurgeUI
+        onStart={startRun}
+        onSelectMode={(mode: OctaSurgeMode) => octaSurgeState.setMode(mode)}
       />
-      <directionalLight position={[6, 8, 10]} intensity={0.88} />
 
-      <group ref={tunnelGroup}>
-        {faces.map((i) => {
-          const angle = (i / GAME.faces) * TWO_PI;
-          return (
-            <group key={i} rotation={[0, 0, angle]}>
-              <mesh
-                position={[0, geom.apothem, -GAME.tunnelLength / 2]}
-                rotation={[Math.PI / 2, 0, 0]}
-                geometry={geom.faceGeo}
-                receiveShadow
-              >
-                <meshStandardMaterial
-                  ref={(m) => {
-                    if (m) faceMaterials.current[i] = m;
-                  }}
-                  roughness={0.3}
-                  metalness={0.12}
-                  emissive="#0d0820"
-                  emissiveIntensity={0.35}
-                  side={THREE.DoubleSide}
-                />
-              </mesh>
-            </group>
-          );
-        })}
-
-        {rings.map((i) => (
-          <mesh
-            key={i}
-            ref={(m) => {
-              if (m) ringRefs.current[i] = m;
-            }}
-            geometry={geom.ringGeo}
-            rotation={[Math.PI / 2, 0, 0]}
-            position={[
-              0,
-              0,
-              -GAME.tunnelLength + (i / GAME.ringCount) * GAME.tunnelLength,
-            ]}
-          >
-            <meshBasicMaterial
-              color="#88ccff"
-              wireframe
-              transparent
-              opacity={0.2}
-            />
-          </mesh>
-        ))}
-
-        {Array.from({ length: GAME.obstacleCount }, (_, i) => i).map((i) => (
-          <group
-            key={i}
-            ref={(o) => {
-              if (o) obstacleRefs.current[i] = o;
-            }}
-            position={[0, 0, 0]}
-          >
-            <mesh
-              ref={(m) => {
-                if (m) bumpRefs.current[i] = m;
-              }}
-              position={[0, geom.apothem - 0.4, 0]}
-              geometry={geom.bumpGeo}
-              castShadow
-              receiveShadow
-            >
-              <meshStandardMaterial
-                color="#521733"
-                emissive="#7f1d1d"
-                emissiveIntensity={0.24}
-                roughness={0.5}
-                metalness={0.18}
-              />
-            </mesh>
-
-            <mesh
-              ref={(m) => {
-                if (m) holeRefs.current[i] = m;
-              }}
-              position={[0, geom.apothem + 0.01, 0]}
-              rotation={[Math.PI / 2, 0, 0]}
-              geometry={geom.holeGeo}
-            >
-              <meshBasicMaterial
-                color="#05050a"
-                transparent
-                opacity={0.6}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-          </group>
-        ))}
-
-        {collectibleSlots.map((i) => {
-          const type = collectibleTypeByIndex(i);
-          const colors = collectibleColors(type);
-          const geometry =
-            type === 'special'
-              ? geom.specialGeo
-              : type === 'boost'
-                ? geom.boostGeo
-                : type === 'shield'
-                  ? geom.shieldGeo
-                  : geom.collectibleGeo;
-
-          return (
-            <group
-              key={`c-${i}`}
-              ref={(g) => {
-                if (g) collectibleRefs.current[i] = g;
-              }}
-              position={[0, 0, 0]}
-            >
-              <mesh position={[0, geom.apothem - 0.15, 0]} geometry={geometry}>
-                <meshStandardMaterial
-                  color={colors.color}
-                  emissive={colors.emissive}
-                  emissiveIntensity={type === 'special' ? 0.62 : 0.48}
-                  roughness={0.2}
-                  metalness={0.36}
-                />
-              </mesh>
-            </group>
-          );
-        })}
-
-        {collectionEffects.map((e) => {
-          const age = e.age ?? 0;
-          const tNorm = clamp(age / Math.max(0.01, e.life), 0, 1);
-          const alpha = 1 - tNorm * tNorm;
-
-          const colorSet =
-            e.kind === 'near'
-              ? { core: '#67e8f9', ring: '#22d3ee' }
-              : e.kind === 'impact'
-                ? { core: '#fca5a5', ring: '#ef4444' }
-                : e.kind === 'shield'
-                  ? { core: '#99f6e4', ring: '#2dd4bf' }
-                  : (() => {
-                      const c = collectibleColors(e.type);
-                      return { core: c.glow, ring: c.color };
-                    })();
-
-          const baseScale =
-            e.kind === 'impact'
-              ? 0.9 + 1.6 * tNorm
-              : e.kind === 'shield'
-                ? 0.8 + 1.2 * tNorm
-                : 0.5 + 1.1 * tNorm;
-
-          return (
-            <group
-              key={`eff-${e.id}`}
-              position={[0, 0, e.z]}
-              rotation={[0, 0, (e.faceIndex / GAME.faces) * TWO_PI]}
-              scale={[baseScale, baseScale, baseScale]}
-            >
-              <mesh
-                position={[0, geom.apothem - 0.15, 0]}
-                geometry={e.kind === 'near' ? geom.nearGeo : geom.impactGeo}
-              >
-                <meshBasicMaterial
-                  color={colorSet.core}
-                  transparent
-                  opacity={alpha * (e.kind === 'near' ? 0.5 : 0.88)}
-                  side={THREE.DoubleSide}
-                />
-              </mesh>
-
-              <mesh
-                position={[0, geom.apothem - 0.15, 0]}
-                rotation={[Math.PI / 2, 0, 0]}
-                geometry={geom.effectRingGeo}
-              >
-                <meshBasicMaterial
-                  color={colorSet.ring}
-                  transparent
-                  opacity={alpha * 0.72}
-                  side={THREE.DoubleSide}
-                />
-              </mesh>
-            </group>
-          );
-        })}
-      </group>
-
-      <group position={[0, -(GAME.apothem - GAME.playerInset), playerZ]}>
-        <mesh geometry={geom.playerGeo}>
-          <meshStandardMaterial
-            color="#3B82F6"
-            emissive={snap.boostActive ? '#be123c' : '#1E40AF'}
-            emissiveIntensity={snap.boostActive ? 0.45 : 0.26}
-            roughness={0.2}
-            metalness={0.45}
-          />
-        </mesh>
-
-        <mesh geometry={geom.playerCoreGeo} position={[0, 0.16, 0]}>
-          <meshStandardMaterial
-            color="#E0F2FE"
-            roughness={0.12}
-            emissive="#22325d"
-          />
-        </mesh>
-
-        <mesh geometry={geom.playerAuraGeo}>
-          <meshBasicMaterial
-            color={playerAuraColor}
-            transparent
-            opacity={playerAuraOpacity}
-            blending={THREE.AdditiveBlending}
-          />
-        </mesh>
-      </group>
-
+      <ambientLight intensity={0.28} />
+      <directionalLight
+        position={[5, 8, 6]}
+        intensity={1.05}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
+      <directionalLight position={[-5, -2, 4]} intensity={0.45} />
+      <Environment preset="sunset" background={false} />
       <Stars
-        radius={92}
-        depth={84}
-        count={1500}
+        radius={140}
+        depth={44}
+        count={700}
         factor={2.2}
-        saturation={0}
+        saturation={0.6}
         fade
+        speed={0.15}
       />
+
+      <group ref={worldRef}>
+        <instancedMesh
+          ref={tileRef}
+          args={[undefined, undefined, tileInstances]}
+          receiveShadow
+        >
+          <primitive object={geom.tile} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.42}
+            metalness={0.08}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={bumpRef}
+          args={[undefined, undefined, bumpInstances]}
+          castShadow
+          receiveShadow
+        >
+          <primitive object={geom.bump} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.34}
+            metalness={0.06}
+            emissive="#7f1d1d"
+            emissiveIntensity={0.35}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={ringRef}
+          args={[undefined, undefined, GAME.ringBuffer]}
+        >
+          <primitive object={geom.ring} attach="geometry" />
+          <meshBasicMaterial
+            vertexColors
+            transparent
+            opacity={0.4}
+            toneMapped={false}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={gemRef}
+          args={[undefined, undefined, GAME.ringBuffer]}
+        >
+          <primitive object={geom.gem} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.18}
+            metalness={0.2}
+            emissive="#f59e0b"
+            emissiveIntensity={0.45}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={boostRef}
+          args={[undefined, undefined, GAME.ringBuffer]}
+        >
+          <primitive object={geom.boost} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.2}
+            metalness={0.18}
+            emissive="#0891b2"
+            emissiveIntensity={0.52}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={shieldRef}
+          args={[undefined, undefined, GAME.ringBuffer]}
+        >
+          <primitive object={geom.shield} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.22}
+            metalness={0.15}
+            emissive="#7c3aed"
+            emissiveIntensity={0.5}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={fxRef}
+          args={[undefined, undefined, runtime.current.effects.length]}
+        >
+          <primitive object={geom.fx} attach="geometry" />
+          <meshBasicMaterial
+            vertexColors
+            transparent
+            opacity={0.85}
+            toneMapped={false}
+          />
+        </instancedMesh>
+      </group>
+
+      <group
+        ref={playerRef}
+        position={[0, -GAME.radius + 0.62, GAME.playerPlaneZ]}
+      >
+        <mesh castShadow>
+          <primitive object={geom.player} attach="geometry" />
+          <meshStandardMaterial
+            color="#f8fafc"
+            roughness={0.28}
+            metalness={0.08}
+            emissive="#93c5fd"
+            emissiveIntensity={0.28}
+          />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.02]}>
+          <primitive object={geom.playerAura} attach="geometry" />
+          <meshBasicMaterial
+            color="#67e8f9"
+            transparent
+            opacity={0.25}
+            toneMapped={false}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
-
-export { octaSurgeState };

@@ -55,7 +55,8 @@ function makePlatform(
 
   const dangerChance = lerp(0.05, 0.25, difficulty01);
   const cubeChance = lerp(0.5, 0.3, difficulty01);
-  const slidingHazardChance = difficulty01 > 0.25 ? lerp(0, 0.18, (difficulty01 - 0.25) / 0.75) : 0;
+  const slidingHazardChance =
+    difficulty01 > 0.25 ? lerp(0, 0.18, (difficulty01 - 0.25) / 0.75) : 0;
 
   const type: PlatformData['type'] = rng.bool(dangerChance)
     ? 'danger'
@@ -285,7 +286,8 @@ export default function PrismJump() {
     // Mark rows that are out of frame (behind camera)
     for (let r = 0; r < w.rows.length; r++) {
       const row = w.rows[r];
-      if (row.z < outOfFrameZ) {
+      const rowZ = row.rowIndex * GAME.rowSpacing;
+      if (rowZ < outOfFrameZ) {
         row.outOfFrameSince = row.outOfFrameSince ?? elapsed;
       } else {
         row.outOfFrameSince = undefined;
@@ -708,7 +710,14 @@ export default function PrismJump() {
       const arrowMesh = arrowMeshRef.current;
       const hazardMesh = hazardMeshRef.current;
 
-      if (baseMesh && topMesh && cubeMesh && spikeMesh && arrowMesh && hazardMesh) {
+      if (
+        baseMesh &&
+        topMesh &&
+        cubeMesh &&
+        spikeMesh &&
+        arrowMesh &&
+        hazardMesh
+      ) {
         const dummy = w.dummy;
         const c = w.color;
 
@@ -840,7 +849,8 @@ export default function PrismJump() {
         if (topMesh.instanceColor) topMesh.instanceColor.needsUpdate = true;
         if (cubeMesh.instanceColor) cubeMesh.instanceColor.needsUpdate = true;
         if (arrowMesh.instanceColor) arrowMesh.instanceColor.needsUpdate = true;
-        if (hazardMesh.instanceColor) hazardMesh.instanceColor.needsUpdate = true;
+        if (hazardMesh.instanceColor)
+          hazardMesh.instanceColor.needsUpdate = true;
       }
     }
 

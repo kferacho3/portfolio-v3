@@ -1,4 +1,4 @@
-export type BranchFlipSoundName =
+export type GrowthSoundName =
   | 'rotate_left'
   | 'rotate_right'
   | 'collision'
@@ -6,16 +6,13 @@ export type BranchFlipSoundName =
   | 'perfect_turn'
   | 'game_over';
 
-export type BranchFlipSoundConfig = {
+export type GrowthSoundConfig = {
   volume: number;
   playbackRate: number;
   cooldownMs: number;
 };
 
-export const BRANCH_FLIP_SOUND_CONFIG: Record<
-  BranchFlipSoundName,
-  BranchFlipSoundConfig
-> = {
+export const GROWTH_SOUND_CONFIG: Record<GrowthSoundName, GrowthSoundConfig> = {
   rotate_left: { volume: 0.35, playbackRate: 1, cooldownMs: 40 },
   rotate_right: { volume: 0.35, playbackRate: 1, cooldownMs: 40 },
   collision: { volume: 0.55, playbackRate: 0.92, cooldownMs: 120 },

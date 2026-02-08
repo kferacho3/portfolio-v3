@@ -1,9 +1,9 @@
 export type Face = 0 | 1 | 2 | 3;
 export type PowerupType = 'boost' | 'shield';
 
-export type BranchFlipPhase = 'menu' | 'playing' | 'gameover';
+export type GrowthPhase = 'menu' | 'playing' | 'gameover';
 
-export interface BranchSegment {
+export interface GrowthSegment {
   slot: number;
   sequence: number;
   z: number;
@@ -17,8 +17,8 @@ export interface BranchSegment {
   cleared: boolean;
 }
 
-export interface BranchFlipGameState {
-  phase: BranchFlipPhase;
+export interface GrowthGameState {
+  phase: GrowthPhase;
   paused: boolean;
   time: number;
   score: number;

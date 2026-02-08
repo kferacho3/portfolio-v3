@@ -1,91 +1,76 @@
 export const OCTA_SURGE_TITLE = 'Octa Surge';
 
 export const STORAGE_KEYS = {
-  best: 'rachos-fun-octasurge-best',
-  bestScore: 'rachos-fun-octasurge-best-score',
-  totalCollectibles: 'rachos-fun-octasurge-collectibles',
-  totalSpecial: 'rachos-fun-octasurge-special',
-  totalBoost: 'rachos-fun-octasurge-boost',
-  totalShield: 'rachos-fun-octasurge-shield',
+  bestScore: 'rachos-fun-octasurge-best-score-v2',
+  bestClassic: 'rachos-fun-octasurge-best-classic-v2',
+  bestDaily: 'rachos-fun-octasurge-best-daily-v2',
+  totalGems: 'rachos-fun-octasurge-total-gems-v2',
+  totalBoost: 'rachos-fun-octasurge-total-boost-v2',
+  totalShield: 'rachos-fun-octasurge-total-shield-v2',
 };
 
 export const GAME = {
   faces: 8,
-  runSeconds: 70,
+  bottomFace: 6,
+  faceStep: (Math.PI * 2) / 8,
 
-  // Tunnel
-  apothem: 3.6,
-  tunnelLength: 150,
+  radius: 3.35,
+  ringSpacing: 1.18,
+  ringDepth: 1.06,
+  tileThickness: 0.14,
+  bumpHeight: 0.42,
 
-  // Player (fixed at bottom)
-  playerInset: 0.36,
-  playerZ: 0.75,
-  playerDepth: 0.54,
+  ringBuffer: 84,
+  spawnStartZ: -10,
+  despawnWorldZ: 1.2,
 
-  // Controls
-  keyRotationSpeed: 3.15,
-  dragRotationFactor: 0.007,
-  rotationEase: 11,
+  playerDepth: 0.5,
+  playerPlaneZ: 0,
 
-  // Motion
-  baseSpeed: 17,
-  speedRamp: 1.45,
-  spawnDistance: 128,
+  rotationDurationMs: 192,
+  rotationQueueLimit: 3,
 
-  // Obstacles
-  obstacleCount: 24,
-  obstacleDepth: 2.35,
-  wedgeScaleX: 1.45,
-  baseHazard: 0.16,
-  hazardRamp: 0.5,
+  classicRunSeconds: 62,
+  dailyRunSeconds: 68,
 
-  // Collision
-  faceHitTightness: 0.4,
-  collectibleFaceTolerance: 0.62,
-  nearMissFaceTolerance: 0.9,
+  baseSpeed: 11.4,
+  speedRampPerSecond: 0.14,
+  speedRampFromScore: 0.0028,
+  maxSpeed: 24.5,
 
-  // Collectibles
-  collectibleHitRadius: 0.58,
-  specialHitRadius: 0.46,
-  powerupHitRadius: 0.54,
-  collectibleCount: 14,
-  specialCollectibleCount: 5,
-  boostCollectibleCount: 3,
-  shieldCollectibleCount: 2,
-  collectibleGapLeadMin: 1.9,
-  collectibleGapLeadMax: 4.4,
-  specialZOffsetMin: 1.35,
-  specialZOffsetMax: 2.65,
-  powerupZOffsetMin: 2.1,
-  powerupZOffsetMax: 4.8,
+  comboWindow: 1.75,
+  comboStep: 0.08,
+  clearScore: 2,
+  nearMissScore: 26,
+  gemScore: 22,
+  boostScore: 50,
+  shieldScore: 42,
 
-  // Boost / shield / surge systems
-  boostDuration: 2.8,
-  boostSpeedMultiplier: 1.3,
-  boostScoreMultiplier: 1.25,
-  maxShieldCharges: 2,
-  invulnDuration: 0.45,
-  shieldInvulnDuration: 0.8,
-  surgeSlowScale: 0.58,
-  surgeDrainRate: 48,
-  surgeRechargeRate: 14,
-  surgeBoostRechargeRate: 12,
-  surgeGainNormal: 8,
-  surgeGainSpecial: 14,
-  surgeGainPowerup: 20,
+  warmupRings: 14,
+  difficultyRampRings: 520,
+  densityEarly: 0.2,
+  densityMid: 0.46,
+  densityLate: 0.72,
+  breatherEvery: 10,
 
-  // Scoring
-  distanceScoreFactor: 1.85,
-  nearMissScore: 28,
-  comboWindow: 2.1,
-  comboStep: 0.09,
-  pointsNormal: 24,
-  pointsSpecial: 78,
-  pointsBoost: 110,
-  pointsShield: 88,
+  collectibleGemChance: 0.32,
+  collectibleBoostChance: 0.08,
+  collectibleShieldChance: 0.055,
 
-  // FX
-  ringCount: 30,
-  collectionEffectLife: 0.72,
-  impactEffectLife: 0.62,
+  boostDuration: 2.3,
+  boostMultiplier: 1.34,
+  shieldMaxCharges: 2,
+
+  surgeDrainRate: 44,
+  surgeRechargeRate: 13,
+  surgeBoostRecharge: 10,
+  surgeSlowScale: 0.62,
+
+  cameraBaseFov: 72,
+  cameraMaxFovBoost: 16,
+
+  collisionLaneTolerance: 0.42,
+  nearMissLaneTolerance: 0.9,
+
+  fxLife: 0.62,
 };

@@ -1,4 +1,4 @@
-export const BEST_SCORE_KEY = 'branch_flip_best_v2';
+export const BEST_SCORE_KEY = 'growth_best_v2';
 
 export const QUARTER_TURN = Math.PI / 2;
 export const ROTATION_MS = 200;
