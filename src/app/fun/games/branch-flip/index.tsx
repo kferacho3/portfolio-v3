@@ -1,516 +1,791 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Html } from '@react-three/drei';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Environment, Html, OrthographicCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
 import { useGameUIState } from '../../store/selectors';
-import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { SeededRandom } from '../../utils/seededRandom';
 
+import {
+  BOOST_DURATION,
+  BOOST_MULTIPLIER,
+  CLEAR_SCORE,
+  COLLISION_WINDOW,
+  DESPAWN_WORLD_Z,
+  GEM_SCORE,
+  PERFECT_TURN_BONUS,
+  PLAYER_COLLISION_RADIUS,
+  SEGMENT_HALF,
+  SEGMENT_POOL,
+  SEGMENT_SIZE,
+  SEGMENT_SPACING,
+  SHIELD_DURATION,
+  SPAWN_START_Z,
+} from './constants';
+import { gameplayConfig } from './gameplayConfig';
+import { pickGraphicsPreset } from './graphicsPresets';
 import { branchFlipState } from './state';
+import type { BranchSegment, Face, PowerupType } from './types';
+import { useCameraShake } from './useCameraShake';
+import { useJellySquash } from './useJellySquash';
+import { useKeyboardControls } from './useKeyboardControls';
+import { useSwipeControls } from './useSwipeControls';
+import { useWorldRotation } from './useWorldRotation';
 
 export { branchFlipState } from './state';
 export * from './types';
 export * from './constants';
+export * from './gameplayConfig';
+export * from './graphicsPresets';
 
-type Segment = {
-  index: number;
-  instanceId: number;
-  branchSide: number | null;
-  hasGem: boolean;
-  gemSide: number;
-  scored: boolean;
-  themeIndex: number;
-  spawnTime: number;
-  branchGrowth: number;
-};
+const FACE_LIST: Face[] = [0, 1, 2, 3];
+const PLAYER_FACE_BY_ROTATION: Face[] = [2, 0, 3, 1];
 
-type Theme = {
-  skyTop: string;
-  skyBottom: string;
-  fog: string;
-  tileTop: string;
-  tileSide: string;
-  gem: string;
-};
-
-const TILE_SIZE = 1.0;
-const TILE_HEIGHT = 0.32;
-const PLAYER_SIZE = 0.38;
-const PLAYER_Y = TILE_HEIGHT / 2 + PLAYER_SIZE / 2 + 0.02;
-
-const BRANCH_LENGTH = 0.82;
-const BRANCH_OFFSET = TILE_SIZE / 2 + BRANCH_LENGTH / 2;
-const GEM_OFFSET = TILE_SIZE / 2 + 0.2;
-
-const LOOKAHEAD = 160;
-const MAX_SEGMENTS = 260;
-
-const BRANCH_GROW_TIME = 0.35;
-const BRANCH_BLOCK_THRESHOLD = 0.6;
-const MAX_LAG = 2.4;
-
-const ROTATE_STEP = Math.PI / 2;
-const ROTATE_SMOOTH = 12;
-
-const GEM_CHANCE = 0.14;
-const BRANCH_CHANCE_MIN = 0.18;
-const BRANCH_CHANCE_MAX = 0.45;
-
-const THEMES: Theme[] = [
-  {
-    skyTop: '#f0d7a6',
-    skyBottom: '#b9c07f',
-    fog: '#c8c084',
-    tileTop: '#fff3c7',
-    tileSide: '#f4a381',
-    gem: '#facc15',
-  },
-  {
-    skyTop: '#e7c2ff',
-    skyBottom: '#a98bd9',
-    fog: '#b99cd9',
-    tileTop: '#fff1cf',
-    tileSide: '#f1a07b',
-    gem: '#facc15',
-  },
-  {
-    skyTop: '#f2e2b3',
-    skyBottom: '#c8b7a8',
-    fog: '#d1b9a1',
-    tileTop: '#fff4d8',
-    tileSide: '#f3a17b',
-    gem: '#facc15',
-  },
+const TILE_COLOR_LIGHT = new THREE.Color('#f8f5ec');
+const TILE_COLOR_DARK = new THREE.Color('#ebd9b8');
+const OBSTACLE_COLORS = [
+  new THREE.Color('#f97316'),
+  new THREE.Color('#ef4444'),
+  new THREE.Color('#c2410c'),
 ];
+const GEM_COLOR = new THREE.Color('#fde047');
+const BOOST_COLOR = new THREE.Color('#22d3ee');
+const SHIELD_COLOR = new THREE.Color('#a78bfa');
 
-const SIDE_DIRS = [
-  new THREE.Vector2(1, 0),
-  new THREE.Vector2(0, 1),
-  new THREE.Vector2(-1, 0),
-  new THREE.Vector2(0, -1),
-];
+const OBSTACLE_INSTANCES_PER_SEGMENT = 3;
+const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
 
+const OBSTACLE_LENGTH = 0.72;
+const OBSTACLE_THICKNESS = 0.16;
+const OBSTACLE_RADIUS = SEGMENT_HALF + OBSTACLE_THICKNESS * 0.56;
+const GEM_RADIUS = SEGMENT_HALF + 0.16;
+const POWERUP_RADIUS = SEGMENT_HALF + 0.2;
+const HIDE_POSITION_Y = -9999;
+
+const normalizeFace = (face: number) => (((face % 4) + 4) % 4) as Face;
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+const getFaceOffset = (face: Face, radius: number): [number, number] => {
+  switch (face) {
+    case 0:
+      return [radius, 0];
+    case 1:
+      return [-radius, 0];
+    case 2:
+      return [0, radius];
+    default:
+      return [0, -radius];
+  }
+};
+
+const buildSafeFace = (
+  rng: SeededRandom,
+  previousSafeFace: Face,
+  difficulty: number
+): Face => {
+  const keepWeight = clamp(0.56 - difficulty * 0.2, 0.28, 0.56);
+  const turnWeight = clamp(0.22 + difficulty * 0.1, 0.22, 0.4);
+  const choices = [
+    { item: previousSafeFace, weight: keepWeight },
+    { item: normalizeFace(previousSafeFace + 1), weight: turnWeight },
+    { item: normalizeFace(previousSafeFace - 1), weight: turnWeight },
+  ];
+  return rng.weighted(choices);
+};
+
+const buildBlockedFaces = (
+  rng: SeededRandom,
+  safeFace: Face,
+  difficulty: number
+): Face[] => {
+  let blockedCount = 1;
+  if (difficulty > 0.25 && rng.bool(0.34 + difficulty * 0.28)) blockedCount = 2;
+  if (difficulty > 0.72 && rng.bool(0.12 + difficulty * 0.24)) blockedCount = 3;
+
+  const available = FACE_LIST.filter((face) => face !== safeFace) as Face[];
+  rng.shuffle(available);
+  return available.slice(0, blockedCount);
+};
+
+type InputControllerProps = {
+  canStart: boolean;
+  canRotate: boolean;
+  rotateLeft: () => void;
+  rotateRight: () => void;
+  rotateFallback: () => void;
+  startOrRestart: () => void;
+};
+
+const InputController: React.FC<InputControllerProps> = ({
+  canStart,
+  canRotate,
+  rotateLeft,
+  rotateRight,
+  rotateFallback,
+  startOrRestart,
+}) => {
+  const onLeft = useCallback(() => {
+    if (!canRotate) return;
+    rotateLeft();
+  }, [canRotate, rotateLeft]);
+
+  const onRight = useCallback(() => {
+    if (!canRotate) return;
+    rotateRight();
+  }, [canRotate, rotateRight]);
+
+  const onTapFallback = useCallback(() => {
+    if (!canRotate) return;
+    rotateFallback();
+  }, [canRotate, rotateFallback]);
+
+  const onStart = useCallback(() => {
+    if (!canStart) return;
+    startOrRestart();
+  }, [canStart, startOrRestart]);
+
+  useKeyboardControls({
+    onLeft,
+    onRight,
+    onTapFallback,
+    onStart,
+  });
+
+  useSwipeControls({
+    enabled: canRotate,
+    onLeft: onRight,
+    onRight: onLeft,
+  });
+
+  useEffect(() => {
+    const handlePointerDown = () => {
+      if (canStart) {
+        startOrRestart();
+        return;
+      }
+      if (canRotate) {
+        rotateFallback();
+      }
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => window.removeEventListener('pointerdown', handlePointerDown);
+  }, [canRotate, canStart, rotateFallback, startOrRestart]);
+
+  return null;
+};
 
 const BranchFlip: React.FC = () => {
   const snap = useSnapshot(branchFlipState);
   const { paused } = useGameUIState();
-  const input = useInputRef();
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
+
+  const graphicsPreset = useMemo(() => pickGraphicsPreset(), []);
+  const rotation = useWorldRotation();
+  const cameraShake = useCameraShake();
+  const jellySquash = useJellySquash();
 
   const worldRef = useRef<THREE.Group>(null);
-  const tileMeshRef = useRef<THREE.InstancedMesh>(null);
-  const branchMeshRef = useRef<THREE.InstancedMesh>(null);
-  const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Group>(null);
-  const skyRef = useRef<THREE.Mesh>(null);
+  const tileMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const gemMeshRef = useRef<THREE.InstancedMesh>(null);
+  const powerupMeshRef = useRef<THREE.InstancedMesh>(null);
+  const orthoRef = useRef<THREE.OrthographicCamera>(null);
 
-  const skyUniforms = useRef({
-    uTop: { value: new THREE.Color(THEMES[0].skyTop) },
-    uBottom: { value: new THREE.Color(THEMES[0].skyBottom) },
-  });
-
-  const world = useRef({
+  const runtime = useRef({
     rng: new SeededRandom(1),
-    nextIndex: 0,
-    segmentsByIndex: new Map<number, Segment>(),
-    instanceToSegment: Array<Segment | null>(MAX_SEGMENTS).fill(null),
-    rotationIndex: 0,
-    rotation: 0,
-    targetRotation: 0,
-    playerX: 0,
-    scrollX: 0,
-    playerY: PLAYER_Y,
-    time: 0,
-    themeIndex: 0,
-    dummy: new THREE.Object3D(),
-    color: new THREE.Color(),
+    segments: [] as BranchSegment[],
+    farthestZ: SPAWN_START_Z,
+    nextSequence: 0,
+    lastSafeFace: 2 as Face,
+    scroll: 0,
+    elapsed: 0,
   });
 
-  const themeForIndex = (index: number) => THEMES[index % THEMES.length];
+  const matrixDummy = useMemo(() => new THREE.Object3D(), []);
 
-  const clearInstances = () => {
-    const w = world.current;
-    if (tileMeshRef.current) {
-      for (let i = 0; i < MAX_SEGMENTS; i += 1) {
-        w.dummy.position.set(0, -9999, 0);
-        w.dummy.scale.set(0.0001, 0.0001, 0.0001);
-        w.dummy.updateMatrix();
-        tileMeshRef.current.setMatrixAt(i, w.dummy.matrix);
-        branchMeshRef.current?.setMatrixAt(i, w.dummy.matrix);
-        gemMeshRef.current?.setMatrixAt(i, w.dummy.matrix);
-      }
-      tileMeshRef.current.instanceMatrix.needsUpdate = true;
-      branchMeshRef.current?.instanceMatrix.needsUpdate &&
-        (branchMeshRef.current.instanceMatrix.needsUpdate = true);
-      gemMeshRef.current?.instanceMatrix.needsUpdate &&
-        (gemMeshRef.current.instanceMatrix.needsUpdate = true);
-    }
-  };
+  const hideInstance = useCallback(
+    (mesh: THREE.InstancedMesh | null, instanceId: number) => {
+      if (!mesh) return;
+      matrixDummy.position.set(0, HIDE_POSITION_Y, 0);
+      matrixDummy.rotation.set(0, 0, 0);
+      matrixDummy.scale.set(0.001, 0.001, 0.001);
+      matrixDummy.updateMatrix();
+      mesh.setMatrixAt(instanceId, matrixDummy.matrix);
+    },
+    [matrixDummy]
+  );
 
-  const setBranchInstance = (segment: Segment, growth: number) => {
-    if (!branchMeshRef.current) return;
-    if (segment.branchSide == null) {
-      const w = world.current;
-      w.dummy.position.set(0, -9999, 0);
-      w.dummy.scale.set(0.0001, 0.0001, 0.0001);
-      w.dummy.updateMatrix();
-      branchMeshRef.current.setMatrixAt(segment.instanceId, w.dummy.matrix);
-      return;
-    }
-
-    const w = world.current;
-    const dir = SIDE_DIRS[segment.branchSide];
-    const x = segment.index * TILE_SIZE;
-    const theme = themeForIndex(segment.themeIndex);
-    const rotationBySide = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
-    const rotationX = rotationBySide[segment.branchSide] ?? 0;
-
-    w.dummy.position.set(x, dir.x * BRANCH_OFFSET, dir.y * BRANCH_OFFSET);
-    w.dummy.rotation.set(rotationX, 0, 0);
-    w.dummy.scale.set(1, clamp(growth, 0.001, 1), 1);
-    w.dummy.updateMatrix();
-    branchMeshRef.current.setMatrixAt(segment.instanceId, w.dummy.matrix);
-    branchMeshRef.current.setColorAt(
-      segment.instanceId,
-      new THREE.Color(theme.tileSide)
-    );
-  };
-
-  const addSegment = () => {
-    const w = world.current;
-    const index = w.nextIndex;
-    const instanceId = index % MAX_SEGMENTS;
-
-    const existing = w.instanceToSegment[instanceId];
-    if (existing) {
-      w.segmentsByIndex.delete(existing.index);
-    }
-
-    const difficulty = clamp(index / 160, 0, 1);
-    const branchChance =
-      BRANCH_CHANCE_MIN + (BRANCH_CHANCE_MAX - BRANCH_CHANCE_MIN) * difficulty;
-    const hasBranch = index > 6 && w.rng.bool(branchChance);
-    const branchSide = hasBranch ? w.rng.int(0, 3) : null;
-
-    const hasGem =
-      index > 4 && w.rng.bool(GEM_CHANCE) && branchSide !== w.rotationIndex;
-    const gemSide = w.rng.int(0, 3);
-
-    const themeIndex = Math.floor(index / 40) % THEMES.length;
-    const segment: Segment = {
-      index,
-      instanceId,
-      branchSide,
-      hasGem,
-      gemSide,
-      scored: false,
-      themeIndex,
-      spawnTime: w.time,
-      branchGrowth: 0,
-    };
-
-    w.segmentsByIndex.set(index, segment);
-    w.instanceToSegment[instanceId] = segment;
-
-    const theme = themeForIndex(themeIndex);
-
-    const x = index * TILE_SIZE;
-    if (tileMeshRef.current) {
-      w.dummy.position.set(x, 0, 0);
-      w.dummy.rotation.set(0, 0, 0);
-      w.dummy.scale.set(1, 1, 1);
-      w.dummy.updateMatrix();
-      tileMeshRef.current.setMatrixAt(instanceId, w.dummy.matrix);
+  const writeTileInstance = useCallback(
+    (segment: BranchSegment) => {
+      if (!tileMeshRef.current) return;
+      matrixDummy.position.set(0, 0, segment.z);
+      matrixDummy.rotation.set(0, 0, 0);
+      matrixDummy.scale.set(1, 1, 1);
+      matrixDummy.updateMatrix();
+      tileMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
       tileMeshRef.current.setColorAt(
-        instanceId,
-        new THREE.Color(theme.tileTop)
+        segment.slot,
+        segment.sequence % 2 === 0 ? TILE_COLOR_LIGHT : TILE_COLOR_DARK
       );
-    }
+    },
+    [matrixDummy]
+  );
 
-    segment.branchGrowth = 0.02;
-    setBranchInstance(segment, 0.02);
+  const writeObstacleInstances = useCallback(
+    (segment: BranchSegment) => {
+      const mesh = obstacleMeshRef.current;
+      if (!mesh) return;
 
-    if (gemMeshRef.current) {
-      if (hasGem) {
-        const dir = SIDE_DIRS[gemSide];
-        w.dummy.position.set(x, dir.x * GEM_OFFSET, dir.y * GEM_OFFSET);
-        w.dummy.rotation.set(0, 0, 0);
-        w.dummy.scale.set(0.4, 0.4, 0.4);
-        w.dummy.updateMatrix();
-        gemMeshRef.current.setMatrixAt(instanceId, w.dummy.matrix);
-        gemMeshRef.current.setColorAt(instanceId, new THREE.Color(theme.gem));
-      } else {
-        w.dummy.position.set(0, -9999, 0);
-        w.dummy.scale.set(0.0001, 0.0001, 0.0001);
-        w.dummy.updateMatrix();
-        gemMeshRef.current.setMatrixAt(instanceId, w.dummy.matrix);
+      for (let i = 0; i < OBSTACLE_INSTANCES_PER_SEGMENT; i += 1) {
+        const instanceId = segment.slot * OBSTACLE_INSTANCES_PER_SEGMENT + i;
+        const face = segment.blockedFaces[i];
+        if (face == null) {
+          hideInstance(mesh, instanceId);
+          continue;
+        }
+
+        const [ox, oy] = getFaceOffset(face, OBSTACLE_RADIUS);
+        const angle = face === 0 || face === 1 ? 0 : Math.PI / 2;
+        matrixDummy.position.set(ox, oy, segment.z);
+        matrixDummy.rotation.set(0, 0, angle);
+        matrixDummy.scale.set(1, 1, 1);
+        matrixDummy.updateMatrix();
+        mesh.setMatrixAt(instanceId, matrixDummy.matrix);
+        mesh.setColorAt(
+          instanceId,
+          OBSTACLE_COLORS[Math.min(i, OBSTACLE_COLORS.length - 1)]
+        );
       }
+    },
+    [hideInstance, matrixDummy]
+  );
+
+  const writeGemInstance = useCallback(
+    (segment: BranchSegment) => {
+      if (!gemMeshRef.current) return;
+      if (segment.gemFace == null || segment.gemTaken) {
+        hideInstance(gemMeshRef.current, segment.slot);
+        return;
+      }
+
+      const [gx, gy] = getFaceOffset(segment.gemFace, GEM_RADIUS);
+      matrixDummy.position.set(gx, gy, segment.z);
+      matrixDummy.rotation.set(0.4, 0.2, 0.1);
+      matrixDummy.scale.set(0.28, 0.28, 0.28);
+      matrixDummy.updateMatrix();
+      gemMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
+      gemMeshRef.current.setColorAt(segment.slot, GEM_COLOR);
+    },
+    [hideInstance, matrixDummy]
+  );
+
+  const writePowerupInstance = useCallback(
+    (segment: BranchSegment) => {
+      if (!powerupMeshRef.current) return;
+      if (
+        segment.powerupFace == null ||
+        segment.powerupType == null ||
+        segment.powerupTaken
+      ) {
+        hideInstance(powerupMeshRef.current, segment.slot);
+        return;
+      }
+
+      const [px, py] = getFaceOffset(segment.powerupFace, POWERUP_RADIUS);
+      matrixDummy.position.set(px, py, segment.z);
+      matrixDummy.rotation.set(
+        0,
+        0,
+        segment.powerupType === 'boost' ? 0 : Math.PI * 0.25
+      );
+      matrixDummy.scale.set(0.26, 0.26, 0.26);
+      matrixDummy.updateMatrix();
+      powerupMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
+      powerupMeshRef.current.setColorAt(
+        segment.slot,
+        segment.powerupType === 'boost' ? BOOST_COLOR : SHIELD_COLOR
+      );
+    },
+    [hideInstance, matrixDummy]
+  );
+
+  const flushInstances = useCallback(() => {
+    if (tileMeshRef.current?.instanceMatrix) {
+      tileMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (tileMeshRef.current?.instanceColor) {
+      tileMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    if (obstacleMeshRef.current?.instanceMatrix) {
+      obstacleMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (obstacleMeshRef.current?.instanceColor) {
+      obstacleMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    if (gemMeshRef.current?.instanceMatrix) {
+      gemMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (gemMeshRef.current?.instanceColor) {
+      gemMeshRef.current.instanceColor.needsUpdate = true;
+    }
+    if (powerupMeshRef.current?.instanceMatrix) {
+      powerupMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+    if (powerupMeshRef.current?.instanceColor) {
+      powerupMeshRef.current.instanceColor.needsUpdate = true;
+    }
+  }, []);
+
+  const createSegment = useCallback(
+    (
+      slot: number,
+      z: number,
+      sequence: number,
+      previousSafeFace: Face
+    ): BranchSegment => {
+      const difficulty = clamp(sequence / 550, 0, 1);
+      const safeFace = buildSafeFace(
+        runtime.current.rng,
+        previousSafeFace,
+        difficulty
+      );
+      const blockedFaces = buildBlockedFaces(
+        runtime.current.rng,
+        safeFace,
+        difficulty
+      );
+
+      const availableForPickup = FACE_LIST.filter(
+        (face) => !blockedFaces.includes(face)
+      ) as Face[];
+
+      let gemFace: Face | null = null;
+      if (availableForPickup.length > 0) {
+        const gemChance = clamp(
+          gameplayConfig.gemChance - difficulty * 0.08,
+          0.15,
+          0.28
+        );
+        if (runtime.current.rng.bool(gemChance)) {
+          gemFace = runtime.current.rng.pick(availableForPickup);
+        }
+      }
+
+      let powerupFace: Face | null = null;
+      let powerupType: PowerupType | null = null;
+      if (
+        availableForPickup.length > 0 &&
+        runtime.current.rng.bool(gameplayConfig.powerupChance)
+      ) {
+        const pool = availableForPickup.filter((face) => face !== gemFace);
+        if (pool.length > 0) {
+          powerupFace = runtime.current.rng.pick(pool);
+          powerupType = runtime.current.rng.bool(
+            gameplayConfig.shieldChanceWithinPowerups
+          )
+            ? 'shield'
+            : 'boost';
+        }
+      }
+
+      return {
+        slot,
+        sequence,
+        z,
+        blockedFaces,
+        safeFace,
+        gemFace,
+        powerupFace,
+        powerupType,
+        gemTaken: false,
+        powerupTaken: false,
+        cleared: false,
+      };
+    },
+    []
+  );
+
+  const recycleSegment = useCallback(
+    (segment: BranchSegment) => {
+      const nextSequence = runtime.current.nextSequence;
+      const nextZ = runtime.current.farthestZ + SEGMENT_SPACING;
+      const next = createSegment(
+        segment.slot,
+        nextZ,
+        nextSequence,
+        runtime.current.lastSafeFace
+      );
+
+      runtime.current.lastSafeFace = next.safeFace;
+      runtime.current.farthestZ = nextZ;
+      runtime.current.nextSequence += 1;
+      runtime.current.segments[segment.slot] = next;
+
+      writeTileInstance(next);
+      writeObstacleInstances(next);
+      writeGemInstance(next);
+      writePowerupInstance(next);
+    },
+    [
+      createSegment,
+      writeGemInstance,
+      writeObstacleInstances,
+      writePowerupInstance,
+      writeTileInstance,
+    ]
+  );
+
+  const resetWorld = useCallback(() => {
+    runtime.current.rng.reset(Math.floor(Math.random() * 1_000_000_000));
+    runtime.current.segments = [];
+    runtime.current.lastSafeFace = 2;
+    runtime.current.scroll = 0;
+    runtime.current.elapsed = 0;
+    runtime.current.nextSequence = SEGMENT_POOL;
+    runtime.current.farthestZ =
+      SPAWN_START_Z + SEGMENT_SPACING * (SEGMENT_POOL - 1);
+
+    for (let slot = 0; slot < SEGMENT_POOL; slot += 1) {
+      const z = SPAWN_START_Z + slot * SEGMENT_SPACING;
+      const segment = createSegment(
+        slot,
+        z,
+        slot,
+        runtime.current.lastSafeFace
+      );
+      runtime.current.lastSafeFace = segment.safeFace;
+      runtime.current.segments.push(segment);
+      writeTileInstance(segment);
+      writeObstacleInstances(segment);
+      writeGemInstance(segment);
+      writePowerupInstance(segment);
     }
 
-    tileMeshRef.current?.instanceMatrix.needsUpdate &&
-      (tileMeshRef.current.instanceMatrix.needsUpdate = true);
-    tileMeshRef.current?.instanceColor &&
-      (tileMeshRef.current.instanceColor.needsUpdate = true);
-    branchMeshRef.current?.instanceMatrix.needsUpdate &&
-      (branchMeshRef.current.instanceMatrix.needsUpdate = true);
-    branchMeshRef.current?.instanceColor &&
-      (branchMeshRef.current.instanceColor.needsUpdate = true);
-    gemMeshRef.current?.instanceMatrix.needsUpdate &&
-      (gemMeshRef.current.instanceMatrix.needsUpdate = true);
-    gemMeshRef.current?.instanceColor &&
-      (gemMeshRef.current.instanceColor.needsUpdate = true);
+    if (worldRef.current) {
+      worldRef.current.position.set(0, 0, 0);
+      worldRef.current.rotation.set(0, 0, 0);
+    }
+    rotation.reset(worldRef);
+    flushInstances();
 
-    w.nextIndex += 1;
-  };
-
-  const resetWorld = () => {
-    const w = world.current;
-    w.rng = new SeededRandom(Math.floor(Math.random() * 1_000_000_000));
-    w.nextIndex = 0;
-    w.segmentsByIndex.clear();
-    w.instanceToSegment.fill(null);
-    w.rotationIndex = 0;
-    w.rotation = 0;
-    w.targetRotation = 0;
-    w.playerX = 0;
-    w.scrollX = 0;
-    w.playerY = PLAYER_Y;
-    w.time = 0;
-    w.themeIndex = 0;
-
+    branchFlipState.time = 0;
+    branchFlipState.speed = gameplayConfig.baseSpeed;
     branchFlipState.score = 0;
     branchFlipState.gems = 0;
-    branchFlipState.speed = 4.8;
-    branchFlipState.falling = false;
+    branchFlipState.boostMs = 0;
+    branchFlipState.shieldMs = 0;
+    branchFlipState.perfectTurns = 0;
+  }, [
+    createSegment,
+    flushInstances,
+    rotation,
+    writeGemInstance,
+    writeObstacleInstances,
+    writePowerupInstance,
+    writeTileInstance,
+  ]);
 
-    clearInstances();
-    for (let i = 0; i < LOOKAHEAD; i += 1) {
-      addSegment();
-    }
-  };
+  const startOrRestart = useCallback(() => {
+    branchFlipState.startGame();
+    resetWorld();
+  }, [resetWorld]);
+
+  const rotateLeft = useCallback(() => {
+    if (branchFlipState.phase !== 'playing' || paused) return;
+    rotation.rotateLeft();
+  }, [paused, rotation]);
+
+  const rotateRight = useCallback(() => {
+    if (branchFlipState.phase !== 'playing' || paused) return;
+    rotation.rotateRight();
+  }, [paused, rotation]);
+
+  const rotateFallback = useCallback(() => {
+    if (branchFlipState.phase !== 'playing' || paused) return;
+    rotation.rotateInLastDirection();
+  }, [paused, rotation]);
 
   useEffect(() => {
     branchFlipState.loadBestScore();
     resetWorld();
-  }, []);
+  }, [resetWorld]);
 
   useEffect(() => {
-    const theme = themeForIndex(world.current.themeIndex);
-    skyUniforms.current.uTop.value.set(theme.skyTop);
-    skyUniforms.current.uBottom.value.set(theme.skyBottom);
-    scene.fog = new THREE.Fog(theme.fog, 8, 60);
-    scene.background = new THREE.Color(theme.skyBottom);
-  }, [scene]);
+    if (paused) branchFlipState.pause();
+    else branchFlipState.resume();
+  }, [paused]);
 
-  useFrame((_, dt) => {
-    const w = world.current;
-    const inputState = input.current;
-    const tap = inputState.pointerJustDown || inputState.keysDown.has(' ');
-
-    if (tap) {
-      if (snap.phase === 'menu' || snap.phase === 'gameover') {
-        branchFlipState.startGame();
-        resetWorld();
-      } else if (snap.phase === 'playing' && !paused) {
-        w.rotationIndex = (w.rotationIndex + 1) % 4;
-        w.targetRotation = w.rotationIndex * ROTATE_STEP;
-      }
+  useEffect(() => {
+    if (graphicsPreset.fog) {
+      scene.fog = new THREE.Fog('#d6d6e3', 8, 56);
+    } else {
+      scene.fog = null;
     }
+    scene.background = new THREE.Color('#c9d0dd');
+  }, [graphicsPreset.fog, scene]);
 
-    clearFrameInput(input);
+  useEffect(() => {
+    gl.setPixelRatio(graphicsPreset.pixelRatio);
+  }, [gl, graphicsPreset.pixelRatio]);
 
-    if (paused) return;
+  useFrame((state, dt) => {
+    const nowMs = state.clock.elapsedTime * 1000;
+    rotation.update(nowMs, worldRef);
+    jellySquash.update(dt, playerRef);
 
-    if (snap.phase === 'playing') {
-      w.time += dt;
-      w.rotation =
-        w.rotation +
-        (w.targetRotation - w.rotation) * Math.min(1, dt * ROTATE_SMOOTH);
+    if (branchFlipState.phase === 'playing' && !paused) {
+      runtime.current.elapsed += dt;
+      branchFlipState.time = runtime.current.elapsed;
+      branchFlipState.tickTimers(dt);
+
+      let speed =
+        gameplayConfig.baseSpeed +
+        runtime.current.elapsed * gameplayConfig.speedRampPerSecond +
+        branchFlipState.score * gameplayConfig.speedRampFromScore;
+
+      if (branchFlipState.boostMs > 0) speed *= BOOST_MULTIPLIER;
+      speed = Math.min(gameplayConfig.maxSpeed, speed);
+      branchFlipState.speed = speed;
+
+      runtime.current.scroll += speed * dt;
       if (worldRef.current) {
-        worldRef.current.rotation.x = w.rotation;
+        worldRef.current.position.z = -runtime.current.scroll;
       }
 
-      branchFlipState.speed = 4.8 + Math.max(0, branchFlipState.score) * 0.02;
-      w.scrollX += branchFlipState.speed * dt;
+      const activeFace = PLAYER_FACE_BY_ROTATION[rotation.rotationIndex];
+      let shouldEndRun = false;
 
-      const currentIndex = Math.floor(w.scrollX / TILE_SIZE);
-      while (w.nextIndex < currentIndex + LOOKAHEAD) addSegment();
+      for (let i = 0; i < runtime.current.segments.length; i += 1) {
+        const segment = runtime.current.segments[i];
+        const worldZ = segment.z - runtime.current.scroll;
 
-      const playerIndex = Math.floor(w.playerX / TILE_SIZE);
-      const blockingSegment = w.segmentsByIndex.get(playerIndex + 1);
-      const blockingGrowth = blockingSegment
-        ? clamp((w.time - blockingSegment.spawnTime) / BRANCH_GROW_TIME, 0, 1)
-        : 0;
-      const isBlocked =
-        !!blockingSegment &&
-        blockingSegment.branchSide === w.rotationIndex &&
-        blockingGrowth > BRANCH_BLOCK_THRESHOLD;
+        if (!segment.cleared && worldZ <= COLLISION_WINDOW) {
+          const isBlocked = segment.blockedFaces.includes(activeFace);
+          segment.cleared = true;
 
-      if (!isBlocked) {
-        w.playerX += branchFlipState.speed * dt;
-        if (w.playerX > w.scrollX) w.playerX = w.scrollX;
-      }
+          if (isBlocked) {
+            if (branchFlipState.shieldMs > 0) {
+              branchFlipState.shieldMs = 0;
+              cameraShake.triggerShake(0.12, 110);
+              jellySquash.trigger();
+            } else {
+              shouldEndRun = true;
+              cameraShake.triggerShake(0.2, 150);
+              jellySquash.trigger();
+              break;
+            }
+          } else {
+            branchFlipState.addClearScore(
+              CLEAR_SCORE + Math.max(0, segment.blockedFaces.length - 1)
+            );
 
-      const lag = w.scrollX - w.playerX;
-      if (lag > MAX_LAG) {
-        branchFlipState.endGame();
-        return;
-      }
+            const turnDelta = nowMs - rotation.lastRotateAtMs;
+            if (
+              turnDelta > 0 &&
+              turnDelta <= gameplayConfig.perfectTurnWindowMs
+            ) {
+              branchFlipState.addPerfectTurn();
+              branchFlipState.addClearScore(PERFECT_TURN_BONUS);
+              cameraShake.triggerShake(0.07, 80);
+            } else if (segment.blockedFaces.length >= 2) {
+              cameraShake.triggerShake(0.04, 55);
+            }
 
-      let branchUpdated = false;
-      const growthStart = Math.max(0, currentIndex - 2);
-      const growthEnd = currentIndex + 26;
-      for (let i = growthStart; i <= growthEnd; i += 1) {
-        const seg = w.segmentsByIndex.get(i);
-        if (!seg || seg.branchSide == null) continue;
-        const growth = clamp((w.time - seg.spawnTime) / BRANCH_GROW_TIME, 0, 1);
-        if (Math.abs(growth - seg.branchGrowth) > 0.01) {
-          seg.branchGrowth = growth;
-          setBranchInstance(seg, growth);
-          branchUpdated = true;
-        }
-      }
-      if (branchUpdated && branchMeshRef.current) {
-        branchMeshRef.current.instanceMatrix.needsUpdate = true;
-        if (branchMeshRef.current.instanceColor) {
-          branchMeshRef.current.instanceColor.needsUpdate = true;
-        }
-      }
+            if (segment.gemFace === activeFace && !segment.gemTaken) {
+              segment.gemTaken = true;
+              branchFlipState.collectGem();
+              branchFlipState.addClearScore(GEM_SCORE);
+              writeGemInstance(segment);
+            }
 
-      const segment = w.segmentsByIndex.get(playerIndex);
-      if (segment && !segment.scored) {
-        segment.scored = true;
-        branchFlipState.score = Math.max(branchFlipState.score, playerIndex);
-
-        if (segment.hasGem && segment.gemSide === w.rotationIndex) {
-          segment.hasGem = false;
-          branchFlipState.collectGem();
-          if (gemMeshRef.current) {
-            w.dummy.position.set(0, -9999, 0);
-            w.dummy.scale.set(0.0001, 0.0001, 0.0001);
-            w.dummy.updateMatrix();
-            gemMeshRef.current.setMatrixAt(segment.instanceId, w.dummy.matrix);
-            gemMeshRef.current.instanceMatrix.needsUpdate = true;
+            if (
+              segment.powerupFace === activeFace &&
+              segment.powerupType != null &&
+              !segment.powerupTaken
+            ) {
+              segment.powerupTaken = true;
+              if (segment.powerupType === 'boost') {
+                branchFlipState.triggerBoost(BOOST_DURATION * 1000);
+              } else {
+                branchFlipState.grantShield(SHIELD_DURATION * 1000);
+              }
+              writePowerupInstance(segment);
+            }
           }
         }
+
+        if (worldZ < DESPAWN_WORLD_Z) {
+          recycleSegment(segment);
+        }
       }
 
-      const themeIndex = Math.floor(currentIndex / 40) % THEMES.length;
-      if (themeIndex !== w.themeIndex) {
-        w.themeIndex = themeIndex;
-        const theme = themeForIndex(themeIndex);
-        skyUniforms.current.uTop.value.set(theme.skyTop);
-        skyUniforms.current.uBottom.value.set(theme.skyBottom);
-        scene.fog = new THREE.Fog(theme.fog, 8, 60);
-        scene.background = new THREE.Color(theme.skyBottom);
+      if (shouldEndRun) {
+        branchFlipState.endGame();
+      } else {
+        flushInstances();
       }
     }
 
-    if (playerRef.current) {
-      playerRef.current.position.set(w.playerX, w.playerY, 0);
-    }
-
-    if (skyRef.current) {
-      skyRef.current.position.set(w.scrollX, 0, 0);
-    }
-
-    camera.position.x = w.scrollX - 6.8;
-    camera.position.y = 4.6;
-    camera.position.z = 4.6;
-    camera.lookAt(w.scrollX + 2.4, 0.6, 0);
+    const shake = cameraShake.updateShake(dt, state.clock.elapsedTime);
+    const cam = orthoRef.current ?? (camera as THREE.OrthographicCamera);
+    const speedRatio = clamp(
+      branchFlipState.speed / gameplayConfig.maxSpeed,
+      0,
+      1
+    );
+    const targetZoom = 92 + speedRatio * 8;
+    cam.zoom = THREE.MathUtils.lerp(
+      cam.zoom,
+      targetZoom,
+      1 - Math.exp(-dt * 7)
+    );
+    cam.position.x = THREE.MathUtils.lerp(
+      cam.position.x,
+      5.2 + shake.x,
+      1 - Math.exp(-dt * 8)
+    );
+    cam.position.y = THREE.MathUtils.lerp(
+      cam.position.y,
+      5.1 + shake.y,
+      1 - Math.exp(-dt * 8)
+    );
+    cam.position.z = THREE.MathUtils.lerp(
+      cam.position.z,
+      9 + shake.z,
+      1 - Math.exp(-dt * 8)
+    );
+    cam.rotation.z = THREE.MathUtils.lerp(
+      cam.rotation.z,
+      rotation.worldRotation * 0.06,
+      1 - Math.exp(-dt * 9)
+    );
+    cam.lookAt(0, 0, 0);
+    cam.updateProjectionMatrix();
   });
-
-  const scoreDisplay = snap.score;
 
   return (
     <group>
-      <mesh ref={skyRef}>
-        <sphereGeometry args={[80, 32, 32]} />
-        <shaderMaterial
-          side={THREE.BackSide}
-          depthWrite={false}
-          uniforms={skyUniforms.current}
-          vertexShader={`
-            varying vec3 vWorldPos;
-            void main() {
-              vec4 worldPosition = modelMatrix * vec4(position, 1.0);
-              vWorldPos = worldPosition.xyz;
-              gl_Position = projectionMatrix * viewMatrix * worldPosition;
-            }
-          `}
-          fragmentShader={`
-            uniform vec3 uTop;
-            uniform vec3 uBottom;
-            varying vec3 vWorldPos;
-            void main() {
-              float h = normalize(vWorldPos).y * 0.5 + 0.5;
-              vec3 col = mix(uBottom, uTop, smoothstep(0.0, 1.0, h));
-              gl_FragColor = vec4(col, 1.0);
-            }
-          `}
-        />
-      </mesh>
+      <InputController
+        canStart={snap.phase !== 'playing'}
+        canRotate={snap.phase === 'playing' && !paused}
+        rotateLeft={rotateLeft}
+        rotateRight={rotateRight}
+        rotateFallback={rotateFallback}
+        startOrRestart={startOrRestart}
+      />
 
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[6, 8, 6]} intensity={0.9} />
+      <OrthographicCamera
+        ref={orthoRef}
+        makeDefault
+        near={0.1}
+        far={120}
+        position={[5.2, 5.1, 9]}
+        zoom={92}
+      />
+
+      <ambientLight intensity={0.58} />
+      <directionalLight
+        position={[6, 9, 8]}
+        intensity={0.9}
+        castShadow={graphicsPreset.shadows}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+      />
+      <directionalLight position={[-4, 3, 2]} intensity={0.45} />
+      <Environment preset="city" background={false} />
 
       <group ref={worldRef}>
         <instancedMesh
           ref={tileMeshRef}
-          args={[undefined, undefined, MAX_SEGMENTS]}
-          castShadow
+          args={[undefined, undefined, SEGMENT_POOL]}
           receiveShadow
         >
-          <boxGeometry args={[TILE_SIZE, TILE_HEIGHT, TILE_SIZE]} />
-          <meshStandardMaterial vertexColors roughness={0.6} metalness={0.05} />
+          <boxGeometry
+            args={[SEGMENT_SIZE, SEGMENT_SIZE, SEGMENT_SPACING * 0.9]}
+          />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.42}
+            metalness={0.08}
+          />
         </instancedMesh>
 
         <instancedMesh
-          ref={branchMeshRef}
-          args={[undefined, undefined, MAX_SEGMENTS]}
-          castShadow
+          ref={obstacleMeshRef}
+          args={[undefined, undefined, OBSTACLE_INSTANCE_COUNT]}
+          castShadow={graphicsPreset.shadows}
           receiveShadow
         >
-          <boxGeometry args={[TILE_SIZE, BRANCH_LENGTH, TILE_SIZE]} />
+          <boxGeometry
+            args={[OBSTACLE_THICKNESS, OBSTACLE_LENGTH, SEGMENT_SPACING * 0.64]}
+          />
           <meshStandardMaterial
             vertexColors
-            roughness={0.55}
-            metalness={0.05}
+            roughness={0.38}
+            metalness={0.06}
           />
         </instancedMesh>
 
         <instancedMesh
           ref={gemMeshRef}
-          args={[undefined, undefined, MAX_SEGMENTS]}
+          args={[undefined, undefined, SEGMENT_POOL]}
         >
-          <octahedronGeometry args={[0.24, 0]} />
+          <octahedronGeometry args={[0.28, 0]} />
           <meshStandardMaterial
             vertexColors
-            roughness={0.3}
+            roughness={0.28}
             metalness={0.2}
+            emissive="#f59e0b"
             emissiveIntensity={0.35}
           />
         </instancedMesh>
-        <group ref={playerRef}>
-          <mesh>
-            <boxGeometry
-              args={[PLAYER_SIZE * 0.9, PLAYER_SIZE * 0.9, PLAYER_SIZE * 0.9]}
-            />
-            <meshStandardMaterial color={'#e25b4c'} roughness={0.5} />
-          </mesh>
-          <mesh position={[0, -PLAYER_SIZE * 0.55, 0]}>
-            <boxGeometry
-              args={[PLAYER_SIZE * 0.8, PLAYER_SIZE * 0.2, PLAYER_SIZE * 0.8]}
-            />
-            <meshStandardMaterial color={'#2b2b2b'} roughness={0.7} />
-          </mesh>
-        </group>
+
+        <instancedMesh
+          ref={powerupMeshRef}
+          args={[undefined, undefined, SEGMENT_POOL]}
+        >
+          <icosahedronGeometry args={[0.26, 0]} />
+          <meshStandardMaterial
+            vertexColors
+            roughness={0.3}
+            metalness={0.18}
+            emissive="#60a5fa"
+            emissiveIntensity={0.3}
+          />
+        </instancedMesh>
+      </group>
+
+      <group ref={playerRef} position={[0, 0, 0]}>
+        <mesh castShadow={graphicsPreset.shadows}>
+          <boxGeometry
+            args={[
+              PLAYER_COLLISION_RADIUS * 1.35,
+              PLAYER_COLLISION_RADIUS * 1.35,
+              PLAYER_COLLISION_RADIUS * 1.35,
+            ]}
+          />
+          <meshStandardMaterial
+            color="#ef4444"
+            roughness={0.5}
+            metalness={0.06}
+          />
+        </mesh>
+        <mesh position={[0, -PLAYER_COLLISION_RADIUS * 0.84, 0]}>
+          <boxGeometry
+            args={[
+              PLAYER_COLLISION_RADIUS * 1.1,
+              PLAYER_COLLISION_RADIUS * 0.24,
+              PLAYER_COLLISION_RADIUS * 1.1,
+            ]}
+          />
+          <meshStandardMaterial color="#111827" roughness={0.62} />
+        </mesh>
       </group>
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -521,15 +796,28 @@ const BranchFlip: React.FC = () => {
             left: 14,
             color: '#ffffff',
             fontFamily: 'ui-sans-serif, system-ui',
-            textShadow: '0 2px 6px rgba(0,0,0,0.35)',
+            textShadow: '0 2px 8px rgba(0,0,0,0.45)',
           }}
         >
-          <div style={{ fontSize: 14, opacity: 0.8 }}>GROWTH</div>
-          <div style={{ fontSize: 28, fontWeight: 800 }}>{scoreDisplay}</div>
-          <div style={{ fontSize: 13, opacity: 0.85 }}>Gems: {snap.gems}</div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
+          <div style={{ fontSize: 13, opacity: 0.84 }}>BRANCH FLIP</div>
+          <div style={{ fontSize: 30, fontWeight: 800 }}>{snap.score}</div>
+          <div style={{ fontSize: 13, opacity: 0.9 }}>Gems: {snap.gems}</div>
+          <div style={{ fontSize: 12, opacity: 0.78 }}>
             Best: {snap.bestScore}
           </div>
+          <div style={{ fontSize: 12, opacity: 0.78 }}>
+            Speed: {snap.speed.toFixed(1)}
+          </div>
+          {snap.shieldMs > 0 && (
+            <div style={{ fontSize: 12, color: '#c4b5fd' }}>
+              Shield {Math.ceil(snap.shieldMs / 1000)}s
+            </div>
+          )}
+          {snap.boostMs > 0 && (
+            <div style={{ fontSize: 12, color: '#67e8f9' }}>
+              Boost {Math.ceil(snap.boostMs / 1000)}s
+            </div>
+          )}
         </div>
 
         {(snap.phase === 'menu' || snap.phase === 'gameover') && (
@@ -545,36 +833,40 @@ const BranchFlip: React.FC = () => {
           >
             <div
               style={{
-                background: 'rgba(15, 23, 42, 0.78)',
-                borderRadius: 16,
-                padding: '18px 20px',
-                width: 360,
+                width: 380,
+                borderRadius: 18,
+                padding: '20px 22px',
+                background: 'rgba(17, 24, 39, 0.82)',
+                color: '#fff',
                 textAlign: 'center',
-                color: 'white',
+                boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
               }}
             >
-              <div style={{ fontSize: 30, fontWeight: 900 }}>Growth</div>
+              <div style={{ fontSize: 30, fontWeight: 900 }}>Branch Flip</div>
               <div
                 style={{
-                  marginTop: 8,
-                  fontSize: 14,
-                  opacity: 0.85,
-                  lineHeight: 1.4,
+                  marginTop: 9,
+                  fontSize: 13,
+                  opacity: 0.86,
+                  lineHeight: 1.45,
                 }}
               >
-                Stay on the branch as long as you can. Tap to rotate the world
-                and keep Mike safe.
+                Rotate the world around your static runner. Dodge side walls,
+                collect gems, and chain perfect quarter-turns.
               </div>
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                Collect gems to unlock new characters.
+                Left Arrow / Swipe Right: +90°
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Right Arrow / Swipe Left: -90°
               </div>
               {snap.phase === 'gameover' && (
-                <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
-                  Run over • Score: {scoreDisplay}
+                <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>
+                  Run ended • Score {snap.score}
                 </div>
               )}
-              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.6 }}>
-                Tap / Space to start
+              <div style={{ marginTop: 13, fontSize: 12, opacity: 0.62 }}>
+                Tap / Space to {snap.phase === 'menu' ? 'start' : 'restart'}
               </div>
             </div>
           </div>

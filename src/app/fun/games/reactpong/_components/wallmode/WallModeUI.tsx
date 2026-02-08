@@ -24,7 +24,7 @@ const WallModeUI: React.FC = () => {
   const speed = wm.currentSpeed;
   const spinMag = Math.hypot(wm.spin.x, wm.spin.y);
 
-  const showIntro = wm.gameState === 'playing' && wm.elapsed < 7;
+  const showIntro = wm.gameState === 'playing' && wm.elapsed < 2.5;
 
   return (
     <>
@@ -75,37 +75,25 @@ const WallModeUI: React.FC = () => {
       {showIntro && (
         <>
           <Text
-            position={[0, 2.2, 0]}
-            fontSize={0.9}
-            color="#ffffff"
+            position={[0, halfHeight + 0.12, 0]}
+            fontSize={0.4}
+            color="#c7d2fe"
             anchorX="center"
             anchorY="middle"
-            outlineWidth={0.05}
-            outlineColor="#000000"
+            outlineWidth={0.01}
+            outlineColor="#111827"
           >
-            WALL MODE: INFINITE ARENA
+            WALL MODE • deflect and survive
           </Text>
           <Text
-            position={[0, 0.8, 0]}
-            fontSize={0.35}
-            color="#cbd5e1"
+            position={[0, halfHeight - 0.4, 0]}
+            fontSize={0.26}
+            color="#93c5fd"
             anchorX="center"
             anchorY="middle"
-            maxWidth={14}
+            maxWidth={12}
           >
-            Move your plane-wall with the mouse. Deflect the ball. No catch. No
-            pause. One miss ends the run.
-          </Text>
-          <Text
-            position={[0, -0.6, 0]}
-            fontSize={0.28}
-            color="#94a3b8"
-            anchorX="center"
-            anchorY="middle"
-            maxWidth={14}
-          >
-            Hold Right Click to micro-tilt. Fast hits add spin. Spin compounds
-            until death.
+            Mouse to move paddle • Right-click to micro-tilt • One miss ends run
           </Text>
         </>
       )}

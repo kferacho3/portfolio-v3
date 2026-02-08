@@ -2,13 +2,13 @@ import clamp from 'lodash-es/clamp';
 import type { ReactPongState } from '../state';
 import type { WallModeState } from '../types';
 
-const BASE_SPEED = 12;
-const MAX_SPEED = 56;
-const SPEED_GROWTH_PER_S = 1.0085;
+const BASE_SPEED = 8.9;
+const MAX_SPEED = 28.5;
+const SPEED_GROWTH_PER_S = 1.0046;
 
-const SPIN_MAX = 2.4;
-const SPIN_STRENGTH = 18;
-const SPIN_SENS_GROWTH_PER_S = 0.012;
+const SPIN_MAX = 1.9;
+const SPIN_STRENGTH = 7.6;
+const SPIN_SENS_GROWTH_PER_S = 0.0045;
 
 const spinMag = (spin: { x: number; y: number }) => Math.hypot(spin.x, spin.y);
 
@@ -75,11 +75,12 @@ export const wallModeTick = (state: ReactPongState, dt: number) => {
     wm.baseSpeed * Math.pow(wm.speedGrowth, t)
   );
   wm.spinSensitivity = 1 + t * wm.spinSensitivityGrowth;
-  wm.wallChaos = clamp((t - 35) / 160, 0, 1);
+  wm.wallChaos = clamp((t - 58) / 320, 0, 1);
 
   const speedMult = wm.currentSpeed / wm.baseSpeed;
   const spinN = clamp(spinMag(wm.spin) / SPIN_MAX, 0, 1);
-  const perSecond = (10 + 16 * speedMult + 12 * spinN) * (0.75 + speedMult);
+  const perSecond =
+    (6 + 8.5 * speedMult + 5 * spinN) * (0.55 + speedMult * 0.65);
 
   state.score += perSecond * dt;
   if (state.score > state.highScore) state.highScore = Math.floor(state.score);
@@ -105,14 +106,14 @@ export const wallModePaddleHit = (
 
   const speedMult = wm.currentSpeed / wm.baseSpeed;
   const spinN = clamp(spinMag(wm.spin) / SPIN_MAX, 0, 1);
-  const points = Math.round(12 + 18 * speedMult + 22 * spinN);
+  const points = Math.round(10 + 14 * speedMult + 18 * spinN);
 
   state.score += points;
   if (state.score > state.highScore) state.highScore = Math.floor(state.score);
 
   state.addScorePopup(points, opts.position, '#00ffaa');
   state.addHitEffect(opts.position, '#00ffaa', opts.intensity ?? 1.1);
-  state.triggerScreenShake(0.08 + spinN * 0.14);
+  state.triggerScreenShake(0.035 + spinN * 0.06);
 
   const sound = state.audio.paddleHitSound;
   if (sound) {

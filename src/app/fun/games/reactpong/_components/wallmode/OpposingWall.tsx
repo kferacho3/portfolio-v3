@@ -5,7 +5,7 @@ import {
   type RapierRigidBody,
 } from '@react-three/rapier';
 import clamp from 'lodash-es/clamp';
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import {
   WALL_MODE_HEIGHT,
@@ -20,7 +20,7 @@ interface OpposingWallProps {
 
 type WallZone = {
   id: string;
-  kind: 'angle' | 'spin' | 'hot';
+  kind: 'angle' | 'spin';
   cx: number;
   cy: number;
   sx: number;
@@ -29,109 +29,75 @@ type WallZone = {
   vy: number;
 };
 
-const randBetween = (a: number, b: number) => a + Math.random() * (b - a);
+const SPIN_MAX = 1.9;
 
-function inZone(p: { x: number; y: number }, z: WallZone) {
-  return Math.abs(p.x - z.cx) <= z.sx / 2 && Math.abs(p.y - z.cy) <= z.sy / 2;
-}
-
-const SPIN_MAX = 2.4;
-function addSpin(add: { x: number; y: number }) {
-  const spin = reactPongState.wallMode.spin;
-  spin.x += add.x;
-  spin.y += add.y;
-  const m = Math.hypot(spin.x, spin.y);
-  if (m > SPIN_MAX) {
-    const s = SPIN_MAX / Math.max(1e-6, m);
-    spin.x *= s;
-    spin.y *= s;
-  }
-}
+const inZone = (x: number, y: number, zone: WallZone) =>
+  Math.abs(x - zone.cx) <= zone.sx / 2 && Math.abs(y - zone.cy) <= zone.sy / 2;
 
 const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
   const wallWidth = WALL_MODE_WIDTH;
   const wallHeight = WALL_MODE_HEIGHT;
   const wallZ = WALL_MODE_WALL_Z;
-  const wallThickness = 0.6;
+  const wallThickness = 0.56;
 
-  const wallMeshRef = useRef<THREE.Mesh>(null);
   const wallMatRef = useRef<THREE.MeshStandardMaterial>(null);
-
-  const zonesRef = useRef<WallZone[]>([]);
-  const zonesInitTokenRef = useRef(0);
-  const wasStartedRef = useRef(false);
-
+  const zonesRef = useRef<WallZone[]>([
+    {
+      id: 'angle',
+      kind: 'angle',
+      cx: 0,
+      cy: 0.95,
+      sx: wallWidth * 0.33,
+      sy: wallHeight * 0.18,
+      vx: 0.26,
+      vy: -0.16,
+    },
+    {
+      id: 'spin',
+      kind: 'spin',
+      cx: 0,
+      cy: -1.1,
+      sx: wallWidth * 0.3,
+      sy: wallHeight * 0.18,
+      vx: -0.2,
+      vy: 0.18,
+    },
+  ]);
   const tmpDir = useRef(new THREE.Vector3());
 
-  const initZones = useCallback(() => {
-    const w = wallWidth - 2;
-    const h = wallHeight - 2;
-    zonesRef.current = [
-      {
-        id: 'angle',
-        kind: 'angle',
-        cx: randBetween(-w * 0.2, w * 0.2),
-        cy: randBetween(-h * 0.2, h * 0.2),
-        sx: w * 0.36,
-        sy: h * 0.22,
-        vx: randBetween(-0.35, 0.35),
-        vy: randBetween(-0.3, 0.3),
-      },
-      {
-        id: 'spin',
-        kind: 'spin',
-        cx: randBetween(-w * 0.25, w * 0.25),
-        cy: randBetween(-h * 0.25, h * 0.25),
-        sx: w * 0.28,
-        sy: h * 0.28,
-        vx: randBetween(-0.28, 0.28),
-        vy: randBetween(-0.28, 0.28),
-      },
-      {
-        id: 'hot',
-        kind: 'hot',
-        cx: randBetween(-w * 0.25, w * 0.25),
-        cy: randBetween(-h * 0.25, h * 0.25),
-        sx: w * 0.22,
-        sy: h * 0.2,
-        vx: randBetween(-0.22, 0.22),
-        vy: randBetween(-0.22, 0.22),
-      },
-    ];
-    zonesInitTokenRef.current = performance.now();
-  }, [wallHeight, wallWidth]);
+  const edgeGuideMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#7dd3fc',
+        transparent: true,
+        opacity: 0.26,
+      }),
+    []
+  );
 
-  useFrame(({ clock }, dt) => {
+  useFrame((state, dt) => {
     const wm = reactPongState.wallMode;
     if (wm.gameState !== 'playing') return;
 
-    if (wasStartedRef.current && !wm.started && wm.elapsed === 0) initZones();
-    wasStartedRef.current = wm.started;
+    const boundsX = wallWidth / 2 - 1.2;
+    const boundsY = wallHeight / 2 - 1.05;
+    const drift = 0.6 + wm.wallChaos * 0.2;
+    const t = state.clock.elapsedTime;
 
-    if (!zonesRef.current.length) initZones();
+    for (const zone of zonesRef.current) {
+      zone.cx += zone.vx * dt * drift;
+      zone.cy += zone.vy * dt * drift;
+      if (zone.cx < -boundsX || zone.cx > boundsX) zone.vx *= -1;
+      if (zone.cy < -boundsY || zone.cy > boundsY) zone.vy *= -1;
+      zone.cx = clamp(zone.cx, -boundsX, boundsX);
+      zone.cy = clamp(zone.cy, -boundsY, boundsY);
 
-    // Subtle micro-shifts: zones drift slowly over time (almost subconscious).
-    const t = clock.getElapsedTime();
-    const w = wallWidth - 2.5;
-    const h = wallHeight - 2.5;
-    for (const z of zonesRef.current) {
-      const drift = 0.45 + wm.wallChaos * 0.65;
-      z.cx += z.vx * dt * drift;
-      z.cy += z.vy * dt * drift;
-      // Gentle boundary bounce
-      const limX = w / 2 - z.sx / 2;
-      const limY = h / 2 - z.sy / 2;
-      if (z.cx < -limX || z.cx > limX) z.vx *= -1;
-      if (z.cy < -limY || z.cy > limY) z.vy *= -1;
-      z.cx = clamp(z.cx, -limX, limX);
-      z.cy = clamp(z.cy, -limY, limY);
-      // tiny oscillation to keep it alive
-      z.cx += Math.sin(t * 0.35 + z.sx) * 0.0015;
-      z.cy += Math.cos(t * 0.33 + z.sy) * 0.0015;
+      zone.cx += Math.sin(t * 0.7 + zone.sx) * 0.0009;
+      zone.cy += Math.cos(t * 0.8 + zone.sy) * 0.0009;
     }
 
     if (wallMatRef.current) {
-      wallMatRef.current.emissiveIntensity = 0.35 + wm.wallChaos * 0.55;
+      wallMatRef.current.emissiveIntensity = 0.19 + wm.wallChaos * 0.08;
     }
   });
 
@@ -143,76 +109,55 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
 
     const ballPos = ball.translation();
     const ballVel = ball.linvel();
-    if (ballVel.z >= -0.4) return; // only when traveling toward the wall
+    if (ballVel.z >= -0.2) return;
 
-    // Base reflection (invert z) + organic chaos that ramps over time.
     const edgeX = clamp(ballPos.x / (wallWidth / 2), -1, 1);
     const edgeY = clamp(ballPos.y / (wallHeight / 2), -1, 1);
+    const wmSpin = wm.spin;
 
-    const chaos = wm.wallChaos;
-    const noiseAmp = chaos * 0.16;
-    const shiftAmp = chaos * 0.12;
+    tmpDir.current.set(
+      ballVel.x * 0.66 + edgeX * 0.84,
+      ballVel.y * 0.66 + edgeY * 0.84,
+      Math.abs(ballVel.z)
+    );
 
-    // Start with a clean reflect direction.
-    tmpDir.current.set(ballVel.x, ballVel.y, Math.abs(ballVel.z));
-    if (tmpDir.current.lengthSq() < 1e-6) tmpDir.current.set(0, 0, 1);
-    tmpDir.current.normalize();
-
-    // Edge bias: hits near edges return slightly "hotter" angles.
-    tmpDir.current.x += edgeX * (0.12 + chaos * 0.12);
-    tmpDir.current.y += edgeY * (0.12 + chaos * 0.12);
-
-    // Reactive zones (subtle, not announced).
-    const p = { x: ballPos.x, y: ballPos.y };
-    for (const z of zonesRef.current) {
-      if (!inZone(p, z)) continue;
-      const k = z.kind === 'hot' ? 1.1 : 1;
-      if (z.kind === 'angle') {
-        tmpDir.current.x += edgeX * 0.18 * k;
-        tmpDir.current.y += edgeY * 0.18 * k;
-      } else if (z.kind === 'spin') {
-        addSpin({
-          x: (Math.random() - 0.5) * 0.12 * (0.5 + chaos),
-          y: (Math.random() - 0.5) * 0.12 * (0.5 + chaos),
-        });
-      } else if (z.kind === 'hot') {
-        tmpDir.current.x += (Math.random() - 0.5) * 0.18 * chaos * k;
-        tmpDir.current.y += (Math.random() - 0.5) * 0.18 * chaos * k;
+    for (const zone of zonesRef.current) {
+      if (!inZone(ballPos.x, ballPos.y, zone)) continue;
+      if (zone.kind === 'angle') {
+        tmpDir.current.x += edgeX * 0.18;
+        tmpDir.current.y += edgeY * 0.18;
+      } else if (zone.kind === 'spin') {
+        wmSpin.x += edgeY * 0.06 * (0.7 + wm.wallChaos * 0.25);
+        wmSpin.y += -edgeX * 0.06 * (0.7 + wm.wallChaos * 0.25);
+        const m = Math.hypot(wmSpin.x, wmSpin.y);
+        if (m > SPIN_MAX) {
+          const s = SPIN_MAX / Math.max(1e-6, m);
+          wmSpin.x *= s;
+          wmSpin.y *= s;
+        }
       }
       break;
     }
 
-    // Micro shifts: tiny warping based on time + position.
-    const t = performance.now() / 1000;
-    const microX = Math.sin(t * 0.9 + ballPos.y * 0.6 + edgeX * 2.2) * shiftAmp;
-    const microY =
-      Math.cos(t * 0.85 + ballPos.x * 0.6 + edgeY * 2.2) * shiftAmp;
-    tmpDir.current.x += microX;
-    tmpDir.current.y += microY;
-
-    // Deflection noise: ramps gradually into late-run unpredictability.
-    tmpDir.current.x += (Math.random() - 0.5) * noiseAmp;
-    tmpDir.current.y += (Math.random() - 0.5) * noiseAmp;
-
     tmpDir.current.normalize();
-    if (Math.abs(tmpDir.current.z) < 0.22) {
-      tmpDir.current.z = 0.22;
+    if (Math.abs(tmpDir.current.z) < 0.45) {
+      tmpDir.current.z = 0.45;
       tmpDir.current.normalize();
     }
 
-    const speed = wm.currentSpeed;
+    const targetSpeed = wm.currentSpeed * (0.985 + wm.wallChaos * 0.025);
     ball.setLinvel(
       {
-        x: tmpDir.current.x * speed,
-        y: tmpDir.current.y * speed,
-        z: tmpDir.current.z * speed,
+        x: tmpDir.current.x * targetSpeed,
+        y: tmpDir.current.y * targetSpeed,
+        z: tmpDir.current.z * targetSpeed,
       },
       true
     );
 
     reactPongState.wallModeWallHit({
       position: [ballPos.x, ballPos.y, ballPos.z],
-      intensity: 0.85 + chaos * 0.35,
+      intensity: 0.62 + wm.wallChaos * 0.1,
     });
   }, [ballRef, wallHeight, wallWidth]);
 
@@ -228,26 +173,54 @@ const OpposingWall: React.FC<OpposingWallProps> = ({ ballRef }) => {
           restitution={1}
           friction={0}
         />
-        <mesh ref={wallMeshRef}>
+        <mesh>
           <boxGeometry args={[wallWidth, wallHeight, wallThickness]} />
           <meshStandardMaterial
             ref={wallMatRef}
-            color="#2346ff"
-            emissive="#3b82f6"
-            emissiveIntensity={0.35}
-            transparent
-            opacity={0.72}
-            metalness={0.15}
-            roughness={0.65}
+            color="#10223f"
+            emissive="#1d4ed8"
+            emissiveIntensity={0.19}
+            metalness={0.04}
+            roughness={0.63}
           />
         </mesh>
       </RigidBody>
 
+      <group position={[0, 0, wallZ + wallThickness * 0.58]}>
+        <mesh material={edgeGuideMaterial}>
+          <boxGeometry args={[wallWidth * 0.86, 0.03, 0.04]} />
+        </mesh>
+        <mesh position={[0, wallHeight * 0.23, 0]} material={edgeGuideMaterial}>
+          <boxGeometry args={[wallWidth * 0.74, 0.03, 0.04]} />
+        </mesh>
+        <mesh
+          position={[0, -wallHeight * 0.23, 0]}
+          material={edgeGuideMaterial}
+        >
+          <boxGeometry args={[wallWidth * 0.74, 0.03, 0.04]} />
+        </mesh>
+      </group>
+
+      {zonesRef.current.map((zone) => (
+        <mesh
+          key={zone.id}
+          position={[zone.cx, zone.cy, wallZ + wallThickness * 0.7]}
+        >
+          <planeGeometry args={[zone.sx, zone.sy]} />
+          <meshBasicMaterial
+            color={zone.kind === 'angle' ? '#38bdf8' : '#a78bfa'}
+            transparent
+            opacity={0.11}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+
       <pointLight
-        position={[0, 0, wallZ + 2]}
-        color="#3b82f6"
-        intensity={0.7}
-        distance={15}
+        position={[0, 0, wallZ + 1.9]}
+        color="#2563eb"
+        intensity={0.34}
+        distance={16}
       />
     </>
   );

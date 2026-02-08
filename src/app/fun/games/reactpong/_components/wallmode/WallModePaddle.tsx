@@ -20,29 +20,30 @@ interface WallModePaddleProps {
   scoreColor: string;
 }
 
+const HIT_COOLDOWN_S = 0.055;
+
 const WallModePaddle: React.FC<WallModePaddleProps> = ({
   ballRef,
   scoreColor,
 }) => {
   const paddleApi = useRef<RapierRigidBody | null>(null);
-
   const prevPosRef = useRef({ x: 0, y: 0 });
+  const smoothedPosRef = useRef({ x: 0, y: 0, initialized: false });
   const velRef = useRef({ x: 0, y: 0 });
-  const tiltRef = useRef({ x: 0, y: 0 }); // pitch (x), yaw (y)
+  const tiltRef = useRef({ x: 0, y: 0 });
   const prevPointerRef = useRef({ x: 0, y: 0 });
-
   const rightClickDown = useRef(false);
   const lastHitAtRef = useRef(0);
 
-  const vec = useMemo(() => new THREE.Vector3(), []);
-  const dir = useMemo(() => new THREE.Vector3(), []);
-  const target = useMemo(() => new THREE.Vector3(), []);
-  const euler = useMemo(() => new THREE.Euler(), []);
-  const quaternion = useMemo(() => new THREE.Quaternion(), []);
   const outDir = useMemo(() => new THREE.Vector3(), []);
+  const rayPoint = useRef(new THREE.Vector3());
+  const rayDir = useRef(new THREE.Vector3());
+  const worldPos = useRef(new THREE.Vector3());
+  const tiltEuler = useRef(new THREE.Euler());
+  const tiltQuat = useRef(new THREE.Quaternion());
 
-  const paddleWidth = WALL_MODE_WIDTH * 0.24;
-  const paddleHeight = WALL_MODE_HEIGHT * 0.2;
+  const paddleWidth = WALL_MODE_WIDTH * 0.17;
+  const paddleHeight = WALL_MODE_HEIGHT * 0.145;
 
   const handlePaddleHit = useCallback(() => {
     const wm = reactPongState.wallMode;
@@ -52,11 +53,10 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({
     if (!ball || !paddle) return;
 
     const nowS = performance.now() / 1000;
-    if (nowS - lastHitAtRef.current < 0.075) return;
+    if (nowS - lastHitAtRef.current < HIT_COOLDOWN_S) return;
 
     const ballVel = ball.linvel();
-    // Only process hits when the ball is traveling *toward* the player.
-    if (ballVel.z <= 0.4) return;
+    if (ballVel.z <= 0.18) return;
 
     lastHitAtRef.current = nowS;
 
@@ -69,23 +69,23 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({
     const pv = velRef.current;
     const tilt = tiltRef.current;
 
-    // Reflect back toward the wall with skill-based angle control:
-    // - off-center hits add angle
-    // - paddle velocity adds angle
-    // - micro-tilt adds angle (optional advanced control)
     outDir.set(
-      ballVel.x * 0.35 + dxN * 4.2 + pv.x * 0.08 + tilt.y * 5.5,
-      ballVel.y * 0.35 + dyN * 4.2 + pv.y * 0.08 + tilt.x * 5.5,
-      -Math.abs(ballVel.z)
+      dxN * 2.35 + pv.x * 0.028 + tilt.y * 1.35 + ballVel.x * 0.14,
+      dyN * 2.35 + pv.y * 0.028 + tilt.x * 1.35 + ballVel.y * 0.14,
+      -Math.max(0.72, Math.abs(ballVel.z))
     );
-    if (outDir.lengthSq() < 1e-6) outDir.set(dxN * 2.2, dyN * 2.2, -1);
+    if (outDir.lengthSq() < 1e-6) outDir.set(dxN * 1.25, dyN * 1.25, -1);
     outDir.normalize();
-    if (Math.abs(outDir.z) < 0.35) {
-      outDir.z = -0.35;
+
+    if (Math.abs(outDir.z) < 0.5) {
+      outDir.z = -0.5;
       outDir.normalize();
     }
 
-    const targetSpeed = wm.currentSpeed;
+    const paddleSpeed = Math.hypot(pv.x, pv.y);
+    const speedBoost = clamp(paddleSpeed / 165, 0, 0.06);
+    const targetSpeed = wm.currentSpeed * (1 + speedBoost);
+
     ball.setLinvel(
       {
         x: outDir.x * targetSpeed,
@@ -95,42 +95,29 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({
       true
     );
 
-    // Add compounding spin.
-    const velSpinX = clamp(pv.x * 0.006, -0.35, 0.35);
-    const velSpinY = clamp(pv.y * 0.006, -0.35, 0.35);
-    const offSpinX = dxN * 0.22;
-    const offSpinY = dyN * 0.22;
-    const tiltSpinX = tilt.y * 0.45;
-    const tiltSpinY = tilt.x * 0.45;
     const spinAdd = {
-      x: velSpinX + offSpinX + tiltSpinX,
-      y: velSpinY + offSpinY + tiltSpinY,
+      x: dxN * 0.1 + pv.x * 0.0024 + tilt.y * 0.11,
+      y: dyN * 0.1 + pv.y * 0.0024 + tilt.x * 0.11,
     };
 
     reactPongState.wallModePaddleHit({
       position: [ballPos.x, ballPos.y, ballPos.z],
       spinAdd,
-      intensity: 1.15,
+      intensity: 0.82,
     });
 
-    const spin = reactPongState.wallMode.spin;
-    ball.setAngvel({ x: -spin.y * 7, y: spin.x * 7, z: 0 }, true);
+    const wmSpin = reactPongState.wallMode.spin;
+    ball.setAngvel({ x: -wmSpin.y * 4.1, y: wmSpin.x * 4.1, z: 0 }, true);
   }, [ballRef, outDir, paddleHeight, paddleWidth]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
-      if (event.button === 2) {
-        rightClickDown.current = true;
-      }
+      if (event.button === 2) rightClickDown.current = true;
     };
     const handlePointerUp = (event: PointerEvent) => {
-      if (event.button === 2) {
-        rightClickDown.current = false;
-      }
+      if (event.button === 2) rightClickDown.current = false;
     };
-    const handleContextMenu = (event: MouseEvent) => {
-      event.preventDefault();
-    };
+    const handleContextMenu = (event: MouseEvent) => event.preventDefault();
 
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('pointerup', handlePointerUp);
@@ -145,45 +132,69 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({
   useFrame((state, delta) => {
     const wm = reactPongState.wallMode;
     if (wm.gameState !== 'playing') return;
-    const dt = Math.max(1e-4, delta);
 
-    vec.set(state.pointer.x, state.pointer.y, 0.5).unproject(state.camera);
-    dir.copy(vec).sub(state.camera.position).normalize();
-    if (Math.abs(dir.z) < 1e-5) return;
-    const dist = (WALL_MODE_PLAYER_Z - state.camera.position.z) / dir.z;
-    target.copy(state.camera.position).add(dir.multiplyScalar(dist));
+    const dt = Math.max(1e-4, delta);
+    rayPoint.current
+      .set(state.pointer.x, state.pointer.y, 0.35)
+      .unproject(state.camera);
+    rayDir.current
+      .copy(rayPoint.current)
+      .sub(state.camera.position)
+      .normalize();
+
+    if (Math.abs(rayDir.current.z) < 1e-5) return;
+    const travel =
+      (WALL_MODE_PLAYER_Z - state.camera.position.z) / rayDir.current.z;
+    worldPos.current
+      .copy(state.camera.position)
+      .addScaledVector(rayDir.current, travel);
 
     const halfWidth = Math.max(
       0,
-      WALL_MODE_WIDTH / 2 - paddleWidth / 2 - WALL_MODE_PADDLE_EDGE_INSET
+      WALL_MODE_WIDTH / 2 - paddleWidth / 2 - WALL_MODE_PADDLE_EDGE_INSET - 0.05
     );
     const halfHeight = Math.max(
       0,
-      WALL_MODE_HEIGHT / 2 - paddleHeight / 2 - WALL_MODE_PADDLE_EDGE_INSET
+      WALL_MODE_HEIGHT / 2 -
+        paddleHeight / 2 -
+        WALL_MODE_PADDLE_EDGE_INSET -
+        0.05
     );
 
-    const x = clamp(target.x, -halfWidth, halfWidth);
-    const y = clamp(target.y, -halfHeight, halfHeight);
+    const targetX = clamp(worldPos.current.x, -halfWidth, halfWidth);
+    const targetY = clamp(worldPos.current.y, -halfHeight, halfHeight);
 
-    velRef.current = {
-      x: (x - prevPosRef.current.x) / dt,
-      y: (y - prevPosRef.current.y) / dt,
-    };
-    prevPosRef.current = { x, y };
+    if (!smoothedPosRef.current.initialized) {
+      smoothedPosRef.current.x = targetX;
+      smoothedPosRef.current.y = targetY;
+      smoothedPosRef.current.initialized = true;
+    }
 
-    // Micro-tilt (optional advanced control): hold right click and "nudge" tilt with mouse motion.
-    const px = state.pointer.x;
-    const py = state.pointer.y;
-    const dpx = px - prevPointerRef.current.x;
-    const dpy = py - prevPointerRef.current.y;
-    prevPointerRef.current = { x: px, y: py };
+    const smoothing = 1 - Math.exp(-dt * 20);
+    smoothedPosRef.current.x +=
+      (targetX - smoothedPosRef.current.x) * smoothing;
+    smoothedPosRef.current.y +=
+      (targetY - smoothedPosRef.current.y) * smoothing;
+
+    const x = smoothedPosRef.current.x;
+    const y = smoothedPosRef.current.y;
+
+    velRef.current.x = (x - prevPosRef.current.x) / dt;
+    velRef.current.y = (y - prevPosRef.current.y) / dt;
+    prevPosRef.current.x = x;
+    prevPosRef.current.y = y;
+
+    const dpx = state.pointer.x - prevPointerRef.current.x;
+    const dpy = state.pointer.y - prevPointerRef.current.y;
+    prevPointerRef.current.x = state.pointer.x;
+    prevPointerRef.current.y = state.pointer.y;
 
     if (rightClickDown.current) {
-      tiltRef.current.y = clamp(tiltRef.current.y + dpx * 0.9, -0.22, 0.22);
-      tiltRef.current.x = clamp(tiltRef.current.x + -dpy * 0.9, -0.18, 0.18);
+      tiltRef.current.y = clamp(tiltRef.current.y + dpx * 0.5, -0.1, 0.1);
+      tiltRef.current.x = clamp(tiltRef.current.x - dpy * 0.5, -0.1, 0.1);
     } else {
-      tiltRef.current.x *= 0.86;
-      tiltRef.current.y *= 0.86;
+      tiltRef.current.x *= 0.85;
+      tiltRef.current.y *= 0.85;
     }
 
     paddleApi.current?.setNextKinematicTranslation({
@@ -192,13 +203,13 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({
       z: WALL_MODE_PLAYER_Z,
     });
 
-    euler.set(tiltRef.current.x, tiltRef.current.y, 0);
-    quaternion.setFromEuler(euler);
+    tiltEuler.current.set(tiltRef.current.x, tiltRef.current.y, 0);
+    tiltQuat.current.setFromEuler(tiltEuler.current);
     paddleApi.current?.setNextKinematicRotation({
-      x: quaternion.x,
-      y: quaternion.y,
-      z: quaternion.z,
-      w: quaternion.w,
+      x: tiltQuat.current.x,
+      y: tiltQuat.current.y,
+      z: tiltQuat.current.z,
+      w: tiltQuat.current.w,
     });
   });
 
@@ -212,28 +223,33 @@ const WallModePaddle: React.FC<WallModePaddleProps> = ({
       onCollisionEnter={handlePaddleHit}
     >
       <CuboidCollider
-        args={[paddleWidth / 2, paddleHeight / 2, 0.22]}
+        args={[paddleWidth / 2, paddleHeight / 2, 0.14]}
         restitution={1}
         friction={0}
       />
 
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[paddleWidth, paddleHeight, 0.44]} />
+      <mesh>
+        <boxGeometry args={[paddleWidth, paddleHeight, 0.28]} />
         <meshStandardMaterial
-          color={scoreColor}
+          color="#dbeafe"
           emissive={scoreColor}
-          emissiveIntensity={0.55}
-          metalness={0.55}
-          roughness={0.3}
+          emissiveIntensity={0.15}
+          roughness={0.32}
+          metalness={0.1}
         />
       </mesh>
 
-      <mesh position={[0, 0, 0.38]}>
-        <boxGeometry args={[paddleWidth + 0.45, paddleHeight + 0.45, 0.18]} />
-        <meshBasicMaterial color={scoreColor} transparent opacity={0.18} />
+      <mesh position={[0, 0, 0.15]}>
+        <boxGeometry args={[paddleWidth * 1.02, paddleHeight * 1.02, 0.03]} />
+        <meshBasicMaterial color="#67e8f9" transparent opacity={0.2} />
       </mesh>
 
-      <pointLight color={scoreColor} intensity={0.8} distance={6} />
+      <mesh position={[0, 0, 0.17]}>
+        <ringGeometry args={[0.08, 0.14, 24]} />
+        <meshBasicMaterial color="#a5f3fc" transparent opacity={0.78} />
+      </mesh>
+
+      <pointLight color="#22d3ee" intensity={0.22} distance={4.4} />
     </RigidBody>
   );
 };

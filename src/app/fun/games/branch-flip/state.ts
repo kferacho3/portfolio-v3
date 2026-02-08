@@ -1,5 +1,5 @@
 import { proxy } from 'valtio';
-import type { BranchFlipGameState, Tile } from './types';
+import type { BranchFlipGameState } from './types';
 import { BEST_SCORE_KEY } from './constants';
 
 export const branchFlipState = proxy<
@@ -9,8 +9,12 @@ export const branchFlipState = proxy<
     endGame: () => void;
     pause: () => void;
     resume: () => void;
-    flip: () => void;
     collectGem: () => void;
+    addClearScore: (amount?: number) => void;
+    addPerfectTurn: () => void;
+    grantShield: (durationMs?: number) => void;
+    triggerBoost: (durationMs?: number) => void;
+    tickTimers: (dt: number) => void;
     loadBestScore: () => void;
   }
 >({
@@ -19,12 +23,11 @@ export const branchFlipState = proxy<
   time: 0,
   score: 0,
   gems: 0,
-  speed: 4.8,
-  dir: 0,
-  falling: false,
-  fallT: 0,
-  shake: 0,
+  speed: 0,
   bestScore: 0,
+  perfectTurns: 0,
+  shieldMs: 0,
+  boostMs: 0,
 
   reset() {
     this.phase = 'menu';
@@ -32,11 +35,10 @@ export const branchFlipState = proxy<
     this.time = 0;
     this.score = 0;
     this.gems = 0;
-    this.speed = 4.8;
-    this.dir = 0;
-    this.falling = false;
-    this.fallT = 0;
-    this.shake = 0;
+    this.speed = 0;
+    this.perfectTurns = 0;
+    this.shieldMs = 0;
+    this.boostMs = 0;
     this.loadBestScore();
   },
 
@@ -46,11 +48,10 @@ export const branchFlipState = proxy<
     this.time = 0;
     this.score = 0;
     this.gems = 0;
-    this.speed = 4.8;
-    this.dir = 0;
-    this.falling = false;
-    this.fallT = 0;
-    this.shake = 0;
+    this.speed = 0;
+    this.perfectTurns = 0;
+    this.shieldMs = 0;
+    this.boostMs = 0;
   },
 
   endGame() {
@@ -73,15 +74,34 @@ export const branchFlipState = proxy<
     if (this.phase === 'playing') this.paused = false;
   },
 
-  flip() {
-    if (this.phase === 'playing' && !this.paused && !this.falling) {
-      this.dir = 1 - this.dir;
-    }
-  },
-
   collectGem() {
     this.gems += 1;
-    this.score += 10;
+    this.score += 8;
+  },
+
+  addClearScore(amount = 1) {
+    this.score += amount;
+  },
+
+  addPerfectTurn() {
+    this.perfectTurns += 1;
+  },
+
+  grantShield(durationMs = 0) {
+    this.shieldMs = Math.max(this.shieldMs, durationMs);
+  },
+
+  triggerBoost(durationMs = 0) {
+    this.boostMs = Math.max(this.boostMs, durationMs);
+  },
+
+  tickTimers(dt: number) {
+    if (this.shieldMs > 0) {
+      this.shieldMs = Math.max(0, this.shieldMs - dt * 1000);
+    }
+    if (this.boostMs > 0) {
+      this.boostMs = Math.max(0, this.boostMs - dt * 1000);
+    }
   },
 
   loadBestScore() {
@@ -93,9 +113,3 @@ export const branchFlipState = proxy<
     }
   },
 });
-
-export const mutation = {
-  playerPos: [0, 0.35, 0] as [number, number, number],
-  tiles: [] as Tile[],
-  tileIndexByKey: new Map<string, number>(),
-};

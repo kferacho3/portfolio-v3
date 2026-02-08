@@ -55,6 +55,15 @@ const ReactPong: React.FC<{ ready?: boolean }> = () => {
   }, []);
 
   useEffect(() => {
+    reactPongState.setModeMenuOpen(true);
+    if (reactPongState.mode === 'WallMode') {
+      reactPongState.resetWallMode();
+    } else {
+      reactPongState.reset();
+    }
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       if (key === 'm') {
@@ -89,8 +98,9 @@ const ReactPong: React.FC<{ ready?: boolean }> = () => {
     return (
       <>
         <CameraSetup />
-        <ambientLight intensity={0.28} />
-        <pointLight position={[0, 4, 8]} intensity={0.55} color="#38bdf8" />
+        <ambientLight intensity={0.24} />
+        <pointLight position={[0, 4, 8]} intensity={0.45} color="#38bdf8" />
+        <pointLight position={[-6, -2, 4]} intensity={0.24} color="#22d3ee" />
         <ModeSelectMenu onSelectMode={handleSelectMode} />
       </>
     );

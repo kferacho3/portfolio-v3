@@ -63,6 +63,8 @@ export const reactPongState = proxy({
     reactPongState.mode = mode;
     if (mode === 'WallMode') {
       reactPongState.resetWallMode();
+    } else {
+      reactPongState.reset();
     }
   },
   setModeMenuOpen: (open: boolean) => {
