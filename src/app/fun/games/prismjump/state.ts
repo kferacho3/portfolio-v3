@@ -22,6 +22,10 @@ export const prismJumpState = proxy({
   // Score
   score: 0,
   best: 0,
+  combo: 0,
+  multiplier: 1,
+  perfectCount: 0,
+  furthestRowIndex: 0,
 
   // Currency
   runCubes: 0,
@@ -120,6 +124,10 @@ export const prismJumpState = proxy({
 
   start: () => {
     prismJumpState.score = 0;
+    prismJumpState.combo = 0;
+    prismJumpState.multiplier = 1;
+    prismJumpState.perfectCount = 0;
+    prismJumpState.furthestRowIndex = 0;
     prismJumpState.runCubes = 0;
     prismJumpState.edgeSafe = 1;
     prismJumpState.phase = 'playing';

@@ -270,7 +270,8 @@ export function PrismJumpUI() {
                   const xScale = 100 / (2 * GAME.xWrap);
                   const xOff = 50;
                   const zToY = (z: number) =>
-                    64 * (1 - Math.max(0, Math.min(1, (z - minZ) / (maxZ - minZ))));
+                    64 *
+                    (1 - Math.max(0, Math.min(1, (z - minZ) / (maxZ - minZ))));
                   return (
                     <>
                       {snap.minimapRows.map((row, ri) =>
@@ -315,7 +316,8 @@ export function PrismJumpUI() {
                 padding: '0 20px',
               }}
             >
-              WASD / Arrows: jump (W/↑), left/right on row (A/D), backward (S/↓) • Rows alternate left/right • Avoid spikes and hazards
+              Tap / Space / W / ↑ to jump. Time each leap onto the moving
+              platform and stay inside the lane.
             </div>
           )}
         </div>
@@ -368,10 +370,9 @@ export function PrismJumpUI() {
                     marginTop: 4,
                   }}
                 >
-                  One-tap jump across constantly moving platforms in an
-                  interstellar world. Each row alternates direction. Collect
-                  cubes to unlock one of {CHARACTERS.length} unique characters
-                  (100 cubes lottery).
+                  Cube Jump style flow: tap to jump forward across moving rows.
+                  Land near center for Perfect bonuses, collect cubes, and
+                  survive the speed ramp.
                 </div>
               </div>
 
@@ -489,10 +490,10 @@ export function PrismJumpUI() {
                   color: 'rgba(255,255,255,0.68)',
                 }}
               >
-                <strong>How to play:</strong> W/↑ or tap to jump forward; A/D or ←/→ to move
-                left/right on the row; S/↓ to jump backward. Platforms move
-                left (even rows) or right (odd rows). Stay ahead of the camera.
-                Avoid red spikes and orange sliding hazards.
+                <strong>How to play:</strong> Tap (or press Space / W / ↑) to
+                jump to the next row. Rows alternate left/right motion, so wait
+                for alignment and chain clean landings. Perfect center landings
+                build combo and multiplier.
               </div>
             </div>
 

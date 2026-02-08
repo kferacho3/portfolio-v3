@@ -11,6 +11,7 @@ export type PlatformData = {
   // World-space center position
   x: number;
   z: number;
+  baseOffsetX: number;
 
   // Platform dimensions
   length: number; // along X
@@ -33,8 +34,6 @@ export type RowData = {
   dir: 1 | -1;
   speedMul: number;
   platforms: PlatformData[];
-  /** When this row went out of frame (for lifecycle cleanup) */
-  outOfFrameSince?: number;
 };
 
 export type Popup = {

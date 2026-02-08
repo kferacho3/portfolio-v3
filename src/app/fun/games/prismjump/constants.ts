@@ -11,38 +11,56 @@ export const STORAGE_KEYS = {
 
 export const GAME = {
   // World sizing
-  rowSpacing: 1.5,
-  xLimit: 5.0, // player dies if carried beyond this
-  xWrap: 5.5, // platforms wrap beyond this; keep lanes clear
+  rowSpacing: 2.0,
+  xLimit: 7.5, // player dies if carried beyond this
+  xWrap: 15, // platforms wrap beyond this; keep lanes clear
+  laneSpacing: 3.0,
 
   // Platform sizing - single prism per platform (bright colored block on thin dark base)
-  platformDepth: 1.0,
+  platformDepth: 1.05,
   platformHeight: 0.5,
-  platformTopThickness: 0.2,
+  platformTopThickness: 0.22,
   topThickness: 0.2,
   baseCenterY: 0.25,
   topCenterY: 0.4,
   platformTopY: 0.66, // top face of prism (baseH + prismH)
 
-  // Spawn - fewer platforms per row, no overlap; alternating positions
-  visibleRows: 16,
-  platformsPerRow: 3,
+  // Spawn - fixed ring buffer (no memory growth)
+  visibleRows: 24,
+  platformsPerRow: 5,
+  rowRecycleLookahead: 8,
+  minimapRows: 14,
 
   // Movement / difficulty - PLATFORMS ALWAYS MOVE!
-  baseSpeed: 1.85, // Increased from 1.35 to make movement more obvious
-  speedPerScore: 0.035, // Increased from 0.028 for faster difficulty ramp
-  maxSpeed: 6.5, // Increased from 5.2 for more challenge
+  baseSpeed: 1.8,
+  speedIncreasePerRow: 0.018,
+  maxSpeed: 5.5,
+  rowSpeedVariance: 0.16,
 
   // Jump
-  jumpDuration: 0.3,
-  jumpHeight: 1.25,
-  fallSpeed: 8.5, // falling speed
+  gravityY: -18,
+  jumpImpulseY: 5.2,
+  jumpImpulseZ: 2.8,
+  jumpBufferMs: 110,
+  landingZTolerance: 0.22,
+  landingYTolerance: 0.28,
+  killY: -4.5,
 
   // Collectibles / economy
   unlockCost: 100,
+  coinChance: 0.25,
+  scorePerRow: 1,
+  perfectThresholdX: 0.18,
+  perfectScoreBonus: 1,
+  perfectComboStep: 0.1,
+  multiplierCap: 3,
 
-  // Platform lifecycle: remove rows after this many seconds out of frame
-  platformOutOfFrameTTL: 13,
+  // Camera
+  cameraX: 10,
+  cameraY: 10,
+  cameraLookAhead: 3,
+  cameraZOffset: -6,
+  cameraDamping: 0.18,
 };
 
 export const PLATFORM_TOP_COLORS = [
