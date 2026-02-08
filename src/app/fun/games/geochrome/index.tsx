@@ -135,22 +135,7 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const handleStart = useCallback(() => {
     setRunLiteMode(lowPerf);
     start();
-
-    if (!soundsOn) {
-      setAudioReady(false);
-      return;
-    }
-
-    setAudioReady(true);
-    import('howler')
-      .then(({ Howler }) => {
-        if (Howler.ctx && typeof Howler.ctx.resume === 'function') {
-          void Howler.ctx.resume();
-        }
-      })
-      .catch(() => {
-        // Ignore audio bootstrap failures; game remains playable.
-      });
+    setAudioReady(soundsOn);
   }, [lowPerf, setAudioReady, soundsOn, start]);
 
   const handleRestart = useCallback(() => {

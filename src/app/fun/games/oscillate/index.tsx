@@ -66,7 +66,7 @@ function Overlay() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="text-4xl font-black" style={{ color: COLORS.hudInk }}>
-                  Oscillate
+                  One Path
                 </h1>
                 <p className="mt-2 text-black/70 leading-relaxed">
                   The Walls style rhythm-runner: bounce between corridor walls,

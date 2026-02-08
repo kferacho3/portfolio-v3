@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import type { Howl } from 'howler';
 import type { RapierRigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
 import { AUDIO_TUNING } from './constants';
@@ -16,8 +15,9 @@ export function useKatamariAudio({
   playerBodyRef,
   scaleRef,
 }: UseKatamariAudioProps) {
-  const rollSoundRef = useRef<Howl | null>(null);
-  const popSoundRef = useRef<Howl | null>(null);
+  const rollSoundRef = useRef<HTMLAudioElement | null>(null);
+  const popPoolRef = useRef<HTMLAudioElement[]>([]);
+  const popCursorRef = useRef(0);
   const failedRef = useRef(false);
   const currentVolumeRef = useRef(0);
   const burstRef = useRef({ count: 0, startedAt: 0 });
@@ -25,50 +25,44 @@ export function useKatamariAudio({
   useEffect(() => {
     if (!enabled || rollSoundRef.current || failedRef.current) return;
 
-    let cancelled = false;
+    try {
+      const roll = new Audio('/sounds/geochrome-roll.mp3');
+      roll.loop = true;
+      roll.preload = 'auto';
+      roll.volume = 0;
+      rollSoundRef.current = roll;
 
-    const load = async () => {
-      try {
-        const { Howl } = await import('howler');
-        if (cancelled) return;
+      const poolSize = 5;
+      popPoolRef.current = new Array(poolSize).fill(0).map(() => {
+        const pop = new Audio('/sounds/geochrome-pop.mp3');
+        pop.preload = 'auto';
+        pop.volume = AUDIO_TUNING.popBaseVolume;
+        return pop;
+      });
+      popCursorRef.current = 0;
+    } catch {
+      failedRef.current = true;
+    }
 
-        rollSoundRef.current = new Howl({
-          src: ['/sounds/geochrome-roll.mp3'],
-          volume: 0,
-          loop: true,
-          preload: true,
-          onloaderror: () => {
-            failedRef.current = true;
-          },
-        });
-
-        popSoundRef.current = new Howl({
-          src: ['/sounds/geochrome-pop.mp3'],
-          volume: AUDIO_TUNING.popBaseVolume,
-          preload: true,
-          onloaderror: () => {
-            failedRef.current = true;
-          },
-        });
-      } catch {
-        failedRef.current = true;
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => undefined;
   }, [enabled]);
 
   useEffect(() => {
     return () => {
-      rollSoundRef.current?.stop();
-      rollSoundRef.current?.unload();
-      popSoundRef.current?.unload();
+      if (rollSoundRef.current) {
+        rollSoundRef.current.pause();
+        rollSoundRef.current.src = '';
+        rollSoundRef.current.load();
+      }
+
+      for (const pop of popPoolRef.current) {
+        pop.pause();
+        pop.src = '';
+        pop.load();
+      }
+
       rollSoundRef.current = null;
-      popSoundRef.current = null;
+      popPoolRef.current = [];
     };
   }, []);
 
@@ -102,14 +96,16 @@ export function useKatamariAudio({
       AUDIO_TUNING.rollMaxRate
     );
 
-    roll.volume(currentVolumeRef.current);
-    roll.rate(targetRate);
+    roll.volume = currentVolumeRef.current;
+    roll.playbackRate = targetRate;
 
     if (speed > 0.12) {
-      if (!roll.playing()) {
-        roll.play();
+      if (roll.paused) {
+        void roll.play().catch(() => {
+          // Browser may still block autoplay if user did not interact.
+        });
       }
-    } else if (roll.playing() && currentVolumeRef.current < 0.03) {
+    } else if (!roll.paused && currentVolumeRef.current < 0.03) {
       roll.pause();
     }
   });
@@ -117,8 +113,8 @@ export function useKatamariAudio({
   const playPickup = useCallback(
     (size: number) => {
       if (!enabled || failedRef.current) return;
-      const pop = popSoundRef.current;
-      if (!pop) return;
+      const pool = popPoolRef.current;
+      if (pool.length === 0) return;
 
       const now = performance.now();
       if (now - burstRef.current.startedAt > AUDIO_TUNING.popWindowMs) {
@@ -131,17 +127,21 @@ export function useKatamariAudio({
         return;
       }
 
+      const pop = pool[popCursorRef.current % pool.length];
+      popCursorRef.current += 1;
       const rateJitter = 0.93 + Math.random() * 0.2;
       const sizeRate = THREE.MathUtils.clamp(1.25 - size * 0.11, 0.72, 1.32);
-      pop.rate(rateJitter * sizeRate);
-      pop.volume(
-        THREE.MathUtils.clamp(
-          AUDIO_TUNING.popBaseVolume + size * 0.035,
-          0.2,
-          0.8
-        )
+
+      pop.playbackRate = rateJitter * sizeRate;
+      pop.volume = THREE.MathUtils.clamp(
+        AUDIO_TUNING.popBaseVolume + size * 0.035,
+        0.2,
+        0.8
       );
-      pop.play();
+      pop.currentTime = 0;
+      void pop.play().catch(() => {
+        // Ignore rejected play() calls on unsupported formats.
+      });
     },
     [enabled]
   );

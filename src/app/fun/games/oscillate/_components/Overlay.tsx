@@ -54,7 +54,7 @@ export const Overlay: React.FC = () => {
           <div className="pointer-events-auto w-[min(600px,92vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-4xl font-black text-black">Oscillate</div>
+                <div className="text-4xl font-black text-black">One Path</div>
                 <div className="mt-2 text-black/70">
                   Bounce between side walls. Tap{' '}
                   <span className="font-semibold text-black/80">

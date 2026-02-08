@@ -1,0 +1,106 @@
+export const GAME_TITLE = 'Oscillate';
+export const GAME_ID = 'oscillate';
+
+export const TUNING = {
+  walls: {
+    leftX: -3,
+    rightX: 3,
+    width: 0.7,
+    height: 20000,
+  },
+  camera: {
+    followOffsetY: 7,
+    followSmooth: 10,
+    lookAhead: 18,
+    halfHeight: 14,
+    z: 24,
+  },
+  player: {
+    radius: 0.24,
+    baseSpeed: 5.0,
+    maxAddSpeed: 10.0,
+    growthRate: 0.22,
+    jumpDurationBase: 0.28,
+    jumpDurationMin: 0.18,
+    tapBoost: 0.9,
+    tapBoostTime: 0.08,
+    jumpArcVisual: 0.22,
+    inputBufferSec: 0.08,
+    nearMissThreshold: 0.28,
+  },
+  spawn: {
+    spawnLookAheadY: 35,
+    despawnBehindY: 20,
+    basePatternGap: 10,
+    minPatternGap: 5,
+    minReactionSec: 0.75,
+  },
+  difficulty: {
+    maxPatternComplexity: 3,
+    biomeEveryMeters: 500,
+    levelGoalBase: 140,
+    levelGoalStep: 45,
+  },
+  juice: {
+    shakeStrength: 0.06,
+    shakeDecay: 12,
+    hitSquash: 0.18,
+    trailPoints: 30,
+    trailMinScale: 0.12,
+    trailMaxScale: 0.34,
+  },
+  wave: {
+    startOffset: 10,
+    baseCatchup: 0.62,
+    maxCatchup: 0.94,
+    stallPenalty: 1.35,
+  },
+  pool: {
+    obstacles: 260,
+    collectibles: 170,
+    warnings: 90,
+  },
+} as const;
+
+export const BIOME_PALETTES = [
+  {
+    bgA: '#f2f7ff',
+    bgB: '#dfe9ff',
+    wallA: '#4b6bff',
+    wallB: '#2d4bdd',
+    obstacle: '#56e2ff',
+    danger: '#ff5b83',
+    collectible: '#ffd76a',
+    accent: '#6cf7d7',
+  },
+  {
+    bgA: '#fff4e7',
+    bgB: '#ffe0bf',
+    wallA: '#ff8a4d',
+    wallB: '#e86a2b',
+    obstacle: '#45d1ff',
+    danger: '#ff4569',
+    collectible: '#ffe26e',
+    accent: '#70ffd5',
+  },
+  {
+    bgA: '#efffe8',
+    bgB: '#d8ffd3',
+    wallA: '#36b37e',
+    wallB: '#1f9161',
+    obstacle: '#7ad7ff',
+    danger: '#ff5978',
+    collectible: '#ffe57b',
+    accent: '#7df4ff',
+  },
+  {
+    bgA: '#f9f0ff',
+    bgB: '#e9d8ff',
+    wallA: '#8763ff',
+    wallB: '#5f40d8',
+    obstacle: '#6be6ff',
+    danger: '#ff5e9e',
+    collectible: '#ffd86c',
+    accent: '#7affda',
+  },
+] as const;

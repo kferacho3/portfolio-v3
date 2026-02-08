@@ -348,12 +348,12 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'onepath',
-    title: 'One Path',
+    title: 'Oscillate',
     description:
-      'Tap to switch sides. Thread the gaps. Reach the gate. One-touch timing game with growing difficulty.',
+      'Vertical wall-runner with orthographic camera, pattern-based hazards, shield orbs, and capped infinite scaling.',
     accent: '#6b4cff',
     poster:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
     hotkey: '',
   },
   {
@@ -407,12 +407,12 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'oscillate',
-    title: 'Oscillate',
+    title: 'One Path',
     description:
       'Bounce between walls. Tap right on the wall to turn and advance.',
     accent: '#6b4cff',
     poster:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
     hotkey: '',
   },
   {
@@ -681,8 +681,8 @@ export const GAME_RULES: Record<string, GameRules> = {
   onepath: {
     controls: 'Tap/Space/Click to switch sides • R to restart',
     objective:
-      'Tap to switch sides and thread through gaps. Reach the portal gate to clear each level. Collect gems along the way.',
-    tips: "Switch early—your ball slides, it doesn't teleport. Watch for obstacles on alternating sides. Perfect dodges give bonus feedback.",
+      'Climb infinitely or clear level distance goals by switching walls, dodging patterned hazards, and outpacing the crashing wave.',
+    tips: 'Buffered taps trigger instant re-switches on landing. Collect 3 shield orbs for one-hit protection and use near-misses to raise multiplier.',
   },
   slowmo: {
     controls: 'Hold/Tap to slow time • Release to resume • R to restart',
