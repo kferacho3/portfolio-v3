@@ -30,6 +30,11 @@ import { ThemeContext } from '../../../contexts/ThemeContext';
 
 type BackdropStyle = 'aurora' | 'grid' | 'none';
 
+type NavigatorWithHints = Navigator & {
+  deviceMemory?: number;
+  connection?: { saveData?: boolean };
+};
+
 type GameFXTheme = {
   palette: [string, string, string];
   shaderPresets: ArcadeMaterialPreset[];
@@ -674,6 +679,22 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { scene, size } = useThree();
   const theme = GAME_THEMES[gameId] ?? DEFAULT_THEME;
   const isMobile = size.width < 768;
+  const lowPowerDevice = useMemo(() => {
+    if (typeof window === 'undefined') return isMobile;
+    const reducedMotion =
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+    const nav = navigator as NavigatorWithHints;
+    const deviceMemory = nav.deviceMemory ?? 8;
+    const hardwareConcurrency = nav.hardwareConcurrency ?? 8;
+    const saveData = nav.connection?.saveData ?? false;
+    return (
+      isMobile ||
+      reducedMotion ||
+      saveData ||
+      deviceMemory <= 4 ||
+      hardwareConcurrency <= 4
+    );
+  }, [isMobile]);
   const { theme: uiTheme } = useContext(ThemeContext);
   const isLightMode = uiTheme === 'light';
 
@@ -682,7 +703,8 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
 
   // Only load env map if backdrop cluster is needed and not on mobile/light mode
-  const shouldLoadEnvMap = showBackdrop && !isMobile && !isLightMode;
+  const shouldLoadEnvMap =
+    showBackdrop && !isMobile && !isLightMode && !lowPowerDevice;
   const envMap = useEnvMap(shouldLoadEnvMap);
 
   const qualityScale = isMobile ? 0.65 : 1;
@@ -806,6 +828,10 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     };
   }, [isLightMode, theme.lights]);
 
+  const postEnabled = !lowPowerDevice;
+  const frameBufferType =
+    gameId === 'home' ? THREE.UnsignedByteType : THREE.HalfFloatType;
+
   return (
     <>
       {envMap && <Environment map={envMap} background={false} />}
@@ -835,7 +861,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         <Stars
           radius={300}
           depth={60}
-          count={isMobile ? 2000 : 5000} // Reduced star count for memory
+          count={lowPowerDevice ? 1200 : isMobile ? 2000 : 5000} // Reduced star count for memory
           factor={isMobile ? 5 : 7}
           saturation={0}
           fade
@@ -860,40 +886,43 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
         />
       )}
 
-      <EffectComposer
-        enableNormalPass={false}
-        multisampling={isMobile ? 0 : 2} // Reduce multisampling on mobile
-      >
-        <HueSaturation saturation={saturation} />
-        <Bloom
-          intensity={bloomIntensity}
-          luminanceThreshold={0.2}
-          luminanceSmoothing={0.8}
-          mipmapBlur={!isMobile}
-        />
-        <ChromaticAberration
-          offset={chromaticOffset}
-          radialModulation={false}
-          modulationOffset={0}
-        />
-        {useTiltShift && !isMobile ? (
-          <TiltShift2 blur={theme.post.tiltShift ?? 0.12} />
-        ) : (
-          <></>
-        )}
-        {theme.post.dof && !isMobile ? (
-          <DepthOfField
-            focusDistance={theme.post.dof.focusDistance}
-            focalLength={theme.post.dof.focalLength}
-            bokehScale={theme.post.dof.bokehScale}
-            height={480}
+      {postEnabled && (
+        <EffectComposer
+          enableNormalPass={false}
+          multisampling={gameId === 'home' || isMobile ? 0 : 2}
+          frameBufferType={frameBufferType}
+        >
+          <HueSaturation saturation={saturation} />
+          <Bloom
+            intensity={bloomIntensity}
+            luminanceThreshold={0.2}
+            luminanceSmoothing={0.8}
+            mipmapBlur={!isMobile}
           />
-        ) : (
-          <></>
-        )}
-        <Noise opacity={noiseOpacity} />
-        <Vignette eskil={false} offset={0.1} darkness={vignetteDarkness} />
-      </EffectComposer>
+          <ChromaticAberration
+            offset={chromaticOffset}
+            radialModulation={false}
+            modulationOffset={0}
+          />
+          {useTiltShift && !isMobile ? (
+            <TiltShift2 blur={theme.post.tiltShift ?? 0.12} />
+          ) : (
+            <></>
+          )}
+          {theme.post.dof && !isMobile ? (
+            <DepthOfField
+              focusDistance={theme.post.dof.focusDistance}
+              focalLength={theme.post.dof.focalLength}
+              bokehScale={theme.post.dof.bokehScale}
+              height={480}
+            />
+          ) : (
+            <></>
+          )}
+          <Noise opacity={noiseOpacity} />
+          <Vignette eskil={false} offset={0.1} darkness={vignetteDarkness} />
+        </EffectComposer>
+      )}
     </>
   );
 };

@@ -90,8 +90,8 @@ const recordCurvePos = (pos: THREE.Vector3) => {
 export const advanceCurvedState = (
   pos: THREE.Vector3,
   theta: number,
-  _curvature: number,
-  _curvatureVel: number,
+  curvature: number,
+  curvatureVel: number,
   directionSign: number,
   step: number
 ) => {
@@ -99,15 +99,28 @@ export const advanceCurvedState = (
   // - Track is generated along a diagonal-forward basis (classic ZigZag "feel").
   // - Player + tiles share the exact same integrator (physically possible).
   // - Use sign flips (tap) to change curvature direction.
-  const turnRate = CURVE_BASE_CURVATURE * 0.42; // rad per world-unit (tuned)
+  const targetAbsYaw = THREE.MathUtils.clamp(
+    Math.abs(curvature) > 0.001 ? Math.abs(curvature) : 0.5,
+    0.24,
+    CURVE_MAX_YAW * 0.88
+  );
+  const turnEnergy = THREE.MathUtils.clamp(
+    Math.abs(curvatureVel) > 0.001 ? Math.abs(curvatureVel) : 1,
+    0.7,
+    1.55
+  );
+  const targetYaw = targetAbsYaw * (directionSign >= 0 ? 1 : -1);
+  const turnRate = CURVE_BASE_CURVATURE * 0.52 * turnEnergy;
 
   const lateral = pos.dot(curveRight);
   const boundaryForce =
     THREE.MathUtils.clamp(Math.abs(lateral) / CURVE_BOUNDARY_HARD, 0, 1) *
     Math.sign(lateral);
 
-  theta += (directionSign - boundaryForce * 0.65) * turnRate * step;
-  theta = THREE.MathUtils.damp(theta, 0, CURVE_FORWARD_BIAS, step);
+  const steer = targetYaw - theta;
+  theta += steer * turnRate * step;
+  theta -= boundaryForce * 0.45 * turnRate * step;
+  theta = THREE.MathUtils.damp(theta, 0, CURVE_FORWARD_BIAS * 0.45, step);
   theta = THREE.MathUtils.clamp(theta, -CURVE_MAX_YAW, CURVE_MAX_YAW);
 
   const c = Math.cos(theta);
@@ -132,7 +145,13 @@ export const advanceCurvedState = (
   pos.addScaledVector(curveRight, lateralPulled - lateralAfter);
   pos.y = -TILE_DEPTH / 2;
 
-  return { theta, curvature: 0, curvatureVel: 0, tangent, normal };
+  return {
+    theta,
+    curvature: targetAbsYaw,
+    curvatureVel: turnEnergy,
+    tangent,
+    normal,
+  };
 };
 
 const chooseGridDirection = (preferRight: boolean) => {
@@ -174,12 +193,19 @@ export const generateClassicTile = (): THREE.Vector3 => {
 
 export const generateCurvedTiles = () => {
   if (mutation.pathCurveSegmentRemaining <= 0) {
+    const shouldFlip =
+      Math.abs(mutation.pathCurveTheta) > 0.32 || Math.random() < 0.82;
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_RANGE[0],
       CURVE_SEGMENT_RANGE[1]
     );
-    mutation.pathCurveDirection =
-      mutation.pathCurveDirection === 0 ? 1 : mutation.pathCurveDirection * -1;
+    if (mutation.pathCurveDirection === 0) {
+      mutation.pathCurveDirection = Math.random() < 0.5 ? 1 : -1;
+    } else if (shouldFlip) {
+      mutation.pathCurveDirection *= -1;
+    }
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.32, 0.68);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.9, 1.35);
   }
 
   const nearYawLimit = Math.abs(mutation.pathCurveTheta) > CURVE_MAX_YAW * 0.92;
@@ -189,6 +215,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.5, 0.78);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.1, 1.5);
   }
 
   const lateral = mutation.lastTilePos.dot(curveRight);
@@ -198,6 +226,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.52, 0.8);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.1, 1.55);
   }
 
   const prevPos = mutation.lastTilePos.clone();
@@ -233,6 +263,8 @@ export const generateCurvedTiles = () => {
         CURVE_SEGMENT_SHORT_RANGE[1]
       )
     );
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.52, 0.82);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.15, 1.55);
 
     result = advanceCurvedState(
       mutation.lastTilePos,

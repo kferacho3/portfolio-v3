@@ -1,4 +1,5 @@
 import { proxy } from 'valtio';
+import { clamp } from './helpers';
 
 export type OnePathPhase = 'menu' | 'playing' | 'cleared' | 'gameover' | 'shop';
 export type OnePathMode = 'levels' | 'endless';
@@ -18,6 +19,9 @@ export type OnePathSegment = {
   lenNeg: number;
   lenPos: number;
   exit: number | null;
+  // Number of wall bounces required before the exit "turn" becomes valid.
+  // This models the corridor rhythm from "The Walls" (you can't turn immediately).
+  turnAfterHits: number;
   walls: { neg: OnePathWall; pos: OnePathWall };
 };
 
@@ -140,10 +144,6 @@ const DEFAULT_SKINS: OnePathSkin[] = [
     metalness: 0.85,
   },
 ];
-
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
-}
 
 export const onePathState = proxy({
   // ui
@@ -284,6 +284,21 @@ export const onePathState = proxy({
     onePathState.save();
   },
 
+  // Endless progression without a "cleared" screen (classic-style flow).
+  // Called by the renderer when the portal is reached in endless mode.
+  advanceEndless: (gemsCollected: number) => {
+    if (onePathState.mode !== 'endless') return;
+    onePathState.lastRunGems = gemsCollected;
+    onePathState.gems += gemsCollected;
+    onePathState.level += 1;
+    onePathState.endlessBest = Math.max(
+      onePathState.endlessBest,
+      onePathState.level
+    );
+    onePathState.phase = 'playing';
+    onePathState.save();
+  },
+
   next: () => {
     if (onePathState.mode === 'levels') {
       onePathState.level += 1;
@@ -366,7 +381,13 @@ export const onePathState = proxy({
     const maxCoord = maxSpan;
     const minSide = clamp(baseLen * 0.45, 0.5, 0.95);
     const exitMargin = clamp(turnRadius * 2.35, 0.24, 0.6);
-    const wallHits = 8;
+    const wallHits =
+      mode === 'levels' ? 8 : clamp(6 - Math.floor((lvl - 1) / 12), 3, 6);
+    const turnAfterBase =
+      mode === 'levels'
+        ? clamp(1 + Math.floor(lvl * 0.08), 1, 4)
+        : clamp(2 + Math.floor(lvl * 0.1), 2, 7);
+    const turnAfterMax = Math.max(1, wallHits * 2 - 1);
 
     const eps = 1e-4;
     const segmentsOut: OnePathSegment[] = [];
@@ -506,6 +527,13 @@ export const onePathState = proxy({
         }
 
         let exit: number | null = null;
+        const turnAfterHits = isLast
+          ? 0
+          : clamp(
+              turnAfterBase + (rnd() < 0.32 ? 1 : 0) - (rnd() < 0.14 ? 1 : 0),
+              1,
+              turnAfterMax
+            );
         if (!isLast) {
           const exitMin = -lenNeg + exitMargin;
           const exitMax = lenPos - exitMargin;
@@ -519,6 +547,7 @@ export const onePathState = proxy({
           lenNeg,
           lenPos,
           exit,
+          turnAfterHits,
           walls: {
             neg: { id: `w_${lvl}_${i}_n`, ...wallBase },
             pos: { id: `w_${lvl}_${i}_p`, ...wallBase },
@@ -537,6 +566,13 @@ export const onePathState = proxy({
         const lenPos = minWall;
         const lenNeg = minWall;
         let exit: number | null = null;
+        const turnAfterHits = isLast
+          ? 0
+          : clamp(
+              turnAfterBase + (rnd() < 0.32 ? 1 : 0) - (rnd() < 0.14 ? 1 : 0),
+              1,
+              turnAfterMax
+            );
         if (!isLast) {
           const exitMin = -lenNeg + exitMargin;
           const exitMax = lenPos - exitMargin;
@@ -549,6 +585,7 @@ export const onePathState = proxy({
           lenNeg,
           lenPos,
           exit,
+          turnAfterHits,
           walls: {
             neg: { id: `w_${lvl}_${i}_n`, ...wallBase },
             pos: { id: `w_${lvl}_${i}_p`, ...wallBase },

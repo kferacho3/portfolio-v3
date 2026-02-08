@@ -160,14 +160,14 @@ export const apexState = proxy<
     const spiralSeed = Math.random() < 0.5 ? 1 : -1;
     mutation.curveCenterPos.set(0, -TILE_DEPTH / 2, 0);
     mutation.curveTheta = 0;
-    mutation.curveCurvature = 0;
-    mutation.curveCurvatureVel = 0;
+    mutation.curveCurvature = 0.5;
+    mutation.curveCurvatureVel = 1;
     mutation.curveDirection = curveSeed;
     mutation.curveLane = 1;
     mutation.curveLaneOffset = 0;
     mutation.pathCurveTheta = 0;
-    mutation.pathCurveCurvature = 0;
-    mutation.pathCurveCurvatureVel = 0;
+    mutation.pathCurveCurvature = 0.5;
+    mutation.pathCurveCurvatureVel = 1;
     mutation.pathCurveDirection = curveSeed;
     mutation.pathCurveSegmentRemaining = 0;
     mutation.spiralDirection = spiralSeed;
@@ -221,7 +221,7 @@ export const apexState = proxy<
     this.arena = arena;
     try {
       localStorage.setItem('apex-arena', arena);
-    } catch (e) {
+    } catch {
       /* ignore */
     }
   },
@@ -297,7 +297,7 @@ export const apexState = proxy<
     try {
       const saved = localStorage.getItem('apex-highscores');
       if (saved) Object.assign(this.highScores, JSON.parse(saved));
-    } catch (e) {
+    } catch {
       /* ignore */
     }
   },
@@ -305,7 +305,7 @@ export const apexState = proxy<
   saveHighScores() {
     try {
       localStorage.setItem('apex-highscores', JSON.stringify(this.highScores));
-    } catch (e) {
+    } catch {
       /* ignore */
     }
   },

@@ -24,19 +24,25 @@ import AnimatedCamera from './components/AnimatedCamera';
 import { RachosArcade, GameCard } from './components/RachosArcade';
 import ArcadeWorldFX from './components/ArcadeWorldFX';
 import { ArcadeDeck } from './components/shell';
-import { GAME_CARDS, TOTAL_GAMES } from './config/games';
+import { GAME_CARDS } from './config/games';
 import { ORBIT_SETTINGS } from './config/themes';
-import { useArcadeStore } from './store';
 import { useGameState, useNavigationActions } from './store/selectors';
 import { useAutoCycleGames } from './hooks';
-import type { GameId } from './store/types';
+
+type NavigatorWithHints = Navigator & {
+  deviceMemory?: number;
+  connection?: { saveData?: boolean };
+};
 
 const CanvasProvider = dynamic(
   () => import('../../components/CanvasProvider'),
   {
     ssr: false,
     loading: () => (
-      <div className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud" aria-hidden="true" />
+      <div
+        className="fixed inset-0 z-0 bg-cloud-aqua dark:bg-dark-cloud"
+        aria-hidden="true"
+      />
     ),
   }
 );
@@ -251,13 +257,49 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
 
 export default function FunPage() {
   const router = useRouter();
+  const [autoCycleEnabled, setAutoCycleEnabled] = useState(false);
 
   // Zustand state
   const { selectedIndex } = useGameState();
   const { setSelectedIndex, setCurrentGame } = useNavigationActions();
 
   // Auto-cycle games on home screen
-  useAutoCycleGames(5500);
+  useEffect(() => {
+    try {
+      const reducedMotion = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+      ).matches;
+      const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+      const smallScreen = window.innerWidth < 768;
+      const nav = navigator as NavigatorWithHints;
+      const deviceMemory = nav.deviceMemory ?? 8;
+      const saveData = nav.connection?.saveData ?? false;
+
+      const lowPower =
+        reducedMotion ||
+        coarsePointer ||
+        smallScreen ||
+        saveData ||
+        deviceMemory <= 4;
+      setAutoCycleEnabled(!lowPower);
+    } catch {
+      // If feature detection fails, default to no auto-cycle for safety.
+      setAutoCycleEnabled(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!autoCycleEnabled) return;
+    const stop = () => setAutoCycleEnabled(false);
+    window.addEventListener('pointerdown', stop, { once: true });
+    window.addEventListener('keydown', stop, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', stop);
+      window.removeEventListener('keydown', stop);
+    };
+  }, [autoCycleEnabled]);
+
+  useAutoCycleGames(5500, autoCycleEnabled);
 
   // Ensure we're on home when visiting /fun
   useEffect(() => {

@@ -6,11 +6,10 @@
  */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
 import { GAME_CARDS, TOTAL_GAMES } from '../../config/games';
 import { getArcadePanelCSS } from '../../config/themes';
-import { preloadGame } from '../../games/registry';
-import type { GameCard, GameId } from '../../store/types';
 
 export interface ArcadeDeckProps {
   selectedIndex: number;
@@ -23,6 +22,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
   onSelectGame,
   onLaunchGame,
 }) => {
+  const router = useRouter();
   const [showInfo, setShowInfo] = useState(false);
   const selectedGame = GAME_CARDS[selectedIndex] ?? GAME_CARDS[0];
   const panelStyles = getArcadePanelCSS(selectedGame.accent);
@@ -31,17 +31,6 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
   useEffect(() => {
     setShowInfo(false);
   }, [selectedIndex]);
-
-  useEffect(() => {
-    if (!selectedGame) return;
-    preloadGame(selectedGame.id as GameId);
-
-    const nextGame = GAME_CARDS[(selectedIndex + 1) % TOTAL_GAMES];
-    const prevGame =
-      GAME_CARDS[(selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES];
-    if (nextGame) preloadGame(nextGame.id as GameId);
-    if (prevGame) preloadGame(prevGame.id as GameId);
-  }, [selectedGame, selectedIndex]);
 
   const handleSelectPrevious = () => {
     onSelectGame((selectedIndex - 1 + TOTAL_GAMES) % TOTAL_GAMES);
@@ -58,19 +47,22 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
   };
 
   const handlePreloadSelected = () => {
-    if (selectedGame) {
-      preloadGame(selectedGame.id as GameId);
-    }
+    if (!selectedGame) return;
+    // Prefetch the route JS without executing/loading the game module.
+    router.prefetch(`/fun/${selectedGame.id}`);
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-6 z-[9999] flex justify-center px-4 pointer-events-none">
+    <div
+      className="fixed inset-x-0 bottom-0 z-[9999] flex justify-center px-4 pointer-events-none"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
+    >
       <div
         className="pointer-events-auto w-full max-w-[760px] animate-in fade-in slide-in-from-bottom-4 duration-700"
         style={panelStyles}
       >
         <div
-          className="relative overflow-hidden border px-5 py-4 backdrop-blur-2xl"
+          className="relative overflow-hidden border px-4 py-3 md:px-5 md:py-4 backdrop-blur-none md:backdrop-blur-2xl"
           style={{
             borderColor: 'var(--arcade-stroke)',
             background: 'var(--arcade-surface)',
@@ -89,17 +81,25 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
           />
 
           {/* Main content */}
-          <div className="relative flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+            <div className="flex items-center justify-between gap-3 min-w-0">
               <NavigationButton
                 direction="prev"
                 onClick={handleSelectPrevious}
               />
 
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="text-base font-semibold text-white/90 md:text-lg truncate">
-                  {selectedGame.title}
-                </span>
+              <div className="flex min-w-0 flex-1 items-center justify-center gap-2 md:justify-start">
+                <div className="min-w-0">
+                  <div className="text-base font-semibold text-white/90 md:text-lg truncate text-center md:text-left">
+                    {selectedGame.title}
+                  </div>
+                  <div
+                    className="text-[10px] uppercase tracking-[0.28em] text-white/40 text-center md:text-left"
+                    style={{ fontFamily: 'var(--arcade-mono)' }}
+                  >
+                    {selectedIndex + 1} / {TOTAL_GAMES}
+                  </div>
+                </div>
                 <InfoButton
                   isActive={showInfo}
                   onClick={() => setShowInfo((prev) => !prev)}
@@ -109,18 +109,17 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
               <NavigationButton direction="next" onClick={handleSelectNext} />
             </div>
 
-            <div className="flex-shrink-0">
-              <LaunchButton
-                onClick={handleLaunchSelected}
-                onPreload={handlePreloadSelected}
-              />
-            </div>
+            <LaunchButton
+              className="w-full justify-center md:w-auto"
+              onClick={handleLaunchSelected}
+              onPreload={handlePreloadSelected}
+            />
           </div>
 
           {/* Info panel */}
           {showInfo && (
             <div
-              className="relative mt-3 border px-3 py-2 text-sm text-white/70"
+              className="relative mt-3 border px-3 py-2 text-xs md:text-sm text-white/70"
               style={{
                 borderColor: 'var(--arcade-stroke)',
                 background: 'rgba(10, 12, 18, 0.55)',
@@ -185,14 +184,15 @@ const InfoButton: React.FC<{
  * Launch/Start button
  */
 const LaunchButton: React.FC<{
+  className?: string;
   onClick: () => void;
   onPreload: () => void;
-}> = ({ onClick, onPreload }) => (
+}> = ({ className, onClick, onPreload }) => (
   <button
     onClick={onClick}
     onMouseEnter={onPreload}
     onFocus={onPreload}
-    className="group inline-flex items-center gap-2 border px-4 py-2 text-[11px] uppercase tracking-[0.32em] text-white/70 transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95"
+    className={`group inline-flex items-center gap-2 border px-4 py-2 text-[11px] uppercase tracking-[0.32em] text-white/70 transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95 ${className ?? ''}`}
     style={{
       background:
         'linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04))',

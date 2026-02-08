@@ -17,6 +17,11 @@ type GLTFResult = GLTF & {
   materials: Record<string, THREE.Material>;
 };
 
+type NavigatorWithHints = Navigator & {
+  deviceMemory?: number;
+  connection?: { saveData?: boolean };
+};
+
 export type GameCard = {
   id: string;
   title: string;
@@ -46,9 +51,39 @@ const SCREEN_ROTATION = new THREE.Quaternion().setFromAxisAngle(
   new THREE.Vector3(1, 0, 0),
   Math.PI / 2 - 0.2 // ~78 degrees - tilts top of screen backward
 );
-// LRU Texture cache with size limits to prevent memory accumulation
-const MAX_TEXTURE_CACHE_SIZE = 5; // Only keep 5 most recent textures
-const MAX_TEXTURE_SIZE = 2048; // Max texture dimension in pixels
+
+// Keep the lobby ultra memory-safe on mobile / low-power devices.
+const DEVICE_LIMITS = (() => {
+  if (typeof window === 'undefined') {
+    return {
+      maxTextureCacheSize: 5,
+      maxTextureSize: 2048,
+      enableMipmaps: true,
+    };
+  }
+
+  const reducedMotion =
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+  const coarsePointer =
+    window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+  const smallScreen = window.innerWidth < 768;
+  const nav = navigator as NavigatorWithHints;
+  const deviceMemory = nav.deviceMemory ?? 8;
+  const saveData = nav.connection?.saveData ?? false;
+
+  const lowPower =
+    reducedMotion ||
+    coarsePointer ||
+    smallScreen ||
+    saveData ||
+    deviceMemory <= 4;
+
+  return {
+    maxTextureCacheSize: lowPower ? 2 : 5,
+    maxTextureSize: lowPower ? 1024 : 2048,
+    enableMipmaps: !lowPower,
+  };
+})();
 
 interface CachedTexture {
   texture: THREE.Texture;
@@ -60,14 +95,17 @@ const textureLoader = new THREE.TextureLoader();
 
 // Clean up old textures from cache (LRU eviction)
 function evictOldTextures() {
-  if (textureCache.size <= MAX_TEXTURE_CACHE_SIZE) return;
+  if (textureCache.size <= DEVICE_LIMITS.maxTextureCacheSize) return;
 
   // Sort by last used time and remove oldest
   const entries = Array.from(textureCache.entries()).sort(
     (a, b) => a[1].lastUsed - b[1].lastUsed
   );
 
-  const toRemove = entries.slice(0, entries.length - MAX_TEXTURE_CACHE_SIZE);
+  const toRemove = entries.slice(
+    0,
+    entries.length - DEVICE_LIMITS.maxTextureCacheSize
+  );
   for (const [url, cached] of toRemove) {
     // Dispose texture to free memory
     cached.texture.dispose();
@@ -76,30 +114,51 @@ function evictOldTextures() {
 }
 
 // Downscale texture if too large
-function optimizeTexture(texture: THREE.Texture): THREE.Texture {
+function optimizeTexture(
+  texture: THREE.Texture,
+  maxSize: number = DEVICE_LIMITS.maxTextureSize
+): THREE.Texture {
   if (!texture.image) return texture;
 
-  const img = texture.image as HTMLImageElement;
-  if (img.width <= MAX_TEXTURE_SIZE && img.height <= MAX_TEXTURE_SIZE) {
+  const img = texture.image as unknown as { width?: number; height?: number };
+  if (
+    !img ||
+    typeof img.width !== 'number' ||
+    typeof img.height !== 'number' ||
+    (img.width <= maxSize && img.height <= maxSize)
+  ) {
     return texture;
   }
 
   // Create canvas to downscale
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) return texture;
 
-  const scale = Math.min(
-    MAX_TEXTURE_SIZE / img.width,
-    MAX_TEXTURE_SIZE / img.height
-  );
-  canvas.width = img.width * scale;
-  canvas.height = img.height * scale;
+  const scale = Math.min(maxSize / img.width, maxSize / img.height);
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
 
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(
+    texture.image as unknown as CanvasImageSource,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
 
   // Create new texture from downscaled image
-  const optimizedTexture = new THREE.Texture(canvas);
+  const optimizedTexture = new THREE.CanvasTexture(canvas);
+  optimizedTexture.colorSpace = texture.colorSpace;
+  optimizedTexture.flipY = texture.flipY;
+  optimizedTexture.wrapS = texture.wrapS;
+  optimizedTexture.wrapT = texture.wrapT;
+  optimizedTexture.mapping = texture.mapping;
+  optimizedTexture.repeat.copy(texture.repeat);
+  optimizedTexture.offset.copy(texture.offset);
+  optimizedTexture.center.copy(texture.center);
+  optimizedTexture.rotation = texture.rotation;
+  optimizedTexture.anisotropy = texture.anisotropy;
   optimizedTexture.needsUpdate = true;
 
   // Dispose old texture
@@ -156,41 +215,64 @@ export function RachosArcade(props: ModelProps) {
   useEffect(() => {
     if (!scene) return;
 
+    const keepAttrs = new Set(['position', 'normal', 'uv', 'uv2', 'color']);
+    const textureRemap = new Map<string, THREE.Texture>();
+
+    const optimizeAndConfigureTexture = (tex?: THREE.Texture | null) => {
+      if (!tex) return tex;
+      const cached = textureRemap.get(tex.uuid);
+      if (cached) return cached;
+
+      const optimized = optimizeTexture(tex, DEVICE_LIMITS.maxTextureSize);
+      optimized.minFilter = DEVICE_LIMITS.enableMipmaps
+        ? THREE.LinearMipmapLinearFilter
+        : THREE.LinearFilter;
+      optimized.magFilter = THREE.LinearFilter;
+      optimized.generateMipmaps = DEVICE_LIMITS.enableMipmaps;
+      optimized.needsUpdate = true;
+
+      textureRemap.set(tex.uuid, optimized);
+      return optimized;
+    };
+
     scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
         const geometry = mesh.geometry;
 
-        // Merge vertices if possible to reduce memory
         if (geometry instanceof THREE.BufferGeometry) {
-          // Enable frustum culling for better performance
           mesh.frustumCulled = true;
 
-          // Dispose unused attributes if any
-          const attrs = geometry.attributes;
-          for (const key in attrs) {
-            if (!['position', 'normal', 'uv'].includes(key)) {
-              // Keep only essential attributes
+          // Drop unused vertex attributes to reduce CPU/GPU memory.
+          for (const key of Object.keys(geometry.attributes)) {
+            if (!keepAttrs.has(key)) {
+              geometry.deleteAttribute(key);
             }
           }
+          geometry.morphAttributes = {};
         }
 
         // Optimize materials
         if (mesh.material) {
-          const material = Array.isArray(mesh.material)
-            ? mesh.material[0]
-            : mesh.material;
+          const materials = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
 
-          if (material instanceof THREE.MeshStandardMaterial) {
-            // Reduce texture sizes if they exist
-            if (material.map) {
-              material.map.minFilter = THREE.LinearMipmapLinearFilter;
-              material.map.generateMipmaps = true;
-            }
-            if (material.normalMap) {
-              material.normalMap.minFilter = THREE.LinearMipmapLinearFilter;
-              material.normalMap.generateMipmaps = true;
-            }
+          for (const material of materials) {
+            if (!(material instanceof THREE.MeshStandardMaterial)) continue;
+
+            // Downscale + configure textures (big memory win on mobile).
+            material.map = optimizeAndConfigureTexture(material.map) ?? null;
+            material.normalMap =
+              optimizeAndConfigureTexture(material.normalMap) ?? null;
+            material.emissiveMap =
+              optimizeAndConfigureTexture(material.emissiveMap) ?? null;
+            material.roughnessMap =
+              optimizeAndConfigureTexture(material.roughnessMap) ?? null;
+            material.metalnessMap =
+              optimizeAndConfigureTexture(material.metalnessMap) ?? null;
+            material.aoMap =
+              optimizeAndConfigureTexture(material.aoMap) ?? null;
           }
         }
       }
@@ -582,10 +664,11 @@ function applyTextureToMesh(mesh: THREE.Mesh, texture: THREE.Texture) {
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.ClampToEdgeWrapping;
   texture.wrapT = THREE.ClampToEdgeWrapping;
-  // Use mipmaps for better memory efficiency
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.minFilter = DEVICE_LIMITS.enableMipmaps
+    ? THREE.LinearMipmapLinearFilter
+    : THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = true;
+  texture.generateMipmaps = DEVICE_LIMITS.enableMipmaps;
   texture.flipY = true;
 
   normalizeMeshUVs(mesh);
@@ -761,7 +844,7 @@ if (typeof window !== 'undefined') {
   try {
     const isHighEndDevice =
       (navigator.hardwareConcurrency || 2) >= 4 &&
-      ((navigator as any).deviceMemory || 2) >= 4;
+      ((navigator as NavigatorWithHints).deviceMemory || 2) >= 4;
 
     if (isHighEndDevice) {
       useGLTF.preload('/fun/models/rachoArcade.glb', true);

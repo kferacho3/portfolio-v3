@@ -244,18 +244,21 @@ export function useArcadeKeyboard() {
 /**
  * Hook for auto-cycling games on the arcade home screen
  */
-export function useAutoCycleGames(intervalMs: number = 5500) {
+export function useAutoCycleGames(
+  intervalMs: number = 5500,
+  enabled: boolean = true
+) {
   const { isHome, selectNextGame } = useArcadeShell();
 
   useEffect(() => {
-    if (!isHome || GAME_CARDS.length === 0) return;
+    if (!enabled || !isHome || GAME_CARDS.length === 0) return;
 
     const interval = setInterval(() => {
       selectNextGame();
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [isHome, selectNextGame, intervalMs]);
+  }, [enabled, isHome, selectNextGame, intervalMs]);
 }
 
 export default useArcadeShell;

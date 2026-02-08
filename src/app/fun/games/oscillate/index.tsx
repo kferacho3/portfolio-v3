@@ -7,25 +7,17 @@ import { useSnapshot } from 'valtio';
 import * as THREE from 'three';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { COLORS, CONST } from './constants';
+import { clamp } from './helpers';
 import { onePathState, type OnePathLevel } from './state';
 
 export { onePathState as oscillateState } from './state';
 
 /**
- * OnePath
+ * Oscillate
  * Inspired by "The Walls" (Ketchapp × mauigo games / Marius Gerlich).
  * Original implementation for this codebase.
  */
-
-const COLORS = {
-  bg: '#ffffff',
-  wall: '#6b4cff',
-  wallDark: '#563be8',
-  deck: '#8a6bff',
-  pillar: '#64e7ff',
-  gem: '#ffd35a',
-  portalGlow: '#61e9ff',
-};
 
 type RunStatus = {
   // sim
@@ -37,6 +29,7 @@ type RunStatus = {
   vy: number;
   alive: boolean;
   cleared: boolean;
+  bouncesOnSeg: number;
 
   // scoring / feedback
   gemsThisRun: number;
@@ -51,10 +44,6 @@ function useOnMount(fn: () => void) {
     fn();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-}
-
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n));
 }
 
 function formatLevel(n: number) {
@@ -107,9 +96,9 @@ function Overlay() {
           <div className="pointer-events-auto w-[min(560px,92vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-4xl font-black text-black">OnePath</div>
+                <div className="text-4xl font-black text-black">Oscillate</div>
                 <div className="mt-2 text-black/70">
-                  Bounce between walls. Tap{' '}
+                  Bounce between walls. After a few bounces, tap{' '}
                   <span className="font-semibold text-black/80">
                     on the crossing
                   </span>{' '}
@@ -130,15 +119,15 @@ function Overlay() {
                   How it works
                 </div>
                 <div className="mt-1 text-sm text-black/60">
-                  The ball oscillates between two walls. The perpendicular
-                  bridge appears between them — tap when you cross it.
+                  The ball oscillates between two walls. After a few bounces,
+                  the perpendicular bridge lights up — tap when you cross it.
                 </div>
               </div>
               <div className="rounded-2xl bg-black/5 p-4">
                 <div className="text-sm font-semibold text-black/80">Twist</div>
                 <div className="mt-1 text-sm text-black/60">
-                  Shorter distance = tighter timing. Walls break after 8 hits
-                  (the first pair never does).
+                  Shorter distance = tighter timing. Walls break after 8 hits in
+                  Levels (faster in Classic). The first pair never does.
                 </div>
               </div>
             </div>
@@ -191,7 +180,7 @@ function Overlay() {
                   className="rounded-2xl bg-black/5 px-5 py-3 text-black font-semibold hover:bg-black/10"
                   onClick={() => onePathState.startEndless()}
                 >
-                  Endless
+                  Classic
                 </button>
                 <button
                   className="rounded-2xl bg-black px-5 py-3 text-white font-semibold active:scale-[0.99]"
@@ -335,7 +324,7 @@ function Overlay() {
           <div className="pointer-events-auto w-[min(560px,92vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur">
             <div className="text-4xl font-black text-black">Missed.</div>
             <div className="mt-2 text-black/70">
-              Tap when the ball crosses the perpendicular bridge to turn.
+              Wait for the bridge to light up, then tap as you cross it.
             </div>
 
             <div className="mt-5 flex items-center justify-between gap-3">
@@ -353,7 +342,7 @@ function Overlay() {
                   </>
                 ) : (
                   <>
-                    Endless{' '}
+                    Classic{' '}
                     <span className="font-semibold text-black/80">
                       {snap.level}
                     </span>{' '}
@@ -389,6 +378,8 @@ function Overlay() {
 function Scene() {
   const snap = useSnapshot(onePathState);
   const inputRef = useInputRef();
+  const [activeSegIndex, setActiveSegIndex] = React.useState(0);
+  const activeSegIndexRef = React.useRef(0);
 
   const levelRef = React.useRef<OnePathLevel>(
     onePathState.buildLevel(onePathState.level, onePathState.mode)
@@ -403,6 +394,7 @@ function Scene() {
     vy: 0,
     alive: true,
     cleared: false,
+    bouncesOnSeg: 0,
     gemsThisRun: 0,
     wobble: 0,
     perfectFlash: 0,
@@ -414,16 +406,6 @@ function Scene() {
   const groupRef = React.useRef<THREE.Group>(null);
   const portalRef = React.useRef<THREE.Group>(null);
   const particlesRef = React.useRef<THREE.Points>(null);
-
-  const CONST = React.useMemo(() => {
-    const BASE_H = 0.95;
-    const DECK_H = 0.14;
-    const BALL_R = 0.13;
-    const WALL_T = 0.12;
-    const WALL_H = 0.6;
-    const WALL_OVERHANG = 1;
-    return { BASE_H, DECK_H, BALL_R, WALL_T, WALL_H, WALL_OVERHANG };
-  }, []);
 
   const mats = React.useMemo(() => {
     const wall = new THREE.MeshStandardMaterial({
@@ -497,7 +479,7 @@ function Scene() {
     const portalSeg = new THREE.BoxGeometry(0.09, 0.09, 0.2);
     const glow = new THREE.RingGeometry(0.32, 0.52, 48);
     return { unitBox, ball, gem, portalSeg, glow };
-  }, [CONST.BALL_R]);
+  }, []);
 
   // portal particles
   const particleGeom = React.useMemo(() => {
@@ -526,36 +508,36 @@ function Scene() {
     });
   }, []);
 
-  const resetRun = React.useCallback(
-    (lvl: OnePathLevel) => {
-      // reset mutable level state
-      lvl.segments.forEach((seg) => {
-        seg.walls.neg.hp = seg.walls.neg.maxHp;
-        seg.walls.neg.broken = false;
-        seg.walls.pos.hp = seg.walls.pos.maxHp;
-        seg.walls.pos.broken = false;
-      });
-      lvl.gems.forEach((g) => (g.collected = false));
+  const resetRun = React.useCallback((lvl: OnePathLevel) => {
+    // reset mutable level state
+    lvl.segments.forEach((seg) => {
+      seg.walls.neg.hp = seg.walls.neg.maxHp;
+      seg.walls.neg.broken = false;
+      seg.walls.pos.hp = seg.walls.pos.maxHp;
+      seg.walls.pos.broken = false;
+    });
+    lvl.gems.forEach((g) => (g.collected = false));
 
-      const r = run.current;
-      r.t = 0;
-      r.seg = 0;
-      r.s = 0;
-      const firstSeg = lvl.segments[0];
-      r.dir = firstSeg ? getDefaultDir(firstSeg) : 1;
-      r.alive = true;
-      r.cleared = false;
-      r.gemsThisRun = 0;
-      r.wobble = 0;
-      r.perfectFlash = 0;
-      r.missFlash = 0;
-      r.lastTapAt = -999;
+    const r = run.current;
+    r.t = 0;
+    r.seg = 0;
+    r.s = 0;
+    setActiveSegIndex(0);
+    activeSegIndexRef.current = 0;
+    const firstSeg = lvl.segments[0];
+    r.dir = firstSeg ? getDefaultDir(firstSeg) : 1;
+    r.alive = true;
+    r.cleared = false;
+    r.bouncesOnSeg = 0;
+    r.gemsThisRun = 0;
+    r.wobble = 0;
+    r.perfectFlash = 0;
+    r.missFlash = 0;
+    r.lastTapAt = -999;
 
-      r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R;
-      r.vy = 0;
-    },
-    [CONST.BALL_R, CONST.BASE_H, CONST.DECK_H]
-  );
+    r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R;
+    r.vy = 0;
+  }, []);
 
   React.useEffect(() => {
     // Build level on entry to playing/menu to keep deterministic.
@@ -603,6 +585,14 @@ function Scene() {
     const segData = getSeg(lvl, r.seg);
     const seg = segData.seg;
     if (seg.exit === null) return;
+    if (r.bouncesOnSeg < seg.turnAfterHits) {
+      // Too early: you tried to turn before the bridge is "active".
+      r.alive = false;
+      r.missFlash = 1;
+      r.vy = -2.2;
+      onePathState.fail();
+      return;
+    }
 
     const px = segData.ox + segData.dir.x * r.s;
     const pz = segData.oz + segData.dir.z * r.s;
@@ -622,6 +612,7 @@ function Scene() {
       // snap to the intersection, then rotate onto the next segment (perpendicular)
       r.seg += 1;
       r.s = 0;
+      r.bouncesOnSeg = 0;
       const nextSeg = lvl.segments[r.seg];
       r.dir = nextSeg ? getDefaultDir(nextSeg) : 1;
       r.lastTapAt = r.t;
@@ -632,6 +623,7 @@ function Scene() {
     if (distToExit <= snapWindow) {
       r.seg += 1;
       r.s = 0;
+      r.bouncesOnSeg = 0;
       const nextSeg = lvl.segments[r.seg];
       r.dir = nextSeg ? getDefaultDir(nextSeg) : 1;
       r.wobble = Math.max(r.wobble, 0.35);
@@ -748,6 +740,11 @@ function Scene() {
         groupRef.current.rotation.x = Math.sin(r.t * 18) * 0.008 * wob;
       }
 
+      if (r.seg !== activeSegIndexRef.current) {
+        activeSegIndexRef.current = r.seg;
+        setActiveSegIndex(r.seg);
+      }
+
       clearFrameInput(inputRef);
       return;
     }
@@ -788,7 +785,11 @@ function Scene() {
         const close = Math.abs(nextS - lvl.goal.offset) <= goalRadius;
         if (crossed || close) {
           r.cleared = true;
-          onePathState.clear(r.gemsThisRun);
+          if (snap.mode === 'endless') {
+            onePathState.advanceEndless(r.gemsThisRun);
+          } else {
+            onePathState.clear(r.gemsThisRun);
+          }
           clearFrameInput(inputRef);
           return;
         }
@@ -798,11 +799,13 @@ function Scene() {
       if (r.s <= -seg.lenNeg) {
         r.s = -seg.lenNeg;
         r.dir = 1;
+        r.bouncesOnSeg += 1;
         hitWall(seg.walls.neg);
         r.wobble = Math.max(r.wobble, 0.25);
       } else if (r.s >= seg.lenPos) {
         r.s = seg.lenPos;
         r.dir = -1;
+        r.bouncesOnSeg += 1;
         hitWall(seg.walls.pos);
         r.wobble = Math.max(r.wobble, 0.25);
       }
@@ -872,6 +875,11 @@ function Scene() {
       }
     }
 
+    if (r.seg !== activeSegIndexRef.current) {
+      activeSegIndexRef.current = r.seg;
+      setActiveSegIndex(r.seg);
+    }
+
     clearFrameInput(inputRef);
   });
 
@@ -885,11 +893,14 @@ function Scene() {
       metalness: 0.05,
       emissive: new THREE.Color(COLORS.portalGlow),
       emissiveIntensity: 0.2,
+      transparent: true,
+      opacity: 0.25,
     });
   }, []);
 
-  // precompute segment meshes - ALL segments are always visible
+  // Render only the active corridor and the one intersecting next corridor.
   const segmentMeshes = lvl.segments.map((seg, idx) => {
+    const visible = idx === activeSegIndex || idx === activeSegIndex + 1;
     const ax = seg.origin.x - seg.dir.x * seg.lenNeg;
     const az = seg.origin.z - seg.dir.z * seg.lenNeg;
     const bx = seg.origin.x + seg.dir.x * seg.lenPos;
@@ -912,7 +923,12 @@ function Scene() {
     const baseMat = idx % 2 === 0 ? mats.wall : mats.wallDark;
 
     return (
-      <group key={seg.id} position={[midX, 0, midZ]} rotation={[0, -angle, 0]}>
+      <group
+        key={seg.id}
+        visible={visible}
+        position={[midX, 0, midZ]}
+        rotation={[0, -angle, 0]}
+      >
         <mesh
           geometry={geoms.unitBox}
           material={baseMat}
@@ -947,6 +963,7 @@ function Scene() {
       }
 
       const currentSegIndex = clamp(r.seg, 0, lvl.segments.length - 1);
+      const currentSeg = lvl.segments[currentSegIndex];
       const nextSegIndex =
         currentSegIndex < lvl.segments.length - 1 ? currentSegIndex + 1 : -1;
 
@@ -976,6 +993,13 @@ function Scene() {
         CONST.DECK_H * 1.15,
         lvl.bridgeWidth * 0.96
       );
+
+      // Fade/energize the preview based on how close you are to being allowed to turn.
+      const required = currentSeg?.turnAfterHits ?? 1;
+      const ready01 =
+        required <= 0 ? 1 : clamp(r.bouncesOnSeg / required, 0, 1);
+      nextSegmentDeckMat.opacity = 0.18 + ready01 * 0.82;
+      nextSegmentDeckMat.emissiveIntensity = 0.06 + ready01 * 0.28;
 
       ref.current.visible = true;
     });
@@ -1018,7 +1042,9 @@ function Scene() {
         <NextSegmentHighlight />
 
         {/* walls */}
-        {lvl.segments.map((seg) => {
+        {lvl.segments.map((seg, segIdx) => {
+          const visible =
+            segIdx === activeSegIndex || segIdx === activeSegIndex + 1;
           const angle = Math.atan2(seg.dir.z, seg.dir.x);
           const wallWidth = lvl.bridgeWidth * CONST.WALL_OVERHANG;
 
@@ -1047,7 +1073,7 @@ function Scene() {
           };
 
           return (
-            <group key={`${seg.id}_walls`}>
+            <group key={`${seg.id}_walls`} visible={visible}>
               {renderWall(
                 seg.walls.neg,
                 seg.origin.x - seg.dir.x * seg.lenNeg,

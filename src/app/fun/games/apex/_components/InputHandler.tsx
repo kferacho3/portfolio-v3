@@ -43,6 +43,8 @@ const InputHandler: React.FC = () => {
         ) {
           if (snap.mode === 'curved') {
             mutation.curveDirection *= -1;
+            mutation.curveCurvature = 0.34 + Math.random() * 0.34;
+            mutation.curveCurvatureVel = 0.9 + Math.random() * 0.45;
           } else if (snap.mode === 'spiral') {
             mutation.spiralDirection *= -1;
           } else {

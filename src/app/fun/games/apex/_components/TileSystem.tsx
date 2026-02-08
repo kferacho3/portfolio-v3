@@ -60,14 +60,9 @@ const applyTopShader = (
       `
     );
     shader.vertexShader = shader.vertexShader.replace(
-      '#include <begin_vertex>',
+      '#include <worldpos_vertex>',
       `
-        #include <begin_vertex>
-        #ifdef USE_INSTANCING
-          vec4 worldPosition = modelMatrix * instanceMatrix * vec4(transformed, 1.0);
-        #else
-          vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
-        #endif
+        #include <worldpos_vertex>
         vWorldPos = worldPosition.xyz;
       `
     );
@@ -75,7 +70,19 @@ const applyTopShader = (
       '#include <common>',
       `
         #include <common>
+        uniform float uTime;
+        uniform vec3 uAccent;
+        uniform vec3 uSecondary;
+        uniform vec3 uGlow;
+        uniform float uWorldScale;
         varying vec3 vWorldPos;
+        vec2 apexUv() {
+          #ifdef USE_UV
+            return vUv;
+          #else
+            return fract(vWorldPos.xz * 0.18);
+          #endif
+        }
       `
     );
 
@@ -280,10 +287,14 @@ const applyTopShader = (
       }
     })();
 
+    const shaderBodySafe = shaderBody
+      .replace(/vUv/g, 'apexUv()')
+      .replace(/emissiveColor/g, 'totalEmissiveRadiance');
+
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <dithering_fragment>',
       `
-        ${shaderBody}
+        ${shaderBodySafe}
         #include <dithering_fragment>
       `
     );
@@ -700,14 +711,14 @@ const TileSystem: React.FC = () => {
     const spiralSeed = Math.random() < 0.5 ? 1 : -1;
     mutation.curveCenterPos.set(0, -TILE_DEPTH / 2, 0);
     mutation.curveTheta = 0;
-    mutation.curveCurvature = 0;
-    mutation.curveCurvatureVel = 0;
+    mutation.curveCurvature = 0.5;
+    mutation.curveCurvatureVel = 1;
     mutation.curveDirection = curveSeed;
     mutation.curveLane = 1;
     mutation.curveLaneOffset = 0;
     mutation.pathCurveTheta = 0;
-    mutation.pathCurveCurvature = 0;
-    mutation.pathCurveCurvatureVel = 0;
+    mutation.pathCurveCurvature = 0.5;
+    mutation.pathCurveCurvatureVel = 1;
     mutation.pathCurveDirection = curveSeed;
     mutation.pathCurveSegmentRemaining = 0;
     mutation.spiralDirection = spiralSeed;
