@@ -3,6 +3,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
+import {
+  Bloom,
+  EffectComposer,
+  Noise,
+  Vignette,
+} from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
@@ -13,369 +19,585 @@ import { SeededRandom } from '../../utils/seededRandom';
 import { shadesState } from './state';
 export { shadesState } from './state';
 
-const BOARD_H = 12;
-const CELL = 0.9;
-const BLOCK_Z = 0.35;
-const MAX_SHADE = 6;
-const COLUMN_OPTIONS = [3, 4, 5];
-const PALETTES = [
-  { name: 'Mint', hue: 140, accent: '#6ee7b7' },
-  { name: 'Pink', hue: 330, accent: '#f9a8d4' },
-  { name: 'Sky', hue: 205, accent: '#93c5fd' },
-  { name: 'Lime', hue: 95, accent: '#a3e635' },
-  { name: 'Tangerine', hue: 28, accent: '#fdba74' },
-  { name: 'Violet', hue: 265, accent: '#c4b5fd' },
-];
-const SHADE_WEIGHTS = Array.from({ length: MAX_SHADE - 1 }, (_, i) => ({
-  item: i + 1,
-  weight: MAX_SHADE - i,
-}));
+const ROWS = 10;
+const COLS = 5;
+const TOTAL_CELLS = ROWS * COLS;
 
-type Coord = { x: number; y: number };
+const CELL_SIZE = 1.12;
+const TILE_DEPTH = 0.46;
+const TILE_LEVELS = 4;
 
-type PieceDef = {
-  rotations: Coord[][];
+const MAX_PARTICLES = 180;
+const MAX_RESOLVE_LOOPS = 64;
+
+const BASE_DROP_INTERVAL = 0.62;
+const MIN_DROP_INTERVAL = 0.16;
+
+const TAP_TO_COLUMN_EPSILON = 0.06;
+const SWIPE_THRESHOLD = 0.18;
+
+const GROUP_HUES = [205, 165, 272, 34, 338];
+const LEVEL_WEIGHTS = [56, 28, 12, 4];
+
+type PaletteDef = {
   name: string;
+  bg: string;
+  fog: string;
+  board: string;
+  accent: string;
+  hueShift: number;
+  satMul: number;
+  lightBias: number;
 };
 
-const PIECES: PieceDef[] = [
-  { name: 'Dot', rotations: [[{ x: 0, y: 0 }]] },
+const PALETTES: PaletteDef[] = [
   {
-    name: 'Domino',
-    rotations: [
-      [
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-      ],
-      [
-        { x: 0, y: 0 },
-        { x: 0, y: 1 },
-      ],
-    ],
+    name: 'Nocturne',
+    bg: '#070a12',
+    fog: '#0e1323',
+    board: '#10172a',
+    accent: '#93c5fd',
+    hueShift: 0,
+    satMul: 1.0,
+    lightBias: 0,
   },
   {
-    name: 'Trio',
-    rotations: [
-      [
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        { x: 2, y: 0 },
-      ],
-      [
-        { x: 0, y: 0 },
-        { x: 0, y: 1 },
-        { x: 0, y: 2 },
-      ],
-    ],
+    name: 'Ocean',
+    bg: '#06101b',
+    fog: '#0a1d2d',
+    board: '#0d2236',
+    accent: '#67e8f9',
+    hueShift: -8,
+    satMul: 1.08,
+    lightBias: 0.01,
   },
   {
-    name: 'L',
-    rotations: [
-      [
-        { x: 0, y: 0 },
-        { x: 0, y: 1 },
-        { x: 1, y: 0 },
-      ],
-      [
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        { x: 1, y: 1 },
-      ],
-      [
-        { x: 0, y: 1 },
-        { x: 1, y: 0 },
-        { x: 1, y: 1 },
-      ],
-      [
-        { x: 0, y: 0 },
-        { x: 0, y: 1 },
-        { x: 1, y: 1 },
-      ],
-    ],
+    name: 'Cyber',
+    bg: '#0b0617',
+    fog: '#180d2b',
+    board: '#1a1130',
+    accent: '#c4b5fd',
+    hueShift: 18,
+    satMul: 1.1,
+    lightBias: -0.01,
+  },
+  {
+    name: 'Forest',
+    bg: '#060f0d',
+    fog: '#10231c',
+    board: '#122920',
+    accent: '#86efac',
+    hueShift: -28,
+    satMul: 0.92,
+    lightBias: 0.015,
+  },
+  {
+    name: 'Sunset',
+    bg: '#1a0b08',
+    fog: '#2a120f',
+    board: '#301814',
+    accent: '#fdba74',
+    hueShift: 34,
+    satMul: 1.04,
+    lightBias: 0.005,
+  },
+  {
+    name: 'Slate',
+    bg: '#07090f',
+    fog: '#101521',
+    board: '#121926',
+    accent: '#e2e8f0',
+    hueShift: -14,
+    satMul: 0.78,
+    lightBias: -0.01,
   },
 ];
 
-function shadeToColor(shade: number, hue = 140) {
-  // shade 1 = light, shade MAX_SHADE = darkest
-  const t = (shade - 1) / (MAX_SHADE - 1);
-  const light = THREE.MathUtils.lerp(0.78, 0.22, t);
-  const col = new THREE.Color();
-  col.setHSL(hue / 360, 0.55, light);
-  return col;
-}
-
-type ActivePiece = {
-  type: number;
-  rot: number;
+type ActiveTile = {
   x: number;
   y: number;
-  shade: number;
+  colorGroup: number;
+  level: number;
 };
+
+type TileSpec = {
+  colorGroup: number;
+  level: number;
+};
+
+type ResolveSummary = {
+  merges: number;
+  clears: number;
+  hadEffect: boolean;
+};
+
+type Particle = {
+  active: boolean;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  life: number;
+  size: number;
+  color: THREE.Color;
+};
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
+
+const encodeTile = (colorGroup: number, level: number) =>
+  1 + colorGroup * TILE_LEVELS + level;
+
+const decodeColorGroup = (code: number) => Math.floor((code - 1) / TILE_LEVELS);
+const decodeLevel = (code: number) => (code - 1) % TILE_LEVELS;
+
+const cellIndex = (x: number, y: number) => y * COLS + x;
+
+const boardOriginX = -((COLS - 1) * CELL_SIZE) * 0.5;
+const boardOriginY = -((ROWS - 1) * CELL_SIZE) * 0.5;
+
+function cellToWorld(x: number, y: number, out: THREE.Vector3) {
+  out.set(boardOriginX + x * CELL_SIZE, boardOriginY + y * CELL_SIZE, 0);
+  return out;
+}
+
+function weightedLevel(rng: SeededRandom): number {
+  const total = LEVEL_WEIGHTS.reduce((sum, w) => sum + w, 0);
+  let roll = rng.float(0, total);
+  for (let i = 0; i < LEVEL_WEIGHTS.length; i += 1) {
+    roll -= LEVEL_WEIGHTS[i];
+    if (roll <= 0) return i;
+  }
+  return 0;
+}
+
+function tileColor(
+  group: number,
+  level: number,
+  paletteIndex: number,
+  out: THREE.Color
+) {
+  const palette = PALETTES[paletteIndex % PALETTES.length];
+  const hue =
+    (((GROUP_HUES[group % GROUP_HUES.length] + palette.hueShift) % 360) + 360) %
+    360;
+  const saturation = clamp(0.64 * palette.satMul, 0.4, 0.95);
+  const light = clamp(
+    THREE.MathUtils.lerp(0.8, 0.24, level / (TILE_LEVELS - 1)) +
+      palette.lightBias,
+    0.13,
+    0.9
+  );
+  out.setHSL(hue / 360, saturation, light);
+  return out;
+}
 
 export default function Shades() {
   const snap = useSnapshot(shadesState);
   const { paused } = useGameUIState();
   const input = useInputRef();
   const { camera, scene } = useThree();
-  const boardW = snap.columns;
-  const palette = PALETTES[snap.paletteIndex % PALETTES.length];
-  const level = Math.max(
-    1,
-    1 + Math.floor(snap.lines / 4) + Math.floor(snap.score / 800)
-  );
 
-  const lockedRef = useRef<THREE.InstancedMesh>(null);
-  const pieceRefs = useRef<Array<THREE.Mesh | null>>([null, null, null, null]);
-  const ghostRefs = useRef<Array<THREE.Mesh | null>>([null, null, null, null]);
-  const guideRef = useRef<THREE.Mesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-
-  const idx = (x: number, y: number) => y * boardW + x;
-  const inBounds = (x: number, y: number) =>
-    x >= 0 && x < boardW && y >= 0 && y < BOARD_H;
+  const boardRef = useRef<THREE.InstancedMesh>(null);
+  const activeRef = useRef<THREE.Mesh>(null);
+  const particleRef = useRef<THREE.InstancedMesh>(null);
 
   const world = useRef({
     rng: new SeededRandom(snap.worldSeed),
-    grid: new Array<number>(boardW * BOARD_H).fill(0),
-    piece: null as ActivePiece | null,
-    dropAcc: 0,
-    hue: palette.hue,
-    swipeBoost: 0,
-    touchStart: null as { x: number; y: number } | null,
-    touchMoved: false,
-    prevKeys: {
-      arrowleft: false,
-      arrowright: false,
-      arrowup: false,
-      ' ': false,
-    } as Record<string, boolean>,
+    grid: new Int16Array(TOTAL_CELLS),
+
+    active: null as ActiveTile | null,
+    next: null as TileSpec | null,
+
+    activeVisual: new THREE.Vector3(0, 0, 0.2),
+    activeScalePulse: 0,
+
+    dropTimer: 0,
+    simTime: 0,
+    fastDropUntil: 0,
+
+    touchStartX: 0,
+    touchStartY: 0,
+    touchTracking: false,
+    touchHandled: false,
+
+    cellPulse: new Float32Array(TOTAL_CELLS),
+    cellDropOffset: new Float32Array(TOTAL_CELLS),
+
+    particles: Array.from(
+      { length: MAX_PARTICLES },
+      (): Particle => ({
+        active: false,
+        pos: new THREE.Vector3(0, -9999, 0),
+        vel: new THREE.Vector3(0, 0, 0),
+        life: 0,
+        size: 0.1,
+        color: new THREE.Color('#ffffff'),
+      })
+    ),
+    particleCursor: 0,
+
+    cameraShake: 0,
+
+    dummy: new THREE.Object3D(),
+    tempVec: new THREE.Vector3(),
+    tempColorA: new THREE.Color(),
+    tempColorB: new THREE.Color(),
+    bgColor: new THREE.Color(PALETTES[0].bg),
+    fogColor: new THREE.Color(PALETTES[0].fog),
+    targetBg: new THREE.Color(PALETTES[0].bg),
+    targetFog: new THREE.Color(PALETTES[0].fog),
+    themeIndex: 0,
   });
 
-  useEffect(() => {
-    shadesState.loadBest();
-  }, []);
+  const nextPreviewHex = useMemo(() => {
+    const c = tileColor(
+      snap.nextColorGroup,
+      snap.nextLevel,
+      snap.paletteIndex,
+      new THREE.Color()
+    );
+    return `#${c.getHexString()}`;
+  }, [snap.nextColorGroup, snap.nextLevel, snap.paletteIndex]);
 
-  useEffect(() => {
-    // Board camera
-    camera.position.set(0, 0, 18);
-    camera.lookAt(0, 0, 0);
+  function getCell(x: number, y: number) {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return 0;
+    return world.current.grid[cellIndex(x, y)];
+  }
 
-    scene.fog = new THREE.Fog('#0b0e14', 10, 40);
+  function setCell(x: number, y: number, value: number) {
+    world.current.grid[cellIndex(x, y)] = value;
+  }
 
-    // Reset world for the run.
-    world.current = {
-      ...world.current,
-      rng: new SeededRandom(snap.worldSeed),
-      grid: new Array<number>(boardW * BOARD_H).fill(0),
-      piece: null,
-      dropAcc: 0,
-      hue: palette.hue,
-      swipeBoost: 0,
-      touchStart: null,
-      touchMoved: false,
-      prevKeys: {
-        arrowleft: false,
-        arrowright: false,
-        arrowup: false,
-        ' ': false,
-      },
+  function canOccupy(x: number, y: number) {
+    return x >= 0 && x < COLS && y >= 0 && y < ROWS && getCell(x, y) === 0;
+  }
+
+  function randomTile(): TileSpec {
+    const rng = world.current.rng;
+    return {
+      colorGroup: rng.int(0, GROUP_HUES.length - 1),
+      level: weightedLevel(rng),
+    };
+  }
+
+  function setNextTile(tile: TileSpec) {
+    shadesState.nextColorGroup = tile.colorGroup;
+    shadesState.nextLevel = tile.level;
+  }
+
+  function spawnImpactAtCell(
+    x: number,
+    y: number,
+    colorCode: number,
+    amount = 8,
+    force = 1
+  ) {
+    const w = world.current;
+    const center = cellToWorld(x, y, w.tempVec);
+    const color = tileColor(
+      decodeColorGroup(colorCode),
+      decodeLevel(colorCode),
+      shadesState.paletteIndex,
+      w.tempColorA
+    );
+
+    for (let i = 0; i < amount; i += 1) {
+      const p = w.particles[w.particleCursor % MAX_PARTICLES];
+      w.particleCursor += 1;
+      const angle = w.rng.float(0, Math.PI * 2);
+      const spread = w.rng.float(0.45, 1.1) * force;
+      p.active = true;
+      p.life = w.rng.float(0.24, 0.52);
+      p.size = w.rng.float(0.06, 0.14);
+      p.pos.copy(center);
+      p.pos.z = 0.18;
+      p.vel.set(
+        Math.cos(angle) * spread * 2.8,
+        Math.sin(angle) * spread * 2.8,
+        w.rng.float(0.3, 1.4)
+      );
+      p.color.copy(color);
+    }
+
+    w.cameraShake = Math.max(w.cameraShake, 0.26 * force);
+  }
+
+  function spawnActiveTile() {
+    const w = world.current;
+    if (!w.next) {
+      w.next = randomTile();
+      setNextTile(w.next);
+    }
+
+    const tile: ActiveTile = {
+      x: Math.floor(COLS * 0.5),
+      y: ROWS - 1,
+      colorGroup: w.next.colorGroup,
+      level: w.next.level,
     };
 
-    spawnPiece();
-    syncLockedInstances();
-    syncPieceMeshes();
-    syncGhostMeshes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap.worldSeed, boardW]);
+    w.next = randomTile();
+    setNextTile(w.next);
 
-  useEffect(() => {
-    world.current.hue = palette.hue;
-    syncLockedInstances();
-    syncPieceMeshes();
-    syncGhostMeshes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette.hue]);
-
-  function canPlace(p: ActivePiece, nx: number, ny: number, nrot: number) {
-    const shape = PIECES[p.type].rotations[nrot];
-    const g = world.current.grid;
-
-    for (const c of shape) {
-      const x = nx + c.x;
-      const y = ny + c.y;
-      if (!inBounds(x, y)) return false;
-      if (g[idx(x, y)] !== 0) return false;
-    }
-    return true;
-  }
-
-  function spawnPiece() {
-    const w = world.current;
-    const type = w.rng.int(0, PIECES.length - 1);
-    const rot = 0;
-    const shade = w.rng.weighted(SHADE_WEIGHTS);
-
-    // Spawn near top, centered.
-    const spawnX = Math.floor(boardW / 2) - 1;
-    const spawnY = BOARD_H - 2;
-
-    const p: ActivePiece = { type, rot, x: spawnX, y: spawnY, shade };
-
-    if (!canPlace(p, p.x, p.y, p.rot)) {
-      // No space: game over.
-      if (shadesState.phase === 'playing') shadesState.endGame();
-      w.piece = null;
-      syncPieceMeshes();
+    if (!canOccupy(tile.x, tile.y)) {
+      w.active = null;
+      shadesState.endGame();
       return;
     }
 
-    w.piece = p;
-    syncPieceMeshes();
+    w.active = tile;
+    cellToWorld(tile.x, tile.y, w.activeVisual);
+    w.activeVisual.z = 0.22;
+    w.activeScalePulse = 0.35;
   }
 
-  function lockPiece() {
+  function resolveGridRecursive(): ResolveSummary {
     const w = world.current;
-    const p = w.piece;
-    if (!p) {
-      syncGhostMeshes();
-      return;
-    }
+    const summary: ResolveSummary = { merges: 0, clears: 0, hadEffect: false };
 
-    const shape = PIECES[p.type].rotations[p.rot];
-    for (const c of shape) {
-      const x = p.x + c.x;
-      const y = p.y + c.y;
-      if (!inBounds(x, y)) continue;
-      w.grid[idx(x, y)] = p.shade;
-    }
+    for (let loop = 0; loop < MAX_RESOLVE_LOOPS; loop += 1) {
+      let changed = false;
 
-    w.piece = null;
-    resolveMergesAndGravity();
-    syncLockedInstances();
+      for (let x = 0; x < COLS; x += 1) {
+        for (let y = 0; y < ROWS - 1; y += 1) {
+          const lower = getCell(x, y);
+          const upper = getCell(x, y + 1);
+          if (lower === 0 || lower !== upper) continue;
 
-    spawnPiece();
-  }
+          const group = decodeColorGroup(lower);
+          const level = decodeLevel(lower);
+          const merged = encodeTile(
+            group,
+            Math.min(level + 1, TILE_LEVELS - 1)
+          );
+          setCell(x, y, merged);
+          setCell(x, y + 1, 0);
 
-  function resolveMergesAndGravity() {
-    const w = world.current;
-    const g = w.grid;
+          const dst = cellIndex(x, y);
+          const src = cellIndex(x, y + 1);
+          w.cellPulse[dst] = Math.max(w.cellPulse[dst], 1);
+          w.cellDropOffset[src] = 0;
 
-    let changed = true;
-    let mergeIterations = 0;
-    const maxIterations = 50; // Prevent infinite loops
-
-    while (changed && mergeIterations < maxIterations) {
-      changed = false;
-      mergeIterations++;
-
-      // Vertical merges: Check from bottom to top, merge identical shades
-      // Process all columns
-      for (let x = 0; x < boardW; x++) {
-        // Check from bottom (y = 0) up to top (y = BOARD_H - 1)
-        // We check bottom-up so that after gravity, merges happen at the bottom first
-        for (let y = 0; y < BOARD_H - 1; y++) {
-          const lower = g[idx(x, y)];
-          const upper = g[idx(x, y + 1)];
-
-          // If both are non-zero and same shade, merge them
-          if (lower !== 0 && upper !== 0 && lower === upper) {
-            const nextShade = lower + 1;
-            if (nextShade > MAX_SHADE) {
-              // Max shade reached - clear both blocks
-              g[idx(x, y)] = 0;
-              g[idx(x, y + 1)] = 0;
-              shadesState.score += 120;
-            } else {
-              // Merge into darker shade at the lower position (gravity will handle positioning)
-              g[idx(x, y)] = nextShade;
-              g[idx(x, y + 1)] = 0;
-              shadesState.score += 20 * nextShade;
-            }
-            changed = true;
-            // Continue checking this column - there might be more merges above
-          }
+          spawnImpactAtCell(x, y, merged, 7, 0.9);
+          summary.merges += 1;
+          summary.hadEffect = true;
+          changed = true;
         }
       }
 
-      // Clear full lines of the same shade
-      let clearedLines = 0;
-      for (let y = 0; y < BOARD_H; y++) {
-        const first = g[idx(0, y)];
+      for (let y = 0; y < ROWS; y += 1) {
+        const first = getCell(0, y);
         if (first === 0) continue;
         let same = true;
-        for (let x = 1; x < boardW; x++) {
-          if (g[idx(x, y)] !== first) {
+        for (let x = 1; x < COLS; x += 1) {
+          if (getCell(x, y) !== first) {
             same = false;
             break;
           }
         }
-        if (same) {
-          for (let x = 0; x < boardW; x++) {
-            g[idx(x, y)] = 0;
-          }
-          clearedLines += 1;
-          shadesState.score += 50 * first * boardW;
-          changed = true;
+        if (!same) continue;
+
+        for (let x = 0; x < COLS; x += 1) {
+          setCell(x, y, 0);
+          const i = cellIndex(x, y);
+          w.cellPulse[i] = Math.max(w.cellPulse[i], 0.8);
         }
-      }
-      if (clearedLines > 0) {
-        shadesState.lines += clearedLines;
+        spawnImpactAtCell(Math.floor(COLS * 0.5), y, first, 18, 1.4);
+        summary.clears += 1;
+        summary.hadEffect = true;
+        changed = true;
       }
 
-      // Apply gravity after merges - pull all blocks down
-      if (changed) {
-        for (let x = 0; x < boardW; x++) {
-          const stack: number[] = [];
-          // Collect all non-zero blocks from bottom to top
-          for (let y = 0; y < BOARD_H; y++) {
-            const v = g[idx(x, y)];
-            if (v !== 0) stack.push(v);
+      for (let x = 0; x < COLS; x += 1) {
+        let writeY = 0;
+        for (let y = 0; y < ROWS; y += 1) {
+          const code = getCell(x, y);
+          if (code === 0) continue;
+          if (y !== writeY) {
+            setCell(x, writeY, code);
+            setCell(x, y, 0);
+            const dest = cellIndex(x, writeY);
+            w.cellDropOffset[dest] = Math.max(
+              w.cellDropOffset[dest],
+              (y - writeY) * CELL_SIZE * 0.86
+            );
+            changed = true;
+            summary.hadEffect = true;
           }
-          // Place them back from bottom up, filling empty spaces
-          for (let y = 0; y < BOARD_H; y++) {
-            g[idx(x, y)] = y < stack.length ? stack[y] : 0;
+          writeY += 1;
+        }
+        for (let y = writeY; y < ROWS; y += 1) {
+          if (getCell(x, y) !== 0) {
+            setCell(x, y, 0);
+            changed = true;
           }
         }
+      }
+
+      if (!changed) break;
+    }
+
+    return summary;
+  }
+
+  function lockActiveTile() {
+    const w = world.current;
+    const tile = w.active;
+    if (!tile) return;
+
+    let immediateMerges = 0;
+    let hadImmediateEffect = false;
+
+    const belowY = tile.y - 1;
+    if (belowY >= 0) {
+      const below = getCell(tile.x, belowY);
+      const tileCode = encodeTile(tile.colorGroup, tile.level);
+      if (below !== 0 && below === tileCode) {
+        const nextLevel = Math.min(tile.level + 1, TILE_LEVELS - 1);
+        const mergedCode = encodeTile(tile.colorGroup, nextLevel);
+        setCell(tile.x, belowY, mergedCode);
+        const i = cellIndex(tile.x, belowY);
+        w.cellPulse[i] = Math.max(w.cellPulse[i], 1);
+        spawnImpactAtCell(tile.x, belowY, mergedCode, 9, 1.1);
+        immediateMerges = 1;
+        hadImmediateEffect = true;
       }
     }
 
+    if (!hadImmediateEffect) {
+      const tileCode = encodeTile(tile.colorGroup, tile.level);
+      setCell(tile.x, tile.y, tileCode);
+      const i = cellIndex(tile.x, tile.y);
+      w.cellPulse[i] = Math.max(w.cellPulse[i], 0.45);
+    }
+
+    w.active = null;
+
+    const resolved = resolveGridRecursive();
+    const totalMerges = immediateMerges + resolved.merges;
+    const hadEffect = hadImmediateEffect || resolved.hadEffect;
+
+    if (hadEffect) {
+      shadesState.combo += 1;
+      shadesState.multiplier = clamp(1 + shadesState.combo * 0.12, 1, 4.2);
+      const gained = Math.round(
+        (totalMerges * 35 + resolved.clears * 220 + resolved.clears * 65) *
+          shadesState.multiplier
+      );
+      shadesState.score += gained;
+      shadesState.merges += totalMerges;
+      shadesState.clears += resolved.clears;
+    } else {
+      shadesState.combo = 0;
+      shadesState.multiplier = 1;
+    }
+
     shadesState.best = Math.max(shadesState.best, shadesState.score);
+
+    const nextPalette = Math.floor(shadesState.score / 2400) % PALETTES.length;
+    if (nextPalette !== shadesState.paletteIndex) {
+      shadesState.paletteIndex = nextPalette;
+    }
+
+    spawnActiveTile();
   }
 
-  function syncLockedInstances() {
-    const mesh = lockedRef.current;
+  function tryMove(dx: number) {
+    const tile = world.current.active;
+    if (!tile) return;
+    const nx = tile.x + dx;
+    if (!canOccupy(nx, tile.y)) return;
+    tile.x = nx;
+  }
+
+  function tryMoveToColumn(targetCol: number) {
+    const tile = world.current.active;
+    if (!tile) return;
+    const col = clamp(Math.round(targetCol), 0, COLS - 1);
+    if (canOccupy(col, tile.y)) {
+      tile.x = col;
+      world.current.activeScalePulse = Math.max(
+        world.current.activeScalePulse,
+        0.12
+      );
+      return;
+    }
+    const dir = col > tile.x ? 1 : -1;
+    let cursor = tile.x;
+    while (cursor !== col) {
+      const next = cursor + dir;
+      if (!canOccupy(next, tile.y)) break;
+      cursor = next;
+    }
+    tile.x = cursor;
+    world.current.activeScalePulse = Math.max(
+      world.current.activeScalePulse,
+      0.1
+    );
+  }
+
+  function stepDropTick() {
+    const tile = world.current.active;
+    if (!tile) {
+      spawnActiveTile();
+      return;
+    }
+    if (canOccupy(tile.x, tile.y - 1)) {
+      tile.y -= 1;
+      return;
+    }
+    lockActiveTile();
+  }
+
+  function syncBoardInstances(dt: number) {
+    const mesh = boardRef.current;
     if (!mesh) return;
 
     const w = world.current;
-    const g = w.grid;
-    const col = new THREE.Color();
+    const dummy = w.dummy;
+    const color = w.tempColorA;
 
-    const originX = -((boardW - 1) * CELL) / 2;
-    const originY = -((BOARD_H - 1) * CELL) / 2;
+    for (let y = 0; y < ROWS; y += 1) {
+      for (let x = 0; x < COLS; x += 1) {
+        const i = cellIndex(x, y);
+        const code = w.grid[i];
+        w.cellPulse[i] = Math.max(0, w.cellPulse[i] - dt * 2.8);
+        w.cellDropOffset[i] = THREE.MathUtils.damp(
+          w.cellDropOffset[i],
+          0,
+          14,
+          dt
+        );
 
-    for (let y = 0; y < BOARD_H; y++) {
-      for (let x = 0; x < boardW; x++) {
-        const i = idx(x, y);
-        const shade = g[i];
-        const px = originX + x * CELL;
-        const py = originY + y * CELL;
-
-        if (shade === 0) {
-          dummy.position.set(px, py, 0);
+        if (code === 0) {
+          dummy.position.set(0, -9999, 0);
           dummy.scale.set(0.0001, 0.0001, 0.0001);
+          dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           mesh.setMatrixAt(i, dummy.matrix);
-          mesh.setColorAt(i, col.setRGB(0, 0, 0));
+          mesh.setColorAt(i, color.setRGB(0, 0, 0));
           continue;
         }
 
-        dummy.position.set(px, py, 0);
-        dummy.scale.set(1, 1, 1);
+        const worldPos = cellToWorld(x, y, w.tempVec);
+        const pulse = w.cellPulse[i];
+        dummy.position.set(
+          worldPos.x,
+          worldPos.y + w.cellDropOffset[i],
+          0.02 + pulse * 0.05
+        );
+        const scale = 1 + pulse * 0.18;
+        dummy.scale.set(scale, scale, 1);
+        dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         mesh.setMatrixAt(i, dummy.matrix);
 
-        const c = shadeToColor(shade, w.hue);
-        mesh.setColorAt(i, c);
+        tileColor(
+          decodeColorGroup(code),
+          decodeLevel(code),
+          shadesState.paletteIndex,
+          color
+        );
+        mesh.setColorAt(i, color);
       }
     }
 
@@ -383,427 +605,418 @@ export default function Shades() {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
-  function syncPieceMeshes() {
+  function syncActiveMesh(dt: number) {
+    const mesh = activeRef.current;
+    if (!mesh) return;
     const w = world.current;
-    const p = w.piece;
-
-    // Hide all blocks by default.
-    for (let i = 0; i < pieceRefs.current.length; i++) {
-      const m = pieceRefs.current[i];
-      if (!m) continue;
-      m.visible = false;
+    const active = w.active;
+    if (!active) {
+      mesh.visible = false;
+      return;
     }
+    mesh.visible = true;
 
-    if (!p) return;
+    const target = cellToWorld(active.x, active.y, w.tempVec);
+    target.z = 0.26;
+    w.activeVisual.x = THREE.MathUtils.damp(w.activeVisual.x, target.x, 18, dt);
+    w.activeVisual.y = THREE.MathUtils.damp(w.activeVisual.y, target.y, 18, dt);
+    w.activeVisual.z = THREE.MathUtils.damp(w.activeVisual.z, target.z, 18, dt);
 
-    const originX = -((boardW - 1) * CELL) / 2;
-    const originY = -((BOARD_H - 1) * CELL) / 2;
+    w.activeScalePulse = Math.max(0, w.activeScalePulse - dt * 3.4);
+    const bob = Math.sin(w.simTime * 8) * 0.015;
+    const s = 1.02 + w.activeScalePulse * 0.22;
+    mesh.position.set(
+      w.activeVisual.x,
+      w.activeVisual.y,
+      w.activeVisual.z + bob
+    );
+    mesh.scale.set(s, s, 1);
 
-    const shape = PIECES[p.type].rotations[p.rot];
-    const color = shadeToColor(p.shade, w.hue);
-
-    shape.forEach((c, i) => {
-      const m = pieceRefs.current[i];
-      if (!m) return;
-      const px = originX + (p.x + c.x) * CELL;
-      const py = originY + (p.y + c.y) * CELL;
-      m.position.set(px, py, 0.2);
-      (m.material as THREE.MeshStandardMaterial).color.copy(color);
-      m.visible = true;
-    });
-    syncGhostMeshes();
+    const mat = mesh.material as THREE.MeshStandardMaterial;
+    tileColor(
+      active.colorGroup,
+      active.level,
+      shadesState.paletteIndex,
+      world.current.tempColorA
+    );
+    mat.color.copy(world.current.tempColorA);
+    mat.emissive.copy(world.current.tempColorA).multiplyScalar(0.2);
   }
 
-  function syncGhostMeshes() {
+  function syncParticles(dt: number) {
+    const mesh = particleRef.current;
+    if (!mesh) return;
     const w = world.current;
-    const p = w.piece;
+    const dummy = w.dummy;
 
-    for (let i = 0; i < ghostRefs.current.length; i++) {
-      const m = ghostRefs.current[i];
-      if (!m) continue;
-      m.visible = false;
+    for (let i = 0; i < MAX_PARTICLES; i += 1) {
+      const p = w.particles[i];
+      if (!p.active) {
+        dummy.position.set(0, -9999, 0);
+        dummy.scale.set(0.0001, 0.0001, 0.0001);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, w.tempColorB.setRGB(0, 0, 0));
+        continue;
+      }
+
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.active = false;
+        dummy.position.set(0, -9999, 0);
+        dummy.scale.set(0.0001, 0.0001, 0.0001);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, w.tempColorB.setRGB(0, 0, 0));
+        continue;
+      }
+
+      p.vel.y -= dt * 5.5;
+      p.vel.multiplyScalar(Math.pow(0.988, dt * 60));
+      p.pos.addScaledVector(p.vel, dt);
+
+      const lifeNorm = clamp(p.life / 0.52, 0, 1);
+      dummy.position.copy(p.pos);
+      dummy.scale.setScalar(p.size * (0.45 + lifeNorm * 1.2));
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      mesh.setColorAt(
+        i,
+        w.tempColorB.copy(p.color).multiplyScalar(0.5 + lifeNorm)
+      );
     }
 
-    if (guideRef.current) {
-      guideRef.current.visible = false;
-    }
-
-    if (!p) return;
-
-    const originX = -((boardW - 1) * CELL) / 2;
-    const originY = -((BOARD_H - 1) * CELL) / 2;
-    const shape = PIECES[p.type].rotations[p.rot];
-
-    let ghostY = p.y;
-    while (canPlace(p, p.x, ghostY - 1, p.rot)) {
-      ghostY -= 1;
-    }
-
-    const color = shadeToColor(p.shade, w.hue);
-    shape.forEach((c, i) => {
-      const m = ghostRefs.current[i];
-      if (!m) return;
-      const px = originX + (p.x + c.x) * CELL;
-      const py = originY + (ghostY + c.y) * CELL;
-      m.position.set(px, py, 0.05);
-      (m.material as THREE.MeshStandardMaterial).color.copy(color);
-      m.visible = true;
-    });
-
-    const minX = Math.min(...shape.map((c) => c.x)) + p.x;
-    const maxX = Math.max(...shape.map((c) => c.x)) + p.x;
-    if (guideRef.current) {
-      const guide = guideRef.current;
-      const guideMat = guide.material as THREE.MeshStandardMaterial;
-      guideMat.color.copy(color);
-      guide.position.set(originX + ((minX + maxX) / 2) * CELL, 0, -0.12);
-      guide.scale.set((maxX - minX + 1) * CELL, BOARD_H * CELL, 1);
-      guide.visible = true;
-    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
+
+  function resetRunFromSeed(seed: number) {
+    const w = world.current;
+    w.rng = new SeededRandom(seed);
+    w.grid.fill(0);
+    w.cellPulse.fill(0);
+    w.cellDropOffset.fill(0);
+    w.active = null;
+    w.next = null;
+    w.dropTimer = 0;
+    w.simTime = 0;
+    w.fastDropUntil = 0;
+    w.touchTracking = false;
+    w.touchHandled = false;
+    w.cameraShake = 0;
+
+    for (let i = 0; i < w.particles.length; i += 1) {
+      const p = w.particles[i];
+      p.active = false;
+      p.life = 0;
+      p.pos.set(0, -9999, 0);
+      p.vel.set(0, 0, 0);
+    }
+
+    const palette = PALETTES[shadesState.paletteIndex % PALETTES.length];
+    w.themeIndex = shadesState.paletteIndex;
+    w.bgColor.set(palette.bg);
+    w.fogColor.set(palette.fog);
+    w.targetBg.set(palette.bg);
+    w.targetFog.set(palette.fog);
+
+    spawnActiveTile();
+    syncBoardInstances(0);
+  }
+
+  useEffect(() => {
+    shadesState.loadBest();
+  }, []);
+
+  useEffect(() => {
+    camera.position.set(0, 0, 16.2);
+    camera.lookAt(0, 0, 0);
+    scene.fog = new THREE.Fog(PALETTES[0].fog, 8, 30);
+    scene.background = new THREE.Color(PALETTES[0].bg);
+  }, [camera, scene]);
+
+  useEffect(() => {
+    resetRunFromSeed(snap.worldSeed);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap.worldSeed]);
 
   useFrame((_, dt) => {
-    // Start / restart input
-    const inputState = input.current;
-    const tapStart = inputState.pointerJustDown;
-    const spaceDown = inputState.keysDown.has(' ');
     const w = world.current;
-    const isMenu = snap.phase === 'menu' || snap.phase === 'gameover';
+    const inputState = input.current;
 
-    if (isMenu) {
-      if (inputState.justPressed.has('c')) {
-        shadesState.paletteIndex = (snap.paletteIndex + 1) % PALETTES.length;
-      }
-      if (inputState.justPressed.has('3')) shadesState.columns = 3;
-      if (inputState.justPressed.has('4')) shadesState.columns = 4;
-      if (inputState.justPressed.has('5')) shadesState.columns = 5;
+    w.simTime += dt;
 
-      if (tapStart || spaceDown) {
-        // Starting a new run generates a new seed.
+    if (w.themeIndex !== shadesState.paletteIndex) {
+      const p = PALETTES[shadesState.paletteIndex % PALETTES.length];
+      w.targetBg.set(p.bg);
+      w.targetFog.set(p.fog);
+      w.themeIndex = shadesState.paletteIndex;
+    }
+
+    w.bgColor.lerp(w.targetBg, clamp(dt * 3.5, 0, 1));
+    w.fogColor.lerp(w.targetFog, clamp(dt * 3.5, 0, 1));
+    scene.background = w.bgColor;
+    if (scene.fog instanceof THREE.Fog) scene.fog.color.copy(w.fogColor);
+
+    w.cameraShake = Math.max(0, w.cameraShake - dt * 2.8);
+    const shake = w.cameraShake * 0.1;
+    camera.position.x = Math.sin(w.simTime * 42) * shake;
+    camera.position.y = Math.cos(w.simTime * 37) * shake;
+    camera.position.z = 16.2;
+    camera.lookAt(0, 0, 0);
+
+    const startPressed =
+      inputState.pointerJustDown ||
+      inputState.justPressed.has(' ') ||
+      inputState.justPressed.has('enter');
+
+    if (snap.phase === 'menu' || snap.phase === 'gameover') {
+      if (startPressed) {
         shadesState.startGame();
         clearFrameInput(input);
-        return;
       }
-
-      clearFrameInput(input);
+      syncBoardInstances(dt);
+      syncActiveMesh(dt);
+      syncParticles(dt);
       return;
     }
 
     if (paused || snap.phase !== 'playing') {
+      syncBoardInstances(dt);
+      syncActiveMesh(dt);
+      syncParticles(dt);
       clearFrameInput(input);
       return;
     }
 
-    // Touch controls (tap left/right, swipe down to speed drop)
     if (inputState.pointerJustDown) {
-      w.touchStart = { x: inputState.pointerX, y: inputState.pointerY };
-      w.touchMoved = false;
+      w.touchTracking = true;
+      w.touchHandled = false;
+      w.touchStartX = inputState.pointerX;
+      w.touchStartY = inputState.pointerY;
     }
 
-    if (inputState.pointerDown && w.touchStart && !w.touchMoved) {
-      const dx = inputState.pointerX - w.touchStart.x;
-      const dy = inputState.pointerY - w.touchStart.y;
-      const swipeThreshold = 0.18;
-      if (dy < -swipeThreshold && Math.abs(dy) > Math.abs(dx)) {
-        w.touchMoved = true;
-        w.swipeBoost = Math.max(w.swipeBoost, 0.6);
-      }
-    }
+    if (w.touchTracking && inputState.pointerDown && !w.touchHandled) {
+      const dx = inputState.pointerX - w.touchStartX;
+      const dy = inputState.pointerY - w.touchStartY;
 
-    if (inputState.pointerJustUp && w.touchStart) {
-      if (!w.touchMoved) {
-        const p = w.piece;
-        if (p) {
-          if (inputState.pointerX < 0) {
-            if (canPlace(p, p.x - 1, p.y, p.rot)) {
-              p.x -= 1;
-              syncPieceMeshes();
-            }
-          } else {
-            if (canPlace(p, p.x + 1, p.y, p.rot)) {
-              p.x += 1;
-              syncPieceMeshes();
-            }
-          }
-        }
-      }
-      w.touchStart = null;
-      w.touchMoved = false;
-    }
-
-    // Edge-triggered keys
-    const left = inputState.keysDown.has('arrowleft');
-    const right = inputState.keysDown.has('arrowright');
-    const up = inputState.keysDown.has('arrowup');
-    const space = inputState.keysDown.has(' ');
-
-    const leftPressed = left && !w.prevKeys.arrowleft;
-    const rightPressed = right && !w.prevKeys.arrowright;
-    const upPressed = up && !w.prevKeys.arrowup;
-    const spacePressed = space && !w.prevKeys[' '];
-
-    w.prevKeys.arrowleft = left;
-    w.prevKeys.arrowright = right;
-    w.prevKeys.arrowup = up;
-    w.prevKeys[' '] = space;
-
-    const p = w.piece;
-    if (p) {
-      if (leftPressed) {
-        if (canPlace(p, p.x - 1, p.y, p.rot)) {
-          p.x -= 1;
-          syncPieceMeshes();
-        }
-      }
-      if (rightPressed) {
-        if (canPlace(p, p.x + 1, p.y, p.rot)) {
-          p.x += 1;
-          syncPieceMeshes();
-        }
-      }
-      if (upPressed) {
-        const nextRot = (p.rot + 1) % PIECES[p.type].rotations.length;
-        if (canPlace(p, p.x, p.y, nextRot)) {
-          p.rot = nextRot;
-          syncPieceMeshes();
-        }
-      }
-      if (spacePressed) {
-        // Hard drop
-        while (canPlace(p, p.x, p.y - 1, p.rot)) {
-          p.y -= 1;
-        }
-        syncPieceMeshes();
-        lockPiece();
-        clearFrameInput(input);
-        return;
+      if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy) * 1.1) {
+        tryMove(dx > 0 ? 1 : -1);
+        w.touchHandled = true;
+        w.activeScalePulse = Math.max(w.activeScalePulse, 0.16);
+      } else if (dy < -SWIPE_THRESHOLD && Math.abs(dy) > Math.abs(dx) * 1.1) {
+        w.fastDropUntil = w.simTime + 0.45;
+        w.touchHandled = true;
       }
     }
 
-    // Drop timing
-    w.swipeBoost = Math.max(0, w.swipeBoost - dt);
-    const fast = inputState.keysDown.has('arrowdown') || w.swipeBoost > 0;
-    const base = 0.6;
-    const speedMul = 1 + (level - 1) * 0.18;
-    const interval = (base / speedMul) * (fast ? 0.12 : 1);
-
-    w.dropAcc += dt;
-    if (w.dropAcc >= interval) {
-      w.dropAcc = 0;
-
-      if (!w.piece) {
-        clearFrameInput(input);
-        return;
+    if (w.touchTracking && inputState.pointerJustUp) {
+      const dx = Math.abs(inputState.pointerX - w.touchStartX);
+      const dy = Math.abs(inputState.pointerY - w.touchStartY);
+      if (
+        !w.touchHandled &&
+        dx < TAP_TO_COLUMN_EPSILON &&
+        dy < TAP_TO_COLUMN_EPSILON
+      ) {
+        const targetCol = (inputState.pointerX + 1) * 0.5 * (COLS - 1);
+        tryMoveToColumn(targetCol);
       }
-
-      const cp = w.piece;
-      if (canPlace(cp, cp.x, cp.y - 1, cp.rot)) {
-        cp.y -= 1;
-        syncPieceMeshes();
-      } else {
-        lockPiece();
-      }
+      w.touchTracking = false;
+      w.touchHandled = false;
     }
 
+    if (
+      inputState.justPressed.has('arrowleft') ||
+      inputState.justPressed.has('a')
+    ) {
+      tryMove(-1);
+      w.activeScalePulse = Math.max(w.activeScalePulse, 0.1);
+    }
+    if (
+      inputState.justPressed.has('arrowright') ||
+      inputState.justPressed.has('d')
+    ) {
+      tryMove(1);
+      w.activeScalePulse = Math.max(w.activeScalePulse, 0.1);
+    }
+
+    const downHeld =
+      inputState.keysDown.has('arrowdown') || inputState.keysDown.has('s');
+    if (downHeld) {
+      w.fastDropUntil = Math.max(w.fastDropUntil, w.simTime + 0.15);
+    }
+
+    const difficulty =
+      clamp(shadesState.score / 5200, 0, 1.2) +
+      clamp(shadesState.clears * 0.035, 0, 0.55);
+    const intervalBase = clamp(
+      BASE_DROP_INTERVAL - difficulty * 0.23,
+      MIN_DROP_INTERVAL,
+      BASE_DROP_INTERVAL
+    );
+    const interval =
+      w.simTime < w.fastDropUntil ? intervalBase * 0.21 : intervalBase;
+
+    w.dropTimer += dt;
+    while (w.dropTimer >= interval) {
+      w.dropTimer -= interval;
+      stepDropTick();
+      if (shadesState.phase !== 'playing') break;
+    }
+
+    syncBoardInstances(dt);
+    syncActiveMesh(dt);
+    syncParticles(dt);
     clearFrameInput(input);
   });
 
   return (
     <group>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[3, 6, 8]} intensity={0.9} />
+      <ambientLight intensity={0.56} />
+      <directionalLight position={[4.2, 7.5, 8]} intensity={1.08} />
+      <pointLight position={[-4, 3, 5]} intensity={0.3} color="#7dd3fc" />
 
-      {/* Board backing */}
-      <mesh key={`board-${boardW}`} position={[0, 0, -0.2]}>
-        <boxGeometry args={[boardW * CELL + 0.8, BOARD_H * CELL + 0.8, 0.2]} />
+      <mesh position={[0, 0, -0.32]}>
+        <boxGeometry
+          args={[COLS * CELL_SIZE + 1.2, ROWS * CELL_SIZE + 1.2, 0.3]}
+        />
         <meshStandardMaterial
-          color={'#0f172a'}
-          roughness={0.9}
-          metalness={0.05}
+          color={PALETTES[snap.paletteIndex % PALETTES.length].board}
+          roughness={0.52}
+          metalness={0.1}
         />
       </mesh>
 
-      {/* Trajectory guide */}
-      <mesh
-        ref={guideRef}
-        position={[0, 0, -0.12]}
-        scale={[1, 1, 1]}
-        visible={false}
-      >
-        <planeGeometry args={[1, 1]} />
+      <instancedMesh ref={boardRef} args={[undefined, undefined, TOTAL_CELLS]}>
+        <boxGeometry args={[CELL_SIZE * 0.9, CELL_SIZE * 0.9, TILE_DEPTH]} />
         <meshStandardMaterial
-          transparent
-          opacity={0.12}
-          roughness={0.9}
-          metalness={0.05}
+          vertexColors
+          roughness={0.42}
+          metalness={0.08}
+          emissive={'#111827'}
+          emissiveIntensity={0.22}
         />
-      </mesh>
-
-      {/* Locked blocks */}
-      <instancedMesh
-        key={`locked-${boardW}`}
-        ref={lockedRef}
-        args={[undefined, undefined, boardW * BOARD_H]}
-      >
-        <boxGeometry args={[CELL * 0.9, CELL * 0.9, BLOCK_Z]} />
-        <meshStandardMaterial vertexColors roughness={0.65} metalness={0.08} />
       </instancedMesh>
 
-      {/* Ghost piece */}
-      {new Array(4).fill(0).map((_, i) => (
-        <mesh
-          // eslint-disable-next-line react/no-array-index-key
-          key={`ghost-${i}`}
-          ref={(m) => {
-            ghostRefs.current[i] = m;
-          }}
-        >
-          <boxGeometry args={[CELL * 0.9, CELL * 0.9, BLOCK_Z]} />
-          <meshStandardMaterial
-            transparent
-            opacity={0.25}
-            roughness={0.4}
-            metalness={0.05}
-          />
-        </mesh>
-      ))}
+      <mesh ref={activeRef} visible={false}>
+        <boxGeometry args={[CELL_SIZE * 0.92, CELL_SIZE * 0.92, TILE_DEPTH]} />
+        <meshStandardMaterial
+          roughness={0.35}
+          metalness={0.1}
+          emissiveIntensity={0.25}
+        />
+      </mesh>
 
-      {/* Current piece (max 4 blocks) */}
-      {new Array(4).fill(0).map((_, i) => (
-        <mesh
-          // eslint-disable-next-line react/no-array-index-key
-          key={i}
-          ref={(m) => {
-            pieceRefs.current[i] = m;
-          }}
-        >
-          <boxGeometry args={[CELL * 0.9, CELL * 0.9, BLOCK_Z]} />
-          <meshStandardMaterial roughness={0.55} metalness={0.08} />
-        </mesh>
-      ))}
+      <instancedMesh
+        ref={particleRef}
+        args={[undefined, undefined, MAX_PARTICLES]}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.75}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <EffectComposer multisampling={0}>
+        <Bloom
+          mipmapBlur
+          luminanceThreshold={0.22}
+          intensity={0.9}
+          radius={0.62}
+        />
+        <Noise opacity={0.04} />
+        <Vignette darkness={0.52} offset={0.18} />
+      </EffectComposer>
 
       <Html fullscreen pointerEvents="auto">
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            padding: 18,
             fontFamily:
-              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
-            color: 'white',
+              '"Avenir Next", "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
+            color: '#e5e7eb',
+            letterSpacing: '0.04em',
           }}
         >
           <div
             style={{
-              display: 'flex',
-              gap: 12,
-              alignItems: 'baseline',
+              position: 'absolute',
+              left: 16,
+              top: 14,
+              padding: '8px 10px',
+              borderRadius: 10,
+              background: 'rgba(2, 6, 23, 0.45)',
+              border: '1px solid rgba(148,163,184,0.2)',
               pointerEvents: 'none',
             }}
           >
-            <div style={{ fontWeight: 800, letterSpacing: 0.3, opacity: 0.9 }}>
-              SHADES
+            <div
+              style={{
+                fontSize: 10,
+                opacity: 0.66,
+                textTransform: 'uppercase',
+              }}
+            >
+              Shades+
             </div>
-            <div style={{ fontSize: 14, opacity: 0.85 }}>
-              Score {snap.score.toLocaleString()}
+            <div style={{ fontSize: 30, fontWeight: 300, lineHeight: 1 }}>
+              {snap.score.toLocaleString()}
             </div>
-            <div style={{ fontSize: 14, opacity: 0.7 }}>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              Combo x{snap.multiplier.toFixed(2)}{' '}
+              {snap.combo > 0 ? `(${snap.combo})` : ''}
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.65 }}>
+              Clears {snap.clears} • Merges {snap.merges}
+            </div>
+            <div style={{ fontSize: 11, opacity: 0.6 }}>
               Best {snap.best.toLocaleString()}
             </div>
-            <div style={{ fontSize: 14, opacity: 0.7 }}>Level {level}</div>
-            <div style={{ fontSize: 14, opacity: 0.7 }}>Lines {snap.lines}</div>
           </div>
 
           <div
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-end',
-              gap: 8,
+              position: 'absolute',
+              right: 16,
+              top: 14,
+              padding: '8px 10px',
+              borderRadius: 10,
+              background: 'rgba(2, 6, 23, 0.45)',
+              border: '1px solid rgba(148,163,184,0.2)',
+              pointerEvents: 'none',
+              textAlign: 'right',
             }}
           >
-            <div style={{ fontSize: 12, opacity: 0.6, pointerEvents: 'none' }}>
-              Cols {boardW} • {palette.name}
+            <div
+              style={{
+                fontSize: 10,
+                opacity: 0.66,
+                textTransform: 'uppercase',
+              }}
+            >
+              Next • {PALETTES[snap.paletteIndex % PALETTES.length].name}
             </div>
-            {(snap.phase === 'menu' || snap.phase === 'gameover') && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 8,
-                  alignItems: 'flex-end',
-                  pointerEvents: 'auto',
-                }}
-              >
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.6,
-                      textTransform: 'uppercase',
-                      letterSpacing: 0.8,
-                    }}
-                  >
-                    Columns
-                  </div>
-                  {COLUMN_OPTIONS.map((value) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onPointerDown={(event) => {
-                        event.stopPropagation();
-                        shadesState.columns = value;
-                      }}
-                      style={{
-                        borderRadius: 8,
-                        padding: '4px 8px',
-                        fontSize: 12,
-                        border:
-                          value === boardW
-                            ? `1px solid ${palette.accent}`
-                            : '1px solid rgba(255,255,255,0.2)',
-                        background:
-                          value === boardW
-                            ? 'rgba(255,255,255,0.08)'
-                            : 'rgba(0,0,0,0.25)',
-                        color:
-                          value === boardW
-                            ? palette.accent
-                            : 'rgba(255,255,255,0.7)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {value}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onPointerDown={(event) => {
-                    event.stopPropagation();
-                    shadesState.paletteIndex =
-                      (snap.paletteIndex + 1) % PALETTES.length;
-                  }}
-                  style={{
-                    borderRadius: 10,
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    background: 'rgba(0,0,0,0.35)',
-                    color: palette.accent,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Refresh colors (C)
-                </button>
-                <div style={{ fontSize: 10, opacity: 0.5 }}>
-                  3/4/5 set columns • C cycles colors
-                </div>
-              </div>
-            )}
+            <div
+              style={{
+                marginTop: 8,
+                marginLeft: 'auto',
+                width: 30,
+                height: 30,
+                borderRadius: 7,
+                background: nextPreviewHex,
+                boxShadow: `0 0 20px ${nextPreviewHex}88`,
+                border: '1px solid rgba(255,255,255,0.25)',
+              }}
+            />
           </div>
 
           {(snap.phase === 'menu' || snap.phase === 'gameover') && (
@@ -813,38 +1026,49 @@ export default function Shades() {
                 left: '50%',
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
-                textAlign: 'center',
-                padding: '14px 16px',
+                width: 460,
+                maxWidth: '90vw',
+                padding: '16px 18px',
                 borderRadius: 14,
-                background: 'rgba(0,0,0,0.55)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                width: 420,
-                maxWidth: '88vw',
+                border: '1px solid rgba(148,163,184,0.24)',
+                background: 'rgba(2, 6, 23, 0.6)',
+                backdropFilter: 'blur(8px)',
+                textAlign: 'center',
                 pointerEvents: 'none',
               }}
             >
-              <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 8 }}>
-                Shades
+              <div
+                style={{
+                  fontSize: 28,
+                  fontWeight: 300,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                Shades+
               </div>
-              <div style={{ opacity: 0.9, fontSize: 14, lineHeight: 1.4 }}>
-                <div>1) Drop blocks into the grid.</div>
-                <div>2) Match identical shades to merge into darker ones.</div>
-                <div>
-                  3) Clear full rows of the same shade or reach the darkest to
-                  clear.
-                </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 13,
+                  opacity: 0.9,
+                  lineHeight: 1.45,
+                }}
+              >
+                Stack and merge matching shades. Fill a row with the exact same
+                tile color+depth to clear it. Resolution is recursive until
+                stable.
               </div>
-              <div style={{ opacity: 0.75, fontSize: 13, marginTop: 10 }}>
-                Tap left/right or ← → to move &nbsp; | &nbsp; Swipe down or ↓ to
-                speed drop &nbsp; | &nbsp; Space: Hard drop
+              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                Desktop: ← → move, ↓ fast drop
+                <br />
+                Mobile: tap a column, swipe down to fast drop, swipe ←/→ to
+                nudge
               </div>
-              <div style={{ opacity: 0.6, fontSize: 12, marginTop: 6 }}>
-                ↑ rotate (optional)
-              </div>
-              <div style={{ opacity: 0.9, fontSize: 13, marginTop: 12 }}>
+              <div style={{ marginTop: 12, fontSize: 13, opacity: 0.92 }}>
                 {snap.phase === 'menu'
-                  ? 'Click / Space to start'
-                  : 'Click / Space to play again'}
+                  ? 'Tap / Space / Enter to start'
+                  : 'Tap / Space / Enter to restart'}
               </div>
             </div>
           )}
