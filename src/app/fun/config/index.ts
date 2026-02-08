@@ -36,3 +36,31 @@ export {
   getArcadePanelCSS,
 } from './themes';
 export type { ThemeKey } from './themes';
+
+// Ketchapp universe configuration
+export {
+  KETCHAPP_GAME_IDS,
+  KETCHAPP_GAME_SPECS,
+  SHARED_CHUNK_TEMPLATE,
+  KETCHAPP_DIFFICULTY_RAMPS,
+  KETCHAPP_UNIVERSE_ART_DIRECTION,
+  KETCHAPP_IMPLEMENTATION_PHASES,
+  KETCHAPP_ACCEPTANCE_CHECKLIST,
+  isKetchappGame,
+  getKetchappGameSpec,
+  sampleDifficulty,
+  buildPatternLibraryTemplate,
+} from './ketchapp';
+export type {
+  KetchappGameId,
+  KetchappInputType,
+  KetchappChunkProfile,
+  KetchappFailCondition,
+  KetchappGameSpec,
+  ChunkTier,
+  ChunkRewardMode,
+  ChunkTemplate,
+  GameChunkPatternTemplate,
+  DifficultyRamp,
+  DifficultySample,
+} from './ketchapp';

@@ -9,6 +9,7 @@
 import React from 'react';
 import { getArcadePanelCSS } from '../../config/themes';
 import { getGameCard, getGameRules } from '../../config/games';
+import { getKetchappGameSpec } from '../../config/ketchapp';
 import type { GameId, GameRules } from '../../store/types';
 
 export interface GameControlPanelProps {
@@ -38,6 +39,7 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
 }) => {
   const gameCard = getGameCard(gameId);
   const currentGameRules = getGameRules(gameId);
+  const ketchappSpec = getKetchappGameSpec(gameId);
   const accent = gameCard?.accent ?? '#60a5fa';
   const panelStyles = getArcadePanelCSS(accent);
 
@@ -96,7 +98,10 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
 
           {/* Game Rules Panel */}
           {showGameRules && currentGameRules && (
-            <GameRulesPanel rules={currentGameRules} />
+            <GameRulesPanel
+              rules={currentGameRules}
+              tutorial={ketchappSpec?.tutorial}
+            />
           )}
 
           {/* Action buttons with keyboard hints */}
@@ -140,7 +145,10 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
 /**
  * Game rules display panel
  */
-const GameRulesPanel: React.FC<{ rules: GameRules }> = ({ rules }) => (
+const GameRulesPanel: React.FC<{ rules: GameRules; tutorial?: string }> = ({
+  rules,
+  tutorial,
+}) => (
   <div
     className="mt-3 border px-3 py-2.5 text-xs"
     style={{
@@ -152,6 +160,12 @@ const GameRulesPanel: React.FC<{ rules: GameRules }> = ({ rules }) => (
     <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5">
       How to Play
     </div>
+    {tutorial && (
+      <div className="mb-2 border-b border-white/10 pb-2 text-[11px] text-white/80">
+        <span className="mr-2 text-white/45">Quick Start:</span>
+        {tutorial}
+      </div>
+    )}
     <div className="text-white/80 leading-relaxed">{rules.objective}</div>
     <div className="mt-2 pt-2 border-t border-white/10">
       <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">

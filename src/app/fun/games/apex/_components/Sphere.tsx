@@ -9,12 +9,6 @@ import {
   DIRECTIONS,
   LEVEL_DISTANCE,
   MODE_SETTINGS,
-  SPIRAL_INWARD_DRIFT,
-  SPIRAL_MAX_RADIUS,
-  SPIRAL_MIN_RADIUS,
-  SPIRAL_OUTWARD_DRIFT,
-  SPIRAL_OUTER_PULL,
-  SPIRAL_TURN_RATE,
   GRAVITY,
   REMOVAL_Y,
   SPEED_INCREMENT,
@@ -28,7 +22,10 @@ import {
   getArenaTheme,
 } from '../constants';
 import { apexState, mutation } from '../state';
-import { advanceCurvedState } from '../utils/pathGeneration';
+import {
+  advanceCurvedState,
+  computeSpiralDirection,
+} from '../utils/pathGeneration';
 
 const Sphere: React.FC = () => {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -40,10 +37,7 @@ const Sphere: React.FC = () => {
     [preset, snap.currentTheme]
   );
   const rotationRef = useRef(new THREE.Euler());
-  const spiralScratch = useRef({
-    radial: new THREE.Vector3(),
-    tangent: new THREE.Vector3(),
-  });
+  const spiralDirectionRef = useRef(new THREE.Vector3());
 
   const geometries = useMemo(
     () => ({
@@ -176,27 +170,11 @@ const Sphere: React.FC = () => {
         }
       }
     } else if (snap.mode === 'spiral') {
-      const { radial, tangent } = spiralScratch.current;
-      radial.copy(mutation.spherePos).setY(0);
-      const radius = Math.max(radial.length(), 0.001);
-      if (radius < 0.01) {
-        radial.set(1, 0, 0);
-      } else {
-        radial.divideScalar(radius);
-      }
-      tangent.set(radial.z, 0, -radial.x);
-      tangent.multiplyScalar(SPIRAL_TURN_RATE);
-
-      let radialBias =
-        mutation.spiralDirection >= 0
-          ? SPIRAL_OUTWARD_DRIFT
-          : -SPIRAL_INWARD_DRIFT;
-      if (radius < SPIRAL_MIN_RADIUS) radialBias = SPIRAL_OUTWARD_DRIFT;
-      else if (radius > SPIRAL_MAX_RADIUS)
-        radialBias = -SPIRAL_INWARD_DRIFT * SPIRAL_OUTER_PULL;
-
-      const direction = tangent.add(radial.multiplyScalar(radialBias));
-      direction.normalize();
+      const direction = computeSpiralDirection(
+        mutation.spherePos,
+        mutation.spiralDirection,
+        spiralDirectionRef.current
+      );
       mutation.targetDirection.copy(direction);
     }
 
@@ -243,49 +221,10 @@ const Sphere: React.FC = () => {
             headSegmentStart--;
           }
 
-          const touched = activeTiles.filter((t) => t.lastContactTime > 0);
-          const mostRecentTouched = touched.length
-            ? touched.reduce((best, tile) =>
-                tile.lastContactTime > best.lastContactTime ? tile : best
-              )
-            : null;
-          const touchedIdx = mostRecentTouched
-            ? activeTiles.findIndex((t) => t.id === mostRecentTouched.id)
-            : -1;
-
-          let anchorIdx = headIdx;
-          let anchorSegmentStart = headSegmentStart;
-
-          if (touchedIdx >= 0) {
-            // Identify the touched tile's contiguous segment.
-            let touchedStart = touchedIdx;
-            while (touchedStart > 0) {
-              const prev = activeTiles[touchedStart - 1];
-              const cur = activeTiles[touchedStart];
-              const dist = Math.hypot(prev.x - cur.x, prev.z - cur.z);
-              if (dist > maxGap) break;
-              touchedStart--;
-            }
-
-            let touchedEnd = touchedIdx;
-            while (touchedEnd < activeTiles.length - 1) {
-              const cur = activeTiles[touchedEnd];
-              const next = activeTiles[touchedEnd + 1];
-              const dist = Math.hypot(next.x - cur.x, next.z - cur.z);
-              if (dist > maxGap) break;
-              touchedEnd++;
-            }
-
-            // If the touched segment is the current "head" segment, respawn near where the player fell.
-            // Otherwise, respawn into the head segment so the run can continue (no reset-to-gap loops).
-            if (touchedEnd === headIdx) {
-              anchorIdx = touchedIdx;
-              anchorSegmentStart = touchedStart;
-            }
-          }
-
+          // Always respawn inside the latest contiguous "head" segment.
+          // This avoids Zen loops where respawn lands in an older disconnected segment.
           const safeBack = 30;
-          const respawnIdx = Math.max(anchorSegmentStart, anchorIdx - safeBack);
+          const respawnIdx = Math.max(headSegmentStart, headIdx - safeBack);
           const respawnTile = activeTiles[respawnIdx];
 
           if (respawnTile) {
@@ -296,25 +235,61 @@ const Sphere: React.FC = () => {
             );
             mutation.velocity.set(0, 0, 0);
             mutation.isOnPlatform = true;
+            mutation.activeTileId = respawnTile.id;
+            mutation.activeTileY = respawnTile.y + TILE_DEPTH / 2;
 
-            // Align the travel direction to the next tile in the current segment so the player
-            // doesn't instantly run backwards into a missing section after a Zen reset.
-            if (respawnIdx < activeTiles.length - 1) {
+            // Keep generation anchored at the current head segment.
+            const headTile = activeTiles[headIdx];
+            mutation.lastTilePos.set(headTile.x, headTile.y, headTile.z);
+
+            const alignDirection = (
+              from: { x: number; z: number },
+              to: { x: number; z: number }
+            ) => {
+              const dx = to.x - from.x;
+              const dz = to.z - from.z;
+              if (Math.abs(dx) < 0.0001 && Math.abs(dz) < 0.0001) return false;
+
+              if (Math.abs(dx) >= Math.abs(dz)) {
+                mutation.directionIndex = dx >= 0 ? 1 : 0;
+              } else {
+                mutation.directionIndex = dz <= 0 ? 0 : 1;
+              }
+
+              mutation.targetDirection.copy(
+                DIRECTIONS[mutation.directionIndex]
+              );
+              mutation.currentDirection.copy(mutation.targetDirection);
+              return true;
+            };
+
+            let aligned = false;
+            if (respawnIdx < headIdx) {
               const next = activeTiles[respawnIdx + 1];
               const dist = Math.hypot(
                 next.x - respawnTile.x,
                 next.z - respawnTile.z
               );
               if (dist <= maxGap) {
-                const dx = next.x - respawnTile.x;
-                const dz = next.z - respawnTile.z;
-                const useRight = Math.abs(dx) >= Math.abs(dz);
-                mutation.directionIndex = useRight ? 1 : 0;
-                mutation.targetDirection.copy(
-                  DIRECTIONS[mutation.directionIndex]
-                );
-                mutation.currentDirection.copy(mutation.targetDirection);
+                aligned = alignDirection(respawnTile, next);
               }
+            }
+
+            if (!aligned && respawnIdx > headSegmentStart) {
+              const prev = activeTiles[respawnIdx - 1];
+              const dist = Math.hypot(
+                respawnTile.x - prev.x,
+                respawnTile.z - prev.z
+              );
+              if (dist <= maxGap) {
+                aligned = alignDirection(prev, respawnTile);
+              }
+            }
+
+            if (!aligned) {
+              mutation.directionIndex = 0;
+              mutation.targetDirection.copy(DIRECTIONS[0]);
+              mutation.currentDirection.copy(mutation.targetDirection);
             }
           }
         }

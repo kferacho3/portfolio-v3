@@ -3,6 +3,7 @@
 import React from 'react';
 import type { GameId } from '../store/types';
 import { getGameCard } from '../config/games';
+import { getKetchappGameSpec } from '../config/ketchapp';
 import { getArcadePanelCSS } from '../config/themes';
 
 interface GameStartOverlayProps {
@@ -19,6 +20,7 @@ const GameStartOverlay: React.FC<GameStartOverlayProps> = ({
   const card = getGameCard(gameId);
   const accent = card?.accent ?? '#7dd3fc';
   const title = card?.title ?? 'Game';
+  const ketchappSpec = getKetchappGameSpec(gameId);
   const panelStyles = getArcadePanelCSS(accent);
 
   return (
@@ -53,6 +55,18 @@ const GameStartOverlay: React.FC<GameStartOverlayProps> = ({
           Ready Player
         </div>
         <div className="mt-3 text-xl font-semibold text-white/90">{title}</div>
+        {ketchappSpec && (
+          <div className="mt-3 space-y-2">
+            <div className="text-sm text-white/70">{ketchappSpec.tutorial}</div>
+            <div className="flex items-center justify-center gap-2 text-[10px] uppercase tracking-[0.22em] text-white/55">
+              <span>{ketchappSpec.input}</span>
+              <span>•</span>
+              <span>{ketchappSpec.verb}</span>
+              <span>•</span>
+              <span>{ketchappSpec.failCondition}</span>
+            </div>
+          </div>
+        )}
         <div className="mt-4 text-sm text-white/60">
           Tap to start or press
           <span

@@ -213,7 +213,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'polarity',
     title: 'Polarity',
     description:
-      'Flip charge, slingshot pylons, and collect ions in a high-speed arena.',
+      'Tap to flip charge and swap rails through matching polarity gates.',
     accent: '#22d3ee',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Polarity.webp',
@@ -222,7 +222,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'tetherdrift',
     title: 'Tether Drift',
-    description: 'Swing on tethers, chain gates, and dodge laser events.',
+    description: 'Hold to tether, release to drift, and chain anchors upward.',
     accent: '#a78bfa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/TetherDrift.webp',
@@ -231,8 +231,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'trace',
     title: 'Trace',
-    description:
-      'Draw a neon trail, phase through walls, and survive the solidify storm.',
+    description: 'Drag to stay centered on a glowing path as it bends ahead.',
     accent: '#facc15',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Trace.webp',
@@ -241,7 +240,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'flipbox',
     title: 'Flip Box',
-    description: 'Invert gravity, collect cores, and survive shifting hazards.',
+    description: 'Tap to flip onto the next platform. Miss once and fall.',
     accent: '#38bdf8',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/FlipBox.webp',
@@ -250,8 +249,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'portalpunch',
     title: 'Portal Punch',
-    description:
-      'Place portals to warp and punch targets while keeping integrity high.',
+    description: 'Tap to punch a portal and instantly warp between two lanes.',
     accent: '#fb7185',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PortalPunch.webp',
@@ -260,7 +258,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'conveyorchaos',
     title: 'Conveyor Chaos',
-    description: 'Rotate conveyors to build a path to the goal under pressure.',
+    description: 'Tap to switch the next junction before your package arrives.',
     accent: '#fb923c',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ConveyorChaos.webp',
@@ -419,7 +417,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'waveflip',
     title: 'WaveFlip',
     description:
-      'Flip the wave direction to thread between ceiling and floor spikes.',
+      'Tap to mirror the wave and thread between ceiling and floor spikes.',
     accent: '#ff5a7a',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/WaveFlip.webp',
@@ -429,7 +427,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'slipstream',
     title: 'Slipstream',
     description:
-      'Toggle between ground and glide to clear spikes, ceilings, and gaps.',
+      'Tap to swap lanes and hold the high-score slipstream as long as you can.',
     accent: '#38bdf8',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Slipstream.webp',
@@ -438,7 +436,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'runeroll',
     title: 'RuneRoll',
-    description: 'Rotate the rune to match the gate and keep rolling forward.',
+    description: 'Tap to rotate runes and match each gate before impact.',
     accent: '#a78bfa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RuneRoll.webp',
@@ -447,7 +445,7 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'pulseparry',
     title: 'PulseParry',
-    description: 'Pulse a shield to parry shards and score on the rebound.',
+    description: 'Tap to parry incoming pulses with clean, learnable timing.',
     accent: '#22d3ee',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PulseParry.webp',
@@ -457,7 +455,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'orbitlatch',
     title: 'OrbitLatch',
     description:
-      'Launch on a tangent to latch the next pylon and avoid hazards.',
+      'Tap to latch the next anchor while orbiting forward endlessly.',
     accent: '#f97316',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OrbitLatch.webp',
@@ -590,42 +588,40 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Try different modes: Classic for sharp turns, Curved for flow, Spiral for hypnotic patterns, Zen for no death.',
   },
   polarity: {
-    controls:
-      'WASD/Arrows to roll • Space to flip • Click to pulse • Shift to stabilize',
+    controls: 'Tap/Click to flip polarity and swap rails • R to restart',
     objective:
-      'Flip charge to sling past pylons, collect ions, and avoid spikes while chaining combos.',
-    tips: 'Time flips near pylons and use pulse to recover bad lines.',
+      'Auto-run forward, match your charge to upcoming gates, and survive as speed ramps up.',
+    tips: 'Treat every gate like a rhythm cue. One clean flip beats panic tapping.',
   },
   tetherdrift: {
-    controls:
-      'Hold Click to tether • Release to fling • WASD adjust • Space boost • Shift brake',
-    objective: 'Swing between pylons, chain gates, and dodge event hazards.',
-    tips: 'Release at the right angle for speed and chain bonuses.',
+    controls: 'Hold to tether • Release to drift • R to restart',
+    objective:
+      'Latch anchors in sequence while climbing forever. Miss anchor range once and fall.',
+    tips: 'Release on the forward arc to carry speed into the next anchor.',
   },
   trace: {
-    controls: 'A/D steer • W/S speed • Space phase • E purge',
+    controls: 'Drag to stay on path • R to restart',
     objective:
-      'Carve a trail, collect shards, and survive as segments solidify.',
-    tips: 'Phase through tight gaps and purge before you seal yourself in.',
+      'Follow the luminous line, stay centered through turns, and avoid leaving the ribbon.',
+    tips: 'Small corrections are safer than late, wide swipes.',
   },
   flipbox: {
-    controls: 'WASD aim • Space snap • Shift brake • E focus',
+    controls: 'Tap/Click to flip forward • R to restart',
     objective:
-      'Flip gravity to catch cores and avoid hazards as the box shifts.',
-    tips: 'Brake during dense hazard waves. Snap to keep your line clean.',
+      'Land on each platform in an endless chain. Any short or long landing ends the run.',
+    tips: 'Lock into a steady flip rhythm before chasing tiny bonus platforms.',
   },
   portalpunch: {
-    controls: 'WASD roll • Space dash • LMB portal A • RMB portal B • E clear',
+    controls: 'Tap/Click to punch portal and swap lanes • R to restart',
     objective:
-      'Use portals to punch targets and restore integrity while avoiding hazards.',
-    tips: 'Chain portal hits to refill integrity. Clear portals before they trap you.',
+      'Warp lanes to dodge blockers and keep the run alive with one clean input.',
+    tips: 'Swap early when patterns alternate. Late swaps usually chain into mistakes.',
   },
   conveyorchaos: {
-    controls:
-      'Click rotate tile • Right click back • Shift 180 • WASD nudge • Space reverse • E override',
+    controls: 'Tap/Click to switch next junction direction • R to restart',
     objective:
-      'Route conveyors to the goal before time runs out and events scramble the grid.',
-    tips: 'Use reversals sparingly. Override can rescue a broken path.',
+      'Read each upcoming split and route the package away from pits and crushers.',
+    tips: 'Prioritize survival routes first. Take danger routes only when the read is clear.',
   },
   jellyjump: {
     controls: 'A/D or Arrow Keys to move • Space/Click to jump • R to restart',
@@ -722,33 +718,34 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Shorter distance = tighter timing. Collect gems. Bounce too much and walls can break.',
   },
   waveflip: {
-    controls: 'Tap/Click to reverse the wave • R to restart',
+    controls: 'Tap/Click to flip the wave • R to restart',
     objective:
-      'Flip the wave direction to thread between ceiling and floor spikes.',
-    tips: 'Anticipate the next spike pattern before you flip.',
+      'Mirror your wave line to dodge ceiling and floor spikes in an endless rhythm run.',
+    tips: 'Flip for the next obstacle, not the one you already cleared.',
   },
   slipstream: {
-    controls: 'Tap/Click to toggle Ground/Glide • R to restart',
+    controls: 'Tap/Click to switch lanes • R to restart',
     objective:
-      'Ground is safe under ceilings. Glide is safe over spikes and gaps.',
-    tips: 'Switch early—one late toggle is usually fatal.',
+      'Stay in the slipstream lane for multiplier gains and swap out when blockers appear.',
+    tips: 'Do not overstay high-value lanes when the safe lane is the only clear path.',
   },
   runeroll: {
     controls: 'Tap/Click to rotate rune • R to restart',
-    objective: 'Match the gate rune with a single tap before you hit it.',
-    tips: 'Watch the gate shape first, then rotate only once.',
+    objective:
+      'Cycle rune states to match each incoming gate and keep rolling without breaks.',
+    tips: 'Read the next gate first, then commit to the minimum number of taps.',
   },
   pulseparry: {
-    controls: 'Tap/Click to pulse shield • R to restart',
+    controls: 'Tap/Click to parry pulse • R to restart',
     objective:
-      'Time pulses to parry incoming shards and bounce them back for points.',
-    tips: 'Short pulses are stronger—tap late, not early.',
+      'Parry every incoming pulse. One mistimed defense ends the run immediately.',
+    tips: 'Learn the approach cadence. Consistent timing beats reactive spam.',
   },
   orbitlatch: {
-    controls: 'Tap/Click to launch & latch • R to restart',
+    controls: 'Tap/Click to latch next anchor • R to restart',
     objective:
-      'Launch on a tangent to latch the next pylon and avoid hazard spheres.',
-    tips: 'Launch on the forward arc so your tangent points toward the next pylon.',
+      'Orbit each anchor and latch the next one inside range before you drift out.',
+    tips: 'Latch near the front side of the orbit when anchors are offset.',
   },
 };
 

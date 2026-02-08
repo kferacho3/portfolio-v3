@@ -5,6 +5,8 @@ import { RoundedBoxGeometry } from 'three-stdlib';
 import { useSnapshot } from 'valtio';
 import {
   ARENA_PRESETS,
+  CURVE_DEFAULT_CURVATURE,
+  CURVE_DEFAULT_CURVATURE_VEL,
   CURVE_TILE_STRETCH,
   GEM_HEIGHT_OFFSET,
   GRAVITY,
@@ -20,6 +22,7 @@ import {
   REMOVAL_Y,
   SPECIAL_GEM_CHANCE,
   SPECIAL_GEM_TYPES,
+  SPIRAL_TILE_STRETCH,
   SPHERE_RADIUS,
   THEME_EDGE_BLEND,
   THEMES,
@@ -687,7 +690,7 @@ const TileSystem: React.FC = () => {
     const delta = pos.clone().sub(prevPos);
     const rotationY = Math.atan2(delta.x, delta.z);
     const scaleX = 1;
-    const scaleZ = 1;
+    const scaleZ = mode === 'spiral' ? SPIRAL_TILE_STRETCH : 1;
     const tile = spawnTile(pos, rotationY, scaleX, scaleZ);
 
     if (Math.random() < modeSettings.gemSpawnChance) {
@@ -711,14 +714,14 @@ const TileSystem: React.FC = () => {
     const spiralSeed = Math.random() < 0.5 ? 1 : -1;
     mutation.curveCenterPos.set(0, -TILE_DEPTH / 2, 0);
     mutation.curveTheta = 0;
-    mutation.curveCurvature = 0.5;
-    mutation.curveCurvatureVel = 1;
+    mutation.curveCurvature = CURVE_DEFAULT_CURVATURE;
+    mutation.curveCurvatureVel = CURVE_DEFAULT_CURVATURE_VEL;
     mutation.curveDirection = curveSeed;
     mutation.curveLane = 1;
     mutation.curveLaneOffset = 0;
     mutation.pathCurveTheta = 0;
-    mutation.pathCurveCurvature = 0.5;
-    mutation.pathCurveCurvatureVel = 1;
+    mutation.pathCurveCurvature = CURVE_DEFAULT_CURVATURE;
+    mutation.pathCurveCurvatureVel = CURVE_DEFAULT_CURVATURE_VEL;
     mutation.pathCurveDirection = curveSeed;
     mutation.pathCurveSegmentRemaining = 0;
     mutation.spiralDirection = spiralSeed;
@@ -888,14 +891,11 @@ const TileSystem: React.FC = () => {
       }
 
       if (tilesToRemove.length > 0) {
-        mutation.tiles = mutation.tiles.filter(
-          (t) => !tilesToRemove.includes(t.id)
-        );
-        mutation.gems = mutation.gems.filter(
-          (g) => !tilesToRemove.includes(g.tileId)
-        );
+        const removedIds = new Set(tilesToRemove);
+        mutation.tiles = mutation.tiles.filter((t) => !removedIds.has(t.id));
+        mutation.gems = mutation.gems.filter((g) => !removedIds.has(g.tileId));
         mutation.powerUps = mutation.powerUps.filter(
-          (p) => !tilesToRemove.includes(p.tileId)
+          (p) => !removedIds.has(p.tileId)
         );
       }
     }

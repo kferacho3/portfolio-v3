@@ -133,6 +133,8 @@ export const CLASSIC_TURN_CHANCE = 0.5;
 export const CURVE_BASE_CURVATURE = 0.9;
 export const CURVE_SPRING = 3.5;
 export const CURVE_DAMPING = 1.4;
+export const CURVE_DEFAULT_CURVATURE = 0.42;
+export const CURVE_DEFAULT_CURVATURE_VEL = 1;
 export const CURVE_FORWARD_BIAS = 0.35;
 export const CURVE_MAX_YAW = 0.9;
 export const CURVE_CENTER_PULL = 0.35;
@@ -155,6 +157,7 @@ export const SPIRAL_FORWARD_DRIFT = 0.22;
 export const SPIRAL_MIN_RADIUS = TILE_SIZE * 3.5;
 export const SPIRAL_MAX_RADIUS = TILE_SIZE * 10.5;
 export const SPIRAL_SWITCH_RANGE: [number, number] = [12, 22];
+export const SPIRAL_TILE_STRETCH = 1.2;
 
 export const GRAVITY_WAVE_AMPLITUDE = 0.65;
 export const GRAVITY_WAVE_FREQUENCY = 0.65;

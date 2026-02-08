@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { proxy } from 'valtio';
 import {
   ARENA_KEYS,
+  CURVE_DEFAULT_CURVATURE,
+  CURVE_DEFAULT_CURVATURE_VEL,
   DIRECTIONS,
   GEM_BASE_POINTS,
   GEM_SCORE_MULTIPLIER_CAP,
@@ -160,14 +162,14 @@ export const apexState = proxy<
     const spiralSeed = Math.random() < 0.5 ? 1 : -1;
     mutation.curveCenterPos.set(0, -TILE_DEPTH / 2, 0);
     mutation.curveTheta = 0;
-    mutation.curveCurvature = 0.5;
-    mutation.curveCurvatureVel = 1;
+    mutation.curveCurvature = CURVE_DEFAULT_CURVATURE;
+    mutation.curveCurvatureVel = CURVE_DEFAULT_CURVATURE_VEL;
     mutation.curveDirection = curveSeed;
     mutation.curveLane = 1;
     mutation.curveLaneOffset = 0;
     mutation.pathCurveTheta = 0;
-    mutation.pathCurveCurvature = 0.5;
-    mutation.pathCurveCurvatureVel = 1;
+    mutation.pathCurveCurvature = CURVE_DEFAULT_CURVATURE;
+    mutation.pathCurveCurvatureVel = CURVE_DEFAULT_CURVATURE_VEL;
     mutation.pathCurveDirection = curveSeed;
     mutation.pathCurveSegmentRemaining = 0;
     mutation.spiralDirection = spiralSeed;
@@ -334,14 +336,14 @@ export const mutation = {
 
   curveCenterPos: new THREE.Vector3(0, -TILE_DEPTH / 2, 0),
   curveTheta: 0,
-  curveCurvature: 0,
-  curveCurvatureVel: 0,
+  curveCurvature: CURVE_DEFAULT_CURVATURE,
+  curveCurvatureVel: CURVE_DEFAULT_CURVATURE_VEL,
   curveDirection: 1,
   curveLane: 1,
   curveLaneOffset: 0,
   pathCurveTheta: 0,
-  pathCurveCurvature: 0,
-  pathCurveCurvatureVel: 0,
+  pathCurveCurvature: CURVE_DEFAULT_CURVATURE,
+  pathCurveCurvatureVel: CURVE_DEFAULT_CURVATURE_VEL,
   pathCurveDirection: 1,
   pathCurveSegmentRemaining: 0,
 
