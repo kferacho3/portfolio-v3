@@ -5,12 +5,10 @@ import * as THREE from 'three';
 import { Html, OrthographicCamera } from '@react-three/drei';
 import { useEffect, useMemo, useRef } from 'react';
 import { proxy, useSnapshot } from 'valtio';
-import { useInputRef, clearFrameInput } from '../../hooks/useInput';
 import {
   BALL_SKINS,
   state as persistState,
   load,
-  save,
   addStars,
   setHighScore,
   unlockBall,
@@ -18,50 +16,94 @@ import {
   canUnlockBall,
 } from './state';
 
-// -----------------------------
-// Runtime (per-run) state
-// -----------------------------
-const run = proxy({
-  score: 0,
-  slow: false,
-  speed: 4.2,
-  starsThisRun: 0,
-});
-
-// -----------------------------
-// Constants (tuned to feel like a Ketchapp-ish one-tapper)
-// -----------------------------
 const TRACK_WIDTH = 2.6;
 const TRACK_THICK = 0.12;
 const RAIL_WIDTH = 0.22;
 const SEG_LEN = 6;
-const SEG_COUNT = 26;
+const SEG_COUNT = 28;
 
 const BALL_RADIUS = 0.25;
-const BALL_BOUNCE_SPEED = 2.65; // lateral speed
-
-const BASE_SPEED = 4.2;
-const SPEED_RAMP = 0.045; // speed added per point
-
-const SLOW_TARGET = 0.26; // time scale while holding
-const SLOW_LERP = 9.5;
-
-const OBST_COUNT = 28;
 const OBST_THICK = 0.38;
 const OBST_HEIGHT = 0.36;
 
-const LOOK_AHEAD = 4.8;
-const RESPAWN_BEHIND = 8;
+const LANE_HALF = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
 
-const OBST_COLORS = ['#ff6b6b', '#ffe4b8', '#b6ffcc', '#cfd4dc'];
+const OBST_COLORS = ['#ff6b6b', '#ffe4b8', '#b6ffcc', '#a3d4ff'];
+
+const GAME_TUNING = {
+  forward: {
+    baseSpeed: 4.2,
+    scoreRamp: 0.045,
+  },
+  side: {
+    speed: 2.65,
+  },
+  slow: {
+    factor: 0.2,
+    lambdaIn: 22,
+    lambdaOut: 13,
+  },
+  spawn: {
+    poolSize: 34,
+    initialSpawnZ: 7,
+    gapMin: 2.35,
+    gapMax: 4.05,
+    respawnBehind: 10,
+    lookAhead: 56,
+  },
+  energy: {
+    drainPerSecond: 0.35,
+    regenPerSecond: 0.18,
+    pickupRefill: 0.25,
+  },
+  trail: {
+    length: 24,
+    sampleNormal: 0.022,
+    sampleSlow: 0.012,
+    maxOpacity: 0.24,
+    maxOpacitySlow: 0.42,
+  },
+  tunnel: {
+    ringCount: 14,
+    spacing: 8,
+    radius: TRACK_WIDTH * 0.82,
+  },
+  camera: {
+    offsetX: 4.6,
+    offsetZ: -4.7,
+    height: 5.5,
+    lookAhead: 4.9,
+    baseZoom: 90,
+    slowZoom: 99,
+    followLambda: 10,
+    zoomLambda: 11,
+    releaseDamp: 13,
+    releaseShake: 0.05,
+  },
+} as const;
+
+const THEME = {
+  background: '#020713',
+  fog: '#050d1e',
+  track: '#101924',
+  rails: '#40f2d0',
+  stripe: '#8cb8ff',
+  tunnelRing: '#78bcff',
+  trailBase: '#5fd6ff',
+  trailSlow: '#d1f7ff',
+  ring: '#b6ffcc',
+} as const;
+
+const isDev = process.env.NODE_ENV !== 'production';
 
 type ObstacleKind = 'side' | 'center';
 
 type Obstacle = {
   id: number;
+  active: boolean;
   z: number;
   kind: ObstacleKind;
-  side: -1 | 1; // only for side obstacles
+  side: -1 | 1;
   lenX: number;
   color: string;
   hasStar: boolean;
@@ -71,6 +113,45 @@ type Obstacle = {
   giftCollected: boolean;
 };
 
+type WorldRuntime = {
+  realTime: number;
+  gameTime: number;
+  runnerDistance: number;
+  nextSpawnAt: number;
+  x: number;
+  sideDir: -1 | 1;
+  timeScale: number;
+  targetScale: number;
+  cameraX: number;
+  cameraZ: number;
+  cameraZoom: number;
+  releaseKick: number;
+  bouncePulse: number;
+  ringPulse: number;
+  trailSampleAcc: number;
+  fps: number;
+  wasSlow: boolean;
+  trailPoints: THREE.Vector3[];
+};
+
+const run = proxy({
+  score: 0,
+  slow: false,
+  speed: GAME_TUNING.forward.baseSpeed,
+  starsThisRun: 0,
+  timeScale: 1,
+  targetScale: 1,
+  slowEnergy: 1,
+  distance: 0,
+  vignette: 0,
+  slowStrength: 0,
+  fps: 60,
+});
+
+const holdInput = proxy({
+  isHolding: false,
+});
+
 function rand(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
@@ -79,23 +160,41 @@ function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function expDamp(current: number, target: number, lambda: number, dt: number) {
+  return target + (current - target) * Math.exp(-lambda * dt);
+}
+
+function createObstacleSlot(id: number): Obstacle {
+  return {
+    id,
+    active: false,
+    z: -999,
+    kind: 'side',
+    side: 1,
+    lenX: 0.6,
+    color: OBST_COLORS[0],
+    hasStar: false,
+    hasGift: false,
+    passed: false,
+    starCollected: true,
+    giftCollected: true,
+  };
+}
+
 function makeObstacle(id: number, z: number): Obstacle {
   const kind: ObstacleKind = Math.random() < 0.86 ? 'side' : 'center';
   const side: -1 | 1 = Math.random() < 0.5 ? -1 : 1;
-  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
-
-  // Side blocks: from edge toward center. Center blocks: centered, forcing you to be on an edge.
   const lenX =
     kind === 'side'
-      ? rand(laneHalf * 0.55, laneHalf * 1.22)
-      : rand(laneHalf * 0.55, laneHalf * 0.9);
+      ? rand(LANE_HALF * 0.55, LANE_HALF * 1.22)
+      : rand(LANE_HALF * 0.55, LANE_HALF * 0.9);
 
-  // Pickups: mostly stars, occasionally gifts.
   const hasGift = Math.random() < 0.07;
   const hasStar = !hasGift && Math.random() < 0.35;
 
   return {
     id,
+    active: true,
     z,
     kind,
     side,
@@ -110,108 +209,227 @@ function makeObstacle(id: number, z: number): Obstacle {
 }
 
 function obstacleXRange(o: Obstacle) {
-  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
   if (o.kind === 'center') {
-    const xMin = -o.lenX / 2;
-    const xMax = o.lenX / 2;
-    return { xMin, xMax };
+    return { xMin: -o.lenX / 2, xMax: o.lenX / 2 };
   }
+
   if (o.side === -1) {
-    const xMin = -laneHalf;
-    const xMax = -laneHalf + o.lenX;
-    return { xMin, xMax };
+    return { xMin: -LANE_HALF, xMax: -LANE_HALF + o.lenX };
   }
-  const xMax = laneHalf;
-  const xMin = laneHalf - o.lenX;
-  return { xMin, xMax };
+
+  return { xMin: LANE_HALF - o.lenX, xMax: LANE_HALF };
 }
 
 function pickupX(o: Obstacle) {
-  // Keep pickups tempting but not always free.
   if (o.kind === 'center') return 0;
-  // Put stars/gifts a bit away from the obstacle to encourage timing.
-  const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
-  return o.side === -1 ? laneHalf * 0.45 : -laneHalf * 0.45;
+  return o.side === -1 ? LANE_HALF * 0.45 : -LANE_HALF * 0.45;
 }
 
-// -----------------------------
-// Scene
-// -----------------------------
 function SlowMoScene() {
   const snap = useSnapshot(persistState);
-  const inputRef = useInputRef({ preventDefault: [' ', 'Space'] });
 
   const cameraRef = useRef<THREE.OrthographicCamera>(null!);
   const ballRef = useRef<THREE.Mesh>(null!);
+  const ballMaterialRef = useRef<THREE.MeshStandardMaterial>(null!);
   const shadowRef = useRef<THREE.Mesh>(null!);
+  const shadowMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
   const slowRingRef = useRef<THREE.Mesh>(null!);
+  const slowRingMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
 
   const segmentGroupRefs = useRef<(THREE.Group | null)[]>([]);
+  const tunnelRingRefs = useRef<(THREE.Mesh | null)[]>([]);
+
   const obstacleGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const obstacleMeshRefs = useRef<(THREE.Mesh | null)[]>([]);
   const starRefs = useRef<(THREE.Mesh | null)[]>([]);
   const giftRefs = useRef<(THREE.Mesh | null)[]>([]);
 
-  const segments = useMemo(() => {
-    return Array.from({ length: SEG_COUNT }, (_, i) => ({
-      id: i,
-      z: i * SEG_LEN,
-    }));
-  }, []);
+  const trailRefs = useRef<(THREE.Mesh | null)[]>([]);
 
-  const obstacles = useMemo(() => {
-    const arr: Obstacle[] = [];
-    let z = 7;
-    for (let i = 0; i < OBST_COUNT; i++) {
-      z += rand(2.4, 4.1);
-      arr.push(makeObstacle(i, z));
-    }
-    return arr;
-  }, []);
+  const segments = useMemo(
+    () =>
+      Array.from({ length: SEG_COUNT }, (_, i) => ({
+        id: i,
+        z: i * SEG_LEN,
+      })),
+    []
+  );
 
-  const world = useRef({
-    x: -1,
-    z: 0,
-    renderZ: 0,
-    vx: BALL_BOUNCE_SPEED,
+  const tunnelRings = useMemo(
+    () =>
+      Array.from({ length: GAME_TUNING.tunnel.ringCount }, (_, i) => ({
+        id: i,
+        z: i * GAME_TUNING.tunnel.spacing,
+      })),
+    []
+  );
+
+  const obstacles = useMemo(
+    () =>
+      Array.from({ length: GAME_TUNING.spawn.poolSize }, (_, i) =>
+        createObstacleSlot(i)
+      ),
+    []
+  );
+
+  const world = useRef<WorldRuntime>({
+    realTime: 0,
+    gameTime: 0,
+    runnerDistance: 0,
+    nextSpawnAt: GAME_TUNING.spawn.initialSpawnZ,
+    x: -(LANE_HALF - BALL_RADIUS),
+    sideDir: 1,
     timeScale: 1,
-    farZ: 0,
+    targetScale: 1,
+    cameraX: GAME_TUNING.camera.offsetX,
+    cameraZ: GAME_TUNING.camera.offsetZ,
+    cameraZoom: GAME_TUNING.camera.baseZoom,
+    releaseKick: 0,
+    bouncePulse: 0,
+    ringPulse: 0,
+    trailSampleAcc: 0,
+    fps: 60,
+    wasSlow: false,
+    trailPoints: Array.from(
+      { length: GAME_TUNING.trail.length },
+      () => new THREE.Vector3(0, BALL_RADIUS + 0.02, 0)
+    ),
   });
+
+  function resetTrail(x: number, z: number) {
+    const y = BALL_RADIUS + 0.02;
+    for (let i = 0; i < world.current.trailPoints.length; i++) {
+      world.current.trailPoints[i].set(x, y, z);
+    }
+  }
+
+  function syncObstacleVisual(i: number) {
+    const o = obstacles[i];
+    const group = obstacleGroupRefs.current[i];
+    const block = obstacleMeshRefs.current[i];
+    const star = starRefs.current[i];
+    const gift = giftRefs.current[i];
+
+    if (!group || !block) return;
+
+    group.visible = o.active;
+    if (!o.active) return;
+
+    group.position.set(0, 0, o.z);
+
+    const { xMin, xMax } = obstacleXRange(o);
+    const lenX = xMax - xMin;
+    const x = (xMin + xMax) / 2;
+
+    block.position.set(x, OBST_HEIGHT / 2, 0);
+    block.scale.set(lenX, OBST_HEIGHT, OBST_THICK);
+
+    const blockMaterial = block.material as THREE.MeshStandardMaterial;
+    blockMaterial.color.set(o.color);
+    blockMaterial.emissive.set(o.color);
+    blockMaterial.emissiveIntensity = 0.2 + run.slowStrength * 0.6;
+
+    if (star) {
+      star.visible = o.hasStar && !o.starCollected;
+      star.position.set(pickupX(o), 0.45, 0);
+    }
+
+    if (gift) {
+      gift.visible = o.hasGift && !o.giftCollected;
+      gift.position.set(pickupX(o), 0.42, 0);
+    }
+  }
+
+  function takeInactiveSlot() {
+    for (let i = 0; i < obstacles.length; i++) {
+      if (!obstacles[i].active) return i;
+    }
+    return -1;
+  }
+
+  function spawnObstacleAt(slotIndex: number, z: number) {
+    const fresh = makeObstacle(obstacles[slotIndex].id, z);
+    Object.assign(obstacles[slotIndex], fresh, { active: true, z });
+    syncObstacleVisual(slotIndex);
+  }
+
+  function fillSpawnHorizon() {
+    let guard = obstacles.length * 2;
+    while (
+      world.current.nextSpawnAt <
+        world.current.runnerDistance + GAME_TUNING.spawn.lookAhead &&
+      guard > 0
+    ) {
+      const slot = takeInactiveSlot();
+      if (slot < 0) break;
+      spawnObstacleAt(slot, world.current.nextSpawnAt);
+      world.current.nextSpawnAt += rand(
+        GAME_TUNING.spawn.gapMin,
+        GAME_TUNING.spawn.gapMax
+      );
+      guard -= 1;
+    }
+  }
 
   // (re)start run
   useEffect(() => {
-    if (snap.phase !== 'playing') return;
+    if (snap.phase !== 'playing') {
+      holdInput.isHolding = false;
+      return;
+    }
 
     load();
 
-    // reset runtime
     run.score = 0;
     run.slow = false;
-    run.speed = BASE_SPEED;
+    run.speed = GAME_TUNING.forward.baseSpeed;
     run.starsThisRun = 0;
+    run.timeScale = 1;
+    run.targetScale = 1;
+    run.slowEnergy = 1;
+    run.distance = 0;
+    run.vignette = 0;
+    run.slowStrength = 0;
+    run.fps = 60;
 
-    world.current.x = -(TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06 - BALL_RADIUS);
-    world.current.z = 0;
-    world.current.renderZ = 0;
-    world.current.vx = BALL_BOUNCE_SPEED;
+    const startX = -(LANE_HALF - BALL_RADIUS);
+
+    world.current.realTime = 0;
+    world.current.gameTime = 0;
+    world.current.runnerDistance = 0;
+    world.current.nextSpawnAt = GAME_TUNING.spawn.initialSpawnZ;
+    world.current.x = startX;
+    world.current.sideDir = 1;
     world.current.timeScale = 1;
+    world.current.targetScale = 1;
+    world.current.cameraX = startX + GAME_TUNING.camera.offsetX;
+    world.current.cameraZ = GAME_TUNING.camera.offsetZ;
+    world.current.cameraZoom = GAME_TUNING.camera.baseZoom;
+    world.current.releaseKick = 0;
+    world.current.bouncePulse = 0;
+    world.current.ringPulse = 0;
+    world.current.trailSampleAcc = 0;
+    world.current.fps = 60;
+    world.current.wasSlow = false;
 
-    // reset track
-    segments.forEach((seg, i) => {
-      seg.z = i * SEG_LEN;
-    });
+    resetTrail(startX, 0);
 
-    // reset obstacles
-    let z = 7;
-    for (let i = 0; i < obstacles.length; i++) {
-      z += rand(2.4, 4.1);
-      const o = obstacles[i];
-      const fresh = makeObstacle(o.id, z);
-      Object.assign(o, fresh);
+    for (let i = 0; i < segments.length; i++) {
+      segments[i].z = i * SEG_LEN;
     }
-    world.current.farZ = z;
 
-    // apply visuals to meshes after a tick
+    for (let i = 0; i < tunnelRings.length; i++) {
+      tunnelRings[i].z = i * GAME_TUNING.tunnel.spacing;
+    }
+
+    for (let i = 0; i < obstacles.length; i++) {
+      Object.assign(obstacles[i], createObstacleSlot(obstacles[i].id));
+      const group = obstacleGroupRefs.current[i];
+      if (group) group.visible = false;
+    }
+
+    fillSpawnHorizon();
+
     requestAnimationFrame(() => {
       for (let i = 0; i < obstacles.length; i++) {
         syncObstacleVisual(i);
@@ -220,221 +438,342 @@ function SlowMoScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap.phase]);
 
-  function syncObstacleVisual(i: number, zOffset = 0) {
-    const o = obstacles[i];
-    const group = obstacleGroupRefs.current[i];
-    const block = obstacleMeshRefs.current[i];
-    const star = starRefs.current[i];
-    const gift = giftRefs.current[i];
-    if (!group || !block) return;
-
-    group.position.set(0, 0, o.z + zOffset);
-
-    // Block size/position
-    const { xMin, xMax } = obstacleXRange(o);
-    const lenX = xMax - xMin;
-    const x = (xMin + xMax) / 2;
-
-    block.position.set(x, OBST_HEIGHT / 2, 0);
-    block.scale.set(lenX, OBST_HEIGHT, OBST_THICK);
-
-    const mat = block.material as THREE.MeshStandardMaterial;
-    mat.color.set(o.color);
-
-    // Pickup positions
-    if (star) {
-      star.visible = o.hasStar && !o.starCollected;
-      star.position.set(pickupX(o), 0.45, 0);
-    }
-    if (gift) {
-      gift.visible = o.hasGift && !o.giftCollected;
-      gift.position.set(pickupX(o), 0.42, 0);
-    }
-  }
-
-  useFrame((_r3f, delta) => {
-    const input = inputRef.current;
+  useFrame((_, rawDelta) => {
+    const delta = Math.min(rawDelta, 0.05);
     const cam = cameraRef.current;
+    const w = world.current;
 
     if (snap.phase !== 'playing') {
-      // Keep camera looking at track so menu/finish screens show the scene
-      const lx = world.current.x;
-      const lz = Math.max(0, world.current.renderZ) + LOOK_AHEAD;
-      cam.position.set(lx + 4.6, 5.5, lz - 4.6);
-      cam.lookAt(lx, 0, lz);
-      clearFrameInput(inputRef);
+      const lz = Math.max(0, w.runnerDistance) + GAME_TUNING.camera.lookAhead;
+      cam.position.set(
+        w.x + GAME_TUNING.camera.offsetX,
+        GAME_TUNING.camera.height,
+        lz + GAME_TUNING.camera.offsetZ
+      );
+      cam.lookAt(w.x, 0, lz);
       return;
     }
 
-    // Smooth time scale: hold to slow (mouse/touch or spacebar)
-    const spaceHeld =
-      input.keysDown.has(' ') ||
-      input.keysDown.has('space') ||
-      input.keysDown.has('spacebar');
-    const target = input.pointerDown || spaceHeld ? SLOW_TARGET : 1;
-    world.current.timeScale = THREE.MathUtils.lerp(
-      world.current.timeScale,
-      target,
-      1 - Math.exp(-SLOW_LERP * delta)
-    );
-    const worldDt = delta * world.current.timeScale;
+    w.realTime += delta;
 
-    run.slow = world.current.timeScale < 0.85;
-
-    // Speed ramps with score (feels like "leveling")
-    run.speed = BASE_SPEED + run.score * SPEED_RAMP;
-
-    // Forward gameplay progress (constant speed) vs. visual forward motion (time-scaled).
-    world.current.z += run.speed * delta;
-    world.current.renderZ += run.speed * worldDt;
-    const zOffset = world.current.renderZ - world.current.z;
-
-    // Bounce sideways (time-scaled so slow-mo affects the lateral motion only).
-    const laneHalf = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
-    const bound = laneHalf - BALL_RADIUS;
-    world.current.x += world.current.vx * worldDt;
-    if (world.current.x > bound) {
-      world.current.x = bound;
-      world.current.vx *= -1;
-    }
-    if (world.current.x < -bound) {
-      world.current.x = -bound;
-      world.current.vx *= -1;
+    if (holdInput.isHolding && run.slowEnergy > 0) {
+      run.slowEnergy = Math.max(
+        0,
+        run.slowEnergy - GAME_TUNING.energy.drainPerSecond * delta
+      );
+    } else {
+      run.slowEnergy = Math.min(
+        1,
+        run.slowEnergy + GAME_TUNING.energy.regenPerSecond * delta
+      );
     }
 
-    // Update ball + shadow + slow ring
-    ballRef.current.position.set(
-      world.current.x,
-      BALL_RADIUS + 0.02,
-      world.current.renderZ
-    );
-    shadowRef.current.position.set(
-      world.current.x,
-      0.01,
-      world.current.renderZ
-    );
-    slowRingRef.current.position.set(
-      world.current.x,
-      BALL_RADIUS + 0.02,
-      world.current.renderZ
-    );
-    slowRingRef.current.scale.setScalar(run.slow ? 1.15 : 0.95);
-    (slowRingRef.current.material as THREE.MeshBasicMaterial).opacity = run.slow
-      ? 0.35
-      : 0.15;
+    const canSlow = run.slowEnergy > 0.001;
+    w.targetScale =
+      holdInput.isHolding && canSlow ? GAME_TUNING.slow.factor : 1;
+    const rampLambda =
+      w.targetScale < w.timeScale
+        ? GAME_TUNING.slow.lambdaIn
+        : GAME_TUNING.slow.lambdaOut;
+    w.timeScale = expDamp(w.timeScale, w.targetScale, rampLambda, delta);
 
-    // Camera follow
-    cam.position.set(world.current.x + 4.6, 5.5, world.current.renderZ - 4.6);
-    cam.lookAt(world.current.x, 0.0, world.current.renderZ + LOOK_AHEAD);
+    const gameDt = delta * w.timeScale;
+    w.gameTime += gameDt;
 
-    // Recycle track segments
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      if (seg.z < world.current.z - SEG_LEN) {
-        seg.z += SEG_COUNT * SEG_LEN;
-      }
-      const g = segmentGroupRefs.current[i];
-      if (g) g.position.z = seg.z + zOffset;
+    run.targetScale = w.targetScale;
+    run.timeScale = w.timeScale;
+    run.slowStrength = THREE.MathUtils.clamp(
+      (1 - w.timeScale) / (1 - GAME_TUNING.slow.factor),
+      0,
+      1
+    );
+    run.slow = run.slowStrength > 0.08;
+
+    run.speed =
+      GAME_TUNING.forward.baseSpeed + run.score * GAME_TUNING.forward.scoreRamp;
+    w.runnerDistance += run.speed * gameDt;
+    run.distance = w.runnerDistance;
+
+    w.x += w.sideDir * GAME_TUNING.side.speed * delta;
+    const bound = LANE_HALF - BALL_RADIUS;
+    if (w.x > bound) {
+      w.x = bound;
+      w.sideDir = -1;
+      w.bouncePulse = 1;
+    } else if (w.x < -bound) {
+      w.x = -bound;
+      w.sideDir = 1;
+      w.bouncePulse = 1;
     }
+    w.bouncePulse = expDamp(w.bouncePulse, 0, 12, delta);
+    w.ringPulse += delta * (run.slow ? 8 : 4);
 
-    // Obstacle logic
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
+      if (!o.active) continue;
+      if (o.z < w.runnerDistance - GAME_TUNING.spawn.respawnBehind) {
+        o.active = false;
+        o.hasGift = false;
+        o.hasStar = false;
+        o.starCollected = true;
+        o.giftCollected = true;
+        const group = obstacleGroupRefs.current[i];
+        if (group) group.visible = false;
+      }
+    }
 
-      // score when passed
-      if (!o.passed && world.current.z > o.z + 0.8) {
+    fillSpawnHorizon();
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.z < w.runnerDistance - SEG_LEN) {
+        seg.z += SEG_COUNT * SEG_LEN;
+      }
+      const group = segmentGroupRefs.current[i];
+      if (group) group.position.z = seg.z;
+    }
+
+    const ringLoopLength =
+      GAME_TUNING.tunnel.ringCount * GAME_TUNING.tunnel.spacing;
+    for (let i = 0; i < tunnelRings.length; i++) {
+      const ring = tunnelRings[i];
+      if (ring.z < w.runnerDistance - GAME_TUNING.tunnel.spacing) {
+        ring.z += ringLoopLength;
+      }
+      const mesh = tunnelRingRefs.current[i];
+      if (mesh) {
+        mesh.position.z = ring.z;
+        mesh.rotation.z = w.realTime * 0.12 + i * 0.22;
+        const ringMaterial = mesh.material as THREE.MeshBasicMaterial;
+        ringMaterial.opacity = 0.08 + run.slowStrength * 0.16;
+      }
+    }
+
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i];
+      if (!o.active) continue;
+
+      if (!o.passed && w.runnerDistance > o.z + 0.8) {
         o.passed = true;
         run.score += 1;
       }
 
-      // pickups (stars)
       if (o.hasStar && !o.starCollected) {
-        const dx = Math.abs(world.current.x - pickupX(o));
-        const dz = Math.abs(world.current.z - o.z);
+        const dx = Math.abs(w.x - pickupX(o));
+        const dz = Math.abs(w.runnerDistance - o.z);
         if (dx < 0.38 && dz < 0.55) {
           o.starCollected = true;
           run.starsThisRun += 1;
+          run.slowEnergy = Math.min(1, run.slowEnergy + 0.08);
           addStars(1);
-          save();
           const star = starRefs.current[i];
           if (star) star.visible = false;
         }
       }
+
       if (o.hasGift && !o.giftCollected) {
-        const dx = Math.abs(world.current.x - pickupX(o));
-        const dz = Math.abs(world.current.z - o.z);
+        const dx = Math.abs(w.x - pickupX(o));
+        const dz = Math.abs(w.runnerDistance - o.z);
         if (dx < 0.42 && dz < 0.6) {
           o.giftCollected = true;
           const bonus = Math.floor(rand(4, 8));
           run.starsThisRun += bonus;
+          run.slowEnergy = Math.min(
+            1,
+            run.slowEnergy + GAME_TUNING.energy.pickupRefill
+          );
           addStars(bonus);
-          save();
           const gift = giftRefs.current[i];
           if (gift) gift.visible = false;
         }
       }
 
-      // collision
-      const dz = Math.abs(world.current.z - o.z);
+      const dz = Math.abs(w.runnerDistance - o.z);
       if (dz < OBST_THICK / 2 + BALL_RADIUS * 0.95) {
         const { xMin, xMax } = obstacleXRange(o);
-        const inX =
-          world.current.x + BALL_RADIUS > xMin &&
-          world.current.x - BALL_RADIUS < xMax;
+        const inX = w.x + BALL_RADIUS > xMin && w.x - BALL_RADIUS < xMax;
         if (inX) {
-          // finish run
           setHighScore(run.score);
-          save();
+          holdInput.isHolding = false;
           persistState.finish();
           return;
         }
       }
 
-      // Recycle obstacles behind
-      if (o.z < world.current.z - RESPAWN_BEHIND) {
-        world.current.farZ += rand(2.25, 4.0);
-        const fresh = makeObstacle(o.id, world.current.farZ);
-        Object.assign(o, fresh);
-        syncObstacleVisual(i, zOffset);
-      }
+      const group = obstacleGroupRefs.current[i];
+      if (group) group.position.z = o.z;
 
-      // Keep visuals synced (position only)
-      const g = obstacleGroupRefs.current[i];
-      if (g) g.position.z = o.z + zOffset;
+      const block = obstacleMeshRefs.current[i];
+      if (block) {
+        const blockMaterial = block.material as THREE.MeshStandardMaterial;
+        blockMaterial.emissiveIntensity = 0.2 + run.slowStrength * 0.6;
+      }
 
       const star = starRefs.current[i];
       if (star && star.visible) {
         star.rotation.y += delta * 3.2;
         star.rotation.x += delta * 2.2;
       }
+
       const gift = giftRefs.current[i];
       if (gift && gift.visible) {
-        gift.rotation.y += delta * 1.6;
+        gift.rotation.y += delta * 1.7;
+        gift.rotation.x += delta * 0.4;
       }
     }
 
-    clearFrameInput(inputRef);
-  });
+    const ballY = BALL_RADIUS + 0.02;
+    ballRef.current.position.set(w.x, ballY, w.runnerDistance);
+    shadowRef.current.position.set(w.x, 0.01, w.runnerDistance);
 
-  const ballColor = useSnapshot(persistState).selectedBall;
+    const stretch = 1 + w.bouncePulse * 0.18 + run.slowStrength * 0.06;
+    const squeeze = 1 - w.bouncePulse * 0.1;
+    ballRef.current.scale.set(stretch, squeeze, stretch);
+
+    ballMaterialRef.current.emissive.set(
+      BALL_SKINS[snap.selectedBall]?.color ?? '#ffffff'
+    );
+    ballMaterialRef.current.emissiveIntensity = 0.08 + run.slowStrength * 0.7;
+
+    shadowMaterialRef.current.opacity = 0.16 + w.bouncePulse * 0.06;
+
+    slowRingRef.current.position.set(w.x, ballY, w.runnerDistance);
+    slowRingRef.current.rotation.set(Math.PI / 2, 0, w.realTime * 2.2);
+    const ringPulse = Math.sin(w.ringPulse) * 0.06;
+    slowRingRef.current.scale.setScalar(
+      0.9 + run.slowStrength * 0.32 + w.bouncePulse * 0.08 + ringPulse
+    );
+    slowRingMaterialRef.current.opacity = 0.12 + run.slowStrength * 0.38;
+
+    w.trailSampleAcc += delta;
+    const sampleEvery = run.slow
+      ? GAME_TUNING.trail.sampleSlow
+      : GAME_TUNING.trail.sampleNormal;
+
+    if (w.trailSampleAcc >= sampleEvery) {
+      w.trailSampleAcc = 0;
+      const recycled = w.trailPoints.pop();
+      if (recycled) {
+        recycled.set(w.x, ballY, w.runnerDistance);
+        w.trailPoints.unshift(recycled);
+      }
+    } else {
+      w.trailPoints[0].set(w.x, ballY, w.runnerDistance);
+    }
+
+    const maxTrailOpacity = run.slow
+      ? GAME_TUNING.trail.maxOpacitySlow
+      : GAME_TUNING.trail.maxOpacity;
+
+    for (let i = 0; i < GAME_TUNING.trail.length; i++) {
+      const trailMesh = trailRefs.current[i];
+      if (!trailMesh) continue;
+
+      const p = w.trailPoints[i];
+      trailMesh.position.copy(p);
+
+      const t = 1 - i / (GAME_TUNING.trail.length - 1);
+      const scale = BALL_RADIUS * (0.55 + t * 0.55) * (run.slow ? 1.18 : 1);
+      trailMesh.scale.setScalar(scale);
+
+      const trailMaterial = trailMesh.material as THREE.MeshStandardMaterial;
+      trailMaterial.opacity = maxTrailOpacity * t * t;
+      trailMaterial.color.set(run.slow ? THEME.trailSlow : THEME.trailBase);
+      trailMaterial.emissive.set(run.slow ? THEME.trailSlow : THEME.trailBase);
+      trailMaterial.emissiveIntensity = (run.slow ? 1 : 0.45) * t;
+    }
+
+    if (w.wasSlow && !run.slow) {
+      w.releaseKick = 1;
+    }
+    w.wasSlow = run.slow;
+    w.releaseKick = expDamp(
+      w.releaseKick,
+      0,
+      GAME_TUNING.camera.releaseDamp,
+      delta
+    );
+
+    w.cameraX = expDamp(
+      w.cameraX,
+      w.x + GAME_TUNING.camera.offsetX,
+      GAME_TUNING.camera.followLambda,
+      delta
+    );
+    w.cameraZ = expDamp(
+      w.cameraZ,
+      w.runnerDistance + GAME_TUNING.camera.offsetZ,
+      GAME_TUNING.camera.followLambda,
+      delta
+    );
+    w.cameraZoom = expDamp(
+      w.cameraZoom,
+      run.slow ? GAME_TUNING.camera.slowZoom : GAME_TUNING.camera.baseZoom,
+      GAME_TUNING.camera.zoomLambda,
+      delta
+    );
+
+    const shake =
+      Math.sin(w.realTime * 90) *
+      GAME_TUNING.camera.releaseShake *
+      w.releaseKick;
+
+    cam.position.set(
+      w.cameraX + shake,
+      GAME_TUNING.camera.height + w.releaseKick * 0.08,
+      w.cameraZ - shake * 0.5
+    );
+    cam.zoom = w.cameraZoom;
+    cam.updateProjectionMatrix();
+    cam.lookAt(w.x, 0, w.runnerDistance + GAME_TUNING.camera.lookAhead);
+
+    run.vignette = THREE.MathUtils.clamp(
+      run.slowStrength * 0.8 + w.releaseKick * 0.3,
+      0,
+      1
+    );
+
+    w.fps = expDamp(w.fps, 1 / Math.max(delta, 0.0001), 10, delta);
+    run.fps = w.fps;
+  });
 
   return (
     <>
       <OrthographicCamera
         ref={cameraRef}
         makeDefault
-        zoom={90}
+        zoom={GAME_TUNING.camera.baseZoom}
         near={0.1}
         far={1000}
-        position={[4.6, 5.5, -4.6]}
+        position={[
+          GAME_TUNING.camera.offsetX,
+          GAME_TUNING.camera.height,
+          GAME_TUNING.camera.offsetZ,
+        ]}
       />
 
-      <color attach="background" args={['#0a76e8']} />
+      <color attach="background" args={[THEME.background]} />
+      <fog attach="fog" args={[THEME.fog, 9, 34]} />
 
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[6, 10, 4]} intensity={1.2} />
+      <ambientLight intensity={0.55} />
+      <directionalLight
+        position={[6, 10, 4]}
+        intensity={1.05}
+        color="#eff7ff"
+      />
+      <pointLight
+        position={[0, 2.3, 2]}
+        intensity={2.2}
+        distance={18}
+        color="#2fffe0"
+      />
+      <pointLight
+        position={[0, 2.6, -4]}
+        intensity={1.6}
+        distance={20}
+        color="#7ea4ff"
+      />
 
-      {/* Track segments */}
       {segments.map((seg, i) => (
         <group
           key={seg.id}
@@ -443,50 +782,79 @@ function SlowMoScene() {
           }}
           position={[0, 0, seg.z]}
         >
-          {/* Floor */}
           <mesh position={[0, -TRACK_THICK / 2, SEG_LEN / 2]}>
             <boxGeometry args={[TRACK_WIDTH, TRACK_THICK, SEG_LEN]} />
-            <meshStandardMaterial color="#3a3a3f" roughness={0.85} />
+            <meshStandardMaterial
+              color={THEME.track}
+              roughness={0.78}
+              metalness={0.08}
+            />
           </mesh>
 
-          {/* Rails */}
           <mesh
             position={[
               -(TRACK_WIDTH / 2 - RAIL_WIDTH / 2),
-              TRACK_THICK * 0.15,
+              TRACK_THICK * 0.16,
               SEG_LEN / 2,
             ]}
           >
-            <boxGeometry args={[RAIL_WIDTH, TRACK_THICK * 1.15, SEG_LEN]} />
-            <meshStandardMaterial color="#34d3c7" roughness={0.55} />
+            <boxGeometry args={[RAIL_WIDTH, TRACK_THICK * 1.2, SEG_LEN]} />
+            <meshStandardMaterial
+              color={THEME.rails}
+              emissive={THEME.rails}
+              emissiveIntensity={0.45}
+              roughness={0.32}
+            />
           </mesh>
+
           <mesh
             position={[
               TRACK_WIDTH / 2 - RAIL_WIDTH / 2,
-              TRACK_THICK * 0.15,
+              TRACK_THICK * 0.16,
               SEG_LEN / 2,
             ]}
           >
-            <boxGeometry args={[RAIL_WIDTH, TRACK_THICK * 1.15, SEG_LEN]} />
-            <meshStandardMaterial color="#34d3c7" roughness={0.55} />
+            <boxGeometry args={[RAIL_WIDTH, TRACK_THICK * 1.2, SEG_LEN]} />
+            <meshStandardMaterial
+              color={THEME.rails}
+              emissive={THEME.rails}
+              emissiveIntensity={0.45}
+              roughness={0.32}
+            />
           </mesh>
 
-          {/* subtle stripe every other segment */}
-          {seg.id % 2 === 0 && (
-            <mesh
-              position={[0, 0.001, SEG_LEN / 2]}
-              rotation={[-Math.PI / 2, 0, 0]}
-            >
-              <planeGeometry
-                args={[TRACK_WIDTH - RAIL_WIDTH * 2 - 0.12, 0.14]}
-              />
-              <meshBasicMaterial color="#ffffff" opacity={0.18} transparent />
-            </mesh>
-          )}
+          <mesh
+            position={[0, 0.003, SEG_LEN / 2]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <planeGeometry args={[TRACK_WIDTH - RAIL_WIDTH * 2 - 0.14, 0.14]} />
+            <meshBasicMaterial
+              color={THEME.stripe}
+              transparent
+              opacity={seg.id % 2 === 0 ? 0.2 : 0.08}
+            />
+          </mesh>
         </group>
       ))}
 
-      {/* Obstacles + pickups */}
+      {tunnelRings.map((ring, i) => (
+        <mesh
+          key={ring.id}
+          ref={(el) => {
+            tunnelRingRefs.current[i] = el;
+          }}
+          position={[0, 0.48, ring.z]}
+          rotation={[0, 0, i * 0.22]}
+        >
+          <torusGeometry args={[GAME_TUNING.tunnel.radius, 0.035, 12, 52]} />
+          <meshBasicMaterial
+            color={THEME.tunnelRing}
+            transparent
+            opacity={0.08}
+          />
+        </mesh>
+      ))}
+
       {obstacles.map((o, i) => (
         <group
           key={o.id}
@@ -494,6 +862,7 @@ function SlowMoScene() {
             obstacleGroupRefs.current[i] = el;
           }}
           position={[0, 0, o.z]}
+          visible={o.active}
         >
           <mesh
             ref={(el) => {
@@ -501,14 +870,17 @@ function SlowMoScene() {
             }}
             position={[0, OBST_HEIGHT / 2, 0]}
             scale={[o.lenX, OBST_HEIGHT, OBST_THICK]}
-            castShadow={false}
-            receiveShadow={false}
           >
             <boxGeometry args={[1, 1, 1]} />
-            <meshStandardMaterial color={o.color} roughness={0.65} />
+            <meshStandardMaterial
+              color={o.color}
+              emissive={o.color}
+              emissiveIntensity={0.2}
+              roughness={0.5}
+              metalness={0.05}
+            />
           </mesh>
 
-          {/* Star */}
           <mesh
             ref={(el) => {
               starRefs.current[i] = el;
@@ -519,12 +891,13 @@ function SlowMoScene() {
             <octahedronGeometry args={[0.18, 0]} />
             <meshStandardMaterial
               color="#ffd36a"
-              roughness={0.25}
-              metalness={0.2}
+              emissive="#ffd36a"
+              emissiveIntensity={0.35}
+              roughness={0.2}
+              metalness={0.28}
             />
           </mesh>
 
-          {/* Gift */}
           <mesh
             ref={(el) => {
               giftRefs.current[i] = el;
@@ -535,55 +908,184 @@ function SlowMoScene() {
             <boxGeometry args={[0.22, 0.22, 0.22]} />
             <meshStandardMaterial
               color="#ffffff"
-              roughness={0.2}
+              emissive="#fff0aa"
+              emissiveIntensity={0.25}
+              roughness={0.22}
               metalness={0.1}
             />
           </mesh>
         </group>
       ))}
 
-      {/* Ball */}
+      {Array.from({ length: GAME_TUNING.trail.length }, (_, i) => (
+        <mesh
+          key={`trail-${i}`}
+          ref={(el) => {
+            trailRefs.current[i] = el;
+          }}
+          position={[0, BALL_RADIUS + 0.02, 0]}
+        >
+          <sphereGeometry args={[BALL_RADIUS * 0.52, 16, 16]} />
+          <meshStandardMaterial
+            color={THEME.trailBase}
+            emissive={THEME.trailBase}
+            emissiveIntensity={0.45}
+            roughness={0.2}
+            metalness={0.15}
+            transparent
+            opacity={0}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
+
       <mesh ref={ballRef} position={[0, BALL_RADIUS, 0]}>
         <sphereGeometry args={[BALL_RADIUS, 28, 28]} />
         <meshStandardMaterial
-          color={BALL_SKINS[ballColor]?.color ?? '#ffffff'}
+          ref={ballMaterialRef}
+          color={BALL_SKINS[snap.selectedBall]?.color ?? '#ffffff'}
+          emissive={BALL_SKINS[snap.selectedBall]?.color ?? '#ffffff'}
+          emissiveIntensity={0.08}
           roughness={0.25}
-          metalness={0.05}
+          metalness={0.08}
         />
       </mesh>
 
-      {/* Shadow */}
       <mesh
         ref={shadowRef}
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0.01, 0]}
       >
-        <circleGeometry args={[BALL_RADIUS * 1.15, 20]} />
-        <meshBasicMaterial color="#000000" opacity={0.22} transparent />
+        <circleGeometry args={[BALL_RADIUS * 1.18, 20]} />
+        <meshBasicMaterial
+          ref={shadowMaterialRef}
+          color="#000000"
+          opacity={0.16}
+          transparent
+        />
       </mesh>
 
-      {/* Slow ring */}
       <mesh
         ref={slowRingRef}
         rotation={[Math.PI / 2, 0, 0]}
         position={[0, BALL_RADIUS + 0.02, 0]}
       >
         <torusGeometry args={[BALL_RADIUS * 0.9, 0.05, 12, 32]} />
-        <meshBasicMaterial color="#b6ffcc" opacity={0.15} transparent />
+        <meshBasicMaterial
+          ref={slowRingMaterialRef}
+          color={THEME.ring}
+          opacity={0.12}
+          transparent
+        />
       </mesh>
     </>
   );
 }
 
-// -----------------------------
-// HUD / Overlay
-// -----------------------------
+function SlowMoHoldInputLayer() {
+  const snap = useSnapshot(persistState);
+  const activePointerId = useRef<number | null>(null);
+  const pointerHolding = useRef(false);
+  const keyHolding = useRef(false);
+
+  const syncHoldState = () => {
+    holdInput.isHolding =
+      snap.phase === 'playing' &&
+      (pointerHolding.current || keyHolding.current);
+  };
+
+  const releasePointer = () => {
+    activePointerId.current = null;
+    pointerHolding.current = false;
+  };
+
+  const clearAllHolds = () => {
+    releasePointer();
+    keyHolding.current = false;
+    holdInput.isHolding = false;
+  };
+
+  useEffect(() => {
+    if (snap.phase !== 'playing') {
+      clearAllHolds();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap.phase]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (snap.phase !== 'playing') return;
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      event.preventDefault();
+      keyHolding.current = true;
+      syncHoldState();
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' && event.key !== ' ') return;
+      keyHolding.current = false;
+      syncHoldState();
+    };
+
+    const onBlur = () => {
+      clearAllHolds();
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        clearAllHolds();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap.phase]);
+
+  const releaseFromPointerEvent = (event: { pointerId: number }) => {
+    if (event.pointerId !== activePointerId.current) return;
+    releasePointer();
+    syncHoldState();
+  };
+
+  return (
+    <div
+      className={`absolute inset-0 ${snap.phase === 'playing' ? 'pointer-events-auto' : 'pointer-events-none'}`}
+      style={{ touchAction: 'none' }}
+      onPointerDown={(event) => {
+        if (snap.phase !== 'playing') return;
+        if (activePointerId.current !== null) return;
+        activePointerId.current = event.pointerId;
+        pointerHolding.current = true;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        syncHoldState();
+      }}
+      onPointerUp={releaseFromPointerEvent}
+      onPointerCancel={releaseFromPointerEvent}
+      onLostPointerCapture={releaseFromPointerEvent}
+      onPointerLeave={(event) => {
+        if (event.pointerId !== activePointerId.current) return;
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+          releasePointer();
+          syncHoldState();
+        }
+      }}
+    />
+  );
+}
+
 function SlowMoOverlay() {
   const snap = useSnapshot(persistState);
-  const s = useSnapshot(persistState);
   const r = useSnapshot(run);
-
-  const canUnlock = (id: number) => canUnlockBall(id);
 
   const handleTapStart = () => {
     if (snap.phase === 'menu') persistState.start();
@@ -597,38 +1099,81 @@ function SlowMoOverlay() {
     if (snap.phase === 'finish') persistState.backToMenu();
   };
 
+  const energyPct = Math.round(r.slowEnergy * 100);
+
   return (
     <div className="absolute inset-0 pointer-events-none select-none">
-      {/* Top HUD */}
-      {snap.phase === 'playing' && (
-        <div className="absolute top-4 left-0 right-0 flex items-center justify-center">
-          <div className="px-5 py-2 rounded-full bg-black/25 text-white font-bold text-4xl tracking-wide">
-            {r.score}
-          </div>
-        </div>
-      )}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `radial-gradient(circle at 50% 42%, rgba(7,14,26,0) 34%, rgba(2,4,12,${0.38 + r.vignette * 0.42}) 100%)`,
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          background: `rgba(92, 178, 255, ${0.03 + r.vignette * 0.12})`,
+          mixBlendMode: 'screen',
+        }}
+      />
 
       {snap.phase === 'playing' && (
-        <div className="absolute top-4 right-4 flex items-center gap-2">
-          <div className="px-3 py-2 rounded-full bg-black/25 text-white font-semibold">
-            ★ {s.stars}
+        <>
+          <div className="absolute top-4 left-0 right-0 flex items-center justify-center">
+            <div className="px-5 py-2 rounded-full bg-black/35 text-white font-bold text-4xl tracking-wide border border-white/20">
+              {r.score}
+            </div>
           </div>
-          {r.slow && (
-            <div className="px-3 py-2 rounded-full bg-white/20 text-white font-semibold">
-              SLOW
+
+          <div className="absolute top-4 right-4 flex items-center gap-2">
+            <div className="px-3 py-2 rounded-full bg-black/30 text-white font-semibold border border-white/15">
+              Star {snap.stars}
+            </div>
+            {r.slow && (
+              <div className="px-3 py-2 rounded-full bg-cyan-200/20 text-cyan-50 font-semibold border border-cyan-100/30">
+                SLOW x{r.timeScale.toFixed(2)}
+              </div>
+            )}
+          </div>
+
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[min(360px,80vw)]">
+            <div className="px-4 py-3 rounded-2xl bg-black/35 border border-white/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between text-xs tracking-wide text-cyan-50/85 mb-2">
+                <span>Slow Energy</span>
+                <span>{energyPct}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-black/45 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-300 via-emerald-300 to-lime-300"
+                  style={{ width: `${energyPct}%` }}
+                />
+              </div>
+              <div className="mt-2 text-[11px] text-white/75 text-center">
+                Hold anywhere or press Space
+              </div>
+            </div>
+          </div>
+
+          {isDev && (
+            <div className="absolute left-4 bottom-4 px-3 py-2 rounded-lg bg-black/50 text-[11px] text-cyan-100 font-mono leading-5 border border-cyan-100/20">
+              <div>FPS: {r.fps.toFixed(0)}</div>
+              <div>timeScale: {r.timeScale.toFixed(3)}</div>
+              <div>targetScale: {r.targetScale.toFixed(2)}</div>
+              <div>forwardSpeed: {r.speed.toFixed(2)}</div>
+              <div>slowEnergy: {r.slowEnergy.toFixed(2)}</div>
+              <div>distance: {r.distance.toFixed(1)}</div>
             </div>
           )}
-        </div>
+        </>
       )}
 
-      {/* Menu */}
       {snap.phase === 'menu' && (
         <div
           className="absolute inset-0 flex flex-col items-center justify-between p-6 pointer-events-auto cursor-pointer"
           onClick={handleTapStart}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
               handleTapStart();
             }
           }}
@@ -638,74 +1183,74 @@ function SlowMoOverlay() {
         >
           <div />
 
-          <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex flex-col items-center gap-3 text-center max-w-md">
             <div className="text-6xl font-black text-white drop-shadow">
               SlowMo
             </div>
-            <div className="text-white/90 text-lg max-w-sm">
-              Hold to slow time. Let the ball bounce into the safe lane, then
-              release.
+            <div className="text-cyan-50/95 text-lg">
+              Bend time to survive. Lateral rhythm stays alive while forward
+              motion slows.
             </div>
             <div className="text-white/80 text-sm">
-              Collect ★ to unlock new balls.
+              Hold anywhere to slow. Release to surge.
             </div>
             <div className="text-white/70 text-xs">
-              Inspired by “Slow Mo” (Ketchapp & WildBeep).
+              Collect stars and gifts to unlock skins and refill slow energy.
             </div>
           </div>
 
           <div
             className="w-full max-w-md flex flex-col gap-4"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
-            {/* Ball picker */}
-            <div className="bg-black/25 rounded-2xl p-4">
+            <div className="bg-black/35 rounded-2xl p-4 border border-white/20 backdrop-blur-sm">
               <div className="text-white font-semibold mb-3">Balls</div>
               <div className="flex gap-2 flex-wrap">
-                {BALL_SKINS.map((b) => {
-                  const unlocked = s.unlockedBallIds.includes(b.id);
-                  const selected = s.selectedBall === b.id;
-                  const afford = canUnlock(b.id);
+                {BALL_SKINS.map((skin) => {
+                  const unlocked = snap.unlockedBallIds.includes(skin.id);
+                  const selected = snap.selectedBall === skin.id;
+                  const afford = canUnlockBall(skin.id);
 
                   return (
                     <button
-                      key={b.id}
+                      key={skin.id}
                       className={`relative w-14 h-14 rounded-full border-2 ${selected ? 'border-white' : 'border-white/30'} ${unlocked ? '' : 'opacity-70'}`}
-                      style={{ background: b.color }}
+                      style={{ background: skin.color }}
                       onClick={() => {
                         if (unlocked) {
-                          setSelectedBall(b.id);
-                          save();
+                          setSelectedBall(skin.id);
                           return;
                         }
                         if (afford) {
-                          unlockBall(b.id);
-                          setSelectedBall(b.id);
-                          save();
+                          unlockBall(skin.id);
+                          setSelectedBall(skin.id);
                         }
                       }}
-                      title={unlocked ? b.name : `${b.name} — ${b.cost}★`}
+                      title={
+                        unlocked ? skin.name : `${skin.name} - ${skin.cost}★`
+                      }
                     >
                       {!unlocked && (
-                        <div className="absolute inset-0 rounded-full bg-black/35 flex items-center justify-center text-white text-xs font-bold">
-                          {b.cost}★
+                        <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center text-white text-xs font-bold">
+                          {skin.cost}★
                         </div>
                       )}
                     </button>
                   );
                 })}
               </div>
-              <div className="text-white/80 text-sm mt-3">Stars: {s.stars}</div>
+              <div className="text-white/85 text-sm mt-3">
+                Stars: {snap.stars}
+              </div>
             </div>
 
-            <div className="text-center text-white/90 font-semibold">
+            <div className="text-center text-white/90 font-semibold tracking-wide">
               TAP TO START
             </div>
           </div>
         </div>
       )}
 
-      {/* Game Over */}
       {snap.phase === 'finish' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6">
           <div className="text-white text-5xl font-black drop-shadow">
@@ -714,8 +1259,8 @@ function SlowMoOverlay() {
           <div className="text-white/90 text-xl font-bold">
             Score: {r.score}
           </div>
-          <div className="text-white/70">Best: {s.highScore}</div>
-          <div className="text-white/80">★ +{r.starsThisRun} this run</div>
+          <div className="text-white/70">Best: {snap.highScore}</div>
+          <div className="text-white/80">Star +{r.starsThisRun} this run</div>
 
           <div className="pointer-events-auto flex gap-3 mt-4">
             <button
@@ -725,15 +1270,15 @@ function SlowMoOverlay() {
               Replay
             </button>
             <button
-              className="px-6 py-3 rounded-xl bg-black/40 text-white font-bold"
+              className="px-6 py-3 rounded-xl bg-black/45 text-white font-bold"
               onClick={handleBackToMenu}
             >
               Menu
             </button>
           </div>
 
-          <div className="text-white/60 text-xs mt-4 text-center">
-            Tip: hold SLOW longer to let the ball bounce to the other side.
+          <div className="text-white/65 text-xs mt-4 text-center max-w-xs">
+            Time your holds early, then release through clean lanes.
           </div>
         </div>
       )}
@@ -753,6 +1298,7 @@ export default function SlowMo() {
       <SlowMoScene />
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="fixed inset-0 pointer-events-auto select-none">
+          <SlowMoHoldInputLayer />
           <SlowMoOverlay />
         </div>
       </Html>
