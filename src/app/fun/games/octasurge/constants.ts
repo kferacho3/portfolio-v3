@@ -2,60 +2,90 @@ export const OCTA_SURGE_TITLE = 'Octa Surge';
 
 export const STORAGE_KEYS = {
   best: 'rachos-fun-octasurge-best',
+  bestScore: 'rachos-fun-octasurge-best-score',
   totalCollectibles: 'rachos-fun-octasurge-collectibles',
   totalSpecial: 'rachos-fun-octasurge-special',
+  totalBoost: 'rachos-fun-octasurge-boost',
+  totalShield: 'rachos-fun-octasurge-shield',
 };
 
 export const GAME = {
   faces: 8,
-  runSeconds: 60,
+  runSeconds: 70,
 
   // Tunnel
   apothem: 3.6,
-  tunnelLength: 140,
+  tunnelLength: 150,
 
   // Player (fixed at bottom)
-  playerInset: 0.35,
-  playerZ: 0.7,
-  playerDepth: 0.5, // z-extent half-length for overlap-based hit detection
+  playerInset: 0.36,
+  playerZ: 0.75,
+  playerDepth: 0.54,
 
-  // Controls — smoother, more responsive
-  keyRotationSpeed: 2.6, // rad/s
-  dragRotationFactor: 0.0055,
-  rotationEase: 8, // lower = smoother easing (less snappy)
+  // Controls
+  keyRotationSpeed: 3.15,
+  dragRotationFactor: 0.007,
+  rotationEase: 11,
 
-  // Motion — faster over time
-  baseSpeed: 16,
-  speedRamp: 1.2, // end of run: 2.2x speed
-  spawnDistance: 110,
+  // Motion
+  baseSpeed: 17,
+  speedRamp: 1.45,
+  spawnDistance: 128,
 
   // Obstacles
-  obstacleCount: 18,
-  spawnZMin: -110,
-  spawnZMax: -8,
-  respawnBehind: 120,
-  baseHazard: 0.12,
-  hazardRamp: 0.4,
+  obstacleCount: 24,
+  obstacleDepth: 2.35,
+  wedgeScaleX: 1.45,
+  baseHazard: 0.16,
+  hazardRamp: 0.5,
 
-  // Collision — robust hit detection: exact face match + narrow tolerance
-  obstacleDepth: 2.2,
-  /** Same-face: use exact face index; small tolerance for rotation blur */
-  faceHitTightness: 0.42,
-  collectibleFaceTolerance: 0.55,
+  // Collision
+  faceHitTightness: 0.4,
+  collectibleFaceTolerance: 0.62,
+  nearMissFaceTolerance: 0.9,
 
-  // Collectibles — generous but not trivial
-  collectibleHitRadius: 0.55,
-  specialHitRadius: 0.42,
+  // Collectibles
+  collectibleHitRadius: 0.58,
+  specialHitRadius: 0.46,
+  powerupHitRadius: 0.54,
+  collectibleCount: 14,
+  specialCollectibleCount: 5,
+  boostCollectibleCount: 3,
+  shieldCollectibleCount: 2,
+  collectibleGapLeadMin: 1.9,
+  collectibleGapLeadMax: 4.4,
+  specialZOffsetMin: 1.35,
+  specialZOffsetMax: 2.65,
+  powerupZOffsetMin: 2.1,
+  powerupZOffsetMax: 4.8,
 
-  // Collectible placement — reachable normals, achievable specials
-  collectibleCount: 12,
-  specialCollectibleCount: 4,
-  collectibleGapLeadMin: 1.8,
-  collectibleGapLeadMax: 4,
-  specialZOffsetMin: 1.2,
-  specialZOffsetMax: 2.4,
+  // Boost / shield / surge systems
+  boostDuration: 2.8,
+  boostSpeedMultiplier: 1.3,
+  boostScoreMultiplier: 1.25,
+  maxShieldCharges: 2,
+  invulnDuration: 0.45,
+  shieldInvulnDuration: 0.8,
+  surgeSlowScale: 0.58,
+  surgeDrainRate: 48,
+  surgeRechargeRate: 14,
+  surgeBoostRechargeRate: 12,
+  surgeGainNormal: 8,
+  surgeGainSpecial: 14,
+  surgeGainPowerup: 20,
 
-  // Post-collect — never die from collectible overlap
-  invulnDuration: 0.35,
-  collectionEffectLife: 0.5,
+  // Scoring
+  distanceScoreFactor: 1.85,
+  nearMissScore: 28,
+  comboWindow: 2.1,
+  comboStep: 0.09,
+  pointsNormal: 24,
+  pointsSpecial: 78,
+  pointsBoost: 110,
+  pointsShield: 88,
+
+  // FX
+  ringCount: 30,
+  collectionEffectLife: 0.72,
+  impactEffectLife: 0.62,
 };

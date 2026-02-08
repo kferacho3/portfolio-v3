@@ -54,6 +54,7 @@ export const reactPongState = proxy({
 
   skins: [...reactPongSkins],
   mode: 'SoloPaddle' as ReactPongMode,
+  modeMenuOpen: true,
   graphicsMode: 'clean' as 'clean' | 'classic',
 
   wallMode: createWallModeState(),
@@ -63,6 +64,9 @@ export const reactPongState = proxy({
     if (mode === 'WallMode') {
       reactPongState.resetWallMode();
     }
+  },
+  setModeMenuOpen: (open: boolean) => {
+    reactPongState.modeMenuOpen = open;
   },
   setGraphicsMode: (mode: 'clean' | 'classic') => {
     reactPongState.graphicsMode = mode;

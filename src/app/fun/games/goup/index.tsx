@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { useThree } from '@react-three/fiber';
 import { useSnapshot } from 'valtio';
 import { goUpState } from './state';
 import { getArena, buildBackgroundCubes } from './utils';
@@ -14,7 +13,6 @@ export { goUpState } from './state';
 
 function GoUp() {
   const snap = useSnapshot(goUpState);
-  const { scene } = useThree();
 
   const [arenaIndex, setArenaIndex] = useState(0);
   const arena = useMemo(() => getArena(arenaIndex, ARENAS), [arenaIndex]);
@@ -33,9 +31,8 @@ function GoUp() {
   return (
     <group>
       <GoUpHUD arena={arena} />
-      <GoUpMenu arena={arena} onArenaPick={handleArenaPick} />
+      <GoUpMenu onArenaPick={handleArenaPick} />
       <GoUpWorld
-        arenaIndex={arenaIndex}
         setArenaIndex={setArenaIndex}
         bgCubes={bgCubes}
         arena={arena}

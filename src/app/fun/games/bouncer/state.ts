@@ -11,8 +11,54 @@ export type Palette = {
   pickupInner: string;
 };
 
-// Flat, minimal palettes inspired by classic Ketchapp-era aesthetics (original colors).
-export const palettes: Palette[] = [
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function hslToHex(h: number, s: number, l: number) {
+  const hue = ((h % 1) + 1) % 1;
+  const sat = clamp(s, 0, 1);
+  const lig = clamp(l, 0, 1);
+
+  const c = (1 - Math.abs(2 * lig - 1)) * sat;
+  const x = c * (1 - Math.abs(((hue * 6) % 2) - 1));
+  const m = lig - c / 2;
+  let r = 0;
+  let g = 0;
+  let b = 0;
+
+  if (hue < 1 / 6) {
+    r = c;
+    g = x;
+  } else if (hue < 2 / 6) {
+    r = x;
+    g = c;
+  } else if (hue < 3 / 6) {
+    g = c;
+    b = x;
+  } else if (hue < 4 / 6) {
+    g = x;
+    b = c;
+  } else if (hue < 5 / 6) {
+    r = x;
+    b = c;
+  } else {
+    r = c;
+    b = x;
+  }
+
+  const toHex = (v: number) => {
+    const n = Math.round((v + m) * 255)
+      .toString(16)
+      .padStart(2, '0');
+    return n;
+  };
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// Flat, minimal base palettes inspired by classic Ketchapp-era aesthetics.
+const basePalettes: Palette[] = [
   {
     name: 'Cream',
     bg: '#FAF9F6',
@@ -49,6 +95,32 @@ export const palettes: Palette[] = [
     pickupOuter: '#2B7A78',
     pickupInner: '#FF5A8A',
   },
+];
+
+function generatePalettePack(count: number) {
+  const generated: Palette[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = i / Math.max(1, count);
+    const hueA = (0.04 + t * 0.92 + ((i * 37) % 13) * 0.003) % 1;
+    const hueB = (hueA + 0.11 + ((i * 17) % 9) * 0.004) % 1;
+    const hueC = (hueA + 0.51 + ((i * 19) % 11) * 0.003) % 1;
+    generated.push({
+      name: `Flux ${i + 1}`,
+      bg: hslToHex(hueA, 0.46, 0.93),
+      platform: hslToHex(hueB, 0.55, 0.7),
+      spikes: hslToHex(hueC, 0.72, 0.45),
+      scoreTint: hslToHex(hueB, 0.34, 0.74),
+      pickupOuter: hslToHex((hueC + 0.07) % 1, 0.72, 0.53),
+      pickupInner: hslToHex((hueA + 0.5) % 1, 0.84, 0.56),
+    });
+  }
+  return generated;
+}
+
+// Base + large procedural set (effectively "infinite" feeling in normal play).
+export const palettes: Palette[] = [
+  ...basePalettes,
+  ...generatePalettePack(384),
 ];
 
 export type BallSkin = {

@@ -5,12 +5,10 @@ import React from 'react';
 import { useSnapshot } from 'valtio';
 import { goUpState } from '../state';
 import { ARENAS } from '../arenas';
-import type { Arena } from '../types';
 
 export const GoUpMenu: React.FC<{
-  arena: Arena;
   onArenaPick: (index: number | 'auto') => void;
-}> = ({ arena, onArenaPick }) => {
+}> = ({ onArenaPick }) => {
   const snap = useSnapshot(goUpState);
 
   if (snap.phase !== 'menu' && snap.phase !== 'gameover') return null;

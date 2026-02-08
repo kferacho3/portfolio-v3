@@ -172,6 +172,7 @@ type Particle = {
   life: number;
   age: number;
   color?: string;
+  shape?: 'square' | 'orb';
 };
 
 type Runtime = {
@@ -216,6 +217,7 @@ type Runtime = {
   phase: 'menu' | 'playing' | 'gameover';
   hitFlash: number;
   dropHeld: boolean;
+  holdCharge: number;
 };
 
 function makeRuntime(): Runtime {
@@ -254,6 +256,7 @@ function makeRuntime(): Runtime {
     phase: 'menu',
     hitFlash: 0,
     dropHeld: false,
+    holdCharge: 0,
   };
 }
 
@@ -350,6 +353,11 @@ export default function Bouncer() {
         input.keysDown.has('spacebar');
       rt.dropHeld =
         snap.phase === 'playing' ? input.pointerDown || spaceHeld : false;
+      rt.holdCharge = clamp(
+        rt.holdCharge + (rt.dropHeld ? dtReal * 1.65 : -dtReal * 1.1),
+        0,
+        1
+      );
 
       const dt = dtReal;
       // Tap to start/restart. While playing, a tap "invokes gravity" (cuts the upward arc so you can
@@ -360,7 +368,14 @@ export default function Bouncer() {
         } else if (snap.phase === 'gameover') {
           startGame(rt);
         } else if (snap.phase === 'playing') {
-          rt.vy = Math.max(rt.vy, 0) + 180;
+          const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
+          const clickBoost = 1 + rt.holdCharge * 0.45;
+          const baseImpulse = Math.max(
+            rt.bounceVy * 0.82,
+            Math.abs(rt.vy) * 0.45 + 120
+          );
+          rt.ballY = Math.min(rt.ballY, floorY - 1);
+          rt.vy = -baseImpulse * clickBoost;
 
           const tapCol = palettes[rt.paletteIdx]?.pickupOuter ?? '#2c8f5f';
           for (let i = 0; i < 4; i++) {
@@ -377,6 +392,7 @@ export default function Bouncer() {
               life: 0.35 + Math.random() * 0.25,
               age: 0,
               color: tapCol,
+              shape: 'square',
             });
           }
         }
@@ -529,6 +545,7 @@ function startGame(rt: Runtime) {
   rt.score = 0;
   rt.shownScore = 0;
   rt.hitFlash = 0;
+  rt.holdCharge = 0;
 
   rt.obstacles = [];
   rt.pickups = [];
@@ -581,7 +598,7 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
 
   // Ball physics
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
-  const gMult = rt.dropHeld ? 2.6 : 1;
+  const gMult = rt.dropHeld ? 1.35 : 1;
   rt.vy += rt.g * gMult * dt;
   rt.ballY += rt.vy * dt;
 
@@ -595,8 +612,9 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
 
   if (rt.ballY > floorY) {
     rt.ballY = floorY;
-    rt.vy = -rt.bounceVy;
-    spawnDust(rt, 14);
+    const holdBoost = 1 + rt.holdCharge * 0.55;
+    rt.vy = -rt.bounceVy * holdBoost;
+    spawnDust(rt, Math.round(14 + rt.holdCharge * 8));
   }
 
   // Scroll world + spawn obstacles/pickups.
@@ -654,7 +672,9 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
       ) {
         // Hit!
         rt.hitFlash = 1;
-        spawnShatter(rt, 26);
+        const activePalette = palettes[rt.paletteIdx] ?? palettes[0];
+        spawnShatter(rt, 20, activePalette.spikes);
+        spawnOrbDisintegration(rt, 18, activePalette.pickupOuter);
         endGame(rt);
         return;
       }
@@ -748,6 +768,7 @@ function spawnDust(rt: Runtime, n: number) {
       size: rand(2, 4),
       life: rand(0.25, 0.45),
       age: 0,
+      shape: 'square',
     });
   }
 }
@@ -764,11 +785,12 @@ function spawnConfetti(rt: Runtime, n: number) {
       size: rand(3, 7),
       life: rand(0.4, 0.8),
       age: 0,
+      shape: 'square',
     });
   }
 }
 
-function spawnShatter(rt: Runtime, n: number) {
+function spawnShatter(rt: Runtime, n: number, color?: string) {
   for (let i = 0; i < n; i++) {
     rt.particles.push({
       x: rt.ballX,
@@ -780,6 +802,28 @@ function spawnShatter(rt: Runtime, n: number) {
       size: rand(4, 10),
       life: rand(0.6, 1.1),
       age: 0,
+      color,
+      shape: 'square',
+    });
+  }
+}
+
+function spawnOrbDisintegration(rt: Runtime, n: number, color: string) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / Math.max(1, n)) * Math.PI * 2 + rand(-0.15, 0.15);
+    const speed = rand(180, 620);
+    rt.particles.push({
+      x: rt.ballX,
+      y: rt.ballY,
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed - rand(20, 180),
+      rot: rand(0, Math.PI * 2),
+      vr: rand(-8, 8),
+      size: rand(4, 9),
+      life: rand(0.55, 1.05),
+      age: 0,
+      color,
+      shape: 'orb',
     });
   }
 }
@@ -879,9 +923,16 @@ function draw(
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rot);
 
-    // Color is palette-aware: mix spike and pickup color for a crisp look
-    ctx.fillStyle = fade > 0.55 ? spikes : pickupOuter;
-    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+    // Color is palette-aware by default, with per-particle override support.
+    const particleColor = p.color ?? (fade > 0.55 ? spikes : pickupOuter);
+    ctx.fillStyle = particleColor;
+    if (p.shape === 'orb') {
+      ctx.beginPath();
+      ctx.arc(0, 0, p.size * 0.52, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+    }
     ctx.restore();
   }
   ctx.restore();

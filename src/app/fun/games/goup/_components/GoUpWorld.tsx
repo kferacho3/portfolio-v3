@@ -78,6 +78,7 @@ import {
 import { clamp01, keyFor, hslToColor, easingLerp, getArena } from '../utils';
 import { ARENAS } from '../arenas';
 import type {
+  Arena,
   PathTile,
   WallPillar,
   GemBurst,
@@ -98,11 +99,10 @@ type PathPoint = {
 };
 
 export const GoUpWorld: React.FC<{
-  arenaIndex: number;
   setArenaIndex: (idx: number) => void;
   bgCubes: BackgroundCube[];
-  arena: any;
-}> = ({ arenaIndex, setArenaIndex, bgCubes, arena }) => {
+  arena: Arena;
+}> = ({ setArenaIndex, bgCubes, arena }) => {
   const { camera, scene } = useThree();
   const { paused } = useGameUIState();
   const input = useInputRef();
@@ -936,10 +936,8 @@ export const GoUpWorld: React.FC<{
 
       // Grow quickly then fade
       const growT = Math.min(1, t * 4);
-      const fadeT = Math.max(0, (t - 0.5) * 2);
 
       splat.scale = 0.1 + growT * 0.5;
-      const opacity = 1 - fadeT;
 
       w.dummy.position.set(splat.x, splat.y + 0.01, splat.z);
       w.dummy.rotation.set(-Math.PI / 2, 0, splat.age * 0.002);

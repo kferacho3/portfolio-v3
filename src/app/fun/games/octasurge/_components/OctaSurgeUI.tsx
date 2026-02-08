@@ -10,7 +10,7 @@ import { octaSurgeState } from '../state';
 const font = `'system-ui', -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
 
 const panel: CSSProperties = {
-  width: 420,
+  width: 450,
   maxWidth: '92vw',
   padding: '18px 18px 16px',
   borderRadius: 16,
@@ -23,7 +23,7 @@ const panel: CSSProperties = {
 const btn: CSSProperties = {
   padding: '10px 14px',
   borderRadius: 10,
-  border: '1px solid rgba(255,255,255,0.20)',
+  border: '1px solid rgba(255,255,255,0.2)',
   background: 'rgba(255,255,255,0.08)',
   color: 'white',
   fontFamily: font,
@@ -36,10 +36,12 @@ export function OctaSurgeUI() {
 
   const percent = (snap.progress * 100).toFixed(2);
   const bestPercent = (snap.best * 100).toFixed(2);
+  const score = Math.floor(snap.score);
+  const bestScore = Math.floor(snap.bestScore);
+  const surgePct = Math.max(0, Math.min(100, snap.surgeMeter));
 
   return (
     <Html fullscreen>
-      {/* HUD */}
       {snap.phase === 'playing' && (
         <div
           style={{
@@ -47,7 +49,7 @@ export function OctaSurgeUI() {
             inset: 0,
             pointerEvents: 'none',
             fontFamily: font,
-            color: 'rgba(255,255,255,0.95)',
+            color: 'rgba(255,255,255,0.96)',
           }}
         >
           <div
@@ -55,14 +57,19 @@ export function OctaSurgeUI() {
               position: 'absolute',
               top: 22,
               left: 22,
-              fontWeight: 900,
-              fontSize: 18,
-              letterSpacing: 0.3,
+              display: 'grid',
+              gap: 5,
+              fontWeight: 800,
+              fontSize: 13,
+              letterSpacing: 0.2,
               textShadow: '0 10px 30px rgba(0,0,0,0.35)',
             }}
           >
-            {percent}%
+            <div style={{ fontSize: 24, fontWeight: 900 }}>{score}</div>
+            <div>Progress {percent}%</div>
+            <div>Combo x{Math.max(1, snap.combo)}</div>
           </div>
+
           <div
             style={{
               position: 'absolute',
@@ -74,14 +81,66 @@ export function OctaSurgeUI() {
               fontWeight: 900,
               fontSize: 14,
               textShadow: '0 8px 24px rgba(0,0,0,0.35)',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
             }}
           >
             <span title="Collectibles this run">
               <span style={{ color: '#FBBF24' }}>◆</span> {snap.runCollectibles}
             </span>
-            <span title="Special this run">
+            <span title="Specials this run">
               <span style={{ color: '#A78BFA' }}>◆</span> {snap.runSpecial}
             </span>
+            <span title="Speed boosters">
+              <span style={{ color: '#F97316' }}>◆</span> {snap.runBoost}
+            </span>
+            <span title="Shield charges">
+              <span style={{ color: '#2DD4BF' }}>◆</span> {snap.shieldCharges}
+            </span>
+            {snap.boostActive && (
+              <span title="Speed boost active">
+                <span style={{ color: '#FB7185' }}>BOOST</span>
+              </span>
+            )}
+          </div>
+
+          <div
+            style={{
+              position: 'absolute',
+              left: 22,
+              right: 22,
+              bottom: 24,
+              maxWidth: 420,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                marginBottom: 6,
+                opacity: 0.86,
+                fontWeight: 700,
+              }}
+            >
+              Surge {Math.round(surgePct)}%
+            </div>
+            <div
+              style={{
+                height: 9,
+                borderRadius: 999,
+                background: 'rgba(255,255,255,0.14)',
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.18)',
+              }}
+            >
+              <div
+                style={{
+                  width: `${surgePct}%`,
+                  height: '100%',
+                  background:
+                    'linear-gradient(90deg, #22d3ee 0%, #60a5fa 45%, #a78bfa 100%)',
+                }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -125,7 +184,11 @@ export function OctaSurgeUI() {
               }}
             >
               <span>
-                Best: <span style={{ fontWeight: 900 }}>{bestPercent}%</span>
+                Best Progress:{' '}
+                <span style={{ fontWeight: 900 }}>{bestPercent}%</span>
+              </span>
+              <span>
+                Best Score: <span style={{ fontWeight: 900 }}>{bestScore}</span>
               </span>
               <span>
                 <span style={{ color: '#FBBF24' }}>◆</span>{' '}
@@ -136,6 +199,14 @@ export function OctaSurgeUI() {
               <span>
                 <span style={{ color: '#A78BFA' }}>◆</span>{' '}
                 <span style={{ fontWeight: 900 }}>{snap.totalSpecial}</span>
+              </span>
+              <span>
+                <span style={{ color: '#F97316' }}>◆</span>{' '}
+                <span style={{ fontWeight: 900 }}>{snap.totalBoost}</span>
+              </span>
+              <span>
+                <span style={{ color: '#2DD4BF' }}>◆</span>{' '}
+                <span style={{ fontWeight: 900 }}>{snap.totalShield}</span>
               </span>
             </div>
 
@@ -148,9 +219,9 @@ export function OctaSurgeUI() {
                   background: 'rgba(255,255,255,0.06)',
                 }}
               >
-                <div style={{ fontSize: 14, opacity: 0.9 }}>Progress</div>
+                <div style={{ fontSize: 14, opacity: 0.9 }}>Run Summary</div>
                 <div style={{ fontSize: 34, fontWeight: 900, marginTop: 4 }}>
-                  {percent}%
+                  {score}
                 </div>
                 <div
                   style={{
@@ -159,8 +230,10 @@ export function OctaSurgeUI() {
                     gap: 12,
                     fontSize: 13,
                     opacity: 0.85,
+                    flexWrap: 'wrap',
                   }}
                 >
+                  <span>{percent}%</span>
                   <span>
                     <span style={{ color: '#FBBF24' }}>◆</span> +
                     {snap.runCollectibles}
@@ -169,6 +242,14 @@ export function OctaSurgeUI() {
                     <span style={{ color: '#A78BFA' }}>◆</span> +
                     {snap.runSpecial}
                   </span>
+                  <span>
+                    <span style={{ color: '#F97316' }}>◆</span> +{snap.runBoost}
+                  </span>
+                  <span>
+                    <span style={{ color: '#2DD4BF' }}>◆</span> +
+                    {snap.runShield}
+                  </span>
+                  <span>Near misses +{snap.runNearMisses}</span>
                 </div>
               </div>
             )}
@@ -182,17 +263,21 @@ export function OctaSurgeUI() {
                 }}
                 onClick={() => octaSurgeState.start()}
               >
-                {snap.phase === 'gameover' ? 'Try Again' : 'Play'}
+                {snap.phase === 'gameover' ? 'Run It Back' : 'Play'}
               </button>
 
               <div style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.82 }}>
-                Rotate the tunnel to dodge bumps and holes. Grab{' '}
-                <span style={{ color: '#FBBF24' }}>◆</span> collectibles and{' '}
-                <span style={{ color: '#A78BFA' }}>◆</span> specials (hard but
-                achievable). Speed increases over time.
+                Rotate the tunnel to dodge bumps, holes, and wide wedge blocks.
+                Grab <span style={{ color: '#FBBF24' }}>◆</span> collectibles
+                and <span style={{ color: '#A78BFA' }}>◆</span> specials for
+                combo multipliers. Orange{' '}
+                <span style={{ color: '#F97316' }}>◆</span> triggers speed
+                boost. Teal <span style={{ color: '#2DD4BF' }}>◆</span> grants a
+                shield.
                 <br />
-                <b>Drag</b> left/right or <b>A/D</b> / <b>←/→</b>. Survive{' '}
-                {GAME.runSeconds}s.
+                <b>Drag</b> or <b>A/D</b> / <b>←/→</b> to rotate. Hold{' '}
+                <b>Space</b> to spend surge energy and slow time for clutch
+                dodges.
               </div>
             </div>
           </div>

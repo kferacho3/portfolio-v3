@@ -10,16 +10,18 @@ import HitParticles from './_components/HitParticles';
 import Paddle from './_components/Paddle';
 import ScorePopups from './_components/ScorePopups';
 import SoloWallsAssist from './_components/SoloWallsAssist';
+import ModeSelectMenu from './_components/ModeSelectMenu';
 import WallModeArena from './_components/wallmode/WallModeArena';
 import WallModeCameraSetup from './_components/wallmode/WallModeCameraSetup';
 import { reactPongState } from './state';
+import type { ReactPongMode } from './types';
 
 export { reactPongState } from './state';
 export * from './types';
 export * from './constants';
 
-const ReactPong: React.FC<{ ready?: boolean }> = ({ ready: _ready }) => {
-  const { scoreColor, ballColor, mode, scorePopups, hitEffects } =
+const ReactPong: React.FC<{ ready?: boolean }> = () => {
+  const { scoreColor, ballColor, mode, modeMenuOpen, scorePopups, hitEffects } =
     useSnapshot(reactPongState);
   const ballBodyRef = useRef<RapierRigidBody | null>(null);
 
@@ -54,6 +56,18 @@ const ReactPong: React.FC<{ ready?: boolean }> = ({ ready: _ready }) => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if (key === 'm') {
+        reactPongState.setModeMenuOpen(!reactPongState.modeMenuOpen);
+      }
+      if (key === '1') {
+        reactPongState.setMode('WallMode');
+        reactPongState.setModeMenuOpen(false);
+      }
+      if (key === '2') {
+        reactPongState.setMode('SoloPaddle');
+        reactPongState.setModeMenuOpen(false);
+      }
       if (event.key.toLowerCase() === 'r') {
         if (mode === 'WallMode') {
           reactPongState.resetWallMode();
@@ -65,6 +79,22 @@ const ReactPong: React.FC<{ ready?: boolean }> = ({ ready: _ready }) => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode]);
+
+  const handleSelectMode = (nextMode: ReactPongMode) => {
+    reactPongState.setMode(nextMode);
+    reactPongState.setModeMenuOpen(false);
+  };
+
+  if (modeMenuOpen) {
+    return (
+      <>
+        <CameraSetup />
+        <ambientLight intensity={0.28} />
+        <pointLight position={[0, 4, 8]} intensity={0.55} color="#38bdf8" />
+        <ModeSelectMenu onSelectMode={handleSelectMode} />
+      </>
+    );
+  }
 
   if (mode === 'WallMode') {
     return (
