@@ -1,4 +1,7 @@
-import type { InstancedRigidBodyProps, RapierRigidBody } from '@react-three/rapier';
+import type {
+  InstancedRigidBodyProps,
+  RapierRigidBody,
+} from '@react-three/rapier';
 import type * as THREE from 'three';
 import type { MutableRefObject } from 'react';
 import type { WorldTierName } from './constants';

@@ -52,10 +52,10 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
 
   pushPickup: (pickup) =>
     set((state) => ({
-      recentPickups: [{ ...pickup, id: pickupId++ }, ...state.recentPickups].slice(
-        0,
-        5
-      ),
+      recentPickups: [
+        { ...pickup, id: pickupId++ },
+        ...state.recentPickups,
+      ].slice(0, 5),
     })),
 
   resetProgress: () =>

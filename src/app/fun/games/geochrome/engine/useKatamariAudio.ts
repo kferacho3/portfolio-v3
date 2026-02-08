@@ -95,7 +95,9 @@ export function useKatamariAudio({
 
     const scale = Math.max(1, scaleRef.current);
     const targetRate = THREE.MathUtils.clamp(
-      AUDIO_TUNING.rollBaseRate - scale * AUDIO_TUNING.sizeToRateFalloff + speed * AUDIO_TUNING.speedToRateGain,
+      AUDIO_TUNING.rollBaseRate -
+        scale * AUDIO_TUNING.sizeToRateFalloff +
+        speed * AUDIO_TUNING.speedToRateGain,
       AUDIO_TUNING.rollMinRate,
       AUDIO_TUNING.rollMaxRate
     );
@@ -133,7 +135,11 @@ export function useKatamariAudio({
       const sizeRate = THREE.MathUtils.clamp(1.25 - size * 0.11, 0.72, 1.32);
       pop.rate(rateJitter * sizeRate);
       pop.volume(
-        THREE.MathUtils.clamp(AUDIO_TUNING.popBaseVolume + size * 0.035, 0.2, 0.8)
+        THREE.MathUtils.clamp(
+          AUDIO_TUNING.popBaseVolume + size * 0.035,
+          0.2,
+          0.8
+        )
       );
       pop.play();
     },

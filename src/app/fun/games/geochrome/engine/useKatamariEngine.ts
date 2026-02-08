@@ -4,7 +4,11 @@ import type { RapierCollider, RapierRigidBody } from '@react-three/rapier';
 import * as THREE from 'three';
 import { GROWTH_TUNING, PLAYER_TUNING, WORLD_TUNING } from './constants';
 import { useGeoChromeStore } from './store';
-import type { CollectResult, StuckAttributeBuffers, WorldRuntimeData } from './types';
+import type {
+  CollectResult,
+  StuckAttributeBuffers,
+  WorldRuntimeData,
+} from './types';
 
 interface UseKatamariEngineProps {
   seed: number;
@@ -38,8 +42,8 @@ export function useKatamariEngine({
 
   const stuckCountRef = useRef(0);
   const totalVolumeRef = useRef(0);
-  const targetRadiusRef = useRef(PLAYER_TUNING.baseRadius);
-  const currentRadiusRef = useRef(PLAYER_TUNING.baseRadius);
+  const targetRadiusRef = useRef<number>(PLAYER_TUNING.baseRadius);
+  const currentRadiusRef = useRef<number>(PLAYER_TUNING.baseRadius);
   const scaleRef = useRef(1);
 
   const colliderTimerRef = useRef(0);
@@ -52,7 +56,10 @@ export function useKatamariEngine({
   const tempWorldMatrix = useMemo(() => new THREE.Matrix4(), []);
   const tempKatamariInverse = useMemo(() => new THREE.Matrix4(), []);
   const tempLocalMatrix = useMemo(() => new THREE.Matrix4(), []);
-  const hiddenMatrix = useMemo(() => new THREE.Matrix4().makeScale(0, 0, 0), []);
+  const hiddenMatrix = useMemo(
+    () => new THREE.Matrix4().makeScale(0, 0, 0),
+    []
+  );
 
   useEffect(() => {
     worldDataRef.current = worldData;
@@ -150,7 +157,10 @@ export function useKatamariEngine({
 
       katamariGroup.updateWorldMatrix(true, false);
       worldMesh.getMatrixAt(index, tempInstanceMatrix);
-      tempWorldMatrix.multiplyMatrices(worldMesh.matrixWorld, tempInstanceMatrix);
+      tempWorldMatrix.multiplyMatrices(
+        worldMesh.matrixWorld,
+        tempInstanceMatrix
+      );
       tempKatamariInverse.copy(katamariGroup.matrixWorld).invert();
       tempLocalMatrix.multiplyMatrices(tempKatamariInverse, tempWorldMatrix);
 
@@ -161,10 +171,14 @@ export function useKatamariEngine({
 
       const worldShapeBase = index * 4;
       const stuckShapeBase = stuckIndex * 4;
-      buffers.shapeParams[stuckShapeBase + 0] = world.shapeParams[worldShapeBase + 0];
-      buffers.shapeParams[stuckShapeBase + 1] = world.shapeParams[worldShapeBase + 1];
-      buffers.shapeParams[stuckShapeBase + 2] = world.shapeParams[worldShapeBase + 2];
-      buffers.shapeParams[stuckShapeBase + 3] = world.shapeParams[worldShapeBase + 3];
+      buffers.shapeParams[stuckShapeBase + 0] =
+        world.shapeParams[worldShapeBase + 0];
+      buffers.shapeParams[stuckShapeBase + 1] =
+        world.shapeParams[worldShapeBase + 1];
+      buffers.shapeParams[stuckShapeBase + 2] =
+        world.shapeParams[worldShapeBase + 2];
+      buffers.shapeParams[stuckShapeBase + 3] =
+        world.shapeParams[worldShapeBase + 3];
 
       const worldColorBase = index * 3;
       const stuckColorBase = stuckIndex * 3;
@@ -201,7 +215,9 @@ export function useKatamariEngine({
       totalVolumeRef.current += meta.volume;
 
       const baseVolume = PLAYER_TUNING.baseRadius ** 3;
-      const target = Math.cbrt(baseVolume + totalVolumeRef.current * GROWTH_TUNING.growthK);
+      const target = Math.cbrt(
+        baseVolume + totalVolumeRef.current * GROWTH_TUNING.growthK
+      );
       targetRadiusRef.current = target;
 
       setStuckCount(stuckCountRef.current);

@@ -42,7 +42,8 @@ export function useSpringCamera({
         Math.sin(desiredHeading - headingRef.current),
         Math.cos(desiredHeading - headingRef.current)
       );
-      headingRef.current += angleDelta * Math.min(1, delta * CAMERA_TUNING.headingLerp);
+      headingRef.current +=
+        angleDelta * Math.min(1, delta * CAMERA_TUNING.headingLerp);
     }
 
     const scale = scaleRef.current;

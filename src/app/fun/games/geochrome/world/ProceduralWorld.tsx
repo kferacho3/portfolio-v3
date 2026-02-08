@@ -176,9 +176,14 @@ export default function ProceduralWorld({
   worldBodiesRef,
   onWorldReady,
 }: ProceduralWorldProps) {
-  const worldCount = liteMode ? WORLD_TUNING.liteItemCount : WORLD_TUNING.itemCount;
+  const worldCount = liteMode
+    ? WORLD_TUNING.liteItemCount
+    : WORLD_TUNING.itemCount;
 
-  const worldData = useMemo(() => makeWorldData(seed, worldCount), [seed, worldCount]);
+  const worldData = useMemo(
+    () => makeWorldData(seed, worldCount),
+    [seed, worldCount]
+  );
 
   const geometry = useMemo(() => {
     const geo = new THREE.SphereGeometry(
@@ -204,15 +209,12 @@ export default function ProceduralWorld({
   }, [worldData]);
 
   const material = useMemo(
-    () => createSupershapeMaterial(lowPerf ? RENDER_TUNING.qualityLow : RENDER_TUNING.qualityHigh),
-    []
+    () =>
+      createSupershapeMaterial(
+        lowPerf ? RENDER_TUNING.qualityLow : RENDER_TUNING.qualityHigh
+      ),
+    [lowPerf]
   );
-
-  useEffect(() => {
-    material.uniforms.uQuality.value = lowPerf
-      ? RENDER_TUNING.qualityLow
-      : RENDER_TUNING.qualityHigh;
-  }, [lowPerf, material]);
 
   useFrame((_, delta) => {
     material.uniforms.uTime.value += delta;
@@ -239,7 +241,9 @@ export default function ProceduralWorld({
       linearDamping={2.4}
       angularDamping={2.4}
       canSleep
-      collisionGroups={interactionGroups(COLLISION_GROUPS.WORLD, [COLLISION_GROUPS.PLAYER])}
+      collisionGroups={interactionGroups(COLLISION_GROUPS.WORLD, [
+        COLLISION_GROUPS.PLAYER,
+      ])}
       friction={0.95}
       restitution={0.1}
     >

@@ -1,4 +1,9 @@
-import { BallCollider, interactionGroups, RigidBody, type CollisionEnterPayload } from '@react-three/rapier';
+import {
+  BallCollider,
+  interactionGroups,
+  RigidBody,
+  type CollisionEnterPayload,
+} from '@react-three/rapier';
 import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
@@ -16,8 +21,12 @@ interface KatamariPlayerProps {
   lowPerf: boolean;
   inputRef: React.MutableRefObject<InputState>;
   scaleRef: React.MutableRefObject<number>;
-  playerBodyRef: React.MutableRefObject<import('@react-three/rapier').RapierRigidBody | null>;
-  playerColliderRef: React.MutableRefObject<import('@react-three/rapier').RapierCollider | null>;
+  playerBodyRef: React.MutableRefObject<
+    import('@react-three/rapier').RapierRigidBody | null
+  >;
+  playerColliderRef: React.MutableRefObject<
+    import('@react-three/rapier').RapierCollider | null
+  >;
   katamariGroupRef: React.MutableRefObject<THREE.Group | null>;
   stuckMeshRef: React.MutableRefObject<THREE.InstancedMesh | null>;
   onCollisionEnter: (payload: CollisionEnterPayload) => void;
@@ -140,12 +149,18 @@ export default function KatamariPlayer({
       impulse.y = 0;
       rb.applyImpulse(impulse, true);
 
-      torque.set(moveDirection.z * torquePower * delta, 0, -moveDirection.x * torquePower * delta);
+      torque.set(
+        moveDirection.z * torquePower * delta,
+        0,
+        -moveDirection.x * torquePower * delta
+      );
       rb.applyTorqueImpulse(torque, true);
     }
 
     const velocity = rb.linvel();
-    const planarSpeed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+    const planarSpeed = Math.sqrt(
+      velocity.x * velocity.x + velocity.z * velocity.z
+    );
     const scale = Math.max(1, scaleRef.current);
     const maxSpeed = PLAYER_TUNING.maxSpeed * (1 + Math.log(scale) * 0.2);
 

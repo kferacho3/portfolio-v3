@@ -15,12 +15,15 @@ export default function StartOverlay({ onStart }: StartOverlayProps) {
           transition={{ duration: 0.45 }}
           className="w-full max-w-xl rounded-3xl border border-cyan-300/40 bg-slate-950/70 p-6 text-white shadow-[0_0_80px_-26px_rgba(34,211,238,0.75)] backdrop-blur md:p-8"
         >
-          <div className="text-xs uppercase tracking-[0.25em] text-cyan-300/90">GeoChrome // Katamari Mode</div>
+          <div className="text-xs uppercase tracking-[0.25em] text-cyan-300/90">
+            GeoChrome // Katamari Mode
+          </div>
           <h1 className="mt-2 text-3xl font-black leading-tight md:text-4xl">
             Roll. Stick. Grow.
           </h1>
           <p className="mt-3 text-sm text-cyan-100/80 md:text-base">
-            Sweep through dense geometric fields, absorb smaller shapes, and scale into a chrome titan.
+            Sweep through dense geometric fields, absorb smaller shapes, and
+            scale into a chrome titan.
           </p>
 
           <div className="mt-5 grid grid-cols-1 gap-2 text-xs text-cyan-100/80 md:grid-cols-3 md:text-sm">

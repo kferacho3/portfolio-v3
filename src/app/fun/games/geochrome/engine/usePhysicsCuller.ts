@@ -6,7 +6,9 @@ import { PHYSICS_CULLING } from './constants';
 interface UsePhysicsCullerProps {
   started: boolean;
   lowPerf: boolean;
-  playerBodyRef: React.MutableRefObject<import('@react-three/rapier').RapierRigidBody | null>;
+  playerBodyRef: React.MutableRefObject<
+    import('@react-three/rapier').RapierRigidBody | null
+  >;
   worldBodiesRef: React.MutableRefObject<
     (import('@react-three/rapier').RapierRigidBody | null)[] | null
   >;
@@ -48,7 +50,10 @@ export function usePhysicsCuller({
     const activeRadiusSq = activeRadius * activeRadius;
 
     if (lowPerf) {
-      projectionMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      projectionMatrix.multiplyMatrices(
+        camera.projectionMatrix,
+        camera.matrixWorldInverse
+      );
       frustum.setFromProjectionMatrix(projectionMatrix);
     }
 
@@ -71,7 +76,8 @@ export function usePhysicsCuller({
       const p = candidate.translation();
       bodyPosition.set(p.x, p.y, p.z);
 
-      const inRadius = playerPosition.distanceToSquared(bodyPosition) <= activeRadiusSq;
+      const inRadius =
+        playerPosition.distanceToSquared(bodyPosition) <= activeRadiusSq;
       const inView = !lowPerf || frustum.containsPoint(bodyPosition);
       const shouldEnable = inRadius && inView;
 

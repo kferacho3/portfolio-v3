@@ -13,7 +13,7 @@ import {
 } from '@react-three/rapier';
 import React, { useCallback, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { PLAYER_TUNING, RENDER_TUNING, COLLISION_GROUPS } from './engine/constants';
+import { RENDER_TUNING, COLLISION_GROUPS } from './engine/constants';
 import { SpeedEffects } from './engine/SpeedEffects';
 import { useKatamariAudio } from './engine/useKatamariAudio';
 import { useKatamariEngine } from './engine/useKatamariEngine';
@@ -34,7 +34,8 @@ function AdaptivePerformanceController() {
   const targetDpr = useGeoChromeStore((state) => state.targetDpr);
 
   useEffect(() => {
-    const devicePixelRatio = typeof window !== 'undefined' ? window.devicePixelRatio : 1;
+    const devicePixelRatio =
+      typeof window !== 'undefined' ? window.devicePixelRatio : 1;
     gl.setPixelRatio(Math.min(devicePixelRatio, targetDpr));
   }, [gl, targetDpr]);
 
@@ -66,7 +67,8 @@ interface GeoChromeProps {
 const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const [worldSeed, setWorldSeed] = useState(1);
   const [worldData, setWorldData] = useState<WorldRuntimeData | null>(null);
-  const [stuckBuffers, setStuckBuffers] = useState<StuckAttributeBuffers | null>(null);
+  const [stuckBuffers, setStuckBuffers] =
+    useState<StuckAttributeBuffers | null>(null);
   const [runLiteMode, setRunLiteMode] = useState(false);
 
   const started = useGeoChromeStore((state) => state.started);
@@ -238,10 +240,18 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
             COLLISION_GROUPS.WORLD,
           ])}
         >
-          <CuboidCollider args={[320, 1, 320]} position={[0, -1, 0]} friction={1.2} />
+          <CuboidCollider
+            args={[320, 1, 320]}
+            position={[0, -1, 0]}
+            friction={1.2}
+          />
         </RigidBody>
 
-        <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+        <mesh
+          receiveShadow
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0, 0]}
+        >
           <planeGeometry args={[640, 640, 1, 1]} />
           <meshStandardMaterial
             color="#080d20"
@@ -252,7 +262,10 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
           />
         </mesh>
 
-        <gridHelper args={[640, 96, '#153c5f', '#0a1830']} position={[0, 0.02, 0]} />
+        <gridHelper
+          args={[640, 96, '#153c5f', '#0a1830']}
+          position={[0, 0.02, 0]}
+        />
 
         <KatamariPlayer
           key={`katamari-player-${worldSeed}`}
@@ -279,7 +292,11 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
         />
       </Physics>
 
-      <SpeedEffects started={started} lowPerf={lowPerf} playerBodyRef={playerBodyRef} />
+      <SpeedEffects
+        started={started}
+        lowPerf={lowPerf}
+        playerBodyRef={playerBodyRef}
+      />
 
       <HUD />
       {!started && <StartOverlay onStart={handleStart} />}
