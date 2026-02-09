@@ -147,12 +147,64 @@ function circleIntersectsTriangle(
 // Game types
 // -----------------------------
 
-type Obstacle = {
+const BASE_PLAY_SPEED = 340;
+const MAX_PLAY_SPEED = 560;
+
+function playSpeedForScore(score: number) {
+  return clamp(BASE_PLAY_SPEED + score * 5.8, BASE_PLAY_SPEED, MAX_PLAY_SPEED);
+}
+
+function difficultyForScore(score: number) {
+  return clamp(score / 38, 0, 1);
+}
+
+function spikeMetrics(ballR: number) {
+  const base = Math.max(18, Math.round(ballR * 1.45));
+  const gap = Math.max(8, Math.round(ballR * 0.45));
+  const height = Math.max(18, Math.round(ballR * 1.2));
+  return { base, gap, height };
+}
+
+function spikeObstacleWidth(ballR: number, spikes: number) {
+  const metrics = spikeMetrics(ballR);
+  return spikes * metrics.base + (spikes - 1) * metrics.gap;
+}
+
+type SpikeObstacle = {
   id: number;
+  kind: 'spikes';
   x: number;
   spikes: number;
   scored: boolean;
 };
+
+type FloatingObstacle = {
+  id: number;
+  kind: 'floating';
+  x: number;
+  baseY: number;
+  size: number;
+  bobAmp: number;
+  bobFreq: number;
+  phase: number;
+  rotSpeed: number;
+  scored: boolean;
+};
+
+type SwingingObstacle = {
+  id: number;
+  kind: 'swinging';
+  x: number;
+  anchorY: number;
+  length: number;
+  bobR: number;
+  swingAmp: number;
+  swingFreq: number;
+  phase: number;
+  scored: boolean;
+};
+
+type Obstacle = SpikeObstacle | FloatingObstacle | SwingingObstacle;
 
 type Pickup = {
   id: number;
@@ -194,6 +246,7 @@ type MiniBall = {
 type Runtime = {
   running: boolean;
   lastT: number;
+  elapsed: number;
   w: number;
   h: number;
   dpr: number;
@@ -237,10 +290,32 @@ type Runtime = {
   holdCharge: number;
 };
 
+function floatingCenter(o: FloatingObstacle, rt: Runtime) {
+  return {
+    x: o.x,
+    y: o.baseY + Math.sin(rt.elapsed * o.bobFreq + o.phase) * o.bobAmp,
+  };
+}
+
+function swingingBob(o: SwingingObstacle, rt: Runtime) {
+  const angle = Math.sin(rt.elapsed * o.swingFreq + o.phase) * o.swingAmp;
+  return {
+    x: o.x + Math.sin(angle) * o.length,
+    y: o.anchorY + Math.cos(angle) * o.length,
+  };
+}
+
+function obstacleRightEdge(o: Obstacle, rt: Runtime) {
+  if (o.kind === 'spikes') return o.x + spikeObstacleWidth(rt.ballR, o.spikes);
+  if (o.kind === 'floating') return o.x + o.size * 0.62;
+  return o.x + Math.sin(Math.abs(o.swingAmp)) * o.length + o.bobR;
+}
+
 function makeRuntime(): Runtime {
   return {
     running: false,
     lastT: 0,
+    elapsed: 0,
     w: 1,
     h: 1,
     dpr: 1,
@@ -360,6 +435,7 @@ export default function Bouncer() {
       const rawDt = (t - rt.lastT) / 1000;
       rt.lastT = t;
       const dtReal = clamp(rawDt, 0, 0.033);
+      rt.elapsed += dtReal;
 
       // Controls (Bouncer):
       // Tap while playing = immediate forced drop from the current position.
@@ -542,6 +618,7 @@ function startGame(rt: Runtime) {
   rt.miniBalls = [];
 
   rt.speed = 340;
+  rt.elapsed = 0;
   rt.distToNextObstacle = rand(260, 520);
   rt.distToNextPickup = rand(520, 920);
 
@@ -561,6 +638,21 @@ function invokeImmediateDrop(rt: Runtime) {
   // Immediate response: force a downward velocity from the current position.
   rt.vy = rt.bounceVy * dropBoost;
   spawnTapBurst(rt, Math.round(6 + rt.holdCharge * 8));
+}
+
+function triggerHitAndGameOver(rt: Runtime, skin: (typeof ballSkins)[number]) {
+  rt.hitFlash = 1;
+  const activePalette = paletteAt(rt.paletteIdx);
+  spawnShatter(rt, 20, activePalette.spikes);
+  spawnOrbDisintegration(rt, 18, activePalette.pickupOuter);
+  spawnMiniBallDisintegration(
+    rt,
+    Math.round(20 + rt.holdCharge * 16),
+    skin,
+    activePalette.pickupInner,
+    activePalette.pickupOuter
+  );
+  endGame(rt);
 }
 
 function updateIdle(rt: Runtime, dt: number, dtReal: number) {
@@ -597,7 +689,7 @@ function updateGame(
   skin: (typeof ballSkins)[number]
 ) {
   // Difficulty curve
-  rt.speed = 340 + rt.score * 6;
+  rt.speed = playSpeedForScore(rt.score);
 
   // Ball physics
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
@@ -623,70 +715,78 @@ function updateGame(
   advanceScroller(rt, dt, true);
 
   // Scoring: when obstacle passes the ball
-  const obstacleBase = Math.max(18, Math.round(rt.ballR * 1.45));
-  const obstacleGap = Math.max(8, Math.round(rt.ballR * 0.45));
-  const obstacleW = (spikes: number) =>
-    spikes * obstacleBase + (spikes - 1) * obstacleGap;
-
   rt.obstacles.forEach((o) => {
-    const w = obstacleW(o.spikes);
-    if (!o.scored && o.x + w < rt.ballX - rt.ballR) {
+    const right = obstacleRightEdge(o, rt);
+    if (!o.scored && right < rt.ballX - rt.ballR) {
       o.scored = true;
       rt.score += 1;
     }
   });
 
-  // Collision: spikes
+  // Collision: obstacle variants
   const yBase = rt.groundY - rt.platformH / 2;
-  const spikeH = Math.max(18, Math.round(rt.ballR * 1.2));
+  const spike = spikeMetrics(rt.ballR);
   const cx = rt.ballX;
   const cy = rt.ballY;
 
   for (const o of rt.obstacles) {
-    for (let i = 0; i < o.spikes; i++) {
-      const x0 = o.x + i * (obstacleBase + obstacleGap);
-      const ax = x0;
-      const ay = yBase;
-      const bx = x0 + obstacleBase;
-      const by = yBase;
-      const tx = x0 + obstacleBase / 2;
-      const ty = yBase - spikeH;
+    if (o.kind === 'spikes') {
+      for (let i = 0; i < o.spikes; i++) {
+        const x0 = o.x + i * (spike.base + spike.gap);
+        const ax = x0;
+        const ay = yBase;
+        const bx = x0 + spike.base;
+        const by = yBase;
+        const tx = x0 + spike.base / 2;
+        const ty = yBase - spike.height;
 
-      // Broad phase
-      const minX = ax - rt.ballR;
-      const maxX = bx + rt.ballR;
-      const minY = ty - rt.ballR;
-      const maxY = ay + rt.ballR;
-      if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
+        // Broad phase
+        const minX = ax - rt.ballR;
+        const maxX = bx + rt.ballR;
+        const minY = ty - rt.ballR;
+        const maxY = ay + rt.ballR;
+        if (cx < minX || cx > maxX || cy < minY || cy > maxY) continue;
 
-      if (
-        circleIntersectsTriangle(
-          cx,
-          cy,
-          rt.ballR * 0.92,
-          ax,
-          ay,
-          bx,
-          by,
-          tx,
-          ty
-        )
-      ) {
-        // Hit!
-        rt.hitFlash = 1;
-        const activePalette = paletteAt(rt.paletteIdx);
-        spawnShatter(rt, 20, activePalette.spikes);
-        spawnOrbDisintegration(rt, 18, activePalette.pickupOuter);
-        spawnMiniBallDisintegration(
-          rt,
-          Math.round(20 + rt.holdCharge * 16),
-          skin,
-          activePalette.pickupInner,
-          activePalette.pickupOuter
-        );
-        endGame(rt);
+        if (
+          circleIntersectsTriangle(
+            cx,
+            cy,
+            rt.ballR * 0.92,
+            ax,
+            ay,
+            bx,
+            by,
+            tx,
+            ty
+          )
+        ) {
+          triggerHitAndGameOver(rt, skin);
+          return;
+        }
+      }
+      continue;
+    }
+
+    if (o.kind === 'floating') {
+      const center = floatingCenter(o, rt);
+      const rr = rt.ballR + o.size * 0.56;
+      if (dist2(cx, cy, center.x, center.y) <= rr * rr) {
+        triggerHitAndGameOver(rt, skin);
         return;
       }
+      continue;
+    }
+
+    const bob = swingingBob(o, rt);
+    const orbRR = rt.ballR + o.bobR;
+    if (dist2(cx, cy, bob.x, bob.y) <= orbRR * orbRR) {
+      triggerHitAndGameOver(rt, skin);
+      return;
+    }
+    const chainDist = distPointToSegment(cx, cy, o.x, o.anchorY, bob.x, bob.y);
+    if (chainDist <= rt.ballR * 0.84) {
+      triggerHitAndGameOver(rt, skin);
+      return;
     }
   }
 
@@ -740,27 +840,94 @@ function updateMiniBalls(rt: Runtime, dt: number, dtReal: number) {
   });
 }
 
+function makeSpikeObstacle(rt: Runtime): SpikeObstacle {
+  return {
+    id: idCounter++,
+    kind: 'spikes',
+    x: rt.w + 60,
+    spikes: choice([1, 1, 2, 2, 3]),
+    scored: false,
+  };
+}
+
+function makeFloatingObstacle(
+  rt: Runtime,
+  difficulty: number
+): FloatingObstacle {
+  const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
+  const maxRise = (rt.bounceVy * rt.bounceVy) / (2 * rt.g);
+  const highY = floorY - maxRise + rt.ballR * 1.2;
+  const lowY = floorY - rt.ballR * 2.2;
+  const minY = Math.min(highY, lowY);
+  const maxY = Math.max(highY, lowY);
+
+  return {
+    id: idCounter++,
+    kind: 'floating',
+    x: rt.w + rand(76, 130),
+    baseY: rand(minY, maxY),
+    size: rand(rt.ballR * 1.25, rt.ballR * 1.95),
+    bobAmp: rand(rt.ballR * 0.45, rt.ballR * (0.95 + difficulty * 0.5)),
+    bobFreq: rand(1.2, 2.1) + difficulty * 0.8,
+    phase: rand(0, Math.PI * 2),
+    rotSpeed: rand(-2.4, 2.4),
+    scored: false,
+  };
+}
+
+function makeSwingingObstacle(
+  rt: Runtime,
+  difficulty: number
+): SwingingObstacle {
+  const floorY = rt.groundY - rt.platformH / 2;
+  const anchorY = rand(rt.h * 0.1, rt.h * 0.28);
+  const maxLen = Math.max(rt.ballR * 2.4, floorY - anchorY - rt.ballR * 2.1);
+  const lenUpper = Math.max(rt.ballR * 2.6, maxLen);
+  return {
+    id: idCounter++,
+    kind: 'swinging',
+    x: rt.w + rand(86, 150),
+    anchorY,
+    length: rand(rt.ballR * 2.4, lenUpper),
+    bobR: rand(rt.ballR * 0.74, rt.ballR * 1.12),
+    swingAmp: rand(0.45, 0.8) + difficulty * 0.3,
+    swingFreq: rand(1.1, 1.9) + difficulty * 0.7,
+    phase: rand(0, Math.PI * 2),
+    scored: false,
+  };
+}
+
+function spawnObstacle(rt: Runtime, active: boolean) {
+  if (!active) return makeSpikeObstacle(rt);
+
+  const difficulty = difficultyForScore(rt.score);
+  const swingChance = clamp((difficulty - 0.18) * 0.52, 0, 0.38);
+  const floatingChance = 0.18 + difficulty * 0.36;
+  const roll = Math.random();
+
+  if (roll < swingChance) return makeSwingingObstacle(rt, difficulty);
+  if (roll < swingChance + floatingChance)
+    return makeFloatingObstacle(rt, difficulty);
+  return makeSpikeObstacle(rt);
+}
+
 function advanceScroller(rt: Runtime, dt: number, active: boolean) {
-  const baseSpeed = active ? 340 + rt.score * 6 : 240;
+  const baseSpeed = active ? playSpeedForScore(rt.score) : 240;
   rt.speed = baseSpeed;
   const dx = baseSpeed * dt;
 
   rt.obstacles.forEach((o) => (o.x -= dx));
   rt.pickups.forEach((p) => (p.x -= dx));
 
-  const obstacleMin = active ? 240 : 320;
-  const obstacleMax = active ? 520 : 740;
-  const pickupMin = active ? 520 : 680;
-  const pickupMax = active ? 980 : 1240;
+  const difficulty = active ? difficultyForScore(rt.score) : 0;
+  const obstacleMin = active ? lerp(250, 170, difficulty) : 320;
+  const obstacleMax = active ? lerp(500, 320, difficulty) : 740;
+  const pickupMin = active ? lerp(520, 580, difficulty) : 680;
+  const pickupMax = active ? lerp(980, 1040, difficulty) : 1240;
 
   rt.distToNextObstacle -= dx;
   if (rt.distToNextObstacle <= 0) {
-    rt.obstacles.push({
-      id: idCounter++,
-      x: rt.w + 60,
-      spikes: choice([1, 1, 2, 2, 3]),
-      scored: false,
-    });
+    rt.obstacles.push(spawnObstacle(rt, active));
     rt.distToNextObstacle =
       rand(obstacleMin, obstacleMax) + Math.abs(rt.distToNextObstacle);
   }
@@ -781,7 +948,7 @@ function advanceScroller(rt: Runtime, dt: number, active: boolean) {
       rand(pickupMin, pickupMax) + Math.abs(rt.distToNextPickup);
   }
 
-  rt.obstacles = rt.obstacles.filter((o) => o.x > -200);
+  rt.obstacles = rt.obstacles.filter((o) => obstacleRightEdge(o, rt) > -220);
   rt.pickups = rt.pickups.filter((p) => p.x > -200);
 }
 
@@ -962,23 +1129,85 @@ function draw(
   ctx.fillStyle = platform;
   ctx.fillRect(0, rt.groundY - rt.platformH / 2, w, rt.platformH);
 
-  // Spikes
+  // Obstacles
   const yBase = rt.groundY - rt.platformH / 2;
-  const obstacleBase = Math.max(18, Math.round(rt.ballR * 1.45));
-  const obstacleGap = Math.max(8, Math.round(rt.ballR * 0.45));
-  const spikeH = Math.max(18, Math.round(rt.ballR * 1.2));
+  const spike = spikeMetrics(rt.ballR);
 
-  ctx.fillStyle = spikes;
   for (const o of rt.obstacles) {
-    for (let i = 0; i < o.spikes; i++) {
-      const x0 = o.x + i * (obstacleBase + obstacleGap);
+    if (o.kind === 'spikes') {
+      ctx.fillStyle = spikes;
+      for (let i = 0; i < o.spikes; i++) {
+        const x0 = o.x + i * (spike.base + spike.gap);
+        ctx.beginPath();
+        ctx.moveTo(x0, yBase);
+        ctx.lineTo(x0 + spike.base / 2, yBase - spike.height);
+        ctx.lineTo(x0 + spike.base, yBase);
+        ctx.closePath();
+        ctx.fill();
+      }
+      continue;
+    }
+
+    if (o.kind === 'floating') {
+      const center = floatingCenter(o, rt);
+      ctx.save();
+      ctx.translate(center.x, center.y);
+      ctx.rotate(rt.elapsed * o.rotSpeed + o.phase * 0.5);
+
+      ctx.fillStyle = pickupInner;
+      ctx.fillRect(-o.size / 2, -o.size / 2, o.size, o.size);
+
+      const core = o.size * 0.44;
+      ctx.fillStyle = spikes;
+      ctx.fillRect(-core / 2, -core / 2, core, core);
+      ctx.restore();
+      continue;
+    }
+
+    const bob = swingingBob(o, rt);
+    ctx.save();
+    ctx.strokeStyle = scoreTint;
+    ctx.lineWidth = Math.max(2, rt.ballR * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(o.x, o.anchorY);
+    ctx.lineTo(bob.x, bob.y);
+    ctx.stroke();
+
+    ctx.fillStyle = platform;
+    ctx.beginPath();
+    ctx.arc(o.x, o.anchorY, Math.max(3, rt.ballR * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+
+    const teeth = 8;
+    const toothR = o.bobR * 0.38;
+    for (let i = 0; i < teeth; i++) {
+      const a = (i / teeth) * Math.PI * 2 + rt.elapsed * 1.8;
+      const a2 = a + Math.PI / teeth;
+      const r1 = o.bobR * 0.88;
+      const r2 = o.bobR + toothR;
+      ctx.fillStyle = spikes;
       ctx.beginPath();
-      ctx.moveTo(x0, yBase);
-      ctx.lineTo(x0 + obstacleBase / 2, yBase - spikeH);
-      ctx.lineTo(x0 + obstacleBase, yBase);
+      ctx.moveTo(bob.x + Math.cos(a) * r1, bob.y + Math.sin(a) * r1);
+      ctx.lineTo(bob.x + Math.cos(a2) * r2, bob.y + Math.sin(a2) * r2);
+      ctx.lineTo(
+        bob.x + Math.cos(a + (Math.PI / teeth) * 2) * r1,
+        bob.y + Math.sin(a + (Math.PI / teeth) * 2) * r1
+      );
       ctx.closePath();
       ctx.fill();
     }
+
+    ctx.fillStyle = spikes;
+    ctx.beginPath();
+    ctx.arc(bob.x, bob.y, o.bobR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.62;
+    ctx.fillStyle = pickupOuter;
+    ctx.beginPath();
+    ctx.arc(bob.x, bob.y, o.bobR * 0.56, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   // Pickups (squares)
@@ -1107,4 +1336,20 @@ function draw(
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
+
+  // Bottom-left score counter
+  ctx.save();
+  const hudPad = Math.max(10, Math.round(rt.ballR * 0.65));
+  const hudSize = Math.max(15, Math.round(rt.ballR * 1.02));
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = spikes;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.font = `800 ${hudSize}px ui-sans-serif, system-ui, -apple-system`;
+  ctx.fillText(
+    `Score ${Math.max(0, Math.round(rt.shownScore))}`,
+    hudPad,
+    h - hudPad
+  );
+  ctx.restore();
 }
