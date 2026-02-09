@@ -2,13 +2,16 @@
 
 import { Html, PerspectiveCamera } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
   buildPatternLibraryTemplate,
+  pickPatternChunkForSurvivability,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { flipBoxState } from './state';
 
@@ -41,28 +44,6 @@ const makeRng = (seed: number): SpawnRng => {
   };
 };
 
-const chooseChunk = (
-  rng: SpawnRng,
-  intensity: number,
-  library: ReturnType<typeof buildPatternLibraryTemplate>
-) => {
-  const targetTier = Math.round(intensity * 4);
-  let total = 0;
-  const weights = library.map((chunk) => {
-    const distance = Math.abs(chunk.tier - targetTier);
-    const weight = Math.max(0.13, 1.8 - distance * 0.33);
-    total += weight;
-    return weight;
-  });
-  const pick = rng.next() * total;
-  let cursor = 0;
-  for (let i = 0; i < library.length; i += 1) {
-    cursor += weights[i];
-    if (pick <= cursor) return library[i];
-  }
-  return library[library.length - 1];
-};
-
 const resetRun = (
   platformsRef: React.MutableRefObject<Platform[]>,
   nextPlatformZRef: React.MutableRefObject<number>,
@@ -86,6 +67,8 @@ const resetRun = (
 const FlipBoxScene: React.FC = () => {
   const inputRef = useInputRef({ preventDefault: ['space'] });
   const snap = useSnapshot(flipBoxState);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
 
   const elapsedRef = useRef(0);
   const resetVersionRef = useRef(flipBoxState.resetVersion);
@@ -113,6 +96,8 @@ const FlipBoxScene: React.FC = () => {
     if (flipBoxState.resetVersion !== resetVersionRef.current) {
       resetVersionRef.current = flipBoxState.resetVersion;
       elapsedRef.current = 0;
+      startedRef.current = false;
+      setStarted(false);
       resetRun(
         platformsRef,
         nextPlatformZRef,
@@ -138,23 +123,39 @@ const FlipBoxScene: React.FC = () => {
         lastLandingIdRef,
         rngRef
       );
+      startedRef.current = true;
+      setStarted(true);
+    } else if (!startedRef.current && tap) {
+      startedRef.current = true;
+      setStarted(true);
     }
 
-    if (!flipBoxState.gameOver) {
+    if (startedRef.current && !flipBoxState.gameOver) {
       elapsedRef.current += dt;
       const difficulty = sampleDifficulty('flip-timing', elapsedRef.current);
+      const survivability = sampleSurvivability('flipbox', elapsedRef.current);
       const intensity = Math.min(
         1,
         Math.max(0, (difficulty.speed - 4) / (7 - 4))
       );
+      const jumpDuration = JUMP_DURATION * survivability.decisionWindowScale;
 
       while (nextPlatformZRef.current < progressRef.current + LOOK_AHEAD) {
-        const chunk = chooseChunk(rngRef.current, intensity, patternLibrary);
-        const count = Math.max(1, chunk.hazardCount);
+        const chunk = pickPatternChunkForSurvivability(
+          'flipbox',
+          patternLibrary,
+          rngRef.current.next,
+          intensity,
+          elapsedRef.current
+        );
+        const count = Math.max(
+          1,
+          Math.round(chunk.hazardCount * survivability.hazardScale)
+        );
         const baseLength = THREE.MathUtils.clamp(
-          2.8 - chunk.tier * 0.34,
+          (2.8 - chunk.tier * 0.34) * survivability.decisionWindowScale,
           1.25,
-          2.8
+          3.2
         );
 
         for (let i = 0; i < count; i += 1) {
@@ -164,8 +165,9 @@ const FlipBoxScene: React.FC = () => {
             3
           );
           const gap = THREE.MathUtils.clamp(
-            1.2 + chunk.tier * 0.35 + rngRef.current.next() * 0.7,
-            1.1,
+            (1.2 + chunk.tier * 0.35 + rngRef.current.next() * 0.7) /
+              survivability.decisionWindowScale,
+            0.95,
             3.2
           );
           const moveAmp =
@@ -196,7 +198,8 @@ const FlipBoxScene: React.FC = () => {
         jumpProgressRef.current = 0;
       }
 
-      progressRef.current += difficulty.speed * dt;
+      progressRef.current +=
+        difficulty.speed * survivability.intensityScale * dt;
       distanceBucketRef.current += difficulty.speed * dt * 0.25;
       while (distanceBucketRef.current >= 1) {
         flipBoxState.addScore(1);
@@ -204,7 +207,7 @@ const FlipBoxScene: React.FC = () => {
       }
 
       if (jumpingRef.current) {
-        jumpProgressRef.current += dt / JUMP_DURATION;
+        jumpProgressRef.current += dt / jumpDuration;
         rotationRef.current += dt * 11;
         if (jumpProgressRef.current >= 1) {
           jumpProgressRef.current = 1;
@@ -257,6 +260,11 @@ const FlipBoxScene: React.FC = () => {
 
   const scoreText = Math.floor(snap.score).toString();
   const bestText = Math.floor(snap.bestScore).toString();
+  const shellStatus = snap.gameOver
+    ? 'gameover'
+    : started
+      ? 'playing'
+      : 'ready';
   const playerY = jumpingRef.current
     ? Math.sin(jumpProgressRef.current * Math.PI) * JUMP_HEIGHT
     : 0;
@@ -314,34 +322,14 @@ const FlipBoxScene: React.FC = () => {
       </mesh>
 
       <Html fullscreen>
-        <div className="pointer-events-none fixed inset-0 p-4 text-white/90">
-          <div className="flex items-start justify-between">
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2">
-              <div className="text-xs uppercase tracking-[0.25em] opacity-70">
-                Flip Box
-              </div>
-              <div className="text-[11px] opacity-80">
-                Tap to flip onto the next platform.
-              </div>
-            </div>
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2 text-right">
-              <div className="text-xl font-bold tabular-nums">{scoreText}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] opacity-70">
-                Best {bestText}
-              </div>
-            </div>
-          </div>
-          {snap.gameOver && (
-            <div className="grid h-full place-items-center">
-              <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
-                <div className="text-lg font-semibold">Missed Landing</div>
-                <div className="mt-2 text-sm opacity-80">
-                  Tap anywhere to retry instantly.
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <KetchappGameShell
+          gameId="flipbox"
+          score={scoreText}
+          best={bestText}
+          status={shellStatus}
+          deathTitle="Missed Landing"
+          containerClassName="fixed inset-0"
+        />
       </Html>
     </>
   );

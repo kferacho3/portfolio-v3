@@ -524,6 +524,203 @@ export function sampleDifficulty(
   };
 }
 
+export interface KetchappSurvivabilityProfile {
+  onboardingSeconds: number;
+  earlyIntensityScale: number;
+  earlyTierOffset: number;
+  lowTierWeightBoost: number;
+  telegraphBoost: number;
+  decisionWindowBoost: number;
+  hazardScale: number;
+}
+
+export interface KetchappSurvivabilitySample {
+  onboarding: number;
+  intensityScale: number;
+  targetTierOffset: number;
+  lowTierWeightBoost: number;
+  telegraphScale: number;
+  decisionWindowScale: number;
+  hazardScale: number;
+}
+
+export const KETCHAPP_SURVIVABILITY_PROFILES: Record<
+  KetchappGameId,
+  KetchappSurvivabilityProfile
+> = {
+  polarity: {
+    onboardingSeconds: 18,
+    earlyIntensityScale: 0.74,
+    earlyTierOffset: 1.15,
+    lowTierWeightBoost: 1.5,
+    telegraphBoost: 0.32,
+    decisionWindowBoost: 0.28,
+    hazardScale: 0.72,
+  },
+  tetherdrift: {
+    onboardingSeconds: 20,
+    earlyIntensityScale: 0.7,
+    earlyTierOffset: 1.2,
+    lowTierWeightBoost: 1.55,
+    telegraphBoost: 0.34,
+    decisionWindowBoost: 0.34,
+    hazardScale: 0.68,
+  },
+  trace: {
+    onboardingSeconds: 18,
+    earlyIntensityScale: 0.72,
+    earlyTierOffset: 1.1,
+    lowTierWeightBoost: 1.48,
+    telegraphBoost: 0.28,
+    decisionWindowBoost: 0.35,
+    hazardScale: 0.7,
+  },
+  flipbox: {
+    onboardingSeconds: 22,
+    earlyIntensityScale: 0.68,
+    earlyTierOffset: 1.35,
+    lowTierWeightBoost: 1.62,
+    telegraphBoost: 0.36,
+    decisionWindowBoost: 0.38,
+    hazardScale: 0.66,
+  },
+  portalpunch: {
+    onboardingSeconds: 18,
+    earlyIntensityScale: 0.74,
+    earlyTierOffset: 1.1,
+    lowTierWeightBoost: 1.5,
+    telegraphBoost: 0.3,
+    decisionWindowBoost: 0.28,
+    hazardScale: 0.72,
+  },
+  conveyorchaos: {
+    onboardingSeconds: 20,
+    earlyIntensityScale: 0.72,
+    earlyTierOffset: 1.2,
+    lowTierWeightBoost: 1.58,
+    telegraphBoost: 0.34,
+    decisionWindowBoost: 0.36,
+    hazardScale: 0.68,
+  },
+  waveflip: {
+    onboardingSeconds: 18,
+    earlyIntensityScale: 0.72,
+    earlyTierOffset: 1.05,
+    lowTierWeightBoost: 1.45,
+    telegraphBoost: 0.3,
+    decisionWindowBoost: 0.33,
+    hazardScale: 0.74,
+  },
+  slipstream: {
+    onboardingSeconds: 16,
+    earlyIntensityScale: 0.76,
+    earlyTierOffset: 0.95,
+    lowTierWeightBoost: 1.36,
+    telegraphBoost: 0.24,
+    decisionWindowBoost: 0.24,
+    hazardScale: 0.78,
+  },
+  runeroll: {
+    onboardingSeconds: 18,
+    earlyIntensityScale: 0.72,
+    earlyTierOffset: 1.05,
+    lowTierWeightBoost: 1.46,
+    telegraphBoost: 0.28,
+    decisionWindowBoost: 0.33,
+    hazardScale: 0.74,
+  },
+  pulseparry: {
+    onboardingSeconds: 20,
+    earlyIntensityScale: 0.68,
+    earlyTierOffset: 1.2,
+    lowTierWeightBoost: 1.58,
+    telegraphBoost: 0.3,
+    decisionWindowBoost: 0.38,
+    hazardScale: 0.66,
+  },
+  orbitlatch: {
+    onboardingSeconds: 20,
+    earlyIntensityScale: 0.68,
+    earlyTierOffset: 1.25,
+    lowTierWeightBoost: 1.6,
+    telegraphBoost: 0.34,
+    decisionWindowBoost: 0.38,
+    hazardScale: 0.66,
+  },
+};
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+const lerp = (from: number, to: number, t: number) => from + (to - from) * t;
+
+export function sampleSurvivability(
+  gameId: KetchappGameId,
+  elapsedSeconds: number
+): KetchappSurvivabilitySample {
+  const profile = KETCHAPP_SURVIVABILITY_PROFILES[gameId];
+  const t = clamp01(elapsedSeconds / profile.onboardingSeconds);
+  const onboarding = 1 - t;
+
+  return {
+    onboarding,
+    intensityScale: lerp(profile.earlyIntensityScale, 1, t),
+    targetTierOffset: profile.earlyTierOffset * onboarding,
+    lowTierWeightBoost: 1 + (profile.lowTierWeightBoost - 1) * onboarding,
+    telegraphScale: 1 + profile.telegraphBoost * onboarding,
+    decisionWindowScale: 1 + profile.decisionWindowBoost * onboarding,
+    hazardScale: lerp(profile.hazardScale, 1, t),
+  };
+}
+
+export function pickPatternChunkForSurvivability(
+  gameId: KetchappGameId,
+  library: GameChunkPatternTemplate[],
+  rngNext: () => number,
+  intensity: number,
+  elapsedSeconds: number
+): GameChunkPatternTemplate {
+  if (library.length === 0) {
+    throw new Error(`Pattern library for ${gameId} is empty.`);
+  }
+
+  const survivability = sampleSurvivability(gameId, elapsedSeconds);
+  const adjustedIntensity = clamp01(intensity) * survivability.intensityScale;
+  const targetTier = Math.max(
+    0,
+    Math.min(
+      4,
+      Math.round(adjustedIntensity * 4 - survivability.targetTierOffset)
+    )
+  );
+
+  let total = 0;
+  const weights = library.map((chunk) => {
+    const distance = Math.abs(chunk.tier - targetTier);
+    let weight = Math.max(0.08, 1.95 - distance * 0.5);
+
+    if (chunk.tier <= 1) {
+      weight *= survivability.lowTierWeightBoost;
+    } else if (chunk.tier >= 3) {
+      weight *= 1 / (1 + (survivability.lowTierWeightBoost - 1) * 0.75);
+    }
+
+    if (chunk.id === 'C12' && survivability.onboarding > 0.1) {
+      weight *= 1 + survivability.onboarding * 0.35;
+    }
+
+    total += weight;
+    return weight;
+  });
+
+  const pick = rngNext() * total;
+  let cursor = 0;
+  for (let i = 0; i < library.length; i += 1) {
+    cursor += weights[i];
+    if (pick <= cursor) return library[i];
+  }
+
+  return library[library.length - 1];
+}
+
 export const KETCHAPP_UNIVERSE_ART_DIRECTION = {
   name: 'Neon Toy Kinetics',
   palette: {

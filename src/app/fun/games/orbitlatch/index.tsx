@@ -14,8 +14,10 @@ import * as THREE from 'three';
 import { SeededRandom } from '../../utils/seededRandom';
 import {
   buildPatternLibraryTemplate,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -92,10 +94,6 @@ export default function OrbitLatch() {
     setStatus('playing');
   }, []);
 
-  const backToMenu = useCallback(() => {
-    setStatus('menu');
-  }, []);
-
   const onScore = useCallback(() => {
     setScore((s) => s + 1);
   }, []);
@@ -118,9 +116,12 @@ export default function OrbitLatch() {
 
   return (
     <div
-      className="relative w-full h-full select-none"
+      className="relative h-full w-full select-none"
       style={{
         background: 'linear-gradient(to bottom, #ffb3d9 0%, #a8c8ff 100%)',
+      }}
+      onPointerDown={() => {
+        if (status !== 'playing') start();
       }}
     >
       <Canvas
@@ -137,50 +138,21 @@ export default function OrbitLatch() {
         />
       </Canvas>
 
-      {/* HUD */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-4 top-4 text-white/90 font-semibold tracking-wide">
-          <div className="text-xs opacity-70">ORBITLATCH</div>
-          <div className="text-2xl leading-none">{score}</div>
-          <div className="text-xs opacity-60">best {best}</div>
-        </div>
-      </div>
-
-      {/* Overlays */}
-      {status !== 'playing' && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-[min(520px,92vw)] rounded-xl bg-black/55 border border-white/10 p-6 text-white backdrop-blur-sm">
-            <div className="text-3xl font-bold tracking-tight">OrbitLatch</div>
-            <div className="mt-2 text-sm text-white/80 leading-relaxed">
-              Orbit around pylons. Tap to launch on a tangent and{' '}
-              <span className="font-semibold">latch</span> the next pylon. Miss
-              a latch or hit a hazard sphere and it’s over.
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                className="pointer-events-auto rounded-lg bg-white text-black px-4 py-2 font-semibold hover:opacity-90"
-                onClick={start}
-              >
-                {status === 'gameover' ? 'Retry' : 'Play'}
-              </button>
-              {status === 'gameover' && (
-                <button
-                  className="pointer-events-auto rounded-lg bg-white/10 border border-white/15 px-4 py-2 font-semibold hover:bg-white/15"
-                  onClick={backToMenu}
-                >
-                  Menu
-                </button>
-              )}
-            </div>
-
-            <div className="mt-4 text-xs text-white/60">
-              Tip: launch when you’re on the forward arc so your tangent points
-              toward the next pylon.
-            </div>
-          </div>
-        </div>
-      )}
+      <KetchappGameShell
+        gameId="orbitlatch"
+        score={score}
+        best={best}
+        status={
+          status === 'playing'
+            ? 'playing'
+            : status === 'gameover'
+              ? 'gameover'
+              : 'ready'
+        }
+        tone="light"
+        deathTitle="Missed Latch"
+        containerClassName="absolute inset-0"
+      />
     </div>
   );
 }
@@ -251,9 +223,14 @@ function OrbitLatchScene({
     const s = sim.current;
 
     const difficulty = sampleDifficulty('orbit-chain', s.score * 0.9);
+    const survivability = sampleSurvivability('orbitlatch', s.score);
     const activeChunk = patternLibrary[s.anchorIdx % patternLibrary.length];
-    const dynamicFlightSpeed = difficulty.speed + activeChunk.tier * 0.2;
-    const dynamicOrbitSpeed = ORBIT_SPEED + activeChunk.tier * 0.12;
+    const dynamicFlightSpeed =
+      (difficulty.speed + activeChunk.tier * 0.2) *
+      survivability.intensityScale;
+    const dynamicOrbitSpeed =
+      (ORBIT_SPEED + activeChunk.tier * 0.12) * survivability.intensityScale;
+    const latchDist = LATCH_DIST * survivability.decisionWindowScale;
 
     if (input.current.pointerJustDown && s.mode === 'orbit') {
       // tangent direction in xz plane
@@ -276,7 +253,7 @@ function OrbitLatchScene({
 
       // attempt latch
       getAnchorPos(baseSeed, s.anchorIdx + 1, tmpB);
-      if (s.pos.distanceTo(tmpB) <= LATCH_DIST) {
+      if (s.pos.distanceTo(tmpB) <= latchDist) {
         s.anchorIdx += 1;
         s.score += 1;
         onScore();
@@ -291,11 +268,20 @@ function OrbitLatchScene({
         s.mode = 'orbit';
       } else {
         // missed: flew past the next anchor plane
-        if (s.pos.z > tmpB.z + GAP * 0.9) die();
+        if (
+          s.pos.z >
+          tmpB.z + GAP * (0.9 + (survivability.decisionWindowScale - 1) * 0.24)
+        ) {
+          die();
+        }
       }
 
       // out of bounds
-      if (Math.abs(s.pos.x) > 6.5) die();
+      if (
+        Math.abs(s.pos.x) >
+        6.5 + (survivability.decisionWindowScale - 1) * 1.2
+      )
+        die();
     }
 
     // hazards near current segment(s)
@@ -304,7 +290,13 @@ function OrbitLatchScene({
     for (let i = start; i <= end; i++) {
       getHazard(baseSeed, i, tmpHaz);
       const d = tmpHaz.pos.distanceTo(s.pos);
-      if (d < tmpHaz.r + BALL_RADIUS * 0.92) {
+      const hitRadius = Math.max(
+        0.16,
+        tmpHaz.r +
+          BALL_RADIUS * 0.92 -
+          (survivability.decisionWindowScale - 1) * 0.1
+      );
+      if (d < hitRadius) {
         die();
         break;
       }

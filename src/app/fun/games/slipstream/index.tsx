@@ -14,8 +14,10 @@ import * as THREE from 'three';
 import { SeededRandom } from '../../utils/seededRandom';
 import {
   buildPatternLibraryTemplate,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -122,7 +124,12 @@ export default function Slipstream() {
   );
 
   return (
-    <div className="relative w-full h-full select-none">
+    <div
+      className="relative h-full w-full select-none"
+      onPointerDown={() => {
+        if (status !== 'playing') start();
+      }}
+    >
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -139,58 +146,20 @@ export default function Slipstream() {
           onGameOver={onGameOver}
         />
       </Canvas>
-
-      {/* HUD */}
-      <div className="absolute inset-x-0 top-0 flex items-start justify-between p-4 pointer-events-none">
-        <div className="text-white/90 font-semibold tracking-wide">
-          Slipstream
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-white/40 text-xs">
-            Tap or Space: toggle Ground / Glide
-          </div>
-          <div className="text-white/90 font-semibold tabular-nums">
-            {score}
-          </div>
-        </div>
-      </div>
-
-      {status !== 'playing' && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-[92%] max-w-md bg-black/55 backdrop-blur-md border border-white/10 text-white rounded-xl p-5 shadow-xl">
-            <div className="text-xl font-bold tracking-tight">Slipstream</div>
-            <div className="mt-2 text-sm text-white/80 leading-relaxed">
-              <span className="text-white">Tap or press Space</span> to toggle
-              between <span className="text-white">GROUND</span> and{' '}
-              <span className="text-white">GLIDE</span>. Ground is safe under
-              ceilings; Glide is safe over spikes & gaps. One wrong toggle and
-              you’re gone.
-            </div>
-
-            {status === 'gameover' && (
-              <div className="mt-3 text-sm text-white/85">
-                Score: <span className="font-semibold">{score}</span> · Best:{' '}
-                <span className="font-semibold">{best}</span>
-              </div>
-            )}
-
-            <div className="mt-4 flex gap-2">
-              <button
-                className="pointer-events-auto flex-1 rounded-lg bg-white text-black font-semibold py-2"
-                onClick={start}
-              >
-                {status === 'gameover' ? 'Retry' : 'Play'}
-              </button>
-              <button
-                className="pointer-events-auto rounded-lg bg-white/10 border border-white/15 px-3 py-2 text-white/90"
-                onClick={() => setStatus('menu')}
-              >
-                Menu
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <KetchappGameShell
+        gameId="slipstream"
+        score={score}
+        best={best}
+        status={
+          status === 'playing'
+            ? 'playing'
+            : status === 'gameover'
+              ? 'gameover'
+              : 'ready'
+        }
+        deathTitle="Collision"
+        containerClassName="absolute inset-0"
+      />
     </div>
   );
 }
@@ -272,6 +241,9 @@ function SlipstreamScene({
     }
 
     const s = sim.current;
+    const elapsed = s.z / SPEED;
+    const difficulty = sampleDifficulty('lane-switch', elapsed);
+    const survivability = sampleSurvivability('slipstream', elapsed);
 
     // Input: toggle mode (tap or Space).
     const just = input.current.justPressed;
@@ -287,7 +259,7 @@ function SlipstreamScene({
         const i = Math.floor(s.z / SEG_LEN);
         const seg = getRuntimeSegment(seed, i, patternLibrary, tmpSeg);
         if (seg.gap) {
-          s.dead = true;
+          if (survivability.onboarding < 0.35) s.dead = true;
         } else {
           s.mode = 'ground';
         }
@@ -295,8 +267,7 @@ function SlipstreamScene({
     }
 
     // Advance.
-    const difficulty = sampleDifficulty('lane-switch', s.z / SPEED);
-    s.z += difficulty.speed * dt;
+    s.z += difficulty.speed * survivability.intensityScale * dt;
 
     const i = Math.floor(s.z / SEG_LEN);
     if (i !== segIndex) setSegIndex(i);
@@ -325,13 +296,14 @@ function SlipstreamScene({
     // - Ground hazard hits only when grounded.
     if (!seg.gap && seg.hazard === 'ground' && s.mode === 'ground') {
       // Ground spike top.
-      const spikeTop = groundY + 0.55;
+      const spikeTop =
+        groundY + 0.55 - (survivability.decisionWindowScale - 1) * 0.18;
       if (s.y - BALL_R <= spikeTop) s.dead = true;
     }
 
     // - Ceiling hazard hits only when gliding.
     if (!seg.gap && seg.hazard === 'ceiling' && s.mode === 'glide') {
-      const ceilBottom = 1.0;
+      const ceilBottom = 1 + (survivability.decisionWindowScale - 1) * 0.18;
       if (s.y + BALL_R >= ceilBottom) s.dead = true;
     }
 

@@ -2,13 +2,16 @@
 
 import { Html, PerspectiveCamera } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
   buildPatternLibraryTemplate,
+  pickPatternChunkForSurvivability,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { conveyorChaosState } from './state';
 
@@ -39,28 +42,6 @@ const makeRng = (seed: number): SpawnRng => {
       return value / 0xffffffff;
     },
   };
-};
-
-const chooseChunk = (
-  rng: SpawnRng,
-  intensity: number,
-  library: ReturnType<typeof buildPatternLibraryTemplate>
-) => {
-  const targetTier = Math.round(intensity * 4);
-  let total = 0;
-  const weights = library.map((chunk) => {
-    const distance = Math.abs(chunk.tier - targetTier);
-    const weight = Math.max(0.14, 1.75 - distance * 0.34);
-    total += weight;
-    return weight;
-  });
-  const pick = rng.next() * total;
-  let cursor = 0;
-  for (let i = 0; i < library.length; i += 1) {
-    cursor += weights[i];
-    if (pick <= cursor) return library[i];
-  }
-  return library[library.length - 1];
 };
 
 const nextSafeDirection = (
@@ -108,6 +89,8 @@ const resetRun = (
 const ConveyorChaosScene: React.FC = () => {
   const inputRef = useInputRef({ preventDefault: ['space'] });
   const snap = useSnapshot(conveyorChaosState);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
 
   const elapsedRef = useRef(0);
   const resetVersionRef = useRef(conveyorChaosState.resetVersion);
@@ -133,6 +116,8 @@ const ConveyorChaosScene: React.FC = () => {
     if (conveyorChaosState.resetVersion !== resetVersionRef.current) {
       resetVersionRef.current = conveyorChaosState.resetVersion;
       elapsedRef.current = 0;
+      startedRef.current = false;
+      setStarted(false);
       resetRun(
         progressRef,
         nextSpawnZRef,
@@ -157,6 +142,11 @@ const ConveyorChaosScene: React.FC = () => {
           junctionsRef,
           rngRef
         );
+        startedRef.current = true;
+        setStarted(true);
+      } else if (!startedRef.current) {
+        startedRef.current = true;
+        setStarted(true);
       } else {
         const nextJunction = junctionsRef.current.find(
           (junction) =>
@@ -168,9 +158,13 @@ const ConveyorChaosScene: React.FC = () => {
       }
     }
 
-    if (!conveyorChaosState.gameOver) {
+    if (startedRef.current && !conveyorChaosState.gameOver) {
       elapsedRef.current += dt;
       const difficulty = sampleDifficulty('routing', elapsedRef.current);
+      const survivability = sampleSurvivability(
+        'conveyorchaos',
+        elapsedRef.current
+      );
       const intensity = Math.min(
         1,
         Math.max(0, (difficulty.speed - 3.4) / (6.2 - 3.4))
@@ -179,11 +173,21 @@ const ConveyorChaosScene: React.FC = () => {
       progressRef.current += difficulty.speed * dt;
 
       while (nextSpawnZRef.current < progressRef.current + LOOK_AHEAD) {
-        const chunk = chooseChunk(rngRef.current, intensity, patternLibrary);
-        const count = Math.max(1, chunk.hazardCount);
+        const chunk = pickPatternChunkForSurvivability(
+          'conveyorchaos',
+          patternLibrary,
+          rngRef.current.next,
+          intensity,
+          elapsedRef.current
+        );
+        const count = Math.max(
+          1,
+          Math.round(chunk.hazardCount * survivability.hazardScale)
+        );
         const stride = Math.max(
-          3.2,
-          (difficulty.speed * chunk.durationSeconds) / count + 2
+          3.2 * survivability.telegraphScale,
+          ((difficulty.speed * chunk.durationSeconds) / count + 2) *
+            survivability.telegraphScale
         );
 
         for (let i = 0; i < count; i += 1) {
@@ -213,7 +217,9 @@ const ConveyorChaosScene: React.FC = () => {
       for (let i = 0; i < junctionsRef.current.length; i += 1) {
         const junction = junctionsRef.current[i];
         if (junction.resolved) continue;
-        if (junction.z - progressRef.current <= 0.24) {
+        const decisionThreshold =
+          0.24 + (survivability.decisionWindowScale - 1) * 0.15;
+        if (junction.z - progressRef.current <= decisionThreshold) {
           junction.resolved = true;
           if (junction.choice !== junction.safeDirection) {
             conveyorChaosState.gameOver = true;
@@ -244,6 +250,11 @@ const ConveyorChaosScene: React.FC = () => {
   );
   const scoreText = Math.floor(snap.score).toString();
   const bestText = Math.floor(snap.bestScore).toString();
+  const shellStatus = snap.gameOver
+    ? 'gameover'
+    : started
+      ? 'playing'
+      : 'ready';
 
   return (
     <>
@@ -329,42 +340,24 @@ const ConveyorChaosScene: React.FC = () => {
       })}
 
       <Html fullscreen>
-        <div className="pointer-events-none fixed inset-0 p-4 text-white/90">
-          <div className="flex items-start justify-between">
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2">
-              <div className="text-xs uppercase tracking-[0.25em] opacity-70">
-                Conveyor Chaos
-              </div>
-              <div className="text-[11px] opacity-80">
-                Tap to switch the next junction.
-              </div>
-            </div>
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2 text-right">
-              <div className="text-xl font-bold tabular-nums">{scoreText}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] opacity-70">
-                Best {bestText}
-              </div>
-            </div>
-          </div>
-          {nextJunction && !snap.gameOver && (
-            <div className="mt-3 rounded-md border border-white/15 bg-black/30 px-3 py-2 text-xs">
-              Next Junction:{' '}
-              <span className="font-semibold">
-                {nextJunction.choice === -1 ? 'Left' : 'Right'}
-              </span>
-            </div>
-          )}
-          {snap.gameOver && (
-            <div className="grid h-full place-items-center">
-              <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
-                <div className="text-lg font-semibold">Wrong Route</div>
-                <div className="mt-2 text-sm opacity-80">
-                  Tap anywhere to retry instantly.
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <KetchappGameShell
+          gameId="conveyorchaos"
+          score={scoreText}
+          best={bestText}
+          status={shellStatus}
+          deathTitle="Wrong Route"
+          containerClassName="fixed inset-0"
+          statusNote={
+            nextJunction ? (
+              <>
+                Next Junction:{' '}
+                <span className="font-semibold">
+                  {nextJunction.choice === -1 ? 'Left' : 'Right'}
+                </span>
+              </>
+            ) : null
+          }
+        />
       </Html>
     </>
   );

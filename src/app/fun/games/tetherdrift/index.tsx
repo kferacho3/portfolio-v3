@@ -2,13 +2,16 @@
 
 import { Html, Line, PerspectiveCamera } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
   buildPatternLibraryTemplate,
+  pickPatternChunkForSurvivability,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { tetherDriftState } from './state';
 
@@ -39,28 +42,6 @@ const makeRng = (seed: number): SpawnRng => {
       return value / 0xffffffff;
     },
   };
-};
-
-const chooseChunk = (
-  rng: SpawnRng,
-  intensity: number,
-  library: ReturnType<typeof buildPatternLibraryTemplate>
-) => {
-  const targetTier = Math.round(intensity * 4);
-  let total = 0;
-  const weights = library.map((chunk) => {
-    const distance = Math.abs(chunk.tier - targetTier);
-    const weight = Math.max(0.15, 1.7 - distance * 0.35);
-    total += weight;
-    return weight;
-  });
-  const pick = rng.next() * total;
-  let cursor = 0;
-  for (let i = 0; i < library.length; i += 1) {
-    cursor += weights[i];
-    if (pick <= cursor) return library[i];
-  }
-  return library[library.length - 1];
 };
 
 const anchorOffsetForChunk = (chunkId: string, i: number, rng: SpawnRng) => {
@@ -102,6 +83,8 @@ const resetRun = (
 const TetherDriftScene: React.FC = () => {
   const inputRef = useInputRef({ preventDefault: ['space'] });
   const snap = useSnapshot(tetherDriftState);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
 
   const elapsedRef = useRef(0);
   const resetVersionRef = useRef(tetherDriftState.resetVersion);
@@ -131,6 +114,8 @@ const TetherDriftScene: React.FC = () => {
     if (tetherDriftState.resetVersion !== resetVersionRef.current) {
       resetVersionRef.current = tetherDriftState.resetVersion;
       elapsedRef.current = 0;
+      startedRef.current = false;
+      setStarted(false);
       resetRun(
         anchorsRef,
         nextAnchorZRef,
@@ -156,22 +141,43 @@ const TetherDriftScene: React.FC = () => {
         driftTimeRef,
         rngRef
       );
+      startedRef.current = true;
+      setStarted(true);
+    } else if (!startedRef.current && (tap || holding)) {
+      startedRef.current = true;
+      setStarted(true);
     }
 
-    if (!tetherDriftState.gameOver) {
+    if (startedRef.current && !tetherDriftState.gameOver) {
       elapsedRef.current += dt;
       const difficulty = sampleDifficulty('swing-chain', elapsedRef.current);
+      const survivability = sampleSurvivability(
+        'tetherdrift',
+        elapsedRef.current
+      );
       const intensity = Math.min(
         1,
         Math.max(0, (difficulty.speed - 4.2) / (7.8 - 4.2))
       );
+      const captureRadius = CAPTURE_RADIUS * survivability.decisionWindowScale;
+      const driftFailTime = DRIFT_FAIL_TIME * survivability.decisionWindowScale;
 
       while (nextAnchorZRef.current < playerPosRef.current.z + LOOK_AHEAD) {
-        const chunk = chooseChunk(rngRef.current, intensity, patternLibrary);
-        const count = Math.max(1, chunk.hazardCount);
+        const chunk = pickPatternChunkForSurvivability(
+          'tetherdrift',
+          patternLibrary,
+          rngRef.current.next,
+          intensity,
+          elapsedRef.current
+        );
+        const count = Math.max(
+          1,
+          Math.round(chunk.hazardCount * survivability.hazardScale)
+        );
         const stride = Math.max(
-          4,
-          (difficulty.speed * chunk.durationSeconds) / count + 2.4
+          4 * survivability.telegraphScale,
+          ((difficulty.speed * chunk.durationSeconds) / count + 2.4) *
+            survivability.telegraphScale
         );
 
         for (let i = 0; i < count; i += 1) {
@@ -212,7 +218,7 @@ const TetherDriftScene: React.FC = () => {
       if (holding) {
         if (tetheredAnchorRef.current < 0) {
           let bestIndex = -1;
-          let bestDistSq = CAPTURE_RADIUS * CAPTURE_RADIUS;
+          let bestDistSq = captureRadius * captureRadius;
           for (let i = 0; i < anchorsRef.current.length; i += 1) {
             const anchor = anchorsRef.current[i];
             const ax =
@@ -247,7 +253,8 @@ const TetherDriftScene: React.FC = () => {
             tetherDriftState.addScore(1);
           }
         } else {
-          orbitAngleRef.current += (2.4 + intensity * 1.4) * dt;
+          orbitAngleRef.current +=
+            (2.1 + intensity * 1.2) * survivability.intensityScale * dt;
           const orbitX = Math.cos(orbitAngleRef.current) * ORBIT_RADIUS;
           const orbitZ = Math.sin(orbitAngleRef.current) * ORBIT_RADIUS * 0.6;
           playerPosRef.current.set(
@@ -266,7 +273,7 @@ const TetherDriftScene: React.FC = () => {
           Math.cos(orbitAngleRef.current) * 0.62 + 0.9
         ).normalize();
         playerVelRef.current.copy(
-          tangent.multiplyScalar(difficulty.speed * 1.6)
+          tangent.multiplyScalar(difficulty.speed * (1.4 + intensity * 0.2))
         );
         tetheredAnchorRef.current = -1;
       }
@@ -280,7 +287,7 @@ const TetherDriftScene: React.FC = () => {
         );
         playerVelRef.current.x *= 1 - dt * 1.35;
         driftTimeRef.current += dt;
-        if (driftTimeRef.current >= DRIFT_FAIL_TIME) {
+        if (driftTimeRef.current >= driftFailTime) {
           tetherDriftState.gameOver = true;
         }
       }
@@ -298,6 +305,11 @@ const TetherDriftScene: React.FC = () => {
 
   const scoreText = Math.floor(snap.score).toString();
   const bestText = Math.floor(snap.bestScore).toString();
+  const shellStatus = snap.gameOver
+    ? 'gameover'
+    : started
+      ? 'playing'
+      : 'ready';
   const player = playerPosRef.current;
   const tetheredAnchor =
     tetheredAnchorRef.current >= 0
@@ -388,34 +400,15 @@ const TetherDriftScene: React.FC = () => {
       })}
 
       <Html fullscreen>
-        <div className="pointer-events-none fixed inset-0 p-4 text-white/90">
-          <div className="flex items-start justify-between">
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2">
-              <div className="text-xs uppercase tracking-[0.25em] opacity-70">
-                Tether Drift
-              </div>
-              <div className="text-[11px] opacity-80">
-                Hold to tether. Release to drift.
-              </div>
-            </div>
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2 text-right">
-              <div className="text-xl font-bold tabular-nums">{scoreText}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] opacity-70">
-                Best {bestText}
-              </div>
-            </div>
-          </div>
-          {snap.gameOver && (
-            <div className="grid h-full place-items-center">
-              <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
-                <div className="text-lg font-semibold">Missed The Chain</div>
-                <div className="mt-2 text-sm opacity-80">
-                  Tap anywhere to retry instantly.
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <KetchappGameShell
+          gameId="tetherdrift"
+          score={scoreText}
+          best={bestText}
+          status={shellStatus}
+          deathTitle="Missed The Chain"
+          containerClassName="fixed inset-0"
+          startCtaText="Tap to start, then hold to tether."
+        />
       </Html>
     </>
   );

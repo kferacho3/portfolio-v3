@@ -14,11 +14,13 @@ import * as THREE from 'three';
 import { SeededRandom } from '../../utils/seededRandom';
 import {
   buildPatternLibraryTemplate,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
-type GameStatus = 'menu' | 'countdown' | 'playing' | 'gameover';
+type GameStatus = 'menu' | 'playing' | 'gameover';
 
 type Spike = {
   z: number;
@@ -86,7 +88,6 @@ export default function WaveFlip() {
   const [best, setBest] = useState(0);
   const [rising, setRising] = useState(true);
   const [gemFlash, setGemFlash] = useState(false);
-  const [countdown, setCountdown] = useState<3 | 2 | 1 | 0 | null>(null);
 
   useEffect(() => {
     try {
@@ -100,12 +101,7 @@ export default function WaveFlip() {
   const start = useCallback(() => {
     setSeed((Date.now() ^ (Math.random() * 1e9)) >>> 0);
     setScore(0);
-    setCountdown(3);
-    setStatus('countdown');
-  }, []);
-
-  const backToMenu = useCallback(() => {
-    setStatus('menu');
+    setStatus('playing');
   }, []);
 
   useEffect(() => {
@@ -113,22 +109,6 @@ export default function WaveFlip() {
     const t = setTimeout(() => setGemFlash(false), 500);
     return () => clearTimeout(t);
   }, [gemFlash]);
-
-  useEffect(() => {
-    if (status !== 'countdown' || countdown === null) return;
-    if (countdown === 0) {
-      const t = setTimeout(() => {
-        setStatus('playing');
-        setCountdown(null);
-      }, 400);
-      return () => clearTimeout(t);
-    }
-    const t = setTimeout(
-      () => setCountdown((c) => (c === 3 ? 2 : c === 2 ? 1 : 0)),
-      800
-    );
-    return () => clearTimeout(t);
-  }, [status, countdown]);
 
   const onGameOver = useCallback((finalScore: number) => {
     setStatus('gameover');
@@ -144,7 +124,12 @@ export default function WaveFlip() {
   }, []);
 
   return (
-    <div className="relative w-full h-full select-none">
+    <div
+      className="relative h-full w-full select-none"
+      onPointerDown={() => {
+        if (status !== 'playing') start();
+      }}
+    >
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -165,114 +150,32 @@ export default function WaveFlip() {
             setScore((s) => s + 1);
             setGemFlash(true);
           }}
-          frozen={status === 'countdown'}
         />
       </Canvas>
 
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4">
-        <div className="flex items-start justify-between">
-          <div className="rounded-lg bg-black/8 px-4 py-2 text-sm text-black/80">
-            <div className="font-bold tracking-wide">WaveFlip</div>
-            <div className="text-black/55">
-              score: {score} · best: {best}
-            </div>
-          </div>
-          {status === 'playing' && (
-            <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-black/8 px-3 py-2 text-sm font-bold tabular-nums text-black/80">
-                {rising ? '↑ RISING' : '↓ FALLING'}
-              </div>
-              {gemFlash && (
-                <div className="animate-pulse rounded-lg bg-emerald-500/25 px-2 py-1 text-sm font-bold text-emerald-700">
-                  +1
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        {status === 'playing' && (
-          <div className="flex flex-col items-center gap-2">
-            <div className="rounded-lg bg-black/10 px-4 py-2 text-center text-sm font-medium text-black/75">
-              <span className="font-bold">OBJECTIVE:</span> Go forward → · Avoid{' '}
-              <span className="font-semibold text-red-600">red</span> (floor) &{' '}
-              <span className="font-semibold text-blue-600">blue</span>{' '}
-              (ceiling) spikes · Tap/Space to flip · Green = +1
-            </div>
-            <div className="text-2xl font-bold text-black/40">→</div>
-          </div>
-        )}
-      </div>
-
-      {status === 'menu' && (
-        <Overlay>
-          <h1 className="text-4xl font-extrabold tracking-tight">WaveFlip</h1>
-          <p className="mt-1 text-sm font-semibold uppercase tracking-wide text-black/50">
-            Objective: Go forward · Avoid spikes · Collect gems
-          </p>
-          <p className="mt-3 text-black/70 max-w-sm">
-            <strong>Tap or Space</strong> flips your direction: you rise or
-            fall. Avoid spikes:{' '}
-            <span className="font-semibold text-red-600">Red = floor</span> →
-            flip to rise.{' '}
-            <span className="font-semibold text-blue-600">Blue = ceiling</span>{' '}
-            → flip to fall. Green = +1.
-          </p>
-          <button
-            className="mt-6 rounded-lg bg-black px-5 py-3 text-white font-semibold pointer-events-auto"
-            onClick={start}
-          >
-            Play
-          </button>
-        </Overlay>
-      )}
-
-      {status === 'countdown' && countdown !== null && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="rounded-2xl bg-white/90 shadow-2xl px-16 py-12 text-center">
-            <div className="text-7xl font-black tabular-nums text-black">
-              {countdown === 0 ? 'GO!' : countdown}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {status === 'gameover' && (
-        <Overlay>
-          <h2 className="text-4xl font-extrabold tracking-tight">
-            You hit a spike!
-          </h2>
-          <p className="mt-2 text-black/70">Score: {score}</p>
-          <p className="mt-1 text-sm text-black/60">
-            <span className="font-semibold text-red-600">Red</span> = floor
-            (flip ↑) · <span className="font-semibold text-blue-600">Blue</span>{' '}
-            = ceiling (flip ↓)
-          </p>
-          <div className="mt-6 flex gap-3">
-            <button
-              className="rounded-lg bg-black px-5 py-3 text-white font-semibold pointer-events-auto"
-              onClick={start}
-            >
-              Retry
-            </button>
-            <button
-              className="rounded-lg bg-black/10 px-5 py-3 text-black font-semibold pointer-events-auto"
-              onClick={backToMenu}
-            >
-              Menu
-            </button>
-          </div>
-        </Overlay>
-      )}
-    </div>
-  );
-}
-
-function Overlay({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-0 flex items-center justify-center">
-      <div className="rounded-2xl bg-white/80 backdrop-blur px-8 py-8 text-center shadow-xl">
-        {children}
-      </div>
+      <KetchappGameShell
+        gameId="waveflip"
+        score={score}
+        best={best}
+        status={
+          status === 'playing'
+            ? 'playing'
+            : status === 'gameover'
+              ? 'gameover'
+              : 'ready'
+        }
+        tone="light"
+        deathTitle="Hit A Spike"
+        containerClassName="absolute inset-0"
+        statusNote={
+          status === 'playing' ? (
+            <>
+              {rising ? 'Rising' : 'Falling'}
+              {gemFlash ? ' · +1' : ''}
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }
@@ -282,20 +185,32 @@ function WaveTrail({
 }: {
   trailRef: React.MutableRefObject<THREE.Vector3[]>;
 }) {
-  const lineRef = useRef<THREE.Line>(null);
+  const lineObj = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    const material = new THREE.LineBasicMaterial({
+      color: '#94a3b8',
+      transparent: true,
+      opacity: 0.45,
+    });
+    return new THREE.Line(geometry, material);
+  }, []);
+
+  useEffect(
+    () => () => {
+      lineObj.geometry.dispose();
+      (lineObj.material as THREE.Material).dispose();
+    },
+    [lineObj]
+  );
+
   useFrame(() => {
-    if (!lineRef.current || trailRef.current.length < 2) return;
-    const prev = lineRef.current.geometry;
+    if (trailRef.current.length < 2) return;
+    const prev = lineObj.geometry;
     const geo = new THREE.BufferGeometry().setFromPoints(trailRef.current);
-    lineRef.current.geometry = geo;
+    lineObj.geometry = geo;
     prev.dispose();
   });
-  return (
-    <line ref={lineRef}>
-      <bufferGeometry />
-      <lineBasicMaterial color="#94a3b8" transparent opacity={0.45} />
-    </line>
-  );
+  return <primitive object={lineObj} />;
 }
 
 const SPIKE_FLOOR_COLOR = '#dc2626';
@@ -308,7 +223,6 @@ function WaveFlipScene({
   onGameOver,
   onDirectionChange,
   onGem,
-  frozen,
 }: {
   status: GameStatus;
   seed: number;
@@ -316,9 +230,8 @@ function WaveFlipScene({
   onGameOver: (score: number) => void;
   onDirectionChange?: (rising: boolean) => void;
   onGem?: () => void;
-  frozen?: boolean;
 }) {
-  const active = status === 'playing' && !frozen;
+  const active = status === 'playing';
   const input = useInputRef({
     enabled: active,
     preventDefault: [' ', 'Space'],
@@ -381,7 +294,7 @@ function WaveFlipScene({
   }, [seed, status, onScore, onDirectionChange]);
 
   useFrame((state, dt) => {
-    if (status !== 'playing' || frozen || !sim.current.alive) {
+    if (status !== 'playing' || !sim.current.alive) {
       clearFrameInput(input.current);
       return;
     }
@@ -409,18 +322,21 @@ function WaveFlipScene({
     const phaseMul = 0.6 + 0.4 * ease;
 
     const difficulty = sampleDifficulty('wave-timing', elapsed);
+    const survivability = sampleSurvivability('waveflip', elapsed);
     const intensity = Math.min(
       1,
       Math.max(0, (difficulty.speed - 4.0) / (7.0 - 4.0))
     );
     const spacingMul = THREE.MathUtils.lerp(1, 0.74, intensity);
-    const dynamicSpacing = SPIKE_SPACING * spacingMul;
+    const dynamicSpacing =
+      SPIKE_SPACING * spacingMul * survivability.telegraphScale;
     const activeChunk =
       patternLibrary[Math.floor(sim.current.z) % patternLibrary.length];
 
     sim.current.phase +=
       sim.current.phaseVel * (phaseMul + activeChunk.tier * 0.03) * dt;
-    sim.current.z += difficulty.speed * speedMul * dt;
+    sim.current.z +=
+      difficulty.speed * speedMul * survivability.intensityScale * dt;
 
     const y = AMP * Math.sin(sim.current.phase);
     const z = sim.current.z;
@@ -445,18 +361,24 @@ function WaveFlipScene({
     for (const i of [nextPassed, nextPassed + 1]) {
       const spike = getSpike(i, seed, tmpSpike, dynamicSpacing);
       const dz = Math.abs(z - spike.z);
-      if (dz > 0.55) continue;
+      if (dz > 0.55 * survivability.decisionWindowScale) continue;
 
       if (spike.up) {
         const top = -WORLD_HALF_H + spike.h;
-        if (y - BALL_R <= top) {
+        if (
+          y - BALL_R <=
+          top - (survivability.decisionWindowScale - 1) * 0.14
+        ) {
           sim.current.alive = false;
           onGameOver(sim.current.passed);
           break;
         }
       } else {
         const bottom = WORLD_HALF_H - spike.h;
-        if (y + BALL_R >= bottom) {
+        if (
+          y + BALL_R >=
+          bottom + (survivability.decisionWindowScale - 1) * 0.14
+        ) {
           sim.current.alive = false;
           onGameOver(sim.current.passed);
           break;
@@ -565,6 +487,10 @@ function WaveFlipScene({
           'wave-timing',
           sim.current.z / 5
         );
+        const previewSurvivability = sampleSurvivability(
+          'waveflip',
+          sim.current.z / 5
+        );
         const previewSpacing =
           SPIKE_SPACING *
           THREE.MathUtils.lerp(
@@ -574,7 +500,8 @@ function WaveFlipScene({
               1,
               Math.max(0, (previewDifficulty.speed - 4.0) / (7.0 - 4.0))
             )
-          );
+          ) *
+          previewSurvivability.telegraphScale;
         const spike = getSpike(i, seed, { ...tmpSpike }, previewSpacing);
         const z = -spike.z;
         const yBase = spike.up ? -WORLD_HALF_H : WORLD_HALF_H;
@@ -600,6 +527,10 @@ function WaveFlipScene({
           'wave-timing',
           sim.current.z / 5
         );
+        const previewSurvivability = sampleSurvivability(
+          'waveflip',
+          sim.current.z / 5
+        );
         const previewSpacing =
           SPIKE_SPACING *
           THREE.MathUtils.lerp(
@@ -609,7 +540,8 @@ function WaveFlipScene({
               1,
               Math.max(0, (previewDifficulty.speed - 4.0) / (7.0 - 4.0))
             )
-          );
+          ) *
+          previewSurvivability.telegraphScale;
         const pickup = getPickup(i, seed, { ...tmpPickup }, previewSpacing);
         if (!pickup) return null;
         tmp.set(0, pickup.y, -pickup.z);

@@ -2,12 +2,15 @@
 
 import { Html, PerspectiveCamera } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useSnapshot } from 'valtio';
 import {
   buildPatternLibraryTemplate,
+  pickPatternChunkForSurvivability,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { polarityState, type PolarityCharge } from './state';
 
@@ -38,28 +41,6 @@ const makeRng = (seed: number): SpawnRng => {
       return value / 0xffffffff;
     },
   };
-};
-
-const chooseChunk = (
-  rng: SpawnRng,
-  intensity: number,
-  library: ReturnType<typeof buildPatternLibraryTemplate>
-) => {
-  const targetTier = Math.round(intensity * 4);
-  let total = 0;
-  const weights = library.map((chunk) => {
-    const tierDistance = Math.abs(chunk.tier - targetTier);
-    const weight = Math.max(0.12, 1.75 - tierDistance * 0.35);
-    total += weight;
-    return weight;
-  });
-  const pick = rng.next() * total;
-  let cursor = 0;
-  for (let i = 0; i < library.length; i += 1) {
-    cursor += weights[i];
-    if (pick <= cursor) return library[i];
-  }
-  return library[library.length - 1];
 };
 
 const nextPolarity = (
@@ -98,6 +79,8 @@ const resetRun = (
 
 const PolarityScene: React.FC = () => {
   const inputRef = useInputRef({ preventDefault: ['space'] });
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
 
   const progressRef = useRef(0);
   const elapsedRef = useRef(0);
@@ -122,6 +105,8 @@ const PolarityScene: React.FC = () => {
     if (polarityState.resetVersion !== lastResetVersionRef.current) {
       lastResetVersionRef.current = polarityState.resetVersion;
       elapsedRef.current = 0;
+      startedRef.current = false;
+      setStarted(false);
       resetRun(progressRef, nextSpawnZRef, lastGateChargeRef, gatesRef, rngRef);
     }
 
@@ -136,14 +121,20 @@ const PolarityScene: React.FC = () => {
           gatesRef,
           rngRef
         );
+        startedRef.current = true;
+        setStarted(true);
+      } else if (!startedRef.current) {
+        startedRef.current = true;
+        setStarted(true);
       } else {
         polarityState.flipCharge();
       }
     }
 
-    if (!polarityState.gameOver) {
+    if (startedRef.current && !polarityState.gameOver) {
       elapsedRef.current += dt;
       const difficulty = sampleDifficulty('lane-switch', elapsedRef.current);
+      const survivability = sampleSurvivability('polarity', elapsedRef.current);
       const intensity = Math.min(
         1,
         Math.max(0, (difficulty.speed - 6.5) / (11.5 - 6.5))
@@ -152,11 +143,21 @@ const PolarityScene: React.FC = () => {
       progressRef.current += difficulty.speed * dt;
 
       while (nextSpawnZRef.current < progressRef.current + LOOK_AHEAD) {
-        const chunk = chooseChunk(rngRef.current, intensity, patternLibrary);
-        const hazardCount = Math.max(1, chunk.hazardCount);
+        const chunk = pickPatternChunkForSurvivability(
+          'polarity',
+          patternLibrary,
+          rngRef.current.next,
+          intensity,
+          elapsedRef.current
+        );
+        const hazardCount = Math.max(
+          1,
+          Math.round(chunk.hazardCount * survivability.hazardScale)
+        );
         const stride = Math.max(
-          2.6,
-          (difficulty.speed * chunk.durationSeconds) / hazardCount
+          2.6 * survivability.telegraphScale,
+          ((difficulty.speed * chunk.durationSeconds) / hazardCount) *
+            survivability.telegraphScale
         );
 
         for (let i = 0; i < hazardCount; i += 1) {
@@ -171,7 +172,9 @@ const PolarityScene: React.FC = () => {
             id: `${chunk.id}-${nextSpawnZRef.current.toFixed(2)}-${i}`,
             z: nextSpawnZRef.current + stride * (i + 1),
             required,
-            telegraphLate: chunk.id === 'C07' || chunk.id === 'C13',
+            telegraphLate:
+              (chunk.id === 'C07' || chunk.id === 'C13') &&
+              survivability.onboarding < 0.45,
           });
         }
 
@@ -184,7 +187,9 @@ const PolarityScene: React.FC = () => {
       for (let i = gatesRef.current.length - 1; i >= 0; i -= 1) {
         const gate = gatesRef.current[i];
         const relativeZ = gate.z - progressRef.current;
-        if (relativeZ <= 0.22) {
+        const gateHitThreshold =
+          0.22 + (survivability.decisionWindowScale - 1) * 0.12;
+        if (relativeZ <= gateHitThreshold) {
           if (polarityState.charge !== gate.required) {
             polarityState.takeDamage(999);
             polarityState.gameOver = true;
@@ -204,6 +209,13 @@ const PolarityScene: React.FC = () => {
   const playerX = RAIL_X[snap.charge];
   const scoreText = Math.floor(snap.score).toString();
   const bestText = Math.floor(snap.bestScore).toString();
+  const survivability = sampleSurvivability('polarity', elapsedRef.current);
+  const lateTelegraphHideZ = 10 / survivability.telegraphScale;
+  const shellStatus = snap.gameOver
+    ? 'gameover'
+    : started
+      ? 'playing'
+      : 'ready';
 
   return (
     <>
@@ -244,7 +256,8 @@ const PolarityScene: React.FC = () => {
 
       {gatesRef.current.map((gate) => {
         const z = gate.z - progressRef.current;
-        const hiddenByLateTelegraph = gate.telegraphLate && z > 10;
+        const hiddenByLateTelegraph =
+          gate.telegraphLate && z > lateTelegraphHideZ;
         if (hiddenByLateTelegraph || z < DESPAWN_Z || z > 44) return null;
         const gateColor = gate.required === 1 ? '#2fe0ca' : '#ff6b72';
         return (
@@ -264,34 +277,14 @@ const PolarityScene: React.FC = () => {
       })}
 
       <Html fullscreen>
-        <div className="pointer-events-none fixed inset-0 p-4 text-white/90">
-          <div className="flex items-start justify-between">
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2">
-              <div className="text-xs uppercase tracking-[0.25em] opacity-70">
-                Polarity
-              </div>
-              <div className="text-[11px] opacity-80">
-                Tap to flip charge and swap rails.
-              </div>
-            </div>
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2 text-right">
-              <div className="text-xl font-bold tabular-nums">{scoreText}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] opacity-70">
-                Best {bestText}
-              </div>
-            </div>
-          </div>
-          {snap.gameOver && (
-            <div className="grid h-full place-items-center">
-              <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
-                <div className="text-lg font-semibold">Wrong Charge</div>
-                <div className="mt-2 text-sm opacity-80">
-                  Tap anywhere to retry instantly.
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <KetchappGameShell
+          gameId="polarity"
+          score={scoreText}
+          best={bestText}
+          status={shellStatus}
+          deathTitle="Wrong Charge"
+          containerClassName="fixed inset-0"
+        />
       </Html>
     </>
   );

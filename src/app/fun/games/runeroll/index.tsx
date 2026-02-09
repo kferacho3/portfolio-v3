@@ -14,8 +14,10 @@ import * as THREE from 'three';
 import { SeededRandom } from '../../utils/seededRandom';
 import {
   buildPatternLibraryTemplate,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -94,10 +96,13 @@ export default function RuneRoll() {
     setStatus('playing');
   }, []);
 
-  const backToMenu = useCallback(() => setStatus('menu'), []);
-
   return (
-    <div className="relative w-full h-full select-none">
+    <div
+      className="relative h-full w-full select-none"
+      onPointerDown={() => {
+        if (status !== 'playing') start();
+      }}
+    >
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -125,50 +130,20 @@ export default function RuneRoll() {
           }}
         />
       </Canvas>
-
-      <div className="absolute left-0 right-0 top-0 p-4 flex items-start justify-between pointer-events-none">
-        <div className="pointer-events-auto">
-          <div className="text-white/90 text-sm tracking-wide">RuneRoll</div>
-          <div className="text-white font-semibold text-2xl leading-none">
-            {score}
-          </div>
-          <div className="text-white/60 text-xs mt-1">Best {best}</div>
-        </div>
-        <div className="text-white/40 text-xs">Tap or Space: rotate rune</div>
-      </div>
-
-      {status !== 'playing' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-          <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-xl p-5 w-[320px] text-center">
-            <div className="text-white font-semibold text-2xl">RuneRoll</div>
-            <div className="text-white/70 text-sm mt-2">
-              Match the gate rune. Tap or press Space to rotate your cube.
-            </div>
-            {status === 'gameover' && (
-              <div className="text-white/80 text-sm mt-3">
-                You cleared <span className="font-semibold">{score}</span>{' '}
-                gates.
-              </div>
-            )}
-            <div className="mt-4 flex gap-2 justify-center">
-              <button
-                className="px-4 py-2 rounded-lg bg-white text-black font-semibold"
-                onClick={start}
-              >
-                {status === 'menu' ? 'Play' : 'Retry'}
-              </button>
-              {status === 'gameover' && (
-                <button
-                  className="px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white"
-                  onClick={backToMenu}
-                >
-                  Menu
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <KetchappGameShell
+        gameId="runeroll"
+        score={score}
+        best={best}
+        status={
+          status === 'playing'
+            ? 'playing'
+            : status === 'gameover'
+              ? 'gameover'
+              : 'ready'
+        }
+        deathTitle="Rune Mismatch"
+        containerClassName="absolute inset-0"
+      />
     </div>
   );
 }
@@ -261,7 +236,8 @@ function Scene({
 
     // move world forward (path flows from ahead (-Z) toward you)
     const difficulty = sampleDifficulty('timing-defense', s.runeScore * 0.75);
-    s.z += difficulty.speed * dt;
+    const survivability = sampleSurvivability('runeroll', s.runeScore);
+    s.z += difficulty.speed * survivability.intensityScale * dt;
 
     // gate check: when a gate crosses z==0 in world space (gate i at world z = s.z - i*SPACING)
     const justCleared = Math.floor(s.z / SPACING);
@@ -269,10 +245,17 @@ function Scene({
       // we cleared one or more gates (dt might be large)
       for (let i = s.runeScore + 1; i <= justCleared; i++) {
         getRuntimeGate(seed, i, patternLibrary, gateScratch);
-        if (gateScratch.rune !== s.rune) {
+        const mismatchForgiven =
+          survivability.onboarding > 0.45 &&
+          (s.rune + 1) % 4 === gateScratch.rune;
+        if (gateScratch.rune !== s.rune && !mismatchForgiven) {
           onGameOver(s.runeScore);
           clearFrameInput(input.current);
           return;
+        }
+        if (mismatchForgiven) {
+          s.rune = gateScratch.rune;
+          s.rotTarget = s.rune * (Math.PI / 2);
         }
         s.runeScore = i;
         onScore();
@@ -339,7 +322,6 @@ function Scene({
       {/* cube */}
       <mesh ref={cubeRef} position={[0, -0.45, 0]} castShadow receiveShadow>
         <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
-        {/* @ts-expect-error three allows array materials */}
         <primitive object={cubeFaceMaterials} attach="material" />
       </mesh>
 

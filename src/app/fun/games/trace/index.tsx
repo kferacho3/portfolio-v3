@@ -2,13 +2,16 @@
 
 import { Html, PerspectiveCamera } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
   buildPatternLibraryTemplate,
+  pickPatternChunkForSurvivability,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { traceState } from './state';
 
@@ -34,28 +37,6 @@ const makeRng = (seed: number): SpawnRng => {
       return value / 0xffffffff;
     },
   };
-};
-
-const chooseChunk = (
-  rng: SpawnRng,
-  intensity: number,
-  library: ReturnType<typeof buildPatternLibraryTemplate>
-) => {
-  const targetTier = Math.round(intensity * 4);
-  let total = 0;
-  const weights = library.map((chunk) => {
-    const distance = Math.abs(chunk.tier - targetTier);
-    const weight = Math.max(0.14, 1.75 - distance * 0.34);
-    total += weight;
-    return weight;
-  });
-  const pick = rng.next() * total;
-  let cursor = 0;
-  for (let i = 0; i < library.length; i += 1) {
-    cursor += weights[i];
-    if (pick <= cursor) return library[i];
-  }
-  return library[library.length - 1];
 };
 
 const nextCenterX = (
@@ -127,6 +108,8 @@ const samplePathAt = (nodes: PathNode[], z: number) => {
 const TraceScene: React.FC = () => {
   const inputRef = useInputRef();
   const snap = useSnapshot(traceState);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
 
   const elapsedRef = useRef(0);
   const resetVersionRef = useRef(traceState.resetVersion);
@@ -152,6 +135,8 @@ const TraceScene: React.FC = () => {
     if (traceState.resetVersion !== resetVersionRef.current) {
       resetVersionRef.current = traceState.resetVersion;
       elapsedRef.current = 0;
+      startedRef.current = false;
+      setStarted(false);
       resetRun(
         nodesRef,
         nextNodeZRef,
@@ -175,11 +160,20 @@ const TraceScene: React.FC = () => {
         distanceBucketRef,
         rngRef
       );
+      startedRef.current = true;
+      setStarted(true);
+    } else if (
+      !startedRef.current &&
+      (tap || input.pointerDown || input.keysDown.has(' '))
+    ) {
+      startedRef.current = true;
+      setStarted(true);
     }
 
-    if (!traceState.gameOver) {
+    if (startedRef.current && !traceState.gameOver) {
       elapsedRef.current += dt;
       const difficulty = sampleDifficulty('path-follow', elapsedRef.current);
+      const survivability = sampleSurvivability('trace', elapsedRef.current);
       const intensity = Math.min(
         1,
         Math.max(0, (difficulty.speed - 4.8) / (8.2 - 4.8))
@@ -207,17 +201,27 @@ const TraceScene: React.FC = () => {
       }
 
       const widthScale = THREE.MathUtils.clamp(
-        difficulty.decisionWindowMs / 560,
+        (difficulty.decisionWindowMs * survivability.decisionWindowScale) / 560,
         0.48,
         1
       );
 
       while (nextNodeZRef.current < progressRef.current + LOOK_AHEAD) {
-        const chunk = chooseChunk(rngRef.current, intensity, patternLibrary);
-        const nodeCount = Math.max(2, Math.round(chunk.durationSeconds * 3));
+        const chunk = pickPatternChunkForSurvivability(
+          'trace',
+          patternLibrary,
+          rngRef.current.next,
+          intensity,
+          elapsedRef.current
+        );
+        const nodeCount = Math.max(
+          2,
+          Math.round(chunk.durationSeconds * 3 * survivability.hazardScale)
+        );
         const stride = Math.max(
           1.6,
-          (difficulty.speed * chunk.durationSeconds) / nodeCount
+          ((difficulty.speed * chunk.durationSeconds) / nodeCount) *
+            survivability.telegraphScale
         );
 
         for (let i = 0; i < nodeCount; i += 1) {
@@ -238,9 +242,10 @@ const TraceScene: React.FC = () => {
       }
 
       const pathSample = samplePathAt(nodesRef.current, progressRef.current);
+      const pathGrace = 0.1 * survivability.decisionWindowScale;
       if (
         Math.abs(playerXRef.current - pathSample.x) >
-        pathSample.width * 0.5
+        pathSample.width * 0.5 + pathGrace
       ) {
         traceState.gameOver = true;
       }
@@ -267,6 +272,11 @@ const TraceScene: React.FC = () => {
 
   const scoreText = Math.floor(snap.score).toString();
   const bestText = Math.floor(snap.bestScore).toString();
+  const shellStatus = snap.gameOver
+    ? 'gameover'
+    : started
+      ? 'playing'
+      : 'ready';
 
   return (
     <>
@@ -335,34 +345,15 @@ const TraceScene: React.FC = () => {
       </mesh>
 
       <Html fullscreen>
-        <div className="pointer-events-none fixed inset-0 p-4 text-white/90">
-          <div className="flex items-start justify-between">
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2">
-              <div className="text-xs uppercase tracking-[0.25em] opacity-70">
-                Trace
-              </div>
-              <div className="text-[11px] opacity-80">
-                Drag to stay on the line.
-              </div>
-            </div>
-            <div className="rounded-md border border-white/20 bg-black/35 px-3 py-2 text-right">
-              <div className="text-xl font-bold tabular-nums">{scoreText}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] opacity-70">
-                Best {bestText}
-              </div>
-            </div>
-          </div>
-          {snap.gameOver && (
-            <div className="grid h-full place-items-center">
-              <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
-                <div className="text-lg font-semibold">Off The Path</div>
-                <div className="mt-2 text-sm opacity-80">
-                  Tap anywhere to retry instantly.
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <KetchappGameShell
+          gameId="trace"
+          score={scoreText}
+          best={bestText}
+          status={shellStatus}
+          deathTitle="Off The Path"
+          containerClassName="fixed inset-0"
+          startCtaText="Tap to start, then drag to trace."
+        />
       </Html>
     </>
   );

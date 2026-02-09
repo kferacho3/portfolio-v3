@@ -14,8 +14,10 @@ import * as THREE from 'three';
 import { SeededRandom } from '../../utils/seededRandom';
 import {
   buildPatternLibraryTemplate,
+  sampleSurvivability,
   sampleDifficulty,
 } from '../../config/ketchapp';
+import { KetchappGameShell } from '../_shared/KetchappGameShell';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -87,7 +89,12 @@ export default function PulseParry() {
   );
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-neutral-950 text-white">
+    <div
+      className="relative h-full w-full overflow-hidden bg-neutral-950 text-white"
+      onPointerDown={() => {
+        if (status !== 'playing') start();
+      }}
+    >
       <Canvas
         dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
@@ -103,40 +110,20 @@ export default function PulseParry() {
           onGameOver={onGameOver}
         />
       </Canvas>
-
-      {/* HUD */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-4 top-4 text-sm opacity-80">
-          PulseParry
-        </div>
-        <div className="absolute right-4 top-3 text-right">
-          <div className="text-3xl font-semibold tracking-tight">{score}</div>
-          <div className="text-xs opacity-60">BEST {best}</div>
-        </div>
-      </div>
-
-      {status !== 'playing' && (
-        <div className="absolute inset-0 grid place-items-center bg-black/60">
-          <div className="w-[min(420px,92vw)] rounded-xl bg-neutral-900/80 p-6 shadow-2xl backdrop-blur">
-            <div className="text-2xl font-semibold">PulseParry</div>
-            <p className="mt-2 text-sm leading-relaxed text-white/75">
-              One tap = a short shield pulse. Time it to parry incoming shards.
-              Parried shards bounce back and score points.
-            </p>
-            <div className="mt-5 flex items-center gap-3">
-              <button
-                className="pointer-events-auto rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black hover:bg-white/90"
-                onClick={start}
-              >
-                {status === 'menu' ? 'Play' : 'Retry'}
-              </button>
-              <div className="text-xs text-white/60">
-                Tap anywhere during play
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <KetchappGameShell
+        gameId="pulseparry"
+        score={score}
+        best={best}
+        status={
+          status === 'playing'
+            ? 'playing'
+            : status === 'gameover'
+              ? 'gameover'
+              : 'ready'
+        }
+        deathTitle="Timing Miss"
+        containerClassName="absolute inset-0"
+      />
     </div>
   );
 }
@@ -152,7 +139,7 @@ function PulseParryScene({
   onScore: React.Dispatch<React.SetStateAction<number>>;
   onGameOver: (finalScore: number) => void;
 }) {
-  const input = useInputRef(status === 'playing');
+  const input = useInputRef({ enabled: status === 'playing' });
   const ballRef = useRef<THREE.Mesh>(null);
   const shieldRef = useRef<THREE.Mesh>(null);
 
@@ -234,10 +221,15 @@ function PulseParryScene({
       return;
     }
 
+    const survivability = sampleSurvivability(
+      'pulseparry',
+      sim.current.score * 0.7
+    );
+
     // Input: pulse shield
     if (input.current.pointerJustDown && sim.current.cooldownT <= 0) {
-      sim.current.shieldT = SHIELD_DURATION;
-      sim.current.cooldownT = SHIELD_COOLDOWN;
+      sim.current.shieldT = SHIELD_DURATION * survivability.decisionWindowScale;
+      sim.current.cooldownT = SHIELD_COOLDOWN * survivability.intensityScale;
     }
 
     sim.current.shieldT = Math.max(0, sim.current.shieldT - dt);
@@ -253,13 +245,18 @@ function PulseParryScene({
     // Spawn cadence scales with difficulty profile + chunk tier
     sim.current.spawnT -= dt;
     const spawnEvery = clamp(
-      0.75 - activeChunk.tier * 0.04 - (difficulty.eventRate - 0.4) * 0.28,
+      0.75 -
+        activeChunk.tier * 0.04 * survivability.hazardScale -
+        (difficulty.eventRate - 0.4) * 0.28 * survivability.intensityScale,
       0.3,
-      0.75
+      0.9
     );
     if (sim.current.spawnT <= 0) {
       sim.current.spawnT = spawnEvery;
-      spawn(difficulty.speed + 1.2, activeChunk.tier);
+      spawn(
+        (difficulty.speed + 1.2) * survivability.intensityScale,
+        activeChunk.tier
+      );
     }
 
     // Update visuals
@@ -285,11 +282,14 @@ function PulseParryScene({
 
       // collision with player / shield
       const dist = tmp.v2.copy(p.pos).sub(ballPos).length();
-      const hitDist = p.r + BALL_R;
+      const hitDist =
+        p.r + BALL_R + (survivability.decisionWindowScale - 1) * 0.08;
 
       if (dist <= hitDist) {
         // shield parry?
-        if (sim.current.shieldT > 0 && dist <= SHIELD_RADIUS) {
+        const parryRadius =
+          SHIELD_RADIUS + (survivability.decisionWindowScale - 1) * 0.16;
+        if (sim.current.shieldT > 0 && dist <= parryRadius) {
           if (!p.reflected) {
             p.reflected = true;
             p.vel.z *= -1;
