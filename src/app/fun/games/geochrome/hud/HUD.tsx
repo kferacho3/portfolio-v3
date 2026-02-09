@@ -1,16 +1,22 @@
 import { Html } from '@react-three/drei';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMemo } from 'react';
+import { GOAL_DIAMETERS } from '../engine/constants';
 import { useGeoChromeStore } from '../engine/store';
 
 export default function HUD() {
   const diameter = useGeoChromeStore((state) => state.diameter);
+  const pickupLimit = useGeoChromeStore((state) => state.pickupLimit);
   const recentPickups = useGeoChromeStore((state) => state.recentPickups);
   const lowPerf = useGeoChromeStore((state) => state.lowPerf);
   const stuckCount = useGeoChromeStore((state) => state.stuckCount);
   const worldCount = useGeoChromeStore((state) => state.worldCount);
 
   const diameterKey = useMemo(() => Math.floor(diameter * 100), [diameter]);
+  const nextGoal =
+    GOAL_DIAMETERS.find((goal) => diameter < goal) ??
+    GOAL_DIAMETERS[GOAL_DIAMETERS.length - 1];
+  const progressToGoal = Math.min(1, diameter / nextGoal);
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -37,6 +43,31 @@ export default function HUD() {
             <div className="mt-1 text-[11px] text-cyan-100/80">
               {stuckCount.toLocaleString()} stuck /{' '}
               {worldCount.toLocaleString()} in world
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-700/80">
+              <div
+                className="h-full rounded-full bg-cyan-300"
+                style={{ width: `${progressToGoal * 100}%` }}
+              />
+            </div>
+            <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-cyan-200/85">
+              Goal: {nextGoal.toFixed(1)}m
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="hidden rounded-2xl border border-cyan-200/35 bg-slate-950/60 px-4 py-3 text-right backdrop-blur md:block"
+          >
+            <div className="text-[10px] uppercase tracking-[0.15em] text-cyan-300/90">
+              Pickup Limit
+            </div>
+            <div className="text-2xl font-black text-cyan-50">
+              {pickupLimit.toFixed(2)}m
+            </div>
+            <div className="text-[11px] text-cyan-100/75">
+              absorb anything smaller than this
             </div>
           </motion.div>
 

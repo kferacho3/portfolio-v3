@@ -9,10 +9,14 @@ export const WORLD_TUNING = {
   liteItemCount: 3200,
   maxStuckItems: 12000,
   radius: 185,
+  halfExtent: 220,
   clusterCount: 24,
-  pathChance: 0.2,
-  minY: 0.35,
-  maxY: 3.8,
+  pathChance: 0.35,
+  minY: 0.12,
+  maxY: 0.95,
+  ringStartRadius: 9,
+  ringStep: 46,
+  decorativeCount: 84,
 } as const;
 
 export const PLAYER_TUNING = {
@@ -38,12 +42,13 @@ export const GROWTH_TUNING = {
 } as const;
 
 export const CAMERA_TUNING = {
-  baseHeight: 5.2,
-  baseDistance: 10.8,
-  followLerp: 4.6,
-  lookLerp: 5.5,
-  lookAhead: 2.15,
-  headingLerp: 7.5,
+  baseHeight: 6.6,
+  baseDistance: 12.8,
+  followLerp: 4.2,
+  lookLerp: 4.8,
+  lookAhead: 1.9,
+  headingLerp: 5.8,
+  headingInfluence: 0.35,
 } as const;
 
 export const PHYSICS_CULLING = {
@@ -59,8 +64,17 @@ export const RENDER_TUNING = {
   lowPerfDpr: 1,
   worldSegments: 18,
   worldRings: 16,
+  terrainSegments: 128,
   qualityHigh: 1,
   qualityLow: 0.58,
+} as const;
+
+export const ARENA_TUNING = {
+  terrainAmplitude: 0.18,
+  terrainFrequency: 0.028,
+  boundaryHeight: 12,
+  boundaryThickness: 5.5,
+  boundaryRadius: 214,
 } as const;
 
 export const AUDIO_TUNING = {
@@ -90,5 +104,7 @@ export const WORLD_SHAPE_LABELS = [
 ] as const;
 
 export const WORLD_TIER_NAMES = ['tiny', 'small', 'medium', 'large'] as const;
+
+export const GOAL_DIAMETERS = [2, 3.5, 5.5, 8, 11, 15, 20, 28, 38] as const;
 
 export type WorldTierName = (typeof WORLD_TIER_NAMES)[number];

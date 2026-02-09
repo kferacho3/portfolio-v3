@@ -23,10 +23,11 @@ export default function StartOverlay({ onStart }: StartOverlayProps) {
           </h1>
           <p className="mt-3 text-sm text-cyan-100/80 md:text-base">
             Sweep through dense geometric fields, absorb smaller shapes, and
-            scale into a chrome titan.
+            scale into a chrome titan. Start near the center on tiny shapes,
+            then push outward toward bigger tiers.
           </p>
 
-          <div className="mt-5 grid grid-cols-1 gap-2 text-xs text-cyan-100/80 md:grid-cols-3 md:text-sm">
+          <div className="mt-5 grid grid-cols-1 gap-2 text-xs text-cyan-100/80 md:grid-cols-4 md:text-sm">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="font-semibold text-cyan-200">Move</div>
               <div>WASD / Arrow Keys</div>
@@ -34,6 +35,10 @@ export default function StartOverlay({ onStart }: StartOverlayProps) {
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="font-semibold text-cyan-200">Boost</div>
               <div>Hold Shift</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="font-semibold text-cyan-200">Touch</div>
+              <div>Drag to steer</div>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="font-semibold text-cyan-200">Reset</div>

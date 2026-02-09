@@ -13,7 +13,12 @@ import {
 } from '@react-three/rapier';
 import React, { useCallback, useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { RENDER_TUNING, COLLISION_GROUPS } from './engine/constants';
+import {
+  ARENA_TUNING,
+  COLLISION_GROUPS,
+  RENDER_TUNING,
+  WORLD_TUNING,
+} from './engine/constants';
 import { SpeedEffects } from './engine/SpeedEffects';
 import { useKatamariAudio } from './engine/useKatamariAudio';
 import { useKatamariEngine } from './engine/useKatamariEngine';
@@ -25,6 +30,7 @@ import type { StuckAttributeBuffers, WorldRuntimeData } from './engine/types';
 import HUD from './hud/HUD';
 import StartOverlay from './hud/StartOverlay';
 import KatamariPlayer from './player/KatamariPlayer';
+import ArenaEnvironment from './world/ArenaEnvironment';
 import ProceduralWorld from './world/ProceduralWorld';
 
 function AdaptivePerformanceController() {
@@ -195,21 +201,24 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     <>
       <AdaptivePerformanceController />
 
-      <color attach="background" args={['#040712']} />
-      <fog attach="fog" args={['#040712', 36, 260]} />
+      <color attach="background" args={['#060d1f']} />
+      <fog attach="fog" args={['#081426', 88, 360]} />
 
-      <ambientLight intensity={0.4} />
-      <hemisphereLight intensity={0.45} color="#b9f2ff" groundColor="#111322" />
+      <ambientLight intensity={0.48} />
+      <hemisphereLight intensity={0.5} color="#dbeafe" groundColor="#101627" />
       <directionalLight
-        position={[18, 42, 12]}
-        intensity={1.35}
+        position={[24, 44, 20]}
+        intensity={1.26}
         color="#c8f0ff"
         castShadow={!lowPerf}
         shadow-mapSize-width={lowPerf ? 512 : 1024}
         shadow-mapSize-height={lowPerf ? 512 : 1024}
       />
-      <pointLight position={[-32, 12, -24]} color="#2dd4bf" intensity={1.2} />
-      <pointLight position={[30, 8, 28]} color="#60a5fa" intensity={0.8} />
+      <pointLight position={[-42, 14, -35]} color="#22d3ee" intensity={1.1} />
+      <pointLight position={[36, 12, 30]} color="#38bdf8" intensity={0.92} />
+      <pointLight position={[0, 18, 0]} color="#a5f3fc" intensity={0.55} />
+
+      <ArenaEnvironment lowPerf={lowPerf} />
 
       <Physics
         gravity={[0, -9.81, 0]}
@@ -226,31 +235,31 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
           ])}
         >
           <CuboidCollider
-            args={[320, 1, 320]}
-            position={[0, -1, 0]}
+            args={[WORLD_TUNING.halfExtent + 10, 1.2, WORLD_TUNING.halfExtent + 10]}
+            position={[0, -1.2, 0]}
             friction={1.2}
           />
-        </RigidBody>
-
-        <mesh
-          receiveShadow
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0, 0]}
-        >
-          <planeGeometry args={[640, 640, 1, 1]} />
-          <meshStandardMaterial
-            color="#080d20"
-            metalness={0.45}
-            roughness={0.72}
-            emissive="#03091c"
-            emissiveIntensity={0.25}
+          <CuboidCollider
+            args={[WORLD_TUNING.halfExtent + 9, ARENA_TUNING.boundaryHeight * 0.5, 2]}
+            position={[0, ARENA_TUNING.boundaryHeight * 0.5, WORLD_TUNING.halfExtent + 3]}
+            friction={0.9}
           />
-        </mesh>
-
-        <gridHelper
-          args={[640, 96, '#153c5f', '#0a1830']}
-          position={[0, 0.02, 0]}
-        />
+          <CuboidCollider
+            args={[WORLD_TUNING.halfExtent + 9, ARENA_TUNING.boundaryHeight * 0.5, 2]}
+            position={[0, ARENA_TUNING.boundaryHeight * 0.5, -WORLD_TUNING.halfExtent - 3]}
+            friction={0.9}
+          />
+          <CuboidCollider
+            args={[2, ARENA_TUNING.boundaryHeight * 0.5, WORLD_TUNING.halfExtent + 9]}
+            position={[WORLD_TUNING.halfExtent + 3, ARENA_TUNING.boundaryHeight * 0.5, 0]}
+            friction={0.9}
+          />
+          <CuboidCollider
+            args={[2, ARENA_TUNING.boundaryHeight * 0.5, WORLD_TUNING.halfExtent + 9]}
+            position={[-WORLD_TUNING.halfExtent - 3, ARENA_TUNING.boundaryHeight * 0.5, 0]}
+            friction={0.9}
+          />
+        </RigidBody>
 
         <KatamariPlayer
           key={`katamari-player-${worldSeed}`}

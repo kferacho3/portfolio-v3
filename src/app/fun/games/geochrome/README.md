@@ -6,12 +6,14 @@ GeoChrome is now a Katamari-inspired shape collector built with React Three Fibe
 
 - `WASD` / `Arrow Keys`: Move
 - `Shift`: Boost
+- `Pointer / Touch Drag`: Steer (mobile + touchscreens)
 - `R`: Restart run
 
 ## Architecture
 
 - `index.tsx`: scene assembly, physics, adaptive performance wiring
 - `world/ProceduralWorld.tsx`: instanced procedural shapes + instanced rigid bodies
+- `world/ArenaEnvironment.tsx`: sky dome, terrain styling, ring roads, boundary visuals, landmarks
 - `player/KatamariPlayer.tsx`: player rigid body, rolling controller, stuck-item instanced mesh
 - `engine/useKatamariEngine.ts`: two-buffer transfer (`world -> stuck`), growth math, collider scaling
 - `engine/usePhysicsCuller.ts`: distance/frustum-based body activation
@@ -32,6 +34,8 @@ Update values in `engine/constants.ts`:
 - culling budget: `PHYSICS_CULLING`
 - rendering and quality levels: `RENDER_TUNING`
 - audio response curves: `AUDIO_TUNING`
+- arena/sky/terrain feel: `ARENA_TUNING`
+- size milestones shown in HUD: `GOAL_DIAMETERS`
 
 ## Audio Assets
 

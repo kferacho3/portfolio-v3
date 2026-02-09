@@ -66,46 +66,50 @@ function makeWorldData(seed: number, count: number): WorldRuntimeData {
   const visualScales = new Float32Array(count);
   const metadata: WorldRuntimeData['metadata'] = new Array(count);
 
-  const clusters = new Array(WORLD_TUNING.clusterCount).fill(0).map(() => {
-    const angle = rand() * Math.PI * 2;
-    const radius = 14 + rand() * (WORLD_TUNING.radius - 14);
-    return {
-      x: Math.cos(angle) * radius,
-      z: Math.sin(angle) * radius,
-      spread: 8 + rand() * 19,
-    };
-  });
-
   const color = new THREE.Color();
 
   for (let i = 0; i < count; i += 1) {
-    const { tier, size } = pickSize(rand);
+    const ringBand = i % 4;
     const usePath = rand() < WORLD_TUNING.pathChance;
+    const ringMin = WORLD_TUNING.ringStartRadius + ringBand * WORLD_TUNING.ringStep;
+    const ringMax = ringMin + WORLD_TUNING.ringStep - 8;
+
+    let tierPick = pickSize(rand);
+    if (ringBand === 0) {
+      tierPick = { tier: WORLD_TIER_NAMES[0], size: 0.24 + rand() * 0.32 };
+    } else if (ringBand === 1 && tierPick.tier === WORLD_TIER_NAMES[3]) {
+      tierPick = { tier: WORLD_TIER_NAMES[2], size: 1 + rand() * 0.68 };
+    } else if (ringBand === 2 && tierPick.tier === WORLD_TIER_NAMES[0]) {
+      tierPick = { tier: WORLD_TIER_NAMES[1], size: 0.65 + rand() * 0.5 };
+    } else if (ringBand === 3 && tierPick.tier === WORLD_TIER_NAMES[0]) {
+      tierPick = { tier: WORLD_TIER_NAMES[2], size: 1.2 + rand() * 0.7 };
+    }
+    const { tier, size } = tierPick;
 
     let x = 0;
     let z = 0;
-
     if (usePath) {
-      const lane = Math.floor(rand() * 8) - 4;
-      const stride = WORLD_TUNING.radius * 2.05;
-      const progress = ((i * 0.77 + rand() * 37) % stride) - stride * 0.5;
-      x = lane * (6.5 + rand() * 2.1) + (rand() - 0.5) * 2.8;
-      z = progress + Math.sin(progress * 0.05 + lane) * (3 + rand() * 4);
+      const lane = Math.floor(rand() * 10) - 5;
+      const laneSpace = 7.2 + ringBand * 0.6;
+      const stride = WORLD_TUNING.radius * 2.2;
+      const progress = ((i * 0.63 + rand() * 49) % stride) - stride * 0.5;
+      x = lane * laneSpace + Math.sin(progress * 0.04 + lane * 0.3) * 3.4;
+      z = progress + (rand() - 0.5) * 4.2;
     } else {
-      const center = clusters[Math.floor(rand() * clusters.length)];
       const angle = rand() * Math.PI * 2;
-      const offset = center.spread * (0.28 + rand());
-      x = center.x + Math.cos(angle) * offset;
-      z = center.z + Math.sin(angle) * offset;
+      const radial =
+        Math.sqrt(rand()) * (ringMax - ringMin) + ringMin + (rand() - 0.5) * 3;
+      x = Math.cos(angle) * radial;
+      z = Math.sin(angle) * radial;
     }
 
-    x = THREE.MathUtils.clamp(x, -WORLD_TUNING.radius, WORLD_TUNING.radius);
-    z = THREE.MathUtils.clamp(z, -WORLD_TUNING.radius, WORLD_TUNING.radius);
+    x = THREE.MathUtils.clamp(x, -WORLD_TUNING.halfExtent + 8, WORLD_TUNING.halfExtent - 8);
+    z = THREE.MathUtils.clamp(z, -WORLD_TUNING.halfExtent + 8, WORLD_TUNING.halfExtent - 8);
 
     const y =
       WORLD_TUNING.minY +
       rand() * (WORLD_TUNING.maxY - WORLD_TUNING.minY) +
-      size * 0.26;
+      size * 0.42;
 
     const rotX = rand() * Math.PI;
     const rotY = rand() * Math.PI;
@@ -122,7 +126,19 @@ function makeWorldData(seed: number, count: number): WorldRuntimeData {
     shapeParams[i * 4 + 2] = n2;
     shapeParams[i * 4 + 3] = n3;
 
-    color.setHSL((0.5 + rand() * 0.55) % 1, 0.76, 0.55 + rand() * 0.16);
+    const hueBase =
+      tier === WORLD_TIER_NAMES[0]
+        ? 0.55
+        : tier === WORLD_TIER_NAMES[1]
+          ? 0.48
+          : tier === WORLD_TIER_NAMES[2]
+            ? 0.62
+            : 0.08;
+    color.setHSL(
+      (hueBase + rand() * 0.12) % 1,
+      0.72 + rand() * 0.15,
+      0.48 + rand() * 0.19
+    );
     colors[i * 3 + 0] = color.r;
     colors[i * 3 + 1] = color.g;
     colors[i * 3 + 2] = color.b;
@@ -130,7 +146,8 @@ function makeWorldData(seed: number, count: number): WorldRuntimeData {
     visualScales[i] = visualScale;
 
     const volume = (4 / 3) * Math.PI * Math.pow(size * 0.52, 3);
-    const label = `${tier} ${WORLD_SHAPE_LABELS[Math.floor(rand() * WORLD_SHAPE_LABELS.length)]}`;
+    const zoneName = ringBand === 0 ? 'core' : ringBand === 1 ? 'inner' : ringBand === 2 ? 'mid' : 'outer';
+    const label = `${zoneName} ${tier} ${WORLD_SHAPE_LABELS[Math.floor(rand() * WORLD_SHAPE_LABELS.length)]}`;
     const colorHex = `#${color.getHexString()}`;
 
     metadata[i] = {
@@ -240,6 +257,8 @@ export default function ProceduralWorld({
       gravityScale={0}
       linearDamping={2.4}
       angularDamping={2.4}
+      enabledTranslations={[false, false, false]}
+      enabledRotations={[false, false, false]}
       canSleep
       collisionGroups={interactionGroups(COLLISION_GROUPS.WORLD, [
         COLLISION_GROUPS.PLAYER,
@@ -250,6 +269,7 @@ export default function ProceduralWorld({
       <instancedMesh
         ref={worldMeshRef}
         args={[undefined, undefined, worldData.count]}
+        frustumCulled={false}
         castShadow={!lowPerf}
         receiveShadow={false}
       >

@@ -11,6 +11,7 @@ interface UseSpringCameraProps {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+const FORWARD = new THREE.Vector3(0, 0, 1);
 
 export function useSpringCamera({
   started,
@@ -21,6 +22,7 @@ export function useSpringCamera({
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const velocity = useMemo(() => new THREE.Vector3(), []);
   const offset = useMemo(() => new THREE.Vector3(), []);
+  const headingOffset = useMemo(() => new THREE.Vector3(), []);
   const ideal = useMemo(() => new THREE.Vector3(), []);
   const cameraLook = useMemo(() => new THREE.Vector3(), []);
 
@@ -52,7 +54,13 @@ export function useSpringCamera({
       CAMERA_TUNING.baseHeight * scale,
       CAMERA_TUNING.baseDistance * scale
     );
-    offset.applyAxisAngle(UP, headingRef.current);
+    headingOffset
+      .copy(FORWARD)
+      .multiplyScalar(CAMERA_TUNING.baseDistance * scale)
+      .applyAxisAngle(UP, headingRef.current)
+      .multiplyScalar(CAMERA_TUNING.headingInfluence);
+    offset.x += headingOffset.x;
+    offset.z += headingOffset.z;
 
     ideal.copy(target).add(offset);
     camera.position.lerp(ideal, Math.min(1, delta * CAMERA_TUNING.followLerp));

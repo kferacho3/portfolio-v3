@@ -8,6 +8,7 @@ interface GeoChromeStore {
   lowPerf: boolean;
   targetDpr: number;
   diameter: number;
+  pickupLimit: number;
   stuckCount: number;
   worldCount: number;
   recentPickups: PickupToast[];
@@ -16,6 +17,7 @@ interface GeoChromeStore {
   setLowPerf: (lowPerf: boolean) => void;
   setTargetDpr: (targetDpr: number) => void;
   setDiameter: (diameter: number) => void;
+  setPickupLimit: (pickupLimit: number) => void;
   setStuckCount: (count: number) => void;
   setWorldCount: (count: number) => void;
   pushPickup: (pickup: Omit<PickupToast, 'id'>) => void;
@@ -25,6 +27,7 @@ interface GeoChromeStore {
 
 let pickupId = 1;
 const baseDiameter = PLAYER_TUNING.baseRadius * 2;
+const basePickupLimit = PLAYER_TUNING.baseRadius;
 
 export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   started: false,
@@ -32,6 +35,7 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   lowPerf: false,
   targetDpr: 1.25,
   diameter: baseDiameter,
+  pickupLimit: basePickupLimit,
   stuckCount: 0,
   worldCount: 0,
   recentPickups: [],
@@ -45,6 +49,8 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   setTargetDpr: (targetDpr) => set({ targetDpr }),
 
   setDiameter: (diameter) => set({ diameter }),
+
+  setPickupLimit: (pickupLimit) => set({ pickupLimit }),
 
   setStuckCount: (stuckCount) => set({ stuckCount }),
 
@@ -61,6 +67,7 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   resetProgress: () =>
     set({
       diameter: baseDiameter,
+      pickupLimit: basePickupLimit,
       stuckCount: 0,
       worldCount: 0,
       recentPickups: [],
@@ -71,6 +78,7 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
       started: false,
       audioReady: false,
       diameter: baseDiameter,
+      pickupLimit: basePickupLimit,
       stuckCount: 0,
       worldCount: 0,
       recentPickups: [],

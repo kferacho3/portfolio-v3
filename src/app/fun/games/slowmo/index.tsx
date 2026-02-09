@@ -20,13 +20,15 @@ const TRACK_WIDTH = 2.6;
 const TRACK_THICK = 0.12;
 const RAIL_WIDTH = 0.22;
 const SEG_LEN = 6;
-const SEG_COUNT = 28;
+const SEG_COUNT = 24;
 
 const BALL_RADIUS = 0.25;
 const OBST_THICK = 0.38;
 const OBST_HEIGHT = 0.36;
 
 const LANE_HALF = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
+const HUD_PUBLISH_INTERVAL = 1 / 15;
+const SLOW_VISUAL_STEP = 0.07;
 
 const OBST_COLORS = ['#ff6b6b', '#ffe4b8', '#b6ffcc', '#a3d4ff'];
 
@@ -44,12 +46,12 @@ const GAME_TUNING = {
     lambdaOut: 13,
   },
   spawn: {
-    poolSize: 34,
+    poolSize: 30,
     initialSpawnZ: 7,
     gapMin: 2.35,
     gapMax: 4.05,
     respawnBehind: 10,
-    lookAhead: 56,
+    lookAhead: 52,
   },
   energy: {
     drainPerSecond: 0.35,
@@ -57,15 +59,14 @@ const GAME_TUNING = {
     pickupRefill: 0.25,
   },
   trail: {
-    length: 24,
-    sampleNormal: 0.022,
-    sampleSlow: 0.012,
-    maxOpacity: 0.24,
-    maxOpacitySlow: 0.42,
+    length: 16,
+    sampleNormal: 0.03,
+    sampleSlow: 0.016,
+    size: BALL_RADIUS * 1.05,
   },
   tunnel: {
-    ringCount: 14,
-    spacing: 8,
+    ringCount: 8,
+    spacing: 10,
     radius: TRACK_WIDTH * 0.82,
   },
   camera: {
@@ -122,6 +123,9 @@ type WorldRuntime = {
   sideDir: -1 | 1;
   timeScale: number;
   targetScale: number;
+  slowEnergy: number;
+  slowStrength: number;
+  isSlow: boolean;
   cameraX: number;
   cameraZ: number;
   cameraZoom: number;
@@ -129,8 +133,10 @@ type WorldRuntime = {
   bouncePulse: number;
   ringPulse: number;
   trailSampleAcc: number;
+  hudAccumulator: number;
   fps: number;
   wasSlow: boolean;
+  visualSlowBucket: number;
   trailPoints: THREE.Vector3[];
 };
 
@@ -235,6 +241,7 @@ function SlowMoScene() {
   const shadowMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
   const slowRingRef = useRef<THREE.Mesh>(null!);
   const slowRingMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
+  const trailMaterialRef = useRef<THREE.PointsMaterial>(null!);
 
   const segmentGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const tunnelRingRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -244,7 +251,7 @@ function SlowMoScene() {
   const starRefs = useRef<(THREE.Mesh | null)[]>([]);
   const giftRefs = useRef<(THREE.Mesh | null)[]>([]);
 
-  const trailRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const trailColorRef = useRef(new THREE.Color(THEME.trailBase));
 
   const segments = useMemo(
     () =>
@@ -272,6 +279,35 @@ function SlowMoScene() {
     []
   );
 
+  const trailData = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(GAME_TUNING.trail.length * 3);
+    const colors = new Float32Array(GAME_TUNING.trail.length * 3);
+
+    const positionAttr = new THREE.BufferAttribute(positions, 3);
+    positionAttr.setUsage(THREE.DynamicDrawUsage);
+
+    const colorAttr = new THREE.BufferAttribute(colors, 3);
+    colorAttr.setUsage(THREE.DynamicDrawUsage);
+
+    geometry.setAttribute('position', positionAttr);
+    geometry.setAttribute('color', colorAttr);
+
+    return {
+      geometry,
+      positions,
+      colors,
+      positionAttr,
+      colorAttr,
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      trailData.geometry.dispose();
+    };
+  }, [trailData.geometry]);
+
   const world = useRef<WorldRuntime>({
     realTime: 0,
     gameTime: 0,
@@ -281,6 +317,9 @@ function SlowMoScene() {
     sideDir: 1,
     timeScale: 1,
     targetScale: 1,
+    slowEnergy: 1,
+    slowStrength: 0,
+    isSlow: false,
     cameraX: GAME_TUNING.camera.offsetX,
     cameraZ: GAME_TUNING.camera.offsetZ,
     cameraZoom: GAME_TUNING.camera.baseZoom,
@@ -288,8 +327,10 @@ function SlowMoScene() {
     bouncePulse: 0,
     ringPulse: 0,
     trailSampleAcc: 0,
+    hudAccumulator: 0,
     fps: 60,
     wasSlow: false,
+    visualSlowBucket: -1,
     trailPoints: Array.from(
       { length: GAME_TUNING.trail.length },
       () => new THREE.Vector3(0, BALL_RADIUS + 0.02, 0)
@@ -300,6 +341,42 @@ function SlowMoScene() {
     const y = BALL_RADIUS + 0.02;
     for (let i = 0; i < world.current.trailPoints.length; i++) {
       world.current.trailPoints[i].set(x, y, z);
+
+      const index = i * 3;
+      trailData.positions[index] = x;
+      trailData.positions[index + 1] = y;
+      trailData.positions[index + 2] = z;
+      trailData.colors[index] = 0;
+      trailData.colors[index + 1] = 0;
+      trailData.colors[index + 2] = 0;
+    }
+
+    trailData.positionAttr.needsUpdate = true;
+    trailData.colorAttr.needsUpdate = true;
+  }
+
+  function updateSlowVisualBucket() {
+    const strength = world.current.slowStrength;
+    const bucket = Math.round(strength / SLOW_VISUAL_STEP);
+    if (bucket === world.current.visualSlowBucket) return;
+
+    world.current.visualSlowBucket = bucket;
+
+    const emissiveIntensity = 0.18 + strength * 0.45;
+    const ringOpacity = 0.08 + strength * 0.14;
+
+    for (let i = 0; i < obstacleMeshRefs.current.length; i++) {
+      const mesh = obstacleMeshRefs.current[i];
+      if (!mesh) continue;
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      material.emissiveIntensity = emissiveIntensity;
+    }
+
+    for (let i = 0; i < tunnelRingRefs.current.length; i++) {
+      const ring = tunnelRingRefs.current[i];
+      if (!ring) continue;
+      const material = ring.material as THREE.MeshBasicMaterial;
+      material.opacity = ringOpacity;
     }
   }
 
@@ -327,7 +404,7 @@ function SlowMoScene() {
     const blockMaterial = block.material as THREE.MeshStandardMaterial;
     blockMaterial.color.set(o.color);
     blockMaterial.emissive.set(o.color);
-    blockMaterial.emissiveIntensity = 0.2 + run.slowStrength * 0.6;
+    blockMaterial.emissiveIntensity = 0.18 + world.current.slowStrength * 0.45;
 
     if (star) {
       star.visible = o.hasStar && !o.starCollected;
@@ -362,16 +439,35 @@ function SlowMoScene() {
     ) {
       const slot = takeInactiveSlot();
       if (slot < 0) break;
+
       spawnObstacleAt(slot, world.current.nextSpawnAt);
       world.current.nextSpawnAt += rand(
         GAME_TUNING.spawn.gapMin,
         GAME_TUNING.spawn.gapMax
       );
+
       guard -= 1;
     }
   }
 
-  // (re)start run
+  function publishHud(forwardSpeed: number) {
+    const w = world.current;
+
+    run.slow = w.isSlow;
+    run.speed = forwardSpeed;
+    run.timeScale = w.timeScale;
+    run.targetScale = w.targetScale;
+    run.slowEnergy = w.slowEnergy;
+    run.distance = w.runnerDistance;
+    run.slowStrength = w.slowStrength;
+    run.vignette = THREE.MathUtils.clamp(
+      w.slowStrength * 0.8 + w.releaseKick * 0.3,
+      0,
+      1
+    );
+    run.fps = w.fps;
+  }
+
   useEffect(() => {
     if (snap.phase !== 'playing') {
       holdInput.isHolding = false;
@@ -402,6 +498,9 @@ function SlowMoScene() {
     world.current.sideDir = 1;
     world.current.timeScale = 1;
     world.current.targetScale = 1;
+    world.current.slowEnergy = 1;
+    world.current.slowStrength = 0;
+    world.current.isSlow = false;
     world.current.cameraX = startX + GAME_TUNING.camera.offsetX;
     world.current.cameraZ = GAME_TUNING.camera.offsetZ;
     world.current.cameraZoom = GAME_TUNING.camera.baseZoom;
@@ -409,8 +508,10 @@ function SlowMoScene() {
     world.current.bouncePulse = 0;
     world.current.ringPulse = 0;
     world.current.trailSampleAcc = 0;
+    world.current.hudAccumulator = 0;
     world.current.fps = 60;
     world.current.wasSlow = false;
+    world.current.visualSlowBucket = -1;
 
     resetTrail(startX, 0);
 
@@ -429,6 +530,8 @@ function SlowMoScene() {
     }
 
     fillSpawnHorizon();
+    updateSlowVisualBucket();
+    publishHud(GAME_TUNING.forward.baseSpeed);
 
     requestAnimationFrame(() => {
       for (let i = 0; i < obstacles.length; i++) {
@@ -456,21 +559,21 @@ function SlowMoScene() {
 
     w.realTime += delta;
 
-    if (holdInput.isHolding && run.slowEnergy > 0) {
-      run.slowEnergy = Math.max(
+    if (holdInput.isHolding && w.slowEnergy > 0) {
+      w.slowEnergy = Math.max(
         0,
-        run.slowEnergy - GAME_TUNING.energy.drainPerSecond * delta
+        w.slowEnergy - GAME_TUNING.energy.drainPerSecond * delta
       );
     } else {
-      run.slowEnergy = Math.min(
+      w.slowEnergy = Math.min(
         1,
-        run.slowEnergy + GAME_TUNING.energy.regenPerSecond * delta
+        w.slowEnergy + GAME_TUNING.energy.regenPerSecond * delta
       );
     }
 
-    const canSlow = run.slowEnergy > 0.001;
-    w.targetScale =
-      holdInput.isHolding && canSlow ? GAME_TUNING.slow.factor : 1;
+    const canSlow = w.slowEnergy > 0.001;
+    w.targetScale = holdInput.isHolding && canSlow ? GAME_TUNING.slow.factor : 1;
+
     const rampLambda =
       w.targetScale < w.timeScale
         ? GAME_TUNING.slow.lambdaIn
@@ -480,19 +583,16 @@ function SlowMoScene() {
     const gameDt = delta * w.timeScale;
     w.gameTime += gameDt;
 
-    run.targetScale = w.targetScale;
-    run.timeScale = w.timeScale;
-    run.slowStrength = THREE.MathUtils.clamp(
+    w.slowStrength = THREE.MathUtils.clamp(
       (1 - w.timeScale) / (1 - GAME_TUNING.slow.factor),
       0,
       1
     );
-    run.slow = run.slowStrength > 0.08;
+    w.isSlow = w.slowStrength > 0.08;
 
-    run.speed =
+    const forwardSpeed =
       GAME_TUNING.forward.baseSpeed + run.score * GAME_TUNING.forward.scoreRamp;
-    w.runnerDistance += run.speed * gameDt;
-    run.distance = w.runnerDistance;
+    w.runnerDistance += forwardSpeed * gameDt;
 
     w.x += w.sideDir * GAME_TUNING.side.speed * delta;
     const bound = LANE_HALF - BALL_RADIUS;
@@ -505,12 +605,14 @@ function SlowMoScene() {
       w.sideDir = 1;
       w.bouncePulse = 1;
     }
+
     w.bouncePulse = expDamp(w.bouncePulse, 0, 12, delta);
-    w.ringPulse += delta * (run.slow ? 8 : 4);
+    w.ringPulse += delta * (w.isSlow ? 8 : 4);
 
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
       if (!o.active) continue;
+
       if (o.z < w.runnerDistance - GAME_TUNING.spawn.respawnBehind) {
         o.active = false;
         o.hasGift = false;
@@ -544,10 +646,10 @@ function SlowMoScene() {
       if (mesh) {
         mesh.position.z = ring.z;
         mesh.rotation.z = w.realTime * 0.12 + i * 0.22;
-        const ringMaterial = mesh.material as THREE.MeshBasicMaterial;
-        ringMaterial.opacity = 0.08 + run.slowStrength * 0.16;
       }
     }
+
+    updateSlowVisualBucket();
 
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
@@ -564,7 +666,7 @@ function SlowMoScene() {
         if (dx < 0.38 && dz < 0.55) {
           o.starCollected = true;
           run.starsThisRun += 1;
-          run.slowEnergy = Math.min(1, run.slowEnergy + 0.08);
+          w.slowEnergy = Math.min(1, w.slowEnergy + 0.08);
           addStars(1);
           const star = starRefs.current[i];
           if (star) star.visible = false;
@@ -578,10 +680,7 @@ function SlowMoScene() {
           o.giftCollected = true;
           const bonus = Math.floor(rand(4, 8));
           run.starsThisRun += bonus;
-          run.slowEnergy = Math.min(
-            1,
-            run.slowEnergy + GAME_TUNING.energy.pickupRefill
-          );
+          w.slowEnergy = Math.min(1, w.slowEnergy + GAME_TUNING.energy.pickupRefill);
           addStars(bonus);
           const gift = giftRefs.current[i];
           if (gift) gift.visible = false;
@@ -595,6 +694,7 @@ function SlowMoScene() {
         if (inX) {
           setHighScore(run.score);
           holdInput.isHolding = false;
+          publishHud(forwardSpeed);
           persistState.finish();
           return;
         }
@@ -602,12 +702,6 @@ function SlowMoScene() {
 
       const group = obstacleGroupRefs.current[i];
       if (group) group.position.z = o.z;
-
-      const block = obstacleMeshRefs.current[i];
-      if (block) {
-        const blockMaterial = block.material as THREE.MeshStandardMaterial;
-        blockMaterial.emissiveIntensity = 0.2 + run.slowStrength * 0.6;
-      }
 
       const star = starRefs.current[i];
       if (star && star.visible) {
@@ -617,8 +711,7 @@ function SlowMoScene() {
 
       const gift = giftRefs.current[i];
       if (gift && gift.visible) {
-        gift.rotation.y += delta * 1.7;
-        gift.rotation.x += delta * 0.4;
+        gift.rotation.y += delta * 1.6;
       }
     }
 
@@ -626,27 +719,23 @@ function SlowMoScene() {
     ballRef.current.position.set(w.x, ballY, w.runnerDistance);
     shadowRef.current.position.set(w.x, 0.01, w.runnerDistance);
 
-    const stretch = 1 + w.bouncePulse * 0.18 + run.slowStrength * 0.06;
+    const stretch = 1 + w.bouncePulse * 0.18 + w.slowStrength * 0.06;
     const squeeze = 1 - w.bouncePulse * 0.1;
     ballRef.current.scale.set(stretch, squeeze, stretch);
 
-    ballMaterialRef.current.emissive.set(
-      BALL_SKINS[snap.selectedBall]?.color ?? '#ffffff'
-    );
-    ballMaterialRef.current.emissiveIntensity = 0.08 + run.slowStrength * 0.7;
-
+    ballMaterialRef.current.emissiveIntensity = 0.08 + w.slowStrength * 0.7;
     shadowMaterialRef.current.opacity = 0.16 + w.bouncePulse * 0.06;
 
     slowRingRef.current.position.set(w.x, ballY, w.runnerDistance);
     slowRingRef.current.rotation.set(Math.PI / 2, 0, w.realTime * 2.2);
     const ringPulse = Math.sin(w.ringPulse) * 0.06;
     slowRingRef.current.scale.setScalar(
-      0.9 + run.slowStrength * 0.32 + w.bouncePulse * 0.08 + ringPulse
+      0.9 + w.slowStrength * 0.32 + w.bouncePulse * 0.08 + ringPulse
     );
-    slowRingMaterialRef.current.opacity = 0.12 + run.slowStrength * 0.38;
+    slowRingMaterialRef.current.opacity = 0.12 + w.slowStrength * 0.38;
 
     w.trailSampleAcc += delta;
-    const sampleEvery = run.slow
+    const sampleEvery = w.isSlow
       ? GAME_TUNING.trail.sampleSlow
       : GAME_TUNING.trail.sampleNormal;
 
@@ -661,38 +750,33 @@ function SlowMoScene() {
       w.trailPoints[0].set(w.x, ballY, w.runnerDistance);
     }
 
-    const maxTrailOpacity = run.slow
-      ? GAME_TUNING.trail.maxOpacitySlow
-      : GAME_TUNING.trail.maxOpacity;
+    trailColorRef.current.set(w.isSlow ? THEME.trailSlow : THEME.trailBase);
+    const trailBoost = w.isSlow ? 1 : 0.72;
 
     for (let i = 0; i < GAME_TUNING.trail.length; i++) {
-      const trailMesh = trailRefs.current[i];
-      if (!trailMesh) continue;
-
       const p = w.trailPoints[i];
-      trailMesh.position.copy(p);
+      const idx = i * 3;
 
-      const t = 1 - i / (GAME_TUNING.trail.length - 1);
-      const scale = BALL_RADIUS * (0.55 + t * 0.55) * (run.slow ? 1.18 : 1);
-      trailMesh.scale.setScalar(scale);
+      trailData.positions[idx] = p.x;
+      trailData.positions[idx + 1] = p.y;
+      trailData.positions[idx + 2] = p.z;
 
-      const trailMaterial = trailMesh.material as THREE.MeshStandardMaterial;
-      trailMaterial.opacity = maxTrailOpacity * t * t;
-      trailMaterial.color.set(run.slow ? THEME.trailSlow : THEME.trailBase);
-      trailMaterial.emissive.set(run.slow ? THEME.trailSlow : THEME.trailBase);
-      trailMaterial.emissiveIntensity = (run.slow ? 1 : 0.45) * t;
+      const fade = (1 - i / (GAME_TUNING.trail.length - 1)) ** 2 * trailBoost;
+      trailData.colors[idx] = trailColorRef.current.r * fade;
+      trailData.colors[idx + 1] = trailColorRef.current.g * fade;
+      trailData.colors[idx + 2] = trailColorRef.current.b * fade;
     }
 
-    if (w.wasSlow && !run.slow) {
+    trailData.positionAttr.needsUpdate = true;
+    trailData.colorAttr.needsUpdate = true;
+    trailMaterialRef.current.opacity = 0.58 + w.slowStrength * 0.25;
+    trailMaterialRef.current.size = GAME_TUNING.trail.size * (w.isSlow ? 1.18 : 1);
+
+    if (w.wasSlow && !w.isSlow) {
       w.releaseKick = 1;
     }
-    w.wasSlow = run.slow;
-    w.releaseKick = expDamp(
-      w.releaseKick,
-      0,
-      GAME_TUNING.camera.releaseDamp,
-      delta
-    );
+    w.wasSlow = w.isSlow;
+    w.releaseKick = expDamp(w.releaseKick, 0, GAME_TUNING.camera.releaseDamp, delta);
 
     w.cameraX = expDamp(
       w.cameraX,
@@ -708,33 +792,34 @@ function SlowMoScene() {
     );
     w.cameraZoom = expDamp(
       w.cameraZoom,
-      run.slow ? GAME_TUNING.camera.slowZoom : GAME_TUNING.camera.baseZoom,
+      w.isSlow ? GAME_TUNING.camera.slowZoom : GAME_TUNING.camera.baseZoom,
       GAME_TUNING.camera.zoomLambda,
       delta
     );
 
     const shake =
-      Math.sin(w.realTime * 90) *
-      GAME_TUNING.camera.releaseShake *
-      w.releaseKick;
+      Math.sin(w.realTime * 90) * GAME_TUNING.camera.releaseShake * w.releaseKick;
 
     cam.position.set(
       w.cameraX + shake,
       GAME_TUNING.camera.height + w.releaseKick * 0.08,
       w.cameraZ - shake * 0.5
     );
-    cam.zoom = w.cameraZoom;
-    cam.updateProjectionMatrix();
+
+    if (Math.abs(cam.zoom - w.cameraZoom) > 0.001) {
+      cam.zoom = w.cameraZoom;
+      cam.updateProjectionMatrix();
+    }
+
     cam.lookAt(w.x, 0, w.runnerDistance + GAME_TUNING.camera.lookAhead);
 
-    run.vignette = THREE.MathUtils.clamp(
-      run.slowStrength * 0.8 + w.releaseKick * 0.3,
-      0,
-      1
-    );
-
     w.fps = expDamp(w.fps, 1 / Math.max(delta, 0.0001), 10, delta);
-    run.fps = w.fps;
+
+    w.hudAccumulator += delta;
+    if (w.hudAccumulator >= HUD_PUBLISH_INTERVAL) {
+      w.hudAccumulator = 0;
+      publishHud(forwardSpeed);
+    }
   });
 
   return (
@@ -917,27 +1002,17 @@ function SlowMoScene() {
         </group>
       ))}
 
-      {Array.from({ length: GAME_TUNING.trail.length }, (_, i) => (
-        <mesh
-          key={`trail-${i}`}
-          ref={(el) => {
-            trailRefs.current[i] = el;
-          }}
-          position={[0, BALL_RADIUS + 0.02, 0]}
-        >
-          <sphereGeometry args={[BALL_RADIUS * 0.52, 16, 16]} />
-          <meshStandardMaterial
-            color={THEME.trailBase}
-            emissive={THEME.trailBase}
-            emissiveIntensity={0.45}
-            roughness={0.2}
-            metalness={0.15}
-            transparent
-            opacity={0}
-            depthWrite={false}
-          />
-        </mesh>
-      ))}
+      <points geometry={trailData.geometry} frustumCulled={false}>
+        <pointsMaterial
+          ref={trailMaterialRef}
+          size={GAME_TUNING.trail.size}
+          vertexColors
+          transparent
+          depthWrite={false}
+          opacity={0.58}
+          blending={THREE.AdditiveBlending}
+        />
+      </points>
 
       <mesh ref={ballRef} position={[0, BALL_RADIUS, 0]}>
         <sphereGeometry args={[BALL_RADIUS, 28, 28]} />
@@ -1051,7 +1126,7 @@ function SlowMoHoldInputLayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap.phase]);
 
-  const releaseFromPointerEvent = (event: { pointerId: number }) => {
+  const releaseFromPointerEvent = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerId !== activePointerId.current) return;
     releasePointer();
     syncHoldState();

@@ -50,6 +50,7 @@ export function useKatamariEngine({
   const hudTimerRef = useRef(0);
 
   const setDiameter = useGeoChromeStore((state) => state.setDiameter);
+  const setPickupLimit = useGeoChromeStore((state) => state.setPickupLimit);
   const setStuckCount = useGeoChromeStore((state) => state.setStuckCount);
 
   const tempInstanceMatrix = useMemo(() => new THREE.Matrix4(), []);
@@ -112,11 +113,13 @@ export function useKatamariEngine({
     }
 
     setDiameter(PLAYER_TUNING.baseRadius * 2);
+    setPickupLimit(PLAYER_TUNING.baseRadius * GROWTH_TUNING.pickupFactor);
     setStuckCount(0);
   }, [
     katamariColliderRef,
     katamariGroupRef,
     setDiameter,
+    setPickupLimit,
     setStuckCount,
     stuckMeshRef,
   ]);
@@ -280,6 +283,7 @@ export function useKatamariEngine({
     if (hudTimerRef.current >= GROWTH_TUNING.hudUpdateInterval) {
       hudTimerRef.current = 0;
       setDiameter(currentRadiusRef.current * 2);
+      setPickupLimit(currentRadiusRef.current * GROWTH_TUNING.pickupFactor);
     }
   });
 

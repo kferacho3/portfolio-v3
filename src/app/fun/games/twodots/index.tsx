@@ -76,6 +76,7 @@ type LineHandle = Line2 & {
 type RunMode = 'infinite' | 'timed' | 'levels';
 type EndReason = 'moves' | 'connections' | 'time';
 type Grade = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond';
+type GridStyle = 'classic' | 'stagger' | 'arc' | 'diamond';
 
 const BEST_KEY = 'rachos-fun-twodots-best';
 const SETTINGS_KEY = 'rachos-fun-twodots-settings-v2';
@@ -145,6 +146,8 @@ const MODE_META: Record<
     short: 'LVL',
   },
 };
+
+const GRID_STYLE_SEQUENCE: GridStyle[] = ['classic', 'diamond', 'stagger', 'arc'];
 
 const vec3A = new THREE.Vector3();
 const vec3B = new THREE.Vector3();
@@ -241,6 +244,41 @@ function fromIndex(index: number) {
 
 function worldFromCell(r: number, c: number, target = new THREE.Vector3()) {
   target.set((c - (COLS - 1) / 2) * SPACING, ((ROWS - 1) / 2 - r) * SPACING, 0);
+  return target;
+}
+
+function chooseGridStyle(level: number, mode: RunMode, rng: SeededRandom): GridStyle {
+  if (mode === 'levels') {
+    return GRID_STYLE_SEQUENCE[(level - 1) % GRID_STYLE_SEQUENCE.length];
+  }
+  if (mode === 'timed') {
+    const timedStyles: GridStyle[] = ['arc', 'stagger', 'diamond'];
+    return timedStyles[rng.int(0, timedStyles.length - 1)];
+  }
+  const infiniteStyles: GridStyle[] = ['classic', 'diamond', 'arc', 'stagger'];
+  return infiniteStyles[rng.int(0, infiniteStyles.length - 1)];
+}
+
+function worldFromCellStyled(
+  r: number,
+  c: number,
+  style: GridStyle,
+  target = new THREE.Vector3()
+) {
+  worldFromCell(r, c, target);
+  const midR = (ROWS - 1) / 2;
+  const rowNorm = (r - midR) / Math.max(1, midR);
+
+  if (style === 'stagger') {
+    target.x += (r % 2 === 0 ? -1 : 1) * SPACING * 0.22;
+  } else if (style === 'arc') {
+    const t = c / Math.max(1, COLS - 1);
+    target.y += (Math.sin(t * Math.PI) - 0.5) * SPACING * 0.48;
+  } else if (style === 'diamond') {
+    const rowScale = 0.62 + (1 - Math.abs(rowNorm)) * 0.58;
+    target.x *= rowScale;
+  }
+
   return target;
 }
 
@@ -374,20 +412,25 @@ function ensurePlayable(board: Board, rng: SeededRandom) {
 
 function updateLineGeometry(line: LineHandle, points: THREE.Vector3[]) {
   const geometry = line.geometry;
-  if (!geometry || typeof geometry.setPositions !== 'function') {
+  if (geometry && typeof geometry.setPositions === 'function') {
+    const flattened = new Float32Array(points.length * 3);
+    for (let i = 0; i < points.length; i += 1) {
+      const p = points[i];
+      const base = i * 3;
+      flattened[base] = p.x;
+      flattened[base + 1] = p.y;
+      flattened[base + 2] = p.z;
+    }
+
+    geometry.setPositions(flattened);
+    line.computeLineDistances?.();
     return;
   }
 
-  const flattened = new Float32Array(points.length * 3);
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i];
-    const base = i * 3;
-    flattened[base] = p.x;
-    flattened[base + 1] = p.y;
-    flattened[base + 2] = p.z;
+  if (typeof line.setPoints !== 'function') {
+    return;
   }
-
-  geometry.setPositions(flattened);
+  line.setPoints(points);
   line.computeLineDistances?.();
 }
 
@@ -594,6 +637,7 @@ export default function TwoDots() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [movesMade, setMovesMade] = useState(0);
   const [lastGrade, setLastGrade] = useState<Grade | null>(null);
+  const [gridStyle, setGridStyle] = useState<GridStyle>('classic');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [highQuality, setHighQuality] = useState(true);
   const [showFps, setShowFps] = useState(false);
@@ -636,6 +680,8 @@ export default function TwoDots() {
   const worldMouseRef = useRef(new THREE.Vector3());
   const snappedMouseRef = useRef(new THREE.Vector3());
   const pointerClientRef = useRef(new THREE.Vector2(Number.NaN, Number.NaN));
+  const pointerDownRef = useRef(false);
+  const pointerJustDownRef = useRef(false);
 
   const inputLockedRef = useRef(false);
   const pendingSettleRef = useRef(false);
@@ -652,9 +698,9 @@ export default function TwoDots() {
   const centers = useMemo(() => {
     return Array.from({ length: CELL_COUNT }, (_, idx) => {
       const { r, c } = fromIndex(idx);
-      return worldFromCell(r, c);
+      return worldFromCellStyled(r, c, gridStyle);
     });
-  }, []);
+  }, [gridStyle]);
 
   const colorAttr = useMemo(
     () => new THREE.InstancedBufferAttribute(new Float32Array(CELL_COUNT), 1),
@@ -949,6 +995,7 @@ export default function TwoDots() {
       }
 
       const rng = new SeededRandom(twoDotsState.worldSeed + level * 109);
+      setGridStyle(chooseGridStyle(level, mode, rng.child(3)));
       boardRef.current = ensurePlayable(
         createBoard(rng, config),
         rng.child(41)
@@ -1049,9 +1096,6 @@ export default function TwoDots() {
           )
         );
         twoDotsState.phase = 'levelComplete';
-      } else if (mode === 'levels' && twoDotsState.movesLeft <= 0) {
-        setEndReason('moves');
-        twoDotsState.endGame();
       } else if (!hasAvailableMoves(boardRef.current)) {
         setEndReason('connections');
         twoDotsState.endGame();
@@ -1243,16 +1287,30 @@ export default function TwoDots() {
   }, [highQuality, showFps]);
 
   useEffect(() => {
-    const handlePointer = (event: PointerEvent) => {
+    const handlePointerMove = (event: PointerEvent) => {
       pointerClientRef.current.set(event.clientX, event.clientY);
     };
+    const handlePointerDown = (event: PointerEvent) => {
+      pointerClientRef.current.set(event.clientX, event.clientY);
+      if (event.button === 0) {
+        pointerDownRef.current = true;
+        pointerJustDownRef.current = true;
+      }
+    };
+    const handlePointerUp = (event: PointerEvent) => {
+      if (event.button === 0) {
+        pointerDownRef.current = false;
+      }
+    };
 
-    window.addEventListener('pointermove', handlePointer, { passive: true });
-    window.addEventListener('pointerdown', handlePointer, { passive: true });
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
 
     return () => {
-      window.removeEventListener('pointermove', handlePointer);
-      window.removeEventListener('pointerdown', handlePointer);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp);
     };
   }, []);
 
@@ -1265,6 +1323,12 @@ export default function TwoDots() {
     window.addEventListener('pointerup', onPointerUp);
     return () => window.removeEventListener('pointerup', onPointerUp);
   }, [finishSelection]);
+
+  useEffect(() => {
+    if (lineRef.current) {
+      lineRef.current.visible = false;
+    }
+  }, []);
 
   useFrame((state, delta) => {
     const inputState = input.current;
@@ -1352,9 +1416,12 @@ export default function TwoDots() {
       hoveredIdRef.current = null;
     }
 
+    const pointerJustDown = pointerJustDownRef.current;
+    pointerJustDownRef.current = false;
+
     if (
       hitId != null &&
-      inputState.pointerJustDown &&
+      pointerJustDown &&
       !selectionRef.current.active &&
       snap.phase === 'playing' &&
       !paused &&
@@ -1367,7 +1434,7 @@ export default function TwoDots() {
     if (
       hitId != null &&
       selectionRef.current.active &&
-      inputState.pointerDown &&
+      pointerDownRef.current &&
       snap.phase === 'playing' &&
       !paused &&
       !settingsOpen &&
@@ -1536,6 +1603,13 @@ export default function TwoDots() {
       const offset = yOffsets[i];
       const velocity = yVelocity[i];
 
+      if (!Number.isFinite(offset) || !Number.isFinite(velocity)) {
+        yOffsets[i] = 0;
+        yVelocity[i] = 0;
+        yDirty = true;
+        continue;
+      }
+
       if (Math.abs(offset) < 0.0001 && Math.abs(velocity) < 0.0001) {
         continue;
       }
@@ -1561,6 +1635,11 @@ export default function TwoDots() {
     }
 
     if (pendingSettleRef.current && !anyMoving) {
+      for (let i = 0; i < CELL_COUNT; i += 1) {
+        yOffsets[i] = 0;
+        yVelocity[i] = 0;
+      }
+      yOffsetAttr.needsUpdate = true;
       pendingSettleRef.current = false;
       inputLockedRef.current = false;
     }
@@ -1736,7 +1815,6 @@ export default function TwoDots() {
 
       <Line
         ref={lineRef}
-        visible={false}
         points={[new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]}
         color={lineColor}
         lineWidth={Math.min(10, 3 + selectionVisual.count * 0.6)}
@@ -1839,6 +1917,9 @@ export default function TwoDots() {
                 )}
               </>
             )}
+          </div>
+          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.84 }}>
+            Grid Style <b style={{ textTransform: 'capitalize' }}>{gridStyle}</b>
           </div>
 
           {isLevelsMode && targetItems.length > 0 && (
