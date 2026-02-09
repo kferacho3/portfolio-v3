@@ -16,6 +16,7 @@ export type OnePathWall = {
 };
 
 export type OnePathGate = {
+  // Position along the segment's long axis where the perpendicular branch starts.
   offset: number;
   triggerStart: number;
   triggerEnd: number;
@@ -34,14 +35,23 @@ export type OnePathSegment = {
   id: string;
   axis: OnePathAxis;
   dir: -1 | 1;
+
+  // Segment start (center of the "near" end wall), world space.
   x: number;
   z: number;
+
+  // Long-axis distance between near and far end walls.
   length: number;
+
+  // Total corridor width (wall-to-wall across narrow dimension).
   corridorWidth: number;
   halfWidth: number;
+
+  // Ball-center oscillation bounds along long axis.
   centerMin: number;
   centerMax: number;
-  gate: OnePathGate | null;
+
+  gate: OnePathGate;
   walls: { neg: OnePathWall; pos: OnePathWall };
   gems: OnePathGem[];
 };
@@ -97,7 +107,8 @@ type DifficultyProfile = {
   trapChance: number;
   reqMin: number;
   reqMax: number;
-  widthBonus: number;
+  widthJitterMin: number;
+  widthJitterMax: number;
   gemChance: number;
 };
 
@@ -180,9 +191,10 @@ const DEFAULT_SKINS: OnePathSkin[] = [
 ];
 
 const BALL_DIAMETER = CONST.BALL_R * 2;
+const MIN_CORRIDOR_WIDTH = BALL_DIAMETER + CONST.MIN_CLEARANCE;
 const BASE_CORRIDOR_WIDTH = Math.max(
   BALL_DIAMETER * CONST.CORRIDOR_MULT,
-  BALL_DIAMETER + CONST.MIN_CLEARANCE
+  MIN_CORRIDOR_WIDTH
 );
 
 function getDifficulty(level: number, mode: OnePathMode): DifficultyProfile {
@@ -192,15 +204,16 @@ function getDifficulty(level: number, mode: OnePathMode): DifficultyProfile {
     return {
       segmentMin: 8,
       segmentMax: 14,
-      lengthMin: 3.2,
-      lengthMax: 4.6,
+      lengthMin: 2.9,
+      lengthMax: 4.3,
       speed: 3.8,
       lateralSpeed: 4.6,
       breakThreshold: 14,
       trapChance: 0.2,
       reqMin: 0,
       reqMax: 3,
-      widthBonus: 0.02,
+      widthJitterMin: 0,
+      widthJitterMax: 0.035,
       gemChance: 0.5,
     };
   }
@@ -209,32 +222,34 @@ function getDifficulty(level: number, mode: OnePathMode): DifficultyProfile {
     return {
       segmentMin: 10,
       segmentMax: 18,
-      lengthMin: 3.0,
-      lengthMax: 4.2,
+      lengthMin: 2.7,
+      lengthMax: 4.0,
       speed: 4.4,
-      lateralSpeed: 5.4,
+      lateralSpeed: 5.5,
       breakThreshold: 10,
       trapChance: 0.45,
       reqMin: 2,
       reqMax: 6,
-      widthBonus: 0.01,
-      gemChance: 0.38,
+      widthJitterMin: 0,
+      widthJitterMax: 0.022,
+      gemChance: 0.36,
     };
   }
 
   return {
     segmentMin: 12,
     segmentMax: 22,
-    lengthMin: 2.7,
-    lengthMax: 3.9,
+    lengthMin: 2.5,
+    lengthMax: 3.7,
     speed: 5.2,
-    lateralSpeed: 6.6,
+    lateralSpeed: 6.4,
     breakThreshold: 7,
     trapChance: 0.62,
     reqMin: 4,
     reqMax: 9,
-    widthBonus: 0,
-    gemChance: 0.28,
+    widthJitterMin: 0,
+    widthJitterMax: 0.015,
+    gemChance: 0.25,
   };
 }
 
@@ -246,8 +261,8 @@ function pointOnSegment(seg: OnePathSegment, s: number, l: number) {
 }
 
 function corridorAABB(seg: OnePathSegment, noTouchMargin: number): AABB {
-  const halfTotal = seg.halfWidth + CONST.WALL_T + noTouchMargin;
-  const endPad = CONST.WALL_T + noTouchMargin;
+  const halfTotal = seg.halfWidth + CONST.WALL_T * 0.5 + noTouchMargin;
+  const endPad = CONST.WALL_T * 0.5 + noTouchMargin;
 
   if (seg.axis === 'x') {
     const x0 = seg.x;
@@ -271,12 +286,32 @@ function corridorAABB(seg: OnePathSegment, noTouchMargin: number): AABB {
 }
 
 function intersectsOrTouches(a: AABB, b: AABB) {
-  const separated =
-    a.maxX < b.minX ||
-    a.minX > b.maxX ||
-    a.maxZ < b.minZ ||
-    a.minZ > b.maxZ;
-  return !separated;
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxZ < b.minZ || a.minZ > b.maxZ);
+}
+
+function overlapRect(a: AABB, b: AABB) {
+  const minX = Math.max(a.minX, b.minX);
+  const maxX = Math.min(a.maxX, b.maxX);
+  const minZ = Math.max(a.minZ, b.minZ);
+  const maxZ = Math.min(a.maxZ, b.maxZ);
+  if (maxX <= minX || maxZ <= minZ) return null;
+  return { minX, maxX, minZ, maxZ };
+}
+
+function overlapsCurrentOutsideConnector(
+  candidate: AABB,
+  current: AABB,
+  connector: { x: number; z: number },
+  connectorAllowance: number
+) {
+  const overlap = overlapRect(candidate, current);
+  if (!overlap) return false;
+  return !(
+    overlap.minX >= connector.x - connectorAllowance &&
+    overlap.maxX <= connector.x + connectorAllowance &&
+    overlap.minZ >= connector.z - connectorAllowance &&
+    overlap.maxZ <= connector.z + connectorAllowance
+  );
 }
 
 function withinWorldBounds(aabb: AABB, worldLimit: number) {
@@ -304,13 +339,6 @@ function pickDirection(
   return rand() < 0.5 ? -1 : 1;
 }
 
-function estimateMaxBouncesBeforeTurn(seg: OnePathSegment, speed: number, lateralSpeed: number) {
-  if (!seg.gate) return 0;
-  const time = Math.max(0, seg.gate.triggerEnd) / Math.max(0.0001, speed);
-  const span = Math.max(0.0001, seg.centerMax - seg.centerMin);
-  return Math.max(1, Math.floor((time * lateralSpeed) / span) + 1);
-}
-
 function buildWalls(level: number, segIndex: number, threshold: number) {
   const hp = Math.max(2, threshold + (segIndex === 0 ? 2 : 0));
   const base = {
@@ -328,51 +356,53 @@ function buildWalls(level: number, segIndex: number, threshold: number) {
 
 function buildFallbackLevel(level: number, mode: OnePathMode, seed: number): OnePathLevel {
   const diff = getDifficulty(level, mode);
-  const corridorWidth = BASE_CORRIDOR_WIDTH + diff.widthBonus;
-  const halfWidth = corridorWidth;
-  const centerMin = -halfWidth + CONST.BALL_R;
-  const centerMax = halfWidth - CONST.BALL_R;
-  const triggerEnd = Math.max(1.0, 3.0 - CONST.TURN_DEADZONE);
-  const triggerStart = Math.max(0.4, triggerEnd - CONST.TURN_WINDOW);
+  const noTouchMargin = CONST.BALL_R * CONST.NO_TOUCH_MARGIN_FACTOR;
+  const corridorWidth = Math.max(
+    MIN_CORRIDOR_WIDTH,
+    BASE_CORRIDOR_WIDTH + (diff.widthJitterMin + diff.widthJitterMax) * 0.5
+  );
+  const halfWidth = corridorWidth * 0.5;
+
+  const centerPad = CONST.BALL_R + CONST.WALL_T * 0.5;
+  const centerMin = centerPad;
+  const centerMax = 3 - centerPad;
 
   const segments: OnePathSegment[] = [];
   let cursor = { x: 0, z: 0 };
 
   for (let i = 0; i < 10; i += 1) {
     const axis: OnePathAxis = i % 2 === 0 ? 'z' : 'x';
+    const turnS = centerMin + (centerMax - centerMin) * 0.5;
+
     const seg: OnePathSegment = {
       id: `s_fb_${level}_${i}`,
       axis,
       dir: 1,
       x: cursor.x,
       z: cursor.z,
-      length: 3.0,
+      length: 3,
       corridorWidth,
       halfWidth,
       centerMin,
       centerMax,
-      gate:
-        i === 9
-          ? null
-          : {
-              offset: 0,
-              triggerStart,
-              triggerEnd,
-              requiredBounces: Math.min(2, i),
-              isOpen: i === 0,
-            },
+      gate: {
+        offset: turnS,
+        triggerStart: turnS - corridorWidth * 0.22,
+        triggerEnd: turnS + corridorWidth * 0.22,
+        requiredBounces: Math.min(2, i),
+        isOpen: i === 0,
+      },
       walls: buildWalls(level, i, diff.breakThreshold),
       gems: [],
     };
 
     segments.push(seg);
-    if (seg.gate) {
-      cursor = pointOnSegment(seg, seg.length, seg.gate.offset);
-    }
+    cursor = pointOnSegment(seg, turnS, 0);
   }
 
-  const exitPoint = pointOnSegment(segments[segments.length - 1], 3.0, 0);
-  const tolerance = Math.max(corridorWidth * 0.18, diff.speed * CONST.FIXED_DT * 1.25);
+  const finalSeg = segments[segments.length - 1];
+  const exitPoint = pointOnSegment(finalSeg, finalSeg.gate.offset, 0);
+  const tolerance = Math.max(corridorWidth * 0.18, diff.lateralSpeed * CONST.FIXED_DT * 1.25);
 
   return {
     id: `${mode}_lvl_${level}_fallback`,
@@ -384,12 +414,12 @@ function buildFallbackLevel(level: number, mode: OnePathMode, seed: number): One
     speed: diff.speed,
     lateralSpeed: diff.lateralSpeed,
     tolerance,
-    perfectTol: tolerance * 0.55,
+    perfectTol: tolerance * 0.6,
     bridgeWidth: corridorWidth,
     baseHeight: CONST.BASE_H,
     deckHeight: CONST.DECK_H,
     fallMargin: CONST.FALL_MARGIN,
-    noTouchMargin: CONST.BALL_R * CONST.NO_TOUCH_MARGIN_FACTOR,
+    noTouchMargin,
   };
 }
 
@@ -576,7 +606,8 @@ export const onePathState = proxy({
     onePathState.save();
   },
 
-  // Deterministic, self-avoiding corridor generator.
+  // Deterministic self-avoiding generator:
+  // each new branch can only connect to current segment and cannot touch older corridors.
   buildLevel: (level: number, mode: OnePathMode = 'levels'): OnePathLevel => {
     const lvl = Math.max(1, Math.floor(level));
     const diff = getDifficulty(lvl, mode);
@@ -588,52 +619,51 @@ export const onePathState = proxy({
 
     const noTouchMargin = CONST.BALL_R * CONST.NO_TOUCH_MARGIN_FACTOR;
 
-    for (let regen = 0; regen < 36; regen += 1) {
+    for (let regen = 0; regen < 42; regen += 1) {
       const rand = mulberry32(hash32(seed ^ regen));
       const segmentCount = randInt(rand, diff.segmentMin, diff.segmentMax);
 
       const segments: OnePathSegment[] = [];
       const occupied: AABB[] = [];
-
       let cursor = { x: 0, z: 0 };
       let failed = false;
 
       for (let i = 0; i < segmentCount; i += 1) {
         const axis: OnePathAxis = i % 2 === 0 ? 'z' : 'x';
-        const isLast = i === segmentCount - 1;
 
         let accepted: OnePathSegment | null = null;
         let acceptedAABB: AABB | null = null;
 
-        for (let attempt = 0; attempt < 96; attempt += 1) {
+        for (let attempt = 0; attempt < 120; attempt += 1) {
           const dir = pickDirection(axis, cursor, rand);
-          const corridorWidth = BASE_CORRIDOR_WIDTH + diff.widthBonus;
-          const halfWidth = corridorWidth;
-          const centerMin = -halfWidth + CONST.BALL_R;
-          const centerMax = halfWidth - CONST.BALL_R;
-          if (centerMax <= centerMin) continue;
-
-          const shrink = Math.max(0.55, 1 - attempt * 0.01);
-          const length =
-            randRange(rand, diff.lengthMin, diff.lengthMax) * shrink;
-
-          const triggerEnd = Math.max(
-            Math.max(CONST.TURN_DEADZONE + 0.15, length - CONST.TURN_DEADZONE),
-            0.75
+          const corridorWidth = Math.max(
+            MIN_CORRIDOR_WIDTH,
+            BASE_CORRIDOR_WIDTH + randRange(rand, diff.widthJitterMin, diff.widthJitterMax)
           );
-          const triggerStart = Math.max(0.25, triggerEnd - CONST.TURN_WINDOW);
+          const halfWidth = corridorWidth * 0.5;
 
-          const offsetMargin = Math.max(0.012, (centerMax - centerMin) * 0.12);
-          const offsetMin = centerMin + offsetMargin;
-          const offsetMax = centerMax - offsetMargin;
+          const shrink = Math.max(0.55, 1 - attempt * 0.008);
+          const length = randRange(rand, diff.lengthMin, diff.lengthMax) * shrink;
 
-          const gateOffset = isLast
-            ? 0
-            : randRange(
-                rand,
-                Math.min(offsetMin, offsetMax),
-                Math.max(offsetMin, offsetMax)
-              );
+          const centerPad = CONST.BALL_R + CONST.WALL_T * 0.5;
+          const centerMin = centerPad;
+          const centerMax = length - centerPad;
+          if (centerMax - centerMin <= 0.35) continue;
+
+          const turnMargin = Math.max(0.2, (centerMax - centerMin) * 0.12);
+          const turnMin = centerMin + turnMargin;
+          const turnMax = centerMax - turnMargin;
+          if (turnMax <= turnMin) continue;
+
+          const turnS = randRange(rand, turnMin, turnMax);
+          const gateWindow = Math.max(corridorWidth * 0.25, 0.09);
+
+          const reqAllowedMax = Math.max(0, Math.min(diff.reqMax, diff.breakThreshold - 2));
+          const reqAllowedMin = Math.min(diff.reqMin, reqAllowedMax);
+          const req =
+            rand() < diff.trapChance && reqAllowedMax > 0
+              ? randInt(rand, reqAllowedMin, reqAllowedMax)
+              : 0;
 
           const seg: OnePathSegment = {
             id: `s_${lvl}_${i}`,
@@ -646,42 +676,54 @@ export const onePathState = proxy({
             halfWidth,
             centerMin,
             centerMax,
-            gate: isLast
-              ? null
-              : {
-                  offset: gateOffset,
-                  triggerStart,
-                  triggerEnd,
-                  requiredBounces: 0,
-                  isOpen: true,
-                },
+            gate: {
+              offset: turnS,
+              triggerStart: turnS - gateWindow,
+              triggerEnd: turnS + gateWindow,
+              requiredBounces: req,
+              isOpen: req <= 0,
+            },
             walls: buildWalls(lvl, i, diff.breakThreshold),
             gems: [],
           };
 
-          if (seg.gate) {
-            const maxHits = estimateMaxBouncesBeforeTurn(seg, diff.speed, diff.lateralSpeed);
-            const reqAllowedMax = Math.max(0, Math.min(diff.reqMax, maxHits - 1));
-            const reqAllowedMin = Math.min(diff.reqMin, reqAllowedMax);
-            const req =
-              rand() < diff.trapChance && reqAllowedMax > 0
-                ? randInt(rand, reqAllowedMin, reqAllowedMax)
-                : 0;
-            seg.gate.requiredBounces = req;
-            seg.gate.isOpen = req <= 0;
+          if (rand() < diff.gemChance) {
+            const gemCount = rand() < 0.18 ? 2 : 1;
+            for (let g = 0; g < gemCount; g += 1) {
+              seg.gems.push({
+                id: `g_${lvl}_${i}_${g}`,
+                s: randRange(rand, Math.max(centerMin + 0.08, turnS - 0.5), Math.min(centerMax - 0.08, turnS + 0.5)),
+                l: randRange(rand, -halfWidth * 0.16, halfWidth * 0.16),
+                collected: false,
+              });
+            }
           }
 
           const aabb = corridorAABB(seg, noTouchMargin);
           if (!withinWorldBounds(aabb, CONST.WORLD_LIMIT)) continue;
 
-          let intersectsPrior = false;
+          let blocked = false;
           for (let j = 0; j < occupied.length - 1; j += 1) {
             if (intersectsOrTouches(aabb, occupied[j])) {
-              intersectsPrior = true;
+              blocked = true;
               break;
             }
           }
-          if (intersectsPrior) continue;
+          if (!blocked && occupied.length > 0) {
+            const currentCorridor = occupied[occupied.length - 1];
+            const connectorAllowance = halfWidth + CONST.WALL_T + noTouchMargin + 0.1;
+            if (
+              overlapsCurrentOutsideConnector(
+                aabb,
+                currentCorridor,
+                cursor,
+                connectorAllowance
+              )
+            ) {
+              blocked = true;
+            }
+          }
+          if (blocked) continue;
 
           accepted = seg;
           acceptedAABB = aabb;
@@ -693,32 +735,9 @@ export const onePathState = proxy({
           break;
         }
 
-        if (!isLast && rand() < diff.gemChance && accepted.gate) {
-          const gemCount = rand() < 0.2 ? 2 : 1;
-          const gemMaxS = Math.max(
-            0.3,
-            Math.min(accepted.length - 0.18, accepted.gate.triggerEnd - 0.08)
-          );
-          for (let g = 0; g < gemCount; g += 1) {
-            accepted.gems.push({
-              id: `g_${lvl}_${i}_${g}`,
-              s: randRange(
-                rand,
-                Math.max(0.2, accepted.length * 0.22),
-                gemMaxS
-              ),
-              l: randRange(rand, accepted.centerMin * 0.9, accepted.centerMax * 0.9),
-              collected: false,
-            });
-          }
-        }
-
         segments.push(accepted);
         occupied.push(acceptedAABB);
-
-        if (accepted.gate) {
-          cursor = pointOnSegment(accepted, accepted.length, accepted.gate.offset);
-        }
+        cursor = pointOnSegment(accepted, accepted.gate.offset, 0);
       }
 
       if (failed || segments.length === 0) {
@@ -726,11 +745,18 @@ export const onePathState = proxy({
       }
 
       const finalSeg = segments[segments.length - 1];
-      const exitPoint = pointOnSegment(finalSeg, finalSeg.length, 0);
-      const corridorWidth = BASE_CORRIDOR_WIDTH + diff.widthBonus;
+      const exitPoint = pointOnSegment(finalSeg, finalSeg.gate.offset, 0);
+      let tightestWidth = Number.POSITIVE_INFINITY;
+      let widthSum = 0;
+      for (let i = 0; i < segments.length; i += 1) {
+        const w = segments[i].corridorWidth;
+        tightestWidth = Math.min(tightestWidth, w);
+        widthSum += w;
+      }
+      const avgWidth = widthSum / segments.length;
       const tolerance = Math.max(
-        corridorWidth * 0.18,
-        diff.speed * CONST.FIXED_DT * 1.25
+        tightestWidth * 0.18,
+        diff.lateralSpeed * CONST.FIXED_DT * 1.25
       );
 
       return {
@@ -747,8 +773,8 @@ export const onePathState = proxy({
         speed: diff.speed,
         lateralSpeed: diff.lateralSpeed,
         tolerance,
-        perfectTol: tolerance * 0.55,
-        bridgeWidth: corridorWidth,
+        perfectTol: tolerance * 0.6,
+        bridgeWidth: avgWidth,
         baseHeight: CONST.BASE_H,
         deckHeight: CONST.DECK_H,
         fallMargin: CONST.FALL_MARGIN,

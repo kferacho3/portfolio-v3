@@ -70,9 +70,9 @@ function Overlay() {
                   One Path
                 </h1>
                 <p className="mt-2 text-black/70 leading-relaxed">
-                  The Walls style rhythm-runner: bounce between corridor walls,
-                  time your tap near the gate, transfer to the perpendicular
-                  path, and reach the portal.
+                  The Walls style rhythm-runner: oscillate between the two
+                  end-cap walls of each corridor, tap at the interior junction,
+                  transfer to the perpendicular path, and reach the portal.
                 </p>
               </div>
               <button
@@ -89,8 +89,8 @@ function Overlay() {
                   Deterministic motion
                 </div>
                 <div className="mt-1 text-sm text-black/65">
-                  Constant forward speed + exact wall reflections. No physics
-                  randomness.
+                  Deterministic wall-to-wall oscillation with exact reflections.
+                  No physics randomness.
                 </div>
               </div>
               <div className="rounded-2xl bg-black/5 p-4">
@@ -277,7 +277,7 @@ function Overlay() {
           <div className="pointer-events-auto w-[min(560px,92vw)] rounded-3xl bg-white/92 p-6 shadow-xl backdrop-blur-md">
             <div className="text-4xl font-black text-black">Missed.</div>
             <div className="mt-2 text-black/70">
-              Tap only when the ball is in the gate window near the corridor end.
+              Tap only when the ball is aligned to the interior junction marker.
             </div>
             <div className="mt-5 flex items-center justify-between gap-3">
               <div className="text-sm text-black/60">
@@ -368,7 +368,7 @@ function Scene() {
   const runRef = React.useRef<RunStatus>({
     t: 0,
     seg: 0,
-    s: 0.08,
+    s: 0.24,
     l: 0,
     lDir: 1,
     y: CONST.BASE_H + CONST.DECK_H + CONST.BALL_R,
@@ -537,9 +537,10 @@ function Scene() {
     });
 
     const r = runRef.current;
+    const first = lvl.segments[0];
     r.t = 0;
     r.seg = 0;
-    r.s = 0.08;
+    r.s = first ? Math.min(first.centerMax - 0.001, first.centerMin + 0.02) : 0.24;
     r.l = 0;
     r.lDir = 1;
     r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R;
@@ -655,13 +656,13 @@ function Scene() {
       return;
     }
 
-    const lateralError = Math.abs(r.l - seg.gate.offset);
-    if (lateralError > lvl.tolerance) {
+    const turnError = Math.abs(r.s - seg.gate.offset);
+    if (turnError > lvl.tolerance) {
       triggerFail();
       return;
     }
 
-    const perfect = lateralError <= lvl.perfectTol;
+    const perfect = turnError <= lvl.perfectTol;
     r.perfectFlash = Math.max(r.perfectFlash, perfect ? 1 : 0.45);
     r.comboCount = perfect ? r.comboCount + 1 : 0;
     r.comboTime = perfect ? 1.9 : 1.1;
@@ -676,14 +677,13 @@ function Scene() {
       return;
     }
 
-    const newLateralDir = seg.dir;
+    const nextSeg = lvl.segments[nextIndex];
     r.seg = nextIndex;
-    r.s = 0.001;
+    r.s = nextSeg ? Math.min(nextSeg.centerMax - 0.001, nextSeg.centerMin + 0.01) : 0.001;
     r.l = 0;
-    r.lDir = newLateralDir;
+    r.lDir = 1;
     r.bouncesOnSeg = 0;
 
-    const nextSeg = lvl.segments[nextIndex];
     r.gateOpen = nextSeg?.gate ? nextSeg.gate.isOpen : true;
   }, [handleLevelClear, triggerFail]);
 
@@ -712,28 +712,23 @@ function Scene() {
 
       r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R + Math.sin(r.t * 9.2) * 0.008;
 
-      r.s += lvl.speed * dt;
-      r.l += lvl.lateralSpeed * r.lDir * dt;
+      // Long-axis oscillation between the two end-cap walls.
+      r.s += lvl.lateralSpeed * r.lDir * dt;
+      r.l = 0;
 
-      // The ball center is constrained between two corridor walls at all times.
-      const minL = seg.centerMin;
-      const maxL = seg.centerMax;
+      const minS = seg.centerMin;
+      const maxS = seg.centerMax;
 
-      if (r.l <= minL) {
-        r.l = minL;
+      if (r.s <= minS) {
+        r.s = minS;
         r.lDir = 1;
         onBounce(seg, 'neg');
         if (!r.alive) return;
-      } else if (r.l >= maxL) {
-        r.l = maxL;
+      } else if (r.s >= maxS) {
+        r.s = maxS;
         r.lDir = -1;
         onBounce(seg, 'pos');
         if (!r.alive) return;
-      }
-
-      if (seg.gate) {
-        // Hold near the connector while the player keeps bouncing.
-        r.s = Math.min(r.s, seg.gate.triggerEnd);
       }
 
       for (let i = 0; i < seg.gems.length; i += 1) {
@@ -747,13 +742,8 @@ function Scene() {
           r.perfectFlash = Math.max(r.perfectFlash, 0.35);
         }
       }
-
-      if (!seg.gate && r.s >= seg.length) {
-        r.cleared = true;
-        handleLevelClear();
-      }
     },
-    [handleLevelClear, onBounce]
+    [onBounce]
   );
 
   const rebuildStaticInstances = React.useCallback(() => {
@@ -826,30 +816,21 @@ function Scene() {
       if (i !== activeSegIndex) continue;
 
       for (let side = 0; side < 2; side += 1) {
-        const sideSign = side === 0 ? -1 : 1;
         const wall = side === 0 ? seg.walls.neg : seg.walls.pos;
+        const wallS = side === 0 ? 0 : seg.length;
+        const wallPos = segmentWorldPos(seg, wallS, 0);
 
         const hp01 = wall.unbreakable
           ? 1
           : clamp(wall.hp / Math.max(1, wall.maxHp), 0, 1);
         const liveScaleY = wall.broken ? 0.0001 : CONST.WALL_H * (0.72 + hp01 * 0.28);
 
+        tmpObj.position.set(wallPos.x, wallYBase, wallPos.z);
+        tmpObj.rotation.set(0, 0, 0);
         if (seg.axis === 'x') {
-          tmpObj.position.set(
-            seg.x + seg.dir * seg.length * 0.5,
-            wallYBase,
-            seg.z + sideSign * (seg.halfWidth + CONST.WALL_T * 0.5)
-          );
-          tmpObj.rotation.set(0, 0, 0);
-          tmpObj.scale.set(seg.length, liveScaleY, CONST.WALL_T);
+          tmpObj.scale.set(CONST.WALL_T, liveScaleY, seg.corridorWidth);
         } else {
-          tmpObj.position.set(
-            seg.x + sideSign * (seg.halfWidth + CONST.WALL_T * 0.5),
-            wallYBase,
-            seg.z + seg.dir * seg.length * 0.5
-          );
-          tmpObj.rotation.set(0, 0, 0);
-          tmpObj.scale.set(CONST.WALL_T, liveScaleY, seg.length);
+          tmpObj.scale.set(seg.corridorWidth, liveScaleY, CONST.WALL_T);
         }
 
         tmpObj.updateMatrix();
@@ -859,61 +840,19 @@ function Scene() {
 
       if (seg.gate) {
         const open = seg.gate.isOpen;
-        const openW = lvl.bridgeWidth;
-        const openStart = seg.gate.offset - openW * 0.5;
-        const openEnd = seg.gate.offset + openW * 0.5;
-        const leftLen = Math.max(0, openStart + seg.halfWidth);
-        const rightLen = Math.max(0, seg.halfWidth - openEnd);
-
+        const gatePoint = segmentWorldPos(seg, seg.gate.offset, 0);
         const collapse = open ? 0.0001 : 1;
 
+        tmpObj.position.set(gatePoint.x, gateY, gatePoint.z);
+        tmpObj.rotation.set(0, 0, 0);
         if (seg.axis === 'x') {
-          const endX = seg.x + seg.dir * seg.length;
-          tmpObj.position.set(
-            endX + seg.dir * 0.11,
-            gateY,
-            seg.z + (-seg.halfWidth + openStart) * 0.5
-          );
-          tmpObj.rotation.set(0, 0, 0);
-          tmpObj.scale.set(0.18, CONST.DECK_H * 1.08 * collapse, Math.max(0.0001, leftLen * collapse));
-          tmpObj.updateMatrix();
-          gateBlocks.setMatrixAt(gateIdx, tmpObj.matrix);
-          gateIdx += 1;
-
-          tmpObj.position.set(
-            endX + seg.dir * 0.11,
-            gateY,
-            seg.z + (openEnd + seg.halfWidth) * 0.5
-          );
-          tmpObj.rotation.set(0, 0, 0);
-          tmpObj.scale.set(0.18, CONST.DECK_H * 1.08 * collapse, Math.max(0.0001, rightLen * collapse));
-          tmpObj.updateMatrix();
-          gateBlocks.setMatrixAt(gateIdx, tmpObj.matrix);
-          gateIdx += 1;
+          tmpObj.scale.set(0.14, CONST.DECK_H * 1.08 * collapse, seg.corridorWidth * 0.88);
         } else {
-          const endZ = seg.z + seg.dir * seg.length;
-          tmpObj.position.set(
-            seg.x + (-seg.halfWidth + openStart) * 0.5,
-            gateY,
-            endZ + seg.dir * 0.11
-          );
-          tmpObj.rotation.set(0, 0, 0);
-          tmpObj.scale.set(Math.max(0.0001, leftLen * collapse), CONST.DECK_H * 1.08 * collapse, 0.18);
-          tmpObj.updateMatrix();
-          gateBlocks.setMatrixAt(gateIdx, tmpObj.matrix);
-          gateIdx += 1;
-
-          tmpObj.position.set(
-            seg.x + (openEnd + seg.halfWidth) * 0.5,
-            gateY,
-            endZ + seg.dir * 0.11
-          );
-          tmpObj.rotation.set(0, 0, 0);
-          tmpObj.scale.set(Math.max(0.0001, rightLen * collapse), CONST.DECK_H * 1.08 * collapse, 0.18);
-          tmpObj.updateMatrix();
-          gateBlocks.setMatrixAt(gateIdx, tmpObj.matrix);
-          gateIdx += 1;
+          tmpObj.scale.set(seg.corridorWidth * 0.88, CONST.DECK_H * 1.08 * collapse, 0.14);
         }
+        tmpObj.updateMatrix();
+        gateBlocks.setMatrixAt(gateIdx, tmpObj.matrix);
+        gateIdx += 1;
       }
 
       for (let g = 0; g < seg.gems.length; g += 1) {
@@ -940,7 +879,7 @@ function Scene() {
     const gateGlow = gateGlowRef.current;
     const currentSeg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
     if (gateGlow && currentSeg?.gate && r.alive && !r.cleared) {
-      const gatePoint = segmentWorldPos(currentSeg, currentSeg.length, currentSeg.gate.offset);
+      const gatePoint = segmentWorldPos(currentSeg, currentSeg.gate.offset, 0);
       gateGlow.visible = true;
       gateGlow.position.set(gatePoint.x, CONST.BASE_H + CONST.DECK_H + 0.015, gatePoint.z);
       gateGlow.rotation.set(
@@ -948,7 +887,7 @@ function Scene() {
         currentSeg.axis === 'z' ? Math.PI / 2 : 0,
         0
       );
-      gateGlow.scale.set(lvl.bridgeWidth, lvl.bridgeWidth * 0.24, 1);
+      gateGlow.scale.set(0.24, currentSeg.corridorWidth * 0.94, 1);
       const gateMat = gateGlow.material as THREE.MeshBasicMaterial;
       const openBoost = currentSeg.gate.isOpen ? 0.75 : 0.38;
       gateMat.opacity = openBoost + Math.sin(r.t * 6.4) * 0.12 + r.gateFlash * 0.2;
@@ -1034,8 +973,10 @@ function Scene() {
         const seg0 = levelRef.current.segments[0];
         if (seg0) {
           r.seg = 0;
-          r.s = Math.min(seg0.length * 0.42, seg0.length - 0.2);
-          r.l = Math.sin(r.t * 1.8) * seg0.centerMax * 0.72;
+          const mid = (seg0.centerMin + seg0.centerMax) * 0.5;
+          const amp = Math.max(0.01, (seg0.centerMax - seg0.centerMin) * 0.44);
+          r.s = mid + Math.sin(r.t * 1.8) * amp;
+          r.l = 0;
         }
         r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R + Math.sin(r.t * 8) * 0.012;
       }
