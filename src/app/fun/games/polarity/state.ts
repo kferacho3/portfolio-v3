@@ -16,6 +16,7 @@ export const polarityState = proxy({
   bestScore: 0,
   health: 100,
   gameOver: false,
+  resetVersion: 0,
 
   charge: 1 as PolarityCharge,
 
@@ -52,6 +53,7 @@ export const polarityState = proxy({
   zoneActive: false,
 
   reset() {
+    this.resetVersion += 1;
     this.score = 0;
     this.health = 100;
     this.gameOver = false;

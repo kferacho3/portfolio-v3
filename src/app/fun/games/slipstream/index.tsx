@@ -12,6 +12,10 @@ import { PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 import { SeededRandom } from '../../utils/seededRandom';
+import {
+  buildPatternLibraryTemplate,
+  sampleDifficulty,
+} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -67,6 +71,20 @@ function getSegment(baseSeed: number, index: number, out?: Segment): Segment {
   seg.height = height;
   seg.gap = gap;
   seg.hazard = hazard;
+  return seg;
+}
+
+function getRuntimeSegment(
+  baseSeed: number,
+  index: number,
+  patternLibrary: ReturnType<typeof buildPatternLibraryTemplate>,
+  out?: Segment
+): Segment {
+  const seg = getSegment(baseSeed, index, out);
+  const chunk = patternLibrary[index % patternLibrary.length];
+  if (!seg.gap && seg.hazard === 'none' && chunk.tier >= 3 && index % 2 === 0) {
+    seg.hazard = index % 4 === 0 ? 'ground' : 'ceiling';
+  }
   return seg;
 }
 
@@ -203,7 +221,6 @@ function SlipstreamScene({
     () => ({ z: 0, height: 0, gap: false, hazard: 'none' as SegHazard }),
     []
   );
-  const tmpPos = useMemo(() => new THREE.Vector3(), []);
 
   const sim = useRef({
     z: 0,
@@ -215,6 +232,10 @@ function SlipstreamScene({
   });
 
   const [segIndex, setSegIndex] = useState(0);
+  const patternLibrary = useMemo(
+    () => buildPatternLibraryTemplate('slipstream'),
+    []
+  );
 
   const reset = useCallback(() => {
     sim.current.z = 0;
@@ -237,10 +258,10 @@ function SlipstreamScene({
     const base = Math.max(0, segIndex - 2);
     const out: Segment[] = [];
     for (let i = base; i < base + LOOK_AHEAD; i++) {
-      out.push(getSegment(seed, i));
+      out.push(getRuntimeSegment(seed, i, patternLibrary));
     }
     return out;
-  }, [seed, segIndex]);
+  }, [seed, segIndex, patternLibrary]);
 
   useFrame((_state, dt) => {
     dt = Math.min(dt, 1 / 30);
@@ -264,7 +285,7 @@ function SlipstreamScene({
       } else {
         // Attempt to snap back to ground. If there is no ground, you crash.
         const i = Math.floor(s.z / SEG_LEN);
-        const seg = getSegment(seed, i, tmpSeg);
+        const seg = getRuntimeSegment(seed, i, patternLibrary, tmpSeg);
         if (seg.gap) {
           s.dead = true;
         } else {
@@ -274,7 +295,8 @@ function SlipstreamScene({
     }
 
     // Advance.
-    s.z += SPEED * dt;
+    const difficulty = sampleDifficulty('lane-switch', s.z / SPEED);
+    s.z += difficulty.speed * dt;
 
     const i = Math.floor(s.z / SEG_LEN);
     if (i !== segIndex) setSegIndex(i);
@@ -285,7 +307,7 @@ function SlipstreamScene({
       onScore(i);
     }
 
-    const seg = getSegment(seed, i, tmpSeg);
+    const seg = getRuntimeSegment(seed, i, patternLibrary, tmpSeg);
 
     // Resolve vertical position.
     const groundY = -0.65 + seg.height + BALL_R;
@@ -371,7 +393,7 @@ function SlipstreamScene({
       {visibleSegments.map((seg, idx) => {
         const local = idx + Math.max(0, segIndex - 2);
         // Recompute deterministic segment (avoids stale memo for map key ordering).
-        const s = getSegment(seed, local);
+        const s = getRuntimeSegment(seed, local, patternLibrary);
         const z = -s.z;
         const y = -0.95 + s.height;
         return (

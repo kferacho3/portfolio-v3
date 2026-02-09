@@ -9,6 +9,7 @@ export const traceState = proxy({
   score: 0,
   bestScore: 0,
   gameOver: false,
+  resetVersion: 0,
 
   // Phase “charges” economy (max 2)
   phaseCharges: 2,
@@ -40,6 +41,7 @@ export const traceState = proxy({
   nextEventAt: 18,
 
   reset() {
+    this.resetVersion += 1;
     this.score = 0;
     this.gameOver = false;
     this.phaseCharges = this.phaseMaxCharges;

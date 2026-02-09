@@ -10,6 +10,7 @@ export const flipBoxState = proxy({
   bestScore: 0,
   health: 100,
   gameOver: false,
+  resetVersion: 0,
 
   chain: 0,
   chainTime: 0,
@@ -31,6 +32,7 @@ export const flipBoxState = proxy({
   slowMoTime: 0,
 
   reset() {
+    this.resetVersion += 1;
     this.score = 0;
     this.health = 100;
     this.gameOver = false;

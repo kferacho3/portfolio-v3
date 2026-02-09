@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import React, {
@@ -13,6 +12,10 @@ import { PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 import { SeededRandom } from '../../utils/seededRandom';
+import {
+  buildPatternLibraryTemplate,
+  sampleDifficulty,
+} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -27,7 +30,6 @@ const PLAYER_Y = 0.3;
 const SPAWN_Z = 13;
 const DESPAWN_Z = -8;
 
-const SPEED_Z = 7.2;
 const MAX_PROJECTILES = 18;
 
 const SHIELD_DURATION = 0.34;
@@ -173,6 +175,10 @@ function PulseParryScene({
     }),
     []
   );
+  const patternLibrary = useMemo(
+    () => buildPatternLibraryTemplate('pulseparry'),
+    []
+  );
 
   useEffect(() => {
     if (status !== 'playing') return;
@@ -187,7 +193,7 @@ function PulseParryScene({
     onScore(0);
   }, [seed, status, onScore]);
 
-  const spawn = useCallback(() => {
+  const spawn = useCallback((shotSpeed: number, chunkTier: number) => {
     const arr = projectilesRef.current;
     if (arr.length >= MAX_PROJECTILES) return;
 
@@ -198,9 +204,11 @@ function PulseParryScene({
     const x0 = rng.float(-TRACK_HALF_W * 0.7, TRACK_HALF_W * 0.7);
     const y0 = PLAYER_Y + rng.float(-0.15, 0.35);
 
-    const lateral = rng.bool(0.45);
-    const vx = lateral ? side * rng.float(1.3, 2.4) : rng.float(-0.35, 0.35);
-    const vz = -SPEED_Z * rng.float(0.85, 1.15);
+    const lateral = rng.bool(0.35 + chunkTier * 0.08);
+    const vx = lateral
+      ? side * rng.float(1.3, 2.4 + chunkTier * 0.3)
+      : rng.float(-0.35, 0.35);
+    const vz = -shotSpeed * rng.float(0.85, 1.15);
 
     arr.push({
       id: idRef.current++,
@@ -235,12 +243,23 @@ function PulseParryScene({
     sim.current.shieldT = Math.max(0, sim.current.shieldT - dt);
     sim.current.cooldownT = Math.max(0, sim.current.cooldownT - dt);
 
-    // Spawn cadence scales slightly with score
+    const difficulty = sampleDifficulty(
+      'timing-defense',
+      sim.current.score * 0.7
+    );
+    const activeChunk =
+      patternLibrary[sim.current.score % patternLibrary.length];
+
+    // Spawn cadence scales with difficulty profile + chunk tier
     sim.current.spawnT -= dt;
-    const spawnEvery = clamp(0.7 - sim.current.score * 0.005, 0.38, 0.7);
+    const spawnEvery = clamp(
+      0.75 - activeChunk.tier * 0.04 - (difficulty.eventRate - 0.4) * 0.28,
+      0.3,
+      0.75
+    );
     if (sim.current.spawnT <= 0) {
       sim.current.spawnT = spawnEvery;
-      spawn();
+      spawn(difficulty.speed + 1.2, activeChunk.tier);
     }
 
     // Update visuals

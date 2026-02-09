@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import React, {
@@ -13,13 +12,16 @@ import { PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 import { SeededRandom } from '../../utils/seededRandom';
+import {
+  buildPatternLibraryTemplate,
+  sampleDifficulty,
+} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
 
 const STORAGE_KEY = 'runeroll_best_v1';
 
-const SPEED = 6.2;
 const SPACING = 3.25;
 const LOOK_AHEAD = 20;
 const CUBE_SIZE = 0.8;
@@ -48,6 +50,26 @@ function getGate(seed: number, i: number, out: Gate) {
   const rng = new SeededRandom(hashSeed(seed, i));
   out.z = i * SPACING;
   out.rune = rng.int(0, 3);
+  return out;
+}
+
+function getRuntimeGate(
+  seed: number,
+  i: number,
+  patternLibrary: ReturnType<typeof buildPatternLibraryTemplate>,
+  out: Gate
+) {
+  getGate(seed, i, out);
+  const chunk = patternLibrary[i % patternLibrary.length];
+  if (chunk.id === 'C03' || chunk.id === 'C04') {
+    out.rune = i % 2;
+  } else if (chunk.id === 'C05') {
+    out.rune = i % 3 === 2 ? 2 : 0;
+  } else if (chunk.id === 'C08' || chunk.id === 'C13') {
+    out.rune = (out.rune + 1) % 4;
+  } else if (chunk.id === 'C14' || chunk.id === 'C15') {
+    out.rune = (out.rune + 2) % 4;
+  }
   return out;
 }
 
@@ -179,6 +201,10 @@ function Scene({
   });
 
   const gateScratch = useMemo(() => ({ z: 0, rune: 0 }) as Gate, []);
+  const patternLibrary = useMemo(
+    () => buildPatternLibraryTemplate('runeroll'),
+    []
+  );
 
   useEffect(() => {
     if (status !== 'playing') return;
@@ -234,14 +260,15 @@ function Scene({
     s.rot += diff * clamp(dt * 10, 0, 1);
 
     // move world forward (path flows from ahead (-Z) toward you)
-    s.z += SPEED * dt;
+    const difficulty = sampleDifficulty('timing-defense', s.runeScore * 0.75);
+    s.z += difficulty.speed * dt;
 
     // gate check: when a gate crosses z==0 in world space (gate i at world z = s.z - i*SPACING)
     const justCleared = Math.floor(s.z / SPACING);
     if (justCleared > s.runeScore) {
       // we cleared one or more gates (dt might be large)
       for (let i = s.runeScore + 1; i <= justCleared; i++) {
-        getGate(seed, i, gateScratch);
+        getRuntimeGate(seed, i, patternLibrary, gateScratch);
         if (gateScratch.rune !== s.rune) {
           onGameOver(s.runeScore);
           clearFrameInput(input.current);
@@ -319,7 +346,7 @@ function Scene({
       <group ref={gatesGroupRef}>
         {visibleGateIndices.map((i) => {
           const g = { z: 0, rune: 0 };
-          getGate(seed, i, g);
+          getRuntimeGate(seed, i, patternLibrary, g);
           const c = RUNE_COLORS[g.rune];
           return (
             <group key={i} position={[0, 0, -g.z]}>

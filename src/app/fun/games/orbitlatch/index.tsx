@@ -12,6 +12,10 @@ import { PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 import { SeededRandom } from '../../utils/seededRandom';
+import {
+  buildPatternLibraryTemplate,
+  sampleDifficulty,
+} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'playing' | 'gameover';
@@ -22,7 +26,6 @@ const BALL_RADIUS = 0.18;
 const BALL_Y = 0.28;
 const ORBIT_RADIUS = 1.15;
 const ORBIT_SPEED = 2.35; // radians/sec
-const FLIGHT_SPEED = 5.1;
 const GAP = 5.4;
 const LATCH_DIST = 0.55;
 const VIEW_AHEAD = 14;
@@ -210,6 +213,10 @@ function OrbitLatchScene({
   const tmpB = useMemo(() => new THREE.Vector3(), []);
   const tmpOff = useMemo(() => new THREE.Vector3(), []);
   const tmpHaz = useMemo(() => ({ pos: new THREE.Vector3(), r: 0.2 }), []);
+  const patternLibrary = useMemo(
+    () => buildPatternLibraryTemplate('orbitlatch'),
+    []
+  );
 
   const [anchorIdxRender, setAnchorIdxRender] = useState(0);
 
@@ -243,16 +250,21 @@ function OrbitLatchScene({
 
     const s = sim.current;
 
+    const difficulty = sampleDifficulty('orbit-chain', s.score * 0.9);
+    const activeChunk = patternLibrary[s.anchorIdx % patternLibrary.length];
+    const dynamicFlightSpeed = difficulty.speed + activeChunk.tier * 0.2;
+    const dynamicOrbitSpeed = ORBIT_SPEED + activeChunk.tier * 0.12;
+
     if (input.current.pointerJustDown && s.mode === 'orbit') {
       // tangent direction in xz plane
       const tx = -Math.sin(s.angle);
       const tz = Math.cos(s.angle);
-      s.vel.set(tx, 0, tz).normalize().multiplyScalar(FLIGHT_SPEED);
+      s.vel.set(tx, 0, tz).normalize().multiplyScalar(dynamicFlightSpeed);
       s.mode = 'flight';
     }
 
     if (s.mode === 'orbit') {
-      s.angle += ORBIT_SPEED * dt;
+      s.angle += dynamicOrbitSpeed * dt;
       getAnchorPos(baseSeed, s.anchorIdx, tmpA);
       s.pos.set(
         tmpA.x + Math.cos(s.angle) * ORBIT_RADIUS,
@@ -435,7 +447,6 @@ function OrbitLatchScene({
       {/* Anchors */}
       {visibleAnchors.map((i) => {
         getAnchorPos(baseSeed, i, tmpA);
-        const isNext = i === sim.current.anchorIdx + 1;
         return (
           <group key={`a-${i}`} position={[tmpA.x, 0, tmpA.z]}>
             {/* Pylon body - purple */}

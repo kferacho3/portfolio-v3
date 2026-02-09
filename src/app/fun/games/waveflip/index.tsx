@@ -1,4 +1,3 @@
-// @ts-nocheck
 'use client';
 
 import React, {
@@ -13,6 +12,10 @@ import { Html, OrthographicCamera } from '@react-three/drei';
 import * as THREE from 'three';
 
 import { SeededRandom } from '../../utils/seededRandom';
+import {
+  buildPatternLibraryTemplate,
+  sampleDifficulty,
+} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
 type GameStatus = 'menu' | 'countdown' | 'playing' | 'gameover';
@@ -35,15 +38,10 @@ const WORLD_HALF_H = 2.1;
 const BALL_R = 0.22;
 const AMP = 1.15;
 const PHASE_SPEED = 2.55;
-const FORWARD_SPEED = 4.8;
 const SPIKE_SPACING = 2.15;
 const LOOK_AHEAD = 34;
 
 const PALETTE = ['#ff5a7a', '#1bbbd3', '#7c5cff', '#ffb020', '#20c46b'];
-
-function clamp(v: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, v));
-}
 
 function hashSeed(seed: number, i: number) {
   // deterministic 32-bit-ish mix
@@ -54,19 +52,29 @@ function hashSeed(seed: number, i: number) {
   return x >>> 0;
 }
 
-function getSpike(i: number, seed: number, out: Spike): Spike {
+function getSpike(
+  i: number,
+  seed: number,
+  out: Spike,
+  spacing: number = SPIKE_SPACING
+): Spike {
   const r = new SeededRandom(hashSeed(seed, i));
-  out.z = i * SPIKE_SPACING;
+  out.z = i * spacing;
   out.up = r.bool(0.5);
   out.h = r.float(0.65, 2.05);
   out.w = r.float(0.25, 0.45);
   return out;
 }
 
-function getPickup(i: number, seed: number, out: Pickup): Pickup | null {
+function getPickup(
+  i: number,
+  seed: number,
+  out: Pickup,
+  spacing: number = SPIKE_SPACING
+): Pickup | null {
   const r = new SeededRandom(hashSeed(seed, i) ^ 0xa5a5a5a5);
   if (!r.bool(0.36)) return null;
-  out.z = i * SPIKE_SPACING + r.float(-0.45, 0.45);
+  out.z = i * spacing + r.float(-0.45, 0.45);
   out.y = r.float(-0.75, 0.75);
   return out;
 }
@@ -345,6 +353,10 @@ function WaveFlipScene({
   const tmpPickup = useMemo<Pickup>(() => ({ z: 0, y: 0 }), []);
   const tmp = useMemo(() => new THREE.Vector3(), []);
   const trail = useRef<THREE.Vector3[]>([]);
+  const patternLibrary = useMemo(
+    () => buildPatternLibraryTemplate('waveflip'),
+    []
+  );
 
   const [worldIndex, setWorldIndex] = useState(0);
 
@@ -396,8 +408,19 @@ function WaveFlipScene({
     const speedMul = 0.55 + 0.45 * ease;
     const phaseMul = 0.6 + 0.4 * ease;
 
-    sim.current.phase += sim.current.phaseVel * phaseMul * dt;
-    sim.current.z += FORWARD_SPEED * speedMul * dt;
+    const difficulty = sampleDifficulty('wave-timing', elapsed);
+    const intensity = Math.min(
+      1,
+      Math.max(0, (difficulty.speed - 4.0) / (7.0 - 4.0))
+    );
+    const spacingMul = THREE.MathUtils.lerp(1, 0.74, intensity);
+    const dynamicSpacing = SPIKE_SPACING * spacingMul;
+    const activeChunk =
+      patternLibrary[Math.floor(sim.current.z) % patternLibrary.length];
+
+    sim.current.phase +=
+      sim.current.phaseVel * (phaseMul + activeChunk.tier * 0.03) * dt;
+    sim.current.z += difficulty.speed * speedMul * dt;
 
     const y = AMP * Math.sin(sim.current.phase);
     const z = sim.current.z;
@@ -411,7 +434,7 @@ function WaveFlipScene({
       ball.current.scale.setScalar(scale);
     }
 
-    const nextPassed = Math.floor(z / SPIKE_SPACING);
+    const nextPassed = Math.floor(z / dynamicSpacing);
     if (nextPassed !== sim.current.passed) {
       sim.current.passed = nextPassed;
       onScore(nextPassed);
@@ -420,7 +443,7 @@ function WaveFlipScene({
 
     // collision checks: current and next spike
     for (const i of [nextPassed, nextPassed + 1]) {
-      const spike = getSpike(i, seed, tmpSpike);
+      const spike = getSpike(i, seed, tmpSpike, dynamicSpacing);
       const dz = Math.abs(z - spike.z);
       if (dz > 0.55) continue;
 
@@ -443,7 +466,7 @@ function WaveFlipScene({
 
     // pickup: one per segment (sometimes) — +1 score, color change, track collected
     const pickupIdx = nextPassed + 1;
-    const pickup = getPickup(pickupIdx, seed, tmpPickup);
+    const pickup = getPickup(pickupIdx, seed, tmpPickup, dynamicSpacing);
     if (pickup && !collectedGems.current.has(pickupIdx)) {
       const dz = Math.abs(z - pickup.z);
       const dy = Math.abs(y - pickup.y);
@@ -538,7 +561,21 @@ function WaveFlipScene({
 
       {/* spikes */}
       {spikesToRender.map((i) => {
-        const spike = getSpike(i, seed, { ...tmpSpike });
+        const previewDifficulty = sampleDifficulty(
+          'wave-timing',
+          sim.current.z / 5
+        );
+        const previewSpacing =
+          SPIKE_SPACING *
+          THREE.MathUtils.lerp(
+            1,
+            0.74,
+            Math.min(
+              1,
+              Math.max(0, (previewDifficulty.speed - 4.0) / (7.0 - 4.0))
+            )
+          );
+        const spike = getSpike(i, seed, { ...tmpSpike }, previewSpacing);
         const z = -spike.z;
         const yBase = spike.up ? -WORLD_HALF_H : WORLD_HALF_H;
         const y = spike.up ? yBase + spike.h * 0.5 : yBase - spike.h * 0.5;
@@ -559,7 +596,21 @@ function WaveFlipScene({
       {/* pickups */}
       {pickupsToRender.map((i) => {
         if (collectedGems.current.has(i)) return null;
-        const pickup = getPickup(i, seed, { ...tmpPickup });
+        const previewDifficulty = sampleDifficulty(
+          'wave-timing',
+          sim.current.z / 5
+        );
+        const previewSpacing =
+          SPIKE_SPACING *
+          THREE.MathUtils.lerp(
+            1,
+            0.74,
+            Math.min(
+              1,
+              Math.max(0, (previewDifficulty.speed - 4.0) / (7.0 - 4.0))
+            )
+          );
+        const pickup = getPickup(i, seed, { ...tmpPickup }, previewSpacing);
         if (!pickup) return null;
         tmp.set(0, pickup.y, -pickup.z);
         return (

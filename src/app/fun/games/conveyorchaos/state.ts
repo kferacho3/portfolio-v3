@@ -14,6 +14,7 @@ export const conveyorChaosState = proxy({
   strikes: 0,
   maxStrikes: 3,
   gameOver: false,
+  resetVersion: 0,
 
   goalTime: 12,
 
@@ -34,6 +35,7 @@ export const conveyorChaosState = proxy({
   slowMoTime: 0,
 
   reset() {
+    this.resetVersion += 1;
     this.score = 0;
     this.level = 1;
     this.chain = 0;

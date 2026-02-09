@@ -13,6 +13,7 @@ export const portalPunchState = proxy({
   score: 0,
   bestScore: 0,
   gameOver: false,
+  resetVersion: 0,
 
   chain: 0,
   chainTime: 0,
@@ -37,6 +38,7 @@ export const portalPunchState = proxy({
   slowMoTime: 0,
 
   reset() {
+    this.resetVersion += 1;
     this.score = 0;
     this.gameOver = false;
     this.chain = 0;
