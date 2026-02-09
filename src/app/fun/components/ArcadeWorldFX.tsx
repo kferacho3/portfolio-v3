@@ -698,9 +698,13 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { theme: uiTheme } = useContext(ThemeContext);
   const isLightMode = uiTheme === 'light';
 
+  const gamesWithOwnWorldFx = ['shades'];
+  const disableGlobalWorldFx = gamesWithOwnWorldFx.includes(gameId);
+
   // Determine if backdrop should be shown (used for env map loading decision)
   const gamesWithoutBackdrop = ['voidrunner', 'apex'];
-  const showBackdrop = !gamesWithoutBackdrop.includes(gameId);
+  const showBackdrop =
+    !disableGlobalWorldFx && !gamesWithoutBackdrop.includes(gameId);
 
   // Only load env map if backdrop cluster is needed and not on mobile/light mode
   const shouldLoadEnvMap =
@@ -828,7 +832,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     };
   }, [isLightMode, theme.lights]);
 
-  const postEnabled = !lowPowerDevice;
+  const postEnabled = !lowPowerDevice && !disableGlobalWorldFx;
   const frameBufferType =
     gameId === 'home' ? THREE.UnsignedByteType : THREE.HalfFloatType;
 
@@ -836,28 +840,32 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     <>
       {envMap && <Environment map={envMap} background={false} />}
 
-      <ambientLight
-        intensity={lights.ambient * qualityScale}
-        color={lights.fillColor}
-      />
-      <directionalLight
-        position={[6, 10, 4]}
-        intensity={lights.keyIntensity * qualityScale}
-        color={lights.keyColor}
-        castShadow={false}
-      />
-      <pointLight
-        position={[-8, 4, -6]}
-        intensity={lights.rimIntensity * qualityScale}
-        color={lights.rimColor}
-      />
-      <pointLight
-        position={[8, -4, 6]}
-        intensity={lights.fillIntensity * qualityScale}
-        color={lights.fillColor}
-      />
+      {!disableGlobalWorldFx && (
+        <>
+          <ambientLight
+            intensity={lights.ambient * qualityScale}
+            color={lights.fillColor}
+          />
+          <directionalLight
+            position={[6, 10, 4]}
+            intensity={lights.keyIntensity * qualityScale}
+            color={lights.keyColor}
+            castShadow={false}
+          />
+          <pointLight
+            position={[-8, 4, -6]}
+            intensity={lights.rimIntensity * qualityScale}
+            color={lights.rimColor}
+          />
+          <pointLight
+            position={[8, -4, 6]}
+            intensity={lights.fillIntensity * qualityScale}
+            color={lights.fillColor}
+          />
+        </>
+      )}
 
-      {theme.stars && !isLightMode && (
+      {theme.stars && !isLightMode && !disableGlobalWorldFx && (
         <Stars
           radius={300}
           depth={60}

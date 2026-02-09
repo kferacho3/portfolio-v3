@@ -656,10 +656,10 @@ export const GAME_RULES: Record<string, GameRules> = {
   },
   shades: {
     controls:
-      'Tap left/right or ←/→ to move • Swipe down or ↓ to speed drop • Space hard drop • ↑ rotate (optional)',
+      'Desktop: ←/→ (or A/D) move • ↓ soft drop • Space hard drop • Mobile: tap column, swipe ←/→ nudge, swipe down fast drop',
     objective:
-      'Create rows of identical shades and merge blocks into darker tones. Reach the darkest shade to clear tiles and keep the stack low.',
-    tips: 'Avoid placing darker blocks on lighter ones. Set up chain merges and try 3/4/5 column modes to tune difficulty.',
+      'Merge matching tiles into darker shades, then clear rows by filling them with the exact same tile. Keep the stack below the top.',
+    tips: 'Set up vertical pairs before committing your row. Chain clears and combos to unlock new color palettes faster.',
   },
   twodots: {
     controls:
