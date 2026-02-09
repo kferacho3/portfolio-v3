@@ -22,6 +22,7 @@ import {
   Noise,
 } from '@react-three/postprocessing';
 import * as THREE from 'three';
+import type { Line2 } from 'three-stdlib';
 import { useSnapshot } from 'valtio';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
@@ -52,6 +53,7 @@ type MoveOutcome = {
   clearedByColor: number[];
   clearedTotal: number;
   detonatedBombs: number;
+  convertedBombs: number;
 };
 
 type SelectionState = {
@@ -59,6 +61,23 @@ type SelectionState = {
   colorIndex: number | null;
   path: number[];
   loop: boolean;
+};
+
+type LineHandle = Line2 & {
+  visible: boolean;
+  geometry?: THREE.BufferGeometry & {
+    setPositions?: (positions: number[] | Float32Array) => void;
+  };
+  setPoints?: (points: THREE.Vector3[]) => void;
+  computeLineDistances?: () => void;
+};
+
+type BloomHandle = {
+  intensity: number;
+};
+
+type ChromaHandle = {
+  offset: THREE.Vector2;
 };
 
 const BEST_KEY = 'rachos-fun-twodots-best';
@@ -307,6 +326,30 @@ function ensurePlayable(board: Board, rng: SeededRandom) {
   return candidate;
 }
 
+function updateLineGeometry(line: LineHandle, points: THREE.Vector3[]) {
+  if (typeof line.setPoints === 'function') {
+    line.setPoints(points);
+    return;
+  }
+
+  const geometry = line.geometry;
+  if (!geometry || typeof geometry.setPositions !== 'function') {
+    return;
+  }
+
+  const flattened = new Float32Array(points.length * 3);
+  for (let i = 0; i < points.length; i += 1) {
+    const p = points[i];
+    const base = i * 3;
+    flattened[base] = p.x;
+    flattened[base + 1] = p.y;
+    flattened[base + 2] = p.z;
+  }
+
+  geometry.setPositions(flattened);
+  line.computeLineDistances?.();
+}
+
 function resolveMove(
   board: Board,
   path: number[],
@@ -331,6 +374,7 @@ function resolveMove(
     }
   }
 
+  const enclosedSet = new Set<number>();
   const bombQueue: number[] = [];
 
   if (loop && path.length >= 4) {
@@ -344,8 +388,7 @@ function resolveMove(
     for (let r = minR + 1; r < maxR; r += 1) {
       for (let c = minC + 1; c < maxC; c += 1) {
         const idx = toIndex(r, c);
-        clearSet.add(idx);
-        bombQueue.push(idx);
+        enclosedSet.add(idx);
       }
     }
   }
@@ -380,6 +423,18 @@ function resolveMove(
           bombQueue.push(nextIdx);
         }
       }
+    }
+  }
+
+  let convertedBombs = 0;
+  for (const idx of enclosedSet) {
+    if (clearSet.has(idx)) continue;
+    const { r, c } = fromIndex(idx);
+    const cell = nullableBoard[r][c];
+    if (!cell) continue;
+    if (!cell.bomb) {
+      cell.bomb = true;
+      convertedBombs += 1;
     }
   }
 
@@ -428,6 +483,7 @@ function resolveMove(
     clearedByColor,
     clearedTotal,
     detonatedBombs: detonatedSet.size,
+    convertedBombs,
   };
 }
 
@@ -581,7 +637,7 @@ export default function TwoDots() {
 
   const haloRef = useRef<THREE.Mesh>(null);
   const tailRef = useRef<THREE.Mesh>(null);
-  const lineRef = useRef<any>(null);
+  const lineRef = useRef<LineHandle | null>(null);
 
   const dotMaterial = useMemo(() => {
     const shader = new THREE.ShaderMaterial({
@@ -702,8 +758,8 @@ export default function TwoDots() {
     return shader;
   }, []);
 
-  const bloomRef = useRef<any>(null);
-  const chromaRef = useRef<any>(null);
+  const bloomRef = useRef<BloomHandle | null>(null);
+  const chromaRef = useRef<ChromaHandle | null>(null);
 
   const applyInstanceMatrices = useCallback(
     (mesh: THREE.InstancedMesh | null, z: number) => {
@@ -893,8 +949,10 @@ export default function TwoDots() {
       updateBoardAttributes();
 
       const loopBonus = loop ? 120 : 0;
-      const bombBonus = result.detonatedBombs * 35;
-      twoDotsState.score += result.clearedTotal * 10 + loopBonus + bombBonus;
+      const bombBonus = result.detonatedBombs * 25;
+      const convertBonus = result.convertedBombs * 8;
+      twoDotsState.score +=
+        result.clearedTotal * 10 + loopBonus + bombBonus + convertBonus;
       commitBestScore();
 
       twoDotsState.remainingColors = twoDotsState.remainingColors.map(
@@ -907,9 +965,13 @@ export default function TwoDots() {
         triggerSquareImpact(colorIndex);
       }
 
-      const complete = twoDotsState.remainingColors.every(
-        (value) => value <= 0
+      const hasTargets = config.targets.some((target) => target > 0);
+      const remainingForTargets = twoDotsState.remainingColors.slice(
+        0,
+        config.targets.length
       );
+      const complete =
+        hasTargets && remainingForTargets.every((value) => value <= 0);
 
       if (complete) {
         twoDotsState.stars = computeStars(
@@ -1063,11 +1125,11 @@ export default function TwoDots() {
       if (typeof id !== 'number') return;
       hoveredIdRef.current = id;
 
-      if (selectionRef.current.active && input.current.pointerDown) {
+      if (selectionRef.current.active) {
         extendSelection(id);
       }
     },
-    [extendSelection, input]
+    [extendSelection]
   );
 
   const onHitPointerOut = useCallback(() => {
@@ -1090,6 +1152,13 @@ export default function TwoDots() {
 
     updateBoardAttributes(true);
   }, [updateBoardAttributes]);
+
+  useEffect(() => {
+    const hasTargets = snap.targetColors.some((target) => target > 0);
+    if (snap.phase === 'playing' && !hasTargets) {
+      beginLevel(Math.max(1, snap.level || 1), true);
+    }
+  }, [beginLevel, snap.level, snap.phase, snap.targetColors]);
 
   useEffect(() => {
     applyInstanceMatrices(dotMeshRef.current, 0.1);
@@ -1156,7 +1225,7 @@ export default function TwoDots() {
       }
     }
 
-    ndc.set(inputState.pointerX, inputState.pointerY);
+    ndc.set(state.pointer.x, state.pointer.y);
     raycaster.setFromCamera(ndc, camera);
     raycaster.ray.intersectPlane(interactionPlane, worldMouseRef.current);
 
@@ -1181,7 +1250,6 @@ export default function TwoDots() {
     if (
       hitId != null &&
       selectionRef.current.active &&
-      inputState.pointerDown &&
       snap.phase === 'playing' &&
       !paused &&
       !settingsOpen &&
@@ -1219,7 +1287,7 @@ export default function TwoDots() {
         }
 
         line.visible = true;
-        line.setPoints(points);
+        updateLineGeometry(line, points);
       } else {
         line.visible = false;
       }
@@ -1439,7 +1507,14 @@ export default function TwoDots() {
       <directionalLight position={[3, 4, 6]} intensity={1.1} />
       <pointLight position={[0, 0, 4]} intensity={0.6} color="#bfe7ff" />
 
-      <mesh position={[0, 0, -0.48]}>
+      <mesh
+        position={[0, 0, -0.48]}
+        onPointerDown={(event) => {
+          if (snap.phase !== 'menu' || paused || settingsOpen) return;
+          event.stopPropagation();
+          beginLevel(1, true);
+        }}
+      >
         <boxGeometry
           args={[COLS * SPACING + 1.6, ROWS * SPACING + 1.6, 0.36]}
         />
@@ -1648,7 +1723,7 @@ export default function TwoDots() {
                 }}
               >
                 Drag through matching colors. Squares clear all of that color.
-                Large loops detonate enclosed bombs.
+                Large loops convert enclosed dots into bombs.
               </div>
 
               <label

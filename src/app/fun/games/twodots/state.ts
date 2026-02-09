@@ -11,8 +11,8 @@ export const twoDotsState = proxy({
   movesLeft: 20,
   level: 1,
   stars: 0,
-  targetColors: [0, 0, 0, 0],
-  remainingColors: [0, 0, 0, 0],
+  targetColors: [0, 0, 0, 0, 0],
+  remainingColors: [0, 0, 0, 0, 0],
   targetAnchors: 0,
   remainingAnchors: 0,
   bombs: 0,
@@ -27,11 +27,17 @@ export const twoDotsState = proxy({
   },
 
   startGame: () => {
-    twoDotsState.phase = 'playing';
+    // Start in menu so level initialization still comes from the game scene.
+    twoDotsState.phase = 'menu';
     twoDotsState.score = 0;
     twoDotsState.movesLeft = 20;
     twoDotsState.level = 1;
     twoDotsState.stars = 0;
+    twoDotsState.targetColors = [0, 0, 0, 0, 0];
+    twoDotsState.remainingColors = [0, 0, 0, 0, 0];
+    twoDotsState.targetAnchors = 0;
+    twoDotsState.remainingAnchors = 0;
+    twoDotsState.bombs = 0;
     twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
@@ -67,8 +73,8 @@ export const twoDotsState = proxy({
     twoDotsState.movesLeft = 20;
     twoDotsState.level = 1;
     twoDotsState.stars = 0;
-    twoDotsState.targetColors = [0, 0, 0, 0];
-    twoDotsState.remainingColors = [0, 0, 0, 0];
+    twoDotsState.targetColors = [0, 0, 0, 0, 0];
+    twoDotsState.remainingColors = [0, 0, 0, 0, 0];
     twoDotsState.targetAnchors = 0;
     twoDotsState.remainingAnchors = 0;
     twoDotsState.bombs = 0;

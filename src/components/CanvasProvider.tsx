@@ -90,7 +90,7 @@ const CanvasProvider: React.FC<CanvasProviderProps> = ({ children }) => {
       shadows={perf.shadows} /* enable shadow maps */
       camera={{ position: [-5, 0.5, 5], fov: 45 }} /* default “home” view   */
       dpr={perf.dpr}
-      eventPrefix="client"
+      eventPrefix="offset"
       gl={{
         antialias: perf.antialias,
         alpha: true,
