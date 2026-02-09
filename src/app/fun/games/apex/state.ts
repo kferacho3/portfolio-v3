@@ -149,6 +149,8 @@ export const apexState = proxy<
     mutation.currentDirection.copy(DIRECTIONS[0]);
     mutation.targetDirection.copy(DIRECTIONS[0]);
     mutation.isOnPlatform = true;
+    mutation.airborneTime = 0;
+    mutation.isTouchingPathSide = false;
     mutation.gameOver = false;
     mutation.tiles = [];
     mutation.gems = [];
@@ -202,6 +204,8 @@ export const apexState = proxy<
       INITIAL_SPEED * difficultyMult * modeSettings.speedMultiplier;
     mutation.gameOver = false;
     mutation.isOnPlatform = true;
+    mutation.airborneTime = 0;
+    mutation.isTouchingPathSide = false;
     mutation.initialized = false;
   },
 
@@ -321,6 +325,8 @@ export const mutation = {
   currentDirection: new THREE.Vector3(0, 0, -1),
   targetDirection: new THREE.Vector3(0, 0, -1),
   isOnPlatform: true,
+  airborneTime: 0,
+  isTouchingPathSide: false,
   gameOver: false,
   initialized: false,
 

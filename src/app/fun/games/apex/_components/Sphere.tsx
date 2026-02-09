@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
+  AIRBORNE_GAMEOVER_DELAY,
   CAMERA_OFFSET_X,
   CAMERA_OFFSET_Z,
   DIRECTIONS,
@@ -203,99 +204,113 @@ const Sphere: React.FC = () => {
       }
     }
 
-    if (!mutation.isOnPlatform && !mutation.gameOver) {
-      if (snap.mode === 'zen') {
-        const activeTiles = mutation.tiles.filter((t) => t.status === 'active');
-        if (activeTiles.length > 0) {
-          activeTiles.sort((a, b) => a.id - b.id);
+    if (!mutation.isOnPlatform && !mutation.gameOver && snap.mode === 'zen') {
+      const activeTiles = mutation.tiles.filter((t) => t.status === 'active');
+      if (activeTiles.length > 0) {
+        activeTiles.sort((a, b) => a.id - b.id);
 
-          const maxGap = TILE_SIZE * 1.75;
+        const maxGap = TILE_SIZE * 1.75;
 
-          const headIdx = activeTiles.length - 1;
-          let headSegmentStart = headIdx;
-          while (headSegmentStart > 0) {
-            const prev = activeTiles[headSegmentStart - 1];
-            const cur = activeTiles[headSegmentStart];
-            const dist = Math.hypot(prev.x - cur.x, prev.z - cur.z);
-            if (dist > maxGap) break;
-            headSegmentStart--;
+        const headIdx = activeTiles.length - 1;
+        let headSegmentStart = headIdx;
+        while (headSegmentStart > 0) {
+          const prev = activeTiles[headSegmentStart - 1];
+          const cur = activeTiles[headSegmentStart];
+          const dist = Math.hypot(prev.x - cur.x, prev.z - cur.z);
+          if (dist > maxGap) break;
+          headSegmentStart--;
+        }
+
+        // Always respawn inside the latest contiguous "head" segment.
+        // This avoids Zen loops where respawn lands in an older disconnected segment.
+        const safeBack = 30;
+        const respawnIdx = Math.max(headSegmentStart, headIdx - safeBack);
+        const respawnTile = activeTiles[respawnIdx];
+
+        if (respawnTile) {
+          mutation.spherePos.set(
+            respawnTile.x,
+            respawnTile.y + TILE_DEPTH / 2 + SPHERE_RADIUS,
+            respawnTile.z
+          );
+          mutation.velocity.set(0, 0, 0);
+          mutation.isOnPlatform = true;
+          mutation.airborneTime = 0;
+          mutation.activeTileId = respawnTile.id;
+          mutation.activeTileY = respawnTile.y + TILE_DEPTH / 2;
+
+          // Keep generation anchored at the current head segment.
+          const headTile = activeTiles[headIdx];
+          mutation.lastTilePos.set(headTile.x, headTile.y, headTile.z);
+
+          const alignDirection = (
+            from: { x: number; z: number },
+            to: { x: number; z: number }
+          ) => {
+            const dx = to.x - from.x;
+            const dz = to.z - from.z;
+            if (Math.abs(dx) < 0.0001 && Math.abs(dz) < 0.0001) return false;
+
+            if (Math.abs(dx) >= Math.abs(dz)) {
+              mutation.directionIndex = dx >= 0 ? 1 : 0;
+            } else {
+              mutation.directionIndex = dz <= 0 ? 0 : 1;
+            }
+
+            mutation.targetDirection.copy(DIRECTIONS[mutation.directionIndex]);
+            mutation.currentDirection.copy(mutation.targetDirection);
+            return true;
+          };
+
+          let aligned = false;
+          if (respawnIdx < headIdx) {
+            const next = activeTiles[respawnIdx + 1];
+            const dist = Math.hypot(
+              next.x - respawnTile.x,
+              next.z - respawnTile.z
+            );
+            if (dist <= maxGap) {
+              aligned = alignDirection(respawnTile, next);
+            }
           }
 
-          // Always respawn inside the latest contiguous "head" segment.
-          // This avoids Zen loops where respawn lands in an older disconnected segment.
-          const safeBack = 30;
-          const respawnIdx = Math.max(headSegmentStart, headIdx - safeBack);
-          const respawnTile = activeTiles[respawnIdx];
-
-          if (respawnTile) {
-            mutation.spherePos.set(
-              respawnTile.x,
-              respawnTile.y + TILE_DEPTH / 2 + SPHERE_RADIUS,
-              respawnTile.z
+          if (!aligned && respawnIdx > headSegmentStart) {
+            const prev = activeTiles[respawnIdx - 1];
+            const dist = Math.hypot(
+              respawnTile.x - prev.x,
+              respawnTile.z - prev.z
             );
-            mutation.velocity.set(0, 0, 0);
-            mutation.isOnPlatform = true;
-            mutation.activeTileId = respawnTile.id;
-            mutation.activeTileY = respawnTile.y + TILE_DEPTH / 2;
-
-            // Keep generation anchored at the current head segment.
-            const headTile = activeTiles[headIdx];
-            mutation.lastTilePos.set(headTile.x, headTile.y, headTile.z);
-
-            const alignDirection = (
-              from: { x: number; z: number },
-              to: { x: number; z: number }
-            ) => {
-              const dx = to.x - from.x;
-              const dz = to.z - from.z;
-              if (Math.abs(dx) < 0.0001 && Math.abs(dz) < 0.0001) return false;
-
-              if (Math.abs(dx) >= Math.abs(dz)) {
-                mutation.directionIndex = dx >= 0 ? 1 : 0;
-              } else {
-                mutation.directionIndex = dz <= 0 ? 0 : 1;
-              }
-
-              mutation.targetDirection.copy(
-                DIRECTIONS[mutation.directionIndex]
-              );
-              mutation.currentDirection.copy(mutation.targetDirection);
-              return true;
-            };
-
-            let aligned = false;
-            if (respawnIdx < headIdx) {
-              const next = activeTiles[respawnIdx + 1];
-              const dist = Math.hypot(
-                next.x - respawnTile.x,
-                next.z - respawnTile.z
-              );
-              if (dist <= maxGap) {
-                aligned = alignDirection(respawnTile, next);
-              }
+            if (dist <= maxGap) {
+              aligned = alignDirection(prev, respawnTile);
             }
+          }
 
-            if (!aligned && respawnIdx > headSegmentStart) {
-              const prev = activeTiles[respawnIdx - 1];
-              const dist = Math.hypot(
-                respawnTile.x - prev.x,
-                respawnTile.z - prev.z
-              );
-              if (dist <= maxGap) {
-                aligned = alignDirection(prev, respawnTile);
-              }
-            }
-
-            if (!aligned) {
-              mutation.directionIndex = 0;
-              mutation.targetDirection.copy(DIRECTIONS[0]);
-              mutation.currentDirection.copy(mutation.targetDirection);
-            }
+          if (!aligned) {
+            mutation.directionIndex = 0;
+            mutation.targetDirection.copy(DIRECTIONS[0]);
+            mutation.currentDirection.copy(mutation.targetDirection);
           }
         }
-      } else {
+      }
+    }
+
+    const shouldFailFromPath =
+      !mutation.gameOver &&
+      snap.mode !== 'zen' &&
+      (!mutation.isOnPlatform || mutation.isTouchingPathSide);
+
+    if (shouldFailFromPath) {
+      mutation.airborneTime += delta;
+      if (!mutation.isOnPlatform) {
+        mutation.velocity.y -= GRAVITY * delta;
+        mutation.spherePos.addScaledVector(mutation.velocity, delta);
+      }
+
+      if (mutation.airborneTime >= AIRBORNE_GAMEOVER_DELAY) {
         apexState.endGame();
       }
+    } else {
+      mutation.airborneTime = 0;
     }
 
     if (mutation.gameOver && mutation.spherePos.y > REMOVAL_Y) {

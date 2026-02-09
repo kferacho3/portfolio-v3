@@ -27,6 +27,7 @@ export const LOOKAHEAD_DISTANCE = 38;
 export const MAX_DIVERGENCE = 4;
 
 export const FALL_DELAY = 0.7;
+export const AIRBORNE_GAMEOVER_DELAY = 0.5;
 export const REMOVAL_Y = -40;
 export const GRAVITY = 18;
 

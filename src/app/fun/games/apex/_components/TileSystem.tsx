@@ -819,6 +819,7 @@ const TileSystem: React.FC = () => {
       mutation.isOnPlatform = false;
       let currentTileId: number | null = null;
       let currentTileY: number | null = null;
+      let touchingPathSide = false;
 
       for (const tile of mutation.tiles) {
         if (tile.status !== 'active') continue;
@@ -844,6 +845,9 @@ const TileSystem: React.FC = () => {
           currentTileId = tile.id;
           // Store the *top* surface Y so the sphere can sit on it.
           currentTileY = tileTopY;
+          const edgeTouchX = Math.abs(localX) + SPHERE_RADIUS >= halfX;
+          const edgeTouchZ = Math.abs(localZ) + SPHERE_RADIUS >= halfZ;
+          touchingPathSide = edgeTouchX || edgeTouchZ;
           tile.lastContactTime = clockRef.current;
           break;
         }
@@ -851,6 +855,7 @@ const TileSystem: React.FC = () => {
 
       mutation.activeTileId = currentTileId;
       mutation.activeTileY = currentTileY;
+      mutation.isTouchingPathSide = mutation.isOnPlatform && touchingPathSide;
 
       const tilesToRemove = tilesToRemoveRef.current;
       tilesToRemove.length = 0;
@@ -898,6 +903,8 @@ const TileSystem: React.FC = () => {
           (p) => !removedIds.has(p.tileId)
         );
       }
+    } else {
+      mutation.isTouchingPathSide = false;
     }
 
     const maxToRender = Math.min(mutation.tiles.length, MAX_TILES);
