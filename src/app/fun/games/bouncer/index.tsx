@@ -9,7 +9,7 @@ import {
   ballSkins,
   cyclePalette,
   isSkinUnlocked,
-  palettes,
+  paletteAt,
   selectSkin,
   setBestScore,
   bouncerState,
@@ -175,6 +175,22 @@ type Particle = {
   shape?: 'square' | 'orb';
 };
 
+type MiniBall = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  life: number;
+  age: number;
+  rot: number;
+  vr: number;
+  bounces: number;
+  fill: string;
+  inner: string;
+  ring: string;
+};
+
 type Runtime = {
   running: boolean;
   lastT: number;
@@ -203,6 +219,7 @@ type Runtime = {
   obstacles: Obstacle[];
   pickups: Pickup[];
   particles: Particle[];
+  miniBalls: MiniBall[];
 
   // Score
   score: number;
@@ -245,6 +262,7 @@ function makeRuntime(): Runtime {
     obstacles: [],
     pickups: [],
     particles: [],
+    miniBalls: [],
 
     score: 0,
     shownScore: 0,
@@ -344,57 +362,28 @@ export default function Bouncer() {
       const dtReal = clamp(rawDt, 0, 0.033);
 
       // Controls (Bouncer):
-      // Tap = drop (adds downward velocity).
-      // Holding adds extra gravity to cut the bounce arc.
+      // Tap while playing = immediate forced drop from the current position.
+      // Holding increases drop speed, but never max bounce height.
       const input = inputRef.current;
       const spaceHeld =
         input.keysDown.has(' ') ||
         input.keysDown.has('space') ||
         input.keysDown.has('spacebar');
       rt.dropHeld =
-        snap.phase === 'playing' ? input.pointerDown || spaceHeld : false;
+        rt.phase === 'playing' ? input.pointerDown || spaceHeld : false;
       rt.holdCharge = clamp(
-        rt.holdCharge + (rt.dropHeld ? dtReal * 1.65 : -dtReal * 1.1),
+        rt.holdCharge + (rt.dropHeld ? dtReal * 2.6 : -dtReal * 1.0),
         0,
         1
       );
 
       const dt = dtReal;
-      // Tap to start/restart. While playing, a tap "invokes gravity" (cuts the upward arc so you can
-      // re-time a bounce) — bounce height stays consistent because the bounce impulse is fixed.
+      // Tap from menu/gameover starts. During play it never restarts; it triggers an immediate drop.
       if (input.pointerJustDown) {
-        if (snap.phase === 'menu') {
+        if (rt.phase === 'playing') {
+          invokeImmediateDrop(rt);
+        } else {
           startGame(rt);
-        } else if (snap.phase === 'gameover') {
-          startGame(rt);
-        } else if (snap.phase === 'playing') {
-          const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
-          const clickBoost = 1 + rt.holdCharge * 0.45;
-          const baseImpulse = Math.max(
-            rt.bounceVy * 0.82,
-            Math.abs(rt.vy) * 0.45 + 120
-          );
-          rt.ballY = Math.min(rt.ballY, floorY - 1);
-          rt.vy = -baseImpulse * clickBoost;
-
-          const tapCol = palettes[rt.paletteIdx]?.pickupOuter ?? '#2c8f5f';
-          for (let i = 0; i < 4; i++) {
-            const a = Math.random() * Math.PI * 2;
-            const spd = 220 + Math.random() * 220;
-            rt.particles.push({
-              x: rt.ballX,
-              y: rt.ballY,
-              vx: Math.cos(a) * spd,
-              vy: Math.sin(a) * spd,
-              rot: Math.random() * Math.PI,
-              vr: (Math.random() - 0.5) * 12,
-              size: 5 + Math.random() * 5,
-              life: 0.35 + Math.random() * 0.25,
-              age: 0,
-              color: tapCol,
-              shape: 'square',
-            });
-          }
         }
       }
 
@@ -407,7 +396,7 @@ export default function Bouncer() {
       rt.paletteT = clamp(rt.paletteT + dtReal * 2.8, 0, 1);
 
       if (snap.phase === 'playing') {
-        updateGame(rt, dt, dtReal);
+        updateGame(rt, dt, dtReal, currentSkin);
       } else {
         // In menu/gameover we still animate a gentle bounce and particles for vibe.
         updateIdle(rt, dt, dtReal);
@@ -427,7 +416,7 @@ export default function Bouncer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snap.phase, snap.paletteIndex, snap.selectedSkin]);
 
-  const palette = palettes[snap.paletteIndex] ?? palettes[0];
+  const palette = paletteAt(snap.paletteIndex);
 
   return (
     <div
@@ -469,7 +458,7 @@ export default function Bouncer() {
                   className="mt-1 text-sm opacity-80"
                   style={{ color: palette.spikes }}
                 >
-                  Tap to drop. Dodge spikes. Collect squares to shift the
+                  Tap/hold to drop. Dodge spikes. Collect squares to shift the
                   colors.
                 </div>
 
@@ -550,6 +539,7 @@ function startGame(rt: Runtime) {
   rt.obstacles = [];
   rt.pickups = [];
   rt.particles = [];
+  rt.miniBalls = [];
 
   rt.speed = 340;
   rt.distToNextObstacle = rand(260, 520);
@@ -566,6 +556,13 @@ function endGame(rt: Runtime) {
   setBestScore(rt.score);
 }
 
+function invokeImmediateDrop(rt: Runtime) {
+  const dropBoost = 1.6 + rt.holdCharge * 1.8;
+  // Immediate response: force a downward velocity from the current position.
+  rt.vy = rt.bounceVy * dropBoost;
+  spawnTapBurst(rt, Math.round(6 + rt.holdCharge * 8));
+}
+
 function updateIdle(rt: Runtime, dt: number, dtReal: number) {
   // Gentle bounce even in idle screens
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
@@ -580,6 +577,7 @@ function updateIdle(rt: Runtime, dt: number, dtReal: number) {
 
   // Keep the world scrolling for continuous motion even outside gameplay.
   advanceScroller(rt, dt, false);
+  updateMiniBalls(rt, dt, dtReal);
 
   // Particles
   rt.particles = rt.particles.filter((p) => {
@@ -592,18 +590,23 @@ function updateIdle(rt: Runtime, dt: number, dtReal: number) {
   });
 }
 
-function updateGame(rt: Runtime, dt: number, dtReal: number) {
+function updateGame(
+  rt: Runtime,
+  dt: number,
+  dtReal: number,
+  skin: (typeof ballSkins)[number]
+) {
   // Difficulty curve
   rt.speed = 340 + rt.score * 6;
 
   // Ball physics
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
-  const gMult = rt.dropHeld ? 1.35 : 1;
+  const gMult = rt.dropHeld ? 1.75 : 1;
   rt.vy += rt.g * gMult * dt;
   rt.ballY += rt.vy * dt;
 
-  // Cap max height so the ball never floats too high.
-  const maxRise = Math.max(rt.h * 0.38, rt.ballR * 6);
+  // Hard cap: every bounce can only reach the baseline max height from the normal bounce impulse.
+  const maxRise = (rt.bounceVy * rt.bounceVy) / (2 * rt.g);
   const minY = floorY - maxRise;
   if (rt.ballY < minY) {
     rt.ballY = minY;
@@ -612,8 +615,7 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
 
   if (rt.ballY > floorY) {
     rt.ballY = floorY;
-    const holdBoost = 1 + rt.holdCharge * 0.55;
-    rt.vy = -rt.bounceVy * holdBoost;
+    rt.vy = -rt.bounceVy;
     spawnDust(rt, Math.round(14 + rt.holdCharge * 8));
   }
 
@@ -672,9 +674,16 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
       ) {
         // Hit!
         rt.hitFlash = 1;
-        const activePalette = palettes[rt.paletteIdx] ?? palettes[0];
+        const activePalette = paletteAt(rt.paletteIdx);
         spawnShatter(rt, 20, activePalette.spikes);
         spawnOrbDisintegration(rt, 18, activePalette.pickupOuter);
+        spawnMiniBallDisintegration(
+          rt,
+          Math.round(20 + rt.holdCharge * 16),
+          skin,
+          activePalette.pickupInner,
+          activePalette.pickupOuter
+        );
         endGame(rt);
         return;
       }
@@ -693,6 +702,8 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
     }
   }
 
+  updateMiniBalls(rt, dt, dtReal);
+
   // Particles
   rt.particles = rt.particles.filter((p) => {
     p.age += dtReal;
@@ -705,6 +716,28 @@ function updateGame(rt: Runtime, dt: number, dtReal: number) {
 
   rt.shownScore = lerp(rt.shownScore, rt.score, 1 - Math.pow(0.001, dtReal));
   rt.hitFlash = Math.max(0, rt.hitFlash - dtReal * 3);
+}
+
+function updateMiniBalls(rt: Runtime, dt: number, dtReal: number) {
+  const floorY = rt.groundY - rt.platformH / 2;
+  const cull = rt.ballR * 10;
+  rt.miniBalls = rt.miniBalls.filter((m) => {
+    m.age += dtReal;
+    m.vy += rt.g * 0.65 * dt;
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+    m.rot += m.vr * dt;
+
+    if (m.y + m.r > floorY) {
+      m.y = floorY - m.r;
+      m.vy = -Math.abs(m.vy) * 0.48;
+      m.vx *= 0.84;
+      m.bounces += 1;
+      if (m.bounces > 4 || Math.abs(m.vy) < 80) m.age = m.life;
+    }
+
+    return m.age < m.life && m.x > -cull && m.x < rt.w + cull;
+  });
 }
 
 function advanceScroller(rt: Runtime, dt: number, active: boolean) {
@@ -790,6 +823,27 @@ function spawnConfetti(rt: Runtime, n: number) {
   }
 }
 
+function spawnTapBurst(rt: Runtime, n: number) {
+  const tapCol = paletteAt(rt.paletteIdx).pickupOuter;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const spd = 260 + Math.random() * 340;
+    rt.particles.push({
+      x: rt.ballX,
+      y: rt.ballY,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - rand(40, 180),
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 14,
+      size: 4 + Math.random() * 6,
+      life: 0.24 + Math.random() * 0.28,
+      age: 0,
+      color: tapCol,
+      shape: 'square',
+    });
+  }
+}
+
 function spawnShatter(rt: Runtime, n: number, color?: string) {
   for (let i = 0; i < n; i++) {
     rt.particles.push({
@@ -828,6 +882,37 @@ function spawnOrbDisintegration(rt: Runtime, n: number, color: string) {
   }
 }
 
+function spawnMiniBallDisintegration(
+  rt: Runtime,
+  n: number,
+  skin: (typeof ballSkins)[number],
+  colorA: string,
+  colorB: string
+) {
+  for (let i = 0; i < n; i++) {
+    const a = (i / Math.max(1, n)) * Math.PI * 2 + rand(-0.22, 0.22);
+    const speed = rand(280, 920);
+    const bias = Math.random();
+    const fill = bias < 0.5 ? skin.fill : bias < 0.8 ? colorA : colorB;
+    const inner = bias < 0.4 ? skin.inner : bias < 0.7 ? colorB : skin.fill;
+    rt.miniBalls.push({
+      x: rt.ballX + rand(-rt.ballR * 0.2, rt.ballR * 0.2),
+      y: rt.ballY + rand(-rt.ballR * 0.2, rt.ballR * 0.2),
+      vx: Math.cos(a) * speed,
+      vy: Math.sin(a) * speed - rand(100, 300),
+      r: rand(rt.ballR * 0.12, rt.ballR * 0.3),
+      life: rand(0.7, 1.4),
+      age: 0,
+      rot: rand(0, Math.PI * 2),
+      vr: rand(-22, 22),
+      bounces: 0,
+      fill,
+      inner,
+      ring: skin.ring,
+    });
+  }
+}
+
 // -----------------------------
 // Rendering
 // -----------------------------
@@ -841,8 +926,8 @@ function draw(
   const w = rt.w;
   const h = rt.h;
 
-  const prev = palettes[rt.prevPaletteIdx] ?? palettes[0];
-  const next = palettes[rt.paletteIdx] ?? palettes[0];
+  const prev = paletteAt(rt.prevPaletteIdx);
+  const next = paletteAt(rt.paletteIdx);
   const t = rt.paletteT;
 
   const bg = lerpColor(prev.bg, next.bg, t);
@@ -937,52 +1022,89 @@ function draw(
   }
   ctx.restore();
 
-  // Ball shadow
-  const shadowScale = clamp(1 - (yBase - rt.ballY) / (h * 0.28), 0.15, 1);
+  // Mini balls from spike disintegration
   ctx.save();
-  ctx.globalAlpha = 0.18 * shadowScale;
-  ctx.fillStyle = '#000000';
-  ctx.beginPath();
-  ctx.ellipse(
-    rt.ballX,
-    yBase + rt.ballR * 0.35,
-    rt.ballR * 0.85 * shadowScale,
-    rt.ballR * 0.32 * shadowScale,
-    0,
-    0,
-    Math.PI * 2
-  );
-  ctx.fill();
+  for (const m of rt.miniBalls) {
+    const fade = clamp(1 - m.age / m.life, 0, 1);
+    ctx.globalAlpha = fade;
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.rot);
+
+    ctx.fillStyle = m.fill;
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = fade * 0.62;
+    ctx.fillStyle = m.inner;
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r * 0.56, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = m.ring;
+    ctx.lineWidth = Math.max(1, m.r * 0.26);
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r * 0.9, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.restore();
 
-  // Ball
-  ctx.save();
-  // Hit flash
-  if (rt.hitFlash > 0) {
+  const hideBall = rt.phase === 'gameover' && rt.miniBalls.length > 0;
+  if (!hideBall) {
+    // Ball shadow
+    const shadowScale = clamp(1 - (yBase - rt.ballY) / (h * 0.28), 0.15, 1);
+    ctx.save();
+    ctx.globalAlpha = 0.18 * shadowScale;
+    ctx.fillStyle = '#000000';
+    ctx.beginPath();
+    ctx.ellipse(
+      rt.ballX,
+      yBase + rt.ballR * 0.35,
+      rt.ballR * 0.85 * shadowScale,
+      rt.ballR * 0.32 * shadowScale,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.restore();
+
+    // Ball
+    ctx.save();
+    // Hit flash
+    if (rt.hitFlash > 0) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = `rgba(255,255,255,${0.35 * rt.hitFlash})`;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    ctx.fillStyle = skin.fill;
+    ctx.beginPath();
+    ctx.arc(rt.ballX, rt.ballY, rt.ballR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner circle
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = skin.inner;
+    ctx.beginPath();
+    ctx.arc(rt.ballX, rt.ballY, rt.ballR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
     ctx.globalAlpha = 1;
+
+    // Ring
+    ctx.strokeStyle = skin.ring;
+    ctx.lineWidth = Math.max(2, rt.ballR * 0.12);
+    ctx.beginPath();
+    ctx.arc(rt.ballX, rt.ballY, rt.ballR * 0.92, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  } else if (rt.hitFlash > 0) {
+    ctx.save();
     ctx.fillStyle = `rgba(255,255,255,${0.35 * rt.hitFlash})`;
     ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
-
-  ctx.fillStyle = skin.fill;
-  ctx.beginPath();
-  ctx.arc(rt.ballX, rt.ballY, rt.ballR, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Inner circle
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = skin.inner;
-  ctx.beginPath();
-  ctx.arc(rt.ballX, rt.ballY, rt.ballR * 0.55, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  // Ring
-  ctx.strokeStyle = skin.ring;
-  ctx.lineWidth = Math.max(2, rt.ballR * 0.12);
-  ctx.beginPath();
-  ctx.arc(rt.ballX, rt.ballY, rt.ballR * 0.92, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.restore();
 }

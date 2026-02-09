@@ -97,30 +97,78 @@ const basePalettes: Palette[] = [
   },
 ];
 
-function generatePalettePack(count: number) {
-  const generated: Palette[] = [];
-  for (let i = 0; i < count; i++) {
-    const t = i / Math.max(1, count);
-    const hueA = (0.04 + t * 0.92 + ((i * 37) % 13) * 0.003) % 1;
-    const hueB = (hueA + 0.11 + ((i * 17) % 9) * 0.004) % 1;
-    const hueC = (hueA + 0.51 + ((i * 19) % 11) * 0.003) % 1;
-    generated.push({
-      name: `Flux ${i + 1}`,
-      bg: hslToHex(hueA, 0.46, 0.93),
-      platform: hslToHex(hueB, 0.55, 0.7),
-      spikes: hslToHex(hueC, 0.72, 0.45),
-      scoreTint: hslToHex(hueB, 0.34, 0.74),
-      pickupOuter: hslToHex((hueC + 0.07) % 1, 0.72, 0.53),
-      pickupInner: hslToHex((hueA + 0.5) % 1, 0.84, 0.56),
-    });
-  }
-  return generated;
+function pseudo(seed: number, salt: number) {
+  const v = Math.sin((seed + 1) * 12.9898 + salt * 78.233) * 43758.5453123;
+  return v - Math.floor(v);
 }
 
-// Base + large procedural set (effectively "infinite" feeling in normal play).
+function fluxPalette(index: number): Palette {
+  const seed = Math.max(0, Math.floor(index));
+  const hueA =
+    (seed * 0.618033988749895 + pseudo(seed, 0.17) * 0.23 + 0.04) % 1;
+  const hueB = (hueA + 0.12 + pseudo(seed, 0.53) * 0.2) % 1;
+  const hueC = (hueA + 0.49 + pseudo(seed, 0.91) * 0.28) % 1;
+  const softHue = (hueB + 0.08 + pseudo(seed, 0.29) * 0.14) % 1;
+  const accentHue = (hueC + 0.04 + pseudo(seed, 0.67) * 0.16) % 1;
+
+  return {
+    name: `Flux ${seed + 1}`,
+    bg: hslToHex(
+      hueA,
+      0.28 + pseudo(seed, 1.11) * 0.34,
+      0.84 + pseudo(seed, 1.31) * 0.12
+    ),
+    platform: hslToHex(
+      softHue,
+      0.42 + pseudo(seed, 1.57) * 0.3,
+      0.58 + pseudo(seed, 1.77) * 0.22
+    ),
+    spikes: hslToHex(
+      hueC,
+      0.62 + pseudo(seed, 2.03) * 0.34,
+      0.36 + pseudo(seed, 2.23) * 0.22
+    ),
+    scoreTint: hslToHex(
+      hueB,
+      0.28 + pseudo(seed, 2.51) * 0.3,
+      0.62 + pseudo(seed, 2.71) * 0.24
+    ),
+    pickupOuter: hslToHex(
+      accentHue,
+      0.64 + pseudo(seed, 3.17) * 0.3,
+      0.46 + pseudo(seed, 3.37) * 0.22
+    ),
+    pickupInner: hslToHex(
+      (hueA + 0.5) % 1,
+      0.76 + pseudo(seed, 3.91) * 0.2,
+      0.5 + pseudo(seed, 4.11) * 0.2
+    ),
+  };
+}
+
+const paletteCache = new Map<number, Palette>();
+const PALETTE_CACHE_LIMIT = 4096;
+
+export function paletteAt(index: number): Palette {
+  const safeIndex = Number.isFinite(index) ? Math.max(0, Math.floor(index)) : 0;
+  if (safeIndex < basePalettes.length) return basePalettes[safeIndex];
+
+  let cached = paletteCache.get(safeIndex);
+  if (!cached) {
+    cached = fluxPalette(safeIndex - basePalettes.length);
+    paletteCache.set(safeIndex, cached);
+    if (paletteCache.size > PALETTE_CACHE_LIMIT) {
+      const first = paletteCache.keys().next().value;
+      if (typeof first === 'number') paletteCache.delete(first);
+    }
+  }
+  return cached;
+}
+
+// Small preview export for menus/debug; gameplay uses paletteAt(index) for effectively infinite variation.
 export const palettes: Palette[] = [
   ...basePalettes,
-  ...generatePalettePack(384),
+  ...Array.from({ length: 512 }, (_, i) => fluxPalette(i)),
 ];
 
 export type BallSkin = {
@@ -228,7 +276,9 @@ export const bouncerState = proxy({
   phase: 'menu' as BouncerPhase,
   bestScore: saved.bestScore,
   squares: saved.squares,
-  paletteIndex: Math.max(0, Math.min(palettes.length - 1, saved.paletteIndex)),
+  paletteIndex: Number.isFinite(saved.paletteIndex)
+    ? Math.max(0, Math.floor(saved.paletteIndex))
+    : 0,
   selectedSkin: Math.max(0, Math.min(ballSkins.length - 1, saved.selectedSkin)),
   unlockedSkinIds: new Set<string>(
     saved.unlockedSkinIds.length ? saved.unlockedSkinIds : ['rose']
@@ -274,7 +324,8 @@ export function setBestScore(score: number) {
 }
 
 export function cyclePalette() {
-  bouncerState.paletteIndex = (bouncerState.paletteIndex + 1) % palettes.length;
+  const next = Math.max(0, Math.floor(bouncerState.paletteIndex + 1));
+  bouncerState.paletteIndex = next > Number.MAX_SAFE_INTEGER - 8 ? 0 : next;
   scheduleSave();
 }
 
