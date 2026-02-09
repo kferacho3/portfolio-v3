@@ -658,8 +658,8 @@ export const GAME_RULES: Record<string, GameRules> = {
     controls:
       'Desktop: ←/→ (or A/D) move • ↓ soft drop • Space hard drop • Mobile: tap column, swipe ←/→ nudge, swipe down fast drop',
     objective:
-      'Merge matching tiles into darker shades, then clear rows by filling them with the exact same tile. Keep the stack below the top.',
-    tips: 'Set up vertical pairs before committing your row. Chain clears and combos to unlock new color palettes faster.',
+      'Each run uses one color family with 4 shades. Merge equal shades upward and clear rows only when all 5 cells match exactly.',
+    tips: 'Never waste level-4 blocks. Build vertical pairs first, then complete same-shade rows for chain clears.',
   },
   twodots: {
     controls:

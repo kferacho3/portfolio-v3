@@ -20,27 +20,25 @@ import {
   SHADES_COLS,
   SHADES_MAX_RESOLVE_LOOPS,
   SHADES_ROWS,
-  SHADES_TILE_LEVELS,
+  SHADES_MAX_SHADE,
   type ActiveTile,
-  type TileSpec,
   cellIndex,
   createEmptyGrid,
-  decodeColorGroup,
-  decodeLevel,
-  encodeTile,
-  hardDropTile,
-  lockAndResolve,
-  moveActiveTile,
-  moveActiveTileToColumn,
-  randomTile,
-  softDropTile,
-  spawnActiveTile as spawnActiveTileEngine,
+  firstInvariantViolation,
+  hardDrop,
+  lockTile,
+  moveLeftRight,
+  moveToColumn,
+  randomShade,
+  resolveStable,
+  softDrop,
+  spawnActive,
 } from './engine';
 import {
+  SHADES_PALETTES,
   getPaletteById,
   getPaletteRarityLabel,
-  getPaletteTileColor,
-  SHADES_PALETTES,
+  getShadeHex,
 } from './palettes';
 import { shadesState } from './state';
 
@@ -96,7 +94,7 @@ export default function Shades() {
     grid: createEmptyGrid(ROWS, COLS),
 
     active: null as ActiveTile | null,
-    next: null as TileSpec | null,
+    nextShade: null as number | null,
 
     activeVisual: new THREE.Vector3(0, 0, 0.24),
     activeScalePulse: 0,
@@ -117,7 +115,7 @@ export default function Shades() {
       { length: MAX_PARTICLES },
       (): Particle => ({
         active: false,
-        pos: new THREE.Vector3(0, -9999, 0),
+        pos: new THREE.Vector3(0, 0, 0),
         vel: new THREE.Vector3(0, 0, 0),
         life: 0,
         size: 0.1,
@@ -152,58 +150,46 @@ export default function Shades() {
   );
 
   const nextPreviewHex = useMemo(
-    () =>
-      getPaletteTileColor(activePalette, snap.nextColorGroup, snap.nextLevel),
-    [activePalette, snap.nextColorGroup, snap.nextLevel]
+    () => getShadeHex(activePalette, snap.nextShade),
+    [activePalette, snap.nextShade]
   );
 
   function getCurrentPalette() {
     return getPaletteById(shadesState.selectedPaletteId);
   }
 
-  function setNextTile(tile: TileSpec) {
-    shadesState.nextColorGroup = tile.colorGroup;
-    shadesState.nextLevel = tile.level;
+  function setNextShade(shade: number) {
+    shadesState.nextShade = clamp(Math.round(shade), 1, SHADES_MAX_SHADE);
   }
 
-  function randomTileFromWorld(): TileSpec {
-    return randomTile(world.current.rng);
+  function randomShadeFromWorld(): number {
+    return randomShade(world.current.rng);
   }
 
-  function spawnImpactAtCell(
-    x: number,
-    y: number,
-    colorCode: number,
-    amount = 7,
-    force = 1
-  ) {
+  function spawnImpactAtCell(x: number, y: number, shade: number, amount = 7, force = 1) {
     const w = world.current;
     const center = cellToWorld(x, y, w.tempVec);
-    const palette = getCurrentPalette();
-    const colorHex = getPaletteTileColor(
-      palette,
-      decodeColorGroup(colorCode, SHADES_TILE_LEVELS),
-      decodeLevel(colorCode, SHADES_TILE_LEVELS)
-    );
+    const colorHex = getShadeHex(getCurrentPalette(), shade);
     w.tempColorA.set(colorHex);
 
     for (let i = 0; i < amount; i += 1) {
-      const p = w.particles[w.particleCursor % MAX_PARTICLES];
+      const particle = w.particles[w.particleCursor % MAX_PARTICLES];
       w.particleCursor += 1;
 
       const angle = w.rng.float(0, Math.PI * 2);
       const spread = w.rng.float(0.4, 1.15) * force;
-      p.active = true;
-      p.life = w.rng.float(0.2, 0.5);
-      p.size = w.rng.float(0.05, 0.13);
-      p.pos.copy(center);
-      p.pos.z = 0.2;
-      p.vel.set(
+
+      particle.active = true;
+      particle.life = w.rng.float(0.2, 0.5);
+      particle.size = w.rng.float(0.05, 0.13);
+      particle.pos.copy(center);
+      particle.pos.z = 0.2;
+      particle.vel.set(
         Math.cos(angle) * spread * 2.7,
         Math.sin(angle) * spread * 2.7,
         w.rng.float(0.25, 1.25)
       );
-      p.color.copy(w.tempColorA);
+      particle.color.copy(w.tempColorA);
     }
 
     w.cameraShake = Math.max(w.cameraShake, 0.24 * force);
@@ -212,18 +198,18 @@ export default function Shades() {
   function spawnActiveTile() {
     const w = world.current;
 
-    if (!w.next) {
-      w.next = randomTileFromWorld();
-      setNextTile(w.next);
+    if (w.nextShade === null) {
+      w.nextShade = randomShadeFromWorld();
+      setNextShade(w.nextShade);
     }
 
-    const spawned = spawnActiveTileEngine(w.grid, w.next, {
+    const spawned = spawnActive(w.grid, w.nextShade, {
       rows: ROWS,
       cols: COLS,
     });
 
-    w.next = randomTileFromWorld();
-    setNextTile(w.next);
+    w.nextShade = randomShadeFromWorld();
+    setNextShade(w.nextShade);
 
     if (spawned.gameOver || !spawned.active) {
       w.active = null;
@@ -237,7 +223,7 @@ export default function Shades() {
     w.activeScalePulse = 0.28;
   }
 
-  function pulseChangedCells(previous: Int16Array, next: Int16Array) {
+  function pulseChangedCells(previous: Uint8Array, next: Uint8Array) {
     const w = world.current;
 
     for (let i = 0; i < TOTAL_CELLS; i += 1) {
@@ -257,47 +243,55 @@ export default function Shades() {
     if (!active) return;
 
     const previousGrid = w.grid;
-    const resolved = lockAndResolve(previousGrid, active, {
+    const placedGrid = lockTile(previousGrid, active, { cols: COLS });
+
+    const resolved = resolveStable(placedGrid, {
       rows: ROWS,
       cols: COLS,
-      tileLevels: SHADES_TILE_LEVELS,
+      maxShade: SHADES_MAX_SHADE,
       maxResolveLoops: SHADES_MAX_RESOLVE_LOOPS,
+      strictInvariants: false,
     });
 
-    w.grid = resolved.grid;
+    const invariantViolation = firstInvariantViolation(resolved.invariants, COLS);
+
+    const effectiveGrid = invariantViolation ? placedGrid : resolved.grid;
+    const effectiveMerges = invariantViolation ? 0 : resolved.merges;
+    const effectiveClears = invariantViolation ? 0 : resolved.clears;
+    const effectiveHadEffect = invariantViolation ? false : resolved.hadEffect;
+
+    if (invariantViolation && process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.error('Shades resolve invariant violation; preserving locked tile.', invariantViolation);
+    }
+
+    w.grid = effectiveGrid;
     w.active = null;
 
-    pulseChangedCells(previousGrid, resolved.grid);
+    pulseChangedCells(previousGrid, effectiveGrid);
 
-    const placedCode = encodeTile(
-      active.colorGroup,
-      active.level,
-      SHADES_TILE_LEVELS
-    );
-    spawnImpactAtCell(active.x, active.y, placedCode, 9, 1);
-
-    if (resolved.clears > 0) {
+    spawnImpactAtCell(active.x, active.y, active.shade, 9, 1);
+    if (effectiveClears > 0) {
       spawnImpactAtCell(
         Math.floor(COLS * 0.5),
         Math.min(active.y, ROWS - 1),
-        placedCode,
-        14 + resolved.clears * 5,
+        active.shade,
+        14 + effectiveClears * 5,
         1.35
       );
     }
 
-    if (resolved.hadEffect) {
+    if (effectiveHadEffect) {
       shadesState.combo += 1;
       shadesState.multiplier = clamp(1 + shadesState.combo * 0.14, 1, 4.5);
 
       const gained = Math.round(
-        (resolved.merges * 42 + resolved.clears * 280 + 26) *
-          shadesState.multiplier
+        (effectiveMerges * 42 + effectiveClears * 280 + 26) * shadesState.multiplier
       );
 
       shadesState.score += gained;
-      shadesState.merges += resolved.merges;
-      shadesState.clears += resolved.clears;
+      shadesState.merges += effectiveMerges;
+      shadesState.clears += effectiveClears;
       shadesState.unlockEligiblePalettes();
     } else {
       shadesState.combo = 0;
@@ -312,7 +306,7 @@ export default function Shades() {
     const w = world.current;
     if (!w.active) return;
 
-    const next = moveActiveTile(w.grid, w.active, dx, { rows: ROWS, cols: COLS });
+    const next = moveLeftRight(w.grid, w.active, dx, { rows: ROWS, cols: COLS });
     if (next === w.active) return;
 
     w.active = next;
@@ -323,7 +317,7 @@ export default function Shades() {
     const w = world.current;
     if (!w.active) return;
 
-    const next = moveActiveTileToColumn(w.grid, w.active, targetColumn, {
+    const next = moveToColumn(w.grid, w.active, targetColumn, {
       rows: ROWS,
       cols: COLS,
     });
@@ -340,20 +334,20 @@ export default function Shades() {
       return;
     }
 
-    const dropped = softDropTile(w.grid, w.active, { rows: ROWS, cols: COLS });
+    const dropped = softDrop(w.grid, w.active, { rows: ROWS, cols: COLS });
     if (dropped.locked) {
       lockActiveTile();
       return;
     }
 
-    w.active = dropped.tile;
+    w.active = dropped.active;
   }
 
   function hardDropAndLock() {
     const w = world.current;
     if (!w.active) return;
 
-    w.active = hardDropTile(w.grid, w.active, { rows: ROWS, cols: COLS });
+    w.active = hardDrop(w.grid, w.active, { rows: ROWS, cols: COLS });
     lockActiveTile();
   }
 
@@ -368,28 +362,33 @@ export default function Shades() {
 
     for (let y = 0; y < ROWS; y += 1) {
       for (let x = 0; x < COLS; x += 1) {
-        const i = cellIndex(x, y, COLS);
-        const code = w.grid[i];
+        const index = cellIndex(x, y, COLS);
+        const shade = w.grid[index];
 
-        w.cellPulse[i] = Math.max(0, w.cellPulse[i] - dt * 2.6);
-        w.cellDropOffset[i] = THREE.MathUtils.damp(w.cellDropOffset[i], 0, 11, dt);
+        w.cellPulse[index] = Math.max(0, w.cellPulse[index] - dt * 2.6);
+        w.cellDropOffset[index] = THREE.MathUtils.damp(
+          w.cellDropOffset[index],
+          0,
+          11,
+          dt
+        );
 
-        if (code === 0) {
-          dummy.position.set(0, -9999, 0);
+        if (shade === 0) {
+          dummy.position.set(0, 0, 0);
           dummy.scale.set(0.0001, 0.0001, 0.0001);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
-          mesh.setMatrixAt(i, dummy.matrix);
-          mesh.setColorAt(i, color.setRGB(0, 0, 0));
+          mesh.setMatrixAt(index, dummy.matrix);
+          mesh.setColorAt(index, color.setRGB(0, 0, 0));
           continue;
         }
 
         const worldPos = cellToWorld(x, y, w.tempVec);
-        const pulse = w.cellPulse[i];
+        const pulse = w.cellPulse[index];
 
         dummy.position.set(
           worldPos.x,
-          worldPos.y + w.cellDropOffset[i],
+          worldPos.y + w.cellDropOffset[index],
           0.02 + pulse * 0.05
         );
 
@@ -397,16 +396,10 @@ export default function Shades() {
         dummy.scale.set(scale, scale, 1);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setMatrixAt(index, dummy.matrix);
 
-        color.set(
-          getPaletteTileColor(
-            palette,
-            decodeColorGroup(code, SHADES_TILE_LEVELS),
-            decodeLevel(code, SHADES_TILE_LEVELS)
-          )
-        );
-        mesh.setColorAt(i, color);
+        color.set(getShadeHex(palette, shade));
+        mesh.setColorAt(index, color);
       }
     }
 
@@ -443,11 +436,7 @@ export default function Shades() {
     mesh.scale.set(scale, scale, 1);
 
     const material = mesh.material as THREE.MeshStandardMaterial;
-    const palette = getCurrentPalette();
-    w.tempColorA.set(
-      getPaletteTileColor(palette, active.colorGroup, active.level)
-    );
-
+    w.tempColorA.set(getShadeHex(getCurrentPalette(), active.shade));
     material.color.copy(w.tempColorA);
     material.emissive.copy(w.tempColorA).multiplyScalar(0.26);
   }
@@ -463,7 +452,7 @@ export default function Shades() {
       const p = w.particles[i];
 
       if (!p.active) {
-        dummy.position.set(0, -9999, 0);
+        dummy.position.set(0, 0, 0);
         dummy.scale.set(0.0001, 0.0001, 0.0001);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
@@ -475,7 +464,7 @@ export default function Shades() {
       p.life -= dt;
       if (p.life <= 0) {
         p.active = false;
-        dummy.position.set(0, -9999, 0);
+        dummy.position.set(0, 0, 0);
         dummy.scale.set(0.0001, 0.0001, 0.0001);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
@@ -494,10 +483,7 @@ export default function Shades() {
       dummy.rotation.set(0, 0, 0);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(
-        i,
-        w.tempColorB.copy(p.color).multiplyScalar(0.45 + lifeNorm)
-      );
+      mesh.setColorAt(i, w.tempColorB.copy(p.color).multiplyScalar(0.45 + lifeNorm));
     }
 
     mesh.instanceMatrix.needsUpdate = true;
@@ -512,7 +498,7 @@ export default function Shades() {
     w.cellPulse.fill(0);
     w.cellDropOffset.fill(0);
     w.active = null;
-    w.next = null;
+    w.nextShade = null;
     w.dropTimer = 0;
     w.simTime = 0;
     w.fastDropUntil = 0;
@@ -524,7 +510,7 @@ export default function Shades() {
       const p = w.particles[i];
       p.active = false;
       p.life = 0;
-      p.pos.set(0, -9999, 0);
+      p.pos.set(0, 0, 0);
       p.vel.set(0, 0, 0);
     }
 
@@ -559,6 +545,7 @@ export default function Shades() {
 
   useEffect(() => {
     if (!snap.discoveredPaletteId) return;
+
     const timeout = window.setTimeout(() => {
       shadesState.dismissDiscoveryToast();
     }, 2400);
@@ -603,9 +590,11 @@ export default function Shades() {
         shadesState.startGame();
         clearFrameInput(input);
       }
+
       syncBoardInstances(dt);
       syncActiveMesh(dt);
       syncParticles(dt);
+      clearFrameInput(input);
       return;
     }
 
@@ -641,11 +630,7 @@ export default function Shades() {
       const tapDx = Math.abs(inputState.pointerX - w.touchStartX);
       const tapDy = Math.abs(inputState.pointerY - w.touchStartY);
 
-      if (
-        !w.touchHandled &&
-        tapDx < TAP_TO_COLUMN_EPSILON &&
-        tapDy < TAP_TO_COLUMN_EPSILON
-      ) {
+      if (!w.touchHandled && tapDx < TAP_TO_COLUMN_EPSILON && tapDy < TAP_TO_COLUMN_EPSILON) {
         const targetCol = ((inputState.pointerX + 1) * 0.5) * (COLS - 1);
         tryMoveToColumn(targetCol);
       }
@@ -654,17 +639,11 @@ export default function Shades() {
       w.touchHandled = false;
     }
 
-    if (
-      inputState.justPressed.has('arrowleft') ||
-      inputState.justPressed.has('a')
-    ) {
+    if (inputState.justPressed.has('arrowleft') || inputState.justPressed.has('a')) {
       tryMove(-1);
     }
 
-    if (
-      inputState.justPressed.has('arrowright') ||
-      inputState.justPressed.has('d')
-    ) {
+    if (inputState.justPressed.has('arrowright') || inputState.justPressed.has('d')) {
       tryMove(1);
     }
 
@@ -672,10 +651,7 @@ export default function Shades() {
       hardDropAndLock();
     }
 
-    if (
-      inputState.justPressed.has('arrowdown') ||
-      inputState.justPressed.has('s')
-    ) {
+    if (inputState.justPressed.has('arrowdown') || inputState.justPressed.has('s')) {
       stepDropTick();
       w.fastDropUntil = Math.max(w.fastDropUntil, w.simTime + 0.15);
     }
@@ -696,8 +672,7 @@ export default function Shades() {
       BASE_DROP_INTERVAL
     );
 
-    const interval =
-      w.simTime < w.fastDropUntil ? intervalBase * 0.2 : intervalBase;
+    const interval = w.simTime < w.fastDropUntil ? intervalBase * 0.2 : intervalBase;
 
     w.dropTimer += dt;
     while (w.dropTimer >= interval) {
@@ -719,9 +694,7 @@ export default function Shades() {
       <pointLight position={[-4, 4, 5]} intensity={0.28} color="#a5f3fc" />
 
       <mesh position={[0, 0, -0.34]}>
-        <boxGeometry
-          args={[COLS * CELL_SIZE + 1.2, ROWS * CELL_SIZE + 1.2, 0.3]}
-        />
+        <boxGeometry args={[COLS * CELL_SIZE + 1.2, ROWS * CELL_SIZE + 1.2, 0.3]} />
         <meshStandardMaterial
           color={activePalette.board}
           roughness={0.58}
@@ -729,7 +702,11 @@ export default function Shades() {
         />
       </mesh>
 
-      <instancedMesh ref={boardRef} args={[undefined, undefined, TOTAL_CELLS]}>
+      <instancedMesh
+        ref={boardRef}
+        args={[undefined, undefined, TOTAL_CELLS]}
+        frustumCulled={false}
+      >
         <boxGeometry args={[CELL_SIZE * 0.9, CELL_SIZE * 0.9, TILE_DEPTH]} />
         <meshStandardMaterial
           vertexColors
@@ -742,16 +719,13 @@ export default function Shades() {
 
       <mesh ref={activeRef} visible={false}>
         <boxGeometry args={[CELL_SIZE * 0.92, CELL_SIZE * 0.92, TILE_DEPTH]} />
-        <meshStandardMaterial
-          roughness={0.34}
-          metalness={0.12}
-          emissiveIntensity={0.27}
-        />
+        <meshStandardMaterial roughness={0.34} metalness={0.12} emissiveIntensity={0.27} />
       </mesh>
 
       <instancedMesh
         ref={particleRef}
         args={[undefined, undefined, MAX_PARTICLES]}
+        frustumCulled={false}
       >
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
@@ -765,12 +739,7 @@ export default function Shades() {
       </instancedMesh>
 
       <EffectComposer multisampling={0}>
-        <Bloom
-          mipmapBlur
-          luminanceThreshold={0.22}
-          intensity={0.88}
-          radius={0.58}
-        />
+        <Bloom mipmapBlur luminanceThreshold={0.22} intensity={0.88} radius={0.58} />
         <Noise opacity={0.03} />
         <Vignette darkness={0.48} offset={0.16} />
       </EffectComposer>
@@ -798,15 +767,7 @@ export default function Shades() {
               pointerEvents: 'none',
             }}
           >
-            <div
-              style={{
-                fontSize: 10,
-                opacity: 0.7,
-                textTransform: 'uppercase',
-              }}
-            >
-              Shades Plus
-            </div>
+            <div style={{ fontSize: 10, opacity: 0.7, textTransform: 'uppercase' }}>Shades Plus</div>
             <div style={{ fontSize: 31, fontWeight: 300, lineHeight: 1 }}>
               {snap.score.toLocaleString()}
             </div>
@@ -817,9 +778,7 @@ export default function Shades() {
             <div style={{ fontSize: 11, opacity: 0.66 }}>
               Clears {snap.clears} • Merges {snap.merges}
             </div>
-            <div style={{ fontSize: 11, opacity: 0.64 }}>
-              Best {snap.best.toLocaleString()}
-            </div>
+            <div style={{ fontSize: 11, opacity: 0.64 }}>Best {snap.best.toLocaleString()}</div>
           </div>
 
           <div
@@ -833,16 +792,10 @@ export default function Shades() {
               border: '1px solid rgba(148,163,184,0.25)',
               textAlign: 'right',
               pointerEvents: 'auto',
-              minWidth: 178,
+              minWidth: 188,
             }}
           >
-            <div
-              style={{
-                fontSize: 10,
-                opacity: 0.7,
-                textTransform: 'uppercase',
-              }}
-            >
+            <div style={{ fontSize: 10, opacity: 0.7, textTransform: 'uppercase' }}>
               Next • {activePalette.name}
             </div>
 
@@ -859,20 +812,12 @@ export default function Shades() {
               }}
             />
 
-              <div style={{ marginTop: 8, fontSize: 10, opacity: 0.75 }}>
-              {getPaletteRarityLabel(activePalette.rarity)} •
-              {' '}
-              {snap.unlockedPaletteIds.length} / {SHADES_PALETTES.length}
+            <div style={{ marginTop: 8, fontSize: 10, opacity: 0.75 }}>
+              {getPaletteRarityLabel(activePalette.rarity)} • {snap.unlockedPaletteIds.length} /{' '}
+              {SHADES_PALETTES.length}
             </div>
 
-            <div
-              style={{
-                marginTop: 8,
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 6,
-              }}
-            >
+            <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
               <button
                 onClick={() => shadesState.cyclePalette(-1)}
                 style={{
@@ -957,28 +902,19 @@ export default function Shades() {
                 Shades Plus
               </div>
 
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 13,
-                  opacity: 0.9,
-                  lineHeight: 1.45,
-                }}
-              >
-                Stack matching shades to merge them darker. Fill a row with the
-                exact same tile to clear it, then chain recursive cascades.
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9, lineHeight: 1.45 }}>
+                One-hue run: stack and merge matching shades from light to dark.
+                Clear a row only when all five tiles are the exact same shade.
               </div>
 
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.76 }}>
                 Desktop: Left / Right move • Down soft drop • Space hard drop
                 <br />
-                Mobile: Tap a column • Swipe left/right nudge • Swipe down fast
-                drop
+                Mobile: Tap column • Swipe left/right nudge • Swipe down fast drop
               </div>
 
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.82 }}>
-                Discover and unlock {SHADES_PALETTES.length} hand-crafted
-                palettes across four rarity tiers.
+                Discover and unlock {SHADES_PALETTES.length} single-hue palette themes.
               </div>
 
               <div style={{ marginTop: 12, fontSize: 13, opacity: 0.95 }}>

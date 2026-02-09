@@ -163,6 +163,12 @@ const Shape: React.FC<ShapeProps> = ({
     return s;
   }, [scale, baseScale, isPulsing, isSelected, isHovered, isClickable]);
 
+  const hitRadius = useMemo(() => {
+    if (gridSize >= 5) return 0.5;
+    if (gridSize === 4) return 0.56;
+    return 0.64;
+  }, [gridSize]);
+
   // Gentle rotation - only rotate the visual group
   useFrame(() => {
     if (visualRef.current) {
@@ -237,7 +243,7 @@ const Shape: React.FC<ShapeProps> = ({
           onClick(index);
         }}
       >
-        <sphereGeometry args={[0.85, 12, 12]} />
+        <sphereGeometry args={[hitRadius, 12, 12]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
       {/* Visual shape - rotates independently */}

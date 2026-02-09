@@ -14,7 +14,6 @@ const UNLOCKS_KEY = 'rachos-fun-shades-unlocks';
 const SELECTED_KEY = 'rachos-fun-shades-selected-palette';
 
 const randomSeed = () => Math.floor(Math.random() * 1_000_000_000);
-
 const defaultUnlocked = [STARTER_PALETTE_ID];
 
 function persistProgress() {
@@ -34,6 +33,7 @@ function parseUnlocked(raw: string | null): string[] {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return defaultUnlocked;
+
     return orderPaletteIds(
       parsed.filter((value): value is string => typeof value === 'string')
     );
@@ -54,14 +54,12 @@ export const shadesState = proxy({
   clears: 0,
   merges: 0,
 
-  paletteIndex: getPaletteOrderIndex(STARTER_PALETTE_ID),
   selectedPaletteId: STARTER_PALETTE_ID,
+  paletteIndex: getPaletteOrderIndex(STARTER_PALETTE_ID),
   unlockedPaletteIds: defaultUnlocked,
   discoveredPaletteId: null as string | null,
 
-  nextColorGroup: 0,
-  nextLevel: 0,
-
+  nextShade: 1,
   worldSeed: randomSeed(),
 
   loadProgress: () => {
@@ -76,9 +74,7 @@ export const shadesState = proxy({
 
     const rawSelected = window.localStorage.getItem(SELECTED_KEY);
     const selected =
-      rawSelected &&
-      isPaletteId(rawSelected) &&
-      unlocked.includes(rawSelected)
+      rawSelected && isPaletteId(rawSelected) && unlocked.includes(rawSelected)
         ? rawSelected
         : unlocked[0] ?? STARTER_PALETTE_ID;
 
@@ -86,7 +82,7 @@ export const shadesState = proxy({
     shadesState.paletteIndex = getPaletteOrderIndex(selected);
   },
 
-  // Compatibility with previous code paths.
+  // Back-compat for older calls.
   loadBest: () => {
     shadesState.loadProgress();
   },
@@ -105,15 +101,15 @@ export const shadesState = proxy({
     const unlocked = shadesState.unlockedPaletteIds;
     if (unlocked.length <= 1) return;
 
-    const current = unlocked.indexOf(shadesState.selectedPaletteId);
-    const offset = direction >= 0 ? 1 : -1;
-    const next = (current + offset + unlocked.length) % unlocked.length;
+    const currentIndex = unlocked.indexOf(shadesState.selectedPaletteId);
+    const delta = direction >= 0 ? 1 : -1;
+    const nextIndex = (currentIndex + delta + unlocked.length) % unlocked.length;
 
-    shadesState.setSelectedPalette(unlocked[next], true);
+    shadesState.setSelectedPalette(unlocked[nextIndex], true);
   },
 
   unlockEligiblePalettes: () => {
-    const unlocked = new Set(shadesState.unlockedPaletteIds);
+    const currentlyUnlocked = new Set(shadesState.unlockedPaletteIds);
     const eligible = orderPaletteIds(
       getUnlockablePaletteIds({
         score: shadesState.score,
@@ -122,7 +118,7 @@ export const shadesState = proxy({
       })
     );
 
-    const newlyUnlocked = eligible.filter((id) => !unlocked.has(id));
+    const newlyUnlocked = eligible.filter((id) => !currentlyUnlocked.has(id));
     if (newlyUnlocked.length === 0) return [] as string[];
 
     shadesState.unlockedPaletteIds = orderPaletteIds([
@@ -150,14 +146,14 @@ export const shadesState = proxy({
     shadesState.clears = 0;
     shadesState.merges = 0;
     shadesState.discoveredPaletteId = null;
-    shadesState.nextColorGroup = 0;
-    shadesState.nextLevel = 0;
+    shadesState.nextShade = 1;
     shadesState.paletteIndex = getPaletteOrderIndex(shadesState.selectedPaletteId);
     shadesState.worldSeed = randomSeed();
   },
 
   endGame: () => {
     if (shadesState.phase === 'gameover') return;
+
     shadesState.phase = 'gameover';
     shadesState.best = Math.max(shadesState.best, shadesState.score);
     persistProgress();
@@ -171,8 +167,7 @@ export const shadesState = proxy({
     shadesState.clears = 0;
     shadesState.merges = 0;
     shadesState.discoveredPaletteId = null;
-    shadesState.nextColorGroup = 0;
-    shadesState.nextLevel = 0;
+    shadesState.nextShade = 1;
     shadesState.paletteIndex = getPaletteOrderIndex(shadesState.selectedPaletteId);
     shadesState.worldSeed = randomSeed();
   },

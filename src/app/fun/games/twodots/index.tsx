@@ -14,7 +14,7 @@ import {
   PerformanceMonitor,
   Stats,
 } from '@react-three/drei';
-import { type ThreeEvent, useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
   ChromaticAberration,
@@ -64,13 +64,6 @@ type SelectionState = {
   loop: boolean;
 };
 
-type ConnectableSegment = {
-  a: number;
-  b: number;
-  colorIndex: number;
-  clusterSize: number;
-};
-
 type LineHandle = Line2 & {
   visible: boolean;
   geometry?: THREE.BufferGeometry & {
@@ -94,6 +87,8 @@ const SPACING = 1.15;
 const DOT_RADIUS = 0.33;
 const HIT_RADIUS = 0.44;
 const MAGNET_RADIUS = 0.72;
+const START_SELECT_RADIUS = HIT_RADIUS * 1.18;
+const DRAG_SELECT_RADIUS = HIT_RADIUS * 1.34;
 
 const PALETTE = [
   { color: '#4EA8DE', name: 'Sky' },
@@ -334,89 +329,6 @@ function hasAvailableMoves(board: Board) {
     }
   }
   return false;
-}
-
-function computeConnectableSegments(board: Board): ConnectableSegment[] {
-  const clusterSizes = new Uint16Array(CELL_COUNT);
-  const visited = new Uint8Array(CELL_COUNT);
-  const queue: number[] = [];
-
-  for (let start = 0; start < CELL_COUNT; start += 1) {
-    if (visited[start]) continue;
-
-    const startPos = fromIndex(start);
-    const startCell = board[startPos.r]?.[startPos.c];
-    if (!startCell) continue;
-
-    queue.length = 0;
-    const cluster: number[] = [];
-    const color = startCell.colorIndex;
-    visited[start] = 1;
-    queue.push(start);
-
-    while (queue.length > 0) {
-      const idx = queue.pop();
-      if (idx == null) continue;
-      cluster.push(idx);
-
-      const { r, c } = fromIndex(idx);
-      const neighbors = [
-        { nr: r - 1, nc: c },
-        { nr: r + 1, nc: c },
-        { nr: r, nc: c - 1 },
-        { nr: r, nc: c + 1 },
-      ];
-
-      for (let i = 0; i < neighbors.length; i += 1) {
-        const { nr, nc } = neighbors[i];
-        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
-        const nIdx = toIndex(nr, nc);
-        if (visited[nIdx]) continue;
-        const neighborCell = board[nr]?.[nc];
-        if (!neighborCell || neighborCell.colorIndex !== color) continue;
-        visited[nIdx] = 1;
-        queue.push(nIdx);
-      }
-    }
-
-    const size = cluster.length;
-    for (let i = 0; i < cluster.length; i += 1) {
-      clusterSizes[cluster[i]] = size;
-    }
-  }
-
-  const segments: ConnectableSegment[] = [];
-  for (let r = 0; r < ROWS; r += 1) {
-    for (let c = 0; c < COLS; c += 1) {
-      const current = board[r]?.[c];
-      if (!current) continue;
-      const currentIdx = toIndex(r, c);
-
-      const right = board[r]?.[c + 1];
-      if (right && right.colorIndex === current.colorIndex) {
-        const rightIdx = toIndex(r, c + 1);
-        segments.push({
-          a: currentIdx,
-          b: rightIdx,
-          colorIndex: current.colorIndex,
-          clusterSize: Math.max(clusterSizes[currentIdx], clusterSizes[rightIdx]),
-        });
-      }
-
-      const down = board[r + 1]?.[c];
-      if (down && down.colorIndex === current.colorIndex) {
-        const downIdx = toIndex(r + 1, c);
-        segments.push({
-          a: currentIdx,
-          b: downIdx,
-          colorIndex: current.colorIndex,
-          clusterSize: Math.max(clusterSizes[currentIdx], clusterSizes[downIdx]),
-        });
-      }
-    }
-  }
-
-  return segments;
 }
 
 function reshuffleBoard(board: Board, rng: SeededRandom) {
@@ -682,9 +594,6 @@ export default function TwoDots() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [movesMade, setMovesMade] = useState(0);
   const [lastGrade, setLastGrade] = useState<Grade | null>(null);
-  const [connectableSegments, setConnectableSegments] = useState<
-    ConnectableSegment[]
-  >([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [highQuality, setHighQuality] = useState(true);
   const [showFps, setShowFps] = useState(false);
@@ -726,6 +635,7 @@ export default function TwoDots() {
 
   const worldMouseRef = useRef(new THREE.Vector3());
   const snappedMouseRef = useRef(new THREE.Vector3());
+  const pointerClientRef = useRef(new THREE.Vector2(Number.NaN, Number.NaN));
 
   const inputLockedRef = useRef(false);
   const pendingSettleRef = useRef(false);
@@ -774,7 +684,6 @@ export default function TwoDots() {
 
   const dotMeshRef = useRef<THREE.InstancedMesh>(null);
   const shadowMeshRef = useRef<THREE.InstancedMesh>(null);
-  const hitMeshRef = useRef<THREE.InstancedMesh>(null);
 
   const haloRef = useRef<THREE.Mesh>(null);
   const tailRef = useRef<THREE.Mesh>(null);
@@ -963,7 +872,6 @@ export default function TwoDots() {
       if (resetMotion) yOffsetAttr.needsUpdate = true;
 
       twoDotsState.bombs = bombCount;
-      setConnectableSegments(computeConnectableSegments(board));
     },
     [bombAttr, colorAttr, yOffsetAttr]
   );
@@ -1268,40 +1176,6 @@ export default function TwoDots() {
     completeMove(path, color, loop);
   }, [completeMove, paused, resetSelection, settingsOpen, snap.phase]);
 
-  const onHitPointerDown = useCallback(
-    (event: ThreeEvent<PointerEvent>) => {
-      event.stopPropagation();
-
-      const id = event.instanceId;
-      if (typeof id !== 'number') return;
-
-      if (snap.phase === 'menu') {
-        beginLevel(1, true, selectedMode);
-        return;
-      }
-
-      startSelection(id);
-    },
-    [beginLevel, selectedMode, snap.phase, startSelection]
-  );
-
-  const onHitPointerMove = useCallback(
-    (event: ThreeEvent<PointerEvent>) => {
-      const id = event.instanceId;
-      if (typeof id !== 'number') return;
-      hoveredIdRef.current = id;
-
-      if (selectionRef.current.active) {
-        extendSelection(id);
-      }
-    },
-    [extendSelection]
-  );
-
-  const onHitPointerOut = useCallback(() => {
-    hoveredIdRef.current = null;
-  }, []);
-
   useEffect(() => {
     camera.position.set(0, 0, 10);
     camera.lookAt(0, 0, 0);
@@ -1329,7 +1203,6 @@ export default function TwoDots() {
   useEffect(() => {
     applyInstanceMatrices(dotMeshRef.current, 0.1);
     applyInstanceMatrices(shadowMeshRef.current, -0.04);
-    applyInstanceMatrices(hitMeshRef.current, 0.1);
   }, [applyInstanceMatrices]);
 
   useEffect(() => {
@@ -1368,6 +1241,20 @@ export default function TwoDots() {
       JSON.stringify({ highQuality, showFps })
     );
   }, [highQuality, showFps]);
+
+  useEffect(() => {
+    const handlePointer = (event: PointerEvent) => {
+      pointerClientRef.current.set(event.clientX, event.clientY);
+    };
+
+    window.addEventListener('pointermove', handlePointer, { passive: true });
+    window.addEventListener('pointerdown', handlePointer, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointer);
+      window.removeEventListener('pointerdown', handlePointer);
+    };
+  }, []);
 
   useEffect(() => {
     modeRef.current = selectedMode;
@@ -1419,19 +1306,43 @@ export default function TwoDots() {
       }
     }
 
-    ndc.set(state.pointer.x, state.pointer.y);
+    const canvasRect = state.gl.domElement.getBoundingClientRect();
+    const pointerClient = pointerClientRef.current;
+    const pointerInsideCanvas =
+      Number.isFinite(pointerClient.x) &&
+      Number.isFinite(pointerClient.y) &&
+      pointerClient.x >= canvasRect.left &&
+      pointerClient.x <= canvasRect.right &&
+      pointerClient.y >= canvasRect.top &&
+      pointerClient.y <= canvasRect.bottom;
+
+    let pointerNdcX = state.pointer.x;
+    let pointerNdcY = state.pointer.y;
+    if (pointerInsideCanvas) {
+      pointerNdcX =
+        ((pointerClient.x - canvasRect.left) / canvasRect.width) * 2 - 1;
+      pointerNdcY =
+        -((pointerClient.y - canvasRect.top) / canvasRect.height) * 2 + 1;
+    }
+
+    ndc.set(pointerNdcX, pointerNdcY);
     raycaster.setFromCamera(ndc, camera);
     raycaster.ray.intersectPlane(interactionPlane, worldMouseRef.current);
 
     let hitId: number | null = null;
-    if (hitMeshRef.current) {
-      const intersections = raycaster.intersectObject(
-        hitMeshRef.current,
-        false
-      );
-      const first = intersections[0];
-      if (first && typeof first.instanceId === 'number') {
-        hitId = first.instanceId;
+    if (pointerInsideCanvas) {
+      const radius = selectionRef.current.active
+        ? DRAG_SELECT_RADIUS
+        : START_SELECT_RADIUS;
+      let bestDistSq = radius * radius;
+
+      for (let i = 0; i < CELL_COUNT; i += 1) {
+        const center = centers[i];
+        const distSq = center.distanceToSquared(worldMouseRef.current);
+        if (distSq <= bestDistSq) {
+          bestDistSq = distSq;
+          hitId = i;
+        }
       }
     }
 
@@ -1443,7 +1354,20 @@ export default function TwoDots() {
 
     if (
       hitId != null &&
+      inputState.pointerJustDown &&
+      !selectionRef.current.active &&
+      snap.phase === 'playing' &&
+      !paused &&
+      !settingsOpen &&
+      !inputLockedRef.current
+    ) {
+      startSelection(hitId);
+    }
+
+    if (
+      hitId != null &&
       selectionRef.current.active &&
+      inputState.pointerDown &&
       snap.phase === 'playing' &&
       !paused &&
       !settingsOpen &&
@@ -1810,42 +1734,9 @@ export default function TwoDots() {
         <primitive object={dotMaterial} attach="material" />
       </instancedMesh>
 
-      <instancedMesh
-        ref={hitMeshRef}
-        args={[undefined, undefined, CELL_COUNT]}
-        onPointerDown={onHitPointerDown}
-        onPointerMove={onHitPointerMove}
-        onPointerOut={onHitPointerOut}
-      >
-        <planeGeometry args={[HIT_RADIUS * 2, HIT_RADIUS * 2]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </instancedMesh>
-
-      {connectableSegments.map((segment, idx) => {
-        const a = centers[segment.a];
-        const b = centers[segment.b];
-        const isBurning = segment.clusterSize >= 6;
-        const accent =
-          isBurning && selectionVisual.active
-            ? '#FFE57A'
-            : (PALETTE[segment.colorIndex]?.color ?? '#FFFFFF');
-        return (
-          <Line
-            key={`hint-${idx}`}
-            points={[
-              new THREE.Vector3(a.x, a.y, 0.12),
-              new THREE.Vector3(b.x, b.y, 0.12),
-            ]}
-            color={accent}
-            lineWidth={isBurning ? 2.8 : 1.3}
-            transparent
-            opacity={isBurning ? 0.38 : 0.16}
-          />
-        );
-      })}
-
       <Line
         ref={lineRef}
+        visible={false}
         points={[new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]}
         color={lineColor}
         lineWidth={Math.min(10, 3 + selectionVisual.count * 0.6)}
