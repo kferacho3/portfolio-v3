@@ -54,19 +54,6 @@ type MoveOutcome = {
   detonatedBombs: number;
 };
 
-type MutableLine = {
-  visible: boolean;
-  setPoints: (points: THREE.Vector3[]) => void;
-};
-
-type MutableBloom = {
-  intensity: number;
-};
-
-type MutableChromatic = {
-  offset: THREE.Vector2;
-};
-
 type SelectionState = {
   active: boolean;
   colorIndex: number | null;
@@ -594,7 +581,7 @@ export default function TwoDots() {
 
   const haloRef = useRef<THREE.Mesh>(null);
   const tailRef = useRef<THREE.Mesh>(null);
-  const lineRef = useRef<MutableLine | null>(null);
+  const lineRef = useRef<any>(null);
 
   const dotMaterial = useMemo(() => {
     const shader = new THREE.ShaderMaterial({
@@ -715,8 +702,8 @@ export default function TwoDots() {
     return shader;
   }, []);
 
-  const bloomRef = useRef<MutableBloom | null>(null);
-  const chromaRef = useRef<MutableChromatic | null>(null);
+  const bloomRef = useRef<any>(null);
+  const chromaRef = useRef<any>(null);
 
   const applyInstanceMatrices = useCallback(
     (mesh: THREE.InstancedMesh | null, z: number) => {
@@ -1524,24 +1511,21 @@ export default function TwoDots() {
         <meshBasicMaterial color="#F8FAFC" transparent opacity={0.85} />
       </mesh>
 
-      <EffectComposer disableNormalPass multisampling={0}>
-        {highQuality && (
-          <>
-            <Bloom
-              ref={bloomRef}
-              luminanceThreshold={0.9}
-              luminanceSmoothing={0.25}
-              intensity={0.4}
-              mipmapBlur
-              radius={0.45}
-            />
-            <ChromaticAberration
-              ref={chromaRef}
-              offset={new THREE.Vector2(0, 0)}
-              radialModulation
-            />
-          </>
-        )}
+      <EffectComposer multisampling={0}>
+        <Bloom
+          ref={bloomRef}
+          luminanceThreshold={0.9}
+          luminanceSmoothing={0.25}
+          intensity={highQuality ? 0.4 : 0}
+          mipmapBlur
+          radius={0.45}
+        />
+        <ChromaticAberration
+          ref={chromaRef}
+          offset={new THREE.Vector2(0, 0)}
+          radialModulation
+          modulationOffset={0}
+        />
         <Noise opacity={highQuality ? 0.035 : 0.02} />
       </EffectComposer>
 

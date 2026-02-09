@@ -137,7 +137,7 @@ type WorldRuntime = {
 const run = proxy({
   score: 0,
   slow: false,
-  speed: GAME_TUNING.forward.baseSpeed,
+  speed: Number(GAME_TUNING.forward.baseSpeed),
   starsThisRun: 0,
   timeScale: 1,
   targetScale: 1,
