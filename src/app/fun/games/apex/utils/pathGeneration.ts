@@ -5,6 +5,7 @@ import {
   CURVE_DEFAULT_CURVATURE,
   CURVE_DEFAULT_CURVATURE_VEL,
   CURVE_BOUNDARY_HARD,
+  CURVE_BOUNDARY_GAIN,
   CURVE_BOUNDARY_SOFT,
   CURVE_CENTER_PULL,
   CURVE_FORWARD_BIAS,
@@ -110,7 +111,7 @@ export const advanceCurvedState = (
       ? Math.abs(curvatureVel)
       : CURVE_DEFAULT_CURVATURE_VEL,
     0.85,
-    1.65
+    1.4
   );
   const sign = directionSign >= 0 ? 1 : -1;
   const turnRate =
@@ -239,7 +240,7 @@ export const generateCurvedTiles = () => {
       CURVE_BOUNDARY_SOFT * 0.5;
     const shouldFlip =
       Math.abs(mutation.pathCurveTheta) > 0.34 ||
-      (nearCenter ? Math.random() < 0.64 : Math.random() < 0.88);
+      (nearCenter ? Math.random() < 0.52 : Math.random() < 0.72);
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_RANGE[0],
       CURVE_SEGMENT_RANGE[1]
@@ -251,13 +252,13 @@ export const generateCurvedTiles = () => {
     }
     mutation.pathCurveCurvature = THREE.MathUtils.clamp(
       CURVE_DEFAULT_CURVATURE + THREE.MathUtils.randFloatSpread(0.2),
-      0.5,
-      0.82
+      0.46,
+      0.76
     );
     mutation.pathCurveCurvatureVel = THREE.MathUtils.clamp(
       CURVE_DEFAULT_CURVATURE_VEL + THREE.MathUtils.randFloatSpread(0.35),
-      0.9,
-      1.45
+      0.85,
+      1.25
     );
   }
 
@@ -268,8 +269,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.62, 0.84);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.2, 1.6);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.56, 0.72);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.95, 1.25);
   }
 
   const lateral = mutation.lastTilePos.dot(curveRight);
@@ -279,8 +280,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.64, 0.86);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.2, 1.65);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.58, 0.74);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.98, 1.3);
   }
 
   const prevPos = mutation.lastTilePos.clone();
@@ -316,8 +317,8 @@ export const generateCurvedTiles = () => {
         CURVE_SEGMENT_SHORT_RANGE[1]
       )
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.62, 0.86);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.2, 1.65);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.56, 0.74);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.95, 1.3);
 
     result = advanceCurvedState(
       mutation.lastTilePos,
