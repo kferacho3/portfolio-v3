@@ -1,7 +1,7 @@
 import { proxy } from 'valtio';
 
 export type GoUpPhase = 'menu' | 'playing' | 'gameover';
-export type CrashType = 'none' | 'fell' | 'spike';
+export type CrashType = 'none' | 'fell' | 'riser';
 
 const BEST_KEY = 'rachos-fun-goup-best';
 const ARENA_KEY = 'rachos-fun-goup-arena';

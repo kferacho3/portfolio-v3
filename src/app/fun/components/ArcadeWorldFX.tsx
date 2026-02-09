@@ -698,7 +698,7 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { theme: uiTheme } = useContext(ThemeContext);
   const isLightMode = uiTheme === 'light';
 
-  const gamesWithOwnWorldFx = ['shades'];
+  const gamesWithOwnWorldFx = ['shades', 'goup'];
   const disableGlobalWorldFx = gamesWithOwnWorldFx.includes(gameId);
 
   // Determine if backdrop should be shown (used for env map loading decision)

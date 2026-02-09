@@ -7,7 +7,7 @@ export const SEGMENT_SPACING = 1;
 export const SEGMENT_SIZE = 1;
 export const SEGMENT_HALF = SEGMENT_SIZE * 0.5;
 
-export const SEGMENT_POOL = 220;
+export const SEGMENT_POOL = 140;
 export const LOOKAHEAD_SEGMENTS = 80;
 export const DESPAWN_WORLD_Z = -12;
 export const SPAWN_START_Z = 10;

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react';
+import { useCallback, useRef, type RefObject } from 'react';
 import type * as THREE from 'three';
 import { QUARTER_TURN, ROTATION_MS } from './constants';
 import { gameplayConfig } from './gameplayConfig';
@@ -18,29 +18,26 @@ type RotationAnim = {
 };
 
 type WorldRotationHook = {
-  isRotating: boolean;
-  rotationIndex: number;
-  worldRotation: number;
-  lastDirection: 1 | -1;
-  lastRotateAtMs: number;
   rotateLeft: () => void;
   rotateRight: () => void;
   rotateInLastDirection: () => void;
   update: (nowMs: number, worldRef: RefObject<THREE.Group>) => void;
   reset: (worldRef: RefObject<THREE.Group>) => void;
+  isRotating: () => boolean;
+  getRotationIndex: () => number;
+  getWorldRotation: () => number;
+  getLastRotateAtMs: () => number;
 };
 
 export function useWorldRotation(): WorldRotationHook {
   const anim = useRef<RotationAnim | null>(null);
-  const queue = useRef<(1 | -1)[]>([]);
   const rotationIndexRef = useRef(0);
   const worldRotationRef = useRef(0);
   const lastDirectionRef = useRef<1 | -1>(1);
   const lastRotateAtRef = useRef(0);
-  const [isRotating, setIsRotating] = useState(false);
-  const [rotationIndex, setRotationIndex] = useState(0);
 
   const startRotation = useCallback((direction: 1 | -1, nowMs: number) => {
+    if (anim.current) return;
     rotationIndexRef.current += direction;
     const target = rotationIndexRef.current * QUARTER_TURN;
     anim.current = {
@@ -51,98 +48,78 @@ export function useWorldRotation(): WorldRotationHook {
     };
     lastDirectionRef.current = direction;
     lastRotateAtRef.current = nowMs;
-    setRotationIndex(rotationIndexRef.current);
-    setIsRotating(true);
   }, []);
 
-  const queueOrRotate = useCallback(
-    (direction: 1 | -1) => {
-      const nowMs = performance.now();
-      if (anim.current) {
-        if (queue.current.length < gameplayConfig.rotationQueueLimit) {
-          queue.current.push(direction);
-        } else {
-          queue.current[queue.current.length - 1] = direction;
-        }
-        return;
-      }
-      startRotation(direction, nowMs);
-    },
-    [startRotation]
-  );
+  const rotateLeft = useCallback(() => {
+    startRotation(1, performance.now());
+  }, [startRotation]);
 
-  const rotateLeft = useCallback(() => queueOrRotate(1), [queueOrRotate]);
-  const rotateRight = useCallback(() => queueOrRotate(-1), [queueOrRotate]);
+  const rotateRight = useCallback(() => {
+    startRotation(-1, performance.now());
+  }, [startRotation]);
 
   const rotateInLastDirection = useCallback(() => {
-    queueOrRotate(lastDirectionRef.current);
-  }, [queueOrRotate]);
+    startRotation(lastDirectionRef.current, performance.now());
+  }, [startRotation]);
 
-  const update = useCallback(
-    (nowMs: number, worldRef: RefObject<THREE.Group>) => {
-      const currentAnim = anim.current;
-      if (!currentAnim) {
-        if (worldRef.current) {
-          worldRef.current.rotation.z = worldRotationRef.current;
-        }
-        return;
-      }
-
-      const t = Math.min(
-        1,
-        (nowMs - currentAnim.startMs) / currentAnim.durationMs
-      );
-      const eased = cubicEase(t);
-      const nextRotation =
-        currentAnim.from + (currentAnim.to - currentAnim.from) * eased;
-      worldRotationRef.current = nextRotation;
-
+  const update = useCallback((nowMs: number, worldRef: RefObject<THREE.Group>) => {
+    const currentAnim = anim.current;
+    if (!currentAnim) {
       if (worldRef.current) {
-        worldRef.current.rotation.z = nextRotation;
+        worldRef.current.rotation.z = worldRotationRef.current;
       }
+      return;
+    }
 
-      if (t >= 1) {
-        const snapped = rotationIndexRef.current * QUARTER_TURN;
-        worldRotationRef.current = snapped;
-        if (worldRef.current) {
-          worldRef.current.rotation.z = snapped;
-        }
-        anim.current = null;
-        setIsRotating(false);
+    const duration = Math.max(1, currentAnim.durationMs);
+    const t = Math.min(1, (nowMs - currentAnim.startMs) / duration);
+    const eased = cubicEase(t);
+    const nextRotation =
+      currentAnim.from + (currentAnim.to - currentAnim.from) * eased;
+    worldRotationRef.current = nextRotation;
 
-        if (queue.current.length > 0) {
-          const nextDir = queue.current.shift() as 1 | -1;
-          startRotation(nextDir, nowMs);
-        }
+    if (worldRef.current) {
+      worldRef.current.rotation.z = nextRotation;
+    }
+
+    if (t >= 1) {
+      const snapped = rotationIndexRef.current * QUARTER_TURN;
+      worldRotationRef.current = snapped;
+      if (worldRef.current) {
+        worldRef.current.rotation.z = snapped;
       }
-    },
-    [startRotation]
-  );
+      anim.current = null;
+    }
+  }, []);
 
   const reset = useCallback((worldRef: RefObject<THREE.Group>) => {
     anim.current = null;
-    queue.current = [];
     rotationIndexRef.current = 0;
     worldRotationRef.current = 0;
     lastDirectionRef.current = 1;
     lastRotateAtRef.current = 0;
-    setIsRotating(false);
-    setRotationIndex(0);
     if (worldRef.current) {
       worldRef.current.rotation.z = 0;
     }
   }, []);
 
+  const isRotating = useCallback(() => anim.current != null, []);
+  const getRotationIndex = useCallback(
+    () => normalizeFaceIndex(rotationIndexRef.current),
+    []
+  );
+  const getWorldRotation = useCallback(() => worldRotationRef.current, []);
+  const getLastRotateAtMs = useCallback(() => lastRotateAtRef.current, []);
+
   return {
-    isRotating,
-    rotationIndex: normalizeFaceIndex(rotationIndex),
-    worldRotation: worldRotationRef.current,
-    lastDirection: lastDirectionRef.current,
-    lastRotateAtMs: lastRotateAtRef.current,
     rotateLeft,
     rotateRight,
     rotateInLastDirection,
     update,
     reset,
+    isRotating,
+    getRotationIndex,
+    getWorldRotation,
+    getLastRotateAtMs,
   };
 }

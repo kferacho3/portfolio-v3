@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Environment, Html, OrthographicCamera } from '@react-three/drei';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Html, OrthographicCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
-import { useGameUIState } from '../../store/selectors';
+import { useGameStateActions, useGameUIState } from '../../store/selectors';
 import { SeededRandom } from '../../utils/seededRandom';
 
 import {
@@ -29,6 +29,7 @@ import { gameplayConfig } from './gameplayConfig';
 import { pickGraphicsPreset } from './graphicsPresets';
 import { growthState } from './state';
 import type { Face, GrowthSegment, PowerupType } from './types';
+import { validateObstacleLayout } from './validateObstacleLayout';
 import CharacterSelection from './_components/CharacterSelection';
 import { useCameraShake } from './useCameraShake';
 import { useJellySquash } from './useJellySquash';
@@ -45,16 +46,16 @@ export * from './graphicsPresets';
 const FACE_LIST: Face[] = [0, 1, 2, 3];
 const PLAYER_FACE_BY_ROTATION: Face[] = [2, 0, 3, 1];
 
-const TILE_COLOR_LIGHT = new THREE.Color('#f8f5ec');
-const TILE_COLOR_DARK = new THREE.Color('#ebd9b8');
+const TILE_COLOR_LIGHT = new THREE.Color('#eaf1ff');
+const TILE_COLOR_DARK = new THREE.Color('#c8d9f4');
 const OBSTACLE_COLORS = [
+  new THREE.Color('#fb923c'),
   new THREE.Color('#f97316'),
-  new THREE.Color('#ef4444'),
-  new THREE.Color('#c2410c'),
+  new THREE.Color('#f43f5e'),
 ];
-const GEM_COLOR = new THREE.Color('#fde047');
+const GEM_COLOR = new THREE.Color('#facc15');
 const BOOST_COLOR = new THREE.Color('#22d3ee');
-const SHIELD_COLOR = new THREE.Color('#a78bfa');
+const SHIELD_COLOR = new THREE.Color('#818cf8');
 
 const OBSTACLE_INSTANCES_PER_SEGMENT = 3;
 const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
@@ -87,23 +88,14 @@ const getFaceOffset = (face: Face, radius: number): [number, number] => {
 const buildSafeFace = (
   rng: SeededRandom,
   previousSafeFace: Face,
-  difficulty: number,
   density: number
 ): Face => {
-  const keepWeight = clamp(0.7 - density * 0.4, 0.34, 0.7);
-  const turnWeight = clamp(0.15 + density * 0.14, 0.15, 0.36);
-  const oppositeWeight =
-    difficulty > gameplayConfig.hardPatternStart
-      ? clamp((difficulty - gameplayConfig.hardPatternStart) * 0.16, 0, 0.11)
-      : 0;
+  const keepWeight = clamp(0.76 - density * 0.34, 0.46, 0.76);
+  const turnWeight = clamp(0.12 + density * 0.12, 0.12, 0.3);
   const choices = [
     { item: previousSafeFace, weight: keepWeight },
     { item: normalizeFace(previousSafeFace + 1), weight: turnWeight },
     { item: normalizeFace(previousSafeFace - 1), weight: turnWeight },
-    {
-      item: normalizeFace(previousSafeFace + 2),
-      weight: oppositeWeight,
-    },
   ];
   return rng.weighted(choices);
 };
@@ -135,6 +127,21 @@ const buildBlockedFaces = (
   const available = FACE_LIST.filter((face) => face !== safeFace) as Face[];
   rng.shuffle(available);
   return available.slice(0, blockedCount);
+};
+
+const sanitizeBlockedFaces = (
+  rng: SeededRandom,
+  blockedFaces: Face[],
+  safeFace: Face
+): Face[] => {
+  const unique = [...new Set(blockedFaces)].filter(
+    (face) => face !== safeFace
+  ) as Face[];
+  if (unique.length > 0) {
+    return unique.slice(0, OBSTACLE_INSTANCES_PER_SEGMENT);
+  }
+  const fallbackPool = FACE_LIST.filter((face) => face !== safeFace) as Face[];
+  return [rng.pick(fallbackPool)];
 };
 
 type InputControllerProps = {
@@ -183,16 +190,18 @@ const InputController: React.FC<InputControllerProps> = ({
 
   useSwipeControls({
     enabled: canRotate,
-    onLeft: onRight,
-    onRight: onLeft,
+    onLeft,
+    onRight,
   });
 
   useEffect(() => {
-    const handlePointerDown = () => {
+    const handlePointerDown = (event: PointerEvent) => {
       if (canStart) {
         startOrRestart();
         return;
       }
+      // Touch input is owned by swipe controls during active runs.
+      if (event.pointerType === 'touch') return;
       if (canRotate) {
         rotateFallback();
       }
@@ -205,25 +214,54 @@ const InputController: React.FC<InputControllerProps> = ({
   return null;
 };
 
+type RuntimeState = {
+  rng: SeededRandom;
+  segments: GrowthSegment[];
+  farthestZ: number;
+  nextSequence: number;
+  lastSafeFace: Face;
+  hardStreak: number;
+  scroll: number;
+  elapsed: number;
+  speed: number;
+  uiSpeedAccumulator: number;
+  lastTurnSequence: number;
+};
+
 const Growth: React.FC = () => {
   const snap = useSnapshot(growthState);
   const { paused } = useGameUIState();
+  const { setPaused } = useGameStateActions();
   const { camera, scene, gl } = useThree();
 
   const graphicsPreset = useMemo(() => pickGraphicsPreset(), []);
   const rotation = useWorldRotation();
+  const {
+    rotateLeft: rotateWorldLeft,
+    rotateRight: rotateWorldRight,
+    rotateInLastDirection: rotateWorldFallback,
+    update: updateWorldRotation,
+    reset: resetWorldRotation,
+    getRotationIndex,
+    getWorldRotation,
+    getLastRotateAtMs,
+  } = rotation;
   const cameraShake = useCameraShake();
   const jellySquash = useJellySquash();
+  const [displaySpeed, setDisplaySpeed] = useState<number>(
+    gameplayConfig.baseSpeed
+  );
 
   const worldRef = useRef<THREE.Group>(null);
   const playerRef = useRef<THREE.Group>(null);
+  const atmosphereRef = useRef<THREE.Group>(null);
   const tileMeshRef = useRef<THREE.InstancedMesh>(null);
   const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const powerupMeshRef = useRef<THREE.InstancedMesh>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
 
-  const runtime = useRef({
+  const runtime = useRef<RuntimeState>({
     rng: new SeededRandom(1),
     segments: [] as GrowthSegment[],
     farthestZ: SPAWN_START_Z,
@@ -232,6 +270,9 @@ const Growth: React.FC = () => {
     hardStreak: 0,
     scroll: 0,
     elapsed: 0,
+    speed: gameplayConfig.baseSpeed,
+    uiSpeedAccumulator: 0,
+    lastTurnSequence: -1000,
   });
 
   const matrixDummy = useMemo(() => new THREE.Object3D(), []);
@@ -397,19 +438,33 @@ const Growth: React.FC = () => {
               gameplayConfig.obstacleDensityCurve.late,
               (difficulty - 0.45) / 0.55
             );
-      const safeFace = buildSafeFace(
+      const requestedSafeFace = buildSafeFace(
         runtime.current.rng,
         previousSafeFace,
-        difficulty,
         density
       );
       let blockedFaces = buildBlockedFaces(
         runtime.current.rng,
-        safeFace,
+        requestedSafeFace,
         difficulty,
         density,
         sequence
       );
+      let safeFace = validateObstacleLayout(
+        blockedFaces,
+        previousSafeFace,
+        () => runtime.current.rng.random()
+      );
+
+      const turnsSinceLastChange = sequence - runtime.current.lastTurnSequence;
+      if (
+        safeFace !== previousSafeFace &&
+        turnsSinceLastChange < gameplayConfig.minSegmentsBetweenTurns
+      ) {
+        safeFace = previousSafeFace;
+      }
+
+      blockedFaces = sanitizeBlockedFaces(runtime.current.rng, blockedFaces, safeFace);
 
       if (blockedFaces.length >= 2) {
         if (runtime.current.hardStreak >= 2) {
@@ -420,6 +475,11 @@ const Growth: React.FC = () => {
         }
       } else {
         runtime.current.hardStreak = 0;
+      }
+
+      blockedFaces = sanitizeBlockedFaces(runtime.current.rng, blockedFaces, safeFace);
+      if (safeFace !== previousSafeFace) {
+        runtime.current.lastTurnSequence = sequence;
       }
 
       const availableForPickup = FACE_LIST.filter(
@@ -508,6 +568,9 @@ const Growth: React.FC = () => {
     runtime.current.lastSafeFace = 2;
     runtime.current.scroll = 0;
     runtime.current.elapsed = 0;
+    runtime.current.speed = gameplayConfig.baseSpeed;
+    runtime.current.uiSpeedAccumulator = 0;
+    runtime.current.lastTurnSequence = -1000;
     runtime.current.nextSequence = SEGMENT_POOL;
     runtime.current.hardStreak = 0;
     runtime.current.farthestZ =
@@ -533,8 +596,9 @@ const Growth: React.FC = () => {
       worldRef.current.position.set(0, 0, 0);
       worldRef.current.rotation.set(0, 0, 0);
     }
-    rotation.reset(worldRef);
+    resetWorldRotation(worldRef);
     flushInstances();
+    setDisplaySpeed(gameplayConfig.baseSpeed);
 
     growthState.time = 0;
     growthState.speed = gameplayConfig.baseSpeed;
@@ -546,7 +610,7 @@ const Growth: React.FC = () => {
   }, [
     createSegment,
     flushInstances,
-    rotation,
+    resetWorldRotation,
     writeGemInstance,
     writeObstacleInstances,
     writePowerupInstance,
@@ -554,29 +618,35 @@ const Growth: React.FC = () => {
   ]);
 
   const startOrRestart = useCallback(() => {
+    setPaused(false);
     growthState.startGame();
-    resetWorld();
-  }, [resetWorld]);
+  }, [setPaused]);
 
   const rotateLeft = useCallback(() => {
     if (growthState.phase !== 'playing' || paused) return;
-    rotation.rotateLeft();
-  }, [paused, rotation]);
+    rotateWorldLeft();
+  }, [paused, rotateWorldLeft]);
 
   const rotateRight = useCallback(() => {
     if (growthState.phase !== 'playing' || paused) return;
-    rotation.rotateRight();
-  }, [paused, rotation]);
+    rotateWorldRight();
+  }, [paused, rotateWorldRight]);
 
   const rotateFallback = useCallback(() => {
     if (growthState.phase !== 'playing' || paused) return;
-    rotation.rotateInLastDirection();
-  }, [paused, rotation]);
+    rotateWorldFallback();
+  }, [paused, rotateWorldFallback]);
 
   useEffect(() => {
     growthState.loadBestScore();
     resetWorld();
   }, [resetWorld]);
+
+  useEffect(() => {
+    if (snap.phase === 'playing') {
+      resetWorld();
+    }
+  }, [resetWorld, snap.phase]);
 
   useEffect(() => {
     if (paused) growthState.pause();
@@ -585,25 +655,36 @@ const Growth: React.FC = () => {
 
   useEffect(() => {
     if (graphicsPreset.fog) {
-      scene.fog = new THREE.Fog('#d6d6e3', 8, 56);
+      scene.fog = new THREE.Fog(graphicsPreset.fogColor, 8, 54);
     } else {
       scene.fog = null;
     }
-    scene.background = new THREE.Color('#c9d0dd');
-  }, [graphicsPreset.fog, scene]);
+    scene.background = new THREE.Color(graphicsPreset.backgroundA);
+  }, [graphicsPreset.backgroundA, graphicsPreset.fog, graphicsPreset.fogColor, scene]);
 
   useEffect(() => {
     gl.setPixelRatio(graphicsPreset.pixelRatio);
-  }, [gl, graphicsPreset.pixelRatio]);
+    gl.shadowMap.enabled = graphicsPreset.shadows;
+    gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = graphicsPreset.name === 'HIGH' ? 1.07 : 1;
+  }, [
+    gl,
+    graphicsPreset.name,
+    graphicsPreset.pixelRatio,
+    graphicsPreset.shadows,
+  ]);
 
   useFrame((state, dt) => {
     const nowMs = state.clock.elapsedTime * 1000;
-    rotation.update(nowMs, worldRef);
+    updateWorldRotation(nowMs, worldRef);
     jellySquash.update(dt, playerRef);
+    if (atmosphereRef.current) {
+      atmosphereRef.current.rotation.z += dt * 0.03;
+    }
 
     if (growthState.phase === 'playing' && !paused) {
       runtime.current.elapsed += dt;
-      growthState.time = runtime.current.elapsed;
       growthState.tickTimers(dt);
 
       let speed =
@@ -613,14 +694,23 @@ const Growth: React.FC = () => {
 
       if (growthState.boostMs > 0) speed *= BOOST_MULTIPLIER;
       speed = Math.min(gameplayConfig.maxSpeed, speed);
-      growthState.speed = speed;
+      runtime.current.speed = speed;
+      runtime.current.uiSpeedAccumulator += dt;
+      if (runtime.current.uiSpeedAccumulator >= 0.08) {
+        runtime.current.uiSpeedAccumulator = 0;
+        const nextSpeed = Number(speed.toFixed(1));
+        if (nextSpeed !== displaySpeed) {
+          setDisplaySpeed(nextSpeed);
+        }
+        growthState.speed = nextSpeed;
+      }
 
       runtime.current.scroll += speed * dt;
       if (worldRef.current) {
         worldRef.current.position.z = -runtime.current.scroll;
       }
 
-      const activeFace = PLAYER_FACE_BY_ROTATION[rotation.rotationIndex];
+      const activeFace = PLAYER_FACE_BY_ROTATION[getRotationIndex()];
       let shouldEndRun = false;
 
       for (let i = 0; i < runtime.current.segments.length; i += 1) {
@@ -646,10 +736,10 @@ const Growth: React.FC = () => {
             growthState.addClearScore(
               CLEAR_SCORE +
                 Math.max(0, segment.blockedFaces.length - 1) +
-                (growthState.speed >= gameplayConfig.baseSpeed + 2.3 ? 1 : 0)
+                (runtime.current.speed >= gameplayConfig.baseSpeed + 2.3 ? 1 : 0)
             );
 
-            const turnDelta = nowMs - rotation.lastRotateAtMs;
+            const turnDelta = nowMs - getLastRotateAtMs();
             if (
               turnDelta > 0 &&
               turnDelta <= gameplayConfig.perfectTurnWindowMs
@@ -698,7 +788,11 @@ const Growth: React.FC = () => {
 
     const shake = cameraShake.updateShake(dt, state.clock.elapsedTime);
     const cam = orthoRef.current ?? (camera as THREE.OrthographicCamera);
-    const speedRatio = clamp(growthState.speed / gameplayConfig.maxSpeed, 0, 1);
+    const speedRatio = clamp(
+      runtime.current.speed / gameplayConfig.maxSpeed,
+      0,
+      1
+    );
     const targetZoom = 94 + speedRatio * 10;
     cam.zoom = THREE.MathUtils.lerp(
       cam.zoom,
@@ -722,12 +816,12 @@ const Growth: React.FC = () => {
     );
     cam.rotation.z = THREE.MathUtils.lerp(
       cam.rotation.z,
-      rotation.worldRotation * 0.06,
+      getWorldRotation() * 0.06,
       1 - Math.exp(-dt * 9)
     );
     cam.lookAt(0, 0, 0);
     cam.updateProjectionMatrix();
-  });
+  }, -1);
 
   return (
     <group>
@@ -749,16 +843,44 @@ const Growth: React.FC = () => {
         zoom={92}
       />
 
-      <ambientLight intensity={0.58} />
-      <directionalLight
-        position={[6, 9, 8]}
-        intensity={0.9}
-        castShadow={graphicsPreset.shadows}
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+      <ambientLight intensity={graphicsPreset.ambientIntensity} />
+      <hemisphereLight
+        args={['#dbeafe', '#0b1320', 0.42]}
       />
-      <directionalLight position={[-4, 3, 2]} intensity={0.45} />
-      <Environment preset="city" background={false} />
+      <directionalLight
+        position={[7, 9, 7]}
+        intensity={graphicsPreset.keyLightIntensity}
+        castShadow={graphicsPreset.shadows}
+        shadow-mapSize-width={graphicsPreset.shadowMapSize}
+        shadow-mapSize-height={graphicsPreset.shadowMapSize}
+      />
+      <directionalLight
+        position={[-5, 4, 2]}
+        color="#93c5fd"
+        intensity={graphicsPreset.rimLightIntensity}
+      />
+      <group ref={atmosphereRef} position={[0, 0, -22]}>
+        <mesh scale={[36, 26, 1]}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial color={graphicsPreset.backgroundA} />
+        </mesh>
+        <mesh position={[0, 0, 0.2]} rotation={[0, 0, Math.PI * 0.16]} scale={[26, 17, 1]}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial
+            color={graphicsPreset.backgroundB}
+            transparent
+            opacity={0.52}
+          />
+        </mesh>
+        <mesh
+          position={[0, 0, 0.4]}
+          rotation={[0, 0, -Math.PI * 0.1]}
+          scale={[12, 12, 1]}
+        >
+          <ringGeometry args={[0.58, 0.72, 64]} />
+          <meshBasicMaterial color="#5eead4" transparent opacity={0.16} />
+        </mesh>
+      </group>
 
       <group ref={worldRef}>
         <instancedMesh
@@ -771,8 +893,9 @@ const Growth: React.FC = () => {
           />
           <meshStandardMaterial
             vertexColors
-            roughness={0.42}
-            metalness={0.08}
+            roughness={0.24}
+            metalness={0.14}
+            flatShading
           />
         </instancedMesh>
 
@@ -787,8 +910,11 @@ const Growth: React.FC = () => {
           />
           <meshStandardMaterial
             vertexColors
-            roughness={0.38}
-            metalness={0.06}
+            roughness={0.3}
+            metalness={0.12}
+            emissive="#4a1524"
+            emissiveIntensity={graphicsPreset.name === 'HIGH' ? 0.28 : 0.2}
+            flatShading
           />
         </instancedMesh>
 
@@ -799,10 +925,10 @@ const Growth: React.FC = () => {
           <octahedronGeometry args={[0.28, 0]} />
           <meshStandardMaterial
             vertexColors
-            roughness={0.28}
-            metalness={0.2}
+            roughness={0.2}
+            metalness={0.32}
             emissive="#f59e0b"
-            emissiveIntensity={0.35}
+            emissiveIntensity={graphicsPreset.name === 'HIGH' ? 0.58 : 0.42}
           />
         </instancedMesh>
 
@@ -813,10 +939,10 @@ const Growth: React.FC = () => {
           <icosahedronGeometry args={[0.26, 0]} />
           <meshStandardMaterial
             vertexColors
-            roughness={0.3}
-            metalness={0.18}
+            roughness={0.22}
+            metalness={0.26}
             emissive="#60a5fa"
-            emissiveIntensity={0.3}
+            emissiveIntensity={graphicsPreset.name === 'HIGH' ? 0.46 : 0.34}
           />
         </instancedMesh>
       </group>
@@ -831,9 +957,12 @@ const Growth: React.FC = () => {
             ]}
           />
           <meshStandardMaterial
-            color="#ef4444"
-            roughness={0.5}
-            metalness={0.06}
+            color="#fb7185"
+            roughness={0.34}
+            metalness={0.12}
+            emissive="#3f0f1c"
+            emissiveIntensity={0.24}
+            flatShading
           />
         </mesh>
         <mesh position={[0, -PLAYER_COLLISION_RADIUS * 0.84, 0]}>
@@ -846,6 +975,17 @@ const Growth: React.FC = () => {
           />
           <meshStandardMaterial color="#111827" roughness={0.62} />
         </mesh>
+        <mesh
+          position={[0, -PLAYER_COLLISION_RADIUS * 0.18, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+        >
+          <ringGeometry args={[0.36, 0.43, 40]} />
+          <meshBasicMaterial
+            color="#34d399"
+            transparent
+            opacity={graphicsPreset.name === 'LOW' ? 0.16 : 0.24}
+          />
+        </mesh>
       </group>
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -855,8 +995,8 @@ const Growth: React.FC = () => {
             top: 14,
             left: 14,
             color: '#ffffff',
-            fontFamily: 'ui-sans-serif, system-ui',
-            textShadow: '0 2px 8px rgba(0,0,0,0.45)',
+            fontFamily: '"Avenir Next", "Segoe UI", sans-serif',
+            textShadow: '0 2px 10px rgba(0,0,0,0.5)',
           }}
         >
           <div style={{ fontSize: 13, opacity: 0.84 }}>GROWTH</div>
@@ -866,7 +1006,7 @@ const Growth: React.FC = () => {
             Best: {snap.bestScore}
           </div>
           <div style={{ fontSize: 12, opacity: 0.78 }}>
-            Speed: {snap.speed.toFixed(1)}
+            Speed: {displaySpeed.toFixed(1)}
           </div>
           {snap.shieldMs > 0 && (
             <div style={{ fontSize: 12, color: '#c4b5fd' }}>
@@ -896,10 +1036,11 @@ const Growth: React.FC = () => {
                 width: 380,
                 borderRadius: 18,
                 padding: '20px 22px',
-                background: 'rgba(17, 24, 39, 0.82)',
+                background:
+                  'linear-gradient(160deg, rgba(12, 22, 38, 0.88), rgba(18, 44, 70, 0.82))',
                 color: '#fff',
                 textAlign: 'center',
-                boxShadow: '0 16px 40px rgba(0,0,0,0.35)',
+                boxShadow: '0 18px 46px rgba(0,0,0,0.35)',
               }}
             >
               <div style={{ fontSize: 30, fontWeight: 900 }}>Growth</div>
@@ -915,10 +1056,10 @@ const Growth: React.FC = () => {
                 collect gems, and chain perfect quarter-turns.
               </div>
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                Left Arrow / Swipe Right: +90°
+                Left Arrow / Swipe Left: +90°
               </div>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Right Arrow / Swipe Left: -90°
+                Right Arrow / Swipe Right: -90°
               </div>
               {snap.phase === 'gameover' && (
                 <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>

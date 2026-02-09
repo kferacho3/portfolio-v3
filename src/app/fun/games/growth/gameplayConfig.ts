@@ -1,10 +1,9 @@
 export const gameplayConfig = {
-  baseSpeed: 3.9,
-  speedRampPerSecond: 0.065,
-  speedRampFromScore: 0.0032,
-  maxSpeed: 8.2,
-  rotationDurationMs: 188,
-  rotationQueueLimit: 3,
+  baseSpeed: 3.6,
+  speedRampPerSecond: 0.058,
+  speedRampFromScore: 0.0026,
+  maxSpeed: 6.6,
+  rotationDurationMs: 132,
   obstacleDensityCurve: {
     early: 0.18,
     mid: 0.42,
@@ -18,6 +17,7 @@ export const gameplayConfig = {
   difficultyRampSegments: 520,
   breatherEverySegments: 9,
   hardPatternStart: 0.45,
+  minSegmentsBetweenTurns: 2,
 } as const;
 
 export type GameplayConfig = typeof gameplayConfig;

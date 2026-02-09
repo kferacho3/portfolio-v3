@@ -630,15 +630,14 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Short hops are safer. Save lateral movement for lining up your next platform.',
   },
   goup: {
-    controls:
-      'Tap/Space/Click to jump • Double-tap for double jump • R to restart',
+    controls: 'Tap/Space/Click to jump • R to restart',
     objective:
-      'Auto-run up the cliffs. Jump single rises, double jump stacked towers, dodge spikes, and climb as high as possible.',
-    tips: 'Single cliffs = one jump. Double stacks need quick double jumps. Spikes show up later—short spike = jump, tall spike = double jump.',
+      'Climb a procedural stair tower. Time each jump to clear risers, cross gaps, and keep your ascent alive.',
+    tips: 'Jump slightly early on fast runs. Landing low at the step edge usually means a riser collision next.',
   },
   growth: {
     controls:
-      'Space = rotate clockwise • Left Arrow = rotate left • Right Arrow = rotate right • R to restart',
+      'Left Arrow / Swipe Left = rotate +90° • Right Arrow / Swipe Right = rotate -90° • Space = repeat last turn • R to restart',
     objective:
       'Rotate the beam to dodge growing branches. Collect gems to unlock 25+ unique characters. Speed increases over time!',
     tips: 'Watch branches grow in real-time—some are close calls! Rotate quickly when needed. Collect gems to unlock new characters.',

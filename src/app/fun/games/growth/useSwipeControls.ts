@@ -19,6 +19,64 @@ export function useSwipeControls({
 
   useEffect(() => {
     if (!enabled) return;
+    const supportsPointerEvents =
+      typeof window !== 'undefined' &&
+      typeof (window as Window & { PointerEvent?: unknown }).PointerEvent ===
+        'function';
+
+    const commitSwipe = (deltaX: number, deltaY: number) => {
+      if (Math.abs(deltaX) < threshold) return;
+      if (Math.abs(deltaY) > Math.abs(deltaX) * 0.75) return;
+      if (deltaX < 0) onLeft();
+      else onRight();
+    };
+
+    if (supportsPointerEvents) {
+      const handlePointerDown = (event: PointerEvent) => {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+          return;
+        }
+        if (activePointerId.current != null) return;
+        activePointerId.current = event.pointerId;
+        startX.current = event.clientX;
+        startY.current = event.clientY;
+      };
+
+      const handlePointerUp = (event: PointerEvent) => {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen') {
+          return;
+        }
+        if (activePointerId.current !== event.pointerId) return;
+        const sx = startX.current;
+        const sy = startY.current;
+        activePointerId.current = null;
+        startX.current = null;
+        startY.current = null;
+        if (sx == null || sy == null) return;
+        commitSwipe(event.clientX - sx, event.clientY - sy);
+      };
+
+      const handlePointerCancel = (event: PointerEvent) => {
+        if (activePointerId.current !== event.pointerId) return;
+        activePointerId.current = null;
+        startX.current = null;
+        startY.current = null;
+      };
+
+      window.addEventListener('pointerdown', handlePointerDown, {
+        passive: true,
+      });
+      window.addEventListener('pointerup', handlePointerUp, { passive: true });
+      window.addEventListener('pointercancel', handlePointerCancel, {
+        passive: true,
+      });
+
+      return () => {
+        window.removeEventListener('pointerdown', handlePointerDown);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerCancel);
+      };
+    }
 
     const handleTouchStart = (event: TouchEvent) => {
       if (event.touches.length !== 1) return;
@@ -28,59 +86,28 @@ export function useSwipeControls({
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      if (startX.current == null || startY.current == null) return;
-      const touch = event.changedTouches[0];
-      const deltaX = touch.clientX - startX.current;
-      const deltaY = touch.clientY - startY.current;
-      startX.current = null;
-      startY.current = null;
-
-      if (Math.abs(deltaX) < threshold) return;
-      if (Math.abs(deltaY) > Math.abs(deltaX) * 0.75) return;
-
-      if (deltaX < 0) onLeft();
-      else onRight();
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.pointerType !== 'touch') return;
-      if (activePointerId.current != null) return;
-      activePointerId.current = event.pointerId;
-      startX.current = event.clientX;
-      startY.current = event.clientY;
-    };
-
-    const handlePointerUp = (event: PointerEvent) => {
-      if (event.pointerType !== 'touch') return;
-      if (activePointerId.current !== event.pointerId) return;
       const sx = startX.current;
       const sy = startY.current;
-      activePointerId.current = null;
       startX.current = null;
       startY.current = null;
       if (sx == null || sy == null) return;
+      const touch = event.changedTouches[0];
+      commitSwipe(touch.clientX - sx, touch.clientY - sy);
+    };
 
-      const deltaX = event.clientX - sx;
-      const deltaY = event.clientY - sy;
-      if (Math.abs(deltaX) < threshold) return;
-      if (Math.abs(deltaY) > Math.abs(deltaX) * 0.75) return;
-
-      if (deltaX < 0) onLeft();
-      else onRight();
+    const handleTouchCancel = () => {
+      startX.current = null;
+      startY.current = null;
     };
 
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
     window.addEventListener('touchend', handleTouchEnd, { passive: true });
-    window.addEventListener('pointerdown', handlePointerDown, {
-      passive: true,
-    });
-    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('touchcancel', handleTouchCancel, { passive: true });
 
     return () => {
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('touchcancel', handleTouchCancel);
     };
   }, [enabled, threshold, onLeft, onRight]);
 }

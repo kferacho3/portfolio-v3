@@ -1,7 +1,7 @@
 'use client';
 
 import { PerformanceMonitor } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import {
   CuboidCollider,
   interactionGroups,
@@ -93,6 +93,8 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const playerBodyRef = React.useRef<RapierRigidBody | null>(null);
   const playerColliderRef = React.useRef<RapierCollider | null>(null);
   const worldBodiesRef = React.useRef<(RapierRigidBody | null)[] | null>(null);
+  const pendingCollectRef = React.useRef<number[]>([]);
+  const pendingCollectSetRef = React.useRef<Set<number>>(new Set());
 
   const inputRef = useInput(started);
 
@@ -129,8 +131,12 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
 
   useEffect(() => {
     resetRun();
+    pendingCollectRef.current.length = 0;
+    pendingCollectSetRef.current.clear();
     return () => {
       resetRun();
+      pendingCollectRef.current.length = 0;
+      pendingCollectSetRef.current.clear();
     };
   }, [resetRun]);
 
@@ -150,6 +156,8 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     setWorldData(null);
     setRunLiteMode(lowPerf);
     resetProgress();
+    pendingCollectRef.current.length = 0;
+    pendingCollectSetRef.current.clear();
     setWorldSeed((prev) => prev + 1);
   }, [lowPerf, resetEngine, resetProgress]);
 
@@ -183,9 +191,26 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
 
       const index = data?.worldIndex;
       if (typeof index !== 'number') return;
+      if (pendingCollectSetRef.current.has(index)) return;
+      pendingCollectSetRef.current.add(index);
+      pendingCollectRef.current.push(index);
+    },
+    [started]
+  );
+
+  useFrame(() => {
+    if (!started) return;
+    const queue = pendingCollectRef.current;
+    if (queue.length === 0) return;
+
+    const maxPerFrame = 24;
+    for (let i = 0; i < maxPerFrame && queue.length > 0; i += 1) {
+      const index = queue.shift();
+      if (typeof index !== 'number') break;
+      pendingCollectSetRef.current.delete(index);
 
       const result = tryCollect(index);
-      if (!result) return;
+      if (!result) continue;
 
       pushPickup({
         label: result.label,
@@ -193,9 +218,8 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
         size: result.size,
       });
       playPickup(result.size);
-    },
-    [playPickup, pushPickup, started, tryCollect]
-  );
+    }
+  });
 
   return (
     <>

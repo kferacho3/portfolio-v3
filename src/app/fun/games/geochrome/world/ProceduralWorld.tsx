@@ -257,8 +257,6 @@ export default function ProceduralWorld({
       gravityScale={0}
       linearDamping={2.4}
       angularDamping={2.4}
-      enabledTranslations={[false, false, false]}
-      enabledRotations={[false, false, false]}
       canSleep
       collisionGroups={interactionGroups(COLLISION_GROUPS.WORLD, [
         COLLISION_GROUPS.PLAYER,

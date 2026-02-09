@@ -15,10 +15,10 @@ export const GoUpMenu: React.FC<{
 
   const getCrashMessage = () => {
     switch (snap.crashType) {
-      case 'spike':
-        return 'Spiked!';
+      case 'riser':
+        return 'Riser hit!';
       case 'fell':
-        return 'Fell off!';
+        return 'Missed step!';
       default:
         return 'Game Over';
     }
@@ -60,7 +60,7 @@ export const GoUpMenu: React.FC<{
               lineHeight: 1.5,
             }}
           >
-            Tap to jump • Double-tap or touch walls for double jump
+            Tap to jump • Time the risers • Clear gaps
           </div>
 
           <div
@@ -150,7 +150,7 @@ export const GoUpMenu: React.FC<{
               </div>
               <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>
                 Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps:{' '}
-                {snap.wallsClimbed} • Spikes: {snap.spikesAvoided}
+                {snap.wallsClimbed}
               </div>
             </div>
           )}
@@ -163,8 +163,8 @@ export const GoUpMenu: React.FC<{
               lineHeight: 1.5,
             }}
           >
-            Jump gaps and climb steps. Avoid spikes for +1 each. Touch wall
-            pillars in air to restore double jump.
+            One-tap stair climber. Auto-forward up a procedural tower, jump the
+            step-ups, and land clean or you crash into the riser.
           </div>
 
           <div style={{ marginTop: 12, fontSize: 11, opacity: 0.4 }}>

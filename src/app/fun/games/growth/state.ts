@@ -96,11 +96,20 @@ export const growthState = proxy<
   },
 
   tickTimers(dt: number) {
+    const updateStepMs = 50;
     if (this.shieldMs > 0) {
-      this.shieldMs = Math.max(0, this.shieldMs - dt * 1000);
+      const next = Math.max(0, this.shieldMs - dt * 1000);
+      const quantized = next === 0 ? 0 : Math.ceil(next / updateStepMs) * updateStepMs;
+      if (quantized !== this.shieldMs) {
+        this.shieldMs = quantized;
+      }
     }
     if (this.boostMs > 0) {
-      this.boostMs = Math.max(0, this.boostMs - dt * 1000);
+      const next = Math.max(0, this.boostMs - dt * 1000);
+      const quantized = next === 0 ? 0 : Math.ceil(next / updateStepMs) * updateStepMs;
+      if (quantized !== this.boostMs) {
+        this.boostMs = quantized;
+      }
     }
   },
 

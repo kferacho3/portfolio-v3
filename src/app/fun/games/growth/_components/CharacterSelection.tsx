@@ -26,9 +26,9 @@ export default function CharacterSelection() {
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: 4 }}>Controls</div>
-        <div>Left Arrow / Swipe Right: rotate +90°</div>
-        <div>Right Arrow / Swipe Left: rotate -90°</div>
-        <div>Tap / Space: start or rotate last direction</div>
+        <div>Left Arrow / Swipe Left: rotate +90°</div>
+        <div>Right Arrow / Swipe Right: rotate -90°</div>
+        <div>Space / Click: repeat last direction</div>
       </div>
     </Html>
   );
