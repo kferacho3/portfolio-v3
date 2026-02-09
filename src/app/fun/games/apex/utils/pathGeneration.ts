@@ -102,28 +102,38 @@ export const advanceCurvedState = (
   // - Use sign flips (tap) to change curvature direction.
   const targetAbsYaw = THREE.MathUtils.clamp(
     Math.abs(curvature) > 0.001 ? Math.abs(curvature) : CURVE_DEFAULT_CURVATURE,
-    0.2,
+    0.46,
     CURVE_MAX_YAW * 0.88
   );
   const turnEnergy = THREE.MathUtils.clamp(
     Math.abs(curvatureVel) > 0.001
       ? Math.abs(curvatureVel)
       : CURVE_DEFAULT_CURVATURE_VEL,
-    0.7,
-    1.55
+    0.85,
+    1.65
   );
-  const targetYaw = targetAbsYaw * (directionSign >= 0 ? 1 : -1);
-  const turnRate = CURVE_BASE_CURVATURE * 0.52 * turnEnergy;
+  const sign = directionSign >= 0 ? 1 : -1;
+  const turnRate =
+    CURVE_BASE_CURVATURE * (0.2 + targetAbsYaw * 0.42) * turnEnergy;
 
   const lateral = pos.dot(curveRight);
-  const boundaryForce =
-    THREE.MathUtils.clamp(Math.abs(lateral) / CURVE_BOUNDARY_HARD, 0, 1) *
-    Math.sign(lateral);
+  const boundaryT = THREE.MathUtils.clamp(
+    (Math.abs(lateral) - CURVE_BOUNDARY_SOFT) /
+      Math.max(CURVE_BOUNDARY_HARD - CURVE_BOUNDARY_SOFT, 0.001),
+    0,
+    1
+  );
+  const boundaryForce = Math.sign(lateral) * boundaryT * CURVE_BOUNDARY_GAIN;
 
-  const steer = targetYaw - theta;
-  theta += steer * turnRate * step;
-  theta -= boundaryForce * 0.45 * turnRate * step;
-  theta = THREE.MathUtils.damp(theta, 0, CURVE_FORWARD_BIAS * 0.45, step);
+  // Integrate heading as a true curve (not just "aim-at-angle"),
+  // then apply gentle stabilization and boundary steering.
+  theta += (sign * turnRate - boundaryForce * 0.42) * step;
+  theta = THREE.MathUtils.damp(
+    theta,
+    0,
+    CURVE_FORWARD_BIAS * (0.35 + boundaryT * 0.8),
+    step
+  );
   theta = THREE.MathUtils.clamp(theta, -CURVE_MAX_YAW, CURVE_MAX_YAW);
 
   const c = Math.cos(theta);
@@ -136,16 +146,17 @@ export const advanceCurvedState = (
   const normal = tempNormal.set(-tangent.z, 0, tangent.x);
   pos.addScaledVector(tangent, step);
 
-  // Pull the path back toward the diagonal centerline (in curveRight-space),
-  // keeping long runs bounded without introducing discontinuities.
+  // Only pull toward center when we are drifting close to soft bounds.
+  // This preserves visible long arcs instead of flattening to a straight lane.
   const lateralAfter = pos.dot(curveRight);
-  const lateralPulled = THREE.MathUtils.damp(
-    lateralAfter,
-    0,
-    CURVE_CENTER_PULL,
-    step
-  );
-  pos.addScaledVector(curveRight, lateralPulled - lateralAfter);
+  const softClamp = CURVE_BOUNDARY_SOFT * 0.82;
+  if (Math.abs(lateralAfter) > softClamp) {
+    const excess = Math.abs(lateralAfter) - softClamp;
+    pos.addScaledVector(
+      curveRight,
+      -Math.sign(lateralAfter) * excess * CURVE_CENTER_PULL
+    );
+  }
   pos.y = -TILE_DEPTH / 2;
 
   return {
@@ -223,8 +234,12 @@ export const generateClassicTile = (): THREE.Vector3 => {
 
 export const generateCurvedTiles = () => {
   if (mutation.pathCurveSegmentRemaining <= 0) {
+    const nearCenter =
+      Math.abs(mutation.lastTilePos.dot(curveRight)) <
+      CURVE_BOUNDARY_SOFT * 0.5;
     const shouldFlip =
-      Math.abs(mutation.pathCurveTheta) > 0.32 || Math.random() < 0.82;
+      Math.abs(mutation.pathCurveTheta) > 0.34 ||
+      (nearCenter ? Math.random() < 0.64 : Math.random() < 0.88);
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_RANGE[0],
       CURVE_SEGMENT_RANGE[1]
@@ -234,19 +249,27 @@ export const generateCurvedTiles = () => {
     } else if (shouldFlip) {
       mutation.pathCurveDirection *= -1;
     }
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.28, 0.52);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.88, 1.2);
+    mutation.pathCurveCurvature = THREE.MathUtils.clamp(
+      CURVE_DEFAULT_CURVATURE + THREE.MathUtils.randFloatSpread(0.2),
+      0.5,
+      0.82
+    );
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.clamp(
+      CURVE_DEFAULT_CURVATURE_VEL + THREE.MathUtils.randFloatSpread(0.35),
+      0.9,
+      1.45
+    );
   }
 
-  const nearYawLimit = Math.abs(mutation.pathCurveTheta) > CURVE_MAX_YAW * 0.92;
+  const nearYawLimit = Math.abs(mutation.pathCurveTheta) > CURVE_MAX_YAW * 0.95;
   if (nearYawLimit) {
     mutation.pathCurveDirection *= -1;
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.36, 0.58);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.95, 1.3);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.62, 0.84);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.2, 1.6);
   }
 
   const lateral = mutation.lastTilePos.dot(curveRight);
@@ -256,8 +279,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.4, 0.62);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.95, 1.35);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.64, 0.86);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.2, 1.65);
   }
 
   const prevPos = mutation.lastTilePos.clone();
@@ -293,8 +316,8 @@ export const generateCurvedTiles = () => {
         CURVE_SEGMENT_SHORT_RANGE[1]
       )
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.38, 0.62);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.98, 1.35);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.62, 0.86);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(1.2, 1.65);
 
     result = advanceCurvedState(
       mutation.lastTilePos,
