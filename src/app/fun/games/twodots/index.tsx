@@ -44,6 +44,7 @@ type LevelConfig = {
   moves: number;
   targets: number[];
   bombChance: number;
+  scoreTarget: number;
   starThresholds: [number, number];
 };
 
@@ -63,6 +64,13 @@ type SelectionState = {
   loop: boolean;
 };
 
+type ConnectableSegment = {
+  a: number;
+  b: number;
+  colorIndex: number;
+  clusterSize: number;
+};
+
 type LineHandle = Line2 & {
   visible: boolean;
   geometry?: THREE.BufferGeometry & {
@@ -72,13 +80,9 @@ type LineHandle = Line2 & {
   computeLineDistances?: () => void;
 };
 
-type BloomHandle = {
-  intensity: number;
-};
-
-type ChromaHandle = {
-  offset: THREE.Vector2;
-};
+type RunMode = 'infinite' | 'timed' | 'levels';
+type EndReason = 'moves' | 'connections' | 'time';
+type Grade = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond';
 
 const BEST_KEY = 'rachos-fun-twodots-best';
 const SETTINGS_KEY = 'rachos-fun-twodots-settings-v2';
@@ -104,21 +108,48 @@ const LEVELS: LevelConfig[] = [
     moves: 22,
     targets: [14, 14, 14, 0, 0],
     bombChance: 0.01,
+    scoreTarget: 280,
     starThresholds: [5, 10],
   },
   {
     moves: 24,
     targets: [0, 16, 16, 16, 0],
     bombChance: 0.015,
+    scoreTarget: 420,
     starThresholds: [6, 11],
   },
   {
     moves: 26,
     targets: [12, 12, 12, 12, 12],
     bombChance: 0.02,
+    scoreTarget: 620,
     starThresholds: [7, 12],
   },
 ];
+
+const MODE_META: Record<
+  RunMode,
+  { title: string; subtitle: string; accent: string; short: string }
+> = {
+  infinite: {
+    title: 'Infinite Orbit',
+    subtitle: 'Play until no adjacent pair remains.',
+    accent: '#22D3EE',
+    short: 'INF',
+  },
+  timed: {
+    title: 'Timed Trials',
+    subtitle: 'Score as much as possible before time runs out.',
+    accent: '#F59E0B',
+    short: 'TMR',
+  },
+  levels: {
+    title: 'Level Campaign',
+    subtitle: 'Hit score + target clears with limited moves.',
+    accent: '#A78BFA',
+    short: 'LVL',
+  },
+};
 
 const vec3A = new THREE.Vector3();
 const vec3B = new THREE.Vector3();
@@ -239,6 +270,7 @@ function getLevelConfig(level: number): LevelConfig {
         : Math.round(target + extra * 1.2)
     ),
     bombChance: Math.min(0.06, base.bombChance + extra * 0.0035),
+    scoreTarget: Math.round(base.scoreTarget + extra * 220),
     starThresholds: [
       base.starThresholds[0] + Math.floor(extra * 0.6),
       base.starThresholds[1] + Math.floor(extra * 0.9),
@@ -250,6 +282,25 @@ function computeStars(movesLeft: number, thresholds: [number, number]) {
   if (movesLeft >= thresholds[1]) return 3;
   if (movesLeft >= thresholds[0]) return 2;
   return 1;
+}
+
+function computeGrade(
+  score: number,
+  targetScore: number,
+  movesLeft: number,
+  totalMoves: number
+): Grade {
+  if (targetScore <= 0) return 'Bronze';
+
+  const ratio = score / Math.max(1, targetScore);
+  const moveBonus = totalMoves > 0 ? Math.max(0, movesLeft / totalMoves) * 0.18 : 0;
+  const performance = ratio + moveBonus;
+
+  if (performance >= 1.85) return 'Diamond';
+  if (performance >= 1.58) return 'Platinum';
+  if (performance >= 1.32) return 'Gold';
+  if (performance >= 1.08) return 'Silver';
+  return 'Bronze';
 }
 
 function createRandomDot(rng: SeededRandom, config: LevelConfig): DotCell {
@@ -283,6 +334,89 @@ function hasAvailableMoves(board: Board) {
     }
   }
   return false;
+}
+
+function computeConnectableSegments(board: Board): ConnectableSegment[] {
+  const clusterSizes = new Uint16Array(CELL_COUNT);
+  const visited = new Uint8Array(CELL_COUNT);
+  const queue: number[] = [];
+
+  for (let start = 0; start < CELL_COUNT; start += 1) {
+    if (visited[start]) continue;
+
+    const startPos = fromIndex(start);
+    const startCell = board[startPos.r]?.[startPos.c];
+    if (!startCell) continue;
+
+    queue.length = 0;
+    const cluster: number[] = [];
+    const color = startCell.colorIndex;
+    visited[start] = 1;
+    queue.push(start);
+
+    while (queue.length > 0) {
+      const idx = queue.pop();
+      if (idx == null) continue;
+      cluster.push(idx);
+
+      const { r, c } = fromIndex(idx);
+      const neighbors = [
+        { nr: r - 1, nc: c },
+        { nr: r + 1, nc: c },
+        { nr: r, nc: c - 1 },
+        { nr: r, nc: c + 1 },
+      ];
+
+      for (let i = 0; i < neighbors.length; i += 1) {
+        const { nr, nc } = neighbors[i];
+        if (nr < 0 || nr >= ROWS || nc < 0 || nc >= COLS) continue;
+        const nIdx = toIndex(nr, nc);
+        if (visited[nIdx]) continue;
+        const neighborCell = board[nr]?.[nc];
+        if (!neighborCell || neighborCell.colorIndex !== color) continue;
+        visited[nIdx] = 1;
+        queue.push(nIdx);
+      }
+    }
+
+    const size = cluster.length;
+    for (let i = 0; i < cluster.length; i += 1) {
+      clusterSizes[cluster[i]] = size;
+    }
+  }
+
+  const segments: ConnectableSegment[] = [];
+  for (let r = 0; r < ROWS; r += 1) {
+    for (let c = 0; c < COLS; c += 1) {
+      const current = board[r]?.[c];
+      if (!current) continue;
+      const currentIdx = toIndex(r, c);
+
+      const right = board[r]?.[c + 1];
+      if (right && right.colorIndex === current.colorIndex) {
+        const rightIdx = toIndex(r, c + 1);
+        segments.push({
+          a: currentIdx,
+          b: rightIdx,
+          colorIndex: current.colorIndex,
+          clusterSize: Math.max(clusterSizes[currentIdx], clusterSizes[rightIdx]),
+        });
+      }
+
+      const down = board[r + 1]?.[c];
+      if (down && down.colorIndex === current.colorIndex) {
+        const downIdx = toIndex(r + 1, c);
+        segments.push({
+          a: currentIdx,
+          b: downIdx,
+          colorIndex: current.colorIndex,
+          clusterSize: Math.max(clusterSizes[currentIdx], clusterSizes[downIdx]),
+        });
+      }
+    }
+  }
+
+  return segments;
 }
 
 function reshuffleBoard(board: Board, rng: SeededRandom) {
@@ -327,11 +461,6 @@ function ensurePlayable(board: Board, rng: SeededRandom) {
 }
 
 function updateLineGeometry(line: LineHandle, points: THREE.Vector3[]) {
-  if (typeof line.setPoints === 'function') {
-    line.setPoints(points);
-    return;
-  }
-
   const geometry = line.geometry;
   if (!geometry || typeof geometry.setPositions !== 'function') {
     return;
@@ -548,6 +677,14 @@ export default function TwoDots() {
   const input = useInputRef();
   const { camera } = useThree();
 
+  const [selectedMode, setSelectedMode] = useState<RunMode>('levels');
+  const [endReason, setEndReason] = useState<EndReason>('moves');
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [movesMade, setMovesMade] = useState(0);
+  const [lastGrade, setLastGrade] = useState<Grade | null>(null);
+  const [connectableSegments, setConnectableSegments] = useState<
+    ConnectableSegment[]
+  >([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [highQuality, setHighQuality] = useState(true);
   const [showFps, setShowFps] = useState(false);
@@ -572,6 +709,10 @@ export default function TwoDots() {
     path: [],
     loop: false,
   });
+
+  const modeRef = useRef<RunMode>('levels');
+  const timerRef = useRef(0);
+  const timerDisplayRef = useRef(0);
 
   const hoveredIdRef = useRef<number | null>(null);
   const lastHapticIdRef = useRef<number | null>(null);
@@ -637,7 +778,10 @@ export default function TwoDots() {
 
   const haloRef = useRef<THREE.Mesh>(null);
   const tailRef = useRef<THREE.Mesh>(null);
+  const chainCoreRef = useRef<THREE.Mesh>(null);
+  const chainAuraRef = useRef<THREE.Mesh>(null);
   const lineRef = useRef<LineHandle | null>(null);
+  const chainCenterRef = useRef(new THREE.Vector3());
 
   const dotMaterial = useMemo(() => {
     const shader = new THREE.ShaderMaterial({
@@ -758,8 +902,8 @@ export default function TwoDots() {
     return shader;
   }, []);
 
-  const bloomRef = useRef<BloomHandle | null>(null);
-  const chromaRef = useRef<ChromaHandle | null>(null);
+  const bloomRef = useRef<any>(null);
+  const chromaRef = useRef<any>(null);
 
   const applyInstanceMatrices = useCallback(
     (mesh: THREE.InstancedMesh | null, z: number) => {
@@ -819,6 +963,7 @@ export default function TwoDots() {
       if (resetMotion) yOffsetAttr.needsUpdate = true;
 
       twoDotsState.bombs = bombCount;
+      setConnectableSegments(computeConnectableSegments(board));
     },
     [bombAttr, colorAttr, yOffsetAttr]
   );
@@ -849,41 +994,29 @@ export default function TwoDots() {
     }
   }, []);
 
-  const runShuffle = useCallback(() => {
-    const cfg = levelConfigRef.current;
-    const rng = new SeededRandom(
-      twoDotsState.worldSeed + twoDotsState.score + twoDotsState.movesLeft * 13
-    );
+  const buildModeConfig = useCallback((level: number, mode: RunMode) => {
+    const base = getLevelConfig(level);
+    if (mode === 'levels') return base;
 
-    boardRef.current = ensurePlayable(
-      reshuffleBoard(boardRef.current, rng),
-      rng
-    );
-    updateBoardAttributes();
-
-    const yOffsets = yOffsetAttr.array as Float32Array;
-    const yVelocity = yVelocityRef.current;
-    for (let i = 0; i < CELL_COUNT; i += 1) {
-      yOffsets[i] = rng.float(0.15, 0.45);
-      yVelocity[i] = -rng.float(0.1, 0.25);
-    }
-    yOffsetAttr.needsUpdate = true;
-
-    impactRef.current.whirl = 1;
-    twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
-
-    if (!hasAvailableMoves(boardRef.current)) {
-      boardRef.current = ensurePlayable(
-        createBoard(rng.child(17), cfg),
-        rng.child(33)
-      );
-      updateBoardAttributes();
-    }
-  }, [updateBoardAttributes, yOffsetAttr]);
+    return {
+      ...base,
+      moves: 9999,
+      targets: [0, 0, 0, 0, 0],
+      scoreTarget: 0,
+      bombChance:
+        mode === 'infinite'
+          ? Math.min(0.095, base.bombChance + 0.02)
+          : Math.min(0.085, base.bombChance + 0.012),
+    };
+  }, []);
 
   const beginLevel = useCallback(
-    (level: number, resetScore: boolean) => {
-      const config = getLevelConfig(level);
+    (level: number, resetScore: boolean, modeOverride?: RunMode) => {
+      const mode = modeOverride ?? modeRef.current;
+      modeRef.current = mode;
+      setSelectedMode(mode);
+
+      const config = buildModeConfig(level, mode);
       levelConfigRef.current = config;
 
       twoDotsState.phase = 'playing';
@@ -893,6 +1026,19 @@ export default function TwoDots() {
 
       twoDotsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
       twoDotsState.setLevelState(level, config.moves, config.targets, 0, 0);
+      setMovesMade(0);
+      setEndReason('moves');
+      setLastGrade(null);
+
+      if (mode === 'timed') {
+        timerRef.current = 75;
+        timerDisplayRef.current = 75;
+        setTimeLeft(75);
+      } else {
+        timerRef.current = 0;
+        timerDisplayRef.current = 0;
+        setTimeLeft(0);
+      }
 
       const rng = new SeededRandom(twoDotsState.worldSeed + level * 109);
       boardRef.current = ensurePlayable(
@@ -914,7 +1060,7 @@ export default function TwoDots() {
       updateBoardAttributes(true);
       resetSelection();
     },
-    [resetSelection, updateBoardAttributes]
+    [buildModeConfig, resetSelection, updateBoardAttributes]
   );
 
   const completeMove = useCallback(
@@ -922,11 +1068,16 @@ export default function TwoDots() {
       if (snap.phase !== 'playing') return;
 
       const config = levelConfigRef.current;
+      const mode = modeRef.current;
       const rng = new SeededRandom(
         twoDotsState.worldSeed + twoDotsState.score + Date.now()
       );
 
-      twoDotsState.movesLeft = Math.max(0, twoDotsState.movesLeft - 1);
+      if (mode === 'levels') {
+        twoDotsState.movesLeft = Math.max(0, twoDotsState.movesLeft - 1);
+      } else {
+        setMovesMade((value) => value + 1);
+      }
 
       const result = resolveMove(
         boardRef.current,
@@ -970,16 +1121,31 @@ export default function TwoDots() {
         0,
         config.targets.length
       );
-      const complete =
+      const targetsComplete =
         hasTargets && remainingForTargets.every((value) => value <= 0);
+
+      const scoreComplete = twoDotsState.score >= config.scoreTarget;
+      const complete = mode === 'levels' ? targetsComplete && scoreComplete : false;
 
       if (complete) {
         twoDotsState.stars = computeStars(
           twoDotsState.movesLeft,
           config.starThresholds
         );
+        setLastGrade(
+          computeGrade(
+            twoDotsState.score,
+            config.scoreTarget,
+            twoDotsState.movesLeft,
+            config.moves
+          )
+        );
         twoDotsState.phase = 'levelComplete';
-      } else if (twoDotsState.movesLeft <= 0) {
+      } else if (mode === 'levels' && twoDotsState.movesLeft <= 0) {
+        setEndReason('moves');
+        twoDotsState.endGame();
+      } else if (!hasAvailableMoves(boardRef.current)) {
+        setEndReason('connections');
         twoDotsState.endGame();
       } else {
         inputLockedRef.current = true;
@@ -1110,13 +1276,13 @@ export default function TwoDots() {
       if (typeof id !== 'number') return;
 
       if (snap.phase === 'menu') {
-        beginLevel(1, true);
+        beginLevel(1, true, selectedMode);
         return;
       }
 
       startSelection(id);
     },
-    [beginLevel, snap.phase, startSelection]
+    [beginLevel, selectedMode, snap.phase, startSelection]
   );
 
   const onHitPointerMove = useCallback(
@@ -1155,7 +1321,7 @@ export default function TwoDots() {
 
   useEffect(() => {
     const hasTargets = snap.targetColors.some((target) => target > 0);
-    if (snap.phase === 'playing' && !hasTargets) {
+    if (snap.phase === 'playing' && modeRef.current === 'levels' && !hasTargets) {
       beginLevel(Math.max(1, snap.level || 1), true);
     }
   }, [beginLevel, snap.level, snap.phase, snap.targetColors]);
@@ -1204,6 +1370,10 @@ export default function TwoDots() {
   }, [highQuality, showFps]);
 
   useEffect(() => {
+    modeRef.current = selectedMode;
+  }, [selectedMode]);
+
+  useEffect(() => {
     const onPointerUp = () => finishSelection();
     window.addEventListener('pointerup', onPointerUp);
     return () => window.removeEventListener('pointerup', onPointerUp);
@@ -1217,11 +1387,35 @@ export default function TwoDots() {
 
     if (!paused && !settingsOpen && didConfirm) {
       if (snap.phase === 'menu') {
-        beginLevel(1, true);
+        beginLevel(1, true, selectedMode);
       } else if (snap.phase === 'gameover') {
-        beginLevel(snap.level, false);
+        if (modeRef.current === 'levels') {
+          beginLevel(Math.max(1, snap.level), false, 'levels');
+        } else {
+          beginLevel(1, true, modeRef.current);
+        }
       } else if (snap.phase === 'levelComplete') {
-        beginLevel(snap.level + 1, false);
+        beginLevel(snap.level + 1, false, 'levels');
+      }
+    }
+
+    if (
+      modeRef.current === 'timed' &&
+      snap.phase === 'playing' &&
+      !paused &&
+      !settingsOpen
+    ) {
+      const next = Math.max(0, timerRef.current - delta);
+      timerRef.current = next;
+
+      if (Math.abs(next - timerDisplayRef.current) >= 0.1 || next === 0) {
+        timerDisplayRef.current = next;
+        setTimeLeft(next);
+      }
+
+      if (next <= 0) {
+        setEndReason('time');
+        twoDotsState.endGame();
       }
     }
 
@@ -1276,9 +1470,20 @@ export default function TwoDots() {
     if (line) {
       if (selection.active && selection.path.length > 0) {
         const points: THREE.Vector3[] = [];
+        chainCenterRef.current.set(0, 0, 0);
         for (let i = 0; i < selection.path.length; i += 1) {
           const idx = selection.path[i];
-          points.push(centers[idx]);
+          const center = centers[idx];
+          chainCenterRef.current.add(center);
+          points.push(center);
+        }
+
+        chainCenterRef.current.multiplyScalar(1 / selection.path.length);
+        chainCenterRef.current.z = 0.16;
+
+        points.unshift(chainCenterRef.current.clone());
+        if (selection.path.length >= 6) {
+          points.push(chainCenterRef.current.clone());
         }
 
         points.push(snappedMouseRef.current.clone());
@@ -1288,8 +1493,46 @@ export default function TwoDots() {
 
         line.visible = true;
         updateLineGeometry(line, points);
+
+        const lineMaterial = line.material as THREE.Material & {
+          color?: THREE.Color;
+        };
+        if (lineMaterial?.color) {
+          if (selection.path.length >= 6) {
+            const hue = 0.125 + Math.sin(state.clock.elapsedTime * 6.5) * 0.02;
+            lineMaterial.color.setHSL(hue, 0.94, 0.72);
+          } else if (selection.path.length >= 4) {
+            lineMaterial.color.set('#FFD166');
+          } else if (selection.colorIndex != null) {
+            lineMaterial.color.set(
+              PALETTE[selection.colorIndex]?.color ?? '#FFFFFF'
+            );
+          } else {
+            lineMaterial.color.set('#FFFFFF');
+          }
+        }
       } else {
         line.visible = false;
+      }
+    }
+
+    const chainCore = chainCoreRef.current;
+    const chainAura = chainAuraRef.current;
+    const hasChainCore = selection.active && selection.path.length >= 6;
+    if (chainCore) {
+      chainCore.visible = hasChainCore;
+      if (hasChainCore) {
+        chainCore.position.copy(chainCenterRef.current);
+        const pulse = 1 + Math.sin(state.clock.elapsedTime * 18) * 0.24;
+        chainCore.scale.setScalar(pulse);
+      }
+    }
+    if (chainAura) {
+      chainAura.visible = hasChainCore;
+      if (hasChainCore) {
+        chainAura.position.copy(chainCenterRef.current);
+        const pulse = 1.35 + Math.sin(state.clock.elapsedTime * 12) * 0.2;
+        chainAura.scale.setScalar(pulse);
       }
     }
 
@@ -1396,12 +1639,6 @@ export default function TwoDots() {
     if (pendingSettleRef.current && !anyMoving) {
       pendingSettleRef.current = false;
       inputLockedRef.current = false;
-
-      if (snap.phase === 'playing' && !hasAvailableMoves(boardRef.current)) {
-        inputLockedRef.current = true;
-        runShuffle();
-        pendingSettleRef.current = true;
-      }
     }
 
     impactRef.current.pulse = THREE.MathUtils.damp(
@@ -1480,7 +1717,11 @@ export default function TwoDots() {
   const lineColor =
     selectionVisual.colorIndex == null
       ? '#ffffff'
-      : (PALETTE[selectionVisual.colorIndex]?.color ?? '#ffffff');
+      : selectionVisual.count >= 6
+        ? '#FFE57A'
+        : selectionVisual.count >= 4
+          ? '#FFD166'
+          : (PALETTE[selectionVisual.colorIndex]?.color ?? '#ffffff');
 
   const targetItems = snap.targetColors
     .map((target, idx) => ({
@@ -1490,6 +1731,22 @@ export default function TwoDots() {
       remaining: snap.remainingColors[idx] ?? target,
     }))
     .filter((item) => item.target > 0);
+
+  const modeMeta = MODE_META[selectedMode];
+  const isLevelsMode = selectedMode === 'levels';
+  const isTimedMode = selectedMode === 'timed';
+  const gameOverTitle =
+    endReason === 'connections'
+      ? 'No Connections Left'
+      : endReason === 'time'
+        ? 'Time Up'
+        : 'Out of Moves';
+  const gameOverSubtitle =
+    endReason === 'connections'
+      ? 'The board has no adjacent matching pairs.'
+      : endReason === 'time'
+        ? 'Your trial timer ended. Great pace.'
+        : 'No moves remain for this level.';
 
   return (
     <group>
@@ -1512,7 +1769,7 @@ export default function TwoDots() {
         onPointerDown={(event) => {
           if (snap.phase !== 'menu' || paused || settingsOpen) return;
           event.stopPropagation();
-          beginLevel(1, true);
+          beginLevel(1, true, selectedMode);
         }}
       >
         <boxGeometry
@@ -1564,17 +1821,62 @@ export default function TwoDots() {
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </instancedMesh>
 
+      {connectableSegments.map((segment, idx) => {
+        const a = centers[segment.a];
+        const b = centers[segment.b];
+        const isBurning = segment.clusterSize >= 6;
+        const accent =
+          isBurning && selectionVisual.active
+            ? '#FFE57A'
+            : (PALETTE[segment.colorIndex]?.color ?? '#FFFFFF');
+        return (
+          <Line
+            key={`hint-${idx}`}
+            points={[
+              new THREE.Vector3(a.x, a.y, 0.12),
+              new THREE.Vector3(b.x, b.y, 0.12),
+            ]}
+            color={accent}
+            lineWidth={isBurning ? 2.8 : 1.3}
+            transparent
+            opacity={isBurning ? 0.38 : 0.16}
+          />
+        );
+      })}
+
       <Line
         ref={lineRef}
         points={[new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]}
         color={lineColor}
-        lineWidth={Math.min(8, 3 + selectionVisual.count * 0.45)}
+        lineWidth={Math.min(10, 3 + selectionVisual.count * 0.6)}
         dashed={selectionVisual.loop}
         dashSize={0.15}
         gapSize={0.12}
         transparent
         opacity={0.95}
       />
+
+      <mesh ref={chainAuraRef} visible={false} position={[0, 0, 0.19]}>
+        <ringGeometry args={[DOT_RADIUS * 0.55, DOT_RADIUS * 0.95, 36]} />
+        <meshBasicMaterial
+          color="#FFB703"
+          transparent
+          opacity={0.55}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+      <mesh ref={chainCoreRef} visible={false} position={[0, 0, 0.2]}>
+        <circleGeometry args={[DOT_RADIUS * 0.3, 24]} />
+        <meshBasicMaterial
+          color="#FFF8CC"
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
 
       <mesh ref={haloRef} visible={false} position={[0, 0, 0.18]}>
         <ringGeometry args={[DOT_RADIUS * 0.95, DOT_RADIUS * 1.3, 36]} />
@@ -1622,45 +1924,69 @@ export default function TwoDots() {
             Dot Current
           </div>
           <div style={{ marginTop: 6, fontSize: 13, opacity: 0.95 }}>
-            Level <b>{snap.level}</b> · Moves <b>{snap.movesLeft}</b>
+            {modeMeta.title} · Level <b>{snap.level}</b>
           </div>
           <div style={{ marginTop: 4, fontSize: 13, opacity: 0.95 }}>
             Score <b>{snap.score}</b> · Best <b>{snap.best}</b>
           </div>
+          <div style={{ marginTop: 4, fontSize: 13, opacity: 0.95 }}>
+            {isLevelsMode ? (
+              <>
+                Moves Left <b>{snap.movesLeft}</b> · Target Score{' '}
+                <b>{levelConfigRef.current.scoreTarget}</b>
+              </>
+            ) : (
+              <>
+                Moves Made <b>{movesMade}</b>
+                {isTimedMode ? (
+                  <>
+                    {' '}
+                    · Time <b>{timeLeft.toFixed(1)}s</b>
+                  </>
+                ) : (
+                  <> · End condition: no connections</>
+                )}
+              </>
+            )}
+          </div>
 
-          <div style={{ marginTop: 10, fontSize: 11, opacity: 0.82 }}>
-            Targets
-          </div>
-          <div
-            style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}
-          >
-            {targetItems.map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '4px 7px',
-                  borderRadius: 999,
-                  background: 'rgba(5, 14, 24, 0.5)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                }}
-              >
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    background: item.color,
-                  }}
-                />
-                <span style={{ fontSize: 11 }}>
-                  {item.remaining}/{item.target}
-                </span>
+          {isLevelsMode && targetItems.length > 0 && (
+            <>
+              <div style={{ marginTop: 10, fontSize: 11, opacity: 0.82 }}>
+                Targets
               </div>
-            ))}
-          </div>
+              <div
+                style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}
+              >
+                {targetItems.map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 7px',
+                      borderRadius: 999,
+                      background: 'rgba(5, 14, 24, 0.5)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 999,
+                        background: item.color,
+                      }}
+                    />
+                    <span style={{ fontSize: 11 }}>
+                      {item.remaining}/{item.target}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div
@@ -1817,60 +2143,205 @@ export default function TwoDots() {
                 style={{ fontSize: 30, fontWeight: 900, letterSpacing: 0.4 }}
               >
                 {snap.phase === 'menu' && 'Draw The Chain'}
-                {snap.phase === 'gameover' && 'Out of Moves'}
+                {snap.phase === 'gameover' && gameOverTitle}
                 {snap.phase === 'levelComplete' &&
                   `Level ${snap.level} Cleared`}
               </div>
 
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 14,
-                  opacity: 0.88,
-                  lineHeight: 1.45,
-                }}
-              >
-                Connect neighboring dots with precision. Build a loop to trigger
-                global color clears and bomb cascades.
-              </div>
-
-              {snap.phase === 'levelComplete' && (
-                <div style={{ marginTop: 10, fontSize: 13, opacity: 0.88 }}>
-                  Stars: <b>{snap.stars}</b> / 3
-                </div>
-              )}
-
-              <div
-                style={{
-                  marginTop: 14,
-                  display: 'flex',
-                  gap: 10,
-                  justifyContent: 'center',
-                }}
-              >
-                {snap.phase === 'menu' && (
-                  <button
-                    type="button"
-                    onClick={() => beginLevel(1, true)}
+              {snap.phase === 'menu' && (
+                <>
+                  <div
                     style={{
-                      padding: '9px 14px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      background: 'rgba(14, 116, 144, 0.42)',
-                      color: '#F8FAFC',
-                      fontWeight: 700,
-                      cursor: 'pointer',
+                      marginTop: 10,
+                      fontSize: 14,
+                      opacity: 0.88,
+                      lineHeight: 1.45,
                     }}
                   >
-                    Start Run
-                  </button>
-                )}
+                    Pick a mode, drag through matching dots, and close loops to
+                    detonate global clears.
+                  </div>
 
-                {snap.phase === 'gameover' && (
-                  <>
+                  <div
+                    style={{
+                      marginTop: 16,
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                      gap: 10,
+                    }}
+                  >
+                    {(Object.keys(MODE_META) as RunMode[]).map((mode) => {
+                      const active = selectedMode === mode;
+                      const meta = MODE_META[mode];
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setSelectedMode(mode)}
+                          style={{
+                            borderRadius: 12,
+                            border: active
+                              ? `1px solid ${meta.accent}`
+                              : '1px solid rgba(255,255,255,0.18)',
+                            background: active
+                              ? 'rgba(11, 31, 45, 0.92)'
+                              : 'rgba(7, 18, 30, 0.74)',
+                            color: '#F8FAFC',
+                            padding: 10,
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <svg
+                            viewBox="0 0 120 56"
+                            width="100%"
+                            height="44"
+                            style={{ display: 'block' }}
+                          >
+                            <defs>
+                              <linearGradient
+                                id={`grad-${mode}`}
+                                x1="0%"
+                                y1="0%"
+                                x2="100%"
+                                y2="100%"
+                              >
+                                <stop offset="0%" stopColor={meta.accent} />
+                                <stop offset="100%" stopColor="#F8FAFC" />
+                              </linearGradient>
+                            </defs>
+                            <rect
+                              x="1"
+                              y="1"
+                              width="118"
+                              height="54"
+                              rx="10"
+                              fill="rgba(2,10,17,0.65)"
+                              stroke="rgba(255,255,255,0.15)"
+                            />
+                            {mode === 'infinite' && (
+                              <>
+                                <path
+                                  d="M18 28c8-16 22-16 30 0s22 16 30 0 22-16 30 0"
+                                  fill="none"
+                                  stroke={`url(#grad-${mode})`}
+                                  strokeWidth="4"
+                                  strokeLinecap="round"
+                                />
+                                <circle cx="18" cy="28" r="4" fill={meta.accent} />
+                                <circle cx="102" cy="28" r="4" fill={meta.accent} />
+                              </>
+                            )}
+                            {mode === 'timed' && (
+                              <>
+                                <circle
+                                  cx="60"
+                                  cy="28"
+                                  r="18"
+                                  fill="none"
+                                  stroke={`url(#grad-${mode})`}
+                                  strokeWidth="4"
+                                />
+                                <path
+                                  d="M60 28 L60 16 M60 28 L72 34"
+                                  stroke="#F8FAFC"
+                                  strokeWidth="4"
+                                  strokeLinecap="round"
+                                />
+                              </>
+                            )}
+                            {mode === 'levels' && (
+                              <>
+                                <path
+                                  d="M16 38 L36 18 L56 34 L78 14 L104 28"
+                                  fill="none"
+                                  stroke={`url(#grad-${mode})`}
+                                  strokeWidth="4"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                <circle cx="16" cy="38" r="4" fill={meta.accent} />
+                                <circle cx="104" cy="28" r="4" fill={meta.accent} />
+                              </>
+                            )}
+                          </svg>
+                          <div style={{ fontSize: 12, fontWeight: 800, marginTop: 6 }}>
+                            {meta.title}
+                          </div>
+                          <div style={{ fontSize: 11, opacity: 0.78, marginTop: 2 }}>
+                            {meta.subtitle}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: 'flex',
+                      gap: 10,
+                      justifyContent: 'center',
+                    }}
+                  >
                     <button
                       type="button"
-                      onClick={() => beginLevel(snap.level, false)}
+                      onClick={() => beginLevel(1, true, selectedMode)}
+                      style={{
+                        padding: '9px 16px',
+                        borderRadius: 999,
+                        border: `1px solid ${modeMeta.accent}`,
+                        background: 'rgba(14, 116, 144, 0.42)',
+                        color: '#F8FAFC',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Start {modeMeta.short}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {snap.phase === 'gameover' && (
+                <>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 14,
+                      opacity: 0.88,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {gameOverSubtitle}
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                    Final score: <b>{snap.score}</b>
+                    {selectedMode !== 'levels' && (
+                      <>
+                        {' '}
+                        · Moves made: <b>{movesMade}</b>
+                      </>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: 'flex',
+                      gap: 10,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedMode === 'levels') {
+                          beginLevel(Math.max(1, snap.level), false, 'levels');
+                        } else {
+                          beginLevel(1, true, selectedMode);
+                        }
+                      }}
                       style={{
                         padding: '9px 14px',
                         borderRadius: 999,
@@ -1881,11 +2352,13 @@ export default function TwoDots() {
                         cursor: 'pointer',
                       }}
                     >
-                      Retry Level
+                      {selectedMode === 'levels' ? 'Retry Level' : 'Restart Mode'}
                     </button>
                     <button
                       type="button"
-                      onClick={() => beginLevel(1, true)}
+                      onClick={() => {
+                        twoDotsState.phase = 'menu';
+                      }}
                       style={{
                         padding: '9px 14px',
                         borderRadius: 999,
@@ -1896,29 +2369,56 @@ export default function TwoDots() {
                         cursor: 'pointer',
                       }}
                     >
-                      New Run
+                      Mode Select
                     </button>
-                  </>
-                )}
+                  </div>
+                </>
+              )}
 
-                {snap.phase === 'levelComplete' && (
-                  <button
-                    type="button"
-                    onClick={() => beginLevel(snap.level + 1, false)}
+              {snap.phase === 'levelComplete' && (
+                <>
+                  <div
                     style={{
-                      padding: '9px 14px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(255,255,255,0.2)',
-                      background: 'rgba(14, 116, 144, 0.42)',
-                      color: '#F8FAFC',
-                      fontWeight: 700,
-                      cursor: 'pointer',
+                      marginTop: 10,
+                      fontSize: 14,
+                      opacity: 0.88,
+                      lineHeight: 1.45,
                     }}
                   >
-                    Next Level
-                  </button>
-                )}
-              </div>
+                    Objectives complete. Keep the chain alive into the next board.
+                  </div>
+
+                  <div style={{ marginTop: 10, fontSize: 13, opacity: 0.9 }}>
+                    Stars: <b>{snap.stars}</b> / 3 · Grade:{' '}
+                    <b>{lastGrade ?? 'Bronze'}</b>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: 'flex',
+                      gap: 10,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => beginLevel(snap.level + 1, false, 'levels')}
+                      style={{
+                        padding: '9px 14px',
+                        borderRadius: 999,
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        background: 'rgba(14, 116, 144, 0.42)',
+                        color: '#F8FAFC',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Next Level
+                    </button>
+                  </div>
+                </>
+              )}
 
               <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
                 Tap, click, or press space to continue.
