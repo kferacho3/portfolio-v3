@@ -346,12 +346,12 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'onepath',
-    title: 'Oscillate',
+    title: 'One Path',
     description:
-      'Vertical wall-runner with orthographic camera, pattern-based hazards, shield orbs, and capped infinite scaling.',
+      'The Walls-inspired corridor runner. Bounce between two walls and tap at the perfect alignment to take each perpendicular path.',
     accent: '#6b4cff',
     poster:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
     hotkey: '',
   },
   {
@@ -405,9 +405,9 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'oscillate',
-    title: 'One Path',
+    title: 'One Path (Alias)',
     description:
-      'Bounce between walls. Tap right on the wall to turn and advance.',
+      'Compatibility route for One Path. Same The Walls-style gameplay.',
     accent: '#6b4cff',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
@@ -675,10 +675,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Wait for clean shots. Slow down and aim—accuracy beats spam.',
   },
   onepath: {
-    controls: 'Tap/Space/Click to switch sides • R to restart',
+    controls: 'Tap/Space/Click to take the next path • R to restart',
     objective:
-      'Climb infinitely or clear level distance goals by switching walls, dodging patterned hazards, and outpacing the crashing wave.',
-    tips: 'Buffered taps trigger instant re-switches on landing. Collect 3 shield orbs for one-hit protection and use near-misses to raise multiplier.',
+      'Bounce between two walls, align with the perpendicular connector, and tap to transfer onto the next corridor until you reach the exit.',
+    tips: 'Only two fail states: wrong-timed turn tap, or waiting so long that a wall breaks from repeated hits.',
   },
   slowmo: {
     controls: 'Hold/Tap to slow time • Release to resume • R to restart',
@@ -714,8 +714,8 @@ export const GAME_RULES: Record<string, GameRules> = {
   oscillate: {
     controls: 'Tap/Space/Click to turn at walls • R to restart',
     objective:
-      'Bounce between walls. Tap near the correct wall to turn onto the next bridge. Reach the portal to clear.',
-    tips: 'Shorter distance = tighter timing. Collect gems. Bounce too much and walls can break.',
+      'Compatibility alias for One Path. Bounce between two walls and tap in the connector window to take each new perpendicular corridor.',
+    tips: 'Stay centered, wait for alignment, and do not over-bounce or the active wall pair will break.',
   },
   waveflip: {
     controls: 'Tap/Click to flip the wave • R to restart',

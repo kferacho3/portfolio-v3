@@ -66,7 +66,7 @@ const gameLoaders: Record<GameId, () => Promise<GameModule>> = {
   shades: () => import('./shades'),
   twodots: () => import('./twodots'),
   polyforge: () => import('./polyforge'),
-  onepath: () => import('./onepath'),
+  onepath: () => import('./oscillate'),
   slowmo: () => import('./slowmo'),
   bouncer: () => import('./bouncer'),
   prismjump: () => import('./prismjump'),

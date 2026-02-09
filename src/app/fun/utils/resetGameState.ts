@@ -28,7 +28,6 @@ import { smashHitState } from '../games/smashhit';
 import { shadesState } from '../games/shades';
 import { twoDotsState } from '../games/twodots';
 import { polyForgeState } from '../games/polyforge';
-import { onePathState } from '../games/onepath';
 import { slowMoState } from '../games/slowmo';
 import { bouncerState } from '../games/bouncer';
 import { knotHopState } from '../games/knothop';
@@ -134,7 +133,7 @@ export function resetGameState(gameId: GameId): void {
       polyForgeState.reset();
       return;
     case 'onepath':
-      onePathState.retry();
+      oscillateState.retry();
       return;
     case 'slowmo':
       slowMoState.backToMenu();

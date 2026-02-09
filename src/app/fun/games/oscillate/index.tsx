@@ -15,6 +15,7 @@ import type { RunStatus } from './types';
 import { segmentWorldPos, useOnMount } from './utils';
 
 export { onePathState as oscillateState } from './state';
+export { onePathState } from './state';
 
 function formatLevel(n: number) {
   return `${n}`;
@@ -595,30 +596,36 @@ function Scene() {
     onePathState.fail();
   }, []);
 
-  const onBounce = React.useCallback((seg: OnePathSegment, side: 'neg' | 'pos') => {
-    const r = runRef.current;
-    r.bouncesOnSeg += 1;
-    r.totalBounces += 1;
-    r.squash = Math.max(r.squash, 1);
-    r.shake = Math.max(r.shake, 0.15);
+  const onBounce = React.useCallback(
+    (seg: OnePathSegment, side: 'neg' | 'pos') => {
+      const r = runRef.current;
+      r.bouncesOnSeg += 1;
+      r.totalBounces += 1;
+      r.squash = Math.max(r.squash, 1);
+      r.shake = Math.max(r.shake, 0.15);
 
-    const wall = side === 'neg' ? seg.walls.neg : seg.walls.pos;
-    if (!wall.broken && !wall.unbreakable) {
-      wall.hp = Math.max(0, wall.hp - 1);
-      if (wall.hp <= 0) {
-        wall.broken = true;
-        r.gateFlash = Math.max(r.gateFlash, 0.3);
+      const wall = side === 'neg' ? seg.walls.neg : seg.walls.pos;
+      if (!wall.broken) {
+        wall.hp = Math.max(0, wall.hp - 1);
+        if (wall.hp <= 0) {
+          wall.broken = true;
+          r.gateFlash = 1;
+          // Timeout pressure mechanic: waiting too long breaks a wall and ends the run.
+          triggerFail();
+          return;
+        }
       }
-    }
 
-    if (seg.gate && !seg.gate.isOpen && r.bouncesOnSeg >= seg.gate.requiredBounces) {
-      seg.gate.isOpen = true;
-      r.gateOpen = true;
-      r.gateFlash = 1;
-      r.shake = Math.max(r.shake, 0.26);
-      r.score += 10;
-    }
-  }, []);
+      if (seg.gate && !seg.gate.isOpen && r.bouncesOnSeg >= seg.gate.requiredBounces) {
+        seg.gate.isOpen = true;
+        r.gateOpen = true;
+        r.gateFlash = 1;
+        r.shake = Math.max(r.shake, 0.26);
+        r.score += 10;
+      }
+    },
+    [triggerFail]
+  );
 
   const handleLevelClear = React.useCallback(() => {
     const r = runRef.current;
@@ -708,26 +715,25 @@ function Scene() {
       r.s += lvl.speed * dt;
       r.l += lvl.lateralSpeed * r.lDir * dt;
 
-      const minL = -seg.halfWidth;
-      const maxL = seg.halfWidth;
+      // The ball center is constrained between two corridor walls at all times.
+      const minL = seg.centerMin;
+      const maxL = seg.centerMax;
 
-      if (!seg.walls.neg.broken && r.l <= minL) {
+      if (r.l <= minL) {
         r.l = minL;
         r.lDir = 1;
         onBounce(seg, 'neg');
-      } else if (!seg.walls.pos.broken && r.l >= maxL) {
+        if (!r.alive) return;
+      } else if (r.l >= maxL) {
         r.l = maxL;
         r.lDir = -1;
         onBounce(seg, 'pos');
+        if (!r.alive) return;
       }
 
-      if (seg.walls.neg.broken && r.l < minL - lvl.fallMargin) {
-        triggerFail();
-        return;
-      }
-      if (seg.walls.pos.broken && r.l > maxL + lvl.fallMargin) {
-        triggerFail();
-        return;
+      if (seg.gate) {
+        // Hold near the connector while the player keeps bouncing.
+        r.s = Math.min(r.s, seg.gate.triggerEnd);
       }
 
       for (let i = 0; i < seg.gems.length; i += 1) {
@@ -742,16 +748,12 @@ function Scene() {
         }
       }
 
-      if (r.s >= seg.length) {
-        if (r.seg >= lvl.segments.length - 1) {
-          r.cleared = true;
-          handleLevelClear();
-          return;
-        }
-        triggerFail();
+      if (!seg.gate && r.s >= seg.length) {
+        r.cleared = true;
+        handleLevelClear();
       }
     },
-    [handleLevelClear, onBounce, triggerFail]
+    [handleLevelClear, onBounce]
   );
 
   const rebuildStaticInstances = React.useCallback(() => {
@@ -814,12 +816,14 @@ function Scene() {
     let wallIdx = 0;
     let gateIdx = 0;
     let gemIdx = 0;
+    const activeSegIndex = clamp(r.seg, 0, lvl.segments.length - 1);
 
     const wallYBase = CONST.BASE_H + CONST.DECK_H + CONST.WALL_H * 0.5;
     const gateY = CONST.BASE_H + CONST.DECK_H * 0.5;
 
     for (let i = 0; i < lvl.segments.length; i += 1) {
       const seg = lvl.segments[i];
+      if (i !== activeSegIndex) continue;
 
       for (let side = 0; side < 2; side += 1) {
         const sideSign = side === 0 ? -1 : 1;
@@ -1031,7 +1035,7 @@ function Scene() {
         if (seg0) {
           r.seg = 0;
           r.s = Math.min(seg0.length * 0.42, seg0.length - 0.2);
-          r.l = Math.sin(r.t * 1.8) * seg0.halfWidth * 0.72;
+          r.l = Math.sin(r.t * 1.8) * seg0.centerMax * 0.72;
         }
         r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R + Math.sin(r.t * 8) * 0.012;
       }
@@ -1127,7 +1131,7 @@ function Scene() {
   );
 }
 
-export default function Oscillate() {
+export default function OnePath() {
   useOnMount(() => onePathState.load());
 
   return (
