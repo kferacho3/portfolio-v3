@@ -58,6 +58,8 @@ type Runtime = {
   playerX: number;
   playerZ: number;
   dir: DirectionIndex;
+  playerYaw: number;
+  targetYaw: number;
   trailStartX: number;
   trailStartZ: number;
   turnAnchorX: number;
@@ -101,6 +103,7 @@ const TRAIL_INSTANCE_CAP = 500;
 const VOID_POOL = 20;
 const PICKUP_POOL = 10;
 const MAX_SPARKS = 96;
+const GRID_LINE_CAP = 18;
 
 const ARENA_START_BOUND = 4.3;
 const ARENA_MIN_BOUND = 2.65;
@@ -122,9 +125,15 @@ const DIRECTIONS: Array<{ x: number; z: number }> = [
   { x: -1, z: 0 },
   { x: 0, z: 1 },
 ];
+const DIR_YAWS: number[] = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const lerpAngle = (a: number, b: number, t: number) => {
+  let diff = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  return a + diff * t;
+};
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -226,6 +235,8 @@ const createRuntime = (): Runtime => ({
   playerX: 0,
   playerZ: 0,
   dir: 0,
+  playerYaw: DIR_YAWS[0],
+  targetYaw: DIR_YAWS[0],
   trailStartX: 0,
   trailStartZ: 0,
   turnAnchorX: 0,
@@ -352,6 +363,8 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.playerX = 0;
   runtime.playerZ = 0;
   runtime.dir = 0;
+  runtime.playerYaw = DIR_YAWS[0];
+  runtime.targetYaw = DIR_YAWS[0];
   runtime.trailStartX = 0;
   runtime.trailStartZ = 0;
   runtime.turnAnchorX = 0;
@@ -481,16 +494,21 @@ function TraceScene() {
   const trailMeshRef = useRef<THREE.InstancedMesh>(null);
   const voidMeshRef = useRef<THREE.InstancedMesh>(null);
   const pickupMeshRef = useRef<THREE.InstancedMesh>(null);
+  const gridLineRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
+  const playerNoseRef = useRef<THREE.Mesh>(null);
   const currentTrailRef = useRef<THREE.Mesh>(null);
   const trailMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const playerMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const sparkPointsRef = useRef<THREE.Points>(null);
   const glowLightRef = useRef<THREE.PointLight>(null);
+  const borderRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const cornerRefs = useRef<Array<THREE.Mesh | null>>([]);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const segDirection = useMemo(() => new THREE.Vector3(), []);
   const segColor = useMemo(() => new THREE.Color(), []);
+  const edgeColor = useMemo(() => new THREE.Color(), []);
   const cameraPosTarget = useMemo(() => new THREE.Vector3(), []);
   const cameraLookTarget = useMemo(() => new THREE.Vector3(), []);
   const cameraUp = useMemo(() => new THREE.Vector3(), []);
@@ -558,6 +576,7 @@ function TraceScene() {
       } else {
         finalizeCurrentSegment(runtime, runtime.playerX, runtime.playerZ);
         runtime.dir = (((runtime.dir + 1) % 4) as DirectionIndex);
+        runtime.targetYaw = DIR_YAWS[runtime.dir];
 
         const distToWall = Math.min(
           runtime.bound - Math.abs(runtime.playerX),
@@ -727,7 +746,7 @@ function TraceScene() {
         dummy.position.set(midX, 0.13, midZ);
         segDirection.set(dx / len, 0, dz / len);
         dummy.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, segDirection);
-        dummy.scale.set(seg.thickness, len * 0.5, seg.thickness);
+        dummy.scale.set(seg.thickness, len, seg.thickness);
         dummy.updateMatrix();
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
@@ -770,7 +789,7 @@ function TraceScene() {
           THREE.Object3D.DEFAULT_UP,
           segDirection
         );
-        currentTrailRef.current.scale.set(TRAIL_THICKNESS * 1.05, len * 0.5, TRAIL_THICKNESS * 1.05);
+        currentTrailRef.current.scale.set(TRAIL_THICKNESS * 1.05, len, TRAIL_THICKNESS * 1.05);
         currentTrailRef.current.visible = true;
       } else {
         currentTrailRef.current.visible = false;
@@ -835,8 +854,21 @@ function TraceScene() {
       if (pickupMeshRef.current.instanceColor) pickupMeshRef.current.instanceColor.needsUpdate = true;
     }
 
+    runtime.playerYaw = lerpAngle(
+      runtime.playerYaw,
+      runtime.targetYaw,
+      1 - Math.exp(-12 * dt)
+    );
+
     if (playerRef.current) {
       playerRef.current.position.set(runtime.playerX, 0.16, runtime.playerZ);
+      playerRef.current.rotation.set(0, runtime.playerYaw, 0);
+    }
+    if (playerNoseRef.current) {
+      playerNoseRef.current.position.set(runtime.playerX, 0.2, runtime.playerZ);
+      playerNoseRef.current.rotation.set(Math.PI * 0.5, runtime.playerYaw, 0);
+      const pulse = runtime.phaseTimer > 0 ? 1.18 : 1;
+      playerNoseRef.current.scale.setScalar(pulse);
     }
     if (playerMatRef.current) {
       playerMatRef.current.emissiveIntensity = 0.5 + runtime.danger * 1.15 + runtime.phaseTimer * 0.45;
@@ -847,6 +879,101 @@ function TraceScene() {
       glowLightRef.current.position.set(runtime.playerX, 0.35, runtime.playerZ);
       glowLightRef.current.intensity = 0.32 + runtime.danger * 1.2 + runtime.phaseTimer * 0.3;
       glowLightRef.current.color.copy(runtime.phaseTimer > 0 ? MAGENTA : CYAN);
+    }
+
+    const arenaBound = runtime.bound;
+    const arenaSpan = arenaBound * 2;
+    const boundDanger = clamp(
+      runtime.danger + (ARENA_START_BOUND - arenaBound) / (ARENA_START_BOUND - ARENA_MIN_BOUND + 0.0001),
+      0,
+      1
+    );
+    const edgeGlow = 0.18 + boundDanger * 0.75;
+
+    if (borderRefs.current.length >= 4) {
+      const edgeW = 0.05;
+      const edgeH = 0.07;
+
+      const top = borderRefs.current[0];
+      const bottom = borderRefs.current[1];
+      const left = borderRefs.current[2];
+      const right = borderRefs.current[3];
+
+      if (top) {
+        top.position.set(0, 0.035, -arenaBound);
+        top.scale.set(arenaSpan + 0.14, edgeH, edgeW);
+        (top.material as THREE.MeshBasicMaterial).color.set('#3aa9ff');
+      }
+      if (bottom) {
+        bottom.position.set(0, 0.035, arenaBound);
+        bottom.scale.set(arenaSpan + 0.14, edgeH, edgeW);
+        (bottom.material as THREE.MeshBasicMaterial).color.set('#3aa9ff');
+      }
+      if (left) {
+        left.position.set(-arenaBound, 0.035, 0);
+        left.scale.set(edgeW, edgeH, arenaSpan + 0.14);
+        (left.material as THREE.MeshBasicMaterial).color.set('#ff57d9');
+      }
+      if (right) {
+        right.position.set(arenaBound, 0.035, 0);
+        right.scale.set(edgeW, edgeH, arenaSpan + 0.14);
+        (right.material as THREE.MeshBasicMaterial).color.set('#ff57d9');
+      }
+    }
+
+    if (cornerRefs.current.length >= 4) {
+      const cs = 0.09 + boundDanger * 0.03;
+      const corners = [
+        [-arenaBound, -arenaBound],
+        [arenaBound, -arenaBound],
+        [arenaBound, arenaBound],
+        [-arenaBound, arenaBound],
+      ];
+      for (let i = 0; i < 4; i += 1) {
+        const corner = cornerRefs.current[i];
+        if (!corner) continue;
+        corner.position.set(corners[i][0], 0.05, corners[i][1]);
+        corner.scale.setScalar(cs);
+        (corner.material as THREE.MeshBasicMaterial).color.set('#e8f7ff');
+      }
+    }
+
+    if (gridLineRef.current) {
+      const divisions = 8;
+      let idx = 0;
+      for (let i = 0; i <= divisions; i += 1) {
+        const t = i / divisions;
+        const offset = -arenaBound + arenaSpan * t;
+
+        dummy.position.set(offset, 0.01, 0);
+        dummy.scale.set(0.01, 0.02, arenaSpan);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        gridLineRef.current.setMatrixAt(idx, dummy.matrix);
+        edgeColor.set('#12364a').lerp(CYAN, 0.1 + edgeGlow * 0.12);
+        gridLineRef.current.setColorAt(idx, edgeColor);
+        idx += 1;
+
+        dummy.position.set(0, 0.01, offset);
+        dummy.scale.set(arenaSpan, 0.02, 0.01);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        gridLineRef.current.setMatrixAt(idx, dummy.matrix);
+        edgeColor.set('#2a1737').lerp(MAGENTA, 0.08 + edgeGlow * 0.1);
+        gridLineRef.current.setColorAt(idx, edgeColor);
+        idx += 1;
+      }
+      while (idx < GRID_LINE_CAP) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(TINY_SCALE);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        gridLineRef.current.setMatrixAt(idx, dummy.matrix);
+        gridLineRef.current.setColorAt(idx, CYAN);
+        idx += 1;
+      }
+      gridLineRef.current.instanceMatrix.needsUpdate = true;
+      if (gridLineRef.current.instanceColor) gridLineRef.current.instanceColor.needsUpdate = true;
     }
 
     const sparkAttr = sparkGeometry.getAttribute('position') as THREE.BufferAttribute;
@@ -862,9 +989,9 @@ function TraceScene() {
     sparkGeometry.setDrawRange(0, sparkCount);
     sparkAttr.needsUpdate = true;
 
-    const driftX = Math.sin(runtime.elapsed * 0.18) * 0.18;
-    const driftZ = Math.cos(runtime.elapsed * 0.21) * 0.18;
-    const tilt = Math.sin(runtime.elapsed * 0.33) * 0.03;
+    const driftX = Math.sin(runtime.elapsed * 0.18) * 0.05;
+    const driftZ = Math.cos(runtime.elapsed * 0.21) * 0.05;
+    const tilt = Math.sin(runtime.elapsed * 0.33) * 0.012;
     cameraPosTarget.set(driftX, 9.2, driftZ);
     camera.position.lerp(cameraPosTarget, 1 - Math.exp(-4.7 * dt));
     cameraLookTarget.set(runtime.playerX * 0.07, 0, runtime.playerZ * 0.07);
@@ -891,22 +1018,34 @@ function TraceScene() {
         <meshStandardMaterial color="#090b0e" roughness={0.95} metalness={0.02} />
       </mesh>
 
-      <mesh position={[0, 0.02, -4.3]}>
-        <boxGeometry args={[8.8, 0.06, 0.04]} />
-        <meshBasicMaterial color="#1f3641" toneMapped={false} />
-      </mesh>
-      <mesh position={[0, 0.02, 4.3]}>
-        <boxGeometry args={[8.8, 0.06, 0.04]} />
-        <meshBasicMaterial color="#1f3641" toneMapped={false} />
-      </mesh>
-      <mesh position={[-4.3, 0.02, 0]}>
-        <boxGeometry args={[0.04, 0.06, 8.8]} />
-        <meshBasicMaterial color="#1f3641" toneMapped={false} />
-      </mesh>
-      <mesh position={[4.3, 0.02, 0]}>
-        <boxGeometry args={[0.04, 0.06, 8.8]} />
-        <meshBasicMaterial color="#1f3641" toneMapped={false} />
-      </mesh>
+      <instancedMesh ref={gridLineRef} args={[undefined, undefined, GRID_LINE_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.55} />
+      </instancedMesh>
+
+      {[0, 1, 2, 3].map((idx) => (
+        <mesh
+          key={`trace-border-${idx}`}
+          ref={(node) => {
+            borderRefs.current[idx] = node;
+          }}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial color="#2f6f9a" toneMapped={false} />
+        </mesh>
+      ))}
+
+      {[0, 1, 2, 3].map((idx) => (
+        <mesh
+          key={`trace-corner-${idx}`}
+          ref={(node) => {
+            cornerRefs.current[idx] = node;
+          }}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial color="#e4f8ff" toneMapped={false} />
+        </mesh>
+      ))}
 
       <instancedMesh ref={trailMeshRef} args={[undefined, undefined, TRAIL_INSTANCE_CAP]}>
         <cylinderGeometry args={[1, 1, 1, 8]} />
@@ -945,6 +1084,11 @@ function TraceScene() {
           roughness={0.28}
           metalness={0.15}
         />
+      </mesh>
+
+      <mesh ref={playerNoseRef} position={[0, 0.2, 0]} rotation={[Math.PI * 0.5, 0, 0]}>
+        <coneGeometry args={[0.065, 0.22, 12]} />
+        <meshBasicMaterial color="#ecfcff" toneMapped={false} />
       </mesh>
 
       <points ref={sparkPointsRef} geometry={sparkGeometry}>

@@ -58,6 +58,8 @@ type Runtime = {
   serial: number;
   lastHeight: number;
   gapRun: number;
+  lastRule: TileRule;
+  nextRuleHint: TileRule;
 };
 
 type FlipBoxStore = {
@@ -68,11 +70,13 @@ type FlipBoxStore = {
   perfectStreak: number;
   failMessage: string;
   posture: OrientationState;
+  nextRule: TileRule;
   pulseNonce: number;
   crashNonce: number;
   startRun: () => void;
   resetToStart: () => void;
   setPosture: (value: OrientationState) => void;
+  setNextRule: (value: TileRule) => void;
   updateHud: (score: number, multiplier: number, perfectStreak: number, perfect: boolean) => void;
   endRun: (score: number, reason: string) => void;
   flashCrash: () => void;
@@ -118,7 +122,6 @@ const PULSE = new THREE.Color('#ffffff');
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -166,6 +169,7 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
   perfectStreak: 0,
   failMessage: '',
   posture: 'UPRIGHT',
+  nextRule: 'ANY',
   pulseNonce: 0,
   crashNonce: 0,
   startRun: () =>
@@ -176,6 +180,7 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
       perfectStreak: 0,
       failMessage: '',
       posture: 'UPRIGHT',
+      nextRule: 'ANY',
     }),
   resetToStart: () =>
     set({
@@ -185,8 +190,10 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
       perfectStreak: 0,
       failMessage: '',
       posture: 'UPRIGHT',
+      nextRule: 'ANY',
     }),
   setPosture: (value) => set({ posture: value }),
+  setNextRule: (value) => set({ nextRule: value }),
   updateHud: (score, multiplier, perfectStreak, perfect) =>
     set((state) => ({
       score: Math.floor(score),
@@ -235,6 +242,8 @@ const createRuntime = (): Runtime => ({
   serial: 0,
   lastHeight: 0,
   gapRun: 0,
+  lastRule: 'ANY',
+  nextRuleHint: 'ANY',
 });
 
 const scoreDifficulty = (runtime: Runtime) =>
@@ -259,7 +268,7 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
     return;
   }
 
-  let gapChance = lerp(0.02, 0.22, d);
+  let gapChance = lerp(0.015, 0.2, d);
   if (runtime.elapsed < 8) gapChance *= 0.3;
   if (runtime.gapRun > 0) gapChance *= 0.18;
 
@@ -273,12 +282,19 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
 
   runtime.gapRun = 0;
 
-  const ruleChance = lerp(0.12, 0.4, d);
+  const ruleChance = lerp(0.1, 0.36, d);
   if (Math.random() < ruleChance) {
-    tile.rule = Math.random() < 0.5 ? 'UPRIGHT' : 'FLAT';
+    if (runtime.lastRule === 'UPRIGHT') {
+      tile.rule = Math.random() < 0.65 ? 'FLAT' : 'UPRIGHT';
+    } else if (runtime.lastRule === 'FLAT') {
+      tile.rule = Math.random() < 0.65 ? 'UPRIGHT' : 'FLAT';
+    } else {
+      tile.rule = Math.random() < 0.5 ? 'UPRIGHT' : 'FLAT';
+    }
   } else {
     tile.rule = 'ANY';
   }
+  if (tile.rule !== 'ANY') runtime.lastRule = tile.rule;
 
   let nextHeight = runtime.lastHeight;
   const stepChance = lerp(0.02, 0.18, d);
@@ -313,6 +329,8 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.serial = 0;
   runtime.lastHeight = 0;
   runtime.gapRun = 0;
+  runtime.lastRule = 'ANY';
+  runtime.nextRuleHint = 'ANY';
 
   const farStartZ = -((TILE_POOL - 1) * TILE_SPACING) + 8;
   runtime.frontZ = farStartZ;
@@ -369,8 +387,18 @@ function FlipBoxOverlay() {
   const perfectStreak = useFlipBoxStore((state) => state.perfectStreak);
   const failMessage = useFlipBoxStore((state) => state.failMessage);
   const posture = useFlipBoxStore((state) => state.posture);
+  const nextRule = useFlipBoxStore((state) => state.nextRule);
   const pulseNonce = useFlipBoxStore((state) => state.pulseNonce);
   const crashNonce = useFlipBoxStore((state) => state.crashNonce);
+
+  const nextRuleLabel =
+    nextRule === 'UPRIGHT' ? 'UPRIGHT' : nextRule === 'FLAT' ? 'FLAT' : 'ANY';
+  const nextRuleClass =
+    nextRule === 'UPRIGHT'
+      ? 'text-cyan-200'
+      : nextRule === 'FLAT'
+        ? 'text-fuchsia-200'
+        : 'text-white/85';
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
@@ -397,6 +425,9 @@ function FlipBoxOverlay() {
           </div>
           <div>
             Perfect Streak <span className="font-semibold text-fuchsia-200">{perfectStreak}</span>
+          </div>
+          <div>
+            Next Glyph <span className={`font-semibold ${nextRuleClass}`}>{nextRuleLabel}</span>
           </div>
         </div>
       )}
@@ -533,6 +564,7 @@ function FlipBoxScene() {
       resetRuntime(runtime);
       useFlipBoxStore.getState().startRun();
       useFlipBoxStore.getState().setPosture('UPRIGHT');
+      useFlipBoxStore.getState().setNextRule('ANY');
     } else if (tap && store.status === 'PLAYING') {
       runtime.targetOrientation = runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
       runtime.orientation = runtime.targetOrientation;
@@ -610,6 +642,21 @@ function FlipBoxScene() {
 
         const warmup = false;
         seedTile(runtime, tile, z, warmup);
+      }
+
+      let nextRule: TileRule = 'ANY';
+      let bestZ = -999;
+      for (let i = 0; i < runtime.tiles.length; i += 1) {
+        const tile = runtime.tiles[i];
+        if (!tile.present || tile.rule === 'ANY') continue;
+        if (tile.z < -0.18 && tile.z > -11.5 && tile.z > bestZ) {
+          bestZ = tile.z;
+          nextRule = tile.rule;
+        }
+      }
+      if (nextRule !== runtime.nextRuleHint) {
+        runtime.nextRuleHint = nextRule;
+        useFlipBoxStore.getState().setNextRule(nextRule);
       }
 
       flipBoxState.elapsed = runtime.elapsed;
