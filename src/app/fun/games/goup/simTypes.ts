@@ -51,6 +51,7 @@ export type GenState = {
   tension: boolean;
   tensionStepsLeft: number;
   obstacleCooldown: number;
+  hazardBurstRemaining: number;
   demandingCooldown: number;
   prevGapAfter: boolean;
   prevRiseToNext: number;

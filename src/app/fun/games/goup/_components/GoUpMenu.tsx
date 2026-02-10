@@ -13,12 +13,6 @@ export const GoUpMenu: React.FC<{
 
   if (snap.phase !== 'menu' && snap.phase !== 'gameover') return null;
 
-  const pathStyles: Array<{ key: typeof snap.pathStyle; label: string }> = [
-    { key: 'tiles', label: 'Tiles' },
-    { key: 'tube', label: 'Tube' },
-    { key: 'ribbon', label: 'Ribbon' },
-    { key: 'hybrid', label: 'Hybrid' },
-  ];
   const trackModes: Array<{ key: typeof snap.trackMode; label: string }> = [
     { key: 'auto', label: 'Auto' },
     { key: 'classic', label: 'Classic' },
@@ -55,13 +49,18 @@ export const GoUpMenu: React.FC<{
   const pillStyle = (selected: boolean): React.CSSProperties => ({
     padding: '8px 14px',
     borderRadius: 999,
-    border: selected ? '2px solid #111111' : '1px solid rgba(0,0,0,0.16)',
-    background: 'rgba(255,255,255,0.82)',
+    border: selected ? '1px solid rgba(255,255,255,0.88)' : '1px solid rgba(255,255,255,0.2)',
+    background: selected ? 'rgba(255,255,255,0.15)' : 'rgba(6,10,14,0.46)',
+    color: selected ? '#f8fbff' : 'rgba(236,243,252,0.84)',
     fontSize: 12,
     fontWeight: 600,
     letterSpacing: 0.5,
     cursor: 'pointer',
   });
+
+  const headerColor = 'rgba(236,243,252,0.94)';
+  const subtleColor = 'rgba(206,218,232,0.72)';
+  const sectionColor = 'rgba(160,180,202,0.7)';
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -69,44 +68,41 @@ export const GoUpMenu: React.FC<{
         style={{
           position: 'absolute',
           inset: 0,
-          display: 'grid',
-          placeItems: 'center',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
         }}
       >
         <div
           style={{
-            background:
-              snap.phase === 'gameover' ? 'rgba(255,255,255,0.9)' : 'transparent',
-            border:
-              snap.phase === 'gameover'
-                ? '1px solid rgba(0,0,0,0.08)'
-                : '1px solid transparent',
-            borderRadius: 20,
-            padding: snap.phase === 'gameover' ? '20px 24px' : '12px 20px',
-            width: snap.phase === 'gameover' ? 420 : 520,
+            background: 'rgba(9,14,20,0.78)',
+            border: '1px solid rgba(255,255,255,0.16)',
+            borderRadius: 18,
+            padding: '16px 18px',
+            width: 420,
             textAlign: 'center',
-            boxShadow:
-              snap.phase === 'gameover'
-                ? '0 14px 34px rgba(0,0,0,0.14)'
-                : 'none',
+            boxShadow: '0 20px 44px rgba(0,0,0,0.34)',
+            backdropFilter: 'blur(6px)',
             pointerEvents: 'auto',
             fontFamily: '"Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif',
+            color: headerColor,
           }}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
         >
-          <div style={{ fontSize: 74, fontWeight: 500, letterSpacing: -1 }}>
+          <div style={{ fontSize: 52, fontWeight: 600, letterSpacing: -0.8 }}>
             Go Up
           </div>
           <div
             style={{
               marginTop: 2,
-              fontSize: 46,
+              fontSize: 42,
               fontWeight: 700,
               letterSpacing: -0.8,
               lineHeight: 1,
-              opacity: snap.phase === 'gameover' ? 1 : 0.92,
+              opacity: snap.phase === 'gameover' ? 1 : 0.9,
               display: snap.phase === 'gameover' ? 'block' : 'none',
+              color: '#ffffff',
             }}
           >
             {snap.phase === 'gameover' ? snap.score : ''}
@@ -114,15 +110,16 @@ export const GoUpMenu: React.FC<{
           <div
             style={{
               marginTop: snap.phase === 'gameover' ? 10 : 18,
-              fontSize: 16,
-              opacity: 0.7,
+              fontSize: 14,
+              opacity: 0.92,
               letterSpacing: 0.4,
+              color: snap.phase === 'gameover' ? '#ff8f8f' : subtleColor,
             }}
           >
             {snap.phase === 'gameover' ? getCrashMessage() : 'TAP TO PLAY'}
           </div>
 
-          <div style={{ marginTop: 18, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+          <div style={{ marginTop: 18, fontSize: 11, letterSpacing: 1.9, color: sectionColor }}>
             ARENAS
           </div>
           <div
@@ -161,31 +158,23 @@ export const GoUpMenu: React.FC<{
             })}
           </div>
 
-          <div style={{ marginTop: 14, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, color: sectionColor }}>
             TRACK STYLE
           </div>
           <div
             style={{
               marginTop: 8,
               display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
+              gap: 10,
               justifyContent: 'center',
             }}
           >
-            {pathStyles.map((style) => (
-              <button
-                key={style.key}
-                type="button"
-                onClick={() => goUpState.setPathStyle(style.key)}
-                style={pillStyle(snap.pathStyle === style.key)}
-              >
-                {style.label}
-              </button>
-            ))}
+            <button type="button" style={pillStyle(true)}>
+              Apex Tiles
+            </button>
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, color: sectionColor }}>
             TRACK SHAPE
           </div>
           <div
@@ -209,7 +198,7 @@ export const GoUpMenu: React.FC<{
             ))}
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, color: sectionColor }}>
             SKIN
           </div>
           <div
@@ -233,7 +222,7 @@ export const GoUpMenu: React.FC<{
             ))}
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, color: sectionColor }}>
             QUALITY
           </div>
           <div
@@ -262,20 +251,20 @@ export const GoUpMenu: React.FC<{
               style={{
                 marginTop: 16,
                 padding: '14px 18px',
-                background: 'rgba(0,0,0,0.04)',
+                background: 'rgba(255,255,255,0.08)',
                 borderRadius: 14,
               }}
             >
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#c62828' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#ff8f8f' }}>
                 Retry
               </div>
-              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700 }}>
+              <div style={{ marginTop: 8, fontSize: 20, fontWeight: 700, color: '#ffffff' }}>
                 Score: {snap.score}
               </div>
-              <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>
+              <div style={{ marginTop: 4, fontSize: 13, color: subtleColor }}>
                 Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps: {snap.wallsClimbed} • Spikes: {snap.spikesAvoided}
               </div>
-              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6 }}>
+              <div style={{ marginTop: 4, fontSize: 12, color: subtleColor }}>
                 Combo x{snap.multiplier} • Near Misses {snap.nearMisses}
               </div>
             </div>
@@ -285,14 +274,14 @@ export const GoUpMenu: React.FC<{
             style={{
               marginTop: 14,
               fontSize: 11,
-              opacity: 0.52,
+              color: subtleColor,
               lineHeight: 1.5,
             }}
           >
-            Auto run is on. Tap to jump over gaps and hazards.
+            Auto-run is on. Tap to clear walls, spikes, and gaps.
           </div>
 
-          <div style={{ marginTop: 12, fontSize: 11, opacity: 0.4 }}>
+          <div style={{ marginTop: 12, fontSize: 11, color: sectionColor }}>
             Tap anywhere to play
           </div>
         </div>

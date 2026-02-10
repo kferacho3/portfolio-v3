@@ -73,7 +73,8 @@ const copyState = (state: GenState): GenState => ({
   dir: [...state.dir],
 });
 
-const chooseObstacleType = (): Obstacle['type'] => 'spike';
+const chooseObstacleType = (rng: () => number): Obstacle['type'] =>
+  rng() < 0.58 ? 'wall' : 'spike';
 
 export function generateChunk(
   baseSeed: number,
@@ -245,9 +246,23 @@ export function generateChunk(
     ];
 
     let obstacles: Obstacle[] | undefined;
-    const obstacleChance =
+    const obstacleChanceBase =
       CFG.OBSTACLES.chanceMin +
       (CFG.OBSTACLES.chanceMax - CFG.OBSTACLES.chanceMin) * difficulty;
+    if (
+      state.tension &&
+      state.hazardBurstRemaining <= 0 &&
+      state.demandingCooldown <= 0 &&
+      !state.prevGapAfter &&
+      rng() < 0.2
+    ) {
+      state.hazardBurstRemaining = randIntRange(rng, 2, 4);
+    }
+    const burstBoost = state.hazardBurstRemaining > 0 ? 1.7 : 1;
+    const obstacleChance = clamp01(
+      (state.tension ? obstacleChanceBase * 1.08 : obstacleChanceBase * 0.38) *
+        burstBoost
+    );
     const obstacleAllowed =
       i > 5 &&
       !gapAfter &&
@@ -257,20 +272,22 @@ export function generateChunk(
       riseToNext <= CFG.STEP.demandingRiseThreshold &&
       state.obstacleCooldown <= 0;
 
+    let spawnedObstacle = false;
     if (obstacleAllowed && rng() < obstacleChance) {
-      const type = chooseObstacleType();
+      const type = chooseObstacleType(rng);
       const along = randRange(rng, length * 0.48, length * 0.82);
       let h = 0.8;
       let d = 0.3;
       let w = CFG.STEP.width * 0.9;
 
-      if (type === 'spike') {
-        h = randRange(rng, CFG.OBSTACLES.spikeHeightMin, CFG.OBSTACLES.spikeHeightMax);
+      if (type === 'wall') {
+        h = randRange(rng, CFG.OBSTACLES.wallHeightMin, CFG.OBSTACLES.wallHeightMax);
         d = 0.28;
+        w = CFG.STEP.width * 0.92;
+      } else if (type === 'spike') {
+        h = randRange(rng, CFG.OBSTACLES.spikeHeightMin, CFG.OBSTACLES.spikeHeightMax);
+        d = 0.24;
         w = 0.42;
-      } else {
-        h = randRange(rng, CFG.OBSTACLES.barHeightMin, CFG.OBSTACLES.barHeightMax);
-        d = randRange(rng, CFG.OBSTACLES.barThicknessMin, CFG.OBSTACLES.barThicknessMax);
       }
 
       obstacles = [
@@ -287,13 +304,22 @@ export function generateChunk(
           nearMissed: false,
         },
       ];
-      state.obstacleCooldown = randIntRange(
-        rng,
-        CFG.OBSTACLES.minSpacingMin,
-        CFG.OBSTACLES.minSpacingMax
-      );
+      spawnedObstacle = true;
+      if (state.hazardBurstRemaining > 0) {
+        state.hazardBurstRemaining -= 1;
+      }
+      const spacingMin = state.tension
+        ? Math.max(1, CFG.OBSTACLES.minSpacingMin - 1)
+        : CFG.OBSTACLES.minSpacingMin + 2;
+      const spacingMax = state.tension
+        ? CFG.OBSTACLES.minSpacingMax
+        : CFG.OBSTACLES.minSpacingMax + 4;
+      state.obstacleCooldown = randIntRange(rng, spacingMin, spacingMax);
     } else if (state.obstacleCooldown > 0) {
       state.obstacleCooldown -= 1;
+    }
+    if (!spawnedObstacle && state.hazardBurstRemaining > 0 && !state.tension) {
+      state.hazardBurstRemaining = Math.max(0, state.hazardBurstRemaining - 1);
     }
 
     const step: Step = {

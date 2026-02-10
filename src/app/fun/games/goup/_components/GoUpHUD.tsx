@@ -10,27 +10,31 @@ export const GoUpHUD: React.FC<{ arena: Arena }> = ({ arena }) => {
   const snap = useSnapshot(goUpState);
   const bg = arena.background.replace('#', '');
   const isDark = parseInt(bg.slice(0, 2), 16) < 120;
-  const textColor = isDark ? '#faf9ff' : '#111';
-  const subColor = isDark ? 'rgba(255,255,255,0.72)' : 'rgba(0,0,0,0.6)';
+  const textColor = isDark ? '#f5f8ff' : '#0f1318';
+  const subColor = isDark ? 'rgba(236,243,255,0.78)' : 'rgba(13,18,24,0.74)';
+  const scoreShadow = isDark
+    ? '0 6px 20px rgba(0,0,0,0.5)'
+    : '0 6px 18px rgba(0,0,0,0.2)';
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
       <div
         style={{
           position: 'absolute',
-          top: 12,
+          top: 10,
           left: '50%',
           transform: 'translateX(-50%)',
           color: textColor,
           fontFamily: '"Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif',
           textAlign: 'center',
           minWidth: 220,
+          textShadow: scoreShadow,
         }}
       >
         <div
           style={{
             fontSize: 12,
-            opacity: 0.6,
+            opacity: 0.88,
             letterSpacing: 2.4,
             fontWeight: 700,
           }}
@@ -44,6 +48,7 @@ export const GoUpHUD: React.FC<{ arena: Arena }> = ({ arena }) => {
             letterSpacing: -1,
             lineHeight: 0.96,
             marginTop: 3,
+            WebkitTextStroke: isDark ? '0px transparent' : '1px rgba(255,255,255,0.16)',
           }}
         >
           {snap.score}

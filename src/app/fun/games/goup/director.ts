@@ -35,6 +35,7 @@ const createInitialGenState = (): GenState => ({
   tension: false,
   tensionStepsLeft: 0,
   obstacleCooldown: 0,
+  hazardBurstRemaining: 0,
   demandingCooldown: 0,
   prevGapAfter: false,
   prevRiseToNext: CFG.STEP.riseCalmMin,

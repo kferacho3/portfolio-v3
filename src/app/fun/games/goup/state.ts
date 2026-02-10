@@ -47,7 +47,7 @@ export const goUpState = proxy({
   nearMisses: 0,
   arenaIndex: 0,
   arenaMode: 'auto' as 'auto' | 'fixed',
-  pathStyle: 'hybrid' as PathStyle,
+  pathStyle: 'tiles' as PathStyle,
   pathSkin: 'sleek' as PathSkin,
   trackMode: 'auto' as TrackMode,
   quality: 'auto' as QualityMode,
@@ -83,7 +83,11 @@ export const goUpState = proxy({
     const pathSkin = window.localStorage.getItem(PATH_SKIN_KEY);
     const trackMode = window.localStorage.getItem(TRACK_MODE_KEY);
     const quality = window.localStorage.getItem(QUALITY_KEY);
-    if (isPathStyle(pathStyle)) goUpState.pathStyle = pathStyle;
+    if (isPathStyle(pathStyle) && pathStyle === 'tiles') {
+      goUpState.pathStyle = pathStyle;
+    } else {
+      goUpState.pathStyle = 'tiles';
+    }
     if (isPathSkin(pathSkin)) goUpState.pathSkin = pathSkin;
     if (isTrackMode(trackMode)) goUpState.trackMode = trackMode;
     if (isQualityMode(quality)) goUpState.quality = quality;
@@ -106,9 +110,9 @@ export const goUpState = proxy({
   },
 
   setPathStyle: (style: PathStyle) => {
-    goUpState.pathStyle = style;
+    goUpState.pathStyle = style === 'tiles' ? style : 'tiles';
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(PATH_STYLE_KEY, style);
+      window.localStorage.setItem(PATH_STYLE_KEY, goUpState.pathStyle);
     }
   },
 

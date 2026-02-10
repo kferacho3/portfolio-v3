@@ -1,6 +1,6 @@
 'use client';
 
-import { ContactShadows, PerspectiveCamera, Trail } from '@react-three/drei';
+import { ContactShadows, PerspectiveCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
@@ -198,13 +198,18 @@ export const GoUpWorld: React.FC<{
     () => new RoundedBoxGeometry(1, 1, 1, 4, 0.18),
     []
   );
+  const wallGeometry = useMemo(
+    () => new RoundedBoxGeometry(1, 1, 1, 3, 0.08),
+    []
+  );
 
   useEffect(() => {
     return () => {
       stepBodyGeometry.dispose();
       stepTopGeometry.dispose();
+      wallGeometry.dispose();
     };
-  }, [stepBodyGeometry, stepTopGeometry]);
+  }, [stepBodyGeometry, stepTopGeometry, wallGeometry]);
 
   const syncInstances = useCallback(() => {
     const stepBodyMesh = stepBodyMeshRef.current;
@@ -246,7 +251,7 @@ export const GoUpWorld: React.FC<{
         step.pos[2]
       );
       dummy.rotation.set(0, yaw, 0);
-      dummy.scale.set(step.width, STEP_BODY_THICKNESS, step.length);
+      dummy.scale.set(step.width * 1.01, STEP_BODY_THICKNESS, step.length + 0.14);
       dummy.updateMatrix();
 
       stepBodyMesh.setMatrixAt(stepCount, dummy.matrix);
@@ -263,11 +268,12 @@ export const GoUpWorld: React.FC<{
         step.pos[2]
       );
       dummy.rotation.set(0, yaw, 0);
-      const topLengthScale = step.gapAfter ? 0.98 : 1.02;
+      const topLengthScale = step.gapAfter ? 0.9 : 1.14;
+      const topLengthPad = step.gapAfter ? 0.02 : 0.12;
       dummy.scale.set(
         step.width * 0.995,
         STEP_TOP_THICKNESS,
-        step.length * topLengthScale + 0.04
+        step.length * topLengthScale + topLengthPad
       );
       dummy.updateMatrix();
 
@@ -345,7 +351,7 @@ export const GoUpWorld: React.FC<{
             dummy.scale.set(obstacle.w, obstacle.h, obstacle.d);
             dummy.updateMatrix();
             wallMesh.setMatrixAt(wallCount, dummy.matrix);
-            wallColor.setHSL(hueWrap(pathHueBase - 0.02), 0.42, 0.46);
+            wallColor.setHSL(hueWrap(pathHueBase - 0.01), 0.64, 0.36);
             wallMesh.setColorAt(wallCount, wallColor);
             wallCount += 1;
             continue;
@@ -972,15 +978,15 @@ export const GoUpWorld: React.FC<{
         args={[undefined, undefined, MAX_WALL_INSTANCES]}
         castShadow
         receiveShadow
-        visible={false}
+        visible
+        geometry={wallGeometry}
       >
-        <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           vertexColors
-          roughness={0.38}
-          metalness={0.22}
-          emissive={hslToColor(arena.pathHue, 0.5, 0.3)}
-          emissiveIntensity={snap.pathSkin === 'neon' ? 0.45 : 0.2}
+          roughness={0.52}
+          metalness={0.18}
+          emissive={hslToColor(arena.pathHue - 0.03, 0.52, 0.3)}
+          emissiveIntensity={snap.pathSkin === 'neon' ? 0.34 : 0.14}
         />
       </instancedMesh>
 
@@ -1011,34 +1017,16 @@ export const GoUpWorld: React.FC<{
           isMobile={isMobile}
         />
       )}
-      {snap.multiplier >= 3 ? (
-        <Trail
-          width={1.0 + snap.multiplier * 0.08}
-          length={8}
-          color={hslToColor(arena.pathHue + 0.05, 0.9, 0.6)}
-          attenuation={(t) => t * t}
-        >
-          <mesh ref={playerMeshRef} castShadow>
-            <sphereGeometry args={[CFG.PLAYER.radius, 28, 28]} />
-            <meshStandardMaterial
-              color={arena.playerColor}
-              roughness={0.14}
-              metalness={0.64}
-              emissive={hslToColor(arena.pathHue + 0.05, 0.8, 0.45)}
-              emissiveIntensity={0.5}
-            />
-          </mesh>
-        </Trail>
-      ) : (
-        <mesh ref={playerMeshRef} castShadow>
-          <sphereGeometry args={[CFG.PLAYER.radius, 28, 28]} />
-          <meshStandardMaterial
-            color={arena.playerColor}
-            roughness={0.14}
-            metalness={0.64}
-          />
-        </mesh>
-      )}
+      <mesh ref={playerMeshRef} castShadow>
+        <sphereGeometry args={[CFG.PLAYER.radius, 28, 28]} />
+        <meshStandardMaterial
+          color={arena.playerColor}
+          roughness={0.14}
+          metalness={0.64}
+          emissive={hslToColor(arena.pathHue + 0.05, 0.82, 0.36)}
+          emissiveIntensity={snap.multiplier > 1 ? 0.36 : 0.08}
+        />
+      </mesh>
 
       <mesh ref={shadowMeshRef} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1, 28]} />
