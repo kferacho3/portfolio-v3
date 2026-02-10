@@ -21,6 +21,12 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+  withinGraceWindow,
+} from '../_shared/hyperUpgradeKit';
 import { portalPunchState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -490,6 +496,7 @@ function PortalPunchScene() {
   const gloveGroupRef = useRef<THREE.Group>(null);
   const gloveHitRef = useRef<THREE.Mesh>(null);
   const warpMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const fixedStepRef = useRef(createFixedStepState());
 
   const { camera } = useThree();
 
@@ -565,7 +572,12 @@ function PortalPunchScene() {
   }, []);
 
   useFrame((state, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = usePortalPunchStore.getState();
@@ -668,10 +680,20 @@ function PortalPunchScene() {
               portalInverse.copy(portalMatrix).invert();
               localPoint.copy(point).applyMatrix4(portalInverse);
               const r = Math.hypot(localPoint.x, localPoint.y);
+              const rimFailRadius = portal.innerRadius - GLOVE_RADIUS * 0.16;
 
-              if (portal.fake || r >= portal.innerRadius - GLOVE_RADIUS * 0.34) {
-                attempt.resolved = true;
-                failRun(runtime, 'rim');
+              if (portal.fake || r >= rimFailRadius) {
+                if (
+                  !portal.fake &&
+                  withinGraceWindow(runtime.elapsed, runtime.lastPunchAt, 0.1)
+                ) {
+                  attempt.crossedPortal = true;
+                  attempt.centerRatio = r / Math.max(0.0001, portal.innerRadius);
+                  attempt.perfect = attempt.centerRatio <= 0.22;
+                } else {
+                  attempt.resolved = true;
+                  failRun(runtime, 'rim');
+                }
               } else {
                 attempt.crossedPortal = true;
                 attempt.centerRatio = r / Math.max(0.0001, portal.innerRadius);
@@ -683,7 +705,7 @@ function PortalPunchScene() {
               const coreZ = portal.z - portal.coreGap;
               if (crossedPlane(runtime.glovePrevZ, runtime.gloveZ, coreZ)) {
                 const distXY = Math.hypot(portal.x, portal.y);
-                if (distXY <= portal.coreRadius + GLOVE_RADIUS * 0.24) {
+                if (distXY <= portal.coreRadius + GLOVE_RADIUS * 0.3) {
                   attempt.hitCore = true;
                   attempt.resolved = true;
                   runtime.shake = Math.min(1.35, runtime.shake + 0.72);
@@ -754,12 +776,13 @@ function PortalPunchScene() {
     runtime.chroma = Math.max(0, runtime.chroma - dt * 3.2);
 
     const shakeAmp = runtime.shake * 0.08;
+    const shakeTime = runtime.elapsed * 26;
     camTarget.set(
-      (Math.random() - 0.5) * shakeAmp,
-      0.42 + (Math.random() - 0.5) * shakeAmp * 0.45,
-      7.55 + (Math.random() - 0.5) * shakeAmp * 0.32
+      shakeNoiseSigned(shakeTime, 2.4) * shakeAmp,
+      0.42 + shakeNoiseSigned(shakeTime, 8.1) * shakeAmp * 0.45,
+      7.55 + shakeNoiseSigned(shakeTime, 15.7) * shakeAmp * 0.32
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-7.8 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.8 * step.renderDt));
     camera.lookAt(0, 0, -5.2);
 
     chromaOffset.set(
@@ -882,10 +905,11 @@ function PortalPunchScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 0.42, 7.55]} fov={44} />
-      <color attach="background" args={['#070b15']} />
-      <fog attach="fog" args={['#070b15', 8, 46]} />
+      <color attach="background" args={['#121a2f']} />
+      <fog attach="fog" args={['#121a2f', 8, 46]} />
 
-      <ambientLight intensity={0.38} />
+      <ambientLight intensity={0.48} />
+      <hemisphereLight args={['#9fe3ff', '#291f3d', 0.28]} />
       <directionalLight position={[2.6, 4.2, 5.4]} intensity={0.85} color="#c9efff" />
       <pointLight position={[0, 0.8, 3.7]} intensity={0.56} color="#8ad3ff" />
 

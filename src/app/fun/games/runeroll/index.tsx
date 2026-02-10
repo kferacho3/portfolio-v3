@@ -14,6 +14,7 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { consumeFixedStep, createFixedStepState, shakeNoiseSigned } from '../_shared/hyperUpgradeKit';
 import { runeRollState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -645,6 +646,7 @@ function RuneRollScene() {
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const cubeRef = useRef<THREE.Mesh>(null);
   const faceRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const fixedStepRef = useRef(createFixedStepState());
 
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -744,7 +746,12 @@ function RuneRollScene() {
   }, []);
 
   useFrame((_, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = useRuneRollStore.getState();
@@ -920,12 +927,13 @@ function RuneRollScene() {
 
     runtime.shake = Math.max(0, runtime.shake - dt * 4.3);
     const shakeAmp = runtime.shake * 0.08;
+    const shakeTime = runtime.elapsed * 22;
     camTarget.set(
-      5.8 + (Math.random() - 0.5) * shakeAmp,
-      6.3 + (Math.random() - 0.5) * shakeAmp * 0.65,
-      6.6 + (Math.random() - 0.5) * shakeAmp
+      5.8 + shakeNoiseSigned(shakeTime, 2.1) * shakeAmp,
+      6.3 + shakeNoiseSigned(shakeTime, 8.3) * shakeAmp * 0.65,
+      6.6 + shakeNoiseSigned(shakeTime, 14.6) * shakeAmp
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * step.renderDt));
     camera.lookAt(0, 0.2, -7.5);
 
     if (bgMatRef.current) {
@@ -1050,10 +1058,11 @@ function RuneRollScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[5.8, 6.3, 6.6]} fov={37} near={0.1} far={120} />
-      <color attach="background" args={['#0f0b19']} />
-      <fog attach="fog" args={['#0f0b19', 10, 58]} />
+      <color attach="background" args={['#16142c']} />
+      <fog attach="fog" args={['#16142c', 10, 58]} />
 
-      <ambientLight intensity={0.46} />
+      <ambientLight intensity={0.54} />
+      <hemisphereLight args={['#9bd9ff', '#2d203c', 0.32]} />
       <directionalLight position={[5, 9, 6]} intensity={0.76} color="#f8e2c6" />
       <pointLight position={[-2, 2.4, 2]} intensity={0.48} color="#7a66ff" />
       <pointLight position={[2, 1.6, -1]} intensity={0.42} color="#ffb870" />

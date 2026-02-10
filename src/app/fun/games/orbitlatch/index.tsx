@@ -14,6 +14,12 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+  withinGraceWindow,
+} from '../_shared/hyperUpgradeKit';
 import { orbitLatchState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -84,6 +90,7 @@ type Runtime = {
   impactFlash: number;
   trailHead: number;
   nextOrbitDirection: number;
+  lastTapAt: number;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -279,6 +286,7 @@ const createRuntime = (): Runtime => ({
   impactFlash: 0,
   trailHead: 0,
   nextOrbitDirection: 1,
+  lastTapAt: -99,
 
   difficulty: sampleDifficulty('orbit-chain', 0),
   chunkLibrary: buildPatternLibraryTemplate('orbitlatch'),
@@ -632,6 +640,7 @@ function OrbitLatchScene() {
   const satRef = useRef<THREE.Mesh>(null);
   const latchSparkRef = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
+  const fixedStepRef = useRef(createFixedStepState());
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
@@ -686,6 +695,7 @@ function OrbitLatchScene() {
     runtime.impactFlash = 0;
     runtime.trailHead = 0;
     runtime.nextOrbitDirection = 1;
+    runtime.lastTapAt = -99;
 
     runtime.difficulty = sampleDifficulty('orbit-chain', 0);
     runtime.currentChunk = null;
@@ -765,7 +775,12 @@ function OrbitLatchScene() {
   );
 
   useFrame((_, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = useOrbitStore.getState();
@@ -777,6 +792,7 @@ function OrbitLatchScene() {
       input.justPressed.has('enter');
 
     if (tap) {
+      runtime.lastTapAt = runtime.elapsed;
       if (store.status !== 'PLAYING') {
         resetRuntime(runtime);
         useOrbitStore.getState().startRun();
@@ -1005,7 +1021,9 @@ function OrbitLatchScene() {
         if (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS)) {
           failRun('Satellite impacted a planet core.');
         } else if (runtime.driftTimer > driftFail) {
-          failRun('Drift window expired before relatch.');
+          if (!withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1)) {
+            failRun('Drift window expired before relatch.');
+          }
         }
       }
 
@@ -1094,12 +1112,13 @@ function OrbitLatchScene() {
     trailGeometry.computeBoundingSphere();
 
     const shakeAmp = runtime.shake * 0.09;
+    const shakeTime = runtime.elapsed * 21;
     camTarget.set(
-      runtime.playerX * 0.3 + (Math.random() - 0.5) * shakeAmp,
-      7.3 + (Math.random() - 0.5) * shakeAmp * 0.32,
-      -runtime.playerY + 4.9 + (Math.random() - 0.5) * shakeAmp
+      runtime.playerX * 0.3 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
+      7.3 + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
+      -runtime.playerY + 4.9 + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     lookTarget.set(runtime.playerX * 0.2, 0, -runtime.playerY - 3.4);
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -1230,10 +1249,11 @@ function OrbitLatchScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.3, 4.9]} fov={39} near={0.1} far={120} />
-      <color attach="background" args={['#090d26']} />
-      <fog attach="fog" args={['#090d26', 11, 74]} />
+      <color attach="background" args={['#171d3f']} />
+      <fog attach="fog" args={['#171d3f', 11, 74]} />
 
-      <ambientLight intensity={0.38} />
+      <ambientLight intensity={0.5} />
+      <hemisphereLight args={['#9ad9ff', '#2f264f', 0.28]} />
       <pointLight position={[0, 3.8, 1]} intensity={0.6} color="#55f4ff" />
       <pointLight position={[0, 2.2, -2]} intensity={0.5} color="#ff7fd0" />
       <pointLight position={[-1.8, 2.5, -1.4]} intensity={0.34} color="#c5ff66" />

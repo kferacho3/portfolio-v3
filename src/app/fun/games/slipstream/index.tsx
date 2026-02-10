@@ -20,6 +20,12 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import {
+  circleVsAabbForgiving,
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+} from '../_shared/hyperUpgradeKit';
 import { slipstreamState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -189,7 +195,7 @@ const circleVsAabb = (
   bz: number,
   hw: number,
   hd: number
-) => Math.abs(px - bx) < hw + r && Math.abs(pz - bz) < hd + r;
+) => circleVsAabbForgiving(px, pz, r, bx, bz, hw, hd, 0.9);
 
 const makeSegment = (slot: number): TunnelSegment => ({
   slot,
@@ -622,6 +628,7 @@ function SlipStreamScene() {
   const streakRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
+  const fixedStepRef = useRef(createFixedStepState());
 
   const chromaOffset = useMemo(() => new THREE.Vector2(0.00032, 0), []);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -655,7 +662,12 @@ function SlipStreamScene() {
   }, []);
 
   useFrame((_, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = useSlipStreamStore.getState();
@@ -843,12 +855,13 @@ function SlipStreamScene() {
 
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
     const shakeAmp = runtime.shake * 0.09;
+    const shakeTime = runtime.elapsed * 23;
     camTarget.set(
-      (Math.random() - 0.5) * shakeAmp,
-      2.35 + runtime.slipBlend * 0.12 + (Math.random() - 0.5) * shakeAmp * 0.24,
-      5.7 - runtime.slipBlend * 0.28 + (Math.random() - 0.5) * shakeAmp * 0.28
+      shakeNoiseSigned(shakeTime, 1.9) * shakeAmp,
+      2.35 + runtime.slipBlend * 0.12 + shakeNoiseSigned(shakeTime, 7.2) * shakeAmp * 0.24,
+      5.7 - runtime.slipBlend * 0.28 + shakeNoiseSigned(shakeTime, 13.7) * shakeAmp * 0.28
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * step.renderDt));
     camera.lookAt(0, -0.12, -10);
     if (camera instanceof THREE.PerspectiveCamera) {
       camera.fov = lerp(camera.fov, 38 - runtime.slipBlend * 2.4, 1 - Math.exp(-6 * dt));
@@ -1021,10 +1034,11 @@ function SlipStreamScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 2.35, 5.7]} fov={38} near={0.1} far={120} />
-      <color attach="background" args={['#062532']} />
-      <fog attach="fog" args={['#062532', 10, 56]} />
+      <color attach="background" args={['#0a3242']} />
+      <fog attach="fog" args={['#0a3242', 10, 56]} />
 
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.56} />
+      <hemisphereLight args={['#7ee3ff', '#173242', 0.3]} />
       <pointLight position={[0, 3.2, 4]} intensity={0.66} color="#95edff" />
       <pointLight position={[0, -1.7, 4]} intensity={0.34} color="#ffc67a" />
 

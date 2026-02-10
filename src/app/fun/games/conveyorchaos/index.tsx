@@ -15,6 +15,12 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+  withinGraceWindow,
+} from '../_shared/hyperUpgradeKit';
 import { conveyorChaosState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -61,6 +67,7 @@ type Runtime = {
   diverterDir: ExitDir;
   diverterAngle: number;
   diverterTargetAngle: number;
+  lastRotateAt: number;
 
   spawnTimer: number;
   nextSpawnSlot: number;
@@ -367,6 +374,7 @@ const createRuntime = (): Runtime => ({
   diverterDir: 0,
   diverterAngle: angleForDir(0),
   diverterTargetAngle: angleForDir(0),
+  lastRotateAt: -99,
 
   spawnTimer: 0.72,
   nextSpawnSlot: 0,
@@ -396,6 +404,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.diverterDir = 0;
   runtime.diverterAngle = angleForDir(0);
   runtime.diverterTargetAngle = angleForDir(0);
+  runtime.lastRotateAt = -99;
 
   runtime.spawnTimer = 0.72;
   runtime.nextSpawnSlot = 0;
@@ -582,6 +591,7 @@ function ConveyorChaosScene() {
   const markerRef = useRef<THREE.InstancedMesh>(null);
   const diverterGroupRef = useRef<THREE.Group>(null);
   const diverterMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const fixedStepRef = useRef(createFixedStepState());
 
   const { camera } = useThree();
 
@@ -630,8 +640,13 @@ function ConveyorChaosScene() {
     return () => unsubscribe();
   }, []);
 
-  useFrame((state, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+  useFrame((_, delta) => {
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = useConveyorStore.getState();
@@ -650,6 +665,7 @@ function ConveyorChaosScene() {
         const nextDir = ((runtime.diverterDir + 1) % 4) as ExitDir;
         runtime.diverterDir = nextDir;
         runtime.diverterTargetAngle = angleForDir(nextDir);
+        runtime.lastRotateAt = runtime.elapsed;
         runtime.shake = Math.min(1.15, runtime.shake + 0.18);
       }
     }
@@ -688,8 +704,13 @@ function ConveyorChaosScene() {
           if (pkg.t >= 1) {
             const hadStreak = runtime.streak > 0;
             if (runtime.diverterDir !== pkg.targetExit) {
-              failRun('Wrong diverter direction.');
-              break;
+              if (withinGraceWindow(runtime.elapsed, runtime.lastRotateAt, 0.1)) {
+                runtime.diverterDir = pkg.targetExit;
+                runtime.diverterTargetAngle = angleForDir(pkg.targetExit);
+              } else {
+                failRun('Wrong diverter direction.');
+                break;
+              }
             }
             if (pkg.dualTag && !hadStreak) {
               failRun('Dual-tag required two in a row.');
@@ -774,12 +795,13 @@ function ConveyorChaosScene() {
     }
 
     const shakeAmp = runtime.shake * 0.1;
+    const shakeTime = runtime.elapsed * 22;
     camTarget.set(
-      (Math.random() - 0.5) * shakeAmp,
-      8.6 + (Math.random() - 0.5) * shakeAmp * 0.55,
-      (Math.random() - 0.5) * shakeAmp * 0.35
+      shakeNoiseSigned(shakeTime, 2.7) * shakeAmp,
+      8.6 + shakeNoiseSigned(shakeTime, 8.2) * shakeAmp * 0.55,
+      shakeNoiseSigned(shakeTime, 13.9) * shakeAmp * 0.35
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-7.4 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.4 * step.renderDt));
     camera.lookAt(0, 0, 0);
 
     for (const uniforms of beltUniforms) {
@@ -852,10 +874,11 @@ function ConveyorChaosScene() {
   return (
     <>
       <OrthographicCamera makeDefault position={[0, 8.6, 0.001]} zoom={96} near={0.1} far={60} />
-      <color attach="background" args={['#0b1120']} />
-      <fog attach="fog" args={['#0b1120', 6, 28]} />
+      <color attach="background" args={['#18243a']} />
+      <fog attach="fog" args={['#18243a', 6, 28]} />
 
-      <ambientLight intensity={0.55} />
+      <ambientLight intensity={0.6} />
+      <hemisphereLight args={['#b6e8ff', '#2d3950', 0.28]} />
       <directionalLight position={[3.2, 8.2, 2.4]} intensity={0.92} color="#d6edff" />
       <pointLight position={[0, 2.8, 0]} intensity={0.42} color="#8be8ff" />
 

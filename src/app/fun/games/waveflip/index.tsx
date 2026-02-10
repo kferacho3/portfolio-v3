@@ -14,6 +14,13 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import {
+  circleVsAabbForgiving,
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+  withinGraceWindow,
+} from '../_shared/hyperUpgradeKit';
 import { waveFlipState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -161,7 +168,7 @@ const circleVsAabb = (
   by: number,
   hw: number,
   hh: number
-) => Math.abs(px - bx) < hw + r && Math.abs(py - by) < hh + r;
+) => circleVsAabbForgiving(px, py, r, bx, by, hw, hh, 0.9);
 
 const waveSample = (x: number, runtime: Runtime) => {
   const arg = runtime.waveFreq * (x + runtime.phaseScroll);
@@ -516,6 +523,7 @@ function WaveFlipScene() {
   const obstacleRef = useRef<THREE.InstancedMesh>(null);
   const markerRef = useRef<THREE.InstancedMesh>(null);
   const orbRef = useRef<THREE.Mesh>(null);
+  const fixedStepRef = useRef(createFixedStepState());
   const impactOverlayRef = useRef<HTMLDivElement>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -596,7 +604,12 @@ function WaveFlipScene() {
   );
 
   useFrame((_, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = useWaveFlipStore.getState();
@@ -660,12 +673,17 @@ function WaveFlipScene() {
           obstacle.h * 0.5
         );
         if (hit) {
-          runtime.failMessage = 'You hit a blocked phase lane.';
-          runtime.impactFlash = 1;
-          runtime.shake = Math.min(1.5, runtime.shake + 0.6);
-          useWaveFlipStore.getState().endRun(runtime.score, runtime.failMessage);
-          failed = true;
-          break;
+          if (withinGraceWindow(runtime.elapsed, runtime.lastFlipAt, 0.1)) {
+            obstacle.glow = 1;
+            runtime.score += 0.12;
+          } else {
+            runtime.failMessage = 'You hit a blocked phase lane.';
+            runtime.impactFlash = 1;
+            runtime.shake = Math.min(1.5, runtime.shake + 0.6);
+            useWaveFlipStore.getState().endRun(runtime.score, runtime.failMessage);
+            failed = true;
+            break;
+          }
         }
 
         if (
@@ -717,12 +735,13 @@ function WaveFlipScene() {
     runtime.shake = Math.max(0, runtime.shake - dt * 4.5);
     runtime.impactFlash = Math.max(0, runtime.impactFlash - dt * 4.2);
     const shakeAmp = runtime.shake * 0.08;
+    const shakeTime = runtime.elapsed * 24;
     camTarget.set(
-      (Math.random() - 0.5) * shakeAmp,
-      (Math.random() - 0.5) * shakeAmp * 0.5,
-      9 + (Math.random() - 0.5) * shakeAmp * 0.35
+      shakeNoiseSigned(shakeTime, 2.3) * shakeAmp,
+      shakeNoiseSigned(shakeTime, 8.8) * shakeAmp * 0.5,
+      9 + shakeNoiseSigned(shakeTime, 16.4) * shakeAmp * 0.35
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     camera.lookAt(0, 0, 0);
 
     if (orbRef.current) {
@@ -836,10 +855,11 @@ function WaveFlipScene() {
   return (
     <>
       <OrthographicCamera makeDefault position={[0, 0, 9]} zoom={58} near={0.1} far={40} />
-      <color attach="background" args={['#051221']} />
-      <fog attach="fog" args={['#051221', 7, 24]} />
+      <color attach="background" args={['#0a1f34']} />
+      <fog attach="fog" args={['#0a1f34', 7, 24]} />
 
-      <ambientLight intensity={0.42} />
+      <ambientLight intensity={0.52} />
+      <hemisphereLight args={['#78dfff', '#2a1e4a', 0.26]} />
       <pointLight position={[0, 2.4, 4]} intensity={0.56} color="#67ebff" />
       <pointLight position={[0, -1.8, 4]} intensity={0.45} color="#ff7ba6" />
 

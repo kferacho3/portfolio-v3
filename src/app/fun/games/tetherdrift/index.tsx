@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { create } from 'zustand';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { consumeFixedStep, createFixedStepState, shakeNoiseSigned } from '../_shared/hyperUpgradeKit';
 import { tetherDriftState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -438,6 +439,7 @@ function TetherDriftScene() {
   const shockMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
   const targetAnchorRef = useRef<THREE.Mesh>(null);
+  const fixedStepRef = useRef(createFixedStepState());
   const tetherLineRef = useRef<any>(null);
   const guideLineRef = useRef<any>(null);
 
@@ -503,7 +505,12 @@ function TetherDriftScene() {
   );
 
   useFrame((state, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const game = useTetherStore.getState();
     const input = inputRef.current;
@@ -659,7 +666,7 @@ function TetherDriftScene() {
           const dx = runtime.playerX - gate.x;
           const dy = runtime.playerY - gate.y;
           const radialDist = Math.hypot(dx, dy);
-          if (Math.abs(radialDist - gate.radius) < gate.thickness + PLAYER_RADIUS * 0.36) {
+          if (Math.abs(radialDist - gate.radius) < (gate.thickness + PLAYER_RADIUS * 0.36) * 0.9) {
             gameOver = true;
             break;
           }
@@ -731,12 +738,13 @@ function TetherDriftScene() {
 
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
     const shakeAmp = runtime.shake * 0.06;
-    const jitterX = (Math.random() - 0.5) * shakeAmp;
-    const jitterY = (Math.random() - 0.5) * shakeAmp * 0.4;
-    const jitterZ = (Math.random() - 0.5) * shakeAmp * 0.42;
+    const shakeTime = runtime.elapsed * 21;
+    const jitterX = shakeNoiseSigned(shakeTime, 2.2) * shakeAmp;
+    const jitterY = shakeNoiseSigned(shakeTime, 7.7) * shakeAmp * 0.4;
+    const jitterZ = shakeNoiseSigned(shakeTime, 13.9) * shakeAmp * 0.42;
     camTarget.set(runtime.playerX * 0.44 + jitterX, 4.45 + runtime.playerY * 0.22 + jitterY, 7.45 + jitterZ);
     lookTarget.set(runtime.playerX * 0.33, runtime.playerY * 0.45, -3.35);
-    camera.position.lerp(camTarget, 1 - Math.exp(-6.5 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-6.5 * step.renderDt));
     camera.lookAt(lookTarget);
 
     if (playerRef.current) {
@@ -943,12 +951,13 @@ function TetherDriftScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 4.2, 7.35]} fov={43} />
-      <color attach="background" args={['#10345f']} />
-      <fog attach="fog" args={['#10345f', 10, 42]} />
+      <color attach="background" args={['#1f4f82']} />
+      <fog attach="fog" args={['#1f4f82', 10, 42]} />
 
       <Stars radius={95} depth={56} count={1200} factor={2.5} saturation={0.55} fade speed={0.4} />
 
-      <ambientLight intensity={0.56} />
+      <ambientLight intensity={0.62} />
+      <hemisphereLight args={['#b8f3ff', '#2f3b73', 0.28]} />
       <pointLight position={[0, 3.1, 2.2]} intensity={0.68} color="#9deeff" />
       <pointLight position={[-2.2, -0.5, -8]} intensity={0.38} color="#c39dff" />
       <pointLight position={[2.2, -0.3, -7]} intensity={0.3} color="#ffb6a0" />

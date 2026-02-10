@@ -14,6 +14,12 @@ import {
   type GameChunkPatternTemplate,
 } from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+  withinGraceWindow,
+} from '../_shared/hyperUpgradeKit';
 import { pulseParryState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -72,6 +78,7 @@ type Runtime = {
 
   hitThreshold: number;
   perfectThreshold: number;
+  lastTapAt: number;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -219,6 +226,7 @@ const createRuntime = (): Runtime => ({
 
   hitThreshold: 0.14,
   perfectThreshold: 0.06,
+  lastTapAt: -99,
 
   difficulty: sampleDifficulty('timing-defense', 0),
   chunkLibrary: buildPatternLibraryTemplate('pulseparry'),
@@ -256,6 +264,7 @@ const resetRuntime = (runtime: Runtime) => {
 
   runtime.hitThreshold = 0.14;
   runtime.perfectThreshold = 0.06;
+  runtime.lastTapAt = -99;
 
   runtime.difficulty = sampleDifficulty('timing-defense', 0);
   runtime.currentChunk = null;
@@ -563,6 +572,7 @@ function PulseParryScene() {
   const parryZoneRef = useRef<THREE.Mesh>(null);
   const shockRef = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
+  const fixedStepRef = useRef(createFixedStepState());
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
@@ -615,7 +625,12 @@ function PulseParryScene() {
   );
 
   useFrame((_, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) {
+      clearFrameInput(inputRef);
+      return;
+    }
+    const dt = step.dt;
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = usePulseParryStore.getState();
@@ -635,6 +650,7 @@ function PulseParryScene() {
         runtime.shockRadius = runtime.parryRadius;
         runtime.shockLife = runtime.shockDuration;
         runtime.tapCooldown = 0.09;
+        runtime.lastTapAt = runtime.elapsed;
         runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
         usePulseParryStore.getState().onTapFx();
       }
@@ -710,14 +726,24 @@ function PulseParryScene() {
             }
           }
 
-          if (pulse.radius <= CORE_FAIL_RADIUS + pulse.thickness * 0.5) {
-            runtime.failMessage = 'A pulse breached the core.';
-            runtime.shake = Math.min(1.5, runtime.shake + 0.72);
-            runtime.perfectFlash = 1;
-            spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
-            usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
-            failed = true;
-            break;
+          if (pulse.radius <= CORE_FAIL_RADIUS + pulse.thickness * 0.42) {
+            if (withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1)) {
+              pulse.parried = true;
+              pulse.life = 0.16;
+              pulse.flash = 0.7;
+              runtime.score += 0.15;
+              runtime.shockActive = false;
+              runtime.shockLife = 0;
+              runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.14);
+            } else {
+              runtime.failMessage = 'A pulse breached the core.';
+              runtime.shake = Math.min(1.5, runtime.shake + 0.72);
+              runtime.perfectFlash = 1;
+              spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
+              usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
+              failed = true;
+              break;
+            }
           }
         } else {
           pulse.radius += pulse.speed * 1.4 * dt;
@@ -754,12 +780,13 @@ function PulseParryScene() {
 
     runtime.shake = Math.max(0, runtime.shake - dt * 5.4);
     const shakeAmp = runtime.shake * 0.07;
+    const shakeTime = runtime.elapsed * 24;
     camTarget.set(
-      (Math.random() - 0.5) * shakeAmp,
-      7.25 + (Math.random() - 0.5) * shakeAmp * 0.2,
-      0.002 + (Math.random() - 0.5) * shakeAmp
+      shakeNoiseSigned(shakeTime, 1.7) * shakeAmp,
+      7.25 + shakeNoiseSigned(shakeTime, 9.3) * shakeAmp * 0.2,
+      0.002 + shakeNoiseSigned(shakeTime, 17.9) * shakeAmp
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     camera.lookAt(0, 0, 0);
 
     if (bgMaterialRef.current) {
@@ -897,12 +924,13 @@ function PulseParryScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.25, 0.002]} fov={36} near={0.1} far={50} />
-      <color attach="background" args={['#04110e']} />
-      <fog attach="fog" args={['#04110e', 8, 24]} />
+      <color attach="background" args={['#0c1b2b']} />
+      <fog attach="fog" args={['#0c1b2b', 8, 24]} />
 
-      <ambientLight intensity={0.36} />
-      <pointLight position={[0, 3.8, 0]} intensity={0.52} color="#6cffb9" />
-      <pointLight position={[0, 1.5, 0]} intensity={0.45} color="#ffd166" />
+      <ambientLight intensity={0.5} />
+      <hemisphereLight args={['#6ee7ff', '#1a2842', 0.36]} />
+      <pointLight position={[0, 3.8, 0]} intensity={0.58} color="#6cffb9" />
+      <pointLight position={[0, 1.5, 0]} intensity={0.5} color="#ffd166" />
 
       <mesh position={[0, -0.72, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[18, 18]} />
