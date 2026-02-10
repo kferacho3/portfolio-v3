@@ -1,6 +1,6 @@
 'use client';
 
-import { ContactShadows, PerspectiveCamera } from '@react-three/drei';
+import { ContactShadows, PerspectiveCamera, Trail } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
@@ -9,7 +9,7 @@ import {
   ToneMapping,
 } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three-stdlib';
 import { useSnapshot } from 'valtio';
@@ -31,6 +31,8 @@ import {
 } from '../constants';
 import type { Arena, BackgroundCube } from '../types';
 import { SkyMesh } from './SkyMesh';
+import type { Obstacle, Step } from '../simTypes';
+import { PathRibbonRenderer } from './PathRibbonRenderer';
 
 type BurstParticle = {
   active: boolean;
@@ -51,6 +53,8 @@ const MAX_STEP_INSTANCES =
   (CFG.KEEP_CHUNKS_BEHIND + CFG.KEEP_CHUNKS_AHEAD + 3) * CFG.STEPS_PER_CHUNK;
 const MAX_GEM_INSTANCES = MAX_STEP_INSTANCES;
 const MAX_SPIKE_INSTANCES = MAX_STEP_INSTANCES;
+const MAX_WALL_INSTANCES = MAX_STEP_INSTANCES;
+const MAX_BAR_INSTANCES = MAX_STEP_INSTANCES;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -60,6 +64,53 @@ const smoothingFactor = (sharpness: number, dt: number) =>
 
 const hueWrap = (h: number) => ((h % 1) + 1) % 1;
 const SLOPE_RISE_THRESHOLD = 0.12;
+
+const getStepStart = (step: Step): THREE.Vector3 => {
+  if (step.start) return new THREE.Vector3(step.start[0], step.start[1], step.start[2]);
+  return new THREE.Vector3(
+    step.pos[0] - step.dir[0] * (step.length * 0.5),
+    step.height,
+    step.pos[2] - step.dir[2] * (step.length * 0.5)
+  );
+};
+
+const getStepEnd = (step: Step): THREE.Vector3 => {
+  if (step.end) return new THREE.Vector3(step.end[0], step.end[1], step.end[2]);
+  return new THREE.Vector3(
+    step.pos[0] + step.dir[0] * (step.length * 0.5),
+    step.height,
+    step.pos[2] + step.dir[2] * (step.length * 0.5)
+  );
+};
+
+const buildTrackSegments = (steps: Step[]) => {
+  if (steps.length === 0) return [] as THREE.Vector3[][];
+
+  const sorted = [...steps].sort((a, b) => a.i - b.i);
+  const segments: THREE.Vector3[][] = [];
+  let current: THREE.Vector3[] = [];
+
+  for (let i = 0; i < sorted.length; i += 1) {
+    const step = sorted[i];
+    const start = getStepStart(step);
+    const end = getStepEnd(step);
+
+    if (current.length === 0) {
+      current.push(start);
+    }
+    current.push(end);
+
+    if (step.gapAfter) {
+      if (current.length >= 2) segments.push(current);
+      current = [];
+      const next = sorted[i + 1];
+      if (next) current.push(getStepStart(next));
+    }
+  }
+
+  if (current.length >= 2) segments.push(current);
+  return segments;
+};
 
 export const GoUpWorld: React.FC<{
   setArenaIndex: (idx: number) => void;
@@ -93,6 +144,8 @@ export const GoUpWorld: React.FC<{
   const stepTopMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const spikeMeshRef = useRef<THREE.InstancedMesh>(null);
+  const wallMeshRef = useRef<THREE.InstancedMesh>(null);
+  const barMeshRef = useRef<THREE.InstancedMesh>(null);
   const bgCubeMeshRef = useRef<THREE.InstancedMesh>(null);
   const towerCoreMeshRef = useRef<THREE.Mesh>(null);
 
@@ -101,6 +154,12 @@ export const GoUpWorld: React.FC<{
   const playerMeshRef = useRef<THREE.Mesh>(null);
 
   const burstMeshRef = useRef<THREE.InstancedMesh>(null);
+  const lastSyncStepIndexRef = useRef(-1);
+  const lastSyncRevisionRef = useRef(-1);
+  const lastSyncStyleKeyRef = useRef('');
+  const nearMissTokenRef = useRef(0);
+
+  const [trackSegments, setTrackSegments] = useState<THREE.Vector3[][]>([]);
   const burstParticlesRef = useRef<BurstParticle[]>(
     Array.from({ length: MAX_BURST_PARTICLES }, () => ({
       active: false,
@@ -124,6 +183,8 @@ export const GoUpWorld: React.FC<{
   const stepTopColor = useMemo(() => new THREE.Color(), []);
   const burstColor = useMemo(() => new THREE.Color(), []);
   const spikeColor = useMemo(() => new THREE.Color(), []);
+  const wallColor = useMemo(() => new THREE.Color(), []);
+  const barColor = useMemo(() => new THREE.Color(), []);
   const tempVecA = useMemo(() => new THREE.Vector3(), []);
   const tempVecB = useMemo(() => new THREE.Vector3(), []);
   const tempVecC = useMemo(() => new THREE.Vector3(), []);
@@ -150,20 +211,29 @@ export const GoUpWorld: React.FC<{
     const stepTopMesh = stepTopMeshRef.current;
     const gemMesh = gemMeshRef.current;
     const spikeMesh = spikeMeshRef.current;
-    if (!stepBodyMesh || !stepTopMesh || !gemMesh || !spikeMesh) {
-      return;
+    const wallMesh = wallMeshRef.current;
+    const barMesh = barMeshRef.current;
+    if (!stepBodyMesh || !stepTopMesh || !gemMesh || !spikeMesh || !wallMesh || !barMesh) {
+      return false;
     }
 
     const director = directorRef.current;
     const steps = director.getVisibleSteps();
+    setTrackSegments(buildTrackSegments(steps));
 
     const pathHueBase = arena.pathHue;
     const pathSat = clamp(arena.pathSat, 0.1, 1);
     const pathLight = clamp(arena.pathLight, 0.2, 0.85);
+    const skinMode = snap.pathSkin;
+
+    const skinSatMul = skinMode === 'neon' ? 1.08 : skinMode === 'velvet' ? 0.84 : 1;
+    const skinLightAdd = skinMode === 'neon' ? 0.03 : skinMode === 'velvet' ? -0.04 : 0;
 
     let stepCount = 0;
     let gemCount = 0;
     let spikeCount = 0;
+    let wallCount = 0;
+    let barCount = 0;
 
     for (let i = 0; i < steps.length && stepCount < MAX_STEP_INSTANCES; i += 1) {
       const step = steps[i];
@@ -182,8 +252,8 @@ export const GoUpWorld: React.FC<{
       stepBodyMesh.setMatrixAt(stepCount, dummy.matrix);
       stepBodyColor.setHSL(
         hueWrap(pathHueBase + (step.i % 14) * 0.0018),
-        clamp(pathSat * 0.88, 0.2, 1),
-        clamp(pathLight - 0.12 - (step.i % 7) * 0.004, 0.18, 0.78)
+        clamp(pathSat * 0.88 * skinSatMul, 0.2, 1),
+        clamp(pathLight - 0.12 - (step.i % 7) * 0.004 + skinLightAdd, 0.15, 0.82)
       );
       stepBodyMesh.setColorAt(stepCount, stepBodyColor);
 
@@ -197,7 +267,7 @@ export const GoUpWorld: React.FC<{
       dummy.scale.set(
         step.width * 0.995,
         STEP_TOP_THICKNESS,
-        step.length * topLengthScale
+        step.length * topLengthScale + 0.04
       );
       dummy.updateMatrix();
 
@@ -220,7 +290,7 @@ export const GoUpWorld: React.FC<{
         topHue = 0.025;
         topSat = 0.78;
         topLight = 0.58;
-      } else if (step.spike && !step.spike.hit) {
+      } else if (step.obstacles?.some((obs) => obs.type === 'spike' && !obs.cleared)) {
         topHue = 0.105;
         topSat = 0.74;
         topLight = 0.56;
@@ -230,7 +300,11 @@ export const GoUpWorld: React.FC<{
         topLight = clamp(pathLight + 0.02, 0.28, 0.84);
       }
 
-      stepTopColor.setHSL(topHue, topSat, topLight);
+      stepTopColor.setHSL(
+        topHue,
+        clamp(topSat * skinSatMul, 0.18, 1),
+        clamp(topLight + skinLightAdd, 0.24, 0.92)
+      );
       stepTopMesh.setColorAt(stepCount, stepTopColor);
       stepCount += 1;
 
@@ -247,43 +321,56 @@ export const GoUpWorld: React.FC<{
         gemCount += 1;
       }
 
-      if (step.spike && !step.spike.hit && spikeCount < MAX_SPIKE_INSTANCES) {
-        const [sx, sy, sz] = director.getSpikeWorldPos(step);
-        const [dx, , dz] = step.dir;
-        const yaw = Math.atan2(dx, dz);
+      if (step.obstacles && step.obstacles.length > 0) {
+        for (let obsIdx = 0; obsIdx < step.obstacles.length; obsIdx += 1) {
+          const obstacle = step.obstacles[obsIdx];
+          if (obstacle.cleared) continue;
+          const [ox, oy, oz] = director.getObstacleWorldPos(step, obstacle);
 
-        dummy.position.set(sx, sy + 0.05, sz);
-        dummy.rotation.set(0, yaw, 0);
-        dummy.scale.set(1.24, 1.24, 1.24);
-        dummy.updateMatrix();
-        spikeMesh.setMatrixAt(spikeCount, dummy.matrix);
-        spikeColor.setHSL(0.045, 0.9, 0.54);
-        spikeMesh.setColorAt(spikeCount, spikeColor);
-        spikeCount += 1;
+          if (obstacle.type === 'spike' && spikeCount < MAX_SPIKE_INSTANCES) {
+            dummy.position.set(ox, step.height + obstacle.h * 0.5 + 0.04, oz);
+            dummy.rotation.set(0, yaw, 0);
+            dummy.scale.set(obstacle.w * 0.9, obstacle.h, obstacle.d * 0.9);
+            dummy.updateMatrix();
+            spikeMesh.setMatrixAt(spikeCount, dummy.matrix);
+            spikeColor.setHSL(0.045, 0.9, 0.54);
+            spikeMesh.setColorAt(spikeCount, spikeColor);
+            spikeCount += 1;
+            continue;
+          }
+
+          if (obstacle.type === 'wall' && wallCount < MAX_WALL_INSTANCES) {
+            dummy.position.set(ox, step.height + obstacle.h * 0.5 + 0.04, oz);
+            dummy.rotation.set(0, yaw, 0);
+            dummy.scale.set(obstacle.w, obstacle.h, obstacle.d);
+            dummy.updateMatrix();
+            wallMesh.setMatrixAt(wallCount, dummy.matrix);
+            wallColor.setHSL(hueWrap(pathHueBase - 0.02), 0.42, 0.46);
+            wallMesh.setColorAt(wallCount, wallColor);
+            wallCount += 1;
+            continue;
+          }
+
+          if (obstacle.type === 'bar' && barCount < MAX_BAR_INSTANCES) {
+            dummy.position.set(ox, step.height + obstacle.h * 0.5 + 0.06, oz);
+            dummy.rotation.set(0, yaw, 0);
+            dummy.scale.set(obstacle.w, obstacle.h, obstacle.d);
+            dummy.updateMatrix();
+            barMesh.setMatrixAt(barCount, dummy.matrix);
+            barColor.setHSL(hueWrap(pathHueBase + 0.08), 0.5, 0.52);
+            barMesh.setColorAt(barCount, barColor);
+            barCount += 1;
+          }
+        }
       }
     }
 
-    for (let i = stepCount; i < MAX_STEP_INSTANCES; i += 1) {
-      dummy.position.set(0, -9999, 0);
-      dummy.scale.set(0.0001, 0.0001, 0.0001);
-      dummy.updateMatrix();
-      stepBodyMesh.setMatrixAt(i, dummy.matrix);
-      stepTopMesh.setMatrixAt(i, dummy.matrix);
-    }
-
-    for (let i = gemCount; i < MAX_GEM_INSTANCES; i += 1) {
-      dummy.position.set(0, -9999, 0);
-      dummy.scale.set(0.0001, 0.0001, 0.0001);
-      dummy.updateMatrix();
-      gemMesh.setMatrixAt(i, dummy.matrix);
-    }
-
-    for (let i = spikeCount; i < MAX_SPIKE_INSTANCES; i += 1) {
-      dummy.position.set(0, -9999, 0);
-      dummy.scale.set(0.0001, 0.0001, 0.0001);
-      dummy.updateMatrix();
-      spikeMesh.setMatrixAt(i, dummy.matrix);
-    }
+    stepBodyMesh.count = stepCount;
+    stepTopMesh.count = stepCount;
+    gemMesh.count = gemCount;
+    spikeMesh.count = spikeCount;
+    wallMesh.count = wallCount;
+    barMesh.count = barCount;
 
     stepBodyMesh.instanceMatrix.needsUpdate = true;
     if (stepBodyMesh.instanceColor) stepBodyMesh.instanceColor.needsUpdate = true;
@@ -293,6 +380,11 @@ export const GoUpWorld: React.FC<{
     if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
     spikeMesh.instanceMatrix.needsUpdate = true;
     if (spikeMesh.instanceColor) spikeMesh.instanceColor.needsUpdate = true;
+    wallMesh.instanceMatrix.needsUpdate = true;
+    if (wallMesh.instanceColor) wallMesh.instanceColor.needsUpdate = true;
+    barMesh.instanceMatrix.needsUpdate = true;
+    if (barMesh.instanceColor) barMesh.instanceColor.needsUpdate = true;
+    return true;
   }, [
     arena.gemHue,
     arena.pathHue,
@@ -303,9 +395,13 @@ export const GoUpWorld: React.FC<{
     arena.spikeSat,
     dummy,
     gemColor,
+    barColor,
     spikeColor,
     stepBodyColor,
     stepTopColor,
+    wallColor,
+    snap.pathSkin,
+    setTrackSegments,
     tempVecA,
     tempVecB,
     tempVecC,
@@ -385,6 +481,9 @@ export const GoUpWorld: React.FC<{
     goUpState.gapsJumped = d.gapsCleared;
     goUpState.wallsClimbed = d.stepsCleared;
     goUpState.spikesAvoided = d.spikesCleared;
+    goUpState.combo = d.combo;
+    goUpState.multiplier = d.multiplier;
+    goUpState.nearMisses = d.nearMisses;
   }, []);
 
   useEffect(() => {
@@ -423,23 +522,52 @@ export const GoUpWorld: React.FC<{
   }, [arena.cubeColor, arena.cubeEmissive, bgCubes]);
 
   useEffect(() => {
-    directorRef.current.prepare(snap.worldSeed, performance.now());
-    syncInstances();
+    directorRef.current.prepare(snap.worldSeed, performance.now(), snap.trackMode);
+    const synced = syncInstances();
+    if (synced) {
+      lastSyncStepIndexRef.current = directorRef.current.stepIndex;
+      lastSyncRevisionRef.current = directorRef.current.renderRevision;
+      lastSyncStyleKeyRef.current = `${snap.pathStyle}|${snap.pathSkin}|${snap.quality}|${arena.id}`;
+    }
     pushStateFromDirector();
     deathHandledRef.current = false;
-  }, [pushStateFromDirector, snap.worldSeed, syncInstances]);
+  }, [
+    arena.id,
+    pushStateFromDirector,
+    snap.pathSkin,
+    snap.pathStyle,
+    snap.quality,
+    snap.trackMode,
+    snap.worldSeed,
+    syncInstances,
+  ]);
 
   useEffect(() => {
     if (snap.phase === 'playing') {
       const now = performance.now();
-      directorRef.current.prepare(snap.worldSeed, now);
+      directorRef.current.prepare(snap.worldSeed, now, snap.trackMode);
       directorRef.current.start(now);
       nextArenaSwapRef.current = CFG.ARENA.swapMinSteps;
       deathHandledRef.current = false;
-      syncInstances();
+      const synced = syncInstances();
+      if (synced) {
+        lastSyncStepIndexRef.current = directorRef.current.stepIndex;
+        lastSyncRevisionRef.current = directorRef.current.renderRevision;
+        lastSyncStyleKeyRef.current = `${snap.pathStyle}|${snap.pathSkin}|${snap.quality}|${arena.id}`;
+      }
       pushStateFromDirector();
     }
-  }, [pushStateFromDirector, snap.phase, snap.worldSeed, syncInstances]);
+  }, [
+    arena.id,
+    pushStateFromDirector,
+    snap.pathSkin,
+    snap.pathStyle,
+    snap.phase,
+    snap.quality,
+    snap.trackMode,
+    snap.worldSeed,
+    syncInstances,
+  ]);
 
   useEffect(() => {
     if (snap.phase === 'menu') {
@@ -510,7 +638,28 @@ export const GoUpWorld: React.FC<{
       }
 
       pushStateFromDirector();
-      syncInstances();
+
+      const styleKey = `${snap.pathStyle}|${snap.pathSkin}|${snap.quality}|${arena.id}`;
+      const needsSync =
+        d.stepIndex !== lastSyncStepIndexRef.current ||
+        d.renderRevision !== lastSyncRevisionRef.current ||
+        styleKey !== lastSyncStyleKeyRef.current;
+
+      if (needsSync && syncInstances()) {
+        lastSyncStepIndexRef.current = d.stepIndex;
+        lastSyncRevisionRef.current = d.renderRevision;
+        lastSyncStyleKeyRef.current = styleKey;
+      }
+
+      if (d.nearMissToken !== nearMissTokenRef.current) {
+        nearMissTokenRef.current = d.nearMissToken;
+        spawnBurst(
+          d.nearMissPos[0],
+          d.nearMissPos[1],
+          d.nearMissPos[2],
+          snap.worldSeed + d.nearMissToken * 101
+        );
+      }
 
       if (d.phase === 'dead' && !deathHandledRef.current) {
         deathHandledRef.current = true;
@@ -522,7 +671,7 @@ export const GoUpWorld: React.FC<{
 
     const [px, py, pz] = d.getPlayerWorldPos();
     playerPos.set(px, py, pz);
-    skyAnchorPos.set(0, py, 0);
+    skyAnchorPos.set(px * 0.22, py, pz * 0.22);
 
     if (playerMeshRef.current) {
       playerMeshRef.current.position.copy(playerPos);
@@ -560,17 +709,21 @@ export const GoUpWorld: React.FC<{
       cameraForwardRef.current.lerp(targetForward, turnT).normalize();
     }
     const forward = cameraForwardRef.current;
-    const side = tempVecB.set(-forward.z, 0, forward.x).normalize();
-    const radial = tempVecC.set(px, 0, pz);
-    if (radial.lengthSq() > 1e-5) {
-      radial.normalize();
-      if (side.dot(radial) < 0) side.multiplyScalar(-1);
+    const radialOut = tempVecB.set(px, 0, pz);
+    if (radialOut.lengthSq() > 1e-5) {
+      radialOut.normalize();
+    } else {
+      radialOut.set(1, 0, 0);
     }
 
+    // Keep camera on the outside ring side and slightly behind tangent direction.
+    const tangent = tempVecC.set(-radialOut.z, 0, radialOut.x).normalize();
+    if (tangent.dot(forward) < 0) tangent.multiplyScalar(-1);
+
     let followX =
-      px + side.x * CFG.CAMERA.sideDistance - forward.x * CFG.CAMERA.backDistance;
+      px + radialOut.x * CFG.CAMERA.sideDistance - tangent.x * CFG.CAMERA.backDistance;
     let followZ =
-      pz + side.z * CFG.CAMERA.sideDistance - forward.z * CFG.CAMERA.backDistance;
+      pz + radialOut.z * CFG.CAMERA.sideDistance - tangent.z * CFG.CAMERA.backDistance;
     const followRadius = Math.hypot(followX, followZ);
     if (followRadius > 1e-5) {
       const clampedRadius = clamp(
@@ -638,7 +791,7 @@ export const GoUpWorld: React.FC<{
     camera.lookAt(lookX, py + CFG.CAMERA.lookOffset, lookZ);
 
     if (bgCubeMeshRef.current) {
-      bgCubeMeshRef.current.position.set(0, Math.max(8, py * 0.35), 0);
+      bgCubeMeshRef.current.position.set(px * 0.25, Math.max(8, py * 0.35), pz * 0.25);
     }
 
     if (towerCoreMeshRef.current) {
@@ -647,7 +800,52 @@ export const GoUpWorld: React.FC<{
     syncBurst(dt);
   });
 
-  const cameraFov = size.width < 768 ? CFG.CAMERA.fovMobile : CFG.CAMERA.fovDesktop;
+  const isMobile = size.width < 768;
+  const cameraFov = isMobile ? CFG.CAMERA.fovMobile : CFG.CAMERA.fovDesktop;
+  const resolvedQuality = snap.quality === 'auto' ? (isMobile ? 'low' : 'high') : snap.quality;
+  const lowQuality = resolvedQuality === 'low';
+  const showTiles = snap.pathStyle === 'tiles' || snap.pathStyle === 'hybrid';
+  const showRibbon =
+    snap.pathStyle === 'tube' ||
+    snap.pathStyle === 'ribbon' ||
+    snap.pathStyle === 'hybrid';
+
+  const pathMaterialPreset = useMemo(() => {
+    if (snap.pathSkin === 'neon') {
+      return {
+        bodyRoughness: 0.34,
+        bodyMetalness: 0.22,
+        bodyEmissive: hslToColor(arena.pathHue, 0.78, 0.34),
+        bodyEmissiveIntensity: 0.44,
+        topRoughness: 0.16,
+        topMetalness: 0.3,
+        topEmissive: hslToColor(arena.pathHue, 0.9, 0.5),
+        topEmissiveIntensity: 0.56,
+      };
+    }
+    if (snap.pathSkin === 'velvet') {
+      return {
+        bodyRoughness: 0.84,
+        bodyMetalness: 0.04,
+        bodyEmissive: hslToColor(arena.pathHue, 0.55, 0.24),
+        bodyEmissiveIntensity: 0.16,
+        topRoughness: 0.58,
+        topMetalness: 0.08,
+        topEmissive: hslToColor(arena.pathHue, 0.6, 0.36),
+        topEmissiveIntensity: 0.22,
+      };
+    }
+    return {
+      bodyRoughness: 0.72,
+      bodyMetalness: 0.1,
+      bodyEmissive: hslToColor(arena.pathHue, 0.62, 0.26),
+      bodyEmissiveIntensity: 0.2,
+      topRoughness: 0.26,
+      topMetalness: 0.24,
+      topEmissive: hslToColor(arena.pathHue, 0.82, 0.46),
+      topEmissiveIntensity: 0.3,
+    };
+  }, [arena.pathHue, snap.pathSkin]);
 
   return (
     <>
@@ -707,13 +905,14 @@ export const GoUpWorld: React.FC<{
         receiveShadow
         geometry={stepBodyGeometry}
         frustumCulled={false}
+        visible={showTiles}
       >
         <meshStandardMaterial
           vertexColors
-          roughness={0.78}
-          metalness={0.07}
-          emissive={hslToColor(arena.pathHue, 0.62, 0.26)}
-          emissiveIntensity={0.18}
+          roughness={pathMaterialPreset.bodyRoughness}
+          metalness={pathMaterialPreset.bodyMetalness}
+          emissive={pathMaterialPreset.bodyEmissive}
+          emissiveIntensity={pathMaterialPreset.bodyEmissiveIntensity}
         />
       </instancedMesh>
 
@@ -724,13 +923,14 @@ export const GoUpWorld: React.FC<{
         receiveShadow
         geometry={stepTopGeometry}
         frustumCulled={false}
+        visible={showTiles}
       >
         <meshStandardMaterial
           vertexColors
-          roughness={0.28}
-          metalness={0.24}
-          emissive={hslToColor(arena.pathHue, 0.82, 0.46)}
-          emissiveIntensity={0.28}
+          roughness={pathMaterialPreset.topRoughness}
+          metalness={pathMaterialPreset.topMetalness}
+          emissive={pathMaterialPreset.topEmissive}
+          emissiveIntensity={pathMaterialPreset.topEmissiveIntensity}
         />
       </instancedMesh>
 
@@ -738,6 +938,7 @@ export const GoUpWorld: React.FC<{
         ref={gemMeshRef}
         args={[undefined, undefined, MAX_GEM_INSTANCES]}
         castShadow
+        visible
       >
         <octahedronGeometry args={[0.14, 0]} />
         <meshStandardMaterial
@@ -754,6 +955,7 @@ export const GoUpWorld: React.FC<{
         args={[undefined, undefined, MAX_SPIKE_INSTANCES]}
         castShadow
         receiveShadow
+        visible
       >
         <coneGeometry args={[0.2, 0.45, 8]} />
         <meshStandardMaterial
@@ -765,14 +967,78 @@ export const GoUpWorld: React.FC<{
         />
       </instancedMesh>
 
-      <mesh ref={playerMeshRef} castShadow>
-        <sphereGeometry args={[CFG.PLAYER.radius, 28, 28]} />
+      <instancedMesh
+        ref={wallMeshRef}
+        args={[undefined, undefined, MAX_WALL_INSTANCES]}
+        castShadow
+        receiveShadow
+        visible={false}
+      >
+        <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
-          color={arena.playerColor}
-          roughness={0.14}
-          metalness={0.64}
+          vertexColors
+          roughness={0.38}
+          metalness={0.22}
+          emissive={hslToColor(arena.pathHue, 0.5, 0.3)}
+          emissiveIntensity={snap.pathSkin === 'neon' ? 0.45 : 0.2}
         />
-      </mesh>
+      </instancedMesh>
+
+      <instancedMesh
+        ref={barMeshRef}
+        args={[undefined, undefined, MAX_BAR_INSTANCES]}
+        castShadow
+        receiveShadow
+        visible={false}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.22}
+          metalness={0.3}
+          emissive={hslToColor(arena.pathHue + 0.08, 0.62, 0.42)}
+          emissiveIntensity={snap.pathSkin === 'neon' ? 0.58 : 0.24}
+        />
+      </instancedMesh>
+
+      {showRibbon && (
+        <PathRibbonRenderer
+          segments={trackSegments}
+          arena={arena}
+          pathStyle={snap.pathStyle}
+          pathSkin={snap.pathSkin}
+          quality={snap.quality}
+          isMobile={isMobile}
+        />
+      )}
+      {snap.multiplier >= 3 ? (
+        <Trail
+          width={1.0 + snap.multiplier * 0.08}
+          length={8}
+          color={hslToColor(arena.pathHue + 0.05, 0.9, 0.6)}
+          attenuation={(t) => t * t}
+        >
+          <mesh ref={playerMeshRef} castShadow>
+            <sphereGeometry args={[CFG.PLAYER.radius, 28, 28]} />
+            <meshStandardMaterial
+              color={arena.playerColor}
+              roughness={0.14}
+              metalness={0.64}
+              emissive={hslToColor(arena.pathHue + 0.05, 0.8, 0.45)}
+              emissiveIntensity={0.5}
+            />
+          </mesh>
+        </Trail>
+      ) : (
+        <mesh ref={playerMeshRef} castShadow>
+          <sphereGeometry args={[CFG.PLAYER.radius, 28, 28]} />
+          <meshStandardMaterial
+            color={arena.playerColor}
+            roughness={0.14}
+            metalness={0.64}
+          />
+        </mesh>
+      )}
 
       <mesh ref={shadowMeshRef} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[1, 28]} />
@@ -807,9 +1073,14 @@ export const GoUpWorld: React.FC<{
         far={14}
       />
 
-      <EffectComposer enableNormalPass={false} multisampling={2}>
-        <Bloom intensity={0.95} luminanceThreshold={1.0} mipmapBlur radius={0.28} />
-        <Noise opacity={0.014} />
+      <EffectComposer enableNormalPass={false} multisampling={lowQuality ? 0 : 2}>
+        <Bloom
+          intensity={lowQuality ? 0.55 : 0.95}
+          luminanceThreshold={1.0}
+          mipmapBlur={!lowQuality}
+          radius={lowQuality ? 0.12 : 0.28}
+        />
+        <Noise opacity={lowQuality ? 0 : 0.014} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       </EffectComposer>
     </>

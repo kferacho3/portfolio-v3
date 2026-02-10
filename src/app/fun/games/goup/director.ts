@@ -1,9 +1,9 @@
 import { CFG } from './config';
 import { generateChunk } from './generateChunk';
-import type { SimDir, SimVec3, Step } from './simTypes';
+import type { GenState, Obstacle, SimVec3, Step, TrackMode } from './simTypes';
 
 export type DirectorPhase = 'menu' | 'playing' | 'dead';
-export type DeathReason = 'fell' | 'riser' | 'spike';
+export type DeathReason = 'fell' | 'riser' | 'spike' | 'hit';
 
 const distSq = (
   ax: number,
@@ -19,6 +19,28 @@ const distSq = (
   return dx * dx + dy * dy + dz * dz;
 };
 
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
+const createInitialGenState = (): GenState => ({
+  pos: [CFG.STEP.pathRadiusMin + 0.35, 0, 0],
+  dir: [0, 0, 1],
+  yaw: 0,
+  yawVel: 0,
+  mode: 'classic',
+  modeStepsLeft: 0,
+  spiralSign: 1,
+  classicRunRemaining: 0,
+  classicTurnSign: 1,
+  tension: false,
+  tensionStepsLeft: 0,
+  obstacleCooldown: 0,
+  demandingCooldown: 0,
+  prevGapAfter: false,
+  prevRiseToNext: CFG.STEP.riseCalmMin,
+  totalStepIndex: 0,
+});
+
 export class GoUpDirector {
   phase: DirectorPhase = 'menu';
   deathReason: DeathReason | null = null;
@@ -28,8 +50,17 @@ export class GoUpDirector {
   gapsCleared = 0;
   stepsCleared = 0;
   spikesCleared = 0;
+  combo = 0;
+  multiplier = 1;
+  nearMisses = 0;
+
+  nearMissToken = 0;
+  nearMissPos: SimVec3 = [0, 0, 0];
+
+  renderRevision = 0;
 
   baseSeed = 1337;
+  trackMode: TrackMode = 'auto';
 
   steps: Step[] = [];
   stepByIndex = new Map<number, Step>();
@@ -44,18 +75,23 @@ export class GoUpDirector {
 
   lastGroundedAtMs: number = 0;
   bufferedJumpUntilMs: number = 0;
+  lastComboAtMs: number = -10_000;
 
-  private chunkStartPos: SimVec3 = [0, 0, 0];
-  private chunkStartDir: SimDir = [1, 0, 0];
+  private chunkState: GenState = createInitialGenState();
   private generatedUpToStep = -1;
 
-  prepare(seed: number, nowMs: number) {
+  prepare(seed: number, nowMs: number, trackMode: TrackMode = this.trackMode) {
     this.baseSeed = seed >>> 0;
+    this.trackMode = trackMode;
+
     this.score = 0;
     this.gems = 0;
     this.gapsCleared = 0;
     this.stepsCleared = 0;
     this.spikesCleared = 0;
+    this.combo = 0;
+    this.multiplier = 1;
+    this.nearMisses = 0;
     this.deathReason = null;
 
     this.steps = [];
@@ -68,13 +104,14 @@ export class GoUpDirector {
     this.landPulse = 0;
     this.lastGroundedAtMs = nowMs;
     this.bufferedJumpUntilMs = 0;
+    this.lastComboAtMs = -10_000;
 
-    this.chunkStartPos = [CFG.STEP.pathRadiusMin + 0.35, 0, 0];
-    this.chunkStartDir = [0, 0, 1];
+    this.chunkState = createInitialGenState();
     this.generatedUpToStep = -1;
 
     this.ensureSteps();
     this.phase = 'menu';
+    this.renderRevision += 1;
   }
 
   start(nowMs: number) {
@@ -83,6 +120,9 @@ export class GoUpDirector {
     this.gapsCleared = 0;
     this.stepsCleared = 0;
     this.spikesCleared = 0;
+    this.combo = 0;
+    this.multiplier = 1;
+    this.nearMisses = 0;
     this.deathReason = null;
     this.stepIndex = 0;
     this.sOnStep = 0;
@@ -92,7 +132,9 @@ export class GoUpDirector {
     this.landPulse = 0;
     this.lastGroundedAtMs = nowMs;
     this.bufferedJumpUntilMs = 0;
+    this.lastComboAtMs = -10_000;
     this.phase = 'playing';
+    this.renderRevision += 1;
   }
 
   jump(nowMs: number) {
@@ -120,7 +162,6 @@ export class GoUpDirector {
       CFG.DIFFICULTY.maxSpeed
     );
 
-    const prevAlong = this.sOnStep;
     this.sOnStep += speed * dt;
     this.vy += CFG.PLAYER.gravity * dt;
     this.y += this.vy * dt;
@@ -140,9 +181,10 @@ export class GoUpDirector {
       }
     }
 
-    this.processSpike(cur, prevAlong, this.sOnStep);
+    this.processObstacles(cur, clamp(this.sOnStep, 0, cur.length), nowMs);
     if (this.phase !== 'playing') return;
 
+    let transitioned = false;
     let loopGuard = 0;
     while (loopGuard < 6 && this.phase === 'playing') {
       loopGuard += 1;
@@ -168,16 +210,35 @@ export class GoUpDirector {
 
       const requiredY =
         next.height + CFG.PLAYER.radius - CFG.PLAYER.landingSlack;
-      if (this.y >= requiredY) {
-        this.stepIndex += 1;
-        this.sOnStep -= transitionDistance;
-        this.score += 1;
-        this.stepsCleared += 1;
-        if (current.gapAfter) this.gapsCleared += 1;
-      } else {
-        this.die(current.gapAfter ? 'fell' : 'riser');
-        return;
+
+      if (current.gapAfter) {
+        if (this.y < requiredY) {
+          this.die('fell');
+          return;
+        }
       }
+
+      this.stepIndex += 1;
+      this.sOnStep -= transitionDistance;
+      this.score += 1;
+      this.stepsCleared += 1;
+      transitioned = true;
+
+      if (current.gapAfter) {
+        this.gapsCleared += 1;
+        this.registerSuccessfulClear(nowMs, CFG.COMBO.gapBonus);
+      } else {
+        const nextGround = next.height + CFG.PLAYER.radius;
+        if (this.y < nextGround) {
+          this.y = nextGround;
+          this.vy = Math.max(0, this.vy);
+          this.lastGroundedAtMs = nowMs;
+          this.landPulse = 1;
+        }
+      }
+
+      this.processObstacles(next, clamp(this.sOnStep, 0, next.length), nowMs);
+      if (this.phase !== 'playing') return;
     }
 
     const referenceStep = this.getCurrentStep();
@@ -190,6 +251,13 @@ export class GoUpDirector {
     }
 
     this.collectNearbyGems();
+
+    if (transitioned) this.renderRevision += 1;
+
+    if (this.combo > 0 && nowMs - this.lastComboAtMs > CFG.COMBO.windowMs) {
+      this.combo = 0;
+      this.multiplier = 1;
+    }
 
     this.jumpPulse = Math.max(0, this.jumpPulse - dt * 8.5);
     this.landPulse = Math.max(0, this.landPulse - dt * 11.5);
@@ -208,8 +276,8 @@ export class GoUpDirector {
     if (!step) return [0, this.y, 0];
 
     const [dx, , dz] = step.dir;
-    const startX = step.pos[0] - dx * (step.length * 0.5);
-    const startZ = step.pos[2] - dz * (step.length * 0.5);
+    const startX = step.start[0];
+    const startZ = step.start[2];
     const along = this.sOnStep;
 
     return [startX + dx * along, this.y, startZ + dz * along];
@@ -239,14 +307,57 @@ export class GoUpDirector {
     ];
   }
 
-  getSpikeWorldPos(step: Step): SimVec3 {
-    if (!step.spike) return [step.pos[0], step.height + 0.22, step.pos[2]];
+  getObstacleWorldPos(step: Step, obstacle: Obstacle): SimVec3 {
     const [dx, , dz] = step.dir;
-    const startX = step.pos[0] - dx * (step.length * 0.5);
-    const startZ = step.pos[2] - dz * (step.length * 0.5);
-    const spikeX = startX + dx * step.spike.along;
-    const spikeZ = startZ + dz * step.spike.along;
-    return [spikeX, step.height + 0.2, spikeZ];
+    const px = -dz;
+    const pz = dx;
+    return [
+      step.start[0] + dx * obstacle.along + px * obstacle.lateral,
+      step.height + obstacle.h * 0.5,
+      step.start[2] + dz * obstacle.along + pz * obstacle.lateral,
+    ];
+  }
+
+  private registerSuccessfulClear(nowMs: number, bonus: number) {
+    const inWindow = nowMs - this.lastComboAtMs <= CFG.COMBO.windowMs;
+    this.combo = inWindow ? this.combo + 1 : 1;
+    this.lastComboAtMs = nowMs;
+
+    const step = Math.max(1, CFG.COMBO.stepEvery);
+    const level = Math.floor((this.combo - 1) / step);
+    this.multiplier = Math.min(1 + level, CFG.COMBO.maxMultiplier);
+
+    this.score += Math.round(bonus * this.multiplier);
+  }
+
+  private processObstacles(step: Step, along: number, nowMs: number) {
+    if (!step.obstacles || step.obstacles.length === 0) return;
+
+    for (let i = 0; i < step.obstacles.length; i += 1) {
+      const obstacle = step.obstacles[i];
+      if (obstacle.cleared) continue;
+      if (Math.abs(along - obstacle.along) > CFG.OBSTACLES.hitWindow) continue;
+
+      const clearance = this.y - obstacle.requiredClearY;
+      if (clearance < 0) {
+        this.die(obstacle.type === 'spike' ? 'spike' : 'hit');
+        return;
+      }
+
+      obstacle.cleared = true;
+      if (obstacle.type === 'spike') this.spikesCleared += 1;
+      this.registerSuccessfulClear(nowMs, CFG.COMBO.obstacleBonus);
+
+      if (!obstacle.nearMissed && clearance <= CFG.OBSTACLES.nearMissEpsilon) {
+        obstacle.nearMissed = true;
+        this.nearMisses += 1;
+        this.score += Math.round(CFG.COMBO.nearMissBonus * this.multiplier);
+        this.nearMissToken += 1;
+        this.nearMissPos = this.getObstacleWorldPos(step, obstacle);
+      }
+
+      this.renderRevision += 1;
+    }
   }
 
   private collectNearbyGems() {
@@ -262,6 +373,8 @@ export class GoUpDirector {
       if (distSq(px, py, pz, gx, gy, gz) <= radiusSq) {
         step.gem.collected = true;
         this.gems += 1;
+        this.score += Math.round(CFG.COMBO.gemBonus * this.multiplier);
+        this.renderRevision += 1;
       }
     }
   }
@@ -270,6 +383,7 @@ export class GoUpDirector {
     const targetMaxStep =
       this.stepIndex + CFG.KEEP_CHUNKS_AHEAD * CFG.STEPS_PER_CHUNK;
 
+    let changed = false;
     while (this.generatedUpToStep < targetMaxStep) {
       const nextChunkIndex = Math.floor(
         (this.generatedUpToStep + 1) / CFG.STEPS_PER_CHUNK
@@ -280,47 +394,34 @@ export class GoUpDirector {
         this.baseSeed,
         nextChunkIndex,
         startStepIndex,
-        this.chunkStartPos,
-        this.chunkStartDir
+        this.chunkState,
+        this.trackMode
       );
 
       for (const step of out.steps) {
         this.steps.push(step);
         this.stepByIndex.set(step.i, step);
         this.generatedUpToStep = Math.max(this.generatedUpToStep, step.i);
+        changed = true;
       }
 
-      this.chunkStartPos = out.endPos;
-      this.chunkStartDir = out.endDir;
+      this.chunkState = out.endState;
     }
 
     const minKeep = Math.max(
       0,
       this.stepIndex - CFG.KEEP_CHUNKS_BEHIND * CFG.STEPS_PER_CHUNK
     );
-    if (minKeep <= 0) return;
-
-    this.steps = this.steps.filter((step) => step.i >= minKeep);
-    for (const index of this.stepByIndex.keys()) {
-      if (index < minKeep) this.stepByIndex.delete(index);
-    }
-  }
-
-  private processSpike(step: Step, fromAlong: number, toAlong: number) {
-    if (!step.spike || step.spike.hit) return;
-    const from = Math.max(0, fromAlong);
-    const to = Math.max(0, toAlong);
-    const crossed = from <= step.spike.along && to >= step.spike.along;
-    if (!crossed) return;
-
-    const requiredY = step.height + CFG.PLAYER.radius + step.spike.clearance;
-    if (this.y < requiredY) {
-      this.die('spike');
-      return;
+    if (minKeep > 0) {
+      const prevSize = this.steps.length;
+      this.steps = this.steps.filter((step) => step.i >= minKeep);
+      for (const index of this.stepByIndex.keys()) {
+        if (index < minKeep) this.stepByIndex.delete(index);
+      }
+      if (this.steps.length !== prevSize) changed = true;
     }
 
-    step.spike.hit = true;
-    this.spikesCleared += 1;
+    if (changed) this.renderRevision += 1;
   }
 
   private die(reason: DeathReason) {

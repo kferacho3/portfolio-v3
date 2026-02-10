@@ -13,18 +13,55 @@ export const GoUpMenu: React.FC<{
 
   if (snap.phase !== 'menu' && snap.phase !== 'gameover') return null;
 
+  const pathStyles: Array<{ key: typeof snap.pathStyle; label: string }> = [
+    { key: 'tiles', label: 'Tiles' },
+    { key: 'tube', label: 'Tube' },
+    { key: 'ribbon', label: 'Ribbon' },
+    { key: 'hybrid', label: 'Hybrid' },
+  ];
+  const trackModes: Array<{ key: typeof snap.trackMode; label: string }> = [
+    { key: 'auto', label: 'Auto' },
+    { key: 'classic', label: 'Classic' },
+    { key: 'curved', label: 'Curved' },
+    { key: 'spiral', label: 'Spiral' },
+    { key: 'mix', label: 'Mix' },
+  ];
+  const pathSkins: Array<{ key: typeof snap.pathSkin; label: string }> = [
+    { key: 'sleek', label: 'Sleek' },
+    { key: 'neon', label: 'Neon' },
+    { key: 'velvet', label: 'Velvet' },
+  ];
+  const qualityModes: Array<{ key: typeof snap.quality; label: string }> = [
+    { key: 'auto', label: 'Auto' },
+    { key: 'high', label: 'High' },
+    { key: 'low', label: 'Low' },
+  ];
+
   const getCrashMessage = () => {
     switch (snap.crashType) {
       case 'riser':
         return 'Riser hit!';
       case 'spike':
         return 'Spiked!';
+      case 'hit':
+        return 'Hit obstacle!';
       case 'fell':
         return 'Missed step!';
       default:
         return 'Game Over';
     }
   };
+
+  const pillStyle = (selected: boolean): React.CSSProperties => ({
+    padding: '8px 14px',
+    borderRadius: 999,
+    border: selected ? '2px solid #111111' : '1px solid rgba(0,0,0,0.16)',
+    background: 'rgba(255,255,255,0.82)',
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: 0.5,
+    cursor: 'pointer',
+  });
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -46,7 +83,7 @@ export const GoUpMenu: React.FC<{
                 : '1px solid transparent',
             borderRadius: 20,
             padding: snap.phase === 'gameover' ? '20px 24px' : '12px 20px',
-            width: snap.phase === 'gameover' ? 340 : 420,
+            width: snap.phase === 'gameover' ? 420 : 520,
             textAlign: 'center',
             boxShadow:
               snap.phase === 'gameover'
@@ -85,14 +122,7 @@ export const GoUpMenu: React.FC<{
             {snap.phase === 'gameover' ? getCrashMessage() : 'TAP TO PLAY'}
           </div>
 
-          <div
-            style={{
-              marginTop: 18,
-              fontSize: 11,
-              letterSpacing: 1.9,
-              opacity: 0.52,
-            }}
-          >
+          <div style={{ marginTop: 18, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
             ARENAS
           </div>
           <div
@@ -104,23 +134,7 @@ export const GoUpMenu: React.FC<{
               justifyContent: 'center',
             }}
           >
-            <button
-              type="button"
-              onClick={() => onArenaPick('auto')}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 999,
-                border:
-                  snap.arenaMode === 'auto'
-                    ? '2px solid #111111'
-                    : '1px solid rgba(0,0,0,0.16)',
-                background: 'rgba(255,255,255,0.78)',
-                fontSize: 12,
-                fontWeight: 600,
-                letterSpacing: 0.5,
-                cursor: 'pointer',
-              }}
-            >
+            <button type="button" onClick={() => onArenaPick('auto')} style={pillStyle(snap.arenaMode === 'auto')}>
               Auto
             </button>
             {ARENAS.map((option, idx) => {
@@ -133,26 +147,114 @@ export const GoUpMenu: React.FC<{
                   type="button"
                   onClick={() => onArenaPick(idx)}
                   style={{
-                    padding: '8px 14px',
-                    borderRadius: 999,
-                    border: isSelected
-                      ? '2px solid #111111'
-                      : '1px solid rgba(0,0,0,0.16)',
+                    ...pillStyle(isSelected),
                     background: `linear-gradient(135deg, ${option.skyTop}, ${option.skyBottom})`,
                     color: darkText ? '#fff' : '#111',
                     textShadow: darkText
                       ? '0 1px 2px rgba(0,0,0,0.4)'
                       : '0 1px 0 rgba(255,255,255,0.5)',
-                    fontSize: 12,
-                    fontWeight: 600,
-                    letterSpacing: 0.4,
-                    cursor: 'pointer',
                   }}
                 >
                   {option.name}
                 </button>
               );
             })}
+          </div>
+
+          <div style={{ marginTop: 14, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+            TRACK STYLE
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              justifyContent: 'center',
+            }}
+          >
+            {pathStyles.map((style) => (
+              <button
+                key={style.key}
+                type="button"
+                onClick={() => goUpState.setPathStyle(style.key)}
+                style={pillStyle(snap.pathStyle === style.key)}
+              >
+                {style.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+            TRACK SHAPE
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              justifyContent: 'center',
+            }}
+          >
+            {trackModes.map((mode) => (
+              <button
+                key={mode.key}
+                type="button"
+                onClick={() => goUpState.setTrackMode(mode.key)}
+                style={pillStyle(snap.trackMode === mode.key)}
+              >
+                {mode.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+            SKIN
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              justifyContent: 'center',
+            }}
+          >
+            {pathSkins.map((skin) => (
+              <button
+                key={skin.key}
+                type="button"
+                onClick={() => goUpState.setPathSkin(skin.key)}
+                style={pillStyle(snap.pathSkin === skin.key)}
+              >
+                {skin.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 12, fontSize: 11, letterSpacing: 1.9, opacity: 0.52 }}>
+            QUALITY
+          </div>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              justifyContent: 'center',
+            }}
+          >
+            {qualityModes.map((quality) => (
+              <button
+                key={quality.key}
+                type="button"
+                onClick={() => goUpState.setQuality(quality.key)}
+                style={pillStyle(snap.quality === quality.key)}
+              >
+                {quality.label}
+              </button>
+            ))}
           </div>
 
           {snap.phase === 'gameover' && (
@@ -171,8 +273,10 @@ export const GoUpMenu: React.FC<{
                 Score: {snap.score}
               </div>
               <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>
-                Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps:{' '}
-                {snap.wallsClimbed} • Spikes: {snap.spikesAvoided}
+                Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps: {snap.wallsClimbed} • Spikes: {snap.spikesAvoided}
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.6 }}>
+                Combo x{snap.multiplier} • Near Misses {snap.nearMisses}
               </div>
             </div>
           )}
@@ -185,7 +289,7 @@ export const GoUpMenu: React.FC<{
               lineHeight: 1.5,
             }}
           >
-            Auto climb the tower. Tap to clear risers, gaps, and spike lines.
+            Auto run is on. Tap to jump over gaps and hazards.
           </div>
 
           <div style={{ marginTop: 12, fontSize: 11, opacity: 0.4 }}>

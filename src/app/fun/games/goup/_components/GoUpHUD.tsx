@@ -55,6 +55,11 @@ export const GoUpHUD: React.FC<{ arena: Arena }> = ({ arena }) => {
               Spikes {snap.spikesAvoided}
             </span>
           )}
+          {snap.multiplier > 1 && (
+            <span style={{ marginRight: 12, color: subColor }}>
+              x{snap.multiplier}
+            </span>
+          )}
           <span style={{ color: subColor }}>Best {snap.best}</span>
         </div>
       </div>
