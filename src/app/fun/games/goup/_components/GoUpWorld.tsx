@@ -1,6 +1,6 @@
 'use client';
 
-import { ContactShadows, OrthographicCamera } from '@react-three/drei';
+import { ContactShadows, PerspectiveCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
@@ -59,6 +59,7 @@ const smoothingFactor = (sharpness: number, dt: number) =>
   1 - Math.exp(-sharpness * dt);
 
 const hueWrap = (h: number) => ((h % 1) + 1) % 1;
+const SLOPE_RISE_THRESHOLD = 0.12;
 
 export const GoUpWorld: React.FC<{
   setArenaIndex: (idx: number) => void;
@@ -123,6 +124,11 @@ export const GoUpWorld: React.FC<{
   const stepTopColor = useMemo(() => new THREE.Color(), []);
   const burstColor = useMemo(() => new THREE.Color(), []);
   const spikeColor = useMemo(() => new THREE.Color(), []);
+  const tempVecA = useMemo(() => new THREE.Vector3(), []);
+  const tempVecB = useMemo(() => new THREE.Vector3(), []);
+  const tempVecC = useMemo(() => new THREE.Vector3(), []);
+  const cameraForwardRef = useRef(new THREE.Vector3(0, 0, 1));
+
   const stepBodyGeometry = useMemo(
     () => new RoundedBoxGeometry(1, 1, 1, 4, 0.12),
     []
@@ -144,7 +150,9 @@ export const GoUpWorld: React.FC<{
     const stepTopMesh = stepTopMeshRef.current;
     const gemMesh = gemMeshRef.current;
     const spikeMesh = spikeMeshRef.current;
-    if (!stepBodyMesh || !stepTopMesh || !gemMesh || !spikeMesh) return;
+    if (!stepBodyMesh || !stepTopMesh || !gemMesh || !spikeMesh) {
+      return;
+    }
 
     const director = directorRef.current;
     const steps = director.getVisibleSteps();
@@ -185,15 +193,44 @@ export const GoUpWorld: React.FC<{
         step.pos[2]
       );
       dummy.rotation.set(0, yaw, 0);
-      dummy.scale.set(step.width * 0.98, STEP_TOP_THICKNESS, step.length * 0.98);
+      const topLengthScale = step.gapAfter ? 0.98 : 1.02;
+      dummy.scale.set(
+        step.width * 0.995,
+        STEP_TOP_THICKNESS,
+        step.length * topLengthScale
+      );
       dummy.updateMatrix();
 
       stepTopMesh.setMatrixAt(stepCount, dummy.matrix);
-      stepTopColor.setHSL(
-        hueWrap(pathHueBase + (step.i % 12) * 0.0022),
-        clamp(pathSat * 1.02, 0.2, 1),
-        clamp(pathLight + 0.07 - (step.i % 8) * 0.003, 0.3, 0.9)
+      let topHue = hueWrap(pathHueBase + (step.i % 10) * 0.0022);
+      let topSat = clamp(
+        pathSat * (step.riseToNext <= SLOPE_RISE_THRESHOLD ? 0.94 : 1.04),
+        0.2,
+        1
       );
+      let topLight = clamp(
+        pathLight +
+          (step.riseToNext <= SLOPE_RISE_THRESHOLD ? 0.1 : 0.04) -
+          (step.i % 8) * 0.003,
+        0.3,
+        0.9
+      );
+
+      if (step.gapAfter) {
+        topHue = 0.025;
+        topSat = 0.78;
+        topLight = 0.58;
+      } else if (step.spike && !step.spike.hit) {
+        topHue = 0.105;
+        topSat = 0.74;
+        topLight = 0.56;
+      } else if (step.riseToNext > SLOPE_RISE_THRESHOLD) {
+        topHue = hueWrap(pathHueBase - 0.03);
+        topSat = clamp(pathSat * 1.06, 0.2, 1);
+        topLight = clamp(pathLight + 0.02, 0.28, 0.84);
+      }
+
+      stepTopColor.setHSL(topHue, topSat, topLight);
       stepTopMesh.setColorAt(stepCount, stepTopColor);
       stepCount += 1;
 
@@ -215,12 +252,12 @@ export const GoUpWorld: React.FC<{
         const [dx, , dz] = step.dir;
         const yaw = Math.atan2(dx, dz);
 
-        dummy.position.set(sx, sy, sz);
+        dummy.position.set(sx, sy + 0.05, sz);
         dummy.rotation.set(0, yaw, 0);
-        dummy.scale.set(1, 1, 1);
+        dummy.scale.set(1.24, 1.24, 1.24);
         dummy.updateMatrix();
         spikeMesh.setMatrixAt(spikeCount, dummy.matrix);
-        spikeColor.setHSL(arena.spikeHue, arena.spikeSat, arena.spikeLight);
+        spikeColor.setHSL(0.045, 0.9, 0.54);
         spikeMesh.setColorAt(spikeCount, spikeColor);
         spikeCount += 1;
       }
@@ -269,6 +306,9 @@ export const GoUpWorld: React.FC<{
     spikeColor,
     stepBodyColor,
     stepTopColor,
+    tempVecA,
+    tempVecB,
+    tempVecC,
   ]);
 
   const spawnBurst = useCallback((x: number, y: number, z: number, seed: number) => {
@@ -509,11 +549,88 @@ export const GoUpWorld: React.FC<{
     }
 
     const t = smoothingFactor(CFG.CAMERA.followSharpness, dt);
-    const followY = py + CFG.CAMERA.yOffset;
-    const followX = px + CFG.CAMERA.xOffset;
-    const followZ = pz + CFG.CAMERA.zOffset;
-    const lookX = currentStep ? px + currentStep.dir[0] * 1.2 : px;
-    const lookZ = currentStep ? pz + currentStep.dir[2] * 1.2 : pz;
+    const turnT = smoothingFactor(CFG.CAMERA.turnSharpness, dt);
+    const targetForward = tempVecA.set(
+      currentStep ? currentStep.dir[0] : cameraForwardRef.current.x,
+      0,
+      currentStep ? currentStep.dir[2] : cameraForwardRef.current.z
+    );
+    if (targetForward.lengthSq() > 1e-5) {
+      targetForward.normalize();
+      cameraForwardRef.current.lerp(targetForward, turnT).normalize();
+    }
+    const forward = cameraForwardRef.current;
+    const side = tempVecB.set(-forward.z, 0, forward.x).normalize();
+    const radial = tempVecC.set(px, 0, pz);
+    if (radial.lengthSq() > 1e-5) {
+      radial.normalize();
+      if (side.dot(radial) < 0) side.multiplyScalar(-1);
+    }
+
+    let followX =
+      px + side.x * CFG.CAMERA.sideDistance - forward.x * CFG.CAMERA.backDistance;
+    let followZ =
+      pz + side.z * CFG.CAMERA.sideDistance - forward.z * CFG.CAMERA.backDistance;
+    const followRadius = Math.hypot(followX, followZ);
+    if (followRadius > 1e-5) {
+      const clampedRadius = clamp(
+        followRadius,
+        CFG.CAMERA.minOrbitRadius,
+        CFG.CAMERA.maxOrbitRadius
+      );
+      const scale = clampedRadius / followRadius;
+      followX *= scale;
+      followZ *= scale;
+    }
+
+    const trackLookX = currentStep
+      ? px + currentStep.dir[0] * CFG.CAMERA.lookAhead
+      : px;
+    const trackLookZ = currentStep
+      ? pz + currentStep.dir[2] * CFG.CAMERA.lookAhead
+      : pz;
+    const stepsForCamera = d.getVisibleSteps();
+    let occlusionExtraLift = 0;
+    let occlusionPush = 0;
+    for (let i = 0; i < stepsForCamera.length; i += 1) {
+      const step = stepsForCamera[i];
+      const dx = step.pos[0] - followX;
+      const dz = step.pos[2] - followZ;
+      const distSq = dx * dx + dz * dz;
+      if (distSq > CFG.CAMERA.occlusionRadius * CFG.CAMERA.occlusionRadius) {
+        continue;
+      }
+      const topY = step.height + STEP_TOP_THICKNESS;
+      if (topY > py + 0.25) {
+        const dist = Math.sqrt(distSq);
+        const proximity = 1 - dist / CFG.CAMERA.occlusionRadius;
+        occlusionPush = Math.max(occlusionPush, proximity);
+        occlusionExtraLift = Math.max(
+          occlusionExtraLift,
+          topY - py + CFG.CAMERA.occlusionLift
+        );
+      }
+    }
+    const outward = tempVecC.set(followX, 0, followZ);
+    if (outward.lengthSq() > 1e-5) {
+      outward.normalize();
+      followX += outward.x * occlusionPush * CFG.CAMERA.occlusionPushOut;
+      followZ += outward.z * occlusionPush * CFG.CAMERA.occlusionPushOut;
+      const pushedRadius = Math.hypot(followX, followZ);
+      const clampedRadius = clamp(
+        pushedRadius,
+        CFG.CAMERA.minOrbitRadius,
+        CFG.CAMERA.maxOrbitRadius
+      );
+      if (pushedRadius > 1e-5) {
+        const scale = clampedRadius / pushedRadius;
+        followX *= scale;
+        followZ *= scale;
+      }
+    }
+    const followY = py + CFG.CAMERA.yOffset + occlusionExtraLift;
+    const lookX = THREE.MathUtils.lerp(trackLookX, 0, CFG.CAMERA.lookCenterBias);
+    const lookZ = THREE.MathUtils.lerp(trackLookZ, 0, CFG.CAMERA.lookCenterBias);
 
     camera.position.x = THREE.MathUtils.lerp(camera.position.x, followX, t);
     camera.position.y = THREE.MathUtils.lerp(camera.position.y, followY, t);
@@ -530,18 +647,16 @@ export const GoUpWorld: React.FC<{
     syncBurst(dt);
   });
 
-  const orthoZoom = size.width < 768
-    ? CFG.CAMERA.orthoZoomMobile
-    : CFG.CAMERA.orthoZoomDesktop;
+  const cameraFov = size.width < 768 ? CFG.CAMERA.fovMobile : CFG.CAMERA.fovDesktop;
 
   return (
     <>
-      <OrthographicCamera
+      <PerspectiveCamera
         makeDefault
+        fov={cameraFov}
         near={0.1}
         far={260}
-        zoom={orthoZoom}
-        position={[CFG.CAMERA.xOffset, CFG.CAMERA.yOffset, CFG.CAMERA.zOffset]}
+        position={[0, CFG.CAMERA.yOffset, CFG.CAMERA.maxOrbitRadius]}
       />
 
       <SkyMesh arena={arena} playerPos={skyAnchorPos} />
@@ -579,6 +694,9 @@ export const GoUpWorld: React.FC<{
           color={hslToColor(arena.pathHue, arena.pathSat * 0.72, clamp(arena.pathLight - 0.1, 0.18, 0.68))}
           roughness={0.82}
           metalness={0.08}
+          transparent
+          opacity={0.28}
+          depthWrite={false}
         />
       </mesh>
 
@@ -637,7 +755,7 @@ export const GoUpWorld: React.FC<{
         castShadow
         receiveShadow
       >
-        <coneGeometry args={[0.17, 0.36, 8]} />
+        <coneGeometry args={[0.2, 0.45, 8]} />
         <meshStandardMaterial
           vertexColors
           emissive={hslToColor(arena.spikeHue, arena.spikeSat, arena.spikeLight)}

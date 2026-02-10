@@ -174,17 +174,6 @@ export class GoUpDirector {
         this.score += 1;
         this.stepsCleared += 1;
         if (current.gapAfter) this.gapsCleared += 1;
-
-        this.y = next.height + CFG.PLAYER.radius;
-        this.vy = 0;
-        this.lastGroundedAtMs = nowMs;
-        this.landPulse = 1;
-
-        if (nowMs <= this.bufferedJumpUntilMs) {
-          this.vy = CFG.PLAYER.jumpVel;
-          this.bufferedJumpUntilMs = 0;
-          this.jumpPulse = 1;
-        }
       } else {
         this.die(current.gapAfter ? 'fell' : 'riser');
         return;
@@ -208,6 +197,10 @@ export class GoUpDirector {
 
   getCurrentStep(): Step | undefined {
     return this.stepByIndex.get(this.stepIndex);
+  }
+
+  getStep(index: number): Step | undefined {
+    return this.stepByIndex.get(index);
   }
 
   getPlayerWorldPos(): SimVec3 {

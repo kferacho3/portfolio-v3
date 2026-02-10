@@ -8,12 +8,6 @@ const randRange = (rng: () => number, min: number, max: number) =>
 const randIntRange = (rng: () => number, min: number, max: number) =>
   Math.floor(min + rng() * (max - min + 1));
 
-function normalizeXZ(x: number, z: number): [number, number] {
-  const len = Math.hypot(x, z);
-  if (len < 1e-6) return [1, 0];
-  return [x / len, z / len];
-}
-
 const headingFromDir = (dir: SimDir) => Math.atan2(dir[0], dir[2]);
 
 const dirFromHeading = (heading: number): SimDir => [
@@ -79,6 +73,11 @@ export function generateChunk(
     CFG.STEP.calmRunMin,
     CFG.STEP.calmRunMax
   );
+  let demandingCooldown = 0;
+  let spikeCooldown = 0;
+  let prevGapAfter = false;
+  let prevRiseToNext: number = CFG.STEP.riseCalmMin;
+  let prevHadSpike = false;
 
   for (let k = 0; k < CFG.STEPS_PER_CHUNK; k += 1) {
     const i = startStepIndex + k;
@@ -120,7 +119,7 @@ export function generateChunk(
     heading = steerHeadingToTowerBand(heading, pos, rng);
     dir = dirFromHeading(heading);
 
-    const riseToNext = inTension
+    let riseToNext = inTension
       ? randRange(rng, CFG.STEP.riseTensionMin, CFG.STEP.riseTensionMax)
       : randRange(rng, CFG.STEP.riseCalmMin, CFG.STEP.riseCalmMax);
 
@@ -130,7 +129,15 @@ export function generateChunk(
         )
       : gapBase * CFG.STEP.gapChanceCalmMultiplier;
 
-    const gapAfter = rng() < gapChance;
+    let gapAfter = rng() < gapChance;
+    if (demandingCooldown > 0) {
+      gapAfter = false;
+      riseToNext = Math.min(riseToNext, CFG.STEP.safeRiseMaxAfterDemanding);
+    }
+    if (prevHadSpike) {
+      gapAfter = false;
+      riseToNext = Math.min(riseToNext, CFG.STEP.safeRiseMaxAfterDemanding);
+    }
     const gapLength = gapAfter
       ? CFG.STEP.gapLengthMin +
         (CFG.STEP.gapLengthMax - CFG.STEP.gapLengthMin) * rng()
@@ -140,7 +147,26 @@ export function generateChunk(
       ? CFG.STEP.spikeChanceTension
       : CFG.STEP.spikeChanceCalm;
     const spikeChance = clamp01(spikeChanceRaw + difficulty * 0.06);
-    const hasSpike = !gapAfter && rng() < spikeChance;
+    const enteredFromDemanding =
+      prevGapAfter || prevRiseToNext > CFG.STEP.spikeBlockRiseFromPrev;
+    const nextDemanding =
+      gapAfter || riseToNext > CFG.STEP.spikeMaxRiseWithNext;
+    const spikeAllowed: boolean =
+      spikeCooldown <= 0 &&
+      !enteredFromDemanding &&
+      !nextDemanding &&
+      !gapAfter &&
+      !prevHadSpike;
+    const hasSpike: boolean = spikeAllowed && rng() < spikeChance;
+    if (hasSpike) {
+      spikeCooldown = randIntRange(
+        rng,
+        CFG.STEP.spikeCooldownMin,
+        CFG.STEP.spikeCooldownMax
+      );
+    } else if (spikeCooldown > 0) {
+      spikeCooldown -= 1;
+    }
 
     const centerX = pos[0] + dir[0] * (length * 0.5);
     const centerZ = pos[2] + dir[2] * (length * 0.5);
@@ -179,22 +205,27 @@ export function generateChunk(
 
     steps.push(step);
 
-    const prevX = pos[0];
-    const prevZ = pos[2];
+    const demanding =
+      gapAfter || riseToNext > CFG.STEP.demandingRiseThreshold;
+    if (demanding) {
+      demandingCooldown = randIntRange(
+        rng,
+        CFG.STEP.demandingCooldownMin,
+        CFG.STEP.demandingCooldownMax
+      );
+    } else if (hasSpike) {
+      demandingCooldown = Math.max(demandingCooldown, 1);
+    } else if (demandingCooldown > 0) {
+      demandingCooldown -= 1;
+    }
+    prevGapAfter = gapAfter;
+    prevRiseToNext = riseToNext;
+    prevHadSpike = hasSpike;
+
     const nextY = pos[1] + riseToNext;
     const nextX = pos[0] + dir[0] * (length + gapLength);
     const nextZ = pos[2] + dir[2] * (length + gapLength);
-    const [normX, normZ] = normalizeXZ(nextX, nextZ);
-    const radius = Math.hypot(nextX, nextZ);
-    const clampedRadius = Math.min(
-      CFG.STEP.pathRadiusMax,
-      Math.max(CFG.STEP.pathRadiusMin, radius)
-    );
-
-    pos = [normX * clampedRadius, nextY, normZ * clampedRadius];
-    const [stepDirX, stepDirZ] = normalizeXZ(pos[0] - prevX, pos[2] - prevZ);
-    heading = Math.atan2(stepDirX, stepDirZ);
-    dir = dirFromHeading(heading);
+    pos = [nextX, nextY, nextZ];
   }
 
   return { steps, endPos: pos, endDir: dir };
