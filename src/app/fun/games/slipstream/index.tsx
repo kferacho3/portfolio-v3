@@ -163,14 +163,16 @@ const GUST_COLLIDE_Z = 0.46;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
-const STREAM = new THREE.Color('#86f7ff');
-const COMET_COLOR = new THREE.Color('#ffcf7d');
-const GUST_COLOR = new THREE.Color('#ff7f6f');
-const LOG_BROWN = new THREE.Color('#7f5539');
-const LOG_DARK = new THREE.Color('#4b3325');
-const LANE_DIVIDER = new THREE.Color('#f9d27d');
-const DANGER = new THREE.Color('#ff5f74');
+const STREAM = new THREE.Color('#87f8ff');
+const COMET_COLOR = new THREE.Color('#ff9654');
+const GUST_COLOR = new THREE.Color('#b27bff');
+const LOG_BROWN = new THREE.Color('#e3b376');
+const LOG_DARK = new THREE.Color('#9a6843');
+const LANE_DIVIDER = new THREE.Color('#fff4bc');
+const DANGER = new THREE.Color('#ff4d84');
 const WHITE = new THREE.Color('#f7fbff');
+const TRACK_MAIN = new THREE.Color('#3ea8d4');
+const TRACK_GLOW = new THREE.Color('#79edff');
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -213,7 +215,7 @@ const makeComet = (slot: number): Comet => ({
   weaveFreq: 1.1,
   phase: 0,
   speedFactor: 1,
-  radius: 0.25,
+  radius: 0.42,
   slipMin: 0.8,
   slipMax: 4.2,
   nearAwarded: false,
@@ -226,9 +228,9 @@ const makeGust = (slot: number): Gust => ({
   lane: 1,
   x: 0,
   z: -12,
-  width: 1.16,
-  height: 1.52,
-  depth: 0.34,
+  width: 1.34,
+  height: 0.56,
+  depth: 0.82,
   swayAmp: 0.14,
   swayFreq: 1.1,
   phase: 0,
@@ -273,8 +275,8 @@ const createRuntime = (): Runtime => ({
   failMessage: '',
   speedNow: 6,
 
-  cometSpawnTimer: 1.2,
-  gustSpawnTimer: 3.4,
+  cometSpawnTimer: 0.58,
+  gustSpawnTimer: 1.35,
   nextCometSlot: 0,
   nextGustSlot: 0,
   lastCometLane: -1,
@@ -310,8 +312,8 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.failMessage = '';
   runtime.speedNow = 6;
 
-  runtime.cometSpawnTimer = 1.2;
-  runtime.gustSpawnTimer = 3.4;
+  runtime.cometSpawnTimer = 0.58;
+  runtime.gustSpawnTimer = 1.35;
   runtime.nextCometSlot = 0;
   runtime.nextGustSlot = 0;
   runtime.lastCometLane = -1;
@@ -476,13 +478,13 @@ const spawnComet = (runtime: Runtime) => {
   const comet = acquireComet(runtime);
   comet.active = true;
   comet.lane = lane;
-  comet.z = -24 - Math.random() * 10;
+  comet.z = -15.5 - Math.random() * 6.5;
   comet.x = LANE_X[lane];
-  comet.weaveAmp = lerp(0.01, 0.12, d) * (0.62 + tier * 0.1) * earlyScale;
+  comet.weaveAmp = lerp(0.02, 0.18, d) * (0.62 + tier * 0.1) * earlyScale;
   comet.weaveFreq = lerp(0.8, 1.7, d) + Math.random() * 0.35;
   comet.phase = Math.random() * Math.PI * 2;
   comet.speedFactor = clamp(lerp(0.95, 1.24, d) + tier * 0.04 + (Math.random() * 2 - 1) * 0.05, 0.88, 1.42);
-  comet.radius = clamp(lerp(0.24, 0.36, d) + tier * 0.01, 0.22, 0.42);
+  comet.radius = clamp(lerp(0.38, 0.54, d) + tier * 0.02, 0.34, 0.6);
   comet.slipMin = 0.82;
   comet.slipMax = clamp(lerp(5.0, 3.7, d) + tier * 0.1, 3.0, 5.3);
   comet.nearAwarded = false;
@@ -501,11 +503,11 @@ const spawnGust = (runtime: Runtime) => {
 
   gust.active = true;
   gust.lane = lane;
-  gust.z = -22 - Math.random() * 10;
+  gust.z = -16.2 - Math.random() * 7.2;
   gust.x = LANE_X[lane];
-  gust.width = clamp(0.92 + Math.random() * 0.18, 0.86, 1.18);
-  gust.height = clamp(0.34 + Math.random() * 0.16, 0.3, 0.6);
-  gust.depth = clamp(0.5 + Math.random() * 0.2, 0.42, 0.76);
+  gust.width = clamp(1.14 + Math.random() * 0.26, 1.02, 1.54);
+  gust.height = clamp(0.42 + Math.random() * 0.22, 0.36, 0.78);
+  gust.depth = clamp(0.72 + Math.random() * 0.26, 0.64, 1.02);
   gust.swayAmp = lerp(0.02, 0.16, d) * (0.52 + tier * 0.08);
   gust.swayFreq = lerp(0.9, 1.9, d) + Math.random() * 0.42;
   gust.phase = Math.random() * Math.PI * 2;
@@ -527,7 +529,7 @@ function SlipStreamOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-sky-100/55 bg-gradient-to-br from-sky-500/24 via-cyan-500/16 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Slip Stream</div>
-        <div className="text-[11px] text-cyan-50/85">Tap cycles 3 lanes on the log.</div>
+        <div className="text-[11px] text-cyan-50/85">Tap lanes. Dodge visible logs, rocks, and crates.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-violet-500/22 via-fuchsia-500/16 to-amber-500/22 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -890,9 +892,9 @@ function SlipStreamScene() {
       let instance = 0;
       for (const segment of runtime.segments) {
         const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 2 + segment.pulse);
-        const woodMix = clamp(0.18 + runtime.slipBlend * 0.2 + pulse * 0.12, 0, 1);
-        const railMix = clamp(0.16 + runtime.slipBlend * 0.24, 0, 1);
-        const laneMix = clamp(0.2 + runtime.slipBlend * 0.44 + pulse * 0.16, 0, 1);
+        const woodMix = clamp(0.58 + runtime.slipBlend * 0.28 + pulse * 0.16, 0, 1);
+        const railMix = clamp(0.5 + runtime.slipBlend * 0.3, 0, 1);
+        const laneMix = clamp(0.56 + runtime.slipBlend * 0.42 + pulse * 0.2, 0, 1);
 
         dummy.rotation.set(0, 0, 0);
 
@@ -900,7 +902,7 @@ function SlipStreamScene() {
         dummy.scale.set(TUNNEL_HALF_W * 2, 0.24, SEGMENT_SPACING * 1.02);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(LOG_BROWN).lerp(WHITE, woodMix * 0.22);
+        colorScratch.copy(LOG_BROWN).lerp(TRACK_GLOW, woodMix * 0.28).lerp(WHITE, woodMix * 0.1);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
@@ -908,7 +910,7 @@ function SlipStreamScene() {
         dummy.scale.set(0.15, 0.34, SEGMENT_SPACING * 0.98);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(LOG_DARK).lerp(WHITE, railMix * 0.16);
+        colorScratch.copy(LOG_DARK).lerp(TRACK_GLOW, railMix * 0.24).lerp(WHITE, railMix * 0.08);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
@@ -916,7 +918,7 @@ function SlipStreamScene() {
         dummy.scale.set(0.15, 0.34, SEGMENT_SPACING * 0.98);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(LOG_DARK).lerp(WHITE, railMix * 0.16);
+        colorScratch.copy(LOG_DARK).lerp(TRACK_GLOW, railMix * 0.24).lerp(WHITE, railMix * 0.08);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
@@ -924,7 +926,7 @@ function SlipStreamScene() {
         dummy.scale.set(0.05, 0.08, SEGMENT_SPACING * 0.94);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(LANE_DIVIDER).lerp(WHITE, laneMix * 0.22);
+        colorScratch.copy(LANE_DIVIDER).lerp(TRACK_GLOW, laneMix * 0.2).lerp(WHITE, laneMix * 0.16);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
@@ -932,7 +934,7 @@ function SlipStreamScene() {
         dummy.scale.set(0.05, 0.08, SEGMENT_SPACING * 0.94);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(LANE_DIVIDER).lerp(WHITE, laneMix * 0.22);
+        colorScratch.copy(LANE_DIVIDER).lerp(TRACK_GLOW, laneMix * 0.2).lerp(WHITE, laneMix * 0.16);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
       }
@@ -956,24 +958,28 @@ function SlipStreamScene() {
           continue;
         }
 
-        dummy.position.set(comet.x, 0, comet.z);
+        dummy.position.set(comet.x, 0.32, comet.z);
         dummy.scale.setScalar(comet.radius);
         dummy.rotation.set(runtime.elapsed * 0.6, runtime.elapsed * 0.9, runtime.elapsed * 0.4);
         dummy.updateMatrix();
         cometRef.current.setMatrixAt(i, dummy.matrix);
         colorScratch
           .copy(COMET_COLOR)
-          .lerp(LOG_DARK, clamp(0.26 + comet.tint * 0.3, 0, 0.72));
+          .lerp(DANGER, 0.26 + comet.tint * 0.18)
+          .lerp(WHITE, clamp(0.44 + comet.tint * 0.3, 0, 0.92));
         cometRef.current.setColorAt(i, colorScratch);
 
-        const trailLen = 0.9 + runtime.slipBlend * 0.5;
-        const trailRad = 0.22 + runtime.slipBlend * 0.08;
-        dummy.position.set(comet.x, -0.1, comet.z - 0.6);
+        const trailLen = 1.38 + runtime.slipBlend * 0.82;
+        const trailRad = 0.34 + runtime.slipBlend * 0.14;
+        dummy.position.set(comet.x, 0.12, comet.z - 0.72);
         dummy.scale.set(trailRad, trailLen, trailRad);
         dummy.rotation.set(Math.PI * 0.5, 0, 0);
         dummy.updateMatrix();
         coneRef.current.setMatrixAt(i, dummy.matrix);
-        colorScratch.copy(DANGER).lerp(WHITE, clamp(runtime.slipBlend * 0.16, 0, 0.3));
+        colorScratch
+          .copy(STREAM)
+          .lerp(DANGER, 0.3)
+          .lerp(WHITE, clamp(0.42 + runtime.slipBlend * 0.24, 0, 0.8));
         coneRef.current.setColorAt(i, colorScratch);
       }
 
@@ -996,14 +1002,15 @@ function SlipStreamScene() {
           continue;
         }
 
-        dummy.position.set(gust.x, -0.02, gust.z);
+        dummy.position.set(gust.x, 0.2, gust.z);
         dummy.scale.set(gust.width, gust.height, gust.depth);
         dummy.rotation.set(0, runtime.elapsed * 0.15, 0);
         dummy.updateMatrix();
         gustRef.current.setMatrixAt(i, dummy.matrix);
         colorScratch
           .copy(GUST_COLOR)
-          .lerp(LOG_DARK, clamp(gust.tint * 0.3 + runtime.slipBlend * 0.16, 0, 0.58));
+          .lerp(STREAM, 0.28)
+          .lerp(WHITE, clamp(0.42 + gust.tint * 0.32 + runtime.slipBlend * 0.24, 0, 0.92));
         gustRef.current.setColorAt(i, colorScratch);
       }
 
@@ -1033,14 +1040,14 @@ function SlipStreamScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 2.35, 5.7]} fov={38} near={0.1} far={120} />
-      <color attach="background" args={['#0a3242']} />
-      <fog attach="fog" args={['#0a3242', 10, 56]} />
+      <PerspectiveCamera makeDefault position={[0, 2.5, 6.35]} fov={38} near={0.1} far={120} />
+      <color attach="background" args={['#1d8fb4']} />
+      <fog attach="fog" args={['#1d8fb4', 14, 70]} />
 
-      <ambientLight intensity={0.56} />
-      <hemisphereLight args={['#7ee3ff', '#173242', 0.3]} />
-      <pointLight position={[0, 3.2, 4]} intensity={0.66} color="#95edff" />
-      <pointLight position={[0, -1.7, 4]} intensity={0.34} color="#ffc67a" />
+      <ambientLight intensity={0.78} />
+      <hemisphereLight args={['#c4fbff', '#2a6c85', 0.52]} />
+      <pointLight position={[0, 3.6, 4]} intensity={0.84} color="#c8faff" />
+      <pointLight position={[0, -1.3, 4]} intensity={0.5} color="#ffd7a8" />
 
       <mesh position={[0, -0.9, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[36, 132]} />
@@ -1059,15 +1066,16 @@ function SlipStreamScene() {
             uniform float uSlip;
             varying vec2 vUv;
             void main() {
-              vec3 deep = vec3(0.03, 0.17, 0.22);
-              vec3 foam = vec3(0.10, 0.40, 0.50);
-              vec3 cool = vec3(0.05, 0.28, 0.36);
+              vec3 deep = vec3(0.10, 0.46, 0.58);
+              vec3 foam = vec3(0.36, 0.82, 0.90);
+              vec3 cool = vec3(0.26, 0.64, 0.74);
               float grad = smoothstep(0.0, 1.0, vUv.y);
               float pulse = 0.5 + 0.5 * sin((vUv.y * 4.6 + uTime * 0.35) * 6.2831853);
               float grain = fract(sin(dot(vUv * (uTime + 1.37), vec2(12.9898, 78.233))) * 43758.5453);
               vec3 col = mix(deep, foam, grad * 0.55);
               col = mix(col, cool, uSlip * (0.3 + pulse * 0.26));
-              col += (grain - 0.5) * 0.024;
+              col += (grain - 0.5) * 0.03;
+              col += vec3(0.02, 0.06, 0.08) * pulse;
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -1075,12 +1083,29 @@ function SlipStreamScene() {
         />
       </mesh>
 
+      <mesh position={[0, -0.1, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <planeGeometry args={[4.45, 126]} />
+        <meshBasicMaterial color={TRACK_MAIN} transparent opacity={0.9} toneMapped={false} />
+      </mesh>
+
+      <mesh position={[0, -0.07, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <planeGeometry args={[3.1, 126]} />
+        <meshBasicMaterial
+          color={TRACK_GLOW}
+          transparent
+          opacity={0.26}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
       <mesh position={[-(TUNNEL_HALF_W + 1.65), -0.34, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[4.2, 124]} />
         <meshBasicMaterial
-          color="#2a8da1"
+          color="#4fcfe2"
           transparent
-          opacity={0.46}
+          opacity={0.72}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -1090,9 +1115,9 @@ function SlipStreamScene() {
       <mesh position={[TUNNEL_HALF_W + 1.65, -0.34, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[4.2, 124]} />
         <meshBasicMaterial
-          color="#2a8da1"
+          color="#4fcfe2"
           transparent
-          opacity={0.46}
+          opacity={0.72}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -1101,7 +1126,7 @@ function SlipStreamScene() {
 
       <instancedMesh ref={tunnelRef} args={[undefined, undefined, TUNNEL_INSTANCE_COUNT]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
+        <meshBasicMaterial color={TRACK_MAIN} vertexColors toneMapped={false} />
       </instancedMesh>
 
       <instancedMesh ref={streakRef} args={[undefined, undefined, STREAK_POOL]}>
@@ -1131,12 +1156,13 @@ function SlipStreamScene() {
 
       <instancedMesh ref={cometRef} args={[undefined, undefined, COMET_POOL]}>
         <icosahedronGeometry args={[1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
+        <meshBasicMaterial color={COMET_COLOR} vertexColors toneMapped={false} />
       </instancedMesh>
 
       <instancedMesh ref={gustRef} args={[undefined, undefined, GUST_POOL]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
+          color={GUST_COLOR}
           vertexColors
           transparent
           opacity={0.92}
@@ -1146,14 +1172,11 @@ function SlipStreamScene() {
         />
       </instancedMesh>
 
-      <mesh ref={playerRef} position={[0, -0.02, 0.28]} rotation={[Math.PI * 0.5, 0, 0]}>
+      <mesh ref={playerRef} position={[0, 0.08, 0.28]} rotation={[Math.PI * 0.5, 0, 0]}>
         <cylinderGeometry args={[0.17, 0.17, 0.54, 16]} />
-        <meshStandardMaterial
-          color="#ffe7bb"
-          emissive="#ffca76"
-          emissiveIntensity={0.68}
-          roughness={0.24}
-          metalness={0.06}
+        <meshBasicMaterial
+          color="#ffe39b"
+          toneMapped={false}
         />
       </mesh>
 

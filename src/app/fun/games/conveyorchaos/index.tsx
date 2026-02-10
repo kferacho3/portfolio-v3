@@ -497,7 +497,9 @@ function ConveyorChaosOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-sky-100/55 bg-gradient-to-br from-sky-500/22 via-cyan-500/16 to-emerald-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Conveyor Chaos</div>
-        <div className="text-[11px] text-cyan-50/85">Tap to rotate diverter clockwise.</div>
+        <div className="text-[11px] text-cyan-50/85">
+          Tap to rotate switch. Route locks at center.
+        </div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/24 via-orange-500/18 to-sky-500/16 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -526,9 +528,9 @@ function ConveyorChaosOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-sky-100/42 bg-gradient-to-br from-slate-950/80 via-sky-950/44 to-amber-950/30 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">CONVEYOR CHAOS</div>
-            <div className="mt-2 text-sm text-white/85">Tap rotates diverter 90° clockwise.</div>
+            <div className="mt-2 text-sm text-white/85">Tap rotates the arrow 90° clockwise.</div>
             <div className="mt-1 text-sm text-white/80">
-              Match package color to bin direction or lose instantly.
+              Set direction before the package crosses the center lock line.
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
@@ -906,6 +908,18 @@ function ConveyorChaosScene() {
       <mesh position={[0, 0.04, 0]}>
         <boxGeometry args={[2.16, 0.16, 2.16]} />
         <meshStandardMaterial color="#21314a" roughness={0.48} metalness={0.06} />
+      </mesh>
+
+      <mesh position={[-0.58, 0.14, 0.58]} rotation={[-Math.PI * 0.5, INPUT_ROT_Y, 0]}>
+        <planeGeometry args={[1.26, 0.08]} />
+        <meshBasicMaterial
+          color="#f6fbff"
+          transparent
+          opacity={0.72}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
 
       <group ref={diverterGroupRef} position={[0, 0.17, 0]}>

@@ -96,14 +96,14 @@ type TraceStore = {
 const BEST_KEY = 'trace_hyper_best_v1';
 
 const CELL_SIZE = 0.44;
-const TRAIL_THICKNESS = 0.11;
+const TRAIL_THICKNESS = 0.13;
 const PLAYER_RADIUS = 0.12;
-const MAX_TRAIL_SEGMENTS = 420;
-const TRAIL_INSTANCE_CAP = 500;
+const MAX_TRAIL_SEGMENTS = 1200;
+const TRAIL_INSTANCE_CAP = 1400;
 const VOID_POOL = 20;
 const PICKUP_POOL = 10;
 const MAX_SPARKS = 96;
-const GRID_LINE_CAP = 18;
+const GRID_LINE_CAP = 36;
 
 const ARENA_START_BOUND = 4.3;
 const ARENA_MIN_BOUND = 2.65;
@@ -751,10 +751,10 @@ function TraceScene() {
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
         const age = runtime.elapsed - seg.createdAt;
-        const fade = clamp(1 - age / 55, 0.08, 1);
+        const fade = clamp(1 - age / 180, 0.24, 1);
         const gradient = count > 1 ? i / (count - 1) : 0;
         segColor.copy(CYAN).lerp(MAGENTA, clamp(gradient * 0.78 + 0.14, 0, 1));
-        segColor.multiplyScalar(fade * (1 + runtime.danger * 0.4));
+        segColor.multiplyScalar(fade * (1 + runtime.danger * 0.45));
         if (runtime.phaseTimer > 0 && (i % 2 === 0)) {
           segColor.multiplyScalar(0.28 + Math.sin(runtime.elapsed * 44) * 0.12 + 0.25);
         }
@@ -854,11 +854,7 @@ function TraceScene() {
       if (pickupMeshRef.current.instanceColor) pickupMeshRef.current.instanceColor.needsUpdate = true;
     }
 
-    runtime.playerYaw = lerpAngle(
-      runtime.playerYaw,
-      runtime.targetYaw,
-      1 - Math.exp(-12 * dt)
-    );
+    runtime.playerYaw = lerpAngle(runtime.playerYaw, runtime.targetYaw, 1 - Math.exp(-8.2 * dt));
 
     if (playerRef.current) {
       playerRef.current.position.set(runtime.playerX, 0.16, runtime.playerZ);
@@ -901,23 +897,23 @@ function TraceScene() {
 
       if (top) {
         top.position.set(0, 0.035, -arenaBound);
-        top.scale.set(arenaSpan + 0.14, edgeH, edgeW);
-        (top.material as THREE.MeshBasicMaterial).color.set('#3aa9ff');
+        top.scale.set(arenaSpan + 0.2, edgeH, edgeW);
+        (top.material as THREE.MeshBasicMaterial).color.set('#66c8ff');
       }
       if (bottom) {
         bottom.position.set(0, 0.035, arenaBound);
-        bottom.scale.set(arenaSpan + 0.14, edgeH, edgeW);
-        (bottom.material as THREE.MeshBasicMaterial).color.set('#3aa9ff');
+        bottom.scale.set(arenaSpan + 0.2, edgeH, edgeW);
+        (bottom.material as THREE.MeshBasicMaterial).color.set('#66c8ff');
       }
       if (left) {
         left.position.set(-arenaBound, 0.035, 0);
-        left.scale.set(edgeW, edgeH, arenaSpan + 0.14);
-        (left.material as THREE.MeshBasicMaterial).color.set('#ff57d9');
+        left.scale.set(edgeW, edgeH, arenaSpan + 0.2);
+        (left.material as THREE.MeshBasicMaterial).color.set('#ff73e3');
       }
       if (right) {
         right.position.set(arenaBound, 0.035, 0);
-        right.scale.set(edgeW, edgeH, arenaSpan + 0.14);
-        (right.material as THREE.MeshBasicMaterial).color.set('#ff57d9');
+        right.scale.set(edgeW, edgeH, arenaSpan + 0.2);
+        (right.material as THREE.MeshBasicMaterial).color.set('#ff73e3');
       }
     }
 
@@ -950,7 +946,7 @@ function TraceScene() {
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         gridLineRef.current.setMatrixAt(idx, dummy.matrix);
-        edgeColor.set('#12364a').lerp(CYAN, 0.1 + edgeGlow * 0.12);
+        edgeColor.set('#1f4962').lerp(CYAN, 0.24 + edgeGlow * 0.18);
         gridLineRef.current.setColorAt(idx, edgeColor);
         idx += 1;
 
@@ -959,7 +955,7 @@ function TraceScene() {
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         gridLineRef.current.setMatrixAt(idx, dummy.matrix);
-        edgeColor.set('#2a1737').lerp(MAGENTA, 0.08 + edgeGlow * 0.1);
+        edgeColor.set('#3a234a').lerp(MAGENTA, 0.2 + edgeGlow * 0.17);
         gridLineRef.current.setColorAt(idx, edgeColor);
         idx += 1;
       }
@@ -1005,22 +1001,22 @@ function TraceScene() {
   return (
     <>
       <OrthographicCamera makeDefault position={[0, 9.2, 0]} zoom={96} near={0.1} far={50} />
-      <color attach="background" args={['#040507']} />
-      <fog attach="fog" args={['#040507', 8, 26]} />
+      <color attach="background" args={['#0a0f16']} />
+      <fog attach="fog" args={['#0a0f16', 8, 26]} />
 
-      <ambientLight intensity={0.2} />
-      <pointLight position={[0, 1.6, 0]} intensity={0.22} color="#73f4ff" />
-      <pointLight position={[0, 2.5, 0]} intensity={0.16} color="#ff52d8" />
+      <ambientLight intensity={0.32} />
+      <pointLight position={[0, 1.6, 0]} intensity={0.34} color="#73f4ff" />
+      <pointLight position={[0, 2.5, 0]} intensity={0.24} color="#ff52d8" />
       <pointLight ref={glowLightRef} position={[0, 0.35, 0]} intensity={0.35} color="#73f4ff" distance={2.2} />
 
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[12, 12]} />
-        <meshStandardMaterial color="#090b0e" roughness={0.95} metalness={0.02} />
+        <meshStandardMaterial color="#111722" roughness={0.92} metalness={0.04} />
       </mesh>
 
       <instancedMesh ref={gridLineRef} args={[undefined, undefined, GRID_LINE_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.55} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.76} />
       </instancedMesh>
 
       {[0, 1, 2, 3].map((idx) => (

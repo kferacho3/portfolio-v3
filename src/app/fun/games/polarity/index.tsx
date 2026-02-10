@@ -490,19 +490,28 @@ function PolarityScene() {
         runtime.shakeTime = Math.min(1.2, runtime.shakeTime + 0.7);
         runtime.chargeSwitchBoost = 1;
         let immediateForce = 0;
+        let closest: Segment | null = null;
+        let closestAbs = Infinity;
         for (const segment of runtime.segments) {
-          if (Math.abs(segment.z) > INFLUENCE_RADIUS * 0.92) continue;
+          const absZ = Math.abs(segment.z);
+          if (absZ > INFLUENCE_RADIUS * 0.92) continue;
+          if (absZ < closestAbs) {
+            closest = segment;
+            closestAbs = absZ;
+          }
+        }
+        if (closest) {
           const pullFromPylon = (x: number, polarity: PolaritySign) => {
             const dx = x - runtime.playerX;
-            const dz = segment.z;
+            const dz = closest!.z;
             const distSq = dx * dx + dz * dz * 0.5 + 1;
-            const forceMag = clamp(segment.strength / (distSq + 1), 0, 2.4);
+            const forceMag = clamp(closest!.strength / (distSq + 1), 0, 2.4);
             const dirSign = Math.sign(dx) || 1;
             const attractOrRepel = activePolarity !== polarity ? 1 : -1;
             immediateForce += dirSign * attractOrRepel * forceMag;
           };
-          pullFromPylon(segment.leftX, segment.leftPolarity);
-          pullFromPylon(segment.rightX, segment.rightPolarity);
+          pullFromPylon(closest.leftX, closest.leftPolarity);
+          pullFromPylon(closest.rightX, closest.rightPolarity);
         }
         const switchKick = clamp(immediateForce * 0.18, -3.6, 3.6);
         runtime.playerVelX += switchKick;
@@ -520,50 +529,70 @@ function PolarityScene() {
       runtime.multiplier = clamp(runtime.multiplier - dt * 0.055, 1, 6);
       runtime.chargeSwitchBoost = Math.max(0, runtime.chargeSwitchBoost - dt * 6.4);
 
-      let netForceX = 0;
       runtime.nearbyPylons.length = 0;
+      let primary: Segment | null = null;
+      let secondary: Segment | null = null;
+      let primaryAbs = Infinity;
+      let secondaryAbs = Infinity;
 
       for (const segment of runtime.segments) {
         segment.z += scrollSpeed * dt;
-
-        if (Math.abs(segment.z) < INFLUENCE_RADIUS) {
-          const applyPylonForce = (x: number, polarity: PolaritySign) => {
-            const dx = x - runtime.playerX;
-            const dz = segment.z;
-            const distSq = dx * dx + dz * dz * 0.45 + 1.0;
-            const forceMag = clamp(segment.strength / (distSq + 1), 0, 2.7);
-            const dirSign = Math.sign(dx) || 1;
-            const attractOrRepel = activePolarity !== polarity ? 1 : -1;
-            netForceX += dirSign * attractOrRepel * forceMag;
-            const intensity = forceMag * (segment.doubleZone ? 1.25 : 1);
-            if (intensity > 0.11) {
-              runtime.nearbyPylons.push({
-                x,
-                z: segment.z,
-                polarity,
-                intensity,
-              });
-            }
-          };
-
-          applyPylonForce(segment.leftX, segment.leftPolarity);
-          applyPylonForce(segment.rightX, segment.rightPolarity);
+        const absZ = Math.abs(segment.z);
+        if (absZ > INFLUENCE_RADIUS) continue;
+        if (absZ < primaryAbs) {
+          secondary = primary;
+          secondaryAbs = primaryAbs;
+          primary = segment;
+          primaryAbs = absZ;
+        } else if (absZ < secondaryAbs) {
+          secondary = segment;
+          secondaryAbs = absZ;
         }
+      }
+
+      let netForceX = 0;
+      const applySegmentPair = (segment: Segment, segmentWeight: number) => {
+        const applyPylonForce = (x: number, polarity: PolaritySign) => {
+          const dx = x - runtime.playerX;
+          const dz = segment.z;
+          const distSq = dx * dx + dz * dz * 0.42 + 1.0;
+          const base = segment.strength / (distSq + 1);
+          const forceMag = clamp(base * segmentWeight, 0, 3.3);
+          const dirSign = Math.sign(dx) || 1;
+          const attractOrRepel = activePolarity !== polarity ? 1 : -1;
+          netForceX += dirSign * attractOrRepel * forceMag;
+          const intensity = forceMag * (segment.doubleZone ? 1.3 : 1);
+          if (intensity > 0.11) {
+            runtime.nearbyPylons.push({
+              x,
+              z: segment.z,
+              polarity,
+              intensity,
+            });
+          }
+        };
+        applyPylonForce(segment.leftX, segment.leftPolarity);
+        applyPylonForce(segment.rightX, segment.rightPolarity);
+      };
+
+      if (primary) applySegmentPair(primary, 1);
+      if (secondary && primaryAbs > 0.18) {
+        const mix = clamp(1 - secondaryAbs / INFLUENCE_RADIUS, 0.22, 0.58);
+        applySegmentPair(secondary, mix);
       }
 
       runtime.nearbyPylons.sort((a, b) => b.intensity - a.intensity);
       runtime.nearbyPylons.length = Math.min(runtime.nearbyPylons.length, 4);
 
-      const switchBoostScale = 1 + runtime.chargeSwitchBoost * 1.08;
-      const lateralAccel = clamp(netForceX * switchBoostScale * 1.12, -26, 26);
-      const steps = Math.max(1, Math.ceil(dt / 0.012));
-      const stepDt = dt / steps;
-      for (let i = 0; i < steps; i += 1) {
-        runtime.playerVelX += lateralAccel * stepDt;
-        runtime.playerVelX *= Math.exp(-6.1 * stepDt);
-        runtime.playerVelX = clamp(runtime.playerVelX, -8.2, 8.2);
-        runtime.playerX += runtime.playerVelX * stepDt;
-      }
+      const switchBoostScale = 1 + runtime.chargeSwitchBoost * 0.88;
+      const equilibriumX = clamp(runtime.playerX + netForceX * 0.34, -LANE_HALF_WIDTH + 0.2, LANE_HALF_WIDTH - 0.2);
+      const spring = 18 + difficulty * 8;
+      const damp = 10 + difficulty * 2.4;
+      runtime.playerVelX += (equilibriumX - runtime.playerX) * spring * dt;
+      runtime.playerVelX *= Math.exp(-damp * dt);
+      runtime.playerVelX += clamp(netForceX * switchBoostScale * 0.06, -0.38, 0.38);
+      runtime.playerVelX = clamp(runtime.playerVelX, -6.6, 6.6);
+      runtime.playerX += runtime.playerVelX * dt;
 
       let gameOver = false;
       if (Math.abs(runtime.playerX) + PLAYER_RADIUS > LANE_HALF_WIDTH) {
@@ -903,28 +932,28 @@ function PolarityScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 2.2, 6.45]} fov={44} />
-      <color attach="background" args={['#111b31']} />
-      <fog attach="fog" args={['#111b31', 8, 42]} />
+      <PerspectiveCamera makeDefault position={[0, 2.22, 6.5]} fov={44} />
+      <color attach="background" args={['#1f3960']} />
+      <fog attach="fog" args={['#1f3960', 10, 48]} />
 
-      <ambientLight intensity={0.52} color="#d8ecff" />
-      <directionalLight position={[2.6, 6.8, 5.2]} intensity={0.92} color="#d9efff" />
-      <pointLight position={[0, 2.1, 3.2]} intensity={0.66} color="#8feeff" />
-      <pointLight position={[0, 1.9, -8]} intensity={0.42} color="#ff72dd" />
+      <ambientLight intensity={0.68} color="#dff3ff" />
+      <directionalLight position={[2.6, 6.8, 5.2]} intensity={1.06} color="#e5f8ff" />
+      <pointLight position={[0, 2.1, 3.2]} intensity={0.76} color="#b6f3ff" />
+      <pointLight position={[0, 1.9, -8]} intensity={0.5} color="#ff9fe7" />
 
       <mesh position={[0, -0.01, -5]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[8.5, 60]} />
-        <meshStandardMaterial color="#182742" roughness={0.82} metalness={0.06} />
+        <meshStandardMaterial color="#28456f" roughness={0.76} metalness={0.09} />
       </mesh>
 
       <mesh position={[0, 0.002, -5]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[2.15, 60]} />
-        <meshBasicMaterial color="#25385f" transparent opacity={0.52} toneMapped={false} />
+        <meshBasicMaterial color="#315181" transparent opacity={0.66} toneMapped={false} />
       </mesh>
 
       <mesh position={[0, 4.2, -25]}>
         <planeGeometry args={[42, 24]} />
-        <meshBasicMaterial color="#1a2950" transparent opacity={0.42} toneMapped={false} />
+        <meshBasicMaterial color="#284171" transparent opacity={0.58} toneMapped={false} />
       </mesh>
 
       <mesh position={[-LANE_HALF_WIDTH, 0.22, -5]}>

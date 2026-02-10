@@ -144,9 +144,9 @@ const sizeForOrientation = (orientation: OrientationState) =>
 const worldYForHeight = (heightLevel: number) => heightLevel * TILE_HEIGHT_STEP;
 
 const failReasonLabel = (reason: FailReason) => {
-  if (reason === 'rule') return 'Wrong posture for this glyph.';
-  if (reason === 'height') return 'Flat posture needs level support.';
-  return 'No tile support under the box.';
+  if (reason === 'rule') return 'Wrong shape for the gate.';
+  if (reason === 'height') return 'Bad fit on a split gate.';
+  return 'You missed the lane support.';
 };
 
 const createTile = (id: number): TileRecord => ({
@@ -268,21 +268,13 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
     return;
   }
 
-  let gapChance = lerp(0.015, 0.2, d);
-  if (runtime.elapsed < 8) gapChance *= 0.3;
-  if (runtime.gapRun > 0) gapChance *= 0.18;
-
-  tile.present = Math.random() > gapChance;
-  if (!tile.present) {
-    tile.rule = 'ANY';
-    tile.heightLevel = runtime.lastHeight;
-    runtime.gapRun += 1;
-    return;
-  }
-
+  // Keep the track continuous and readable; challenge comes from posture-fit rules.
+  tile.present = true;
+  tile.heightLevel = 0;
   runtime.gapRun = 0;
+  runtime.lastHeight = 0;
 
-  const ruleChance = lerp(0.1, 0.36, d);
+  const ruleChance = lerp(0.22, 0.58, d);
   if (Math.random() < ruleChance) {
     if (runtime.lastRule === 'UPRIGHT') {
       tile.rule = Math.random() < 0.65 ? 'FLAT' : 'UPRIGHT';
@@ -295,15 +287,6 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
     tile.rule = 'ANY';
   }
   if (tile.rule !== 'ANY') runtime.lastRule = tile.rule;
-
-  let nextHeight = runtime.lastHeight;
-  const stepChance = lerp(0.02, 0.18, d);
-  if (runtime.elapsed > 10 && Math.random() < stepChance) {
-    nextHeight += Math.random() < 0.5 ? -1 : 1;
-  }
-
-  tile.heightLevel = clamp(Math.round(nextHeight), -1, 2);
-  runtime.lastHeight = tile.heightLevel;
 };
 
 const resetRuntime = (runtime: Runtime) => {
@@ -404,7 +387,7 @@ function FlipBoxOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/70 bg-gradient-to-br from-cyan-500/28 via-sky-500/18 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-50">Flip Box</div>
-        <div className="text-[11px] text-white/90">Tap to flip posture and stay supported.</div>
+        <div className="text-[11px] text-white/90">Tap to switch square/rectangle and fit gates.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-xl border border-rose-100/60 bg-gradient-to-br from-rose-400/24 via-fuchsia-400/18 to-amber-300/16 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -436,8 +419,8 @@ function FlipBoxOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">FLIP BOX</div>
-            <div className="mt-2 text-sm text-white/90">Single glyph = upright. Wide glyph = flat.</div>
-            <div className="mt-1 text-sm text-white/85">Tap anytime to flip posture.</div>
+            <div className="mt-2 text-sm text-white/90">Single gate = upright box. Wide slot = flat box.</div>
+            <div className="mt-1 text-sm text-white/85">Tap anytime to flip shape before each gate.</div>
             <div className="mt-3 text-sm text-cyan-200/95">Tap to play.</div>
           </div>
         </div>

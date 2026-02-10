@@ -120,7 +120,7 @@ function ProjectModal({ project, onClose }: ModalProps) {
                       key={idx}
                       className="flex items-start gap-2 text-muted-foreground"
                     >
-                      <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
+                      <span className="brand-gradient-dot mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full" />
                       <span className="leading-relaxed">{highlight}</span>
                     </li>
                   ))}
@@ -346,7 +346,7 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm text-muted-foreground">
                 {highlights.map((highlight, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
+                    <span className="brand-gradient-dot mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full" />
                     <span>{highlight}</span>
                   </li>
                 ))}
@@ -414,7 +414,7 @@ function ProjectCard({ project, onSelect, priority = false }: CardProps) {
 
         <div className="flex h-full flex-col gap-3 p-5">
           <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
+            <span className="brand-gradient-dot h-1.5 w-1.5 rounded-full" />
             Project
           </div>
           <h3 itemProp="name" className="text-xl font-semibold text-foreground">
@@ -489,7 +489,7 @@ export default function SectionThree() {
             id="projects-title"
             className="mt-3 text-4xl font-black text-foreground sm:text-5xl md:text-6xl"
           >
-            <span className="bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] bg-clip-text text-transparent">
+            <span className="brand-gradient-text">
               Selected Projects
             </span>
           </h2>

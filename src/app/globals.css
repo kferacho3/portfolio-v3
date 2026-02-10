@@ -75,14 +75,8 @@ main {
   position: absolute;
   inset: -1px;
   padding: 2px;
-  background: linear-gradient(
-    45deg,
-    #39ff14,
-    #ffa500,
-    #9400d3,
-    #ff1493,
-    #ffff00
-  );
+  background: var(--brand-gradient-main);
+  background-size: 220% 220%;
   border-radius: inherit;
   mask:
     linear-gradient(#fff 0 0) content-box,
@@ -111,15 +105,8 @@ main {
   content: attr(data-text);
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    45deg,
-    #39ff14,
-    #ffa500,
-    #9400d3,
-    #ff1493,
-    #ffff00
-  );
-  background-size: 400%;
+  background: var(--brand-gradient-main);
+  background-size: 220% 220%;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -145,14 +132,8 @@ main {
   content: '';
   position: absolute;
   inset: -2px;
-  background: linear-gradient(
-    45deg,
-    #39ff14,
-    #ffa500,
-    #9400d3,
-    #ff1493,
-    #ffff00
-  );
+  background: var(--brand-gradient-main);
+  background-size: 220% 220%;
   border-radius: inherit;
   opacity: 0;
   transition: opacity 0.5s ease;
@@ -175,6 +156,51 @@ main {
   }
   .border-border {
     border-color: hsl(var(--border));
+  }
+
+  .brand-gradient-text {
+    background: var(--brand-gradient-main);
+    background-size: 175% 120%;
+    background-position: 52% 50%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+    filter: saturate(1.05) contrast(1.03);
+  }
+
+  .brand-gradient-dot {
+    background: var(--brand-gradient-main);
+    background-size: 180% 180%;
+    background-position: 50% 50%;
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 0 12px rgba(148, 0, 211, 0.2);
+  }
+
+  .brand-gradient-button {
+    background: var(--brand-gradient-main);
+    background-size: 170% 170%;
+    background-position: 44% 50%;
+    color: #0f172a;
+    box-shadow:
+      0 16px 36px -20px rgba(148, 0, 211, 0.62),
+      0 12px 30px -20px rgba(255, 165, 0, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    transition:
+      background-position 350ms ease,
+      filter 220ms ease,
+      transform 220ms ease,
+      box-shadow 220ms ease;
+  }
+
+  .brand-gradient-button:hover {
+    background-position: 76% 50%;
+    filter: saturate(1.09) brightness(1.03);
+    box-shadow:
+      0 18px 42px -22px rgba(148, 0, 211, 0.68),
+      0 16px 36px -24px rgba(255, 165, 0, 0.62),
+      inset 0 1px 0 rgba(255, 255, 255, 0.52);
   }
 }
 
@@ -222,6 +248,19 @@ main {
     --input: 240 3.7% 15.9%;
     --ring: 240 4.9% 83.9%;
     --radius: 0.5rem;
+    --brand-neon-green: #39ff14;
+    --brand-neon-purple: #9400d3;
+    --brand-neon-orange: #ffa500;
+    --brand-gradient-main: linear-gradient(
+      112deg,
+      #39ff14 0%,
+      #58e245 16%,
+      #7f74c8 35%,
+      #9400d3 50%,
+      #bf38b3 68%,
+      #e46f62 84%,
+      #ffa500 100%
+    );
   }
 
   .light {
@@ -279,13 +318,6 @@ main {
 .music-bar.playing {
   animation: bounce 2.2s ease infinite alternate,
              gradientMove 3s linear infinite;
-  background: linear-gradient(
-    45deg,
-    #39ff14,
-    #ffa500,
-    #9400d3,
-    #ff1493,
-    #ffff00
-  );
-  background-size: 400%;
+  background: var(--brand-gradient-main);
+  background-size: 220% 220%;
 }

@@ -109,8 +109,8 @@ const PLAY_Y = 2.45;
 
 const ANCHOR_FORWARD_MIN = -12.5;
 const ANCHOR_FORWARD_MAX = -0.15;
-const ATTACH_MAX_DIST = 3.8;
-const ATTACH_CONE_COS = Math.cos((52 * Math.PI) / 180);
+const ATTACH_MAX_DIST = 4.7;
+const ATTACH_CONE_COS = Math.cos((66 * Math.PI) / 180);
 
 const CYAN = new THREE.Color('#6bf0ff');
 const MINT = new THREE.Color('#3be3ba');
@@ -758,10 +758,10 @@ function TetherDriftScene() {
       if (game.status === 'PLAYING' && !runtime.tether && runtime.targetAnchorIndex >= 0) {
         const anchor = runtime.anchors[runtime.targetAnchorIndex];
         const world = anchorPosition(anchor, runtime.elapsed);
-        const pulse = 1 + Math.sin(runtime.elapsed * 8.6) * 0.12;
+        const pulse = 1 + Math.sin(runtime.elapsed * 8.6) * 0.16;
         targetAnchorRef.current.visible = true;
         targetAnchorRef.current.position.set(world.x, world.y + 0.24, anchor.z + 0.02);
-        targetAnchorRef.current.scale.setScalar(pulse);
+        targetAnchorRef.current.scale.setScalar(1.18 * pulse);
       } else {
         targetAnchorRef.current.visible = false;
       }
@@ -779,7 +779,7 @@ function TetherDriftScene() {
         const anchorPulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 3.8 + i * 0.42);
         const anchorColor = colorScratch
           .copy(anchor.broken ? CORAL : CYAN)
-          .lerp(anchor.broken ? WARN : SKY, 0.28 + anchorPulse * 0.2);
+          .lerp(anchor.broken ? WARN : SKY, 0.36 + anchorPulse * 0.24);
         anchorMeshRef.current.setColorAt(i, anchorColor);
       }
       anchorMeshRef.current.instanceMatrix.needsUpdate = true;
@@ -951,13 +951,13 @@ function TetherDriftScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 4.2, 7.35]} fov={43} />
-      <color attach="background" args={['#1f4f82']} />
-      <fog attach="fog" args={['#1f4f82', 10, 42]} />
+      <color attach="background" args={['#2d6aa6']} />
+      <fog attach="fog" args={['#2d6aa6', 12, 46]} />
 
       <Stars radius={95} depth={56} count={1200} factor={2.5} saturation={0.55} fade speed={0.4} />
 
-      <ambientLight intensity={0.62} />
-      <hemisphereLight args={['#b8f3ff', '#2f3b73', 0.28]} />
+      <ambientLight intensity={0.72} />
+      <hemisphereLight args={['#d2fbff', '#415798', 0.34]} />
       <pointLight position={[0, 3.1, 2.2]} intensity={0.68} color="#9deeff" />
       <pointLight position={[-2.2, -0.5, -8]} intensity={0.38} color="#c39dff" />
       <pointLight position={[2.2, -0.3, -7]} intensity={0.3} color="#ffb6a0" />

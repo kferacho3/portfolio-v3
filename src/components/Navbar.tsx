@@ -101,7 +101,7 @@ const Navbar: React.FC = () => {
           <div className="ml-[2%] flex items-center gap-4">
             <Link href="/" aria-label="Go to homepage">
               <Image
-                src="/logo.png"
+                src={theme === 'dark' ? '/logo-white.png' : '/logo.png'}
                 alt="Kamal Feracho logo"
                 width={600}
                 height={600}

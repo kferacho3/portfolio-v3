@@ -89,6 +89,7 @@ type Runtime = {
 
   forcedDir: StepDir;
   forcedSteps: number;
+  pendingStep: boolean;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -327,6 +328,7 @@ const createRuntime = (): Runtime => ({
 
   forcedDir: 1,
   forcedSteps: 0,
+  pendingStep: false,
 
   difficulty: sampleDifficulty('timing-defense', 0),
   chunkLibrary: buildPatternLibraryTemplate('runeroll'),
@@ -551,7 +553,9 @@ function RuneRollOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/22 via-indigo-500/15 to-amber-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
-        <div className="text-[11px] text-cyan-50/85">Tap toggles next step left or right.</div>
+        <div className="text-[11px] text-cyan-50/85">
+          Each tap rolls one step and flips direction.
+        </div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/22 via-fuchsia-500/16 to-indigo-500/22 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -583,8 +587,9 @@ function RuneRollOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-violet-100/42 bg-gradient-to-br from-slate-950/80 via-violet-950/46 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">RUNE ROLL</div>
-            <div className="mt-2 text-sm text-white/85">Tap to switch the next step direction.</div>
-            <div className="mt-1 text-sm text-white/80">Land with matching bottom rune to survive.</div>
+            <div className="mt-2 text-sm text-white/85">Tap to roll one step at a time.</div>
+            <div className="mt-1 text-sm text-white/80">Bottom rune must match the tile rune.</div>
+            <div className="mt-1 text-sm text-cyan-200/85">The run waits for your tap.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -692,6 +697,7 @@ function RuneRollScene() {
 
     runtime.forcedDir = 1;
     runtime.forcedSteps = 0;
+    runtime.pendingStep = false;
 
     runtime.difficulty = sampleDifficulty('timing-defense', 0);
     runtime.currentChunk = null;
@@ -768,13 +774,14 @@ function RuneRollScene() {
         useRuneRollStore.getState().startRun();
       } else {
         runtime.nextDir = runtime.nextDir === 1 ? -1 : 1;
+        runtime.pendingStep = true;
         runtime.shake = Math.min(1.15, runtime.shake + 0.2);
         useRuneRollStore.getState().onTapFx();
       }
     }
 
     if (store.status === 'PLAYING') {
-      runtime.elapsed += dt;
+      runtime.elapsed += dt * (runtime.stepActive ? 1 : 0.35);
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
 
@@ -782,7 +789,8 @@ function RuneRollScene() {
         if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 2.8);
       }
 
-      if (!runtime.stepActive) {
+      if (!runtime.stepActive && runtime.pendingStep) {
+        runtime.pendingStep = false;
         const nextRow = runtime.currentRow + 1;
         let stepDir: StepDir = runtime.nextDir;
         let nextLane = runtime.currentLane + stepDir;

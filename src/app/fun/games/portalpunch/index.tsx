@@ -85,6 +85,8 @@ type Runtime = {
   lastPunchAt: number;
   shake: number;
   chroma: number;
+  cueIntensity: number;
+  cuePortalId: number;
 
   gloveZ: number;
   glovePrevZ: number;
@@ -264,6 +266,8 @@ const createRuntime = (): Runtime => ({
   lastPunchAt: 0,
   shake: 0,
   chroma: 0,
+  cueIntensity: 0,
+  cuePortalId: -1,
 
   gloveZ: GLOVE_IDLE_Z,
   glovePrevZ: GLOVE_IDLE_Z,
@@ -359,6 +363,8 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.lastPunchAt = 0;
   runtime.shake = 0;
   runtime.chroma = 0;
+  runtime.cueIntensity = 0;
+  runtime.cuePortalId = -1;
 
   runtime.gloveZ = GLOVE_IDLE_Z;
   runtime.glovePrevZ = GLOVE_IDLE_Z;
@@ -398,7 +404,7 @@ function PortalPunchOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/16 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Portal Punch</div>
-        <div className="text-[11px] text-cyan-50/85">Tap to punch through ring and core.</div>
+        <div className="text-[11px] text-cyan-50/85">Tap when the bright guide line says NOW.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-rose-100/55 bg-gradient-to-br from-rose-500/24 via-fuchsia-500/16 to-indigo-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -421,7 +427,7 @@ function PortalPunchOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/82 via-indigo-950/45 to-rose-950/35 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PORTAL PUNCH</div>
-            <div className="mt-2 text-sm text-white/85">Tap once. Time the punch through the portal.</div>
+            <div className="mt-2 text-sm text-white/85">Wait for the center guide to glow, then tap once.</div>
             <div className="mt-1 text-sm text-white/80">Clip the rim or miss the core and run ends.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
@@ -495,6 +501,8 @@ function PortalPunchScene() {
   const shockRef = useRef<THREE.InstancedMesh>(null);
   const gloveGroupRef = useRef<THREE.Group>(null);
   const gloveHitRef = useRef<THREE.Mesh>(null);
+  const punchGuideRef = useRef<THREE.Mesh>(null);
+  const cueRingRef = useRef<THREE.Mesh>(null);
   const warpMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const fixedStepRef = useRef(createFixedStepState());
 
@@ -628,6 +636,23 @@ function PortalPunchScene() {
           portal.baseY +
           Math.cos(runtime.elapsed * portal.driftFreqY + portal.phase * 1.17) *
             portal.driftAmpY;
+      }
+
+      runtime.cueIntensity = 0;
+      runtime.cuePortalId = -1;
+      let bestCueZ = -Infinity;
+      for (const portal of runtime.portals) {
+        if (portal.fake) continue;
+        if (portal.z < -14.5 || portal.z > -2.2) continue;
+        const centerDist = Math.hypot(portal.x, portal.y);
+        const align = 1 - clamp(centerDist / Math.max(0.0001, portal.innerRadius * 0.92), 0, 1);
+        const zCue = 1 - clamp(Math.abs(portal.z - -8.2) / 6.5, 0, 1);
+        const cue = align * 0.68 + zCue * 0.32;
+        if (cue > runtime.cueIntensity || (Math.abs(cue - runtime.cueIntensity) < 0.001 && portal.z > bestCueZ)) {
+          runtime.cueIntensity = cue;
+          runtime.cuePortalId = portal.id;
+          bestCueZ = portal.z;
+        }
       }
 
       runtime.glovePrevZ = runtime.gloveZ;
@@ -805,6 +830,31 @@ function PortalPunchScene() {
     if (gloveHitRef.current) {
       gloveHitRef.current.position.set(0, -0.2, runtime.gloveZ - 0.12);
     }
+    if (punchGuideRef.current) {
+      punchGuideRef.current.position.set(0, -0.2, -4.6);
+      const mat = punchGuideRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.2 + runtime.cueIntensity * 0.58;
+      mat.color.copy(runtime.cueIntensity > 0.62 ? WHITE : CYAN);
+    }
+    if (cueRingRef.current) {
+      if (runtime.cuePortalId >= 0) {
+        const portal = findPortalById(runtime, runtime.cuePortalId);
+        if (portal && !portal.fake) {
+          cueRingRef.current.visible = true;
+          cueRingRef.current.position.set(portal.x, portal.y, portal.z + 0.02);
+          cueRingRef.current.rotation.set(portal.rotX, portal.rotY, portal.rotZ);
+          const pulse = 1 + Math.sin(runtime.elapsed * 9) * 0.08;
+          const s = portal.innerRadius * (1 + runtime.cueIntensity * 0.22) * pulse;
+          cueRingRef.current.scale.set(s, s, s);
+          const mat = cueRingRef.current.material as THREE.MeshBasicMaterial;
+          mat.opacity = 0.18 + runtime.cueIntensity * 0.55;
+        } else {
+          cueRingRef.current.visible = false;
+        }
+      } else {
+        cueRingRef.current.visible = false;
+      }
+    }
 
     if (ringRef.current && warpRef.current && coreRef.current) {
       let idx = 0;
@@ -904,14 +954,14 @@ function PortalPunchScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0.42, 7.55]} fov={44} />
-      <color attach="background" args={['#121a2f']} />
-      <fog attach="fog" args={['#121a2f', 8, 46]} />
+      <PerspectiveCamera makeDefault position={[0, 0.28, 7.25]} fov={42} />
+      <color attach="background" args={['#1b2b4a']} />
+      <fog attach="fog" args={['#1b2b4a', 10, 52]} />
 
-      <ambientLight intensity={0.48} />
-      <hemisphereLight args={['#9fe3ff', '#291f3d', 0.28]} />
-      <directionalLight position={[2.6, 4.2, 5.4]} intensity={0.85} color="#c9efff" />
-      <pointLight position={[0, 0.8, 3.7]} intensity={0.56} color="#8ad3ff" />
+      <ambientLight intensity={0.58} />
+      <hemisphereLight args={['#b9f1ff', '#3a2a52', 0.34]} />
+      <directionalLight position={[2.6, 4.2, 5.4]} intensity={0.96} color="#d8f5ff" />
+      <pointLight position={[0, 0.8, 3.7]} intensity={0.68} color="#9fe7ff" />
 
       <mesh position={[0, -1.1, -10]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[20, 70]} />
@@ -920,7 +970,19 @@ function PortalPunchScene() {
 
       <mesh position={[0, -0.2, -16]}>
         <boxGeometry args={[0.06, 0.06, 42]} />
-        <meshBasicMaterial color="#1d2a44" toneMapped={false} />
+        <meshBasicMaterial color="#4fdfff" toneMapped={false} transparent opacity={0.36} />
+      </mesh>
+
+      <mesh ref={punchGuideRef} position={[0, -0.2, -4.6]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <planeGeometry args={[0.42, 13.4]} />
+        <meshBasicMaterial
+          color="#52ecff"
+          transparent
+          opacity={0.24}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
 
       <instancedMesh ref={ringRef} args={[undefined, undefined, PORTAL_POOL]}>
@@ -973,6 +1035,18 @@ function PortalPunchScene() {
         <sphereGeometry args={[1, 16, 16]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
+
+      <mesh ref={cueRingRef} visible={false}>
+        <torusGeometry args={[1, 0.03, 8, 48]} />
+        <meshBasicMaterial
+          color="#f4fdff"
+          transparent
+          opacity={0.55}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
 
       <instancedMesh ref={shockRef} args={[undefined, undefined, SHOCKWAVE_POOL]}>
         <torusGeometry args={[1, 0.03, 8, 48]} />

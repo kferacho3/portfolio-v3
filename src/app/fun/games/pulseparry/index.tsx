@@ -28,6 +28,7 @@ type Pulse = {
   slot: number;
   active: boolean;
   parried: boolean;
+  angle: number;
   radius: number;
   speed: number;
   thickness: number;
@@ -63,6 +64,13 @@ type Runtime = {
   hudCommit: number;
   coreGlow: number;
   perfectFlash: number;
+  resonance: number;
+
+  cursorAngle: number;
+  parryAngle: number;
+  parryWindow: number;
+  parryWindowLeft: number;
+  runeSpin: number;
 
   shockActive: boolean;
   shockRadius: number;
@@ -133,6 +141,28 @@ const PULSE_COLORS = [CYAN, MAGENTA, ACID] as const;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const TAU = Math.PI * 2;
+const CARDINAL_ANGLES = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5] as const;
+const normalizeAngle = (angle: number) => {
+  const m = angle % TAU;
+  return m < 0 ? m + TAU : m;
+};
+const angleDiff = (a: number, b: number) => {
+  const d = Math.abs(normalizeAngle(a) - normalizeAngle(b));
+  return Math.min(d, TAU - d);
+};
+const quantizeCardinal = (angle: number) => {
+  let best: number = CARDINAL_ANGLES[0];
+  let bestD = angleDiff(angle, best);
+  for (let i = 1; i < CARDINAL_ANGLES.length; i += 1) {
+    const d = angleDiff(angle, CARDINAL_ANGLES[i]);
+    if (d < bestD) {
+      bestD = d;
+      best = CARDINAL_ANGLES[i];
+    }
+  }
+  return best;
+};
 
 let audioCtx: AudioContext | null = null;
 
@@ -176,6 +206,7 @@ const createPulse = (slot: number): Pulse => ({
   slot,
   active: false,
   parried: false,
+  angle: 0,
   radius: SPAWN_RADIUS_BASE,
   speed: 1.3,
   thickness: 0.18,
@@ -211,6 +242,13 @@ const createRuntime = (): Runtime => ({
   hudCommit: 0,
   coreGlow: 0,
   perfectFlash: 0,
+  resonance: 0,
+
+  cursorAngle: 0,
+  parryAngle: 0,
+  parryWindow: 0.12,
+  parryWindowLeft: 0,
+  runeSpin: 0,
 
   shockActive: false,
   shockRadius: PARRY_RADIUS_BASE,
@@ -249,6 +287,12 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.hudCommit = 0;
   runtime.coreGlow = 0;
   runtime.perfectFlash = 0;
+  runtime.resonance = 0;
+  runtime.cursorAngle = 0;
+  runtime.parryAngle = 0;
+  runtime.parryWindow = 0.12;
+  runtime.parryWindowLeft = 0;
+  runtime.runeSpin = 0;
 
   runtime.shockActive = false;
   runtime.shockRadius = PARRY_RADIUS_BASE;
@@ -273,6 +317,7 @@ const resetRuntime = (runtime: Runtime) => {
   for (const pulse of runtime.pulses) {
     pulse.active = false;
     pulse.parried = false;
+    pulse.angle = 0;
     pulse.radius = SPAWN_RADIUS_BASE;
     pulse.speed = 1.3;
     pulse.thickness = 0.18;
@@ -394,11 +439,14 @@ const spawnPulseSet = (runtime: Runtime) => {
 
   const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.34;
   const spacing = 0.45 + Math.random() * 0.28;
+  const baseLane = Math.floor(Math.random() * CARDINAL_ANGLES.length);
 
   for (let i = 0; i < count; i += 1) {
     const pulse = acquirePulse(runtime);
     pulse.active = true;
     pulse.parried = false;
+    const lane = (baseLane + i) % CARDINAL_ANGLES.length;
+    pulse.angle = CARDINAL_ANGLES[lane];
     pulse.radius = baseRadius + i * spacing;
     pulse.speed = clamp(
       baseSpeed * (0.8 + Math.random() * 0.55 + i * 0.05 + tier * 0.03),
@@ -462,7 +510,9 @@ function PulseParryOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
-        <div className="text-[11px] text-cyan-50/85">Tap when a pulse touches the parry ring.</div>
+        <div className="text-[11px] text-cyan-50/85">
+          Cursor rotates. Tap to lock a parry lane.
+        </div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -488,8 +538,12 @@ function PulseParryOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/80 via-emerald-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PULSE PARRY</div>
-            <div className="mt-2 text-sm text-white/85">Tap exactly as a pulse hits the guide ring.</div>
-            <div className="mt-1 text-sm text-white/80">One tap parries one pulse. Miss and the core breaks.</div>
+            <div className="mt-2 text-sm text-white/85">
+              Time the rotating cursor to the incoming lane.
+            </div>
+            <div className="mt-1 text-sm text-white/80">
+              Tap on the guide ring to reflect and build combo.
+            </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -571,6 +625,10 @@ function PulseParryScene() {
   const auraRef = useRef<THREE.Mesh>(null);
   const parryZoneRef = useRef<THREE.Mesh>(null);
   const shockRef = useRef<THREE.Mesh>(null);
+  const cursorRef = useRef<THREE.Mesh>(null);
+  const parryPetalRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const runeRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const laneBeamRefs = useRef<Array<THREE.Mesh | null>>([]);
   const bloomRef = useRef<any>(null);
   const fixedStepRef = useRef(createFixedStepState());
 
@@ -646,6 +704,8 @@ function PulseParryScene() {
         resetRuntime(runtime);
         usePulseParryStore.getState().startRun();
       } else if (runtime.tapCooldown <= 0) {
+        runtime.parryAngle = quantizeCardinal(runtime.cursorAngle);
+        runtime.parryWindowLeft = runtime.parryWindow;
         runtime.shockActive = true;
         runtime.shockRadius = runtime.parryRadius;
         runtime.shockLife = runtime.shockDuration;
@@ -660,6 +720,9 @@ function PulseParryScene() {
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
+      runtime.cursorAngle = normalizeAngle(runtime.cursorAngle + dt * lerp(1.8, 2.8, clamp(runtime.elapsed / 90, 0, 1)));
+      runtime.runeSpin += dt * 0.5;
+      runtime.parryWindowLeft = Math.max(0, runtime.parryWindowLeft - dt);
 
       const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
       runtime.hitThreshold = clamp((runtime.difficulty.decisionWindowMs / 1000) * (0.7 + d * 0.22), 0.08, 0.28);
@@ -694,18 +757,37 @@ function PulseParryScene() {
           if (runtime.shockActive) {
             const diff = Math.abs(pulse.radius - runtime.parryRadius);
             const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
-            if (diff <= hitWindow) {
+            const laneWindow = 0.42;
+            const laneAligned = angleDiff(pulse.angle, runtime.parryAngle) <= laneWindow;
+            if (diff <= hitWindow && runtime.parryWindowLeft > 0 && laneAligned) {
               pulse.parried = true;
               pulse.life = 0.22;
               pulse.flash = 1;
               runtime.shockActive = false;
               runtime.shockLife = 0;
+              runtime.parryWindowLeft = 0;
 
               const perfect = diff <= runtime.perfectThreshold;
               runtime.parries += 1;
               runtime.perfectCombo = perfect ? runtime.perfectCombo + 1 : 0;
-              runtime.multiplier = 1 + Math.min(runtime.perfectCombo, 16) * 0.12;
+              runtime.resonance = clamp(
+                runtime.resonance + (perfect ? 1.2 : 0.5),
+                0,
+                18
+              );
+              runtime.multiplier =
+                1 + Math.min(runtime.perfectCombo, 16) * 0.12 + runtime.resonance * 0.03;
               runtime.score += runtime.multiplier + (perfect ? 0.3 : 0);
+              if (perfect) {
+                const targetAngle = normalizeAngle(runtime.runeSpin + runtime.parryAngle);
+                const runeHit = CARDINAL_ANGLES.some(
+                  (base) => angleDiff(targetAngle, base) < 0.24
+                );
+                if (runeHit) {
+                  runtime.score += 2.5;
+                  runtime.coreGlow = Math.min(1.8, runtime.coreGlow + 0.16);
+                }
+              }
               runtime.coreGlow = Math.min(1.6, runtime.coreGlow + (perfect ? 0.34 : 0.2));
               runtime.shake = Math.min(1.2, runtime.shake + (perfect ? 0.26 : 0.15));
 
@@ -727,7 +809,11 @@ function PulseParryScene() {
           }
 
           if (pulse.radius <= CORE_FAIL_RADIUS + pulse.thickness * 0.42) {
-            if (withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1)) {
+            const laneAligned = angleDiff(pulse.angle, runtime.parryAngle) <= 0.42;
+            if (
+              withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1) &&
+              laneAligned
+            ) {
               pulse.parried = true;
               pulse.life = 0.16;
               pulse.flash = 0.7;
@@ -736,6 +822,7 @@ function PulseParryScene() {
               runtime.shockLife = 0;
               runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.14);
             } else {
+              runtime.resonance = Math.max(0, runtime.resonance - 0.8);
               runtime.failMessage = 'A pulse breached the core.';
               runtime.shake = Math.min(1.5, runtime.shake + 0.72);
               runtime.perfectFlash = 1;
@@ -763,6 +850,7 @@ function PulseParryScene() {
     }
 
     runtime.coreGlow = Math.max(0, runtime.coreGlow - dt * 1.8);
+    runtime.resonance = Math.max(0, runtime.resonance - dt * 0.35);
     runtime.perfectFlash = Math.max(0, runtime.perfectFlash - dt * 4.8);
 
     for (const shard of runtime.shards) {
@@ -827,6 +915,55 @@ function PulseParryScene() {
       shockMat.opacity = clamp(0.88 * lifeT, 0, 0.88);
     }
 
+    if (cursorRef.current) {
+      cursorRef.current.position.set(
+        Math.cos(runtime.cursorAngle) * runtime.parryRadius,
+        0.02,
+        Math.sin(runtime.cursorAngle) * runtime.parryRadius
+      );
+      cursorRef.current.rotation.set(Math.PI * 0.5, runtime.cursorAngle, 0);
+      const mat = cursorRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = clamp(0.66 + runtime.coreGlow * 0.18, 0.55, 0.95);
+    }
+
+    for (let i = 0; i < CARDINAL_ANGLES.length; i += 1) {
+      const angle = CARDINAL_ANGLES[i];
+      const isLocked = angleDiff(runtime.parryAngle, angle) < 0.08 && runtime.parryWindowLeft > 0;
+      const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 5 + i);
+
+      const petal = parryPetalRefs.current[i];
+      if (petal) {
+        petal.position.set(
+          Math.cos(angle) * (runtime.parryRadius + 0.15),
+          0.015,
+          Math.sin(angle) * (runtime.parryRadius + 0.15)
+        );
+        petal.rotation.set(-Math.PI * 0.5, 0, angle);
+        petal.scale.setScalar(isLocked ? 1.22 : 1 + pulse * 0.08);
+        const mat = petal.material as THREE.MeshBasicMaterial;
+        mat.color.copy(isLocked ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
+        mat.opacity = isLocked ? 0.9 : 0.46;
+      }
+
+      const rune = runeRefs.current[i];
+      if (rune) {
+        const targetAngle = runtime.runeSpin + angle;
+        rune.position.set(Math.cos(targetAngle) * 3.48, 0.05, Math.sin(targetAngle) * 3.48);
+        rune.rotation.set(Math.PI * 0.5, targetAngle, 0);
+        const mat = rune.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.35 + runtime.resonance * 0.02;
+      }
+
+      const laneBeam = laneBeamRefs.current[i];
+      if (laneBeam) {
+        const lanePulse = 0.2 + Math.max(0, Math.sin(runtime.elapsed * 3 + i) * 0.1);
+        laneBeam.position.set(Math.cos(angle) * 2.1, 0.005, Math.sin(angle) * 2.1);
+        laneBeam.rotation.set(-Math.PI * 0.5, 0, angle);
+        const mat = laneBeam.material as THREE.MeshBasicMaterial;
+        mat.opacity = lanePulse + (isLocked ? 0.26 : 0);
+      }
+    }
+
     if (pulseRef.current) {
       for (let i = 0; i < runtime.pulses.length; i += 1) {
         const pulse = runtime.pulses[i];
@@ -840,9 +977,14 @@ function PulseParryScene() {
           continue;
         }
 
-        dummy.position.set(0, 0.01, 0);
-        dummy.scale.setScalar(Math.max(0.001, pulse.radius));
-        dummy.rotation.set(-Math.PI * 0.5, 0, 0);
+        dummy.position.set(
+          Math.cos(pulse.angle) * pulse.radius,
+          0.02,
+          Math.sin(pulse.angle) * pulse.radius
+        );
+        const s = Math.max(0.001, pulse.thickness * 0.6);
+        dummy.scale.setScalar(s);
+        dummy.rotation.set(0, runtime.elapsed * 0.8, 0);
         dummy.updateMatrix();
         pulseRef.current.setMatrixAt(i, dummy.matrix);
 
@@ -980,17 +1122,38 @@ function PulseParryScene() {
       </points>
 
       <instancedMesh ref={pulseRef} args={[undefined, undefined, PULSE_POOL]}>
-        <ringGeometry args={[0.975, 1.0, 96]} />
+        <sphereGeometry args={[1, 14, 14]} />
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.94}
+          opacity={0.95}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
         />
       </instancedMesh>
+
+      {CARDINAL_ANGLES.map((_, idx) => (
+        <mesh
+          key={`pulse-lane-${idx}`}
+          ref={(node) => {
+            laneBeamRefs.current[idx] = node;
+          }}
+          position={[0, 0.005, 0]}
+          rotation={[-Math.PI * 0.5, 0, 0]}
+        >
+          <planeGeometry args={[0.28, 4.4]} />
+          <meshBasicMaterial
+            color={PULSE_COLORS[idx % PULSE_COLORS.length]}
+            transparent
+            opacity={0.22}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
 
       <mesh ref={parryZoneRef} position={[0, 0.012, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <ringGeometry args={[0.965, 1.0, 96]} />
@@ -1017,6 +1180,60 @@ function PulseParryScene() {
           toneMapped={false}
         />
       </mesh>
+
+      <mesh ref={cursorRef} position={[0, 0.02, 0]} rotation={[Math.PI * 0.5, 0, 0]}>
+        <coneGeometry args={[0.14, 0.32, 12]} />
+        <meshBasicMaterial
+          color="#ffffff"
+          transparent
+          opacity={0.84}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {CARDINAL_ANGLES.map((_, idx) => (
+        <mesh
+          key={`pulse-petal-${idx}`}
+          ref={(node) => {
+            parryPetalRefs.current[idx] = node;
+          }}
+          position={[0, 0.015, 0]}
+          rotation={[-Math.PI * 0.5, 0, 0]}
+        >
+          <ringGeometry args={[0.08, 0.13, 18]} />
+          <meshBasicMaterial
+            color={PULSE_COLORS[idx % PULSE_COLORS.length]}
+            transparent
+            opacity={0.46}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+
+      {CARDINAL_ANGLES.map((_, idx) => (
+        <mesh
+          key={`pulse-rune-${idx}`}
+          ref={(node) => {
+            runeRefs.current[idx] = node;
+          }}
+          position={[0, 0.05, 0]}
+          rotation={[Math.PI * 0.5, 0, 0]}
+        >
+          <torusGeometry args={[0.16, 0.03, 10, 24]} />
+          <meshBasicMaterial
+            color="#ffd39f"
+            transparent
+            opacity={0.5}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
 
       <mesh ref={coreRef} position={[0, 0.02, 0]}>
         <sphereGeometry args={[CORE_FAIL_RADIUS, 24, 24]} />

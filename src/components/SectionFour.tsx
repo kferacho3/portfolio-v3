@@ -162,7 +162,7 @@ function SectionFour() {
             id="contact-title"
             className="mt-3 text-4xl sm:text-5xl lg:text-6xl font-bold"
           >
-            <span className="bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] bg-clip-text text-transparent">
+            <span className="brand-gradient-text">
               Let&apos;s Build Together
             </span>
           </h2>
@@ -449,8 +449,7 @@ function SectionFour() {
                   type="submit"
                   disabled={sending}
                   className={`
-                    w-full px-6 py-3 rounded-lg font-medium text-slate-900
-                    bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]
+                    brand-gradient-button w-full px-6 py-3 rounded-lg font-medium
                     focus:ring-4 focus:ring-primary/30
                     transform transition-all duration-200
                     disabled:opacity-50 disabled:cursor-not-allowed
@@ -496,7 +495,7 @@ function SectionFour() {
                       'Clear build phases with fast iteration and QA polish.',
                     ].map((item) => (
                       <li key={item} className="flex items-start gap-2">
-                        <span className="mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
+                        <span className="brand-gradient-dot mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full" />
                         <span>{item}</span>
                       </li>
                     ))}
@@ -623,7 +622,7 @@ function SectionFour() {
                 <p className="text-muted-foreground mb-6">{modalMessage}</p>
                 <button
                   onClick={() => setModalOpen(false)}
-                  className="px-6 py-3 rounded-lg bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] text-slate-900 font-medium transition-all duration-200 transform hover:scale-105 active:scale-95"
+                  className="brand-gradient-button px-6 py-3 rounded-lg font-medium transition-all duration-200 transform hover:scale-105 active:scale-95"
                 >
                   Got it
                 </button>
