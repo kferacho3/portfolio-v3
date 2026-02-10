@@ -81,7 +81,9 @@ type Runtime = {
   hudCommit: number;
   coreGlow: number;
   latchFlash: number;
+  impactFlash: number;
   trailHead: number;
+  nextOrbitDirection: number;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -138,22 +140,23 @@ const DRIFT_FAIL_BASE = 5.4;
 const LATCH_BASE_DISTANCE = 0.3;
 const COLLECT_RADIUS = 0.28;
 const PLAYER_RADIUS = 0.12;
+const RELATCH_LOOKAHEAD_BASE = 0.12;
 
 const STAR_COLORS = [
-  new THREE.Color('#7de9ff'),
-  new THREE.Color('#ff83dc'),
-  new THREE.Color('#b7f36c'),
-  new THREE.Color('#ffd474'),
+  new THREE.Color('#55f4ff'),
+  new THREE.Color('#ff68d4'),
+  new THREE.Color('#c5ff66'),
+  new THREE.Color('#ffbf4b'),
 ] as const;
 const PLANET_COLORS = [
-  new THREE.Color('#4ad7ff'),
-  new THREE.Color('#ff6ece'),
-  new THREE.Color('#8de57a'),
-  new THREE.Color('#ffb86a'),
-  new THREE.Color('#a98bff'),
+  new THREE.Color('#33dcff'),
+  new THREE.Color('#ff4fbe'),
+  new THREE.Color('#7dff73'),
+  new THREE.Color('#ffa945'),
+  new THREE.Color('#8f7bff'),
 ] as const;
-const WHITE = new THREE.Color('#f8fbff');
-const DANGER = new THREE.Color('#ff657d');
+const WHITE = new THREE.Color('#fdffff');
+const DANGER = new THREE.Color('#ff4d74');
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -273,7 +276,9 @@ const createRuntime = (): Runtime => ({
   hudCommit: 0,
   coreGlow: 0,
   latchFlash: 0,
+  impactFlash: 0,
   trailHead: 0,
+  nextOrbitDirection: 1,
 
   difficulty: sampleDifficulty('orbit-chain', 0),
   chunkLibrary: buildPatternLibraryTemplate('orbitlatch'),
@@ -454,7 +459,8 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
     radius + 0.52,
     radius + 1.25
   );
-  const orbitAngularVelSign = Math.random() < 0.5 ? -1 : 1;
+  const orbitAngularVelSign = runtime.nextOrbitDirection >= 0 ? 1 : -1;
+  runtime.nextOrbitDirection *= -1;
   const orbitAngularVel = orbitAngularVelSign * clamp(lerp(1.3, 2.75, d) + tier * 0.08 + Math.random() * 0.22, 1.1, 3.4);
 
   planet.x = nextX;
@@ -527,18 +533,18 @@ function OrbitLatchOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/23 via-sky-500/16 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Orbit Latch</div>
         <div className="text-[11px] text-cyan-50/85">Tap to latch near ring. Tap again to release.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/22 via-fuchsia-500/16 to-violet-500/20 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/18 bg-black/35 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-amber-900/24 px-3 py-2 text-xs">
           <div>
             State{' '}
             <span className={`font-semibold ${latched ? 'text-cyan-200' : 'text-fuchsia-200'}`}>
@@ -562,7 +568,7 @@ function OrbitLatchOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/58 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/80 via-cyan-950/44 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">ORBIT LATCH</div>
             <div className="mt-2 text-sm text-white/85">Tap to latch when crossing an orbit ring.</div>
             <div className="mt-1 text-sm text-white/80">Tap again to release and slingshot to the next world.</div>
@@ -573,7 +579,7 @@ function OrbitLatchOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/45 to-cyan-950/28 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Orbit Lost</div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
@@ -618,6 +624,7 @@ function OrbitLatchScene() {
   const runtimeRef = useRef<Runtime>(createRuntime());
 
   const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const impactOverlayRef = useRef<HTMLDivElement>(null);
   const planetRef = useRef<THREE.InstancedMesh>(null);
   const ringRef = useRef<THREE.InstancedMesh>(null);
   const starRef = useRef<THREE.InstancedMesh>(null);
@@ -639,7 +646,7 @@ function OrbitLatchScene() {
     return geo;
   }, [trailPositions]);
   const trailMaterial = useMemo(
-    () => new THREE.LineBasicMaterial({ color: '#76e8ff', transparent: true, opacity: 0.62, toneMapped: false }),
+    () => new THREE.LineBasicMaterial({ color: '#8fffd6', transparent: true, opacity: 0.62, toneMapped: false }),
     []
   );
   const trailObject = useMemo(
@@ -676,7 +683,9 @@ function OrbitLatchScene() {
     runtime.hudCommit = 0;
     runtime.coreGlow = 0;
     runtime.latchFlash = 0;
+    runtime.impactFlash = 0;
     runtime.trailHead = 0;
+    runtime.nextOrbitDirection = 1;
 
     runtime.difficulty = sampleDifficulty('orbit-chain', 0);
     runtime.currentChunk = null;
@@ -783,6 +792,28 @@ function OrbitLatchScene() {
           const launchScale = 1.06;
           runtime.velX = tangentX * orbitalLinear * launchScale + radialX * 0.22;
           runtime.velY = tangentY * orbitalLinear * launchScale + radialY * 0.22 + 0.38;
+
+          // Keep early transfers playable even when clockwise orbits launch downward.
+          let nearestAhead: Planet | null = null;
+          let nearestAheadDy = Infinity;
+          for (const other of runtime.planets) {
+            if (other.slot === planet.slot) continue;
+            const dy = other.y - runtime.playerY;
+            if (dy <= 0) continue;
+            if (dy < nearestAheadDy) {
+              nearestAheadDy = dy;
+              nearestAhead = other;
+            }
+          }
+          if (nearestAhead) {
+            const ax = nearestAhead.x - runtime.playerX;
+            const ay = nearestAhead.y - runtime.playerY;
+            const len = Math.hypot(ax, ay) || 1;
+            runtime.velX += (ax / len) * 0.26;
+            runtime.velY += Math.max(0, ay / len) * 0.42;
+          }
+          runtime.velY = Math.max(runtime.velY, 0.42);
+
           runtime.latched = false;
           runtime.driftTimer = 0;
           runtime.coreGlow = Math.min(1.2, runtime.coreGlow + 0.15);
@@ -809,14 +840,38 @@ function OrbitLatchScene() {
         let bestPlanet: Planet | null = null;
         let bestDelta = Infinity;
         const dNorm = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
-        const latchDistance = clamp(LATCH_BASE_DISTANCE - dNorm * 0.08, 0.18, 0.34);
+        const speed = Math.hypot(runtime.velX, runtime.velY);
+        const speedAssist = clamp(speed * 0.08, 0, 0.16);
+        const lookAhead = clamp(
+          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.55,
+          RELATCH_LOOKAHEAD_BASE,
+          0.26
+        );
+        const predictX = runtime.playerX + runtime.velX * lookAhead;
+        const predictY = runtime.playerY + runtime.velY * lookAhead;
+        const latchDistance = clamp(
+          LATCH_BASE_DISTANCE + 0.04 + speedAssist - dNorm * 0.08,
+          0.22,
+          0.48
+        );
 
         for (const planet of runtime.planets) {
           const dx = runtime.playerX - planet.x;
           const dy = runtime.playerY - planet.y;
           const dist = Math.hypot(dx, dy);
-          if (dist <= planet.radius + PLAYER_RADIUS * 0.9) continue;
-          const deltaRing = Math.abs(dist - planet.orbitRadius);
+          const pdx = predictX - planet.x;
+          const pdy = predictY - planet.y;
+          const predictDist = Math.hypot(pdx, pdy);
+          if (
+            dist <= planet.radius + PLAYER_RADIUS * 0.9 &&
+            predictDist <= planet.radius + PLAYER_RADIUS * 0.9
+          ) {
+            continue;
+          }
+          const deltaRing = Math.min(
+            Math.abs(dist - planet.orbitRadius),
+            Math.abs(predictDist - planet.orbitRadius)
+          );
           if (deltaRing <= latchDistance && deltaRing < bestDelta) {
             bestDelta = deltaRing;
             bestPlanet = planet;
@@ -865,6 +920,20 @@ function OrbitLatchScene() {
       }
     }
 
+    const failRun = (reason: string, color: THREE.Color = DANGER) => {
+      const latest = useOrbitStore.getState();
+      if (latest.status !== 'PLAYING') return;
+      runtime.failMessage = reason;
+      runtime.impactFlash = Math.max(runtime.impactFlash, 1);
+      runtime.shake = Math.max(runtime.shake, 1.25);
+      runtime.coreGlow = Math.max(runtime.coreGlow, 1.2);
+      runtime.latchFlash = Math.max(runtime.latchFlash, 0.7);
+      spawnBurst(runtime, runtime.playerX, runtime.playerY, color, 16, 3.4);
+      maybeVibrate(16);
+      playTone(190, 0.09, 0.042);
+      useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
+    };
+
     if (store.status === 'PLAYING') {
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
@@ -881,8 +950,7 @@ function OrbitLatchScene() {
       if (runtime.latched) {
         const planet = runtime.planets.find((p) => p.slot === runtime.latchedPlanet);
         if (!planet) {
-          runtime.failMessage = 'Orbit source collapsed.';
-          useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
+          failRun('Orbit source collapsed.');
         } else {
           runtime.orbitAngularVel = planet.orbitAngularVel;
           runtime.orbitRadius = planet.orbitRadius;
@@ -935,22 +1003,18 @@ function OrbitLatchScene() {
         runtime.playerY += runtime.velY * dt;
 
         if (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS)) {
-          runtime.failMessage = 'Satellite impacted a planet core.';
-          useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
+          failRun('Satellite impacted a planet core.');
         } else if (runtime.driftTimer > driftFail) {
-          runtime.failMessage = 'Drift window expired before relatch.';
-          useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
+          failRun('Drift window expired before relatch.');
         }
       }
 
       runtime.maxYReached = Math.max(runtime.maxYReached, runtime.playerY);
 
       if (Math.abs(runtime.playerX) > FIELD_HALF_X + 0.05) {
-        runtime.failMessage = 'Satellite escaped lateral bounds.';
-        useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
+        failRun('Satellite escaped lateral bounds.');
       } else if (runtime.playerY < runtime.maxYReached - SAFE_FALL_BACK) {
-        runtime.failMessage = 'Signal lost below relay field.';
-        useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
+        failRun('Signal lost below relay field.');
       }
 
       for (const star of runtime.starsPool) {
@@ -996,6 +1060,7 @@ function OrbitLatchScene() {
 
     runtime.coreGlow = Math.max(0, runtime.coreGlow - dt * 1.9);
     runtime.latchFlash = Math.max(0, runtime.latchFlash - dt * 3.6);
+    runtime.impactFlash = Math.max(0, runtime.impactFlash - dt * 2.9);
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
 
     for (const shard of runtime.shards) {
@@ -1155,6 +1220,9 @@ function OrbitLatchScene() {
     if (bloomRef.current) {
       bloomRef.current.intensity = lerp(0.38, 0.98, clamp(runtime.coreGlow * 0.7 + runtime.latchFlash * 0.4, 0, 1));
     }
+    if (impactOverlayRef.current) {
+      impactOverlayRef.current.style.opacity = `${clamp(runtime.impactFlash * 0.74, 0, 0.74)}`;
+    }
 
     clearFrameInput(inputRef);
   });
@@ -1162,12 +1230,13 @@ function OrbitLatchScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.3, 4.9]} fov={39} near={0.1} far={120} />
-      <color attach="background" args={['#060812']} />
-      <fog attach="fog" args={['#060812', 12, 70]} />
+      <color attach="background" args={['#090d26']} />
+      <fog attach="fog" args={['#090d26', 11, 74]} />
 
-      <ambientLight intensity={0.34} />
-      <pointLight position={[0, 3.8, 1]} intensity={0.46} color="#74e3ff" />
-      <pointLight position={[0, 2.2, -2]} intensity={0.4} color="#ff7dd8" />
+      <ambientLight intensity={0.38} />
+      <pointLight position={[0, 3.8, 1]} intensity={0.6} color="#55f4ff" />
+      <pointLight position={[0, 2.2, -2]} intensity={0.5} color="#ff7fd0" />
+      <pointLight position={[-1.8, 2.5, -1.4]} intensity={0.34} color="#c5ff66" />
 
       <mesh position={[0, -0.85, -30]}>
         <planeGeometry args={[42, 34]} />
@@ -1188,16 +1257,16 @@ function OrbitLatchScene() {
             void main() {
               vec2 p = vUv * 2.0 - 1.0;
               float r = length(p);
-              vec3 deep = vec3(0.02, 0.03, 0.08);
-              vec3 violet = vec3(0.09, 0.05, 0.16);
-              vec3 cyan = vec3(0.05, 0.13, 0.18);
+              vec3 deep = vec3(0.03, 0.05, 0.13);
+              vec3 violet = vec3(0.2, 0.07, 0.24);
+              vec3 cyan = vec3(0.07, 0.23, 0.27);
               float grad = smoothstep(0.0, 1.0, vUv.y);
               float wave = sin((vUv.x * 3.0 + uTime * 0.25) * 6.2831853) * 0.5 + 0.5;
               float grain = fract(sin(dot(vUv * (uTime + 1.37), vec2(12.9898, 78.233))) * 43758.5453);
               vec3 col = mix(deep, violet, grad * 0.8);
               col = mix(col, cyan, wave * 0.16);
               col += (grain - 0.5) * 0.018;
-              col += vec3(0.22, 0.32, 0.46) * uGlow * 0.13;
+              col += vec3(0.35, 0.29, 0.18) * uGlow * 0.13;
               col *= smoothstep(1.15, 0.18, r);
               gl_FragColor = vec4(col, 1.0);
             }
@@ -1280,6 +1349,11 @@ function OrbitLatchScene() {
       </EffectComposer>
 
       <Html fullscreen>
+        <div
+          ref={impactOverlayRef}
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,112,170,0.45),rgba(255,73,112,0.3),rgba(12,7,25,0))]"
+          style={{ opacity: 0, mixBlendMode: 'screen' }}
+        />
         <OrbitLatchOverlay />
       </Html>
     </>

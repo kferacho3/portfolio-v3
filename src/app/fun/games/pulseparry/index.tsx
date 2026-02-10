@@ -60,8 +60,11 @@ type Runtime = {
 
   shockActive: boolean;
   shockRadius: number;
-  shockSpeed: number;
+  shockLife: number;
+  shockDuration: number;
   shockMaxRadius: number;
+  parryRadius: number;
+  tapCooldown: number;
 
   spawnTimer: number;
   nextPulseSlot: number;
@@ -110,6 +113,7 @@ const SPARK_POOL = 14;
 
 const SPAWN_RADIUS_BASE = 5.35;
 const CORE_FAIL_RADIUS = 0.22;
+const PARRY_RADIUS_BASE = 1.12;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -202,9 +206,12 @@ const createRuntime = (): Runtime => ({
   perfectFlash: 0,
 
   shockActive: false,
-  shockRadius: 0,
-  shockSpeed: 11.8,
-  shockMaxRadius: 6.1,
+  shockRadius: PARRY_RADIUS_BASE,
+  shockLife: 0,
+  shockDuration: 0.11,
+  shockMaxRadius: 6.35,
+  parryRadius: PARRY_RADIUS_BASE,
+  tapCooldown: 0,
 
   spawnTimer: 1.1,
   nextPulseSlot: 0,
@@ -236,9 +243,12 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.perfectFlash = 0;
 
   runtime.shockActive = false;
-  runtime.shockRadius = 0;
-  runtime.shockSpeed = 11.8;
-  runtime.shockMaxRadius = 6.1;
+  runtime.shockRadius = PARRY_RADIUS_BASE;
+  runtime.shockLife = 0;
+  runtime.shockDuration = 0.11;
+  runtime.shockMaxRadius = 6.35;
+  runtime.parryRadius = PARRY_RADIUS_BASE;
+  runtime.tapCooldown = 0;
 
   runtime.spawnTimer = 1.1;
   runtime.nextPulseSlot = 0;
@@ -441,18 +451,18 @@ function PulseParryOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
-        <div className="text-[11px] text-cyan-50/85">Tap emits a parry shockwave ring.</div>
+        <div className="text-[11px] text-cyan-50/85">Tap when a pulse touches the parry ring.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/18 bg-black/35 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
           <div>
             Parries <span className="font-semibold text-cyan-200">{parries}</span>
           </div>
@@ -467,10 +477,10 @@ function PulseParryOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/58 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/80 via-emerald-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PULSE PARRY</div>
-            <div className="mt-2 text-sm text-white/85">Tap to emit a shockwave from center.</div>
-            <div className="mt-1 text-sm text-white/80">Parry incoming rings before they hit the core.</div>
+            <div className="mt-2 text-sm text-white/85">Tap exactly as a pulse hits the guide ring.</div>
+            <div className="mt-1 text-sm text-white/80">One tap parries one pulse. Miss and the core breaks.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -478,7 +488,7 @@ function PulseParryOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/45 to-emerald-950/26 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Core Breach</div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
@@ -550,6 +560,7 @@ function PulseParryScene() {
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
   const auraRef = useRef<THREE.Mesh>(null);
+  const parryZoneRef = useRef<THREE.Mesh>(null);
   const shockRef = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
 
@@ -619,9 +630,11 @@ function PulseParryScene() {
       if (store.status !== 'PLAYING') {
         resetRuntime(runtime);
         usePulseParryStore.getState().startRun();
-      } else {
+      } else if (runtime.tapCooldown <= 0) {
         runtime.shockActive = true;
-        runtime.shockRadius = 0;
+        runtime.shockRadius = runtime.parryRadius;
+        runtime.shockLife = runtime.shockDuration;
+        runtime.tapCooldown = 0.09;
         runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
         usePulseParryStore.getState().onTapFx();
       }
@@ -633,9 +646,10 @@ function PulseParryScene() {
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
 
       const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
-      runtime.hitThreshold = clamp((runtime.difficulty.decisionWindowMs / 1000) * (0.44 + d * 0.15), 0.058, 0.19);
+      runtime.hitThreshold = clamp((runtime.difficulty.decisionWindowMs / 1000) * (0.7 + d * 0.22), 0.08, 0.28);
       runtime.perfectThreshold = runtime.hitThreshold * 0.46;
-      runtime.shockSpeed = lerp(10.9, 14.2, d);
+      runtime.parryRadius = lerp(1.02, 1.36, d);
+      runtime.tapCooldown = Math.max(0, runtime.tapCooldown - dt);
 
       runtime.spawnTimer -= dt;
       if (runtime.spawnTimer <= 0) {
@@ -645,9 +659,10 @@ function PulseParryScene() {
       }
 
       if (runtime.shockActive) {
-        runtime.shockRadius += runtime.shockSpeed * dt;
-        if (runtime.shockRadius >= runtime.shockMaxRadius) {
+        runtime.shockLife -= dt;
+        if (runtime.shockLife <= 0) {
           runtime.shockActive = false;
+          runtime.shockLife = 0;
         }
       }
 
@@ -661,12 +676,14 @@ function PulseParryScene() {
           pulse.radius -= pulse.speed * dt;
 
           if (runtime.shockActive) {
-            const diff = Math.abs(pulse.radius - runtime.shockRadius);
-            const hitWindow = runtime.hitThreshold + pulse.thickness * 0.45;
+            const diff = Math.abs(pulse.radius - runtime.parryRadius);
+            const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
             if (diff <= hitWindow) {
               pulse.parried = true;
               pulse.life = 0.22;
               pulse.flash = 1;
+              runtime.shockActive = false;
+              runtime.shockLife = 0;
 
               const perfect = diff <= runtime.perfectThreshold;
               runtime.parries += 1;
@@ -695,6 +712,9 @@ function PulseParryScene() {
 
           if (pulse.radius <= CORE_FAIL_RADIUS + pulse.thickness * 0.5) {
             runtime.failMessage = 'A pulse breached the core.';
+            runtime.shake = Math.min(1.5, runtime.shake + 0.72);
+            runtime.perfectFlash = 1;
+            spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
             usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
             failed = true;
             break;
@@ -702,7 +722,7 @@ function PulseParryScene() {
         } else {
           pulse.radius += pulse.speed * 1.4 * dt;
           pulse.life -= dt;
-          if (pulse.life <= 0 || pulse.radius > runtime.shockMaxRadius + 0.8) {
+          if (pulse.life <= 0 || pulse.radius > runtime.shockMaxRadius) {
             pulse.active = false;
           }
         }
@@ -762,13 +782,22 @@ function PulseParryScene() {
       auraMat.opacity = clamp(0.24 + runtime.coreGlow * 0.32 + runtime.perfectCombo * 0.014, 0.2, 0.8);
     }
 
+    if (parryZoneRef.current) {
+      const zoneScale = runtime.parryRadius;
+      parryZoneRef.current.scale.setScalar(zoneScale);
+      const zoneMat = parryZoneRef.current.material as THREE.MeshBasicMaterial;
+      zoneMat.opacity = clamp(0.18 + runtime.coreGlow * 0.18 + runtime.perfectCombo * 0.01, 0.16, 0.48);
+    }
+
     if (shockRef.current) {
-      const visible = runtime.shockActive ? 1 : 0;
-      const r = Math.max(0.0001, runtime.shockRadius);
-      shockRef.current.visible = visible > 0;
+      const visible = runtime.shockActive;
+      const lifeT = runtime.shockDuration > 0 ? clamp(runtime.shockLife / runtime.shockDuration, 0, 1) : 0;
+      const pulseT = 1 - lifeT;
+      const r = Math.max(0.0001, runtime.shockRadius * (1 + pulseT * 0.1));
+      shockRef.current.visible = visible;
       shockRef.current.scale.setScalar(r);
       const shockMat = shockRef.current.material as THREE.MeshBasicMaterial;
-      shockMat.opacity = clamp(0.84 * (1 - runtime.shockRadius / runtime.shockMaxRadius), 0, 0.85);
+      shockMat.opacity = clamp(0.88 * lifeT, 0, 0.88);
     }
 
     if (pulseRef.current) {
@@ -868,12 +897,12 @@ function PulseParryScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.25, 0.002]} fov={36} near={0.1} far={50} />
-      <color attach="background" args={['#05060d']} />
-      <fog attach="fog" args={['#05060d', 8, 24]} />
+      <color attach="background" args={['#04110e']} />
+      <fog attach="fog" args={['#04110e', 8, 24]} />
 
       <ambientLight intensity={0.36} />
-      <pointLight position={[0, 3.8, 0]} intensity={0.5} color="#6ddfff" />
-      <pointLight position={[0, 1.5, 0]} intensity={0.44} color="#ff78d8" />
+      <pointLight position={[0, 3.8, 0]} intensity={0.52} color="#6cffb9" />
+      <pointLight position={[0, 1.5, 0]} intensity={0.45} color="#ffd166" />
 
       <mesh position={[0, -0.72, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[18, 18]} />
@@ -894,14 +923,14 @@ function PulseParryScene() {
             void main() {
               vec2 p = vUv * 2.0 - 1.0;
               float r = length(p);
-              vec3 deep = vec3(0.02, 0.03, 0.08);
-              vec3 edge = vec3(0.07, 0.03, 0.11);
+              vec3 deep = vec3(0.02, 0.07, 0.05);
+              vec3 edge = vec3(0.10, 0.18, 0.08);
               float halo = smoothstep(1.1, 0.15, r);
               float stars = fract(sin(dot(vUv * (uTime + 1.6), vec2(12.9898, 78.233))) * 43758.5453);
               stars = smoothstep(0.9945, 1.0, stars);
               vec3 col = mix(deep, edge, halo * 0.35);
               col += vec3(stars) * 0.24;
-              col += vec3(0.24, 0.33, 0.48) * uFlash * 0.12;
+              col += vec3(0.36, 0.42, 0.22) * uFlash * 0.12;
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -911,7 +940,7 @@ function PulseParryScene() {
 
       <points geometry={starsGeometry}>
         <pointsMaterial
-          color="#9bd7ff"
+          color="#b7ffd2"
           size={0.028}
           sizeAttenuation
           transparent
@@ -935,6 +964,19 @@ function PulseParryScene() {
         />
       </instancedMesh>
 
+      <mesh ref={parryZoneRef} position={[0, 0.012, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <ringGeometry args={[0.965, 1.0, 96]} />
+        <meshBasicMaterial
+          color="#a5ffe8"
+          transparent
+          opacity={0.22}
+          side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
       <mesh ref={shockRef} visible={false} position={[0, 0.02, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <ringGeometry args={[0.968, 1.0, 96]} />
         <meshBasicMaterial
@@ -952,7 +994,7 @@ function PulseParryScene() {
         <sphereGeometry args={[CORE_FAIL_RADIUS, 24, 24]} />
         <meshStandardMaterial
           color="#f3fbff"
-          emissive="#86e7ff"
+          emissive="#9dffbf"
           emissiveIntensity={0.56}
           roughness={0.2}
           metalness={0.08}
@@ -962,7 +1004,7 @@ function PulseParryScene() {
       <mesh ref={auraRef} position={[0, 0.01, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <ringGeometry args={[0.9, 1.26, 72]} />
         <meshBasicMaterial
-          color="#76dfff"
+          color="#6fffb2"
           transparent
           opacity={0.28}
           side={THREE.DoubleSide}

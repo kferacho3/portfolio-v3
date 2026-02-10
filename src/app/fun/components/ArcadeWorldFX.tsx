@@ -698,7 +698,16 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
   const { theme: uiTheme } = useContext(ThemeContext);
   const isLightMode = uiTheme === 'light';
 
-  const gamesWithOwnWorldFx = ['shades', 'goup'];
+  const gamesWithOwnWorldFx = [
+    'shades',
+    'goup',
+    'polarity',
+    'tetherdrift',
+    'trace',
+    'flipbox',
+    'portalpunch',
+    'conveyorchaos',
+  ];
   const disableGlobalWorldFx = gamesWithOwnWorldFx.includes(gameId);
 
   // Determine if backdrop should be shown (used for env map loading decision)
@@ -747,6 +756,12 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     'slowmo',
     'oscillate',
     'prismjump',
+    'polarity',
+    'tetherdrift',
+    'trace',
+    'flipbox',
+    'portalpunch',
+    'conveyorchaos',
   ];
   const shouldSetSceneFX = !gamesWithOwnBackground.includes(gameId);
   const showBackdropCluster = showBackdrop && !!envMap && !isLightMode;

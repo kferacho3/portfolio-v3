@@ -40,6 +40,7 @@ type Runtime = {
   multiplier: number;
   nearMisses: number;
   shake: number;
+  impactFlash: number;
   waveSign: WaveSign;
   phaseScroll: number;
   waveFreq: number;
@@ -87,9 +88,9 @@ type WaveFlipStore = {
 
 const BEST_KEY = 'waveflip_hyper_best_v3';
 
-const VIEW_MIN_X = -8.8;
-const VIEW_MAX_X = 8.8;
-const PLAYER_X = -3.2;
+const VIEW_MIN_X = -7.2;
+const VIEW_MAX_X = 7.2;
+const PLAYER_X = -2.7;
 const PLAYER_R = 0.22;
 
 const WAVE_POINTS = 200;
@@ -105,6 +106,7 @@ const WAVE_NEON = new THREE.Color('#58d9ff');
 const WAVE_EDGE = new THREE.Color('#f67ac8');
 const SPIKE_TOP = new THREE.Color('#ff5f7a');
 const SPIKE_BOTTOM = new THREE.Color('#b55bff');
+const SAFE_MARKER = new THREE.Color('#90ffe4');
 const WHITE = new THREE.Color('#f8fbff');
 
 let audioContextRef: AudioContext | null = null;
@@ -194,11 +196,11 @@ const chooseChunk = (runtime: Runtime) => {
 
 const spawnInterval = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
-  const tutorialSlow = runtime.elapsed < 14 ? 0.28 : runtime.elapsed < 24 ? 0.14 : 0;
+  const tutorialSlow = runtime.elapsed < 14 ? 0.2 : runtime.elapsed < 24 ? 0.08 : 0;
   return clamp(
-    lerp(1.06, 0.48, d) + (3 - tier) * 0.05 + tutorialSlow + Math.random() * 0.14,
-    0.25,
-    1.35
+    lerp(0.86, 0.44, d) + (3 - tier) * 0.04 + tutorialSlow + Math.random() * 0.1,
+    0.22,
+    1.1
   );
 };
 
@@ -233,8 +235,8 @@ const spawnObstacleSet = (runtime: Runtime) => {
   const setId = runtime.nextSetId++;
   runtime.setRemaining.set(setId, count);
 
-  const baseX = VIEW_MAX_X + 2.2;
-  const spacing = 1.08 + Math.random() * 0.24;
+  const baseX = VIEW_MAX_X + 1.1;
+  const spacing = 0.96 + Math.random() * 0.2;
 
   for (let i = 0; i < count; i += 1) {
     const obstacle = acquireObstacle(runtime);
@@ -248,8 +250,8 @@ const spawnObstacleSet = (runtime: Runtime) => {
     obstacle.active = true;
     obstacle.x = baseX + i * spacing;
     obstacle.y = waveBlockY;
-    obstacle.w = clamp(lerp(0.56, 0.82, d) + tier * 0.03, 0.52, 0.94);
-    obstacle.h = clamp(lerp(1.22, 1.7, d) + tier * 0.06, 1.08, 1.95);
+    obstacle.w = clamp(lerp(0.78, 1.08, d) + tier * 0.04, 0.72, 1.24);
+    obstacle.h = clamp(lerp(1.82, 2.28, d) + tier * 0.08, 1.68, 2.72);
     obstacle.requiredSign = requiredSign;
     obstacle.setId = setId;
     obstacle.resolved = false;
@@ -279,6 +281,7 @@ const createRuntime = (): Runtime => ({
   multiplier: 1,
   nearMisses: 0,
   shake: 0,
+  impactFlash: 0,
   waveSign: 1,
   phaseScroll: 0,
   waveFreq: 1.52,
@@ -310,6 +313,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.multiplier = 1;
   runtime.nearMisses = 0;
   runtime.shake = 0;
+  runtime.impactFlash = 0;
   runtime.waveSign = 1;
   runtime.phaseScroll = 0;
   runtime.waveFreq = 1.52;
@@ -407,18 +411,18 @@ function WaveFlipOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/25 via-blue-500/15 to-indigo-500/25 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">WaveFlip</div>
-        <div className="text-[11px] text-cyan-50/85">Tap to mirror the waveform instantly.</div>
+        <div className="text-[11px] text-cyan-50/85">Tap to move between top and bottom lanes.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/25 via-violet-500/18 to-cyan-500/16 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/18 bg-black/35 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-sky-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/35 to-indigo-900/35 px-3 py-2 text-xs">
           <div>
             Streak <span className="font-semibold text-cyan-200">{streak}</span>
           </div>
@@ -433,10 +437,10 @@ function WaveFlipOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/58 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/78 via-blue-950/55 to-fuchsia-950/40 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">WAVEFLIP</div>
-            <div className="mt-2 text-sm text-white/85">Tap flips wave phase top-to-bottom.</div>
-            <div className="mt-1 text-sm text-white/80">Read spike lanes and time clean inversions.</div>
+            <div className="mt-2 text-sm text-white/85">Tap to swap the wave from top to bottom.</div>
+            <div className="mt-1 text-sm text-white/80">Follow the glowing safe markers, avoid spike blocks.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -444,7 +448,7 @@ function WaveFlipOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/82 via-rose-950/45 to-indigo-950/52 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Phase Crash</div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
@@ -510,7 +514,9 @@ function WaveFlipScene() {
 
   const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const obstacleRef = useRef<THREE.InstancedMesh>(null);
+  const markerRef = useRef<THREE.InstancedMesh>(null);
   const orbRef = useRef<THREE.Mesh>(null);
+  const impactOverlayRef = useRef<HTMLDivElement>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
@@ -654,7 +660,9 @@ function WaveFlipScene() {
           obstacle.h * 0.5
         );
         if (hit) {
-          runtime.failMessage = 'Spike lane mismatch.';
+          runtime.failMessage = 'You hit a blocked phase lane.';
+          runtime.impactFlash = 1;
+          runtime.shake = Math.min(1.5, runtime.shake + 0.6);
           useWaveFlipStore.getState().endRun(runtime.score, runtime.failMessage);
           failed = true;
           break;
@@ -707,6 +715,7 @@ function WaveFlipScene() {
     }
 
     runtime.shake = Math.max(0, runtime.shake - dt * 4.5);
+    runtime.impactFlash = Math.max(0, runtime.impactFlash - dt * 4.2);
     const shakeAmp = runtime.shake * 0.08;
     camTarget.set(
       (Math.random() - 0.5) * shakeAmp,
@@ -723,6 +732,9 @@ function WaveFlipScene() {
     }
     if (bgMaterialRef.current) {
       bgMaterialRef.current.uniforms.uTime.value += dt;
+    }
+    if (impactOverlayRef.current) {
+      impactOverlayRef.current.style.opacity = String(clamp(runtime.impactFlash * 0.42, 0, 0.42));
     }
 
     for (let i = 0; i < WAVE_POINTS; i += 1) {
@@ -790,18 +802,46 @@ function WaveFlipScene() {
       if (obstacleRef.current.instanceColor) obstacleRef.current.instanceColor.needsUpdate = true;
     }
 
+    if (markerRef.current) {
+      for (let i = 0; i < runtime.obstacles.length; i += 1) {
+        const obstacle = runtime.obstacles[i];
+        if (!obstacle.active) {
+          dummy.position.copy(OFFSCREEN_POS);
+          dummy.scale.copy(TINY_SCALE);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          markerRef.current.setMatrixAt(i, dummy.matrix);
+          markerRef.current.setColorAt(i, WHITE);
+          continue;
+        }
+
+        const safeY = obstacle.requiredSign === 1 ? runtime.waveBase + 0.58 : -runtime.waveBase - 0.58;
+        dummy.position.set(obstacle.x - 0.04, safeY, 0.2);
+        const pulseScale = 0.22 + Math.sin(runtime.elapsed * 8 + i * 0.37) * 0.03;
+        dummy.scale.setScalar(pulseScale);
+        dummy.rotation.set(0, 0, runtime.elapsed * 2 + i * 0.1);
+        dummy.updateMatrix();
+        markerRef.current.setMatrixAt(i, dummy.matrix);
+
+        colorScratch.copy(SAFE_MARKER).lerp(WHITE, clamp(obstacle.glow * 0.5, 0, 0.45));
+        markerRef.current.setColorAt(i, colorScratch);
+      }
+      markerRef.current.instanceMatrix.needsUpdate = true;
+      if (markerRef.current.instanceColor) markerRef.current.instanceColor.needsUpdate = true;
+    }
+
     clearFrameInput(inputRef);
   });
 
   return (
     <>
-      <OrthographicCamera makeDefault position={[0, 0, 9]} zoom={76} near={0.1} far={40} />
-      <color attach="background" args={['#070b1b']} />
-      <fog attach="fog" args={['#070b1b', 7, 22]} />
+      <OrthographicCamera makeDefault position={[0, 0, 9]} zoom={58} near={0.1} far={40} />
+      <color attach="background" args={['#051221']} />
+      <fog attach="fog" args={['#051221', 7, 24]} />
 
       <ambientLight intensity={0.42} />
-      <pointLight position={[0, 2.4, 4]} intensity={0.52} color="#78d9ff" />
-      <pointLight position={[0, -1.8, 4]} intensity={0.42} color="#a15cff" />
+      <pointLight position={[0, 2.4, 4]} intensity={0.56} color="#67ebff" />
+      <pointLight position={[0, -1.8, 4]} intensity={0.45} color="#ff7ba6" />
 
       <mesh position={[0, 0, -2.2]}>
         <planeGeometry args={[26, 14]} />
@@ -819,8 +859,8 @@ function WaveFlipScene() {
             uniform float uTime;
             varying vec2 vUv;
             void main() {
-              vec3 deep = vec3(0.03, 0.05, 0.14);
-              vec3 purple = vec3(0.15, 0.08, 0.28);
+              vec3 deep = vec3(0.02, 0.09, 0.16);
+              vec3 purple = vec3(0.24, 0.08, 0.22);
               float grad = smoothstep(0.0, 1.0, vUv.y);
               float grain = fract(sin(dot(vUv * (uTime + 1.7), vec2(12.9898, 78.233))) * 43758.5453);
               vec3 col = mix(deep, purple, grad);
@@ -851,6 +891,18 @@ function WaveFlipScene() {
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
+      <instancedMesh ref={markerRef} args={[undefined, undefined, OBSTACLE_POOL]}>
+        <octahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.95}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
       <mesh ref={orbRef} position={[PLAYER_X, 1, 0.15]}>
         <sphereGeometry args={[PLAYER_R, 18, 18]} />
         <meshStandardMaterial
@@ -869,6 +921,15 @@ function WaveFlipScene() {
       </EffectComposer>
 
       <Html fullscreen>
+        <div
+          ref={impactOverlayRef}
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            opacity: 0,
+            background:
+              'radial-gradient(circle at 50% 50%, rgba(255,160,178,0.42), rgba(255,90,120,0.24) 30%, rgba(0,0,0,0) 70%)',
+          }}
+        />
         <WaveFlipOverlay />
       </Html>
     </>

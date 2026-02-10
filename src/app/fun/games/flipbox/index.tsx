@@ -7,43 +7,30 @@ import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocess
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { create } from 'zustand';
-import {
-  buildPatternLibraryTemplate,
-  pickPatternChunkForSurvivability,
-  sampleDifficulty,
-  type DifficultySample,
-  type GameChunkPatternTemplate,
-} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { flipBoxState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
 type OrientationState = 'UPRIGHT' | 'FLAT';
 type TileRule = 'ANY' | 'UPRIGHT' | 'FLAT';
-type FailReason = 'gap' | 'rule' | 'height' | 'idle';
+type FailReason = 'gap' | 'rule' | 'height';
 
 type TileRecord = {
   id: number;
-  index: number;
+  z: number;
   present: boolean;
-  rule: TileRule;
   length: number;
   heightLevel: number;
+  rule: TileRule;
+  checked: boolean;
   pulse: number;
-};
-
-type SupportHit = {
-  tile: TileRecord;
-  dz: number;
-  y: number;
+  colorSeed: number;
 };
 
 type SupportResult = {
-  valid: boolean;
+  ok: boolean;
   reason: FailReason;
   baseY: number;
-  alignment: number;
-  primary: TileRecord | null;
 };
 
 type Runtime = {
@@ -51,39 +38,26 @@ type Runtime = {
   score: number;
   multiplier: number;
   perfectStreak: number;
+
   orientation: OrientationState;
-  spinAngle: number;
-  baseProgress: number;
-  flipBonus: number;
+  targetOrientation: OrientationState;
+  displayScale: THREE.Vector3;
+  rotX: number;
+  rotTargetX: number;
   playerY: number;
   targetY: number;
-  idleTime: number;
-  supportGrace: number;
+  unsupportedTime: number;
+  flipTimer: number;
+
+  speed: number;
   cameraKick: number;
-
-  difficulty: DifficultySample;
-  chunkLibrary: GameChunkPatternTemplate[];
-  activeChunk: GameChunkPatternTemplate | null;
-  chunkTilesLeft: number;
-
-  lastHeight: number;
-  lastRule: TileRule;
-  gapRun: number;
-
-  flipInProgress: boolean;
-  flipTime: number;
-  flipDuration: number;
-  fromAngle: number;
-  toAngle: number;
-  fromOrientation: OrientationState;
-  toOrientation: OrientationState;
-  flipFromBonus: number;
-  flipToBonus: number;
-  flipEase: number;
+  crashFx: number;
 
   tiles: TileRecord[];
-  tileMap: Map<number, TileRecord>;
-  maxTileIndex: number;
+  frontZ: number;
+  serial: number;
+  lastHeight: number;
+  gapRun: number;
 };
 
 type FlipBoxStore = {
@@ -93,48 +67,58 @@ type FlipBoxStore = {
   multiplier: number;
   perfectStreak: number;
   failMessage: string;
+  posture: OrientationState;
   pulseNonce: number;
+  crashNonce: number;
   startRun: () => void;
   resetToStart: () => void;
+  setPosture: (value: OrientationState) => void;
   updateHud: (score: number, multiplier: number, perfectStreak: number, perfect: boolean) => void;
   endRun: (score: number, reason: string) => void;
+  flashCrash: () => void;
 };
 
-const BEST_KEY = 'flip_box_hyper_best_v2';
+const BEST_KEY = 'flip_box_hyper_best_v4';
 
-const TILE_POOL = 196;
-const TILE_SPACING = 1;
-const TILE_WIDTH = 1.15;
-const TILE_THICKNESS = 0.2;
-const TILE_BASE_LENGTH = 0.94;
-const TILE_MIN_LENGTH = 0.46;
-const TILE_MAX_LENGTH = 1.24;
-const TILE_HEIGHT_STEP = 0.34;
+const TILE_POOL = 260;
+const TILE_SPACING = 0.9;
+const TILE_WIDTH = 1.18;
+const TILE_THICKNESS = 0.22;
+const TILE_LENGTH = 0.96;
+const TILE_HEIGHT_STEP = 0.32;
 
-const UPRIGHT_SIZE = new THREE.Vector3(0.88, 1.9, 0.88);
-const FLAT_SIZE = new THREE.Vector3(0.88, 0.96, 1.62);
-const FLAT_SAMPLE_OFFSET = 0.42;
-const SUPPORT_EXTRA_TOLERANCE = 0.06;
-const SUPPORT_GRACE_SECONDS = 0.08;
+const UPRIGHT_SIZE = new THREE.Vector3(0.9, 1.82, 0.9);
+const FLAT_SIZE = new THREE.Vector3(0.9, 0.92, 1.82);
 
-const TILE_RECYCLE_Z = 9.5;
-const TILE_DRAW_MIN_Z = -36;
-const TILE_DRAW_MAX_Z = 13;
+const SUPPORT_GRACE = 0.08;
+const SUPPORT_FLAT_A = -0.45;
+const SUPPORT_FLAT_B = 0.45;
+
+const DRAW_MIN_Z = -54;
+const DRAW_MAX_Z = 14;
+const RECYCLE_Z = 9;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
-const TILE_ANY = new THREE.Color('#b5bfd8');
-const TILE_UPRIGHT = new THREE.Color('#57d9ff');
-const TILE_FLAT = new THREE.Color('#ff7ac9');
-const TILE_HIGHLIGHT = new THREE.Color('#f8fafc');
-const GLYPH_UPRIGHT = new THREE.Color('#22d3ee');
-const GLYPH_FLAT = new THREE.Color('#f472b6');
-const VOID_BG = '#0b1020';
+
+const BG = '#f4f7ff';
+
+const TILE_BASE_COLORS = [
+  new THREE.Color('#bdd8ff'),
+  new THREE.Color('#ffd7f1'),
+  new THREE.Color('#c6ffe4'),
+  new THREE.Color('#fff0c3'),
+];
+const TILE_UPRIGHT = new THREE.Color('#95e6ff');
+const TILE_FLAT = new THREE.Color('#ff9ed7');
+const TILE_EDGE = new THREE.Color('#ffffff');
+const GLYPH_UPRIGHT = new THREE.Color('#00b8ff');
+const GLYPH_FLAT = new THREE.Color('#ff2da4');
+const PULSE = new THREE.Color('#ffffff');
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const easeInOutCubic = (t: number) =>
-  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -151,21 +135,28 @@ const writeBest = (score: number) => {
 const orientationHalfHeight = (orientation: OrientationState) =>
   orientation === 'UPRIGHT' ? UPRIGHT_SIZE.y * 0.5 : FLAT_SIZE.y * 0.5;
 
-const blendPoseSize = (from: OrientationState, to: OrientationState, easedT: number) => {
-  const fromValue = from === 'FLAT' ? 1 : 0;
-  const toValue = to === 'FLAT' ? 1 : 0;
-  const pose = lerp(fromValue, toValue, easedT);
-  return new THREE.Vector3(
-    lerp(UPRIGHT_SIZE.x, FLAT_SIZE.x, pose),
-    lerp(UPRIGHT_SIZE.y, FLAT_SIZE.y, pose),
-    lerp(UPRIGHT_SIZE.z, FLAT_SIZE.z, pose)
-  );
-};
-
-const worldZForIndex = (index: number, progress: number) =>
-  -(index * TILE_SPACING - progress);
+const sizeForOrientation = (orientation: OrientationState) =>
+  orientation === 'UPRIGHT' ? UPRIGHT_SIZE : FLAT_SIZE;
 
 const worldYForHeight = (heightLevel: number) => heightLevel * TILE_HEIGHT_STEP;
+
+const failReasonLabel = (reason: FailReason) => {
+  if (reason === 'rule') return 'Wrong posture for this glyph.';
+  if (reason === 'height') return 'Flat posture needs level support.';
+  return 'No tile support under the box.';
+};
+
+const createTile = (id: number): TileRecord => ({
+  id,
+  z: 0,
+  present: true,
+  length: TILE_LENGTH,
+  heightLevel: 0,
+  rule: 'ANY',
+  checked: false,
+  pulse: 0,
+  colorSeed: 0,
+});
 
 const useFlipBoxStore = create<FlipBoxStore>((set) => ({
   status: 'START',
@@ -174,7 +165,9 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
   multiplier: 1,
   perfectStreak: 0,
   failMessage: '',
+  posture: 'UPRIGHT',
   pulseNonce: 0,
+  crashNonce: 0,
   startRun: () =>
     set({
       status: 'PLAYING',
@@ -182,6 +175,7 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
       multiplier: 1,
       perfectStreak: 0,
       failMessage: '',
+      posture: 'UPRIGHT',
     }),
   resetToStart: () =>
     set({
@@ -190,7 +184,9 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
       multiplier: 1,
       perfectStreak: 0,
       failMessage: '',
+      posture: 'UPRIGHT',
     }),
+  setPosture: (value) => set({ posture: value }),
   updateHud: (score, multiplier, perfectStreak, perfect) =>
     set((state) => ({
       score: Math.floor(score),
@@ -211,148 +207,87 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
         failMessage: reason,
       };
     }),
+  flashCrash: () => set((state) => ({ crashNonce: state.crashNonce + 1 })),
 }));
-
-const createTile = (id: number): TileRecord => ({
-  id,
-  index: 0,
-  present: true,
-  rule: 'ANY',
-  length: TILE_BASE_LENGTH,
-  heightLevel: 0,
-  pulse: 0,
-});
 
 const createRuntime = (): Runtime => ({
   elapsed: 0,
   score: 0,
   multiplier: 1,
   perfectStreak: 0,
+
   orientation: 'UPRIGHT',
-  spinAngle: 0,
-  baseProgress: 0,
-  flipBonus: 0,
+  targetOrientation: 'UPRIGHT',
+  displayScale: UPRIGHT_SIZE.clone(),
+  rotX: 0,
+  rotTargetX: 0,
   playerY: orientationHalfHeight('UPRIGHT'),
   targetY: orientationHalfHeight('UPRIGHT'),
-  idleTime: 0,
-  supportGrace: 0,
+  unsupportedTime: 0,
+  flipTimer: 999,
+
+  speed: 2.2,
   cameraKick: 0,
-
-  difficulty: sampleDifficulty('flip-timing', 0),
-  chunkLibrary: buildPatternLibraryTemplate('flipbox'),
-  activeChunk: null,
-  chunkTilesLeft: 0,
-
-  lastHeight: 0,
-  lastRule: 'ANY',
-  gapRun: 0,
-
-  flipInProgress: false,
-  flipTime: 0,
-  flipDuration: 0.18,
-  fromAngle: 0,
-  toAngle: 0,
-  fromOrientation: 'UPRIGHT',
-  toOrientation: 'FLAT',
-  flipFromBonus: 0,
-  flipToBonus: 0,
-  flipEase: 0,
+  crashFx: 0,
 
   tiles: Array.from({ length: TILE_POOL }, (_, idx) => createTile(idx)),
-  tileMap: new Map(),
-  maxTileIndex: 0,
+  frontZ: 0,
+  serial: 0,
+  lastHeight: 0,
+  gapRun: 0,
 });
 
-const chooseChunk = (runtime: Runtime) => {
-  const intensity = clamp(runtime.elapsed / 95, 0, 1);
-  runtime.activeChunk = pickPatternChunkForSurvivability(
-    'flipbox',
-    runtime.chunkLibrary,
-    Math.random,
-    intensity,
-    runtime.elapsed
-  );
-  runtime.chunkTilesLeft = Math.max(
-    3,
-    Math.round(
-      runtime.activeChunk.durationSeconds *
-        (2.05 + runtime.difficulty.eventRate * 1.45)
-    )
-  );
-};
+const scoreDifficulty = (runtime: Runtime) =>
+  clamp(runtime.score / 120 + runtime.elapsed / 90, 0, 1);
 
-const seedTile = (runtime: Runtime, tile: TileRecord, index: number) => {
-  if (!runtime.activeChunk || runtime.chunkTilesLeft <= 0) chooseChunk(runtime);
-  runtime.chunkTilesLeft -= 1;
+const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean) => {
+  const d = scoreDifficulty(runtime);
+  runtime.serial += 1;
 
-  const chunk = runtime.activeChunk!;
-  const tier = chunk.tier;
-  const diffNorm = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
-
-  tile.index = index;
+  tile.z = z;
+  tile.checked = false;
   tile.pulse = 0;
+  tile.colorSeed = runtime.serial % TILE_BASE_COLORS.length;
+  tile.length = TILE_LENGTH;
 
-  let present = true;
-  if (index > 8) {
-    let gapChance = 0.03 + tier * 0.05 + diffNorm * 0.08;
-    if (runtime.elapsed < 12) gapChance *= 0.4;
-    else if (runtime.elapsed < 20) gapChance *= 0.72;
-    if (runtime.gapRun >= 1) gapChance *= 0.3;
-    present = Math.random() > gapChance;
+  if (warmup) {
+    tile.present = true;
+    tile.rule = 'ANY';
+    tile.heightLevel = 0;
+    runtime.lastHeight = 0;
+    runtime.gapRun = 0;
+    return;
   }
 
-  tile.present = present;
-  if (!present) {
+  let gapChance = lerp(0.02, 0.22, d);
+  if (runtime.elapsed < 8) gapChance *= 0.3;
+  if (runtime.gapRun > 0) gapChance *= 0.18;
+
+  tile.present = Math.random() > gapChance;
+  if (!tile.present) {
     tile.rule = 'ANY';
-    tile.length = 0.9;
     tile.heightLevel = runtime.lastHeight;
     runtime.gapRun += 1;
     return;
   }
+
   runtime.gapRun = 0;
 
-  if (index <= 8) {
+  const ruleChance = lerp(0.12, 0.4, d);
+  if (Math.random() < ruleChance) {
+    tile.rule = Math.random() < 0.5 ? 'UPRIGHT' : 'FLAT';
+  } else {
     tile.rule = 'ANY';
-  } else {
-    const requireChance = 0.09 + tier * 0.08 + diffNorm * 0.14;
-    if (Math.random() < requireChance) {
-      tile.rule = Math.random() < 0.5 ? 'UPRIGHT' : 'FLAT';
-    } else {
-      tile.rule = 'ANY';
-    }
-  }
-
-  const splitChance = tile.rule === 'UPRIGHT' ? 0.14 + tier * 0.08 : 0.04 + tier * 0.03;
-  const longChance = tile.rule === 'FLAT' ? 0.26 + tier * 0.06 : 0.08;
-
-  if (Math.random() < splitChance) {
-    tile.length = clamp(0.46 + Math.random() * 0.16, TILE_MIN_LENGTH, 0.68);
-    tile.rule = 'UPRIGHT';
-  } else if (Math.random() < longChance) {
-    tile.length = clamp(1.02 + Math.random() * 0.22, 0.98, TILE_MAX_LENGTH);
-    if (tile.rule === 'UPRIGHT') tile.rule = 'ANY';
-  } else {
-    tile.length = clamp(
-      TILE_BASE_LENGTH + (Math.random() * 2 - 1) * 0.16 - tier * 0.04,
-      0.72,
-      TILE_MAX_LENGTH
-    );
-    if (tile.rule === 'FLAT') tile.length = Math.max(tile.length, 0.92);
   }
 
   let nextHeight = runtime.lastHeight;
-  const stepChance = 0.06 + tier * 0.05 + diffNorm * 0.06;
-  if (index > 12 && Math.random() < stepChance) {
+  const stepChance = lerp(0.02, 0.18, d);
+  if (runtime.elapsed > 10 && Math.random() < stepChance) {
     nextHeight += Math.random() < 0.5 ? -1 : 1;
   }
-  if (tile.rule === 'FLAT' && Math.random() < 0.62) {
-    nextHeight = runtime.lastHeight;
-  }
-  nextHeight = clamp(Math.round(nextHeight), -1, 4);
-  tile.heightLevel = nextHeight;
 
-  runtime.lastHeight = nextHeight;
-  runtime.lastRule = tile.rule;
+  tile.heightLevel = clamp(Math.round(nextHeight), -1, 2);
+  runtime.lastHeight = tile.heightLevel;
 };
 
 const resetRuntime = (runtime: Runtime) => {
@@ -360,135 +295,70 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.score = 0;
   runtime.multiplier = 1;
   runtime.perfectStreak = 0;
+
   runtime.orientation = 'UPRIGHT';
-  runtime.spinAngle = 0;
-  runtime.baseProgress = 0;
-  runtime.flipBonus = 0;
+  runtime.targetOrientation = 'UPRIGHT';
+  runtime.displayScale.copy(UPRIGHT_SIZE);
+  runtime.rotX = 0;
+  runtime.rotTargetX = 0;
   runtime.playerY = orientationHalfHeight('UPRIGHT');
-  runtime.targetY = orientationHalfHeight('UPRIGHT');
-  runtime.idleTime = 0;
-  runtime.supportGrace = 0;
+  runtime.targetY = runtime.playerY;
+  runtime.unsupportedTime = 0;
+  runtime.flipTimer = 999;
+
+  runtime.speed = 2.2;
   runtime.cameraKick = 0;
+  runtime.crashFx = 0;
 
-  runtime.difficulty = sampleDifficulty('flip-timing', 0);
-  runtime.activeChunk = null;
-  runtime.chunkTilesLeft = 0;
-
+  runtime.serial = 0;
   runtime.lastHeight = 0;
-  runtime.lastRule = 'ANY';
   runtime.gapRun = 0;
 
-  runtime.flipInProgress = false;
-  runtime.flipTime = 0;
-  runtime.flipDuration = 0.18;
-  runtime.fromAngle = 0;
-  runtime.toAngle = 0;
-  runtime.fromOrientation = 'UPRIGHT';
-  runtime.toOrientation = 'FLAT';
-  runtime.flipFromBonus = 0;
-  runtime.flipToBonus = 0;
-  runtime.flipEase = 0;
+  const farStartZ = -((TILE_POOL - 1) * TILE_SPACING) + 8;
+  runtime.frontZ = farStartZ;
 
-  runtime.tileMap.clear();
-  const startIndex = -36;
-  runtime.maxTileIndex = startIndex + runtime.tiles.length - 1;
   for (let i = 0; i < runtime.tiles.length; i += 1) {
     const tile = runtime.tiles[i];
-    const index = startIndex + i;
-    seedTile(runtime, tile, index);
-    runtime.tileMap.set(index, tile);
+    const z = farStartZ + i * TILE_SPACING;
+    const warmup = z > -14;
+    seedTile(runtime, tile, z, warmup);
   }
 };
 
-const findSupportingTile = (
-  runtime: Runtime,
-  progress: number,
-  sampleZ: number
-): SupportHit | null => {
-  const logical = (progress - sampleZ) / TILE_SPACING;
-  const baseIndex = Math.round(logical);
-
-  let best: SupportHit | null = null;
-  for (let idx = baseIndex - 2; idx <= baseIndex + 2; idx += 1) {
-    const tile = runtime.tileMap.get(idx);
-    if (!tile || !tile.present) continue;
-    const tileCenterZ = worldZForIndex(idx, progress);
-    const dz = Math.abs(tileCenterZ - sampleZ);
-    const tolerance = tile.length * 0.5 + SUPPORT_EXTRA_TOLERANCE;
-    if (dz > tolerance) continue;
-    const y = worldYForHeight(tile.heightLevel);
-    if (!best || dz < best.dz) best = { tile, dz, y };
+const findSupportTileAtZ = (runtime: Runtime, sampleZ: number) => {
+  for (let i = 0; i < runtime.tiles.length; i += 1) {
+    const tile = runtime.tiles[i];
+    if (!tile.present) continue;
+    if (Math.abs(sampleZ - tile.z) <= tile.length * 0.5 + 0.005) {
+      return tile;
+    }
   }
-  return best;
+  return null;
 };
 
-const checkSupport = (
-  runtime: Runtime,
-  progress: number,
-  orientation: OrientationState
-): SupportResult => {
-  const sampleOffsets =
-    orientation === 'UPRIGHT' ? [0] : [-FLAT_SAMPLE_OFFSET, FLAT_SAMPLE_OFFSET];
-
-  const hits: SupportHit[] = [];
-  for (const sampleZ of sampleOffsets) {
-    const hit = findSupportingTile(runtime, progress, sampleZ);
-    if (!hit) {
-      return {
-        valid: false,
-        reason: 'gap',
-        baseY: 0,
-        alignment: 1,
-        primary: null,
-      };
-    }
-    if (orientation === 'UPRIGHT' && hit.tile.rule === 'FLAT') {
-      return {
-        valid: false,
-        reason: 'rule',
-        baseY: hit.y,
-        alignment: hit.dz,
-        primary: hit.tile,
-      };
-    }
-    if (orientation === 'FLAT' && hit.tile.rule === 'UPRIGHT') {
-      return {
-        valid: false,
-        reason: 'rule',
-        baseY: hit.y,
-        alignment: hit.dz,
-        primary: hit.tile,
-      };
-    }
-    hits.push(hit);
+const evaluateSupport = (runtime: Runtime): SupportResult => {
+  if (runtime.orientation === 'UPRIGHT') {
+    const tile = findSupportTileAtZ(runtime, 0);
+    if (!tile) return { ok: false, reason: 'gap', baseY: runtime.playerY - 0.25 };
+    return { ok: true, reason: 'gap', baseY: worldYForHeight(tile.heightLevel) };
   }
 
-  if (hits.length === 2 && Math.abs(hits[0].y - hits[1].y) > TILE_HEIGHT_STEP * 0.55) {
+  const a = findSupportTileAtZ(runtime, SUPPORT_FLAT_A);
+  const b = findSupportTileAtZ(runtime, SUPPORT_FLAT_B);
+
+  if (!a || !b) {
+    return { ok: false, reason: 'gap', baseY: runtime.playerY - 0.25 };
+  }
+
+  if (a.heightLevel !== b.heightLevel) {
     return {
-      valid: false,
+      ok: false,
       reason: 'height',
-      baseY: (hits[0].y + hits[1].y) * 0.5,
-      alignment: (hits[0].dz + hits[1].dz) * 0.5,
-      primary: hits[0].tile,
+      baseY: (worldYForHeight(a.heightLevel) + worldYForHeight(b.heightLevel)) * 0.5,
     };
   }
 
-  const baseY = hits.reduce((sum, hit) => sum + hit.y, 0) / hits.length;
-  const alignment = hits.reduce((sum, hit) => sum + hit.dz, 0) / hits.length;
-  return {
-    valid: true,
-    reason: 'gap',
-    baseY,
-    alignment,
-    primary: hits[0]?.tile ?? null,
-  };
-};
-
-const failReasonLabel = (reason: FailReason) => {
-  if (reason === 'rule') return 'Wrong posture for glyph tile.';
-  if (reason === 'height') return 'Height stagger broke the landing.';
-  if (reason === 'idle') return 'Too slow. Keep flipping.';
-  return 'Missed tile support.';
+  return { ok: true, reason: 'gap', baseY: worldYForHeight(a.heightLevel) };
 };
 
 function FlipBoxOverlay() {
@@ -498,50 +368,58 @@ function FlipBoxOverlay() {
   const multiplier = useFlipBoxStore((state) => state.multiplier);
   const perfectStreak = useFlipBoxStore((state) => state.perfectStreak);
   const failMessage = useFlipBoxStore((state) => state.failMessage);
+  const posture = useFlipBoxStore((state) => state.posture);
   const pulseNonce = useFlipBoxStore((state) => state.pulseNonce);
+  const crashNonce = useFlipBoxStore((state) => state.crashNonce);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
-        <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Flip Box</div>
-        <div className="text-[11px] text-cyan-50/85">Tap to flip and match tile glyphs.</div>
+      <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/70 bg-gradient-to-br from-cyan-500/28 via-sky-500/18 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
+        <div className="text-xs uppercase tracking-[0.22em] text-cyan-50">Flip Box</div>
+        <div className="text-[11px] text-white/90">Tap to flip posture and stay supported.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-white/25 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-xl border border-rose-100/60 bg-gradient-to-br from-rose-400/24 via-fuchsia-400/18 to-amber-300/16 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
-        <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-white/80">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/15 bg-black/30 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[90px] rounded-xl border border-white/40 bg-black/28 px-3 py-2 text-xs text-white/92 backdrop-blur-[2px]">
+          <div>
+            Posture{' '}
+            <span className="font-semibold text-cyan-100">
+              {posture === 'UPRIGHT' ? 'UPRIGHT' : 'FLAT'}
+            </span>
+          </div>
           <div>
             Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
           </div>
           <div>
-            Perfect Streak <span className="font-semibold text-cyan-200">{perfectStreak}</span>
+            Perfect Streak <span className="font-semibold text-fuchsia-200">{perfectStreak}</span>
           </div>
         </div>
       )}
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/55 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">FLIP BOX</div>
-            <div className="mt-2 text-sm text-white/85">Tap to flip 90° over the front edge.</div>
-            <div className="mt-1 text-sm text-white/80">Single glyph = upright, double glyph = flat.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+            <div className="mt-2 text-sm text-white/90">Single glyph = upright. Wide glyph = flat.</div>
+            <div className="mt-1 text-sm text-white/85">Tap anytime to flip posture.</div>
+            <div className="mt-3 text-sm text-cyan-200/95">Tap to play.</div>
           </div>
         </div>
       )}
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black text-rose-200">Fell Off</div>
-            <div className="mt-2 text-sm text-white/80">{failMessage}</div>
-            <div className="mt-2 text-sm text-white/80">Score {score}</div>
-            <div className="mt-1 text-sm text-white/75">Best {best}</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+          <div className="rounded-2xl border border-rose-200/50 bg-gradient-to-br from-black/80 via-rose-950/42 to-indigo-950/24 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-rose-200">Game Over</div>
+            <div className="mt-2 text-sm text-white/86">{failMessage}</div>
+            <div className="mt-2 text-sm text-white/82">Score {score}</div>
+            <div className="mt-1 text-sm text-white/80">Best {best}</div>
+            <div className="mt-3 text-sm text-cyan-200/95">Tap instantly to retry.</div>
           </div>
         </div>
       )}
@@ -549,23 +427,43 @@ function FlipBoxOverlay() {
       {status === 'PLAYING' && (
         <div
           key={pulseNonce}
-          className="absolute left-1/2 top-1/2 h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/70"
+          className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/80"
           style={{
-            animation: 'flipbox-perfect-ring 260ms ease-out forwards',
+            animation: 'flipbox-perfect-ring 240ms ease-out forwards',
             opacity: 0,
-            boxShadow: '0 0 24px rgba(87, 217, 255, 0.35)',
+            boxShadow: '0 0 28px rgba(120, 224, 255, 0.42)',
           }}
         />
       )}
 
+      <div
+        key={crashNonce}
+        className="absolute left-1/2 top-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full border border-rose-200/80"
+        style={{
+          animation: 'flipbox-crash-ring 360ms ease-out forwards',
+          opacity: 0,
+          boxShadow: '0 0 32px rgba(255, 124, 170, 0.5)',
+        }}
+      />
+
       <style jsx global>{`
         @keyframes flipbox-perfect-ring {
           0% {
-            transform: translate(-50%, -50%) scale(0.58);
-            opacity: 0.72;
+            transform: translate(-50%, -50%) scale(0.6);
+            opacity: 0.8;
           }
           100% {
-            transform: translate(-50%, -50%) scale(1.25);
+            transform: translate(-50%, -50%) scale(1.3);
+            opacity: 0;
+          }
+        }
+        @keyframes flipbox-crash-ring {
+          0% {
+            transform: translate(-50%, -50%) scale(0.5);
+            opacity: 0.85;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.45);
             opacity: 0;
           }
         }
@@ -581,15 +479,17 @@ function FlipBoxScene() {
   const resetVersion = useSnapshot(flipBoxState).resetVersion;
 
   const runtimeRef = useRef<Runtime>(createRuntime());
+
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
-  const poseScale = useMemo(() => new THREE.Vector3(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
 
   const tileRef = useRef<THREE.InstancedMesh>(null);
   const glyphRef = useRef<THREE.InstancedMesh>(null);
+  const pulseRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
   const playerOutlineRef = useRef<THREE.Mesh>(null);
+  const crashRingRef = useRef<THREE.Mesh>(null);
 
   const { camera } = useThree();
 
@@ -620,8 +520,8 @@ function FlipBoxScene() {
   useFrame((_, delta) => {
     const dt = Math.min(0.033, Math.max(0.001, delta));
     const input = inputRef.current;
-    const store = useFlipBoxStore.getState();
     const runtime = runtimeRef.current;
+    const store = useFlipBoxStore.getState();
 
     const tap =
       input.pointerJustDown ||
@@ -632,195 +532,156 @@ function FlipBoxScene() {
     if (tap && store.status !== 'PLAYING') {
       resetRuntime(runtime);
       useFlipBoxStore.getState().startRun();
+      useFlipBoxStore.getState().setPosture('UPRIGHT');
+    } else if (tap && store.status === 'PLAYING') {
+      runtime.targetOrientation = runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
+      runtime.orientation = runtime.targetOrientation;
+      runtime.rotTargetX -= Math.PI * 0.5;
+      runtime.flipTimer = 0;
+      runtime.cameraKick = Math.min(1, runtime.cameraKick + 0.38);
+      useFlipBoxStore.getState().setPosture(runtime.orientation);
     }
 
     if (store.status === 'PLAYING') {
       runtime.elapsed += dt;
-      runtime.difficulty = sampleDifficulty('flip-timing', runtime.elapsed);
+      runtime.flipTimer += dt;
 
-      const speedNorm = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
-      const baseSpeed = lerp(1.55, 2.72, speedNorm);
-      runtime.baseProgress += baseSpeed * dt;
+      const d = scoreDifficulty(runtime);
+      runtime.speed = lerp(2.15, 4.35, d);
 
-      const idleLimit = clamp(runtime.difficulty.decisionWindowMs / 1000, 0.22, 0.56);
+      const moveZ = runtime.speed * dt;
+      for (let i = 0; i < runtime.tiles.length; i += 1) {
+        const tile = runtime.tiles[i];
+        tile.z += moveZ;
+        tile.pulse = Math.max(0, tile.pulse - dt * 2.6);
 
-      if (tap && !runtime.flipInProgress) {
-        const nextOrientation: OrientationState =
-          runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
-        runtime.flipInProgress = true;
-        runtime.flipTime = 0;
-        runtime.flipDuration = clamp(runtime.difficulty.decisionWindowMs / 1000 * 0.36, 0.14, 0.2);
-        runtime.fromAngle = runtime.spinAngle;
-        runtime.toAngle = runtime.spinAngle - Math.PI / 2;
-        runtime.fromOrientation = runtime.orientation;
-        runtime.toOrientation = nextOrientation;
-        runtime.flipFromBonus = runtime.flipBonus;
-        const stepDistance =
-          (runtime.fromOrientation === 'UPRIGHT' ? 1.28 : 1.5) + speedNorm * 0.18;
-        runtime.flipToBonus = runtime.flipBonus + stepDistance;
-        runtime.flipEase = 0;
-        runtime.idleTime = 0;
+        if (tile.present && !tile.checked && tile.z >= 0) {
+          tile.checked = true;
+
+          if (tile.rule !== 'ANY' && tile.rule !== runtime.orientation) {
+            runtime.crashFx = 1;
+            useFlipBoxStore.getState().flashCrash();
+            useFlipBoxStore.getState().endRun(runtime.score, failReasonLabel('rule'));
+            break;
+          }
+
+          let perfect = false;
+          runtime.score += 1;
+
+          if (tile.rule !== 'ANY' && runtime.flipTimer < 0.16) {
+            perfect = true;
+            runtime.perfectStreak += 1;
+            runtime.multiplier = clamp(1 + runtime.perfectStreak * 0.24, 1, 5);
+            runtime.score += 1;
+            tile.pulse = 1;
+            runtime.cameraKick = Math.min(1.2, runtime.cameraKick + 0.5);
+          } else {
+            runtime.perfectStreak = 0;
+            runtime.multiplier = Math.max(1, runtime.multiplier * 0.92);
+          }
+
+          useFlipBoxStore
+            .getState()
+            .updateHud(runtime.score, runtime.multiplier, runtime.perfectStreak, perfect);
+        }
       }
 
-      if (runtime.flipInProgress) {
-        runtime.flipTime += dt;
-        const t = clamp(runtime.flipTime / runtime.flipDuration, 0, 1);
-        const eased = easeInOutCubic(t);
-        runtime.flipEase = eased;
-        runtime.spinAngle = lerp(runtime.fromAngle, runtime.toAngle, eased);
-        runtime.flipBonus = lerp(runtime.flipFromBonus, runtime.flipToBonus, eased);
+      const support = evaluateSupport(runtime);
+      if (!support.ok) {
+        runtime.unsupportedTime += dt;
+        runtime.targetY = runtime.playerY - dt * 2.8;
 
-        if (t >= 1) {
-          runtime.flipInProgress = false;
-          runtime.orientation = runtime.toOrientation;
-          runtime.spinAngle = runtime.toAngle;
-          runtime.flipBonus = runtime.flipToBonus;
-          runtime.idleTime = 0;
-
-          const progress = runtime.baseProgress + runtime.flipBonus;
-          const support = checkSupport(runtime, progress, runtime.orientation);
-          if (!support.valid) {
-            useFlipBoxStore
-              .getState()
-              .endRun(runtime.score, failReasonLabel(support.reason));
-          } else {
-            runtime.supportGrace = 0;
-            runtime.targetY = support.baseY + orientationHalfHeight(runtime.orientation);
-            const perfectThreshold = clamp(
-              (support.primary?.length ?? TILE_BASE_LENGTH) * 0.12,
-              0.045,
-              0.09
-            );
-            const perfect = support.alignment <= perfectThreshold;
-            if (perfect) {
-              runtime.perfectStreak += 1;
-              runtime.multiplier = clamp(1 + runtime.perfectStreak * 0.2, 1, 4.5);
-              runtime.cameraKick = Math.min(1.25, runtime.cameraKick + 0.62);
-              if (support.primary) support.primary.pulse = 1.08;
-            } else {
-              runtime.perfectStreak = 0;
-              runtime.multiplier = Math.max(1, runtime.multiplier * 0.84);
-              runtime.cameraKick = Math.min(1.0, runtime.cameraKick + 0.2);
-            }
-            runtime.score += Math.max(1, Math.round(runtime.multiplier));
-            useFlipBoxStore
-              .getState()
-              .updateHud(runtime.score, runtime.multiplier, runtime.perfectStreak, perfect);
-          }
+        if (runtime.unsupportedTime >= SUPPORT_GRACE) {
+          runtime.crashFx = 1;
+          useFlipBoxStore.getState().flashCrash();
+          useFlipBoxStore.getState().endRun(runtime.score, failReasonLabel(support.reason));
         }
       } else {
-        runtime.idleTime += dt;
-        if (runtime.idleTime > idleLimit) {
-          useFlipBoxStore.getState().endRun(runtime.score, failReasonLabel('idle'));
-        } else {
-          const progress = runtime.baseProgress + runtime.flipBonus;
-          const support = checkSupport(runtime, progress, runtime.orientation);
-          if (!support.valid) {
-            runtime.supportGrace += dt;
-            if (runtime.supportGrace > SUPPORT_GRACE_SECONDS) {
-              useFlipBoxStore
-                .getState()
-                .endRun(runtime.score, failReasonLabel(support.reason));
-            }
-          } else {
-            runtime.supportGrace = 0;
-            runtime.targetY = support.baseY + orientationHalfHeight(runtime.orientation);
-          }
-        }
+        runtime.unsupportedTime = 0;
+        runtime.targetY = support.baseY + orientationHalfHeight(runtime.orientation);
       }
 
-      runtime.cameraKick = Math.max(0, runtime.cameraKick - dt * 4.4);
-      runtime.playerY = lerp(runtime.playerY, runtime.targetY, 1 - Math.exp(-12 * dt));
+      for (let i = 0; i < runtime.tiles.length; i += 1) {
+        const tile = runtime.tiles[i];
+        if (tile.z <= RECYCLE_Z) continue;
 
-      for (const tile of runtime.tiles) {
-        tile.pulse = Math.max(0, tile.pulse - dt * 2.8);
-      }
+        const z = runtime.frontZ - TILE_SPACING;
+        runtime.frontZ = z;
 
-      const progress = runtime.baseProgress + runtime.flipBonus;
-      for (const tile of runtime.tiles) {
-        const worldZ = worldZForIndex(tile.index, progress);
-        if (worldZ <= TILE_RECYCLE_Z) continue;
-        runtime.tileMap.delete(tile.index);
-        const nextIndex = runtime.maxTileIndex + 1;
-        runtime.maxTileIndex = nextIndex;
-        seedTile(runtime, tile, nextIndex);
-        runtime.tileMap.set(nextIndex, tile);
+        const warmup = false;
+        seedTile(runtime, tile, z, warmup);
       }
 
       flipBoxState.elapsed = runtime.elapsed;
       flipBoxState.chain = runtime.perfectStreak;
     }
 
-    const progress = runtime.baseProgress + runtime.flipBonus;
+    runtime.cameraKick = Math.max(0, runtime.cameraKick - dt * 4.8);
+    runtime.crashFx = Math.max(0, runtime.crashFx - dt * 2.7);
+
+    const targetScale = sizeForOrientation(runtime.orientation);
+    runtime.displayScale.lerp(targetScale, 1 - Math.exp(-13 * dt));
+    runtime.rotX = lerp(runtime.rotX, runtime.rotTargetX, 1 - Math.exp(-15 * dt));
+    runtime.playerY = lerp(runtime.playerY, runtime.targetY, 1 - Math.exp(-14 * dt));
 
     if (playerRef.current && playerOutlineRef.current) {
-      let scale = UPRIGHT_SIZE;
-      if (runtime.flipInProgress) {
-        const blended = blendPoseSize(
-          runtime.fromOrientation,
-          runtime.toOrientation,
-          runtime.flipEase
-        );
-        poseScale.copy(blended);
-        scale = poseScale;
-      } else if (runtime.orientation === 'FLAT') {
-        scale = FLAT_SIZE;
-      }
-
       playerRef.current.position.set(0, runtime.playerY, 0);
-      playerRef.current.rotation.set(runtime.spinAngle, 0, 0);
-      playerRef.current.scale.copy(scale);
+      playerRef.current.rotation.set(runtime.rotX, 0, 0);
+      playerRef.current.scale.copy(runtime.displayScale);
 
       playerOutlineRef.current.position.copy(playerRef.current.position);
       playerOutlineRef.current.rotation.copy(playerRef.current.rotation);
-      playerOutlineRef.current.scale.copy(playerRef.current.scale).multiplyScalar(1.02);
+      playerOutlineRef.current.scale.copy(playerRef.current.scale).multiplyScalar(1.022);
     }
 
-    const camJitter = runtime.cameraKick * 0.08;
-    camTarget.set(
-      5.8 + (Math.random() - 0.5) * camJitter,
-      6.5 + runtime.cameraKick * 0.2,
-      8.25 + (Math.random() - 0.5) * camJitter * 0.8
-    );
-    camera.position.lerp(camTarget, 1 - Math.exp(-6.5 * dt));
-    camera.lookAt(0, 0.35, -6.8);
+    if (crashRingRef.current) {
+      const s = 0.8 + (1 - runtime.crashFx) * 1.15;
+      crashRingRef.current.visible = runtime.crashFx > 0.001;
+      crashRingRef.current.position.set(0, runtime.playerY - 0.32, 0.02);
+      crashRingRef.current.scale.setScalar(s);
+      const mat = crashRingRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = runtime.crashFx * 0.8;
+    }
 
-    if (tileRef.current && glyphRef.current) {
+    const jitter = runtime.cameraKick * 0.09;
+    camTarget.set(
+      6.8 + (Math.random() - 0.5) * jitter,
+      7.5 + runtime.cameraKick * 0.2,
+      8.6 + (Math.random() - 0.5) * jitter * 0.75
+    );
+    camera.position.lerp(camTarget, 1 - Math.exp(-6.4 * dt));
+    camera.lookAt(0, 0.48, -7.2);
+
+    if (tileRef.current && glyphRef.current && pulseRef.current) {
       for (let i = 0; i < runtime.tiles.length; i += 1) {
         const tile = runtime.tiles[i];
-        const worldZ = worldZForIndex(tile.index, progress);
 
-        if (!tile.present || worldZ < TILE_DRAW_MIN_Z || worldZ > TILE_DRAW_MAX_Z) {
+        if (!tile.present || tile.z < DRAW_MIN_Z || tile.z > DRAW_MAX_Z) {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           tileRef.current.setMatrixAt(i, dummy.matrix);
-          tileRef.current.setColorAt(i, TILE_ANY);
-
+          tileRef.current.setColorAt(i, TILE_BASE_COLORS[0]);
           glyphRef.current.setMatrixAt(i, dummy.matrix);
           glyphRef.current.setColorAt(i, GLYPH_UPRIGHT);
+          pulseRef.current.setMatrixAt(i, dummy.matrix);
+          pulseRef.current.setColorAt(i, PULSE);
           continue;
         }
 
         const tileY = worldYForHeight(tile.heightLevel) - TILE_THICKNESS * 0.5;
-        dummy.position.set(0, tileY, worldZ);
+
+        dummy.position.set(0, tileY, tile.z);
         dummy.scale.set(TILE_WIDTH, TILE_THICKNESS, tile.length);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         tileRef.current.setMatrixAt(i, dummy.matrix);
 
-        const baseColor =
-          tile.rule === 'UPRIGHT'
-            ? TILE_UPRIGHT
-            : tile.rule === 'FLAT'
-              ? TILE_FLAT
-              : TILE_ANY;
-        const heightTint = clamp((tile.heightLevel + 1) / 6, 0, 1);
-        colorScratch.copy(baseColor).lerp(TILE_HIGHLIGHT, 0.08 + heightTint * 0.12);
-        if (tile.pulse > 0) {
-          colorScratch.lerp(TILE_HIGHLIGHT, clamp(tile.pulse * 0.65, 0, 0.75));
-        }
+        const base = tile.rule === 'UPRIGHT' ? TILE_UPRIGHT : tile.rule === 'FLAT' ? TILE_FLAT : TILE_BASE_COLORS[tile.colorSeed];
+        colorScratch.copy(base).lerp(TILE_EDGE, 0.1);
+        if (tile.checked) colorScratch.lerp(TILE_EDGE, 0.13);
+        if (tile.pulse > 0) colorScratch.lerp(TILE_EDGE, clamp(tile.pulse * 0.7, 0, 0.8));
         tileRef.current.setColorAt(i, colorScratch);
 
         if (tile.rule === 'ANY') {
@@ -831,28 +692,44 @@ function FlipBoxScene() {
           glyphRef.current.setMatrixAt(i, dummy.matrix);
           glyphRef.current.setColorAt(i, GLYPH_UPRIGHT);
         } else {
-          const glyphY = tileY + TILE_THICKNESS * 0.62;
-          const glyphLength =
-            tile.rule === 'UPRIGHT'
-              ? clamp(tile.length * 0.42, 0.24, 0.36)
-              : clamp(tile.length * 0.76, 0.52, 0.88);
-          const glyphWidth = tile.rule === 'UPRIGHT' ? 0.24 : 0.32;
-          dummy.position.set(0, glyphY, worldZ);
-          dummy.scale.set(glyphWidth, 0.03, glyphLength);
+          const glyphY = tileY + TILE_THICKNESS * 0.64;
+          if (tile.rule === 'UPRIGHT') {
+            dummy.position.set(0, glyphY, tile.z);
+            dummy.scale.set(0.22, 0.04, 0.22);
+          } else {
+            dummy.position.set(0, glyphY, tile.z);
+            dummy.scale.set(0.42, 0.04, 0.22);
+          }
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           glyphRef.current.setMatrixAt(i, dummy.matrix);
-          glyphRef.current.setColorAt(
-            i,
-            tile.rule === 'UPRIGHT' ? GLYPH_UPRIGHT : GLYPH_FLAT
-          );
+          glyphRef.current.setColorAt(i, tile.rule === 'UPRIGHT' ? GLYPH_UPRIGHT : GLYPH_FLAT);
+        }
+
+        if (tile.pulse > 0) {
+          const s = 1 + (1 - tile.pulse) * 0.72;
+          dummy.position.set(0, tileY + TILE_THICKNESS * 0.74, tile.z);
+          dummy.scale.set(TILE_WIDTH * 1.02 * s, 0.02, tile.length * 1.02 * s);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          pulseRef.current.setMatrixAt(i, dummy.matrix);
+          pulseRef.current.setColorAt(i, PULSE);
+        } else {
+          dummy.position.copy(OFFSCREEN_POS);
+          dummy.scale.copy(TINY_SCALE);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          pulseRef.current.setMatrixAt(i, dummy.matrix);
+          pulseRef.current.setColorAt(i, PULSE);
         }
       }
 
       tileRef.current.instanceMatrix.needsUpdate = true;
       glyphRef.current.instanceMatrix.needsUpdate = true;
+      pulseRef.current.instanceMatrix.needsUpdate = true;
       if (tileRef.current.instanceColor) tileRef.current.instanceColor.needsUpdate = true;
       if (glyphRef.current.instanceColor) glyphRef.current.instanceColor.needsUpdate = true;
+      if (pulseRef.current.instanceColor) pulseRef.current.instanceColor.needsUpdate = true;
     }
 
     clearFrameInput(inputRef);
@@ -860,17 +737,28 @@ function FlipBoxScene() {
 
   return (
     <>
-      <OrthographicCamera makeDefault position={[5.8, 6.5, 8.25]} zoom={118} near={0.1} far={120} />
-      <color attach="background" args={[VOID_BG]} />
-      <fog attach="fog" args={[VOID_BG, 7, 42]} />
+      <OrthographicCamera makeDefault position={[6.8, 7.5, 8.6]} zoom={113} near={0.1} far={170} />
 
-      <ambientLight intensity={0.56} />
-      <directionalLight position={[4.8, 8.2, 3.6]} intensity={0.95} color="#ffffff" />
-      <pointLight position={[-2.5, 3.4, 2.6]} intensity={0.56} color="#8bd8ff" />
+      <color attach="background" args={[BG]} />
+      <fog attach="fog" args={[BG, 10, 62]} />
 
-      <mesh position={[0, -0.12, -10]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[40, 80]} />
-        <meshStandardMaterial color="#090d1a" roughness={0.96} metalness={0.04} />
+      <ambientLight intensity={0.8} color="#ffffff" />
+      <directionalLight position={[5.8, 9.2, 4.3]} intensity={0.94} color="#ffffff" />
+      <pointLight position={[-2.6, 3.8, 2.9]} intensity={0.48} color="#7dd3fc" />
+      <pointLight position={[2.5, 2.7, -4.2]} intensity={0.35} color="#f472b6" />
+
+      <mesh position={[0, -0.18, -10]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[45, 96]} />
+        <meshStandardMaterial color="#f8fbff" roughness={0.95} metalness={0.03} />
+      </mesh>
+
+      <mesh position={[-1.45, 0.02, -8]}>
+        <boxGeometry args={[0.06, 0.08, 78]} />
+        <meshStandardMaterial color="#9dd9ff" emissive="#5ecbff" emissiveIntensity={0.25} roughness={0.3} />
+      </mesh>
+      <mesh position={[1.45, 0.02, -8]}>
+        <boxGeometry args={[0.06, 0.08, 78]} />
+        <meshStandardMaterial color="#ffb7ea" emissive="#ff78cb" emissiveIntensity={0.23} roughness={0.3} />
       </mesh>
 
       <instancedMesh ref={tileRef} args={[undefined, undefined, TILE_POOL]} castShadow receiveShadow>
@@ -878,9 +766,9 @@ function FlipBoxScene() {
         <meshStandardMaterial
           vertexColors
           roughness={0.36}
-          metalness={0.08}
-          emissive="#0a0f1a"
-          emissiveIntensity={0.42}
+          metalness={0.06}
+          emissive="#f8fbff"
+          emissiveIntensity={0.16}
         />
       </instancedMesh>
 
@@ -889,36 +777,59 @@ function FlipBoxScene() {
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
+      <instancedMesh ref={pulseRef} args={[undefined, undefined, TILE_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.76}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
       <mesh ref={playerRef} castShadow>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
-          color="#f8fafc"
-          emissive="#8bd8ff"
-          emissiveIntensity={0.36}
-          roughness={0.25}
-          metalness={0.06}
+          color="#f8fcff"
+          emissive="#7dd3fc"
+          emissiveIntensity={0.35}
+          roughness={0.2}
+          metalness={0.05}
         />
       </mesh>
 
       <mesh ref={playerOutlineRef}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial color="#67e8f9" wireframe toneMapped={false} />
+        <meshBasicMaterial color="#5ed5ff" wireframe toneMapped={false} />
+      </mesh>
+
+      <mesh ref={crashRingRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.65, 0.8, 42]} />
+        <meshBasicMaterial
+          color="#ff7aa9"
+          transparent
+          opacity={0}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
       </mesh>
 
       <ContactShadows
         position={[0, -0.01, 0]}
-        scale={18}
-        opacity={0.46}
-        blur={2.4}
-        far={16}
-        resolution={512}
+        scale={20}
+        opacity={0.54}
+        blur={2.1}
+        far={20}
+        resolution={1024}
         color="#000000"
       />
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.34} luminanceThreshold={0.58} luminanceSmoothing={0.24} mipmapBlur />
-        <Vignette eskil={false} offset={0.14} darkness={0.58} />
-        <Noise premultiply opacity={0.018} />
+        <Bloom intensity={0.34} luminanceThreshold={0.58} luminanceSmoothing={0.23} mipmapBlur />
+        <Vignette eskil={false} offset={0.08} darkness={0.3} />
+        <Noise premultiply opacity={0.012} />
       </EffectComposer>
 
       <Html fullscreen>

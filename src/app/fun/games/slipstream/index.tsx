@@ -133,15 +133,15 @@ type SlipStreamStore = {
 
 const BEST_KEY = 'slipstream_hyper_best_v3';
 
-const LANE_X: readonly [number, number, number] = [-1.78, 0, 1.78];
-const PLAYER_R = 0.24;
+const LANE_X: readonly [number, number, number] = [-1.35, 0, 1.35];
+const PLAYER_R = 0.2;
 const PLAYER_Z = 0;
 
-const TUNNEL_HALF_W = 2.95;
-const TUNNEL_HALF_H = 1.84;
+const TUNNEL_HALF_W = 2.05;
+const TUNNEL_HALF_H = 0.46;
 const SEGMENT_COUNT = 46;
-const SEGMENT_SPACING = 1.82;
-const PANELS_PER_SEGMENT = 4;
+const SEGMENT_SPACING = 1.62;
+const PANELS_PER_SEGMENT = 5;
 const TUNNEL_INSTANCE_COUNT = SEGMENT_COUNT * PANELS_PER_SEGMENT;
 
 const COMET_POOL = 20;
@@ -157,11 +157,13 @@ const GUST_COLLIDE_Z = 0.46;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
-const COOL = new THREE.Color('#2fd9ff');
-const HOT = new THREE.Color('#ff61cc');
 const STREAM = new THREE.Color('#86f7ff');
-const COMET_COLOR = new THREE.Color('#ffd373');
-const GUST_COLOR = new THREE.Color('#ff6f9e');
+const COMET_COLOR = new THREE.Color('#ffcf7d');
+const GUST_COLOR = new THREE.Color('#ff7f6f');
+const LOG_BROWN = new THREE.Color('#7f5539');
+const LOG_DARK = new THREE.Color('#4b3325');
+const LANE_DIVIDER = new THREE.Color('#f9d27d');
+const DANGER = new THREE.Color('#ff5f74');
 const WHITE = new THREE.Color('#f7fbff');
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -230,16 +232,16 @@ const makeGust = (slot: number): Gust => ({
 
 const makeStreak = (slot: number): Streak => ({
   slot,
-  x: (Math.random() * 2 - 1) * (TUNNEL_HALF_W - 0.35),
-  y: (Math.random() * 2 - 1) * (TUNNEL_HALF_H - 0.2),
+  x: (Math.random() < 0.5 ? -1 : 1) * (TUNNEL_HALF_W + 0.72 + Math.random() * 1.35),
+  y: -0.32 + Math.random() * 0.2,
   z: FAR_Z + Math.random() * (Math.abs(FAR_Z) + FRONT_Z),
   len: 0.45 + Math.random() * 1.25,
   speedFactor: 0.65 + Math.random() * 1.35,
 });
 
 const reseedStreak = (streak: Streak, randomizeDepth: boolean) => {
-  streak.x = (Math.random() * 2 - 1) * (TUNNEL_HALF_W - 0.35);
-  streak.y = (Math.random() * 2 - 1) * (TUNNEL_HALF_H - 0.2);
+  streak.x = (Math.random() < 0.5 ? -1 : 1) * (TUNNEL_HALF_W + 0.72 + Math.random() * 1.35);
+  streak.y = -0.32 + Math.random() * 0.2;
   streak.z = randomizeDepth ? FAR_Z + Math.random() * (Math.abs(FAR_Z) + FRONT_Z) : -38 - Math.random() * 20;
   streak.len = 0.45 + Math.random() * 1.25;
   streak.speedFactor = 0.65 + Math.random() * 1.35;
@@ -468,13 +470,13 @@ const spawnComet = (runtime: Runtime) => {
   const comet = acquireComet(runtime);
   comet.active = true;
   comet.lane = lane;
-  comet.z = -28 - Math.random() * 12;
+  comet.z = -24 - Math.random() * 10;
   comet.x = LANE_X[lane];
-  comet.weaveAmp = lerp(0.03, 0.46, d) * (0.72 + tier * 0.1) * earlyScale;
-  comet.weaveFreq = lerp(0.7, 2.35, d) + Math.random() * 0.6;
+  comet.weaveAmp = lerp(0.01, 0.12, d) * (0.62 + tier * 0.1) * earlyScale;
+  comet.weaveFreq = lerp(0.8, 1.7, d) + Math.random() * 0.35;
   comet.phase = Math.random() * Math.PI * 2;
-  comet.speedFactor = clamp(lerp(0.92, 1.26, d) + tier * 0.04 + (Math.random() * 2 - 1) * 0.06, 0.84, 1.48);
-  comet.radius = clamp(lerp(0.2, 0.29, d) + tier * 0.008, 0.2, 0.34);
+  comet.speedFactor = clamp(lerp(0.95, 1.24, d) + tier * 0.04 + (Math.random() * 2 - 1) * 0.05, 0.88, 1.42);
+  comet.radius = clamp(lerp(0.24, 0.36, d) + tier * 0.01, 0.22, 0.42);
   comet.slipMin = 0.82;
   comet.slipMax = clamp(lerp(5.0, 3.7, d) + tier * 0.1, 3.0, 5.3);
   comet.nearAwarded = false;
@@ -493,15 +495,15 @@ const spawnGust = (runtime: Runtime) => {
 
   gust.active = true;
   gust.lane = lane;
-  gust.z = -24 - Math.random() * 11;
+  gust.z = -22 - Math.random() * 10;
   gust.x = LANE_X[lane];
-  gust.width = clamp(1.04 + Math.random() * 0.22, 0.94, 1.36);
-  gust.height = clamp(lerp(1.2, 1.7, d) + tier * 0.06, 1.1, 2.0);
-  gust.depth = clamp(0.28 + Math.random() * 0.2, 0.24, 0.54);
-  gust.swayAmp = lerp(0.05, 0.34, d) * (0.6 + tier * 0.1);
-  gust.swayFreq = lerp(0.8, 2.6, d) + Math.random() * 0.7;
+  gust.width = clamp(0.92 + Math.random() * 0.18, 0.86, 1.18);
+  gust.height = clamp(0.34 + Math.random() * 0.16, 0.3, 0.6);
+  gust.depth = clamp(0.5 + Math.random() * 0.2, 0.42, 0.76);
+  gust.swayAmp = lerp(0.02, 0.16, d) * (0.52 + tier * 0.08);
+  gust.swayFreq = lerp(0.9, 1.9, d) + Math.random() * 0.42;
   gust.phase = Math.random() * Math.PI * 2;
-  gust.speedFactor = clamp(1.02 + d * 0.22 + (Math.random() * 2 - 1) * 0.08, 0.92, 1.38);
+  gust.speedFactor = clamp(0.98 + d * 0.22 + (Math.random() * 2 - 1) * 0.08, 0.9, 1.34);
   gust.tint = Math.random();
 };
 
@@ -517,20 +519,20 @@ function SlipStreamOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-sky-100/55 bg-gradient-to-br from-sky-500/24 via-cyan-500/16 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Slip Stream</div>
-        <div className="text-[11px] text-cyan-50/85">Tap cycles lane. Ride the draft.</div>
+        <div className="text-[11px] text-cyan-50/85">Tap cycles 3 lanes on the log.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-violet-500/22 via-fuchsia-500/16 to-amber-500/22 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/18 bg-black/35 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-sky-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-emerald-900/28 px-3 py-2 text-xs">
           <div>
-            Draft <span className="font-semibold text-cyan-200">{Math.round(slipRatio * 100)}%</span>
+            Flow <span className="font-semibold text-cyan-200">{Math.round(slipRatio * 100)}%</span>
           </div>
           <div>
             Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
@@ -543,10 +545,10 @@ function SlipStreamOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/58 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-sky-100/40 bg-gradient-to-br from-slate-950/78 via-cyan-950/52 to-amber-950/35 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">SLIP STREAM</div>
             <div className="mt-2 text-sm text-white/85">Tap cycles Left, Center, Right lanes.</div>
-            <div className="mt-1 text-sm text-white/80">Stay behind comets to keep speed addiction alive.</div>
+            <div className="mt-1 text-sm text-white/80">Dodge rocks and crates on the floating log track.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -554,7 +556,7 @@ function SlipStreamOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/82 via-rose-950/45 to-amber-950/35 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Run Collapsed</div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
@@ -682,8 +684,10 @@ function SlipStreamScene() {
       runtime.difficulty = sampleDifficulty('lane-switch', runtime.elapsed);
 
       const d = clamp((runtime.difficulty.speed - 6.5) / 5, 0, 1);
-      const baseSpeed = lerp(6.0, 10.9, d);
-      runtime.speedNow = baseSpeed * (1 + runtime.slipBlend * 0.56);
+      const baseSpeed = lerp(5.8, 10.2, d);
+      runtime.inSlipstream = runtime.laneIndex === 1;
+      runtime.slipStrength = runtime.inSlipstream ? 1 : 0;
+      runtime.speedNow = baseSpeed * (1 + runtime.slipStrength * 0.2);
 
       runtime.playerX = lerp(runtime.playerX, runtime.targetX, 1 - Math.exp(-14 * dt));
 
@@ -708,8 +712,6 @@ function SlipStreamScene() {
       }
 
       let failed = false;
-      runtime.inSlipstream = false;
-      runtime.slipStrength = 0;
 
       for (const comet of runtime.comets) {
         if (!comet.active) continue;
@@ -725,24 +727,11 @@ function SlipStreamScene() {
           continue;
         }
 
-        const dzAhead = -comet.z;
-        if (dzAhead >= comet.slipMin && dzAhead <= comet.slipMax) {
-          const xDist = Math.abs(runtime.playerX - comet.x);
-          const width = Math.abs(LANE_X[2] - LANE_X[1]) * 0.44;
-          const laneInfluence = clamp(1 - xDist / width, 0, 1);
-          if (laneInfluence > 0) {
-            runtime.inSlipstream = true;
-            const depthNorm = clamp((dzAhead - comet.slipMin) / (comet.slipMax - comet.slipMin), 0, 1);
-            const depthBoost = 1 - depthNorm * 0.32;
-            runtime.slipStrength = Math.max(runtime.slipStrength, laneInfluence * depthBoost);
-          }
-        }
-
         if (
           Math.abs(comet.z - PLAYER_Z) < COMET_COLLIDE_Z &&
           Math.abs(runtime.playerX - comet.x) < PLAYER_R + comet.radius
         ) {
-          runtime.failMessage = 'Hull impact with a comet.';
+          runtime.failMessage = 'You slammed into a rock.';
           useSlipStreamStore.getState().endRun(runtime.score, runtime.failMessage);
           failed = true;
           break;
@@ -786,7 +775,7 @@ function SlipStreamScene() {
             ) &&
             Math.abs(gust.z - PLAYER_Z) < GUST_COLLIDE_Z
           ) {
-            runtime.failMessage = 'Cross-gust ripped your line.';
+            runtime.failMessage = 'A crate blocked your lane.';
             useSlipStreamStore.getState().endRun(runtime.score, runtime.failMessage);
             failed = true;
             break;
@@ -795,7 +784,7 @@ function SlipStreamScene() {
       }
 
       if (!failed && Math.abs(runtime.playerX) > TUNNEL_HALF_W - PLAYER_R * 0.8) {
-        runtime.failMessage = 'Tunnel wall impact.';
+        runtime.failMessage = 'You slipped off the log.';
         useSlipStreamStore.getState().endRun(runtime.score, runtime.failMessage);
         failed = true;
       }
@@ -803,31 +792,22 @@ function SlipStreamScene() {
       if (!failed) {
         if (runtime.inSlipstream) {
           runtime.slipTime += dt;
-          runtime.slipStreak = Math.min(18, runtime.slipStreak + dt * (0.92 + runtime.slipStrength * 0.88));
+          runtime.slipStreak = Math.min(18, runtime.slipStreak + dt * 1.25);
           runtime.outOfDraftTimer = Math.max(0, runtime.outOfDraftTimer - dt * 3.2);
         } else {
-          runtime.slipStreak = Math.max(0, runtime.slipStreak - dt * 2.5);
+          runtime.slipStreak = Math.max(0, runtime.slipStreak - dt * 2.2);
           runtime.outOfDraftTimer += dt;
         }
 
         runtime.multiplier = 1 + clamp(runtime.slipStreak / 3.5, 0, 2.4);
         const targetSlipBlend = runtime.inSlipstream
-          ? clamp(0.36 + runtime.slipStrength * 0.74, 0, 1.15)
+          ? 0.95
           : 0;
         runtime.slipBlend = lerp(runtime.slipBlend, targetSlipBlend, 1 - Math.exp(-7 * dt));
 
         runtime.distance += runtime.speedNow * dt;
         runtime.score += runtime.speedNow * dt * (0.54 + runtime.multiplier * 0.16);
         runtime.score += runtime.inSlipstream ? dt * (1 + runtime.multiplier * 0.75) : 0;
-
-        if (runtime.elapsed > 12) {
-          const stallWindow = lerp(7.4, 4.4, d);
-          if (runtime.outOfDraftTimer > stallWindow) {
-            runtime.failMessage = 'Engine stalled outside the draft.';
-            useSlipStreamStore.getState().endRun(runtime.score, runtime.failMessage);
-            failed = true;
-          }
-        }
       }
 
       if (!failed && runtime.hudCommit >= 0.08) {
@@ -865,22 +845,22 @@ function SlipStreamScene() {
     const shakeAmp = runtime.shake * 0.09;
     camTarget.set(
       (Math.random() - 0.5) * shakeAmp,
-      0.22 + runtime.slipBlend * 0.1 + (Math.random() - 0.5) * shakeAmp * 0.24,
-      4.4 - runtime.slipBlend * 0.3 + (Math.random() - 0.5) * shakeAmp * 0.28
+      2.35 + runtime.slipBlend * 0.12 + (Math.random() - 0.5) * shakeAmp * 0.24,
+      5.7 - runtime.slipBlend * 0.28 + (Math.random() - 0.5) * shakeAmp * 0.28
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * dt));
-    camera.lookAt(0, 0, -10);
+    camera.lookAt(0, -0.12, -10);
     if (camera instanceof THREE.PerspectiveCamera) {
-      camera.fov = lerp(camera.fov, 43 - runtime.slipBlend * 3.4, 1 - Math.exp(-6 * dt));
+      camera.fov = lerp(camera.fov, 38 - runtime.slipBlend * 2.4, 1 - Math.exp(-6 * dt));
       camera.updateProjectionMatrix();
     }
 
     if (playerRef.current) {
-      playerRef.current.position.set(runtime.playerX, 0, 0.3);
+      playerRef.current.position.set(runtime.playerX, -0.02, 0.28);
       const targetRoll = clamp((runtime.targetX - runtime.playerX) * 0.22, -0.42, 0.42);
-      playerRef.current.rotation.set(Math.PI * 0.5, 0, targetRoll);
-      const scale = 1 + runtime.slipBlend * 0.08 + runtime.shake * 0.04;
-      playerRef.current.scale.set(scale, scale, scale);
+      playerRef.current.rotation.set(Math.PI * 0.5, 0, targetRoll * 0.8);
+      const scale = 1 + runtime.slipBlend * 0.06 + runtime.shake * 0.03;
+      playerRef.current.scale.set(scale, scale, scale * 1.06);
     }
 
     if (bgMatRef.current) {
@@ -897,41 +877,49 @@ function SlipStreamScene() {
       let instance = 0;
       for (const segment of runtime.segments) {
         const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 2 + segment.pulse);
-        const coolMix = clamp(0.22 + runtime.slipBlend * 0.5 + pulse * 0.18, 0, 1);
-        const hotMix = clamp(0.18 + runtime.slipBlend * 0.44 + (1 - pulse) * 0.16, 0, 1);
-        const sideMix = clamp(0.2 + runtime.slipBlend * 0.55, 0, 1);
+        const woodMix = clamp(0.18 + runtime.slipBlend * 0.2 + pulse * 0.12, 0, 1);
+        const railMix = clamp(0.16 + runtime.slipBlend * 0.24, 0, 1);
+        const laneMix = clamp(0.2 + runtime.slipBlend * 0.44 + pulse * 0.16, 0, 1);
 
         dummy.rotation.set(0, 0, 0);
 
-        dummy.position.set(0, TUNNEL_HALF_H, segment.z);
-        dummy.scale.set(TUNNEL_HALF_W * 2, 0.09, SEGMENT_SPACING * 0.9);
+        dummy.position.set(0, -0.14, segment.z);
+        dummy.scale.set(TUNNEL_HALF_W * 2, 0.24, SEGMENT_SPACING * 1.02);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(COOL).lerp(WHITE, coolMix * 0.5);
+        colorScratch.copy(LOG_BROWN).lerp(WHITE, woodMix * 0.22);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
-        dummy.position.set(0, -TUNNEL_HALF_H, segment.z);
-        dummy.scale.set(TUNNEL_HALF_W * 2, 0.09, SEGMENT_SPACING * 0.9);
+        dummy.position.set(-TUNNEL_HALF_W - 0.12, -0.03, segment.z);
+        dummy.scale.set(0.15, 0.34, SEGMENT_SPACING * 0.98);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(HOT).lerp(WHITE, hotMix * 0.5);
+        colorScratch.copy(LOG_DARK).lerp(WHITE, railMix * 0.16);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
-        dummy.position.set(-TUNNEL_HALF_W, 0, segment.z);
-        dummy.scale.set(0.09, TUNNEL_HALF_H * 2, SEGMENT_SPACING * 0.9);
+        dummy.position.set(TUNNEL_HALF_W + 0.12, -0.03, segment.z);
+        dummy.scale.set(0.15, 0.34, SEGMENT_SPACING * 0.98);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(COOL).lerp(STREAM, sideMix * 0.45);
+        colorScratch.copy(LOG_DARK).lerp(WHITE, railMix * 0.16);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
 
-        dummy.position.set(TUNNEL_HALF_W, 0, segment.z);
-        dummy.scale.set(0.09, TUNNEL_HALF_H * 2, SEGMENT_SPACING * 0.9);
+        dummy.position.set((LANE_X[0] + LANE_X[1]) * 0.5, -0.02, segment.z);
+        dummy.scale.set(0.05, 0.08, SEGMENT_SPACING * 0.94);
         dummy.updateMatrix();
         tunnelRef.current.setMatrixAt(instance, dummy.matrix);
-        colorScratch.copy(HOT).lerp(STREAM, sideMix * 0.45);
+        colorScratch.copy(LANE_DIVIDER).lerp(WHITE, laneMix * 0.22);
+        tunnelRef.current.setColorAt(instance, colorScratch);
+        instance += 1;
+
+        dummy.position.set((LANE_X[1] + LANE_X[2]) * 0.5, -0.02, segment.z);
+        dummy.scale.set(0.05, 0.08, SEGMENT_SPACING * 0.94);
+        dummy.updateMatrix();
+        tunnelRef.current.setMatrixAt(instance, dummy.matrix);
+        colorScratch.copy(LANE_DIVIDER).lerp(WHITE, laneMix * 0.22);
         tunnelRef.current.setColorAt(instance, colorScratch);
         instance += 1;
       }
@@ -957,22 +945,22 @@ function SlipStreamScene() {
 
         dummy.position.set(comet.x, 0, comet.z);
         dummy.scale.setScalar(comet.radius);
-        dummy.rotation.set(0, 0, runtime.elapsed * (1.2 + comet.speedFactor * 0.6));
+        dummy.rotation.set(runtime.elapsed * 0.6, runtime.elapsed * 0.9, runtime.elapsed * 0.4);
         dummy.updateMatrix();
         cometRef.current.setMatrixAt(i, dummy.matrix);
         colorScratch
           .copy(COMET_COLOR)
-          .lerp(STREAM, clamp(runtime.slipBlend * 0.42 + comet.tint * 0.26, 0, 0.82));
+          .lerp(LOG_DARK, clamp(0.26 + comet.tint * 0.3, 0, 0.72));
         cometRef.current.setColorAt(i, colorScratch);
 
-        const trailLen = comet.slipMax - comet.slipMin;
-        const trailRad = 0.26 + runtime.slipBlend * 0.2;
-        dummy.position.set(comet.x, 0, comet.z + comet.slipMin + trailLen * 0.5);
+        const trailLen = 0.9 + runtime.slipBlend * 0.5;
+        const trailRad = 0.22 + runtime.slipBlend * 0.08;
+        dummy.position.set(comet.x, -0.1, comet.z - 0.6);
         dummy.scale.set(trailRad, trailLen, trailRad);
         dummy.rotation.set(Math.PI * 0.5, 0, 0);
         dummy.updateMatrix();
         coneRef.current.setMatrixAt(i, dummy.matrix);
-        colorScratch.copy(STREAM).lerp(WHITE, clamp(runtime.slipBlend * 0.5, 0, 0.75));
+        colorScratch.copy(DANGER).lerp(WHITE, clamp(runtime.slipBlend * 0.16, 0, 0.3));
         coneRef.current.setColorAt(i, colorScratch);
       }
 
@@ -995,14 +983,14 @@ function SlipStreamScene() {
           continue;
         }
 
-        dummy.position.set(gust.x, 0, gust.z);
+        dummy.position.set(gust.x, -0.02, gust.z);
         dummy.scale.set(gust.width, gust.height, gust.depth);
-        dummy.rotation.set(0, runtime.elapsed * 0.3, 0);
+        dummy.rotation.set(0, runtime.elapsed * 0.15, 0);
         dummy.updateMatrix();
         gustRef.current.setMatrixAt(i, dummy.matrix);
         colorScratch
           .copy(GUST_COLOR)
-          .lerp(WHITE, clamp(gust.tint * 0.35 + runtime.slipBlend * 0.3, 0, 0.72));
+          .lerp(LOG_DARK, clamp(gust.tint * 0.3 + runtime.slipBlend * 0.16, 0, 0.58));
         gustRef.current.setColorAt(i, colorScratch);
       }
 
@@ -1032,16 +1020,16 @@ function SlipStreamScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0.22, 4.4]} fov={43} near={0.1} far={120} />
-      <color attach="background" args={['#070913']} />
-      <fog attach="fog" args={['#070913', 14, 62]} />
+      <PerspectiveCamera makeDefault position={[0, 2.35, 5.7]} fov={38} near={0.1} far={120} />
+      <color attach="background" args={['#062532']} />
+      <fog attach="fog" args={['#062532', 10, 56]} />
 
-      <ambientLight intensity={0.34} />
-      <pointLight position={[0, 2.5, 4]} intensity={0.54} color="#56dbff" />
-      <pointLight position={[0, -2.1, 4]} intensity={0.42} color="#ff6ecb" />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[0, 3.2, 4]} intensity={0.66} color="#95edff" />
+      <pointLight position={[0, -1.7, 4]} intensity={0.34} color="#ffc67a" />
 
-      <mesh position={[0, 0, -34]}>
-        <planeGeometry args={[40, 24]} />
+      <mesh position={[0, -0.9, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <planeGeometry args={[36, 132]} />
         <shaderMaterial
           ref={bgMatRef}
           uniforms={{ uTime: { value: 0 }, uSlip: { value: 0 } }}
@@ -1057,18 +1045,42 @@ function SlipStreamScene() {
             uniform float uSlip;
             varying vec2 vUv;
             void main() {
-              vec3 deep = vec3(0.03, 0.05, 0.11);
-              vec3 magenta = vec3(0.18, 0.06, 0.22);
-              vec3 cyan = vec3(0.05, 0.15, 0.26);
+              vec3 deep = vec3(0.03, 0.17, 0.22);
+              vec3 foam = vec3(0.10, 0.40, 0.50);
+              vec3 cool = vec3(0.05, 0.28, 0.36);
               float grad = smoothstep(0.0, 1.0, vUv.y);
-              float pulse = 0.5 + 0.5 * sin((vUv.y * 6.2 + uTime * 0.45) * 6.2831853);
+              float pulse = 0.5 + 0.5 * sin((vUv.y * 4.6 + uTime * 0.35) * 6.2831853);
               float grain = fract(sin(dot(vUv * (uTime + 1.37), vec2(12.9898, 78.233))) * 43758.5453);
-              vec3 col = mix(deep, magenta, grad * 0.65);
-              col = mix(col, cyan, uSlip * (0.22 + pulse * 0.24));
-              col += (grain - 0.5) * 0.018;
+              vec3 col = mix(deep, foam, grad * 0.55);
+              col = mix(col, cool, uSlip * (0.3 + pulse * 0.26));
+              col += (grain - 0.5) * 0.024;
               gl_FragColor = vec4(col, 1.0);
             }
           `}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <mesh position={[-(TUNNEL_HALF_W + 1.65), -0.34, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <planeGeometry args={[4.2, 124]} />
+        <meshBasicMaterial
+          color="#2a8da1"
+          transparent
+          opacity={0.46}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <mesh position={[TUNNEL_HALF_W + 1.65, -0.34, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
+        <planeGeometry args={[4.2, 124]} />
+        <meshBasicMaterial
+          color="#2a8da1"
+          transparent
+          opacity={0.46}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
           toneMapped={false}
         />
       </mesh>
@@ -1095,7 +1107,7 @@ function SlipStreamScene() {
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.2}
+          opacity={0.16}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           side={THREE.DoubleSide}
@@ -1113,20 +1125,20 @@ function SlipStreamScene() {
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.86}
+          opacity={0.92}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
         />
       </instancedMesh>
 
-      <mesh ref={playerRef} position={[0, 0, 0.3]} rotation={[Math.PI * 0.5, 0, 0]}>
-        <capsuleGeometry args={[0.16, 0.44, 6, 12]} />
+      <mesh ref={playerRef} position={[0, -0.02, 0.28]} rotation={[Math.PI * 0.5, 0, 0]}>
+        <cylinderGeometry args={[0.17, 0.17, 0.54, 16]} />
         <meshStandardMaterial
-          color="#f8fbff"
-          emissive="#8de8ff"
-          emissiveIntensity={0.58}
-          roughness={0.2}
+          color="#ffe7bb"
+          emissive="#ffca76"
+          emissiveIntensity={0.68}
+          roughness={0.24}
           metalness={0.06}
         />
       </mesh>

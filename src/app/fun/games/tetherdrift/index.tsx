@@ -62,6 +62,7 @@ type Runtime = {
   gatesPassed: number;
   missedConsecutive: number;
   gateSerial: number;
+  targetAnchorIndex: number;
   anchorCursorZ: number;
   gateCursorZ: number;
   debrisCursorZ: number;
@@ -115,6 +116,10 @@ const MINT = new THREE.Color('#3be3ba');
 const MAGENTA = new THREE.Color('#ff5be7');
 const HOT = new THREE.Color('#ff7d6f');
 const WARN = new THREE.Color('#ffc46b');
+const SKY = new THREE.Color('#b9ecff');
+const WATER = new THREE.Color('#67d3ff');
+const CORAL = new THREE.Color('#ff8d95');
+const WHITE = new THREE.Color('#f8fcff');
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
@@ -261,6 +266,7 @@ const createRuntime = (): Runtime => ({
   gatesPassed: 0,
   missedConsecutive: 0,
   gateSerial: 0,
+  targetAnchorIndex: -1,
   anchorCursorZ: -15,
   gateCursorZ: -18,
   debrisCursorZ: -14,
@@ -331,6 +337,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.gatesPassed = 0;
   runtime.missedConsecutive = 0;
   runtime.gateSerial = 0;
+  runtime.targetAnchorIndex = -1;
   runtime.anchorCursorZ = -13;
   runtime.gateCursorZ = -16;
   runtime.debrisCursorZ = -12;
@@ -363,18 +370,18 @@ function TetherDriftOverlay() {
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-300/35 bg-black/45 px-3 py-2">
+      <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/14 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.24em] text-cyan-100/80">Tether Drift</div>
-        <div className="text-[11px] text-cyan-50/80">Hold to tether. Release to sling through gates.</div>
+        <div className="text-[11px] text-cyan-50/80">Hold to latch nearest blue anchor. Release to drift.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-300/35 bg-black/45 px-3 py-2 text-right">
+      <div className="absolute right-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/24 via-fuchsia-500/16 to-cyan-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/20 bg-black/35 px-3 py-2 text-xs text-white/90">
+        <div className="absolute left-4 top-[92px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-violet-900/26 px-3 py-2 text-xs text-white/90">
           <div>
             Gates <span className="font-semibold text-cyan-200">{gatesPassed}</span>
           </div>
@@ -392,18 +399,18 @@ function TetherDriftOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/82 via-cyan-950/46 to-violet-950/36 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">TETHER DRIFT</div>
-            <div className="mt-2 text-sm text-white/85">Tap to begin.</div>
-            <div className="mt-1 text-sm text-white/85">Then hold to tether, release to slingshot.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Pass gates. Miss 2 in a row and crash.</div>
+            <div className="mt-2 text-sm text-white/85">Tap to begin. Hold to tether, release to slingshot.</div>
+            <div className="mt-1 text-sm text-white/85">Fly through ring centers. Avoid ring rims and debris.</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Miss 2 gates in a row and you crash.</div>
           </div>
         </div>
       )}
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/75 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/44 to-violet-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-fuchsia-200">Drift Lost</div>
             <div className="mt-2 text-sm text-white/80">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
@@ -423,14 +430,19 @@ function TetherDriftScene() {
 
   const runtimeRef = useRef<Runtime>(createRuntime());
 
+  const bgMatRef = useRef<THREE.ShaderMaterial>(null);
   const anchorMeshRef = useRef<THREE.InstancedMesh>(null);
   const gateMeshRef = useRef<THREE.InstancedMesh>(null);
+  const gateCoreRef = useRef<THREE.InstancedMesh>(null);
   const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
   const shockMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
+  const targetAnchorRef = useRef<THREE.Mesh>(null);
   const tetherLineRef = useRef<any>(null);
+  const guideLineRef = useRef<any>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const colorScratch = useMemo(() => new THREE.Color(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const tetherPoints = useMemo(
@@ -438,6 +450,11 @@ function TetherDriftScene() {
     []
   );
   const tetherFlat = useMemo(() => new Float32Array(TETHER_POINT_COUNT * 3), []);
+  const guidePoints = useMemo(
+    () => [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)],
+    []
+  );
+  const guideFlat = useMemo(() => new Float32Array(6), []);
 
   const trailAttr = useMemo(
     () => new THREE.BufferAttribute(new Float32Array(TRAIL_POINT_COUNT * 3), 3),
@@ -540,58 +557,55 @@ function TetherDriftScene() {
         }
       }
 
-      if (holdDown && !runtime.tether) {
-        let bestIndex = -1;
-        let bestDist3 = 999;
-        for (let i = 0; i < runtime.anchors.length; i += 1) {
-          const anchor = runtime.anchors[i];
-          if (anchor.z < ANCHOR_FORWARD_MIN || anchor.z > ANCHOR_FORWARD_MAX) continue;
+      let bestIndex = -1;
+      let bestDist3 = 999;
+      for (let i = 0; i < runtime.anchors.length; i += 1) {
+        const anchor = runtime.anchors[i];
+        if (anchor.z < ANCHOR_FORWARD_MIN || anchor.z > ANCHOR_FORWARD_MAX) continue;
 
-          const world = anchorPosition(anchor, runtime.elapsed);
-          const dx = world.x - runtime.playerX;
-          const dy = world.y - runtime.playerY;
-          const planar = Math.hypot(dx, dy);
-          if (planar > ATTACH_MAX_DIST) continue;
+        const world = anchorPosition(anchor, runtime.elapsed);
+        const dx = world.x - runtime.playerX;
+        const dy = world.y - runtime.playerY;
+        const planar = Math.hypot(dx, dy);
+        if (planar > ATTACH_MAX_DIST) continue;
 
-          const len3 = Math.hypot(dx, dy, anchor.z);
-          if (len3 <= 0.0001) continue;
-          const forwardCos = -anchor.z / len3;
-          if (forwardCos < ATTACH_CONE_COS) continue;
-          if (len3 < bestDist3) {
-            bestDist3 = len3;
-            bestIndex = i;
-          }
+        const len3 = Math.hypot(dx, dy, anchor.z);
+        if (len3 <= 0.0001) continue;
+        const forwardCos = -anchor.z / len3;
+        if (forwardCos < ATTACH_CONE_COS) continue;
+        if (len3 < bestDist3) {
+          bestDist3 = len3;
+          bestIndex = i;
         }
+      }
+      runtime.targetAnchorIndex = bestIndex;
 
-        if (bestIndex >= 0) {
-          const anchor = runtime.anchors[bestIndex];
-          const world = anchorPosition(anchor, runtime.elapsed);
-          const length = Math.hypot(world.x - runtime.playerX, world.y - runtime.playerY);
-          runtime.tether = {
-            anchorIndex: bestIndex,
-            len: clamp(length, 0.65, 3.95),
-            holdTime: 0,
-            broken: anchor.broken,
-          };
-          useTetherStore.getState().setTethered(true);
-          maybeVibrate(10);
-          playTone(840, 0.04, 0.03);
-          runtime.shake = Math.min(1.2, runtime.shake + 0.42);
-        }
+      if (holdDown && !runtime.tether && bestIndex >= 0) {
+        const anchor = runtime.anchors[bestIndex];
+        const world = anchorPosition(anchor, runtime.elapsed);
+        const length = Math.hypot(world.x - runtime.playerX, world.y - runtime.playerY);
+        runtime.tether = {
+          anchorIndex: bestIndex,
+          len: clamp(length, 0.65, 3.95),
+          holdTime: 0,
+          broken: anchor.broken,
+        };
+        useTetherStore.getState().setTethered(true);
+        maybeVibrate(10);
+        playTone(840, 0.04, 0.03);
+        runtime.shake = Math.min(1.2, runtime.shake + 0.42);
       }
 
       const oldX = runtime.playerX;
       const oldY = runtime.playerY;
-      const dVel = clamp(d, 0, 1);
-      const damping = lerp(0.986, 0.976, dVel);
+      const drag = Math.exp(-lerp(0.9, 1.45, d) * dt);
+      const vx = (runtime.playerX - runtime.prevX) * drag;
+      const vy = (runtime.playerY - runtime.prevY) * drag;
+      const accelX = -runtime.playerX * 0.16 + Math.sin(runtime.elapsed * 0.82) * 0.04;
+      const accelY = -runtime.playerY * 0.14 + Math.cos(runtime.elapsed * 0.63) * 0.03;
 
-      let vx = (runtime.playerX - runtime.prevX) * damping;
-      let vy = (runtime.playerY - runtime.prevY) * damping;
-      const accelX = -runtime.playerX * 0.34 + Math.sin(runtime.elapsed * 0.9) * 0.11;
-      const accelY = -runtime.playerY * 0.28 + Math.cos(runtime.elapsed * 0.71) * 0.09;
-
-      runtime.playerX += vx + accelX * dt * dt * 42;
-      runtime.playerY += vy + accelY * dt * dt * 42;
+      runtime.playerX += vx + accelX * dt * dt * 46;
+      runtime.playerY += vy + accelY * dt * dt * 46;
       runtime.prevX = oldX;
       runtime.prevY = oldY;
 
@@ -599,7 +613,7 @@ function TetherDriftScene() {
         const anchor = runtime.anchors[runtime.tether.anchorIndex];
         const world = anchorPosition(anchor, runtime.elapsed);
         runtime.tether.holdTime += dt;
-        runtime.tether.len = Math.max(0.44, runtime.tether.len - lerp(1.7, 3.5, d) * dt);
+        runtime.tether.len = Math.max(0.44, runtime.tether.len - lerp(1.9, 3.9, d) * dt);
 
         const dx = runtime.playerX - world.x;
         const dy = runtime.playerY - world.y;
@@ -627,7 +641,7 @@ function TetherDriftScene() {
       const velX = runtime.playerX - runtime.prevX;
       const velY = runtime.playerY - runtime.prevY;
       const velMag = Math.hypot(velX, velY);
-      const maxVel = lerp(0.19, 0.36, d);
+      const maxVel = lerp(0.24, 0.45, d);
       if (velMag > maxVel && velMag > 0.0001) {
         const scale = maxVel / velMag;
         runtime.prevX = runtime.playerX - velX * scale;
@@ -645,7 +659,7 @@ function TetherDriftScene() {
           const dx = runtime.playerX - gate.x;
           const dy = runtime.playerY - gate.y;
           const radialDist = Math.hypot(dx, dy);
-          if (Math.abs(radialDist - gate.radius) < gate.thickness + PLAYER_RADIUS * 0.58) {
+          if (Math.abs(radialDist - gate.radius) < gate.thickness + PLAYER_RADIUS * 0.36) {
             gameOver = true;
             break;
           }
@@ -728,6 +742,22 @@ function TetherDriftScene() {
     if (playerRef.current) {
       playerRef.current.position.set(runtime.playerX, runtime.playerY + 0.22, 0);
     }
+    if (bgMatRef.current) {
+      bgMatRef.current.uniforms.uTime.value += dt;
+    }
+
+    if (targetAnchorRef.current) {
+      if (game.status === 'PLAYING' && !runtime.tether && runtime.targetAnchorIndex >= 0) {
+        const anchor = runtime.anchors[runtime.targetAnchorIndex];
+        const world = anchorPosition(anchor, runtime.elapsed);
+        const pulse = 1 + Math.sin(runtime.elapsed * 8.6) * 0.12;
+        targetAnchorRef.current.visible = true;
+        targetAnchorRef.current.position.set(world.x, world.y + 0.24, anchor.z + 0.02);
+        targetAnchorRef.current.scale.setScalar(pulse);
+      } else {
+        targetAnchorRef.current.visible = false;
+      }
+    }
 
     if (anchorMeshRef.current) {
       for (let i = 0; i < runtime.anchors.length; i += 1) {
@@ -738,22 +768,39 @@ function TetherDriftScene() {
         dummy.scale.set(anchor.broken ? 0.16 : 0.18, anchor.broken ? 0.16 : 0.18, 0.16);
         dummy.updateMatrix();
         anchorMeshRef.current.setMatrixAt(i, dummy.matrix);
-        anchorMeshRef.current.setColorAt(i, anchor.broken ? WARN : CYAN);
+        const anchorPulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 3.8 + i * 0.42);
+        const anchorColor = colorScratch
+          .copy(anchor.broken ? CORAL : CYAN)
+          .lerp(anchor.broken ? WARN : SKY, 0.28 + anchorPulse * 0.2);
+        anchorMeshRef.current.setColorAt(i, anchorColor);
       }
       anchorMeshRef.current.instanceMatrix.needsUpdate = true;
       if (anchorMeshRef.current.instanceColor) anchorMeshRef.current.instanceColor.needsUpdate = true;
     }
 
-    if (gateMeshRef.current && shockMeshRef.current) {
+    if (gateMeshRef.current && shockMeshRef.current && gateCoreRef.current) {
       for (let i = 0; i < runtime.gates.length; i += 1) {
         const gate = runtime.gates[i];
         const radius = gate.radius;
+        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.1 + i * 0.4);
         dummy.position.set(gate.x, gate.y + 0.23, gate.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(radius, radius, 1);
         dummy.updateMatrix();
         gateMeshRef.current.setMatrixAt(i, dummy.matrix);
-        gateMeshRef.current.setColorAt(i, MINT);
+        const gateColor = colorScratch
+          .copy(MINT)
+          .lerp(CYAN, 0.3 + pulse * 0.22)
+          .lerp(WHITE, gate.shock * 0.42);
+        gateMeshRef.current.setColorAt(i, gateColor);
+
+        dummy.position.set(gate.x, gate.y + 0.23, gate.z + 0.03);
+        dummy.rotation.set(0, 0, 0);
+        const coreScale = 0.085 + pulse * 0.02;
+        dummy.scale.setScalar(coreScale);
+        dummy.updateMatrix();
+        gateCoreRef.current.setMatrixAt(i, dummy.matrix);
+        gateCoreRef.current.setColorAt(i, WHITE);
 
         if (gate.shock > 0) {
           const s = 1 + (1 - gate.shock) * 1.9;
@@ -774,8 +821,10 @@ function TetherDriftScene() {
       }
       gateMeshRef.current.instanceMatrix.needsUpdate = true;
       shockMeshRef.current.instanceMatrix.needsUpdate = true;
+      gateCoreRef.current.instanceMatrix.needsUpdate = true;
       if (gateMeshRef.current.instanceColor) gateMeshRef.current.instanceColor.needsUpdate = true;
       if (shockMeshRef.current.instanceColor) shockMeshRef.current.instanceColor.needsUpdate = true;
+      if (gateCoreRef.current.instanceColor) gateCoreRef.current.instanceColor.needsUpdate = true;
     }
 
     if (debrisMeshRef.current) {
@@ -787,7 +836,11 @@ function TetherDriftScene() {
           dummy.scale.set(debris.size, debris.size, debris.size);
           dummy.updateMatrix();
           debrisMeshRef.current.setMatrixAt(i, dummy.matrix);
-          debrisMeshRef.current.setColorAt(i, HOT);
+          const debrisColor = colorScratch
+            .copy(HOT)
+            .lerp(MAGENTA, clamp(0.2 + debris.size * 0.9, 0, 0.55))
+            .lerp(WARN, clamp(Math.abs(Math.sin(runtime.elapsed * 1.7 + i * 0.2)) * 0.24, 0, 0.24));
+          debrisMeshRef.current.setColorAt(i, debrisColor);
         } else {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
@@ -859,6 +912,29 @@ function TetherDriftScene() {
       else if (geom?.setPositions) geom.setPositions(tetherFlat);
     }
 
+    if (guideLineRef.current) {
+      const px = runtime.playerX;
+      const py = runtime.playerY + 0.22;
+      if (game.status === 'PLAYING' && !runtime.tether && runtime.targetAnchorIndex >= 0) {
+        const anchor = runtime.anchors[runtime.targetAnchorIndex];
+        const world = anchorPosition(anchor, runtime.elapsed);
+        guidePoints[0].set(px, py, 0);
+        guidePoints[1].set(world.x, world.y + 0.24, anchor.z);
+      } else {
+        guidePoints[0].set(px, py, 0);
+        guidePoints[1].set(px, py, 0);
+      }
+      guideFlat[0] = guidePoints[0].x;
+      guideFlat[1] = guidePoints[0].y;
+      guideFlat[2] = guidePoints[0].z;
+      guideFlat[3] = guidePoints[1].x;
+      guideFlat[4] = guidePoints[1].y;
+      guideFlat[5] = guidePoints[1].z;
+      const guideGeom: any = guideLineRef.current.geometry;
+      if (guideGeom?.setFromPoints) guideGeom.setFromPoints(guidePoints);
+      else if (guideGeom?.setPositions) guideGeom.setPositions(guideFlat);
+    }
+
     clearFrameInput(inputRef);
   });
 
@@ -866,19 +942,45 @@ function TetherDriftScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 4.45, 7.45]} fov={43} />
-      <color attach="background" args={['#050913']} />
-      <fog attach="fog" args={['#050913', 7, 36]} />
+      <PerspectiveCamera makeDefault position={[0, 4.2, 7.35]} fov={43} />
+      <color attach="background" args={['#10345f']} />
+      <fog attach="fog" args={['#10345f', 10, 42]} />
 
-      <Stars radius={95} depth={50} count={1400} factor={2.3} saturation={0} fade speed={0.45} />
+      <Stars radius={95} depth={56} count={1200} factor={2.5} saturation={0.55} fade speed={0.4} />
 
-      <ambientLight intensity={0.35} />
-      <pointLight position={[0, 2.6, 2.5]} intensity={0.48} color="#8ef6ff" />
-      <pointLight position={[0, -0.8, -6]} intensity={0.32} color="#ff5be7" />
+      <ambientLight intensity={0.56} />
+      <pointLight position={[0, 3.1, 2.2]} intensity={0.68} color="#9deeff" />
+      <pointLight position={[-2.2, -0.5, -8]} intensity={0.38} color="#c39dff" />
+      <pointLight position={[2.2, -0.3, -7]} intensity={0.3} color="#ffb6a0" />
 
-      <mesh position={[0, 0.21, -7]}>
-        <boxGeometry args={[7.4, 5.2, 0.08]} />
-        <meshBasicMaterial color="#0c1224" transparent opacity={0.18} toneMapped={false} />
+      <mesh position={[0, 0.2, -10]}>
+        <planeGeometry args={[18, 14]} />
+        <shaderMaterial
+          ref={bgMatRef}
+          uniforms={{ uTime: { value: 0 } }}
+          vertexShader={`
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            uniform float uTime;
+            varying vec2 vUv;
+            void main() {
+              vec3 sky = vec3(0.18, 0.52, 0.85);
+              vec3 mint = vec3(0.38, 0.95, 0.88);
+              vec3 violet = vec3(0.56, 0.42, 0.95);
+              float grad = smoothstep(0.0, 1.0, vUv.y);
+              float wave = 0.5 + 0.5 * sin((vUv.x * 2.4 + uTime * 0.14) * 6.2831853);
+              vec3 col = mix(sky, mint, grad * 0.65);
+              col = mix(col, violet, (1.0 - grad) * 0.22 + wave * 0.1);
+              gl_FragColor = vec4(col, 1.0);
+            }
+          `}
+          toneMapped={false}
+        />
       </mesh>
 
       <instancedMesh ref={anchorMeshRef} args={[undefined, undefined, ANCHOR_POOL]}>
@@ -891,6 +993,11 @@ function TetherDriftScene() {
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
+      <instancedMesh ref={gateCoreRef} args={[undefined, undefined, GATE_POOL]}>
+        <sphereGeometry args={[1, 10, 10]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
       <instancedMesh ref={shockMeshRef} args={[undefined, undefined, GATE_POOL]}>
         <torusGeometry args={[1, 0.035, 8, 36]} />
         <meshBasicMaterial vertexColors transparent opacity={0.6} toneMapped={false} />
@@ -898,12 +1005,24 @@ function TetherDriftScene() {
 
       <instancedMesh ref={debrisMeshRef} args={[undefined, undefined, DEBRIS_POOL]}>
         <dodecahedronGeometry args={[0.2, 0]} />
-        <meshStandardMaterial vertexColors emissive="#431826" emissiveIntensity={0.3} roughness={0.45} />
+        <meshStandardMaterial vertexColors emissive="#4f1f2b" emissiveIntensity={0.35} roughness={0.4} />
       </instancedMesh>
 
       <mesh ref={playerRef} position={[0, 0.22, 0]}>
         <capsuleGeometry args={[0.14, 0.34, 6, 12]} />
-        <meshStandardMaterial color="#d6f8ff" emissive="#6bf0ff" emissiveIntensity={0.38} roughness={0.3} />
+        <meshStandardMaterial color="#f2fdff" emissive="#7ff8ff" emissiveIntensity={0.44} roughness={0.22} />
+      </mesh>
+
+      <mesh ref={targetAnchorRef} visible={false}>
+        <torusGeometry args={[0.24, 0.035, 10, 42]} />
+        <meshBasicMaterial
+          color="#8ff8ff"
+          transparent
+          opacity={0.9}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
       </mesh>
 
       <Line
@@ -915,14 +1034,23 @@ function TetherDriftScene() {
         opacity={status === 'PLAYING' ? 0.95 : 0}
       />
 
+      <Line
+        ref={guideLineRef}
+        points={guidePoints}
+        color="#d8ffff"
+        lineWidth={1.2}
+        transparent
+        opacity={status === 'PLAYING' ? 0.45 : 0}
+      />
+
       <points geometry={trailGeometry}>
-        <pointsMaterial color="#a6faff" size={0.05} sizeAttenuation transparent opacity={0.42} />
+        <pointsMaterial color="#d8feff" size={0.055} sizeAttenuation transparent opacity={0.55} />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.42} luminanceThreshold={0.52} luminanceSmoothing={0.22} mipmapBlur />
-        <Vignette eskil={false} offset={0.12} darkness={0.58} />
-        <Noise premultiply opacity={0.02} />
+        <Bloom intensity={0.62} luminanceThreshold={0.5} luminanceSmoothing={0.24} mipmapBlur />
+        <Vignette eskil={false} offset={0.1} darkness={0.34} />
+        <Noise premultiply opacity={0.012} />
       </EffectComposer>
 
       <Html fullscreen>

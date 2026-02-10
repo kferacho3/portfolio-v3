@@ -47,6 +47,7 @@ type RuntimeState = {
   elapsed: number;
   playerX: number;
   playerVelX: number;
+  chargeSwitchBoost: number;
   distance: number;
   bonusScore: number;
   orbCount: number;
@@ -92,6 +93,11 @@ const CYAN = new THREE.Color('#22d3ee');
 const MAGENTA = new THREE.Color('#ff4fd8');
 const HOT = new THREE.Color('#ff5f7d');
 const GOLD = new THREE.Color('#ffe066');
+const LIME = new THREE.Color('#8dff86');
+const ORANGE = new THREE.Color('#ffb366');
+const VIOLET = new THREE.Color('#b48dff');
+const PEACH = new THREE.Color('#ff8b8b');
+const WHITE = new THREE.Color('#f8fbff');
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const tinyScale = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
@@ -189,6 +195,7 @@ const createRuntime = (): RuntimeState => ({
   elapsed: 0,
   playerX: 0,
   playerVelX: 0,
+  chargeSwitchBoost: 0,
   distance: 0,
   bonusScore: 0,
   orbCount: 0,
@@ -274,6 +281,7 @@ const resetRuntime = (runtime: RuntimeState) => {
   runtime.elapsed = 0;
   runtime.playerX = 0;
   runtime.playerVelX = 0;
+  runtime.chargeSwitchBoost = 0;
   runtime.distance = 0;
   runtime.bonusScore = 0;
   runtime.orbCount = 0;
@@ -314,18 +322,18 @@ function PolarityOverlay() {
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-300/35 bg-black/45 px-3 py-2">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/24 via-sky-500/16 to-indigo-500/24 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/80">Polarity</div>
         <div className="text-[11px] text-cyan-50/75">Tap to flip charge and drift lanes.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-300/35 bg-black/45 px-3 py-2 text-right">
+      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/24 via-violet-500/16 to-cyan-500/16 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/20 bg-black/35 px-3 py-2 text-xs text-white/90">
+        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-fuchsia-900/25 px-3 py-2 text-xs text-white/90">
           <div>
             Multiplier <span className="font-semibold text-cyan-200">x{multiplier.toFixed(2)}</span>
           </div>
@@ -340,7 +348,7 @@ function PolarityOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/80 via-cyan-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">POLARITY</div>
             <div className="mt-2 text-sm text-white/80">Tap to toggle charge.</div>
             <div className="mt-1 text-sm text-white/80">Attract opposite pylons, repel matching pylons.</div>
@@ -351,7 +359,7 @@ function PolarityOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/42 to-cyan-950/26 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-fuchsia-200">Magnetic Crash</div>
             <div className="mt-2 text-sm text-white/80">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
@@ -396,6 +404,7 @@ function PolarityScene() {
 
   const runtimeRef = useRef<RuntimeState>(createRuntime());
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const colorScratch = useMemo(() => new THREE.Color(), []);
   const pylonRef = useRef<THREE.InstancedMesh>(null);
   const obstacleRef = useRef<THREE.InstancedMesh>(null);
   const orbRef = useRef<THREE.InstancedMesh>(null);
@@ -449,6 +458,8 @@ function PolarityScene() {
     const dt = Math.min(0.033, Math.max(0.001, delta));
     const input = inputRef.current;
     const store = usePolarityStore.getState();
+    const runtime = runtimeRef.current;
+    let activePolarity = store.playerPolarity;
     const tap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
@@ -457,15 +468,19 @@ function PolarityScene() {
 
     if (tap) {
       if (store.status !== 'PLAYING') {
-        resetRuntime(runtimeRef.current);
+        resetRuntime(runtime);
         usePolarityStore.getState().startRun();
       } else {
         usePolarityStore.getState().flipPolarity();
-        runtimeRef.current.shakeTime = Math.min(1.2, runtimeRef.current.shakeTime + 0.7);
+        activePolarity = activePolarity === 1 ? -1 : 1;
+        runtime.shakeTime = Math.min(1.2, runtime.shakeTime + 0.7);
+        runtime.chargeSwitchBoost = 1;
+        runtime.playerVelX *= 0.34;
       }
     }
-
-    const runtime = runtimeRef.current;
+    if (!tap) {
+      activePolarity = store.playerPolarity;
+    }
 
     if (store.status === 'PLAYING') {
       runtime.elapsed += dt;
@@ -473,6 +488,7 @@ function PolarityScene() {
       const scrollSpeed = lerp(7.9, 14.4, difficulty);
       runtime.commitTimer += dt;
       runtime.multiplier = clamp(runtime.multiplier - dt * 0.055, 1, 6);
+      runtime.chargeSwitchBoost = Math.max(0, runtime.chargeSwitchBoost - dt * 6.4);
 
       let netForceX = 0;
       runtime.nearbyPylons.length = 0;
@@ -485,9 +501,9 @@ function PolarityScene() {
             const dx = x - runtime.playerX;
             const dz = segment.z;
             const distSq = dx * dx + dz * dz * 0.45 + 1.0;
-            const forceMag = clamp(segment.strength / (distSq + 1), 0, 2.9);
+            const forceMag = clamp(segment.strength / (distSq + 1), 0, 2.7);
             const dirSign = Math.sign(dx) || 1;
-            const attractOrRepel = store.playerPolarity !== polarity ? 1 : -1;
+            const attractOrRepel = activePolarity !== polarity ? 1 : -1;
             netForceX += dirSign * attractOrRepel * forceMag;
             const intensity = forceMag * (segment.doubleZone ? 1.25 : 1);
             if (intensity > 0.11) {
@@ -508,10 +524,13 @@ function PolarityScene() {
       runtime.nearbyPylons.sort((a, b) => b.intensity - a.intensity);
       runtime.nearbyPylons.length = Math.min(runtime.nearbyPylons.length, 4);
 
-      runtime.playerVelX += netForceX * dt;
-      runtime.playerVelX = clamp(runtime.playerVelX, -8.8, 8.8);
+      const switchBoostScale = 1 + runtime.chargeSwitchBoost * 0.95;
+      const lateralAccel = clamp(netForceX * switchBoostScale * 1.2, -28, 28);
+      runtime.playerVelX += lateralAccel * dt;
+      const drag = Math.exp(-5.6 * dt);
+      runtime.playerVelX *= drag;
+      runtime.playerVelX = clamp(runtime.playerVelX, -8.4, 8.4);
       runtime.playerX += runtime.playerVelX * dt;
-      runtime.playerVelX *= Math.max(0, 1 - 3.9 * dt);
 
       let gameOver = false;
       if (Math.abs(runtime.playerX) + PLAYER_RADIUS > LANE_HALF_WIDTH) {
@@ -653,6 +672,10 @@ function PolarityScene() {
     if (playerRef.current) {
       playerRef.current.position.x = runtime.playerX;
       playerRef.current.position.y = 0.27;
+      const mat = playerRef.current.material as THREE.MeshStandardMaterial;
+      mat.emissiveIntensity = 0.42 + runtime.chargeSwitchBoost * 0.6 + runtime.shakeTime * 0.12;
+      const pulseScale = 1 + runtime.chargeSwitchBoost * 0.08;
+      playerRef.current.scale.set(pulseScale, pulseScale, pulseScale);
     }
 
     if (pylonRef.current) {
@@ -690,11 +713,26 @@ function PolarityScene() {
     if (obstacleRef.current) {
       let idx = 0;
       for (const segment of runtime.segments) {
+        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.3 + segment.z * 0.72);
         if (segment.obstacleKind === 'gate' || segment.obstacleKind === 'slit') {
           const gapLeft = segment.gapX - segment.gapW * 0.5;
           const gapRight = segment.gapX + segment.gapW * 0.5;
           const leftWidth = Math.max(0, gapLeft - -LANE_HALF_WIDTH);
           const rightWidth = Math.max(0, LANE_HALF_WIDTH - gapRight);
+          const leftBase = segment.leftPolarity === 1 ? CYAN : MAGENTA;
+          const rightBase = segment.rightPolarity === 1 ? CYAN : MAGENTA;
+          const leftAccent =
+            segment.obstacleKind === 'slit'
+              ? VIOLET
+              : segment.leftPolarity === 1
+                ? LIME
+                : ORANGE;
+          const rightAccent =
+            segment.obstacleKind === 'slit'
+              ? VIOLET
+              : segment.rightPolarity === 1
+                ? LIME
+                : ORANGE;
 
           if (leftWidth > 0.05 && idx < OBSTACLE_INSTANCE_COUNT) {
             dummy.position.set(-LANE_HALF_WIDTH + leftWidth * 0.5, 0.28, segment.z);
@@ -702,7 +740,11 @@ function PolarityScene() {
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             obstacleRef.current.setMatrixAt(idx, dummy.matrix);
-            obstacleRef.current.setColorAt(idx, HOT);
+            colorScratch
+              .copy(leftBase)
+              .lerp(leftAccent, 0.42)
+              .lerp(WHITE, clamp(0.14 + pulse * 0.2 + (segment.doubleZone ? 0.1 : 0), 0, 0.45));
+            obstacleRef.current.setColorAt(idx, colorScratch);
             idx += 1;
           }
           if (rightWidth > 0.05 && idx < OBSTACLE_INSTANCE_COUNT) {
@@ -711,7 +753,11 @@ function PolarityScene() {
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             obstacleRef.current.setMatrixAt(idx, dummy.matrix);
-            obstacleRef.current.setColorAt(idx, HOT);
+            colorScratch
+              .copy(rightBase)
+              .lerp(rightAccent, 0.42)
+              .lerp(WHITE, clamp(0.14 + (1 - pulse) * 0.2 + (segment.doubleZone ? 0.1 : 0), 0, 0.45));
+            obstacleRef.current.setColorAt(idx, colorScratch);
             idx += 1;
           }
         } else if (idx < OBSTACLE_INSTANCE_COUNT) {
@@ -720,7 +766,11 @@ function PolarityScene() {
           dummy.rotation.set(0, 0.06, 0);
           dummy.updateMatrix();
           obstacleRef.current.setMatrixAt(idx, dummy.matrix);
-          obstacleRef.current.setColorAt(idx, HOT);
+          colorScratch
+            .copy(HOT)
+            .lerp(PEACH, 0.34)
+            .lerp(GOLD, clamp(0.1 + pulse * 0.2, 0, 0.32));
+          obstacleRef.current.setColorAt(idx, colorScratch);
           idx += 1;
         }
       }

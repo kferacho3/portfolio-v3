@@ -390,18 +390,18 @@ function PortalPunchOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/40 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/16 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Portal Punch</div>
         <div className="text-[11px] text-cyan-50/85">Tap to punch through ring and core.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/40 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-rose-100/55 bg-gradient-to-br from-rose-500/24 via-fuchsia-500/16 to-indigo-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/20 bg-black/35 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/72 via-indigo-900/30 to-rose-900/25 px-3 py-2 text-xs">
           <div>
             Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
           </div>
@@ -413,7 +413,7 @@ function PortalPunchOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/82 via-indigo-950/45 to-rose-950/35 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PORTAL PUNCH</div>
             <div className="mt-2 text-sm text-white/85">Tap once. Time the punch through the portal.</div>
             <div className="mt-1 text-sm text-white/80">Clip the rim or miss the core and run ends.</div>
@@ -424,7 +424,7 @@ function PortalPunchOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/44 to-indigo-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Punch Failed</div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>

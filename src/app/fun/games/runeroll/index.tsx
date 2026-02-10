@@ -458,6 +458,39 @@ const enforceReachability = (runtime: Runtime, row: RowData, currentLane: LaneIn
       row.runes[lane] = Math.floor(Math.random() * runeCount) as RuneId;
     }
   }
+
+  const candidates: Array<{ lane: LaneIndex; dir: StepDir; targetBottom: RuneId }> = [];
+  if (currentLane > 0 && (row.mask & bit(currentLane - 1)) !== 0) {
+    const dir: StepDir = -1;
+    candidates.push({
+      lane: (currentLane - 1) as LaneIndex,
+      dir,
+      targetBottom: rollFaces(runtime.faces, dir).bottom,
+    });
+  }
+  if (currentLane < 2 && (row.mask & bit(currentLane + 1)) !== 0) {
+    const dir: StepDir = 1;
+    candidates.push({
+      lane: (currentLane + 1) as LaneIndex,
+      dir,
+      targetBottom: rollFaces(runtime.faces, dir).bottom,
+    });
+  }
+
+  if (candidates.length === 0) return;
+
+  const hasPlayableMatch = candidates.some((candidate) => {
+    const isWild = (row.wildMask & bit(candidate.lane)) !== 0;
+    return isWild || row.runes[candidate.lane] === candidate.targetBottom;
+  });
+
+  if (!hasPlayableMatch) {
+    const preferred =
+      candidates.find((candidate) => candidate.dir === runtime.nextDir) ??
+      candidates[Math.floor(Math.random() * candidates.length)];
+    row.runes[preferred.lane] = preferred.targetBottom;
+    row.wildMask &= ~bit(preferred.lane);
+  }
 };
 
 const acquireShard = (runtime: Runtime) => {
@@ -515,18 +548,18 @@ function RuneRollOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/22 via-indigo-500/15 to-amber-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
         <div className="text-[11px] text-cyan-50/85">Tap toggles next step left or right.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/22 via-fuchsia-500/16 to-indigo-500/22 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-white/18 bg-black/35 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-violet-100/35 bg-gradient-to-br from-slate-950/72 via-indigo-900/35 to-amber-900/22 px-3 py-2 text-xs">
           <div>
             Next <span className="font-semibold text-cyan-200">{direction === 'L' ? 'Left' : 'Right'}</span>
           </div>
@@ -547,7 +580,7 @@ function RuneRollOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/58 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-violet-100/42 bg-gradient-to-br from-slate-950/80 via-violet-950/46 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">RUNE ROLL</div>
             <div className="mt-2 text-sm text-white/85">Tap to switch the next step direction.</div>
             <div className="mt-1 text-sm text-white/80">Land with matching bottom rune to survive.</div>
@@ -558,7 +591,7 @@ function RuneRollOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-rose-100/42 bg-gradient-to-br from-black/84 via-rose-950/42 to-violet-950/45 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Run Broken</div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
@@ -744,7 +777,15 @@ function RuneRollScene() {
 
       if (!runtime.stepActive) {
         const nextRow = runtime.currentRow + 1;
-        const nextLane = runtime.currentLane + runtime.nextDir;
+        let stepDir: StepDir = runtime.nextDir;
+        let nextLane = runtime.currentLane + stepDir;
+        if (nextLane < 0 || nextLane > 2) {
+          if (runtime.elapsed < 7) {
+            stepDir = nextLane < 0 ? 1 : -1;
+            runtime.nextDir = stepDir;
+            nextLane = runtime.currentLane + stepDir;
+          }
+        }
         const row = ensureRow(runtime, nextRow);
         enforceReachability(runtime, row, runtime.currentLane);
 
@@ -765,8 +806,8 @@ function RuneRollScene() {
           runtime.fromLane = runtime.currentLane;
           runtime.toLane = nextLane as LaneIndex;
           runtime.fromRot = runtime.cubeRotZ;
-          runtime.toRot = runtime.cubeRotZ - runtime.nextDir * (Math.PI * 0.5);
-          runtime.targetFaces = rollFaces(runtime.faces, runtime.nextDir);
+          runtime.toRot = runtime.cubeRotZ - stepDir * (Math.PI * 0.5);
+          runtime.targetFaces = rollFaces(runtime.faces, stepDir);
         }
       }
 
@@ -1009,13 +1050,13 @@ function RuneRollScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[5.8, 6.3, 6.6]} fov={37} near={0.1} far={120} />
-      <color attach="background" args={['#080a14']} />
-      <fog attach="fog" args={['#080a14', 10, 58]} />
+      <color attach="background" args={['#0f0b19']} />
+      <fog attach="fog" args={['#0f0b19', 10, 58]} />
 
-      <ambientLight intensity={0.42} />
-      <directionalLight position={[5, 9, 6]} intensity={0.72} color="#dbe6ff" />
-      <pointLight position={[-2, 2.4, 2]} intensity={0.45} color="#4ad8ff" />
-      <pointLight position={[2, 1.6, -1]} intensity={0.4} color="#ff71cf" />
+      <ambientLight intensity={0.46} />
+      <directionalLight position={[5, 9, 6]} intensity={0.76} color="#f8e2c6" />
+      <pointLight position={[-2, 2.4, 2]} intensity={0.48} color="#7a66ff" />
+      <pointLight position={[2, 1.6, -1]} intensity={0.42} color="#ffb870" />
 
       <mesh position={[0, -0.7, -24]}>
         <planeGeometry args={[40, 24]} />
@@ -1034,9 +1075,9 @@ function RuneRollScene() {
             uniform float uPulse;
             varying vec2 vUv;
             void main() {
-              vec3 deep = vec3(0.03, 0.04, 0.09);
-              vec3 violet = vec3(0.11, 0.07, 0.18);
-              vec3 cyan = vec3(0.05, 0.15, 0.2);
+              vec3 deep = vec3(0.04, 0.03, 0.08);
+              vec3 violet = vec3(0.17, 0.08, 0.18);
+              vec3 cyan = vec3(0.07, 0.15, 0.17);
               float grad = smoothstep(0.0, 1.0, vUv.y);
               float ripple = sin((vUv.x * 3.5 + uTime * 0.25) * 6.2831853) * 0.5 + 0.5;
               float grain = fract(sin(dot(vUv * (uTime + 1.7), vec2(12.9898, 78.233))) * 43758.5453);
@@ -1079,9 +1120,9 @@ function RuneRollScene() {
       <mesh ref={cubeRef} position={[0, TILE_HEIGHT + CUBE_SIZE * 0.5, 0]} rotation={[0, Math.PI * 0.25, 0]}>
         <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
         <meshStandardMaterial
-          color="#131820"
-          emissive="#0f1626"
-          emissiveIntensity={0.22}
+          color="#181227"
+          emissive="#25193d"
+          emissiveIntensity={0.24}
           roughness={0.58}
           metalness={0.14}
         />

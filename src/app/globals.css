@@ -52,6 +52,11 @@ body {
   background: transparent;
 }
 
+/* Arcade-wide vibrance pass for all /fun game canvases */
+.fun-vibrant canvas {
+  filter: saturate(1.18) contrast(1.07) brightness(1.03);
+}
+
 main {
   display: flex;
   flex-direction: column;
