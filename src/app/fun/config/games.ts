@@ -232,7 +232,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'trace',
     title: 'Trace',
-    description: 'Drag to stay centered on a glowing path as it bends ahead.',
+    description:
+      'Tap to rotate 90° and survive the neon arena without crossing your own trail.',
     accent: '#facc15',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Trace.webp',
@@ -241,7 +242,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'flipbox',
     title: 'Flip Box',
-    description: 'Tap to flip onto the next platform. Miss once and fall.',
+    description:
+      'One-tap isometric runner: flip a domino box, match upright/flat glyphs, and survive collapsing tile flow.',
     accent: '#38bdf8',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/FlipBox.webp',
@@ -250,7 +252,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'portalpunch',
     title: 'Portal Punch',
-    description: 'Tap to punch a portal and instantly warp between two lanes.',
+    description:
+      'One-tap timing rush: punch through moving portal openings and crack the core behind them.',
     accent: '#fb7185',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PortalPunch.webp',
@@ -259,7 +262,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'conveyorchaos',
     title: 'Conveyor Chaos',
-    description: 'Tap to switch the next junction before your package arrives.',
+    description:
+      'Top-down toy factory sorter: tap to rotate a 4-way diverter and route each package to its matching bin.',
     accent: '#fb923c',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ConveyorChaos.webp',
@@ -437,7 +441,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'runeroll',
     title: 'RuneRoll',
-    description: 'Tap to rotate runes and match each gate before impact.',
+    description:
+      'Tap to toggle left/right stepping and land the die with a matching bottom rune.',
     accent: '#a78bfa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RuneRoll.webp',
@@ -446,7 +451,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'pulseparry',
     title: 'PulseParry',
-    description: 'Tap to parry incoming pulses with clean, learnable timing.',
+    description:
+      'Tap to emit a shockwave ring and parry incoming pulses before they breach the core.',
     accent: '#22d3ee',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PulseParry.webp',
@@ -456,7 +462,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'orbitlatch',
     title: 'OrbitLatch',
     description:
-      'Tap to latch the next anchor while orbiting forward endlessly.',
+      'Tap to latch orbit rings and tap again to release into slingshot transfers.',
     accent: '#f97316',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OrbitLatch.webp',
@@ -609,20 +615,20 @@ export const GAME_RULES: Record<string, GameRules> = {
   flipbox: {
     controls: 'Tap/Click to flip forward • R to restart',
     objective:
-      'Land on each platform in an endless chain. Any short or long landing ends the run.',
-    tips: 'Lock into a steady flip rhythm before chasing tiny bonus platforms.',
+      'Flip across an endless tile stream, matching upright and flat glyph rules while gaps and height steps tighten.',
+    tips: 'Treat taps like rhythm cues: steady cadence first, then hunt perfect center landings for multiplier streaks.',
   },
   portalpunch: {
-    controls: 'Tap/Click to punch portal and swap lanes • R to restart',
+    controls: 'Tap/Click to punch • R to restart',
     objective:
-      'Warp lanes to dodge blockers and keep the run alive with one clean input.',
-    tips: 'Swap early when patterns alternate. Late swaps usually chain into mistakes.',
+      'Time each punch so your glove passes cleanly through the portal opening and hits the core behind it.',
+    tips: 'Wait for center alignment. Panic taps clip rims, and fake portals punish early spam.',
   },
   conveyorchaos: {
-    controls: 'Tap/Click to switch next junction direction • R to restart',
+    controls: 'Tap/Click to rotate diverter clockwise • R to restart',
     objective:
-      'Read each upcoming split and route the package away from pits and crushers.',
-    tips: 'Prioritize survival routes first. Take danger routes only when the read is clear.',
+      'Rotate the central diverter so each incoming package is routed to its matching color exit bin.',
+    tips: 'Read package color first, then tap once with intent. Panic spinning breaks streak and ends runs fast.',
   },
   jellyjump: {
     controls: 'A/D or Arrow Keys to move • Space/Click to jump • R to restart',
@@ -730,22 +736,22 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Do not overstay high-value lanes when the safe lane is the only clear path.',
   },
   runeroll: {
-    controls: 'Tap/Click to rotate rune • R to restart',
+    controls: 'Tap/Click to toggle left-right step • R to restart',
     objective:
-      'Cycle rune states to match each incoming gate and keep rolling without breaks.',
-    tips: 'Read the next gate first, then commit to the minimum number of taps.',
+      'Step across floating rune stones and make the die bottom rune match each landing tile.',
+    tips: 'Tap early to set your next branch. Wild tiles save runs and boost points.',
   },
   pulseparry: {
-    controls: 'Tap/Click to parry pulse • R to restart',
+    controls: 'Tap/Click to emit parry shockwave • R to restart',
     objective:
-      'Parry every incoming pulse. One mistimed defense ends the run immediately.',
-    tips: 'Learn the approach cadence. Consistent timing beats reactive spam.',
+      'Time shockwaves to intersect inbound pulses before they collapse into center.',
+    tips: 'Perfect-timed parries stack multiplier. Tap rhythm beats panic tapping.',
   },
   orbitlatch: {
-    controls: 'Tap/Click to latch next anchor • R to restart',
+    controls: 'Tap/Click to latch or release • R to restart',
     objective:
-      'Orbit each anchor and latch the next one inside range before you drift out.',
-    tips: 'Latch near the front side of the orbit when anchors are offset.',
+      'Chain orbital transfers between planets, collect stars, and avoid collisions.',
+    tips: 'Release tangentially toward the next ring and relatch before drift timeout.',
   },
 };
 

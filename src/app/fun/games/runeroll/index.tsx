@@ -1,17 +1,1198 @@
 'use client';
 
-import React from 'react';
-import { CanvasHyperGame } from '../_shared/CanvasHyperGame';
-import { GAME_CONCEPTS } from '../_shared/hyperConcepts';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { ContactShadows, Html, PerspectiveCamera } from '@react-three/drei';
+import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import * as THREE from 'three';
+import { create } from 'zustand';
+import {
+  buildPatternLibraryTemplate,
+  pickPatternChunkForSurvivability,
+  sampleDifficulty,
+  type DifficultySample,
+  type GameChunkPatternTemplate,
+} from '../../config/ketchapp';
+import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { runeRollState } from './state';
+
+type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
+type LaneIndex = 0 | 1 | 2;
+type StepDir = -1 | 1;
+type RuneId = 0 | 1 | 2 | 3;
+
+type FaceMap = {
+  top: RuneId;
+  bottom: RuneId;
+  left: RuneId;
+  right: RuneId;
+  front: RuneId;
+  back: RuneId;
+};
+
+type RowData = {
+  slot: number;
+  index: number;
+  mask: number;
+  runes: [RuneId, RuneId, RuneId];
+  wildMask: number;
+  glowLane: number;
+  glow: number;
+};
+
+type Shard = {
+  slot: number;
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  color: THREE.Color;
+};
+
+type Runtime = {
+  elapsed: number;
+  score: number;
+  streak: number;
+  multiplier: number;
+  forgiveness: number;
+  nearPerfects: number;
+  failMessage: string;
+  shake: number;
+  hudCommit: number;
+
+  currentRow: number;
+  currentLane: LaneIndex;
+  progressRow: number;
+  nextDir: StepDir;
+  playerX: number;
+  cubeRotZ: number;
+
+  faces: FaceMap;
+  targetFaces: FaceMap;
+
+  stepActive: boolean;
+  stepTime: number;
+  stepDuration: number;
+  fromRow: number;
+  toRow: number;
+  fromLane: LaneIndex;
+  toLane: LaneIndex;
+  fromRot: number;
+  toRot: number;
+
+  forcedDir: StepDir;
+  forcedSteps: number;
+
+  difficulty: DifficultySample;
+  chunkLibrary: GameChunkPatternTemplate[];
+  currentChunk: GameChunkPatternTemplate | null;
+  chunkRowsLeft: number;
+
+  rows: RowData[];
+  shards: Shard[];
+};
+
+type RuneRollStore = {
+  status: GameStatus;
+  score: number;
+  best: number;
+  multiplier: number;
+  streak: number;
+  forgiveness: number;
+  direction: 'L' | 'R';
+  bottomRune: RuneId;
+  failMessage: string;
+  pulseNonce: number;
+  startRun: () => void;
+  resetToStart: () => void;
+  onTapFx: () => void;
+  updateHud: (
+    score: number,
+    multiplier: number,
+    streak: number,
+    forgiveness: number,
+    direction: 'L' | 'R',
+    bottomRune: RuneId
+  ) => void;
+  endRun: (score: number, reason: string) => void;
+};
+
+const BEST_KEY = 'runeroll_hyper_best_v3';
+
+const LANE_X: readonly [number, number, number] = [-1.38, 0, 1.38];
+const ROW_SPACING = 1.12;
+const TILE_SIZE = 0.9;
+const TILE_HEIGHT = 0.18;
+const CUBE_SIZE = 0.72;
+
+const ROW_POOL = 280;
+const SHARD_POOL = 108;
+
+const DRAW_BACK_ROWS = 6;
+const DRAW_AHEAD_ROWS = 34;
+const TILE_DRAW_CAP = 220;
+const GLYPH_DRAW_CAP = 220;
+
+const SHATTER_Y = TILE_HEIGHT * 0.62;
+const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
+const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+
+const STONE = new THREE.Color('#252b38');
+const STONE_EDGE = new THREE.Color('#4b556b');
+const WHITE = new THREE.Color('#f8fbff');
+const DANGER = new THREE.Color('#ff657f');
+const WILD = new THREE.Color('#ffd56a');
+const RUNE_COLORS = [
+  new THREE.Color('#59d9ff'),
+  new THREE.Color('#ff7ad2'),
+  new THREE.Color('#b7f06f'),
+  new THREE.Color('#ffb75e'),
+] as const;
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const normAngle = (v: number) => {
+  const m = v % (Math.PI * 2);
+  return m < 0 ? m + Math.PI * 2 : m;
+};
+
+const bit = (lane: number) => 1 << lane;
+
+const readBest = () => {
+  if (typeof window === 'undefined') return 0;
+  const raw = window.localStorage.getItem(BEST_KEY);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+};
+
+const writeBest = (score: number) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
+};
+
+const createFaces = (): FaceMap => ({
+  top: 0,
+  bottom: 1,
+  left: 2,
+  right: 3,
+  front: 0,
+  back: 1,
+});
+
+const rollFaces = (faces: FaceMap, dir: StepDir): FaceMap => {
+  if (dir === 1) {
+    return {
+      top: faces.left,
+      bottom: faces.right,
+      left: faces.bottom,
+      right: faces.top,
+      front: faces.front,
+      back: faces.back,
+    };
+  }
+  return {
+    top: faces.right,
+    bottom: faces.left,
+    left: faces.top,
+    right: faces.bottom,
+    front: faces.front,
+    back: faces.back,
+  };
+};
+
+const createRow = (slot: number): RowData => ({
+  slot,
+  index: Number.MIN_SAFE_INTEGER,
+  mask: 0,
+  runes: [0, 1, 2],
+  wildMask: 0,
+  glowLane: -1,
+  glow: 0,
+});
+
+const createShard = (slot: number): Shard => ({
+  slot,
+  active: false,
+  x: 0,
+  y: 0,
+  z: 0,
+  vx: 0,
+  vy: 0,
+  vz: 0,
+  life: 0,
+  maxLife: 1,
+  size: 0.05,
+  color: new THREE.Color('#ffffff'),
+});
+
+const useRuneRollStore = create<RuneRollStore>((set) => ({
+  status: 'START',
+  score: 0,
+  best: readBest(),
+  multiplier: 1,
+  streak: 0,
+  forgiveness: 1,
+  direction: 'R',
+  bottomRune: 1,
+  failMessage: '',
+  pulseNonce: 0,
+  startRun: () =>
+    set({
+      status: 'PLAYING',
+      score: 0,
+      multiplier: 1,
+      streak: 0,
+      forgiveness: 1,
+      direction: 'R',
+      bottomRune: 1,
+      failMessage: '',
+    }),
+  resetToStart: () =>
+    set({
+      status: 'START',
+      score: 0,
+      multiplier: 1,
+      streak: 0,
+      forgiveness: 1,
+      direction: 'R',
+      bottomRune: 1,
+      failMessage: '',
+    }),
+  onTapFx: () => set((state) => ({ pulseNonce: state.pulseNonce + 1 })),
+  updateHud: (score, multiplier, streak, forgiveness, direction, bottomRune) =>
+    set({
+      score: Math.floor(score),
+      multiplier,
+      streak,
+      forgiveness,
+      direction,
+      bottomRune,
+    }),
+  endRun: (score, reason) =>
+    set((state) => {
+      const nextBest = Math.max(state.best, Math.floor(score));
+      if (nextBest !== state.best) writeBest(nextBest);
+      return {
+        status: 'GAMEOVER',
+        score: Math.floor(score),
+        best: nextBest,
+        multiplier: 1,
+        streak: 0,
+        forgiveness: 1,
+        direction: 'R',
+        failMessage: reason,
+      };
+    }),
+}));
+
+const createRuntime = (): Runtime => ({
+  elapsed: 0,
+  score: 0,
+  streak: 0,
+  multiplier: 1,
+  forgiveness: 1,
+  nearPerfects: 0,
+  failMessage: '',
+  shake: 0,
+  hudCommit: 0,
+
+  currentRow: 0,
+  currentLane: 1,
+  progressRow: 0,
+  nextDir: 1,
+  playerX: LANE_X[1],
+  cubeRotZ: 0,
+
+  faces: createFaces(),
+  targetFaces: createFaces(),
+
+  stepActive: false,
+  stepTime: 0,
+  stepDuration: 0.2,
+  fromRow: 0,
+  toRow: 1,
+  fromLane: 1,
+  toLane: 2,
+  fromRot: 0,
+  toRot: -Math.PI * 0.5,
+
+  forcedDir: 1,
+  forcedSteps: 0,
+
+  difficulty: sampleDifficulty('timing-defense', 0),
+  chunkLibrary: buildPatternLibraryTemplate('runeroll'),
+  currentChunk: null,
+  chunkRowsLeft: 0,
+
+  rows: Array.from({ length: ROW_POOL }, (_, idx) => createRow(idx)),
+  shards: Array.from({ length: SHARD_POOL }, (_, idx) => createShard(idx)),
+});
+
+const activeRuneCount = (runtime: Runtime) => {
+  const byTime = clamp(runtime.elapsed / 50, 0, 1);
+  const byScore = clamp(runtime.score / 120, 0, 1);
+  const mix = byTime * 0.65 + byScore * 0.35;
+  if (mix < 0.34) return 2;
+  if (mix < 0.7) return 3;
+  return 4;
+};
+
+const chooseChunk = (runtime: Runtime) => {
+  const intensity = clamp(runtime.elapsed / 95, 0, 1);
+  runtime.currentChunk = pickPatternChunkForSurvivability(
+    'runeroll',
+    runtime.chunkLibrary,
+    Math.random,
+    intensity,
+    runtime.elapsed
+  );
+  runtime.chunkRowsLeft = Math.max(
+    4,
+    Math.round(runtime.currentChunk.durationSeconds * (1.9 + runtime.difficulty.eventRate * 1.5))
+  );
+};
+
+const seedRow = (runtime: Runtime, row: RowData, index: number) => {
+  if (!runtime.currentChunk || runtime.chunkRowsLeft <= 0) chooseChunk(runtime);
+  runtime.chunkRowsLeft -= 1;
+
+  const tier = runtime.currentChunk?.tier ?? 0;
+  const d = clamp((runtime.difficulty.speed - 3) / 3.6, 0, 1);
+  const runeCount = activeRuneCount(runtime);
+
+  row.index = index;
+  row.glowLane = -1;
+  row.glow = 0;
+  row.wildMask = 0;
+
+  let mask = 0b111;
+  if (index > 6) {
+    const narrowChance = clamp(0.08 + tier * 0.05 + d * 0.15, 0.08, 0.46);
+    const singleLaneChance = index > 18 ? clamp(0.015 + Math.max(0, tier - 1) * 0.04 + d * 0.1, 0, 0.24) : 0;
+    const roll = Math.random();
+    if (roll < singleLaneChance) {
+      mask = bit(Math.floor(Math.random() * 3));
+    } else if (roll < singleLaneChance + narrowChance) {
+      mask = 0b111 & ~bit(Math.floor(Math.random() * 3));
+    }
+  }
+  if (index <= 2) mask = 0b111;
+  row.mask = mask;
+
+  for (let lane = 0; lane < 3; lane += 1) {
+    row.runes[lane] = Math.floor(Math.random() * runeCount) as RuneId;
+    if ((row.mask & bit(lane)) !== 0 && index > 10) {
+      const wildChance = clamp(0.007 + tier * 0.01 + d * 0.02, 0.005, 0.06);
+      if (Math.random() < wildChance) row.wildMask |= bit(lane);
+    }
+  }
+};
+
+const ensureRow = (runtime: Runtime, rowIndex: number) => {
+  const slot = ((rowIndex % ROW_POOL) + ROW_POOL) % ROW_POOL;
+  const row = runtime.rows[slot];
+  if (row.index !== rowIndex) seedRow(runtime, row, rowIndex);
+  return row;
+};
+
+const enforceReachability = (runtime: Runtime, row: RowData, currentLane: LaneIndex) => {
+  const leftMask = currentLane > 0 ? bit(currentLane - 1) : 0;
+  const rightMask = currentLane < 2 ? bit(currentLane + 1) : 0;
+  const reachableMask = leftMask | rightMask;
+  if (reachableMask === 0) return;
+
+  const d = clamp((runtime.difficulty.speed - 3) / 3.6, 0, 1);
+  const tier = runtime.currentChunk?.tier ?? 0;
+
+  if (runtime.forcedSteps <= 0 && runtime.elapsed > 20) {
+    const forceChance = clamp(0.02 + Math.max(0, tier - 1) * 0.04 + d * 0.08, 0, 0.22);
+    if (Math.random() < forceChance) {
+      const candidates: StepDir[] = [];
+      if (currentLane > 0) candidates.push(-1);
+      if (currentLane < 2) candidates.push(1);
+      if (candidates.length > 0) {
+        runtime.forcedDir = candidates[Math.floor(Math.random() * candidates.length)];
+        runtime.forcedSteps = 1 + Math.floor(Math.random() * 2);
+      }
+    }
+  }
+
+  if (runtime.forcedSteps > 0) {
+    const forcedLane = currentLane + runtime.forcedDir;
+    if (forcedLane >= 0 && forcedLane <= 2) {
+      row.mask = bit(forcedLane);
+      row.wildMask &= bit(forcedLane);
+      runtime.forcedSteps -= 1;
+    } else {
+      runtime.forcedSteps = 0;
+    }
+  }
+
+  if (runtime.elapsed < 10) {
+    row.mask |= reachableMask;
+  } else if ((row.mask & reachableMask) === 0) {
+    const pickLane =
+      currentLane > 0 && currentLane < 2
+        ? (Math.random() < 0.5 ? currentLane - 1 : currentLane + 1)
+        : currentLane === 0
+          ? 1
+          : 1;
+    row.mask |= bit(pickLane);
+  }
+
+  const runeCount = activeRuneCount(runtime);
+  for (let lane = 0; lane < 3; lane += 1) {
+    if ((row.mask & bit(lane)) === 0) {
+      row.wildMask &= ~bit(lane);
+      continue;
+    }
+    if (row.runes[lane] >= runeCount) {
+      row.runes[lane] = Math.floor(Math.random() * runeCount) as RuneId;
+    }
+  }
+};
+
+const acquireShard = (runtime: Runtime) => {
+  for (const shard of runtime.shards) {
+    if (!shard.active) return shard;
+  }
+  return runtime.shards[Math.floor(Math.random() * runtime.shards.length)];
+};
+
+const spawnBurst = (
+  runtime: Runtime,
+  x: number,
+  z: number,
+  color: THREE.Color,
+  count: number,
+  lateral: number,
+  lift: number
+) => {
+  for (let i = 0; i < count; i += 1) {
+    const shard = acquireShard(runtime);
+    const ang = Math.random() * Math.PI * 2;
+    const spd = lateral * (0.45 + Math.random() * 0.9);
+
+    shard.active = true;
+    shard.x = x + (Math.random() * 2 - 1) * 0.12;
+    shard.y = SHATTER_Y + Math.random() * 0.06;
+    shard.z = z + (Math.random() * 2 - 1) * 0.12;
+    shard.vx = Math.cos(ang) * spd;
+    shard.vz = Math.sin(ang) * spd;
+    shard.vy = lift * (0.7 + Math.random() * 0.8);
+    shard.life = 0.42 + Math.random() * 0.3;
+    shard.maxLife = shard.life;
+    shard.size = 0.04 + Math.random() * 0.05;
+    shard.color.copy(color);
+  }
+};
+
+const stepDurationFor = (runtime: Runtime) => {
+  const d = clamp((runtime.difficulty.speed - 3) / 3.6, 0, 1);
+  const tier = runtime.currentChunk?.tier ?? 0;
+  return clamp(lerp(0.22, 0.168, d) - Math.max(0, tier - 2) * 0.004, 0.16, 0.225);
+};
+
+function RuneRollOverlay() {
+  const status = useRuneRollStore((state) => state.status);
+  const score = useRuneRollStore((state) => state.score);
+  const best = useRuneRollStore((state) => state.best);
+  const multiplier = useRuneRollStore((state) => state.multiplier);
+  const streak = useRuneRollStore((state) => state.streak);
+  const forgiveness = useRuneRollStore((state) => state.forgiveness);
+  const direction = useRuneRollStore((state) => state.direction);
+  const bottomRune = useRuneRollStore((state) => state.bottomRune);
+  const failMessage = useRuneRollStore((state) => state.failMessage);
+  const pulseNonce = useRuneRollStore((state) => state.pulseNonce);
+
+  return (
+    <div className="pointer-events-none absolute inset-0 select-none text-white">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-200/35 bg-black/35 px-3 py-2 backdrop-blur-[2px]">
+        <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
+        <div className="text-[11px] text-cyan-50/85">Tap toggles next step left or right.</div>
+      </div>
+
+      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-200/30 bg-black/35 px-3 py-2 text-right backdrop-blur-[2px]">
+        <div className="text-2xl font-black tabular-nums">{score}</div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
+      </div>
+
+      {status === 'PLAYING' && (
+        <div className="absolute left-4 top-[92px] rounded-md border border-white/18 bg-black/35 px-3 py-2 text-xs">
+          <div>
+            Next <span className="font-semibold text-cyan-200">{direction === 'L' ? 'Left' : 'Right'}</span>
+          </div>
+          <div>
+            Bottom Rune <span className="font-semibold text-fuchsia-200">{bottomRune + 1}</span>
+          </div>
+          <div>
+            Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
+          </div>
+          <div>
+            Streak <span className="font-semibold text-emerald-200">{streak}</span>
+          </div>
+          <div>
+            Ward <span className="font-semibold text-sky-200">{forgiveness}</span>
+          </div>
+        </div>
+      )}
+
+      {status === 'START' && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="rounded-xl border border-white/20 bg-black/58 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black tracking-wide">RUNE ROLL</div>
+            <div className="mt-2 text-sm text-white/85">Tap to switch the next step direction.</div>
+            <div className="mt-1 text-sm text-white/80">Land with matching bottom rune to survive.</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+          </div>
+        </div>
+      )}
+
+      {status === 'GAMEOVER' && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-rose-200">Run Broken</div>
+            <div className="mt-2 text-sm text-white/82">{failMessage}</div>
+            <div className="mt-2 text-sm text-white/82">Score {score}</div>
+            <div className="mt-1 text-sm text-white/75">Best {best}</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+          </div>
+        </div>
+      )}
+
+      {status === 'PLAYING' && (
+        <div key={pulseNonce}>
+          <div
+            className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/70"
+            style={{
+              animation: 'runeroll-pulse 200ms ease-out forwards',
+              opacity: 0,
+            }}
+          />
+        </div>
+      )}
+
+      <style jsx global>{`
+        @keyframes runeroll-pulse {
+          0% {
+            transform: translate(-50%, -50%) scale(0.55);
+            opacity: 0.65;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.18);
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function RuneRollScene() {
+  const inputRef = useInputRef({
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+  });
+  const runtimeRef = useRef<Runtime>(createRuntime());
+
+  const bgMatRef = useRef<THREE.ShaderMaterial>(null);
+  const tileRef = useRef<THREE.InstancedMesh>(null);
+  const runeRef0 = useRef<THREE.InstancedMesh>(null);
+  const runeRef1 = useRef<THREE.InstancedMesh>(null);
+  const runeRef2 = useRef<THREE.InstancedMesh>(null);
+  const runeRef3 = useRef<THREE.InstancedMesh>(null);
+  const runeRefWild = useRef<THREE.InstancedMesh>(null);
+  const shardRef = useRef<THREE.InstancedMesh>(null);
+  const cubeRef = useRef<THREE.Mesh>(null);
+  const faceRefs = useRef<Array<THREE.Mesh | null>>([]);
+
+  const camTarget = useMemo(() => new THREE.Vector3(), []);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const colorScratch = useMemo(() => new THREE.Color(), []);
+
+  const { camera } = useThree();
+
+  const runeInstanceRefs = useMemo(
+    () => [runeRef0, runeRef1, runeRef2, runeRef3, runeRefWild],
+    []
+  );
+
+  const resetRuntime = (runtime: Runtime) => {
+    runtime.elapsed = 0;
+    runtime.score = 0;
+    runtime.streak = 0;
+    runtime.multiplier = 1;
+    runtime.forgiveness = 1;
+    runtime.nearPerfects = 0;
+    runtime.failMessage = '';
+    runtime.shake = 0;
+    runtime.hudCommit = 0;
+
+    runtime.currentRow = 0;
+    runtime.currentLane = 1;
+    runtime.progressRow = 0;
+    runtime.nextDir = 1;
+    runtime.playerX = LANE_X[1];
+    runtime.cubeRotZ = 0;
+
+    runtime.faces = createFaces();
+    runtime.targetFaces = createFaces();
+
+    runtime.stepActive = false;
+    runtime.stepTime = 0;
+    runtime.stepDuration = 0.2;
+    runtime.fromRow = 0;
+    runtime.toRow = 1;
+    runtime.fromLane = 1;
+    runtime.toLane = 2;
+    runtime.fromRot = 0;
+    runtime.toRot = -Math.PI * 0.5;
+
+    runtime.forcedDir = 1;
+    runtime.forcedSteps = 0;
+
+    runtime.difficulty = sampleDifficulty('timing-defense', 0);
+    runtime.currentChunk = null;
+    runtime.chunkRowsLeft = 0;
+
+    for (const row of runtime.rows) {
+      row.index = Number.MIN_SAFE_INTEGER;
+      row.mask = 0;
+      row.wildMask = 0;
+      row.glowLane = -1;
+      row.glow = 0;
+    }
+
+    for (const shard of runtime.shards) {
+      shard.active = false;
+      shard.life = 0;
+    }
+
+    for (let i = 0; i <= DRAW_AHEAD_ROWS + 4; i += 1) {
+      ensureRow(runtime, i);
+    }
+    const row0 = ensureRow(runtime, 0);
+    row0.mask = 0b111;
+    row0.runes[1] = runtime.faces.bottom;
+    row0.wildMask &= ~bit(1);
+  };
+
+  useEffect(() => {
+    resetRuntime(runtimeRef.current);
+    useRuneRollStore.getState().resetToStart();
+    runeRollState.status = 'menu';
+    runeRollState.score = 0;
+    runeRollState.rune = 1;
+  }, []);
+
+  useEffect(() => {
+    const apply = (state: ReturnType<typeof useRuneRollStore.getState>) => {
+      runeRollState.status =
+        state.status === 'START'
+          ? 'menu'
+          : state.status === 'PLAYING'
+            ? 'playing'
+            : 'gameover';
+      runeRollState.score = state.score;
+      runeRollState.best = state.best;
+      runeRollState.rune = state.bottomRune;
+    };
+
+    apply(useRuneRollStore.getState());
+    const unsub = useRuneRollStore.subscribe(apply);
+    return () => unsub();
+  }, []);
+
+  useFrame((_, delta) => {
+    const dt = Math.min(0.033, Math.max(0.001, delta));
+    const runtime = runtimeRef.current;
+    const input = inputRef.current;
+    const store = useRuneRollStore.getState();
+
+    const tap =
+      input.pointerJustDown ||
+      input.justPressed.has(' ') ||
+      input.justPressed.has('space') ||
+      input.justPressed.has('enter');
+
+    if (tap) {
+      if (store.status !== 'PLAYING') {
+        resetRuntime(runtime);
+        useRuneRollStore.getState().startRun();
+      } else {
+        runtime.nextDir = runtime.nextDir === 1 ? -1 : 1;
+        runtime.shake = Math.min(1.15, runtime.shake + 0.2);
+        useRuneRollStore.getState().onTapFx();
+      }
+    }
+
+    if (store.status === 'PLAYING') {
+      runtime.elapsed += dt;
+      runtime.hudCommit += dt;
+      runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
+
+      for (const row of runtime.rows) {
+        if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 2.8);
+      }
+
+      if (!runtime.stepActive) {
+        const nextRow = runtime.currentRow + 1;
+        const nextLane = runtime.currentLane + runtime.nextDir;
+        const row = ensureRow(runtime, nextRow);
+        enforceReachability(runtime, row, runtime.currentLane);
+
+        if (nextLane < 0 || nextLane > 2) {
+          runtime.failMessage = 'Stepped off the path into the void.';
+          useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+        } else if ((row.mask & bit(nextLane)) === 0) {
+          const z = -(nextRow - runtime.progressRow) * ROW_SPACING;
+          spawnBurst(runtime, LANE_X[nextLane as LaneIndex], z, DANGER, 9, 2.4, 2.7);
+          runtime.failMessage = 'No tile on that branch.';
+          useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+        } else {
+          runtime.stepActive = true;
+          runtime.stepTime = 0;
+          runtime.stepDuration = stepDurationFor(runtime);
+          runtime.fromRow = runtime.currentRow;
+          runtime.toRow = nextRow;
+          runtime.fromLane = runtime.currentLane;
+          runtime.toLane = nextLane as LaneIndex;
+          runtime.fromRot = runtime.cubeRotZ;
+          runtime.toRot = runtime.cubeRotZ - runtime.nextDir * (Math.PI * 0.5);
+          runtime.targetFaces = rollFaces(runtime.faces, runtime.nextDir);
+        }
+      }
+
+      if (runtime.stepActive) {
+        runtime.stepTime += dt;
+        const t = clamp(runtime.stepTime / runtime.stepDuration, 0, 1);
+        const eased = easeInOut(t);
+        runtime.progressRow = runtime.fromRow + eased;
+        runtime.playerX = lerp(LANE_X[runtime.fromLane], LANE_X[runtime.toLane], eased);
+        runtime.cubeRotZ = lerp(runtime.fromRot, runtime.toRot, eased);
+
+        if (t >= 1) {
+          runtime.stepActive = false;
+          runtime.currentRow = runtime.toRow;
+          runtime.currentLane = runtime.toLane;
+          runtime.progressRow = runtime.currentRow;
+          runtime.playerX = LANE_X[runtime.currentLane];
+          runtime.faces = runtime.targetFaces;
+          runtime.cubeRotZ = normAngle(runtime.toRot);
+
+          const landedRow = ensureRow(runtime, runtime.currentRow);
+          const landedLane = runtime.currentLane;
+          const isWild = (landedRow.wildMask & bit(landedLane)) !== 0;
+          const requiredRune = landedRow.runes[landedLane];
+          const matched = isWild || runtime.faces.bottom === requiredRune;
+
+          if (matched) {
+            landedRow.glowLane = landedLane;
+            landedRow.glow = 0.46;
+            runtime.streak += 1;
+            runtime.multiplier = 1 + Math.min(runtime.streak, 26) * 0.08;
+
+            const stepPoints = isWild ? 3 : 1;
+            runtime.score += stepPoints * runtime.multiplier;
+            if (isWild) runtime.score += 1;
+
+            const lanePerfect =
+              Math.abs(runtime.playerX - LANE_X[landedLane]) < 0.025 &&
+              runtime.stepDuration <= 0.19;
+            if (lanePerfect) {
+              runtime.nearPerfects += 1;
+              runtime.score += 0.5;
+            }
+
+            if (runtime.forgiveness < 1 && runtime.streak > 0 && runtime.streak % 22 === 0) {
+              runtime.forgiveness = 1;
+            }
+
+            const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
+            spawnBurst(
+              runtime,
+              LANE_X[landedLane],
+              z,
+              isWild ? WILD : RUNE_COLORS[requiredRune],
+              isWild ? 7 : 5,
+              isWild ? 1.4 : 1.15,
+              isWild ? 2.6 : 2.1
+            );
+          } else if (runtime.forgiveness > 0) {
+            runtime.forgiveness -= 1;
+            runtime.streak = 0;
+            runtime.multiplier = 1;
+            landedRow.glowLane = landedLane;
+            landedRow.glow = 0.3;
+            const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
+            spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 6, 1.3, 2.0);
+          } else {
+            const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
+            spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 10, 2.6, 3.2);
+            runtime.failMessage = 'Bottom rune mismatch.';
+            useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+          }
+        }
+      } else {
+        runtime.progressRow = runtime.currentRow;
+        runtime.playerX = LANE_X[runtime.currentLane];
+      }
+
+      if (runtime.hudCommit >= 0.08) {
+        runtime.hudCommit = 0;
+        useRuneRollStore.getState().updateHud(
+          runtime.score,
+          runtime.multiplier,
+          runtime.streak,
+          runtime.forgiveness,
+          runtime.nextDir === -1 ? 'L' : 'R',
+          runtime.faces.bottom
+        );
+      }
+    } else {
+      runtime.progressRow = runtime.currentRow;
+      runtime.playerX = lerp(runtime.playerX, LANE_X[runtime.currentLane], 1 - Math.exp(-10 * dt));
+      for (const row of runtime.rows) {
+        if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 1.8);
+      }
+    }
+
+    for (const shard of runtime.shards) {
+      if (!shard.active) continue;
+      shard.life -= dt;
+      if (shard.life <= 0) {
+        shard.active = false;
+        continue;
+      }
+      shard.x += shard.vx * dt;
+      shard.y += shard.vy * dt;
+      shard.z += shard.vz * dt;
+      shard.vy -= 9.4 * dt;
+    }
+
+    runtime.shake = Math.max(0, runtime.shake - dt * 4.3);
+    const shakeAmp = runtime.shake * 0.08;
+    camTarget.set(
+      5.8 + (Math.random() - 0.5) * shakeAmp,
+      6.3 + (Math.random() - 0.5) * shakeAmp * 0.65,
+      6.6 + (Math.random() - 0.5) * shakeAmp
+    );
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * dt));
+    camera.lookAt(0, 0.2, -7.5);
+
+    if (bgMatRef.current) {
+      bgMatRef.current.uniforms.uTime.value += dt;
+      bgMatRef.current.uniforms.uPulse.value = runtime.stepActive ? runtime.stepTime / runtime.stepDuration : 0;
+    }
+
+    if (cubeRef.current) {
+      cubeRef.current.position.set(runtime.playerX, TILE_HEIGHT + CUBE_SIZE * 0.5, 0);
+      cubeRef.current.rotation.set(0, Math.PI * 0.25, runtime.cubeRotZ);
+      const scale = 1 + runtime.shake * 0.03;
+      cubeRef.current.scale.setScalar(scale);
+    }
+
+    const faceOrder: Array<keyof FaceMap> = ['top', 'bottom', 'left', 'right', 'front', 'back'];
+    for (let i = 0; i < faceOrder.length; i += 1) {
+      const mesh = faceRefs.current[i];
+      if (!mesh) continue;
+      const rune = runtime.faces[faceOrder[i]];
+      (mesh.material as THREE.MeshStandardMaterial).emissive.copy(RUNE_COLORS[rune]).multiplyScalar(0.5);
+      (mesh.material as THREE.MeshStandardMaterial).color.copy(RUNE_COLORS[rune]).lerp(WHITE, 0.16);
+    }
+
+    if (tileRef.current) {
+      const glyphCounts = [0, 0, 0, 0, 0];
+      let tileCount = 0;
+      const startRow = Math.floor(runtime.progressRow) - DRAW_BACK_ROWS;
+      const endRow = Math.floor(runtime.progressRow) + DRAW_AHEAD_ROWS;
+
+      for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
+        const row = ensureRow(runtime, rowIndex);
+        const z = -(rowIndex - runtime.progressRow) * ROW_SPACING;
+        if (z < -45 || z > 13) continue;
+
+        for (let lane = 0; lane < 3; lane += 1) {
+          if ((row.mask & bit(lane)) === 0) continue;
+          if (tileCount >= TILE_DRAW_CAP) break;
+
+          const x = LANE_X[lane as LaneIndex];
+          dummy.position.set(x, 0, z);
+          dummy.scale.set(TILE_SIZE, TILE_HEIGHT, TILE_SIZE);
+          dummy.rotation.set(0, Math.PI * 0.25, 0);
+          dummy.updateMatrix();
+          tileRef.current.setMatrixAt(tileCount, dummy.matrix);
+
+          colorScratch.copy(STONE).lerp(STONE_EDGE, 0.22);
+          const rune = row.runes[lane];
+          colorScratch.lerp(RUNE_COLORS[rune], 0.18);
+          if ((row.wildMask & bit(lane)) !== 0) colorScratch.lerp(WILD, 0.36);
+          if (row.glowLane === lane && row.glow > 0) colorScratch.lerp(WHITE, clamp(row.glow, 0, 0.78));
+          tileRef.current.setColorAt(tileCount, colorScratch);
+          tileCount += 1;
+
+          const glyphType = (row.wildMask & bit(lane)) !== 0 ? 4 : rune;
+          const glyphMeshRef = runeInstanceRefs[glyphType];
+          const glyphMesh = glyphMeshRef.current;
+          if (!glyphMesh) continue;
+          const cursor = glyphCounts[glyphType];
+          if (cursor >= GLYPH_DRAW_CAP) continue;
+
+          dummy.position.set(x, TILE_HEIGHT * 0.68, z);
+          if (glyphType === 0) dummy.scale.set(0.56, 0.055, 0.14);
+          else if (glyphType === 1) dummy.scale.set(0.14, 0.055, 0.56);
+          else if (glyphType === 2) dummy.scale.set(0.27, 0.08, 0.27);
+          else if (glyphType === 3) dummy.scale.set(0.24, 0.08, 0.24);
+          else dummy.scale.set(0.25, 0.09, 0.25);
+          dummy.rotation.set(0, runtime.elapsed * (glyphType === 4 ? 1.2 : 0.35), 0);
+          dummy.updateMatrix();
+          glyphMesh.setMatrixAt(cursor, dummy.matrix);
+
+          if (glyphType === 4) {
+            colorScratch.copy(WILD).lerp(WHITE, clamp(row.glow * 0.7, 0, 0.7));
+          } else {
+            colorScratch
+              .copy(RUNE_COLORS[glyphType as RuneId])
+              .lerp(WHITE, clamp(row.glow * 0.5, 0, 0.65));
+          }
+          glyphMesh.setColorAt(cursor, colorScratch);
+          glyphCounts[glyphType] = cursor + 1;
+        }
+      }
+
+      tileRef.current.count = tileCount;
+      tileRef.current.instanceMatrix.needsUpdate = true;
+      if (tileRef.current.instanceColor) tileRef.current.instanceColor.needsUpdate = true;
+
+      for (let i = 0; i < runeInstanceRefs.length; i += 1) {
+        const mesh = runeInstanceRefs[i].current;
+        if (!mesh) continue;
+        mesh.count = glyphCounts[i];
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      }
+    }
+
+    if (shardRef.current) {
+      let shardCount = 0;
+      for (const shard of runtime.shards) {
+        if (!shard.active) continue;
+        if (shardCount >= SHARD_POOL) break;
+        const lifeT = clamp(shard.life / shard.maxLife, 0, 1);
+
+        dummy.position.set(shard.x, shard.y, shard.z);
+        dummy.scale.setScalar(shard.size * lifeT);
+        dummy.rotation.set(runtime.elapsed * 2.3, runtime.elapsed * 1.7, runtime.elapsed * 1.3);
+        dummy.updateMatrix();
+        shardRef.current.setMatrixAt(shardCount, dummy.matrix);
+
+        colorScratch.copy(shard.color).lerp(WHITE, 0.24 + (1 - lifeT) * 0.5);
+        shardRef.current.setColorAt(shardCount, colorScratch);
+        shardCount += 1;
+      }
+
+      shardRef.current.count = shardCount;
+      shardRef.current.instanceMatrix.needsUpdate = true;
+      if (shardRef.current.instanceColor) shardRef.current.instanceColor.needsUpdate = true;
+    }
+
+    clearFrameInput(inputRef);
+  });
+
+  return (
+    <>
+      <PerspectiveCamera makeDefault position={[5.8, 6.3, 6.6]} fov={37} near={0.1} far={120} />
+      <color attach="background" args={['#080a14']} />
+      <fog attach="fog" args={['#080a14', 10, 58]} />
+
+      <ambientLight intensity={0.42} />
+      <directionalLight position={[5, 9, 6]} intensity={0.72} color="#dbe6ff" />
+      <pointLight position={[-2, 2.4, 2]} intensity={0.45} color="#4ad8ff" />
+      <pointLight position={[2, 1.6, -1]} intensity={0.4} color="#ff71cf" />
+
+      <mesh position={[0, -0.7, -24]}>
+        <planeGeometry args={[40, 24]} />
+        <shaderMaterial
+          ref={bgMatRef}
+          uniforms={{ uTime: { value: 0 }, uPulse: { value: 0 } }}
+          vertexShader={`
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            uniform float uTime;
+            uniform float uPulse;
+            varying vec2 vUv;
+            void main() {
+              vec3 deep = vec3(0.03, 0.04, 0.09);
+              vec3 violet = vec3(0.11, 0.07, 0.18);
+              vec3 cyan = vec3(0.05, 0.15, 0.2);
+              float grad = smoothstep(0.0, 1.0, vUv.y);
+              float ripple = sin((vUv.x * 3.5 + uTime * 0.25) * 6.2831853) * 0.5 + 0.5;
+              float grain = fract(sin(dot(vUv * (uTime + 1.7), vec2(12.9898, 78.233))) * 43758.5453);
+              vec3 col = mix(deep, violet, grad * 0.8);
+              col = mix(col, cyan, (0.15 + ripple * 0.22) * uPulse);
+              col += (grain - 0.5) * 0.02;
+              gl_FragColor = vec4(col, 1.0);
+            }
+          `}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <instancedMesh ref={tileRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial vertexColors roughness={0.72} metalness={0.05} />
+      </instancedMesh>
+
+      <instancedMesh ref={runeRef0} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={runeRef1} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={runeRef2} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
+        <cylinderGeometry args={[1, 1, 1, 6]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={runeRef3} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
+        <tetrahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={runeRefWild} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
+        <icosahedronGeometry args={[1, 0]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
+      <mesh ref={cubeRef} position={[0, TILE_HEIGHT + CUBE_SIZE * 0.5, 0]} rotation={[0, Math.PI * 0.25, 0]}>
+        <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
+        <meshStandardMaterial
+          color="#131820"
+          emissive="#0f1626"
+          emissiveIntensity={0.22}
+          roughness={0.58}
+          metalness={0.14}
+        />
+
+        <mesh
+          ref={(node) => {
+            faceRefs.current[0] = node;
+          }}
+          position={[0, CUBE_SIZE * 0.502, 0]}
+          rotation={[-Math.PI * 0.5, 0, 0]}
+        >
+          <planeGeometry args={[0.34, 0.34]} />
+          <meshStandardMaterial emissiveIntensity={0.7} metalness={0.12} roughness={0.3} />
+        </mesh>
+        <mesh
+          ref={(node) => {
+            faceRefs.current[1] = node;
+          }}
+          position={[0, -CUBE_SIZE * 0.502, 0]}
+          rotation={[Math.PI * 0.5, 0, 0]}
+        >
+          <planeGeometry args={[0.34, 0.34]} />
+          <meshStandardMaterial emissiveIntensity={0.6} metalness={0.12} roughness={0.3} />
+        </mesh>
+        <mesh
+          ref={(node) => {
+            faceRefs.current[2] = node;
+          }}
+          position={[-CUBE_SIZE * 0.502, 0, 0]}
+          rotation={[0, Math.PI * 0.5, 0]}
+        >
+          <planeGeometry args={[0.34, 0.34]} />
+          <meshStandardMaterial emissiveIntensity={0.62} metalness={0.12} roughness={0.3} />
+        </mesh>
+        <mesh
+          ref={(node) => {
+            faceRefs.current[3] = node;
+          }}
+          position={[CUBE_SIZE * 0.502, 0, 0]}
+          rotation={[0, -Math.PI * 0.5, 0]}
+        >
+          <planeGeometry args={[0.34, 0.34]} />
+          <meshStandardMaterial emissiveIntensity={0.62} metalness={0.12} roughness={0.3} />
+        </mesh>
+        <mesh
+          ref={(node) => {
+            faceRefs.current[4] = node;
+          }}
+          position={[0, 0, CUBE_SIZE * 0.502]}
+          rotation={[0, 0, 0]}
+        >
+          <planeGeometry args={[0.34, 0.34]} />
+          <meshStandardMaterial emissiveIntensity={0.56} metalness={0.12} roughness={0.3} />
+        </mesh>
+        <mesh
+          ref={(node) => {
+            faceRefs.current[5] = node;
+          }}
+          position={[0, 0, -CUBE_SIZE * 0.502]}
+          rotation={[0, Math.PI, 0]}
+        >
+          <planeGeometry args={[0.34, 0.34]} />
+          <meshStandardMaterial emissiveIntensity={0.56} metalness={0.12} roughness={0.3} />
+        </mesh>
+      </mesh>
+
+      <instancedMesh ref={shardRef} args={[undefined, undefined, SHARD_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.95}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <ContactShadows
+        position={[0, -0.01, 0]}
+        opacity={0.28}
+        scale={12}
+        blur={2.2}
+        far={18}
+        resolution={512}
+        color="#0f1322"
+      />
+
+      <EffectComposer enableNormalPass={false} multisampling={0}>
+        <Bloom intensity={0.46} luminanceThreshold={0.52} luminanceSmoothing={0.24} mipmapBlur />
+        <Vignette eskil={false} offset={0.12} darkness={0.64} />
+        <Noise premultiply opacity={0.02} />
+      </EffectComposer>
+
+      <Html fullscreen>
+        <RuneRollOverlay />
+      </Html>
+    </>
+  );
+}
 
 const RuneRoll: React.FC<{ soundsOn?: boolean }> = () => {
   return (
-    <CanvasHyperGame
-      gameId="runeroll"
-      concept={GAME_CONCEPTS.runeroll}
-      storageKey="ketchapp_runeroll_best_v2"
-      deathTitle="Rune Mismatch"
-    />
+    <Canvas
+      dpr={[1, 1.6]}
+      gl={{ antialias: false, powerPreference: 'high-performance' }}
+      className="absolute inset-0 h-full w-full"
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <RuneRollScene />
+    </Canvas>
   );
 };
 
