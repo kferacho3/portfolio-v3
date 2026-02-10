@@ -32,6 +32,8 @@ type Segment = {
   orbActive: boolean;
   orbX: number;
   orbCollected: boolean;
+  colorA: number;
+  colorB: number;
 };
 
 type RuntimePylon = {
@@ -98,6 +100,14 @@ const ORANGE = new THREE.Color('#ffb366');
 const VIOLET = new THREE.Color('#b48dff');
 const PEACH = new THREE.Color('#ff8b8b');
 const WHITE = new THREE.Color('#f8fbff');
+const BLOCK_PALETTE = [
+  new THREE.Color('#5ee6ff'),
+  new THREE.Color('#ff73de'),
+  new THREE.Color('#ffd66f'),
+  new THREE.Color('#8dff86'),
+  new THREE.Color('#ff9a71'),
+  new THREE.Color('#a78dff'),
+];
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const tinyScale = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
@@ -187,6 +197,8 @@ const createSegment = (): Segment => ({
   orbActive: false,
   orbX: 0,
   orbCollected: false,
+  colorA: 0,
+  colorB: 1,
 });
 
 const createRuntime = (): RuntimeState => ({
@@ -260,6 +272,8 @@ const seedSegment = (segment: Segment, runtime: RuntimeState, z: number) => {
 
   segment.obstacleDepth = segment.obstacleKind === 'spike' ? 0.48 : 0.56;
   segment.passed = false;
+  segment.colorA = runtime.serial % BLOCK_PALETTE.length;
+  segment.colorB = (runtime.serial + 2 + Math.floor(Math.random() * 2)) % BLOCK_PALETTE.length;
 
   segment.orbActive = Math.random() < lerp(0.24, 0.43, d);
   segment.orbCollected = false;
@@ -475,7 +489,23 @@ function PolarityScene() {
         activePolarity = activePolarity === 1 ? -1 : 1;
         runtime.shakeTime = Math.min(1.2, runtime.shakeTime + 0.7);
         runtime.chargeSwitchBoost = 1;
-        runtime.playerVelX *= 0.34;
+        let immediateForce = 0;
+        for (const segment of runtime.segments) {
+          if (Math.abs(segment.z) > INFLUENCE_RADIUS * 0.92) continue;
+          const pullFromPylon = (x: number, polarity: PolaritySign) => {
+            const dx = x - runtime.playerX;
+            const dz = segment.z;
+            const distSq = dx * dx + dz * dz * 0.5 + 1;
+            const forceMag = clamp(segment.strength / (distSq + 1), 0, 2.4);
+            const dirSign = Math.sign(dx) || 1;
+            const attractOrRepel = activePolarity !== polarity ? 1 : -1;
+            immediateForce += dirSign * attractOrRepel * forceMag;
+          };
+          pullFromPylon(segment.leftX, segment.leftPolarity);
+          pullFromPylon(segment.rightX, segment.rightPolarity);
+        }
+        const switchKick = clamp(immediateForce * 0.18, -3.6, 3.6);
+        runtime.playerVelX += switchKick;
       }
     }
     if (!tap) {
@@ -524,13 +554,16 @@ function PolarityScene() {
       runtime.nearbyPylons.sort((a, b) => b.intensity - a.intensity);
       runtime.nearbyPylons.length = Math.min(runtime.nearbyPylons.length, 4);
 
-      const switchBoostScale = 1 + runtime.chargeSwitchBoost * 0.95;
-      const lateralAccel = clamp(netForceX * switchBoostScale * 1.2, -28, 28);
-      runtime.playerVelX += lateralAccel * dt;
-      const drag = Math.exp(-5.6 * dt);
-      runtime.playerVelX *= drag;
-      runtime.playerVelX = clamp(runtime.playerVelX, -8.4, 8.4);
-      runtime.playerX += runtime.playerVelX * dt;
+      const switchBoostScale = 1 + runtime.chargeSwitchBoost * 1.08;
+      const lateralAccel = clamp(netForceX * switchBoostScale * 1.12, -26, 26);
+      const steps = Math.max(1, Math.ceil(dt / 0.012));
+      const stepDt = dt / steps;
+      for (let i = 0; i < steps; i += 1) {
+        runtime.playerVelX += lateralAccel * stepDt;
+        runtime.playerVelX *= Math.exp(-6.1 * stepDt);
+        runtime.playerVelX = clamp(runtime.playerVelX, -8.2, 8.2);
+        runtime.playerX += runtime.playerVelX * stepDt;
+      }
 
       let gameOver = false;
       if (Math.abs(runtime.playerX) + PLAYER_RADIUS > LANE_HALF_WIDTH) {
@@ -662,9 +695,10 @@ function PolarityScene() {
     runtime.shakeTime = Math.max(0, runtime.shakeTime - dt * 4.5);
     const shakeAmp = runtime.shakeTime * 0.065;
     const targetCamX = runtime.playerX * 0.2;
-    const jitterX = (Math.random() - 0.5) * shakeAmp;
-    const jitterY = (Math.random() - 0.5) * shakeAmp * 0.45;
-    const jitterZ = (Math.random() - 0.5) * shakeAmp * 0.35;
+    const t = state.clock.elapsedTime;
+    const jitterX = Math.sin(t * 49.7) * shakeAmp * 0.55;
+    const jitterY = Math.sin(t * 37.9 + 0.9) * shakeAmp * 0.26;
+    const jitterZ = Math.cos(t * 41.4 + 1.2) * shakeAmp * 0.2;
     camTarget.set(targetCamX + jitterX, 2.18 + jitterY, 6.45 + jitterZ);
     camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * dt));
     camera.lookAt(runtime.playerX * 0.12, 0.3, 0);
@@ -681,20 +715,33 @@ function PolarityScene() {
     if (pylonRef.current) {
       let idx = 0;
       for (const segment of runtime.segments) {
+        const pylonPulse = 0.52 + 0.48 * Math.sin(runtime.elapsed * 5.2 + segment.z * 0.58);
+        const pylonScale = segment.doubleZone ? 1.14 : 1;
+        const leftTint = BLOCK_PALETTE[segment.colorA % BLOCK_PALETTE.length];
+        const rightTint = BLOCK_PALETTE[segment.colorB % BLOCK_PALETTE.length];
+
         dummy.position.set(segment.leftX, 0.9, segment.z);
-        dummy.scale.set(0.16, 1.9, 0.16);
+        dummy.scale.set(0.18 * pylonScale, 2.0 * pylonScale, 0.18 * pylonScale);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         pylonRef.current.setMatrixAt(idx, dummy.matrix);
-        pylonRef.current.setColorAt(idx, segment.leftPolarity === 1 ? CYAN : MAGENTA);
+        colorScratch
+          .copy(segment.leftPolarity === 1 ? CYAN : MAGENTA)
+          .lerp(leftTint, 0.38)
+          .lerp(WHITE, clamp(0.16 + pylonPulse * 0.26, 0, 0.5));
+        pylonRef.current.setColorAt(idx, colorScratch);
         idx += 1;
 
         dummy.position.set(segment.rightX, 0.9, segment.z);
-        dummy.scale.set(0.16, 1.9, 0.16);
+        dummy.scale.set(0.18 * pylonScale, 2.0 * pylonScale, 0.18 * pylonScale);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         pylonRef.current.setMatrixAt(idx, dummy.matrix);
-        pylonRef.current.setColorAt(idx, segment.rightPolarity === 1 ? CYAN : MAGENTA);
+        colorScratch
+          .copy(segment.rightPolarity === 1 ? CYAN : MAGENTA)
+          .lerp(rightTint, 0.38)
+          .lerp(WHITE, clamp(0.16 + (1 - pylonPulse) * 0.26, 0, 0.5));
+        pylonRef.current.setColorAt(idx, colorScratch);
         idx += 1;
       }
       while (idx < PYLON_INSTANCE_COUNT) {
@@ -714,6 +761,8 @@ function PolarityScene() {
       let idx = 0;
       for (const segment of runtime.segments) {
         const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.3 + segment.z * 0.72);
+        const segmentTintA = BLOCK_PALETTE[segment.colorA % BLOCK_PALETTE.length];
+        const segmentTintB = BLOCK_PALETTE[segment.colorB % BLOCK_PALETTE.length];
         if (segment.obstacleKind === 'gate' || segment.obstacleKind === 'slit') {
           const gapLeft = segment.gapX - segment.gapW * 0.5;
           const gapRight = segment.gapX + segment.gapW * 0.5;
@@ -742,8 +791,9 @@ function PolarityScene() {
             obstacleRef.current.setMatrixAt(idx, dummy.matrix);
             colorScratch
               .copy(leftBase)
-              .lerp(leftAccent, 0.42)
-              .lerp(WHITE, clamp(0.14 + pulse * 0.2 + (segment.doubleZone ? 0.1 : 0), 0, 0.45));
+              .lerp(leftAccent, 0.35)
+              .lerp(segmentTintA, 0.44)
+              .lerp(WHITE, clamp(0.16 + pulse * 0.22 + (segment.doubleZone ? 0.1 : 0), 0, 0.5));
             obstacleRef.current.setColorAt(idx, colorScratch);
             idx += 1;
           }
@@ -755,8 +805,9 @@ function PolarityScene() {
             obstacleRef.current.setMatrixAt(idx, dummy.matrix);
             colorScratch
               .copy(rightBase)
-              .lerp(rightAccent, 0.42)
-              .lerp(WHITE, clamp(0.14 + (1 - pulse) * 0.2 + (segment.doubleZone ? 0.1 : 0), 0, 0.45));
+              .lerp(rightAccent, 0.35)
+              .lerp(segmentTintB, 0.44)
+              .lerp(WHITE, clamp(0.16 + (1 - pulse) * 0.22 + (segment.doubleZone ? 0.1 : 0), 0, 0.5));
             obstacleRef.current.setColorAt(idx, colorScratch);
             idx += 1;
           }
@@ -768,8 +819,9 @@ function PolarityScene() {
           obstacleRef.current.setMatrixAt(idx, dummy.matrix);
           colorScratch
             .copy(HOT)
-            .lerp(PEACH, 0.34)
-            .lerp(GOLD, clamp(0.1 + pulse * 0.2, 0, 0.32));
+            .lerp(segmentTintA, 0.32)
+            .lerp(PEACH, 0.28)
+            .lerp(GOLD, clamp(0.12 + pulse * 0.24, 0, 0.38));
           obstacleRef.current.setColorAt(idx, colorScratch);
           idx += 1;
         }
@@ -852,25 +904,36 @@ function PolarityScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 2.2, 6.45]} fov={44} />
-      <color attach="background" args={['#06080f']} />
-      <fog attach="fog" args={['#06080f', 7, 32]} />
+      <color attach="background" args={['#111b31']} />
+      <fog attach="fog" args={['#111b31', 8, 42]} />
 
-      <ambientLight intensity={0.33} />
-      <directionalLight position={[2, 6, 5]} intensity={0.72} />
-      <pointLight position={[0, 1.6, 3.2]} intensity={0.42} color="#9ee8ff" />
+      <ambientLight intensity={0.52} color="#d8ecff" />
+      <directionalLight position={[2.6, 6.8, 5.2]} intensity={0.92} color="#d9efff" />
+      <pointLight position={[0, 2.1, 3.2]} intensity={0.66} color="#8feeff" />
+      <pointLight position={[0, 1.9, -8]} intensity={0.42} color="#ff72dd" />
 
       <mesh position={[0, -0.01, -5]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[8.5, 60]} />
-        <meshStandardMaterial color="#0c121e" roughness={0.9} metalness={0.05} />
+        <meshStandardMaterial color="#182742" roughness={0.82} metalness={0.06} />
+      </mesh>
+
+      <mesh position={[0, 0.002, -5]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[2.15, 60]} />
+        <meshBasicMaterial color="#25385f" transparent opacity={0.52} toneMapped={false} />
+      </mesh>
+
+      <mesh position={[0, 4.2, -25]}>
+        <planeGeometry args={[42, 24]} />
+        <meshBasicMaterial color="#1a2950" transparent opacity={0.42} toneMapped={false} />
       </mesh>
 
       <mesh position={[-LANE_HALF_WIDTH, 0.22, -5]}>
         <boxGeometry args={[0.12, 0.5, 60]} />
-        <meshBasicMaterial color="#22d3ee" toneMapped={false} />
+        <meshBasicMaterial color="#44ecff" toneMapped={false} />
       </mesh>
       <mesh position={[LANE_HALF_WIDTH, 0.22, -5]}>
         <boxGeometry args={[0.12, 0.5, 60]} />
-        <meshBasicMaterial color="#ff4fd8" toneMapped={false} />
+        <meshBasicMaterial color="#ff6ce4" toneMapped={false} />
       </mesh>
 
       <instancedMesh ref={pylonRef} args={[undefined, undefined, PYLON_INSTANCE_COUNT]} castShadow>
@@ -904,9 +967,9 @@ function PolarityScene() {
       </mesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.42} luminanceThreshold={0.55} luminanceSmoothing={0.22} mipmapBlur />
-        <Vignette eskil={false} offset={0.12} darkness={0.58} />
-        <Noise premultiply opacity={0.025} />
+        <Bloom intensity={0.48} luminanceThreshold={0.52} luminanceSmoothing={0.2} mipmapBlur />
+        <Vignette eskil={false} offset={0.09} darkness={0.44} />
+        <Noise premultiply opacity={0.018} />
       </EffectComposer>
 
       <Html fullscreen>

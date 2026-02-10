@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSnapshot } from 'valtio';
 import { goUpState } from './state';
 import { getArena, buildBackgroundCubes } from './utils';
@@ -14,9 +14,18 @@ export { goUpState } from './state';
 function GoUp() {
   const snap = useSnapshot(goUpState);
 
-  const [arenaIndex, setArenaIndex] = useState(0);
+  const [arenaIndex, setArenaIndex] = useState(goUpState.arenaIndex);
   const arena = useMemo(() => getArena(arenaIndex, ARENAS), [arenaIndex]);
   const bgCubes = useMemo(() => buildBackgroundCubes(arena.id), [arena.id]);
+
+  useEffect(() => {
+    goUpState.loadBest();
+    goUpState.loadArena();
+  }, []);
+
+  useEffect(() => {
+    setArenaIndex(goUpState.arenaIndex);
+  }, [snap.arenaIndex]);
 
   const handleArenaPick = (index: number | 'auto') => {
     if (snap.phase === 'playing') return;
@@ -24,6 +33,7 @@ function GoUp() {
       goUpState.setArenaMode('auto');
     } else {
       goUpState.setArena(index);
+      setArenaIndex(index);
     }
     goUpState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   };

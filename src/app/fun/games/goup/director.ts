@@ -67,8 +67,8 @@ export class GoUpDirector {
     this.lastGroundedAtMs = nowMs;
     this.bufferedJumpUntilMs = 0;
 
-    this.chunkStartPos = [0, 0, 0];
-    this.chunkStartDir = [1, 0, 0];
+    this.chunkStartPos = [CFG.STEP.pathRadiusMin + 0.35, 0, 0];
+    this.chunkStartDir = [0, 0, 1];
     this.generatedUpToStep = -1;
 
     this.ensureSteps();
@@ -179,7 +179,7 @@ export class GoUpDirector {
           this.jumpPulse = 1;
         }
       } else {
-        this.die('riser');
+        this.die(current.gapAfter ? 'fell' : 'riser');
         return;
       }
     }

@@ -7,11 +7,11 @@ import {
   EffectComposer,
   Noise,
   ToneMapping,
-  Vignette,
 } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three-stdlib';
 import { useSnapshot } from 'valtio';
 import { useGameUIState } from '../../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../../hooks/useInput';
@@ -21,7 +21,14 @@ import { CFG } from '../config';
 import { GoUpDirector } from '../director';
 import { goUpState } from '../state';
 import { hslToColor } from '../utils';
-import { BG_CUBE_COUNT, MAX_BURST_PARTICLES, STEP_THICKNESS } from '../constants';
+import {
+  BG_CUBE_COUNT,
+  MAX_BURST_PARTICLES,
+  STEP_BODY_THICKNESS,
+  STEP_TOP_THICKNESS,
+  TOWER_CORE_HEIGHT,
+  TOWER_CORE_RADIUS,
+} from '../constants';
 import type { Arena, BackgroundCube } from '../types';
 import { SkyMesh } from './SkyMesh';
 
@@ -57,7 +64,7 @@ export const GoUpWorld: React.FC<{
   bgCubes: BackgroundCube[];
   arena: Arena;
 }> = ({ setArenaIndex, bgCubes, arena }) => {
-  const { camera, scene } = useThree();
+  const { camera, scene, size } = useThree();
   const { paused } = useGameUIState();
   const snap = useSnapshot(goUpState);
 
@@ -80,9 +87,11 @@ export const GoUpWorld: React.FC<{
     []
   );
 
-  const stepMeshRef = useRef<THREE.InstancedMesh>(null);
+  const stepBodyMeshRef = useRef<THREE.InstancedMesh>(null);
+  const stepTopMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const bgCubeMeshRef = useRef<THREE.InstancedMesh>(null);
+  const towerCoreMeshRef = useRef<THREE.Mesh>(null);
 
   const shadowMeshRef = useRef<THREE.Mesh>(null);
   const shadowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -108,11 +117,30 @@ export const GoUpWorld: React.FC<{
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const gemColor = useMemo(() => new THREE.Color(), []);
+  const stepBodyColor = useMemo(() => new THREE.Color(), []);
+  const stepTopColor = useMemo(() => new THREE.Color(), []);
+  const burstColor = useMemo(() => new THREE.Color(), []);
+  const stepBodyGeometry = useMemo(
+    () => new RoundedBoxGeometry(1, 1, 1, 4, 0.12),
+    []
+  );
+  const stepTopGeometry = useMemo(
+    () => new RoundedBoxGeometry(1, 1, 1, 4, 0.18),
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      stepBodyGeometry.dispose();
+      stepTopGeometry.dispose();
+    };
+  }, [stepBodyGeometry, stepTopGeometry]);
 
   const syncInstances = useCallback(() => {
-    const stepMesh = stepMeshRef.current;
+    const stepBodyMesh = stepBodyMeshRef.current;
+    const stepTopMesh = stepTopMeshRef.current;
     const gemMesh = gemMeshRef.current;
-    if (!stepMesh || !gemMesh) return;
+    if (!stepBodyMesh || !stepTopMesh || !gemMesh) return;
 
     const director = directorRef.current;
     const steps = director.getVisibleSteps();
@@ -129,20 +157,39 @@ export const GoUpWorld: React.FC<{
       const [dx, , dz] = step.dir;
       const yaw = Math.atan2(dx, dz);
 
-      dummy.position.set(step.pos[0], step.height - STEP_THICKNESS * 0.5, step.pos[2]);
+      dummy.position.set(
+        step.pos[0],
+        step.height - STEP_BODY_THICKNESS * 0.5,
+        step.pos[2]
+      );
       dummy.rotation.set(0, yaw, 0);
-      dummy.scale.set(step.width, STEP_THICKNESS, step.length);
+      dummy.scale.set(step.width, STEP_BODY_THICKNESS, step.length);
       dummy.updateMatrix();
 
-      stepMesh.setMatrixAt(stepCount, dummy.matrix);
-      stepMesh.setColorAt(
-        stepCount,
-        hslToColor(
-          hueWrap(pathHueBase + (step.i % 12) * 0.0025),
-          pathSat,
-          clamp(pathLight - (step.i % 7) * 0.006, 0.2, 0.9)
-        )
+      stepBodyMesh.setMatrixAt(stepCount, dummy.matrix);
+      stepBodyColor.setHSL(
+        hueWrap(pathHueBase + (step.i % 14) * 0.0018),
+        clamp(pathSat * 0.88, 0.2, 1),
+        clamp(pathLight - 0.12 - (step.i % 7) * 0.004, 0.18, 0.78)
       );
+      stepBodyMesh.setColorAt(stepCount, stepBodyColor);
+
+      dummy.position.set(
+        step.pos[0],
+        step.height - STEP_TOP_THICKNESS * 0.5 + 0.015,
+        step.pos[2]
+      );
+      dummy.rotation.set(0, yaw, 0);
+      dummy.scale.set(step.width * 0.98, STEP_TOP_THICKNESS, step.length * 0.98);
+      dummy.updateMatrix();
+
+      stepTopMesh.setMatrixAt(stepCount, dummy.matrix);
+      stepTopColor.setHSL(
+        hueWrap(pathHueBase + (step.i % 12) * 0.0022),
+        clamp(pathSat * 1.02, 0.2, 1),
+        clamp(pathLight + 0.07 - (step.i % 8) * 0.003, 0.3, 0.9)
+      );
+      stepTopMesh.setColorAt(stepCount, stepTopColor);
       stepCount += 1;
 
       if (step.gem && !step.gem.collected && gemCount < MAX_GEM_INSTANCES) {
@@ -153,7 +200,7 @@ export const GoUpWorld: React.FC<{
         dummy.updateMatrix();
 
         gemMesh.setMatrixAt(gemCount, dummy.matrix);
-        gemColor.copy(hslToColor(arena.gemHue, 0.9, 0.58));
+        gemColor.setHSL(arena.gemHue, 0.9, 0.58);
         gemMesh.setColorAt(gemCount, gemColor);
         gemCount += 1;
       }
@@ -163,7 +210,8 @@ export const GoUpWorld: React.FC<{
       dummy.position.set(0, -9999, 0);
       dummy.scale.set(0.0001, 0.0001, 0.0001);
       dummy.updateMatrix();
-      stepMesh.setMatrixAt(i, dummy.matrix);
+      stepBodyMesh.setMatrixAt(i, dummy.matrix);
+      stepTopMesh.setMatrixAt(i, dummy.matrix);
     }
 
     for (let i = gemCount; i < MAX_GEM_INSTANCES; i += 1) {
@@ -173,11 +221,22 @@ export const GoUpWorld: React.FC<{
       gemMesh.setMatrixAt(i, dummy.matrix);
     }
 
-    stepMesh.instanceMatrix.needsUpdate = true;
-    if (stepMesh.instanceColor) stepMesh.instanceColor.needsUpdate = true;
+    stepBodyMesh.instanceMatrix.needsUpdate = true;
+    if (stepBodyMesh.instanceColor) stepBodyMesh.instanceColor.needsUpdate = true;
+    stepTopMesh.instanceMatrix.needsUpdate = true;
+    if (stepTopMesh.instanceColor) stepTopMesh.instanceColor.needsUpdate = true;
     gemMesh.instanceMatrix.needsUpdate = true;
     if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
-  }, [arena.gemHue, arena.pathHue, arena.pathLight, arena.pathSat, dummy, gemColor]);
+  }, [
+    arena.gemHue,
+    arena.pathHue,
+    arena.pathLight,
+    arena.pathSat,
+    dummy,
+    gemColor,
+    stepBodyColor,
+    stepTopColor,
+  ]);
 
   const spawnBurst = useCallback((x: number, y: number, z: number, seed: number) => {
     const rng = new SeededRandom(seed);
@@ -235,7 +294,8 @@ export const GoUpWorld: React.FC<{
       dummy.scale.set(scale, scale, scale);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, hslToColor(arena.pathHue, 0.75, 0.42 + fade * 0.2));
+      burstColor.setHSL(arena.pathHue, 0.75, 0.42 + fade * 0.2);
+      mesh.setColorAt(i, burstColor);
       colorDirty = true;
 
       if (t >= 1) p.active = false;
@@ -243,7 +303,7 @@ export const GoUpWorld: React.FC<{
 
     mesh.instanceMatrix.needsUpdate = true;
     if (colorDirty && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [arena.pathHue, dummy]);
+  }, [arena.pathHue, burstColor, dummy]);
 
   const pushStateFromDirector = useCallback(() => {
     const d = directorRef.current;
@@ -371,6 +431,7 @@ export const GoUpWorld: React.FC<{
         }
 
         setArenaIndex(nextArena);
+        goUpState.arenaIndex = nextArena;
         nextArenaSwapRef.current =
           d.score + rng.int(CFG.ARENA.swapMinSteps, CFG.ARENA.swapMaxSteps);
       }
@@ -426,8 +487,15 @@ export const GoUpWorld: React.FC<{
       bgCubeMeshRef.current.position.set(0, Math.max(8, py * 0.35), 0);
     }
 
+    if (towerCoreMeshRef.current) {
+      towerCoreMeshRef.current.position.set(0, py + TOWER_CORE_HEIGHT * 0.25, 0);
+    }
     syncBurst(dt);
   });
+
+  const orthoZoom = size.width < 768
+    ? CFG.CAMERA.orthoZoomMobile
+    : CFG.CAMERA.orthoZoomDesktop;
 
   return (
     <>
@@ -435,7 +503,7 @@ export const GoUpWorld: React.FC<{
         makeDefault
         near={0.1}
         far={260}
-        zoom={CFG.CAMERA.orthoZoom}
+        zoom={orthoZoom}
         position={[CFG.CAMERA.x, CFG.CAMERA.yOffset, CFG.CAMERA.z]}
       />
 
@@ -457,21 +525,58 @@ export const GoUpWorld: React.FC<{
         <meshStandardMaterial
           vertexColors
           transparent
-          opacity={0.32}
-          roughness={0.5}
+          opacity={0.16}
+          roughness={0.62}
           metalness={0.08}
-          emissiveIntensity={0.24}
+          emissiveIntensity={0.16}
+        />
+      </instancedMesh>
+
+      <mesh
+        ref={towerCoreMeshRef}
+        position={[0, TOWER_CORE_HEIGHT * 0.25, 0]}
+        receiveShadow
+      >
+        <cylinderGeometry args={[TOWER_CORE_RADIUS, TOWER_CORE_RADIUS, TOWER_CORE_HEIGHT, 36]} />
+        <meshStandardMaterial
+          color={hslToColor(arena.pathHue, arena.pathSat * 0.72, clamp(arena.pathLight - 0.1, 0.18, 0.68))}
+          roughness={0.82}
+          metalness={0.08}
+        />
+      </mesh>
+
+      <instancedMesh
+        ref={stepBodyMeshRef}
+        args={[undefined, undefined, MAX_STEP_INSTANCES]}
+        castShadow
+        receiveShadow
+        geometry={stepBodyGeometry}
+        frustumCulled={false}
+      >
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.78}
+          metalness={0.07}
+          emissive={hslToColor(arena.pathHue, 0.62, 0.26)}
+          emissiveIntensity={0.18}
         />
       </instancedMesh>
 
       <instancedMesh
-        ref={stepMeshRef}
+        ref={stepTopMeshRef}
         args={[undefined, undefined, MAX_STEP_INSTANCES]}
         castShadow
         receiveShadow
+        geometry={stepTopGeometry}
+        frustumCulled={false}
       >
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial vertexColors roughness={0.34} metalness={0.18} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.28}
+          metalness={0.24}
+          emissive={hslToColor(arena.pathHue, 0.82, 0.46)}
+          emissiveIntensity={0.28}
+        />
       </instancedMesh>
 
       <instancedMesh
@@ -525,16 +630,15 @@ export const GoUpWorld: React.FC<{
 
       <ContactShadows
         position={[0, 0, 0]}
-        scale={12}
-        blur={1.8}
-        opacity={0.26}
-        far={16}
+        scale={10}
+        blur={1.5}
+        opacity={0.18}
+        far={14}
       />
 
       <EffectComposer enableNormalPass={false} multisampling={2}>
-        <Bloom intensity={1.15} luminanceThreshold={1.0} mipmapBlur radius={0.34} />
-        <Vignette eskil={false} offset={0.08} darkness={0.84} />
-        <Noise opacity={0.02} />
+        <Bloom intensity={0.95} luminanceThreshold={1.0} mipmapBlur radius={0.28} />
+        <Noise opacity={0.014} />
         <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       </EffectComposer>
     </>

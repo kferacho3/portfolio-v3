@@ -6,16 +6,24 @@ export const CFG = {
   MAX_FRAME_STEPS: 8,
 
   STEP: {
-    width: 2.2,
-    rise: 0.55,
-    lengthMin: 1.2,
-    lengthMax: 2.0,
-    turnChance: 0.35,
-    gapChance: 0.08,
-    gapLengthMin: 0.75,
-    gapLengthMax: 1.45,
-    gemChance: 0.18,
-    pathRadiusMax: 5.2,
+    width: 2.24,
+    rise: 0.54,
+    lengthMin: 1.25,
+    lengthMax: 2.18,
+    turnChance: 0.24,
+    turnSegmentMin: 2,
+    turnSegmentMax: 7,
+    turnGentleRange: 0.12,
+    turnHardRange: 0.48,
+    hardTurnChance: 0.2,
+    headingJitter: 0.028,
+    gapChance: 0.075,
+    gapLengthMin: 0.72,
+    gapLengthMax: 1.38,
+    gemChance: 0.2,
+    pathRadiusMin: 3.05,
+    pathRadiusMax: 4.9,
+    radialPull: 0.28,
   },
 
   PLAYER: {
@@ -36,12 +44,13 @@ export const CFG = {
   },
 
   CAMERA: {
-    x: 8.5,
-    z: 8.5,
-    yOffset: 5.8,
-    lookOffset: 1.2,
-    followSharpness: 9.5,
-    orthoZoom: 58,
+    x: 9.4,
+    z: 9.4,
+    yOffset: 5.6,
+    lookOffset: 1.05,
+    followSharpness: 10.2,
+    orthoZoomDesktop: 76,
+    orthoZoomMobile: 62,
   },
 
   ARENA: {
@@ -53,4 +62,3 @@ export const CFG = {
     pickupRadius: 0.62,
   },
 } as const;
-
