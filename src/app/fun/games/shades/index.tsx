@@ -135,12 +135,17 @@ export default function Shades() {
     fogColor: new THREE.Color('#0e1524'),
     targetBg: new THREE.Color('#070a11'),
     targetFog: new THREE.Color('#0e1524'),
-    themePaletteId: snap.selectedPaletteId,
+    themePaletteId: snap.runPaletteId ?? snap.selectedPaletteId,
   });
 
+  const paletteIdForRender =
+    snap.phase === 'playing'
+      ? (snap.runPaletteId ?? snap.selectedPaletteId)
+      : snap.selectedPaletteId;
+
   const activePalette = useMemo(
-    () => getPaletteById(snap.selectedPaletteId),
-    [snap.selectedPaletteId]
+    () => getPaletteById(paletteIdForRender),
+    [paletteIdForRender]
   );
 
   const discoveredPalette = useMemo(
@@ -155,7 +160,9 @@ export default function Shades() {
   );
 
   function getCurrentPalette() {
-    return getPaletteById(shadesState.selectedPaletteId);
+    const runPaletteId =
+      shadesState.phase === 'playing' ? shadesState.runPaletteId : null;
+    return getPaletteById(runPaletteId ?? shadesState.selectedPaletteId);
   }
 
   function setNextShade(shade: number) {
@@ -435,10 +442,9 @@ export default function Shades() {
     mesh.position.set(w.activeVisual.x, w.activeVisual.y, w.activeVisual.z + bob);
     mesh.scale.set(scale, scale, 1);
 
-    const material = mesh.material as THREE.MeshStandardMaterial;
+    const material = mesh.material as THREE.MeshBasicMaterial;
     w.tempColorA.set(getShadeHex(getCurrentPalette(), active.shade));
     material.color.copy(w.tempColorA);
-    material.emissive.copy(w.tempColorA).multiplyScalar(0.26);
   }
 
   function syncParticles(dt: number) {
@@ -687,6 +693,8 @@ export default function Shades() {
     clearFrameInput(input);
   });
 
+  const canCyclePalette = snap.phase !== 'playing';
+
   return (
     <group>
       <ambientLight intensity={0.62} />
@@ -708,18 +716,12 @@ export default function Shades() {
         frustumCulled={false}
       >
         <boxGeometry args={[CELL_SIZE * 0.9, CELL_SIZE * 0.9, TILE_DEPTH]} />
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.42}
-          metalness={0.08}
-          emissive={'#111827'}
-          emissiveIntensity={0.16}
-        />
+        <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
       <mesh ref={activeRef} visible={false}>
         <boxGeometry args={[CELL_SIZE * 0.92, CELL_SIZE * 0.92, TILE_DEPTH]} />
-        <meshStandardMaterial roughness={0.34} metalness={0.12} emissiveIntensity={0.27} />
+        <meshBasicMaterial toneMapped={false} />
       </mesh>
 
       <instancedMesh
@@ -797,6 +799,7 @@ export default function Shades() {
           >
             <div style={{ fontSize: 10, opacity: 0.7, textTransform: 'uppercase' }}>
               Next • {activePalette.name}
+              {!canCyclePalette ? ' (Run Locked)' : ''}
             </div>
 
             <div
@@ -819,7 +822,10 @@ export default function Shades() {
 
             <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
               <button
-                onClick={() => shadesState.cyclePalette(-1)}
+                onClick={() => {
+                  if (canCyclePalette) shadesState.cyclePalette(-1);
+                }}
+                disabled={!canCyclePalette}
                 style={{
                   width: 26,
                   height: 24,
@@ -827,14 +833,18 @@ export default function Shades() {
                   border: '1px solid rgba(148,163,184,0.32)',
                   background: 'rgba(15, 23, 42, 0.55)',
                   color: '#e2e8f0',
-                  cursor: 'pointer',
+                  cursor: canCyclePalette ? 'pointer' : 'not-allowed',
+                  opacity: canCyclePalette ? 1 : 0.45,
                 }}
                 aria-label="Previous palette"
               >
                 {'<'}
               </button>
               <button
-                onClick={() => shadesState.cyclePalette(1)}
+                onClick={() => {
+                  if (canCyclePalette) shadesState.cyclePalette(1);
+                }}
+                disabled={!canCyclePalette}
                 style={{
                   width: 26,
                   height: 24,
@@ -842,7 +852,8 @@ export default function Shades() {
                   border: '1px solid rgba(148,163,184,0.32)',
                   background: 'rgba(15, 23, 42, 0.55)',
                   color: '#e2e8f0',
-                  cursor: 'pointer',
+                  cursor: canCyclePalette ? 'pointer' : 'not-allowed',
+                  opacity: canCyclePalette ? 1 : 0.45,
                 }}
                 aria-label="Next palette"
               >

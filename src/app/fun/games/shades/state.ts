@@ -55,6 +55,7 @@ export const shadesState = proxy({
   merges: 0,
 
   selectedPaletteId: STARTER_PALETTE_ID,
+  runPaletteId: null as string | null,
   paletteIndex: getPaletteOrderIndex(STARTER_PALETTE_ID),
   unlockedPaletteIds: defaultUnlocked,
   discoveredPaletteId: null as string | null,
@@ -128,7 +129,6 @@ export const shadesState = proxy({
 
     const newest = newlyUnlocked[newlyUnlocked.length - 1];
     shadesState.discoveredPaletteId = newest;
-    shadesState.setSelectedPalette(newest, false);
     persistProgress();
 
     return newlyUnlocked;
@@ -147,6 +147,7 @@ export const shadesState = proxy({
     shadesState.merges = 0;
     shadesState.discoveredPaletteId = null;
     shadesState.nextShade = 1;
+    shadesState.runPaletteId = shadesState.selectedPaletteId;
     shadesState.paletteIndex = getPaletteOrderIndex(shadesState.selectedPaletteId);
     shadesState.worldSeed = randomSeed();
   },
@@ -168,6 +169,7 @@ export const shadesState = proxy({
     shadesState.merges = 0;
     shadesState.discoveredPaletteId = null;
     shadesState.nextShade = 1;
+    shadesState.runPaletteId = null;
     shadesState.paletteIndex = getPaletteOrderIndex(shadesState.selectedPaletteId);
     shadesState.worldSeed = randomSeed();
   },

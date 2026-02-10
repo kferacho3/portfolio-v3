@@ -18,6 +18,21 @@ export const gameplayConfig = {
   breatherEverySegments: 9,
   hardPatternStart: 0.45,
   minSegmentsBetweenTurns: 2,
+  jumpVelocity: 4.8,
+  jumpGravity: 14.5,
+  jumpClearancePadding: 0.12,
+  branchHeight: {
+    shortMin: 0.34,
+    shortMax: 0.68,
+    tallMin: 1.02,
+    tallMax: 1.48,
+    tallChanceStart: 0.2,
+    tallChanceEnd: 0.64,
+  },
+  branchGrowthRate: {
+    min: 0.5,
+    max: 1.25,
+  },
 } as const;
 
 export type GameplayConfig = typeof gameplayConfig;

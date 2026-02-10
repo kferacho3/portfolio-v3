@@ -22,9 +22,6 @@ interface UseKatamariEngineProps {
   katamariColliderRef: React.MutableRefObject<RapierCollider | null>;
 }
 
-const ZERO_VECTOR = { x: 0, y: 0, z: 0 };
-const HIDDEN_VECTOR = { x: 0, y: -9000, z: 0 };
-
 export function useKatamariEngine({
   seed,
   started,
@@ -200,17 +197,28 @@ export function useKatamariEngine({
 
       const body = worldBodiesRef.current?.[index];
       if (body) {
-        const nextData =
-          typeof body.userData === 'object' && body.userData !== null
-            ? (body.userData as Record<string, unknown>)
-            : {};
-        nextData.collected = true;
-        body.userData = nextData;
-        body.setEnabled(false);
-        body.setLinvel(ZERO_VECTOR, false);
-        body.setAngvel(ZERO_VECTOR, false);
-        body.setTranslation(HIDDEN_VECTOR, false);
-        body.sleep();
+        try {
+          const nextData =
+            typeof body.userData === 'object' && body.userData !== null
+              ? (body.userData as Record<string, unknown>)
+              : {};
+          nextData.collected = true;
+          body.userData = nextData;
+          if (typeof window !== 'undefined') {
+            const collectedBody = body;
+            window.requestAnimationFrame(() => {
+              try {
+                collectedBody.setEnabled(false);
+              } catch {
+                // Body may be invalidated by restart/unmount before this runs.
+              }
+            });
+          } else {
+            body.setEnabled(false);
+          }
+        } catch {
+          // Body can become stale during rapid world swaps; ignore safely.
+        }
       }
 
       collectedMaskRef.current[index] = 1;
@@ -271,12 +279,16 @@ export function useKatamariEngine({
       colliderTimerRef.current >= GROWTH_TUNING.colliderUpdateInterval
     ) {
       colliderTimerRef.current = 0;
-      const colliderRadius = THREE.MathUtils.lerp(
-        katamariColliderRef.current.radius(),
-        currentRadiusRef.current,
-        Math.min(1, delta * GROWTH_TUNING.colliderLerp)
-      );
-      katamariColliderRef.current.setRadius(colliderRadius);
+      try {
+        const colliderRadius = THREE.MathUtils.lerp(
+          katamariColliderRef.current.radius(),
+          currentRadiusRef.current,
+          Math.min(1, delta * GROWTH_TUNING.colliderLerp)
+        );
+        katamariColliderRef.current.setRadius(colliderRadius);
+      } catch {
+        // Collider can be unmounted between route changes.
+      }
     }
 
     hudTimerRef.current += delta;
@@ -285,7 +297,7 @@ export function useKatamariEngine({
       setDiameter(currentRadiusRef.current * 2);
       setPickupLimit(currentRadiusRef.current * GROWTH_TUNING.pickupFactor);
     }
-  });
+  }, 1);
 
   return {
     resetEngine,

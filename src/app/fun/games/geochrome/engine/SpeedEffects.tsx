@@ -35,7 +35,12 @@ export function SpeedEffects({
     if (timerRef.current < 0.05) return;
     timerRef.current = 0;
 
-    const v = playerBodyRef.current.linvel();
+    let v;
+    try {
+      v = playerBodyRef.current.linvel();
+    } catch {
+      return;
+    }
     const speed = Math.sqrt(v.x * v.x + v.z * v.z);
     const normalized = THREE.MathUtils.clamp(speed / 24, 0, 1);
     strengthRef.current = THREE.MathUtils.lerp(strengthRef.current, normalized, 0.35);

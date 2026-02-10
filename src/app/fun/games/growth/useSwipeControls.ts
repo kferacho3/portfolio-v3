@@ -5,6 +5,7 @@ type SwipeOptions = {
   threshold?: number;
   onLeft: () => void;
   onRight: () => void;
+  onTap?: () => void;
 };
 
 export function useSwipeControls({
@@ -12,6 +13,7 @@ export function useSwipeControls({
   threshold = 36,
   onLeft,
   onRight,
+  onTap,
 }: SwipeOptions) {
   const startX = useRef<number | null>(null);
   const startY = useRef<number | null>(null);
@@ -53,7 +55,13 @@ export function useSwipeControls({
         startX.current = null;
         startY.current = null;
         if (sx == null || sy == null) return;
-        commitSwipe(event.clientX - sx, event.clientY - sy);
+        const deltaX = event.clientX - sx;
+        const deltaY = event.clientY - sy;
+        if (Math.abs(deltaX) < threshold && Math.abs(deltaY) < threshold) {
+          if (onTap) onTap();
+          return;
+        }
+        commitSwipe(deltaX, deltaY);
       };
 
       const handlePointerCancel = (event: PointerEvent) => {
@@ -92,7 +100,13 @@ export function useSwipeControls({
       startY.current = null;
       if (sx == null || sy == null) return;
       const touch = event.changedTouches[0];
-      commitSwipe(touch.clientX - sx, touch.clientY - sy);
+      const deltaX = touch.clientX - sx;
+      const deltaY = touch.clientY - sy;
+      if (Math.abs(deltaX) < threshold && Math.abs(deltaY) < threshold) {
+        if (onTap) onTap();
+        return;
+      }
+      commitSwipe(deltaX, deltaY);
     };
 
     const handleTouchCancel = () => {
@@ -109,5 +123,5 @@ export function useSwipeControls({
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [enabled, threshold, onLeft, onRight]);
+  }, [enabled, threshold, onLeft, onRight, onTap]);
 }

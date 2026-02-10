@@ -86,7 +86,9 @@ export default function KatamariPlayer({
   const cameraForward = useMemo(() => new THREE.Vector3(), []);
   const cameraRight = useMemo(() => new THREE.Vector3(), []);
   const moveDirection = useMemo(() => new THREE.Vector3(), []);
-  const impulse = useMemo(() => new THREE.Vector3(), []);
+  const planarVelocity = useMemo(() => new THREE.Vector3(), []);
+  const desiredVelocity = useMemo(() => new THREE.Vector3(), []);
+  const torqueAxis = useMemo(() => new THREE.Vector3(), []);
   const torque = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
@@ -119,6 +121,13 @@ export default function KatamariPlayer({
     const rb = playerBodyRef.current;
     if (!rb || !started) return;
 
+    let velocity;
+    try {
+      velocity = rb.linvel();
+    } catch {
+      return;
+    }
+
     const input = inputRef.current;
 
     cameraForward.copy(state.camera.getWorldDirection(cameraForward));
@@ -140,40 +149,78 @@ export default function KatamariPlayer({
       moveDirection.normalize();
     }
 
+    const scale = Math.max(1, scaleRef.current);
+    const boost = input.boost ? PLAYER_TUNING.boostMultiplier : 1;
+    const speedScaleFactor = THREE.MathUtils.clamp(
+      Math.pow(scale, PLAYER_TUNING.speedScaleExponent),
+      1,
+      PLAYER_TUNING.maxScaleSpeedFactor
+    );
+    const accelScaleFactor = THREE.MathUtils.clamp(
+      1 + (scale - 1) * PLAYER_TUNING.accelScaleGain,
+      1,
+      PLAYER_TUNING.maxAccelScaleFactor
+    );
+    const torqueScaleFactor = THREE.MathUtils.clamp(
+      1 + (scale - 1) * PLAYER_TUNING.torqueScaleGain,
+      1,
+      PLAYER_TUNING.maxTorqueScaleFactor
+    );
+
+    const baseTargetSpeed = PLAYER_TUNING.maxSpeed * speedScaleFactor;
+    const targetSpeed = baseTargetSpeed * boost;
+
+    planarVelocity.set(velocity.x, 0, velocity.z);
+
     if (moveDirection.lengthSq() > 0.001) {
-      const boost = input.boost ? PLAYER_TUNING.boostMultiplier : 1;
-      const accel = PLAYER_TUNING.accel * boost;
-      const torquePower = PLAYER_TUNING.torque * boost;
+      desiredVelocity.copy(moveDirection).multiplyScalar(targetSpeed);
 
-      impulse.copy(moveDirection).multiplyScalar(accel * delta);
-      impulse.y = 0;
-      rb.applyImpulse(impulse, true);
-
-      torque.set(
-        moveDirection.z * torquePower * delta,
-        0,
-        -moveDirection.x * torquePower * delta
-      );
-      rb.applyTorqueImpulse(torque, true);
+      const response =
+        PLAYER_TUNING.velocityResponse *
+        (PLAYER_TUNING.accel / 48) *
+        accelScaleFactor *
+        (input.boost ? 1.08 : 1);
+      const steerLerp = 1 - Math.exp(-response * delta);
+      planarVelocity.lerp(desiredVelocity, steerLerp);
+    } else {
+      const coast = Math.exp(-PLAYER_TUNING.coastDrag * delta);
+      planarVelocity.multiplyScalar(coast);
     }
 
-    const velocity = rb.linvel();
-    const planarSpeed = Math.sqrt(
-      velocity.x * velocity.x + velocity.z * velocity.z
-    );
-    const scale = Math.max(1, scaleRef.current);
-    const maxSpeed = PLAYER_TUNING.maxSpeed * (1 + Math.log(scale) * 0.2);
+    const planarSpeed = planarVelocity.length();
+    if (planarSpeed > targetSpeed) {
+      planarVelocity.multiplyScalar(targetSpeed / planarSpeed);
+    }
 
-    if (planarSpeed > maxSpeed) {
-      const ratio = maxSpeed / planarSpeed;
+    try {
       rb.setLinvel(
         {
-          x: velocity.x * ratio,
+          x: planarVelocity.x,
           y: velocity.y,
-          z: velocity.z * ratio,
+          z: planarVelocity.z,
         },
         true
       );
+    } catch {
+      return;
+    }
+
+    const currentSpeed = planarVelocity.length();
+    if (currentSpeed > 0.02) {
+      torqueAxis.set(planarVelocity.z, 0, -planarVelocity.x);
+      if (torqueAxis.lengthSq() > 0.0001) {
+        torqueAxis.normalize();
+        const rollStrength =
+          PLAYER_TUNING.torque *
+          torqueScaleFactor *
+          Math.min(2, currentSpeed / Math.max(1, PLAYER_TUNING.maxSpeed));
+        torque.copy(torqueAxis).multiplyScalar(rollStrength * delta);
+        try {
+          rb.applyTorqueImpulse(torque, true);
+        } catch {
+          return;
+        }
+      }
     }
   });
 

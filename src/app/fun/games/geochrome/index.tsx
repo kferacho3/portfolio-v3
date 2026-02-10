@@ -23,7 +23,6 @@ import { SpeedEffects } from './engine/SpeedEffects';
 import { useKatamariAudio } from './engine/useKatamariAudio';
 import { useKatamariEngine } from './engine/useKatamariEngine';
 import { useInput } from './engine/useInput';
-import { usePhysicsCuller } from './engine/usePhysicsCuller';
 import { useSpringCamera } from './engine/useSpringCamera';
 import { useGeoChromeStore } from './engine/store';
 import type { StuckAttributeBuffers, WorldRuntimeData } from './engine/types';
@@ -116,13 +115,6 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     scaleRef,
   });
 
-  usePhysicsCuller({
-    started,
-    lowPerf,
-    playerBodyRef,
-    worldBodiesRef,
-  });
-
   const { playPickup } = useKatamariAudio({
     enabled: started && soundsOn && audioReady,
     playerBodyRef,
@@ -137,6 +129,12 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
       resetRun();
       pendingCollectRef.current.length = 0;
       pendingCollectSetRef.current.clear();
+      worldBodiesRef.current = null;
+      worldMeshRef.current = null;
+      stuckMeshRef.current = null;
+      playerBodyRef.current = null;
+      playerColliderRef.current = null;
+      katamariGroupRef.current = null;
     };
   }, [resetRun]);
 
@@ -158,6 +156,9 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     resetProgress();
     pendingCollectRef.current.length = 0;
     pendingCollectSetRef.current.clear();
+    worldBodiesRef.current = null;
+    worldMeshRef.current = null;
+    stuckMeshRef.current = null;
     setWorldSeed((prev) => prev + 1);
   }, [lowPerf, resetEngine, resetProgress]);
 
@@ -181,13 +182,19 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const handleCollision = useCallback(
     (payload: CollisionEnterPayload) => {
       if (!started) return;
-      const other = payload.other.rigidBody;
-      if (!other) return;
-
-      const data =
-        typeof other.userData === 'object' && other.userData !== null
-          ? (other.userData as Record<string, unknown>)
+      const fromObject =
+        payload.other.rigidBodyObject &&
+        typeof payload.other.rigidBodyObject.userData === 'object'
+          ? (payload.other.rigidBodyObject.userData as Record<string, unknown>)
           : undefined;
+      const fromBody =
+        payload.other.rigidBody &&
+        typeof payload.other.rigidBody.userData === 'object'
+          ? (payload.other.rigidBody.userData as Record<string, unknown>)
+          : undefined;
+
+      const data = fromObject ?? fromBody;
+      if (!data || data.collected === true) return;
 
       const index = data?.worldIndex;
       if (typeof index !== 'number') return;
@@ -219,7 +226,7 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
       });
       playPickup(result.size);
     }
-  });
+  }, 1);
 
   return (
     <>
@@ -246,7 +253,7 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
 
       <Physics
         gravity={[0, -9.81, 0]}
-        timeStep="vary"
+        timeStep={1 / 60}
         paused={!started}
         colliders={false}
       >

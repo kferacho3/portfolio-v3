@@ -213,7 +213,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'polarity',
     title: 'Polarity',
     description:
-      'Tap to flip charge and swap rails through matching polarity gates.',
+      'One-tap magnetic drift runner: flip polarity, weave gates, and farm near-miss streaks.',
     accent: '#22d3ee',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Polarity.webp',
@@ -222,7 +222,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'tetherdrift',
     title: 'Tether Drift',
-    description: 'Hold to tether, release to drift, and chain anchors upward.',
+    description:
+      'Hold to snap a glowing tether, release to slingshot, and thread offset drift gates in zero-g.',
     accent: '#a78bfa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/TetherDrift.webp',
@@ -637,10 +638,10 @@ export const GAME_RULES: Record<string, GameRules> = {
   },
   growth: {
     controls:
-      'Left Arrow / Swipe Left = rotate +90° • Right Arrow / Swipe Right = rotate -90° • Space = repeat last turn • R to restart',
+      'A/Left Arrow/Swipe Left = rotate +90° • D/Right Arrow/Swipe Right = rotate -90° • Tap/Space = jump • R to restart',
     objective:
-      'Rotate the beam to dodge growing branches. Collect gems to unlock 25+ unique characters. Speed increases over time!',
-    tips: 'Watch branches grow in real-time—some are close calls! Rotate quickly when needed. Collect gems to unlock new characters.',
+      'Ride the surface of the path, jump low branches, and rotate to an open face when tall branches become impossible to clear.',
+    tips: 'Branches grow in real time. Low branches are jumpable, tall branches force a rotate. Always scan at least one segment ahead.',
   },
   steps: {
     controls: 'Tap/Space/Click to turn • R to restart',

@@ -5,8 +5,8 @@ export const COLLISION_GROUPS = {
 
 export const WORLD_TUNING = {
   seedBase: 773,
-  itemCount: 5600,
-  liteItemCount: 3200,
+  itemCount: 4200,
+  liteItemCount: 2400,
   maxStuckItems: 12000,
   radius: 185,
   halfExtent: 220,
@@ -21,15 +21,23 @@ export const WORLD_TUNING = {
 
 export const PLAYER_TUNING = {
   spawnHeight: 1.4,
-  accel: 28,
-  torque: 18,
-  maxSpeed: 26,
-  boostMultiplier: 1.35,
-  linearDamping: 1.75,
-  angularDamping: 1.4,
+  accel: 48,
+  torque: 22,
+  maxSpeed: 54,
+  boostMultiplier: 1.85,
+  linearDamping: 0.95,
+  angularDamping: 0.8,
   baseRadius: 0.72,
   friction: 1.2,
   restitution: 0.04,
+  speedScaleExponent: 0.58,
+  maxScaleSpeedFactor: 5.3,
+  accelScaleGain: 0.38,
+  maxAccelScaleFactor: 3.2,
+  torqueScaleGain: 0.2,
+  maxTorqueScaleFactor: 2.1,
+  velocityResponse: 9.5,
+  coastDrag: 2.9,
 } as const;
 
 export const GROWTH_TUNING = {
@@ -42,18 +50,32 @@ export const GROWTH_TUNING = {
 } as const;
 
 export const CAMERA_TUNING = {
-  baseHeight: 6.6,
-  baseDistance: 12.8,
-  followLerp: 4.2,
-  lookLerp: 4.8,
-  lookAhead: 1.9,
-  headingLerp: 5.8,
-  headingInfluence: 0.35,
+  baseHeight: 3.2,
+  baseDistance: 18,
+  minDistance: 14,
+  maxDistance: 46,
+  pitchDeg: 56,
+  followLerp: 9.5,
+  lookLerp: 10.5,
+  targetLerp: 11,
+  lookAhead: 4.2,
+  lookHeight: 1.2,
+  headingLerp: 11.2,
+  speedDistanceFactor: 0.22,
+  speedHeightFactor: 0.03,
+  catchUpDistance: 14,
+  catchUpLerp: 15,
+  baseFov: 52,
+  minFov: 50,
+  maxFov: 63,
+  speedFovGain: 0.1,
+  scaleFovGain: 1.35,
+  fovLerp: 6.2,
 } as const;
 
 export const PHYSICS_CULLING = {
-  activeRadius: 62,
-  liteRadius: 48,
+  activeRadius: 72,
+  liteRadius: 54,
   checkInterval: 0.22,
   liteCheckInterval: 0.14,
 } as const;
@@ -62,8 +84,8 @@ export const RENDER_TUNING = {
   highPerfDpr: 1.5,
   baseDpr: 1.25,
   lowPerfDpr: 1,
-  worldSegments: 18,
-  worldRings: 16,
+  worldSegments: 14,
+  worldRings: 12,
   terrainSegments: 128,
   qualityHigh: 1,
   qualityLow: 0.58,
@@ -75,6 +97,7 @@ export const ARENA_TUNING = {
   boundaryHeight: 12,
   boundaryThickness: 5.5,
   boundaryRadius: 214,
+  tileSize: 8,
 } as const;
 
 export const AUDIO_TUNING = {

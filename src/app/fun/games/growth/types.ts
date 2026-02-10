@@ -8,6 +8,9 @@ export interface GrowthSegment {
   sequence: number;
   z: number;
   blockedFaces: Face[];
+  obstacleHeights: number[];
+  obstacleTargetHeights: number[];
+  obstacleGrowthRates: number[];
   safeFace: Face;
   gemFace: Face | null;
   powerupFace: Face | null;

@@ -60,12 +60,13 @@ const SHIELD_COLOR = new THREE.Color('#818cf8');
 const OBSTACLE_INSTANCES_PER_SEGMENT = 3;
 const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
 
-const OBSTACLE_LENGTH = 0.72;
-const OBSTACLE_THICKNESS = 0.16;
-const OBSTACLE_RADIUS = SEGMENT_HALF + OBSTACLE_THICKNESS * 0.56;
+const BRANCH_DEPTH = SEGMENT_SPACING * 0.66;
+const BRANCH_BASE_THICKNESS = 0.18;
+const BRANCH_INITIAL_HEIGHT = 0.05;
 const GEM_RADIUS = SEGMENT_HALF + 0.16;
 const POWERUP_RADIUS = SEGMENT_HALF + 0.2;
 const HIDE_POSITION_Y = -9999;
+const PLAYER_BASE_Y = SEGMENT_HALF + PLAYER_COLLISION_RADIUS * 0.7;
 
 const normalizeFace = (face: number) => (((face % 4) + 4) % 4) as Face;
 const clamp = (value: number, min: number, max: number) =>
@@ -144,21 +145,41 @@ const sanitizeBlockedFaces = (
   return [rng.pick(fallbackPool)];
 };
 
+const buildObstacleTargetHeight = (rng: SeededRandom, difficulty: number) => {
+  const tallChance = lerp(
+    gameplayConfig.branchHeight.tallChanceStart,
+    gameplayConfig.branchHeight.tallChanceEnd,
+    difficulty
+  );
+  if (rng.bool(tallChance)) {
+    return rng.float(
+      gameplayConfig.branchHeight.tallMin,
+      gameplayConfig.branchHeight.tallMax
+    );
+  }
+  return rng.float(
+    gameplayConfig.branchHeight.shortMin,
+    gameplayConfig.branchHeight.shortMax
+  );
+};
+
 type InputControllerProps = {
   canStart: boolean;
   canRotate: boolean;
+  canJump: boolean;
   rotateLeft: () => void;
   rotateRight: () => void;
-  rotateFallback: () => void;
+  jump: () => void;
   startOrRestart: () => void;
 };
 
 const InputController: React.FC<InputControllerProps> = ({
   canStart,
   canRotate,
+  canJump,
   rotateLeft,
   rotateRight,
-  rotateFallback,
+  jump,
   startOrRestart,
 }) => {
   const onLeft = useCallback(() => {
@@ -171,45 +192,51 @@ const InputController: React.FC<InputControllerProps> = ({
     rotateRight();
   }, [canRotate, rotateRight]);
 
-  const onTapFallback = useCallback(() => {
-    if (!canRotate) return;
-    rotateFallback();
-  }, [canRotate, rotateFallback]);
-
   const onStart = useCallback(() => {
     if (!canStart) return;
     startOrRestart();
   }, [canStart, startOrRestart]);
 
+  const onPrimary = useCallback(() => {
+    if (canStart) {
+      startOrRestart();
+      return;
+    }
+    if (canJump) {
+      jump();
+    }
+  }, [canJump, canStart, jump, startOrRestart]);
+
   useKeyboardControls({
     onLeft,
     onRight,
-    onTapFallback,
+    onPrimary,
     onStart,
   });
 
   useSwipeControls({
-    enabled: canRotate,
+    enabled: canRotate || canJump || canStart,
     onLeft,
     onRight,
+    onTap: onPrimary,
   });
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
+      // Touch input is owned by swipe controls (tap/swipe).
+      if (event.pointerType === 'touch') return;
       if (canStart) {
         startOrRestart();
         return;
       }
-      // Touch input is owned by swipe controls during active runs.
-      if (event.pointerType === 'touch') return;
-      if (canRotate) {
-        rotateFallback();
+      if (canJump) {
+        jump();
       }
     };
 
     window.addEventListener('pointerdown', handlePointerDown);
     return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [canRotate, canStart, rotateFallback, startOrRestart]);
+  }, [canJump, canStart, jump, startOrRestart]);
 
   return null;
 };
@@ -239,7 +266,6 @@ const Growth: React.FC = () => {
   const {
     rotateLeft: rotateWorldLeft,
     rotateRight: rotateWorldRight,
-    rotateInLastDirection: rotateWorldFallback,
     update: updateWorldRotation,
     reset: resetWorldRotation,
     getRotationIndex,
@@ -260,6 +286,11 @@ const Growth: React.FC = () => {
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const powerupMeshRef = useRef<THREE.InstancedMesh>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
+  const jumpState = useRef({
+    height: 0,
+    velocity: 0,
+    grounded: true,
+  });
 
   const runtime = useRef<RuntimeState>({
     rng: new SeededRandom(1),
@@ -317,12 +348,41 @@ const Growth: React.FC = () => {
           hideInstance(mesh, instanceId);
           continue;
         }
+        const height = Math.max(
+          BRANCH_INITIAL_HEIGHT,
+          segment.obstacleHeights[i] ?? BRANCH_INITIAL_HEIGHT
+        );
+        const half = height * 0.5;
+        let x = 0;
+        let y = 0;
+        let angle = 0;
 
-        const [ox, oy] = getFaceOffset(face, OBSTACLE_RADIUS);
-        const angle = face === 0 || face === 1 ? 0 : Math.PI / 2;
-        matrixDummy.position.set(ox, oy, segment.z);
+        switch (face) {
+          case 0:
+            x = SEGMENT_HALF + half;
+            y = 0;
+            angle = 0;
+            break;
+          case 1:
+            x = -SEGMENT_HALF - half;
+            y = 0;
+            angle = 0;
+            break;
+          case 2:
+            x = 0;
+            y = SEGMENT_HALF + half;
+            angle = Math.PI / 2;
+            break;
+          default:
+            x = 0;
+            y = -SEGMENT_HALF - half;
+            angle = Math.PI / 2;
+            break;
+        }
+
+        matrixDummy.position.set(x, y, segment.z);
         matrixDummy.rotation.set(0, 0, angle);
-        matrixDummy.scale.set(1, 1, 1);
+        matrixDummy.scale.set(height, 1, 1);
         matrixDummy.updateMatrix();
         mesh.setMatrixAt(instanceId, matrixDummy.matrix);
         mesh.setColorAt(
@@ -482,6 +542,19 @@ const Growth: React.FC = () => {
         runtime.current.lastTurnSequence = sequence;
       }
 
+      const obstacleTargetHeights = blockedFaces.map(() =>
+        buildObstacleTargetHeight(runtime.current.rng, difficulty)
+      );
+      const obstacleHeights = obstacleTargetHeights.map(() =>
+        runtime.current.rng.float(BRANCH_INITIAL_HEIGHT, BRANCH_INITIAL_HEIGHT * 1.8)
+      );
+      const obstacleGrowthRates = blockedFaces.map(() =>
+        runtime.current.rng.float(
+          gameplayConfig.branchGrowthRate.min,
+          gameplayConfig.branchGrowthRate.max
+        )
+      );
+
       const availableForPickup = FACE_LIST.filter(
         (face) => !blockedFaces.includes(face)
       ) as Face[];
@@ -520,6 +593,9 @@ const Growth: React.FC = () => {
         sequence,
         z,
         blockedFaces,
+        obstacleHeights,
+        obstacleTargetHeights,
+        obstacleGrowthRates,
         safeFace,
         gemFace,
         powerupFace,
@@ -562,6 +638,29 @@ const Growth: React.FC = () => {
     ]
   );
 
+  const growBranchesForSegment = useCallback(
+    (segment: GrowthSegment, dt: number) => {
+      let changed = false;
+      for (let i = 0; i < segment.blockedFaces.length; i += 1) {
+        const current = segment.obstacleHeights[i] ?? BRANCH_INITIAL_HEIGHT;
+        const target = segment.obstacleTargetHeights[i] ?? current;
+        if (current >= target) continue;
+        const growthRate =
+          segment.obstacleGrowthRates[i] ?? gameplayConfig.branchGrowthRate.min;
+        const next = Math.min(target, current + growthRate * dt);
+        if (next !== current) {
+          segment.obstacleHeights[i] = next;
+          changed = true;
+        }
+      }
+      if (changed) {
+        writeObstacleInstances(segment);
+      }
+      return changed;
+    },
+    [writeObstacleInstances]
+  );
+
   const resetWorld = useCallback(() => {
     runtime.current.rng.reset(Math.floor(Math.random() * 1_000_000_000));
     runtime.current.segments = [];
@@ -571,6 +670,9 @@ const Growth: React.FC = () => {
     runtime.current.speed = gameplayConfig.baseSpeed;
     runtime.current.uiSpeedAccumulator = 0;
     runtime.current.lastTurnSequence = -1000;
+    jumpState.current.height = 0;
+    jumpState.current.velocity = 0;
+    jumpState.current.grounded = true;
     runtime.current.nextSequence = SEGMENT_POOL;
     runtime.current.hardStreak = 0;
     runtime.current.farthestZ =
@@ -632,10 +734,13 @@ const Growth: React.FC = () => {
     rotateWorldRight();
   }, [paused, rotateWorldRight]);
 
-  const rotateFallback = useCallback(() => {
+  const jump = useCallback(() => {
     if (growthState.phase !== 'playing' || paused) return;
-    rotateWorldFallback();
-  }, [paused, rotateWorldFallback]);
+    if (!jumpState.current.grounded) return;
+    jumpState.current.grounded = false;
+    jumpState.current.velocity = gameplayConfig.jumpVelocity;
+    cameraShake.triggerShake(0.03, 70);
+  }, [cameraShake, paused]);
 
   useEffect(() => {
     growthState.loadBestScore();
@@ -683,6 +788,24 @@ const Growth: React.FC = () => {
       atmosphereRef.current.rotation.z += dt * 0.03;
     }
 
+    if (growthState.phase !== 'playing') {
+      jumpState.current.height = 0;
+      jumpState.current.velocity = 0;
+      jumpState.current.grounded = true;
+    } else if (!paused && !jumpState.current.grounded) {
+      jumpState.current.velocity -= gameplayConfig.jumpGravity * dt;
+      jumpState.current.height += jumpState.current.velocity * dt;
+      if (jumpState.current.height <= 0) {
+        jumpState.current.height = 0;
+        jumpState.current.velocity = 0;
+        jumpState.current.grounded = true;
+      }
+    }
+
+    if (playerRef.current) {
+      playerRef.current.position.set(0, PLAYER_BASE_Y + jumpState.current.height, 0);
+    }
+
     if (growthState.phase === 'playing' && !paused) {
       runtime.current.elapsed += dt;
       growthState.tickTimers(dt);
@@ -712,16 +835,33 @@ const Growth: React.FC = () => {
 
       const activeFace = PLAYER_FACE_BY_ROTATION[getRotationIndex()];
       let shouldEndRun = false;
+      let instancesDirty = false;
 
       for (let i = 0; i < runtime.current.segments.length; i += 1) {
         const segment = runtime.current.segments[i];
         const worldZ = segment.z - runtime.current.scroll;
+        if (worldZ < 30 && worldZ > DESPAWN_WORLD_Z - 2) {
+          if (growBranchesForSegment(segment, dt)) {
+            instancesDirty = true;
+          }
+        }
 
         if (!segment.cleared && worldZ <= COLLISION_WINDOW) {
-          const isBlocked = segment.blockedFaces.includes(activeFace);
+          const blockedIndex = segment.blockedFaces.indexOf(activeFace);
+          const isBlocked = blockedIndex >= 0;
+          const activeObstacleHeight =
+            blockedIndex >= 0
+              ? segment.obstacleHeights[blockedIndex] ?? BRANCH_INITIAL_HEIGHT
+              : 0;
+          const jumpClearHeight = Math.max(
+            0,
+            activeObstacleHeight - gameplayConfig.jumpClearancePadding
+          );
+          const jumpedOverObstacle =
+            !isBlocked || jumpState.current.height >= jumpClearHeight;
           segment.cleared = true;
 
-          if (isBlocked) {
+          if (isBlocked && !jumpedOverObstacle) {
             if (growthState.shieldMs > 0) {
               growthState.shieldMs = 0;
               cameraShake.triggerShake(0.12, 110);
@@ -733,6 +873,10 @@ const Growth: React.FC = () => {
               break;
             }
           } else {
+            if (isBlocked && jumpedOverObstacle) {
+              growthState.addClearScore(2);
+              cameraShake.triggerShake(0.05, 70);
+            }
             growthState.addClearScore(
               CLEAR_SCORE +
                 Math.max(0, segment.blockedFaces.length - 1) +
@@ -756,6 +900,7 @@ const Growth: React.FC = () => {
               growthState.collectGem();
               growthState.addClearScore(GEM_SCORE);
               writeGemInstance(segment);
+              instancesDirty = true;
             }
 
             if (
@@ -770,18 +915,20 @@ const Growth: React.FC = () => {
                 growthState.grantShield(SHIELD_DURATION * 1000);
               }
               writePowerupInstance(segment);
+              instancesDirty = true;
             }
           }
         }
 
         if (worldZ < DESPAWN_WORLD_Z) {
           recycleSegment(segment);
+          instancesDirty = true;
         }
       }
 
       if (shouldEndRun) {
         growthState.endGame();
-      } else {
+      } else if (instancesDirty) {
         flushInstances();
       }
     }
@@ -793,7 +940,7 @@ const Growth: React.FC = () => {
       0,
       1
     );
-    const targetZoom = 94 + speedRatio * 10;
+    const targetZoom = 78 + speedRatio * 5;
     cam.zoom = THREE.MathUtils.lerp(
       cam.zoom,
       targetZoom,
@@ -801,25 +948,25 @@ const Growth: React.FC = () => {
     );
     cam.position.x = THREE.MathUtils.lerp(
       cam.position.x,
-      5.2 + shake.x,
+      6.8 + shake.x,
       1 - Math.exp(-dt * 8)
     );
     cam.position.y = THREE.MathUtils.lerp(
       cam.position.y,
-      5.1 + shake.y,
+      6.2 + shake.y,
       1 - Math.exp(-dt * 8)
     );
     cam.position.z = THREE.MathUtils.lerp(
       cam.position.z,
-      9 + shake.z,
+      14.5 + shake.z,
       1 - Math.exp(-dt * 8)
     );
     cam.rotation.z = THREE.MathUtils.lerp(
       cam.rotation.z,
-      getWorldRotation() * 0.06,
+      getWorldRotation() * 0.045,
       1 - Math.exp(-dt * 9)
     );
-    cam.lookAt(0, 0, 0);
+    cam.lookAt(0, PLAYER_BASE_Y * 0.36, 3.8);
     cam.updateProjectionMatrix();
   }, -1);
 
@@ -828,9 +975,10 @@ const Growth: React.FC = () => {
       <InputController
         canStart={snap.phase !== 'playing'}
         canRotate={snap.phase === 'playing' && !paused}
+        canJump={snap.phase === 'playing' && !paused}
         rotateLeft={rotateLeft}
         rotateRight={rotateRight}
-        rotateFallback={rotateFallback}
+        jump={jump}
         startOrRestart={startOrRestart}
       />
 
@@ -839,8 +987,8 @@ const Growth: React.FC = () => {
         makeDefault
         near={0.1}
         far={120}
-        position={[5.2, 5.1, 9]}
-        zoom={92}
+        position={[6.8, 6.2, 14.5]}
+        zoom={78}
       />
 
       <ambientLight intensity={graphicsPreset.ambientIntensity} />
@@ -906,7 +1054,7 @@ const Growth: React.FC = () => {
           receiveShadow
         >
           <boxGeometry
-            args={[OBSTACLE_THICKNESS, OBSTACLE_LENGTH, SEGMENT_SPACING * 0.64]}
+            args={[1, BRANCH_BASE_THICKNESS, BRANCH_DEPTH]}
           />
           <meshStandardMaterial
             vertexColors
@@ -947,7 +1095,7 @@ const Growth: React.FC = () => {
         </instancedMesh>
       </group>
 
-      <group ref={playerRef} position={[0, 0, 0]}>
+      <group ref={playerRef} position={[0, PLAYER_BASE_Y, 0]}>
         <mesh castShadow={graphicsPreset.shadows}>
           <boxGeometry
             args={[
@@ -1052,14 +1200,17 @@ const Growth: React.FC = () => {
                   lineHeight: 1.45,
                 }}
               >
-                Rotate the world around your static runner. Dodge side walls,
-                collect gems, and chain perfect quarter-turns.
+                Jump low branches and rotate to safer faces when tall branches
+                grow too high.
               </div>
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                Left Arrow / Swipe Left: +90°
+                A / Left Arrow / Swipe Left: rotate +90°
               </div>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Right Arrow / Swipe Right: -90°
+                D / Right Arrow / Swipe Right: rotate -90°
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>
+                Tap / Space: jump
               </div>
               {snap.phase === 'gameover' && (
                 <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>

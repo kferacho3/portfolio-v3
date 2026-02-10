@@ -4,7 +4,7 @@ type KeyboardOptions = {
   enabled?: boolean;
   onLeft: () => void;
   onRight: () => void;
-  onTapFallback?: () => void;
+  onPrimary?: () => void;
   onStart?: () => void;
 };
 
@@ -12,7 +12,7 @@ export function useKeyboardControls({
   enabled = true,
   onLeft,
   onRight,
-  onTapFallback,
+  onPrimary,
   onStart,
 }: KeyboardOptions) {
   useEffect(() => {
@@ -32,14 +32,18 @@ export function useKeyboardControls({
         onRight();
         return;
       }
-      if (key === ' ' || key === 'Enter') {
+      if (key === ' ') {
+        event.preventDefault();
+        if (onPrimary) onPrimary();
+        return;
+      }
+      if (key === 'Enter') {
         event.preventDefault();
         if (onStart) onStart();
-        if (onTapFallback) onTapFallback();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [enabled, onLeft, onRight, onTapFallback, onStart]);
+  }, [enabled, onLeft, onRight, onPrimary, onStart]);
 }

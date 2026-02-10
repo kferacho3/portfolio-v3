@@ -1,294 +1,870 @@
 'use client';
 
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Html, PerspectiveCamera } from '@react-three/drei';
-import { useFrame } from '@react-three/fiber';
-import React, { useMemo, useRef, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
+import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import {
-  buildPatternLibraryTemplate,
-  pickPatternChunkForSurvivability,
-  sampleSurvivability,
-  sampleDifficulty,
-} from '../../config/ketchapp';
-import { KetchappGameShell } from '../_shared/KetchappGameShell';
+import { create } from 'zustand';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { polarityState, type PolarityCharge } from './state';
 
-type Gate = {
-  id: string;
+type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
+type PolaritySign = 1 | -1;
+type ObstacleKind = 'gate' | 'spike' | 'slit';
+
+type Segment = {
   z: number;
-  required: PolarityCharge;
-  telegraphLate: boolean;
+  leftX: number;
+  rightX: number;
+  leftPolarity: PolaritySign;
+  rightPolarity: PolaritySign;
+  strength: number;
+  doubleZone: boolean;
+  obstacleKind: ObstacleKind;
+  gapX: number;
+  gapW: number;
+  spikeX: number;
+  spikeW: number;
+  obstacleDepth: number;
+  passed: boolean;
+  orbActive: boolean;
+  orbX: number;
+  orbCollected: boolean;
 };
 
-type SpawnRng = {
-  next: () => number;
+type RuntimePylon = {
+  x: number;
+  z: number;
+  polarity: PolaritySign;
+  intensity: number;
 };
 
-const LOOK_AHEAD = 110;
-const DESPAWN_Z = -12;
-const PLAYER_Z = 0;
-const RAIL_X: Record<PolarityCharge, number> = {
-  1: -1.6,
-  [-1]: 1.6,
+type RuntimeState = {
+  segments: Segment[];
+  serial: number;
+  elapsed: number;
+  playerX: number;
+  playerVelX: number;
+  distance: number;
+  bonusScore: number;
+  orbCount: number;
+  nearMissStreak: number;
+  multiplier: number;
+  commitTimer: number;
+  currentScore: number;
+  shakeTime: number;
+  nearbyPylons: RuntimePylon[];
 };
 
-const makeRng = (seed: number): SpawnRng => {
-  let value = seed >>> 0;
-  return {
-    next() {
-      value = (value * 1664525 + 1013904223) >>> 0;
-      return value / 0xffffffff;
+type PolarityStore = {
+  status: GameStatus;
+  score: number;
+  multiplier: number;
+  nearMissStreak: number;
+  best: number;
+  playerPolarity: PolaritySign;
+  flipFxNonce: number;
+  startRun: () => void;
+  flipPolarity: () => void;
+  updateRuntimeHud: (score: number, multiplier: number, nearMissStreak: number) => void;
+  endRun: (score: number) => void;
+  resetToStart: () => void;
+};
+
+const BEST_KEY = 'polarity_hyper_best_v1';
+
+const SEGMENT_POOL = 68;
+const PYLON_INSTANCE_COUNT = SEGMENT_POOL * 2;
+const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * 2;
+const ORB_INSTANCE_COUNT = SEGMENT_POOL;
+const FIELD_LINE_CAP = 30;
+
+const PLAYER_RADIUS = 0.24;
+const ORB_RADIUS = 0.13;
+const LANE_HALF_WIDTH = 3.45;
+const DESPAWN_Z = 8;
+const SPAWN_START_Z = -9;
+const INFLUENCE_RADIUS = 12;
+
+const CYAN = new THREE.Color('#22d3ee');
+const MAGENTA = new THREE.Color('#ff4fd8');
+const HOT = new THREE.Color('#ff5f7d');
+const GOLD = new THREE.Color('#ffe066');
+const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
+const tinyScale = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+const readBest = () => {
+  if (typeof window === 'undefined') return 0;
+  const raw = window.localStorage.getItem(BEST_KEY);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+};
+
+const writeBest = (score: number) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
+};
+
+const usePolarityStore = create<PolarityStore>((set, get) => ({
+  status: 'START',
+  score: 0,
+  multiplier: 1,
+  nearMissStreak: 0,
+  best: readBest(),
+  playerPolarity: 1,
+  flipFxNonce: 0,
+  startRun: () => {
+    set({
+      status: 'PLAYING',
+      score: 0,
+      multiplier: 1,
+      nearMissStreak: 0,
+      playerPolarity: 1,
+    });
+  },
+  flipPolarity: () =>
+    set((state) => ({
+      playerPolarity: state.playerPolarity === 1 ? -1 : 1,
+      flipFxNonce: state.flipFxNonce + 1,
+    })),
+  updateRuntimeHud: (score, multiplier, nearMissStreak) => {
+    if (get().status !== 'PLAYING') return;
+    set({
+      score,
+      multiplier: round2(multiplier),
+      nearMissStreak,
+    });
+  },
+  endRun: (score) =>
+    set((state) => {
+      const nextBest = Math.max(state.best, Math.floor(score));
+      if (nextBest !== state.best) writeBest(nextBest);
+      return {
+        status: 'GAMEOVER',
+        score: Math.floor(score),
+        multiplier: 1,
+        nearMissStreak: 0,
+        best: nextBest,
+      };
+    }),
+  resetToStart: () =>
+    set({
+      status: 'START',
+      score: 0,
+      multiplier: 1,
+      nearMissStreak: 0,
+      playerPolarity: 1,
+    }),
+}));
+
+const createSegment = (): Segment => ({
+  z: SPAWN_START_Z,
+  leftX: -2.8,
+  rightX: 2.8,
+  leftPolarity: 1,
+  rightPolarity: -1,
+  strength: 40,
+  doubleZone: false,
+  obstacleKind: 'gate',
+  gapX: 0,
+  gapW: 2.1,
+  spikeX: 0,
+  spikeW: 0.85,
+  obstacleDepth: 0.52,
+  passed: false,
+  orbActive: false,
+  orbX: 0,
+  orbCollected: false,
+});
+
+const createRuntime = (): RuntimeState => ({
+  segments: Array.from({ length: SEGMENT_POOL }, createSegment),
+  serial: 0,
+  elapsed: 0,
+  playerX: 0,
+  playerVelX: 0,
+  distance: 0,
+  bonusScore: 0,
+  orbCount: 0,
+  nearMissStreak: 0,
+  multiplier: 1,
+  commitTimer: 0,
+  currentScore: 0,
+  shakeTime: 0,
+  nearbyPylons: [],
+});
+
+const difficultyAt = (runtime: RuntimeState) =>
+  clamp(runtime.elapsed / 62 + runtime.distance / 480, 0, 1);
+
+const randomPolarity = (): PolaritySign => (Math.random() < 0.5 ? -1 : 1);
+
+const seedSegment = (segment: Segment, runtime: RuntimeState, z: number) => {
+  const d = difficultyAt(runtime);
+  runtime.serial += 1;
+
+  const pylonBase = lerp(3.05, 1.95, d);
+  const pylonJitter = (Math.random() * 2 - 1) * lerp(0.18, 0.72, d);
+
+  segment.z = z;
+  segment.leftX = -pylonBase + pylonJitter * 0.35;
+  segment.rightX = pylonBase + pylonJitter * 0.35;
+
+  const unpredictability = lerp(0.18, 0.86, d);
+  if (Math.random() < unpredictability) {
+    segment.leftPolarity = randomPolarity();
+    segment.rightPolarity = randomPolarity();
+  } else {
+    const alternating = runtime.serial % 2 === 0;
+    segment.leftPolarity = alternating ? 1 : -1;
+    segment.rightPolarity = alternating ? -1 : 1;
+  }
+
+  segment.doubleZone = Math.random() < lerp(0.08, 0.24, d);
+  segment.strength = lerp(34, 74, d) * (segment.doubleZone ? 1.65 : 1);
+
+  const obstacleRoll = Math.random();
+  if (obstacleRoll < 0.48) segment.obstacleKind = 'gate';
+  else if (obstacleRoll < 0.78) segment.obstacleKind = 'slit';
+  else segment.obstacleKind = 'spike';
+
+  const maxGapOffset = lerp(0.55, 1.45, d);
+  segment.gapX = (Math.random() * 2 - 1) * maxGapOffset;
+
+  const wideGap = lerp(2.3, 1.15, d);
+  if (segment.obstacleKind === 'slit') {
+    segment.gapW = clamp(wideGap * 0.62 + Math.random() * 0.3, 0.72, 1.4);
+  } else {
+    segment.gapW = clamp(wideGap + (Math.random() * 2 - 1) * 0.35, 1.05, 2.7);
+  }
+
+  segment.spikeW = clamp(lerp(0.84, 1.36, d) + (Math.random() * 2 - 1) * 0.18, 0.66, 1.55);
+  segment.spikeX = clamp(
+    segment.gapX + (Math.random() * 2 - 1) * lerp(1.0, 1.8, d),
+    -LANE_HALF_WIDTH + segment.spikeW * 0.5 + 0.2,
+    LANE_HALF_WIDTH - segment.spikeW * 0.5 - 0.2
+  );
+
+  segment.obstacleDepth = segment.obstacleKind === 'spike' ? 0.48 : 0.56;
+  segment.passed = false;
+
+  segment.orbActive = Math.random() < lerp(0.24, 0.43, d);
+  segment.orbCollected = false;
+  if (segment.orbActive) {
+    const nearLeft = Math.random() < 0.5;
+    const anchor = nearLeft ? segment.leftX : segment.rightX;
+    segment.orbX = clamp(
+      anchor * lerp(0.72, 0.84, d) + (Math.random() * 2 - 1) * 0.22,
+      -LANE_HALF_WIDTH + 0.38,
+      LANE_HALF_WIDTH - 0.38
+    );
+  } else {
+    segment.orbX = 0;
+  }
+};
+
+const resetRuntime = (runtime: RuntimeState) => {
+  runtime.serial = 0;
+  runtime.elapsed = 0;
+  runtime.playerX = 0;
+  runtime.playerVelX = 0;
+  runtime.distance = 0;
+  runtime.bonusScore = 0;
+  runtime.orbCount = 0;
+  runtime.nearMissStreak = 0;
+  runtime.multiplier = 1;
+  runtime.commitTimer = 0;
+  runtime.currentScore = 0;
+  runtime.shakeTime = 0;
+  runtime.nearbyPylons.length = 0;
+
+  let z = SPAWN_START_Z;
+  for (const segment of runtime.segments) {
+    seedSegment(segment, runtime, z);
+    z -= 4.1 + Math.random() * 1.2;
+  }
+};
+
+const makeScore = (runtime: RuntimeState) =>
+  Math.floor(runtime.distance + runtime.bonusScore + runtime.nearMissStreak * 16);
+
+const aabbHit = (
+  playerX: number,
+  radius: number,
+  boxX: number,
+  boxZ: number,
+  halfW: number,
+  halfD: number
+) => Math.abs(playerX - boxX) < halfW + radius && Math.abs(boxZ) < halfD + radius;
+
+function PolarityOverlay() {
+  const status = usePolarityStore((state) => state.status);
+  const score = usePolarityStore((state) => state.score);
+  const best = usePolarityStore((state) => state.best);
+  const multiplier = usePolarityStore((state) => state.multiplier);
+  const nearMissStreak = usePolarityStore((state) => state.nearMissStreak);
+  const playerPolarity = usePolarityStore((state) => state.playerPolarity);
+  const flipFxNonce = usePolarityStore((state) => state.flipFxNonce);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none select-none text-white">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-300/35 bg-black/45 px-3 py-2">
+        <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/80">Polarity</div>
+        <div className="text-[11px] text-cyan-50/75">Tap to flip charge and drift lanes.</div>
+      </div>
+
+      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-300/35 bg-black/45 px-3 py-2 text-right">
+        <div className="text-2xl font-black tabular-nums">{score}</div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {best}</div>
+      </div>
+
+      {status === 'PLAYING' && (
+        <div className="absolute left-4 top-[92px] rounded-md border border-white/20 bg-black/35 px-3 py-2 text-xs text-white/90">
+          <div>
+            Multiplier <span className="font-semibold text-cyan-200">x{multiplier.toFixed(2)}</span>
+          </div>
+          <div>
+            Near-Miss Streak <span className="font-semibold text-fuchsia-200">{nearMissStreak}</span>
+          </div>
+          <div>
+            Charge <span className="font-semibold">{playerPolarity === 1 ? '+' : '-'}</span>
+          </div>
+        </div>
+      )}
+
+      {status === 'START' && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="rounded-xl border border-white/20 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black tracking-wide">POLARITY</div>
+            <div className="mt-2 text-sm text-white/80">Tap to toggle charge.</div>
+            <div className="mt-1 text-sm text-white/80">Attract opposite pylons, repel matching pylons.</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+          </div>
+        </div>
+      )}
+
+      {status === 'GAMEOVER' && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="rounded-xl border border-white/20 bg-black/70 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-fuchsia-200">Magnetic Crash</div>
+            <div className="mt-2 text-sm text-white/80">Score {score}</div>
+            <div className="mt-1 text-sm text-white/75">Best {best}</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+          </div>
+        </div>
+      )}
+
+      {status === 'PLAYING' && (
+        <div
+          key={flipFxNonce}
+          className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-200/70"
+          style={{
+            animation: 'polarity-ring 220ms ease-out forwards',
+            boxShadow: '0 0 28px rgba(34, 211, 238, 0.25)',
+            opacity: 0,
+          }}
+        />
+      )}
+
+      <style jsx global>{`
+        @keyframes polarity-ring {
+          0% {
+            transform: translate(-50%, -50%) scale(0.55);
+            opacity: 0.75;
+          }
+          100% {
+            transform: translate(-50%, -50%) scale(1.35);
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function PolarityScene() {
+  const inputRef = useInputRef({
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+  });
+  const resetVersion = useSnapshot(polarityState).resetVersion;
+
+  const runtimeRef = useRef<RuntimeState>(createRuntime());
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const pylonRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleRef = useRef<THREE.InstancedMesh>(null);
+  const orbRef = useRef<THREE.InstancedMesh>(null);
+  const playerRef = useRef<THREE.Mesh>(null);
+
+  const fieldPositions = useMemo(() => new Float32Array(FIELD_LINE_CAP * 2 * 3), []);
+  const fieldGeometry = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(fieldPositions, 3));
+    geometry.setDrawRange(0, 0);
+    return geometry;
+  }, [fieldPositions]);
+  const camTarget = useMemo(() => new THREE.Vector3(), []);
+
+  const { camera } = useThree();
+
+  useEffect(() => {
+    resetRuntime(runtimeRef.current);
+    usePolarityStore.getState().resetToStart();
+  }, []);
+
+  useEffect(() => {
+    resetRuntime(runtimeRef.current);
+    usePolarityStore.getState().resetToStart();
+  }, [resetVersion]);
+
+  useEffect(() => {
+    const initial = usePolarityStore.getState();
+    polarityState.score = initial.score;
+    polarityState.bestScore = initial.best;
+    polarityState.gameOver = initial.status === 'GAMEOVER';
+    polarityState.charge = initial.playerPolarity as PolarityCharge;
+
+    const unsubscribe = usePolarityStore.subscribe((storeState) => {
+      polarityState.score = storeState.score;
+      polarityState.bestScore = storeState.best;
+      polarityState.gameOver = storeState.status === 'GAMEOVER';
+      polarityState.charge = storeState.playerPolarity as PolarityCharge;
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(
+    () => () => {
+      fieldGeometry.dispose();
     },
-  };
-};
-
-const nextPolarity = (
-  previous: PolarityCharge,
-  chunkId: string,
-  indexInChunk: number,
-  rng: SpawnRng
-): PolarityCharge => {
-  if (chunkId === 'C03' || chunkId === 'C04' || chunkId === 'C08') {
-    return previous === 1 ? -1 : 1;
-  }
-  if (chunkId === 'C05') {
-    return indexInChunk < 2 ? previous : previous === 1 ? -1 : 1;
-  }
-  if (chunkId === 'C06' || chunkId === 'C11' || chunkId === 'C13') {
-    return rng.next() < 0.7 ? (previous === 1 ? -1 : 1) : previous;
-  }
-  if (chunkId === 'C12') return previous;
-  return rng.next() < 0.5 ? 1 : -1;
-};
-
-const resetRun = (
-  progressRef: React.MutableRefObject<number>,
-  nextSpawnZRef: React.MutableRefObject<number>,
-  lastGateChargeRef: React.MutableRefObject<PolarityCharge>,
-  gatesRef: React.MutableRefObject<Gate[]>,
-  rngRef: React.MutableRefObject<SpawnRng>
-) => {
-  progressRef.current = 0;
-  nextSpawnZRef.current = 20;
-  lastGateChargeRef.current = 1;
-  gatesRef.current = [];
-  rngRef.current = makeRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
-  polarityState.charge = 1;
-};
-
-const PolarityScene: React.FC = () => {
-  const inputRef = useInputRef({ preventDefault: ['space'] });
-  const [started, setStarted] = useState(false);
-  const startedRef = useRef(false);
-
-  const progressRef = useRef(0);
-  const elapsedRef = useRef(0);
-  const nextSpawnZRef = useRef(20);
-  const lastGateChargeRef = useRef<PolarityCharge>(1);
-  const lastResetVersionRef = useRef(polarityState.resetVersion);
-  const gatesRef = useRef<Gate[]>([]);
-  const rngRef = useRef<SpawnRng>(
-    makeRng((Date.now() ^ (Math.random() * 1e9)) >>> 0)
+    [fieldGeometry]
   );
 
-  const patternLibrary = useMemo(
-    () => buildPatternLibraryTemplate('polarity'),
-    []
-  );
-  const snap = useSnapshot(polarityState);
-
-  useFrame((_, dt) => {
+  useFrame((state, delta) => {
+    const dt = Math.min(0.033, Math.max(0.001, delta));
     const input = inputRef.current;
-    const tap = input.pointerJustDown || input.justPressed.has(' ');
-
-    if (polarityState.resetVersion !== lastResetVersionRef.current) {
-      lastResetVersionRef.current = polarityState.resetVersion;
-      elapsedRef.current = 0;
-      startedRef.current = false;
-      setStarted(false);
-      resetRun(progressRef, nextSpawnZRef, lastGateChargeRef, gatesRef, rngRef);
-    }
+    const store = usePolarityStore.getState();
+    const tap =
+      input.pointerJustDown ||
+      input.justPressed.has(' ') ||
+      input.justPressed.has('space') ||
+      input.justPressed.has('enter');
 
     if (tap) {
-      if (polarityState.gameOver) {
-        polarityState.reset();
-        elapsedRef.current = 0;
-        resetRun(
-          progressRef,
-          nextSpawnZRef,
-          lastGateChargeRef,
-          gatesRef,
-          rngRef
-        );
-        startedRef.current = true;
-        setStarted(true);
-      } else if (!startedRef.current) {
-        startedRef.current = true;
-        setStarted(true);
+      if (store.status !== 'PLAYING') {
+        resetRuntime(runtimeRef.current);
+        usePolarityStore.getState().startRun();
       } else {
-        polarityState.flipCharge();
+        usePolarityStore.getState().flipPolarity();
+        runtimeRef.current.shakeTime = Math.min(1.2, runtimeRef.current.shakeTime + 0.7);
       }
     }
 
-    if (startedRef.current && !polarityState.gameOver) {
-      elapsedRef.current += dt;
-      const difficulty = sampleDifficulty('lane-switch', elapsedRef.current);
-      const survivability = sampleSurvivability('polarity', elapsedRef.current);
-      const intensity = Math.min(
-        1,
-        Math.max(0, (difficulty.speed - 6.5) / (11.5 - 6.5))
-      );
+    const runtime = runtimeRef.current;
 
-      progressRef.current += difficulty.speed * dt;
+    if (store.status === 'PLAYING') {
+      runtime.elapsed += dt;
+      const difficulty = difficultyAt(runtime);
+      const scrollSpeed = lerp(7.9, 14.4, difficulty);
+      runtime.commitTimer += dt;
+      runtime.multiplier = clamp(runtime.multiplier - dt * 0.055, 1, 6);
 
-      while (nextSpawnZRef.current < progressRef.current + LOOK_AHEAD) {
-        const chunk = pickPatternChunkForSurvivability(
-          'polarity',
-          patternLibrary,
-          rngRef.current.next,
-          intensity,
-          elapsedRef.current
-        );
-        const hazardCount = Math.max(
-          1,
-          Math.round(chunk.hazardCount * survivability.hazardScale)
-        );
-        const stride = Math.max(
-          2.6 * survivability.telegraphScale,
-          ((difficulty.speed * chunk.durationSeconds) / hazardCount) *
-            survivability.telegraphScale
-        );
+      let netForceX = 0;
+      runtime.nearbyPylons.length = 0;
 
-        for (let i = 0; i < hazardCount; i += 1) {
-          const required = nextPolarity(
-            lastGateChargeRef.current,
-            chunk.id,
-            i,
-            rngRef.current
-          );
-          lastGateChargeRef.current = required;
-          gatesRef.current.push({
-            id: `${chunk.id}-${nextSpawnZRef.current.toFixed(2)}-${i}`,
-            z: nextSpawnZRef.current + stride * (i + 1),
-            required,
-            telegraphLate:
-              (chunk.id === 'C07' || chunk.id === 'C13') &&
-              survivability.onboarding < 0.45,
-          });
+      for (const segment of runtime.segments) {
+        segment.z += scrollSpeed * dt;
+
+        if (Math.abs(segment.z) < INFLUENCE_RADIUS) {
+          const applyPylonForce = (x: number, polarity: PolaritySign) => {
+            const dx = x - runtime.playerX;
+            const dz = segment.z;
+            const distSq = dx * dx + dz * dz * 0.45 + 1.0;
+            const forceMag = clamp(segment.strength / (distSq + 1), 0, 2.9);
+            const dirSign = Math.sign(dx) || 1;
+            const attractOrRepel = store.playerPolarity !== polarity ? 1 : -1;
+            netForceX += dirSign * attractOrRepel * forceMag;
+            const intensity = forceMag * (segment.doubleZone ? 1.25 : 1);
+            if (intensity > 0.11) {
+              runtime.nearbyPylons.push({
+                x,
+                z: segment.z,
+                polarity,
+                intensity,
+              });
+            }
+          };
+
+          applyPylonForce(segment.leftX, segment.leftPolarity);
+          applyPylonForce(segment.rightX, segment.rightPolarity);
         }
-
-        nextSpawnZRef.current += Math.max(
-          stride * hazardCount + 1.2,
-          difficulty.speed * chunk.durationSeconds + 1.2
-        );
       }
 
-      for (let i = gatesRef.current.length - 1; i >= 0; i -= 1) {
-        const gate = gatesRef.current[i];
-        const relativeZ = gate.z - progressRef.current;
-        const gateHitThreshold =
-          0.22 + (survivability.decisionWindowScale - 1) * 0.12;
-        if (relativeZ <= gateHitThreshold) {
-          if (polarityState.charge !== gate.required) {
-            polarityState.takeDamage(999);
-            polarityState.gameOver = true;
+      runtime.nearbyPylons.sort((a, b) => b.intensity - a.intensity);
+      runtime.nearbyPylons.length = Math.min(runtime.nearbyPylons.length, 4);
+
+      runtime.playerVelX += netForceX * dt;
+      runtime.playerVelX = clamp(runtime.playerVelX, -8.8, 8.8);
+      runtime.playerX += runtime.playerVelX * dt;
+      runtime.playerVelX *= Math.max(0, 1 - 3.9 * dt);
+
+      let gameOver = false;
+      if (Math.abs(runtime.playerX) + PLAYER_RADIUS > LANE_HALF_WIDTH) {
+        gameOver = true;
+      }
+
+      for (const segment of runtime.segments) {
+        if (gameOver) break;
+
+        const segmentNearPlayer = Math.abs(segment.z) < 1.45;
+        if (segmentNearPlayer) {
+          if (segment.obstacleKind === 'gate' || segment.obstacleKind === 'slit') {
+            const gapLeft = segment.gapX - segment.gapW * 0.5;
+            const gapRight = segment.gapX + segment.gapW * 0.5;
+
+            const leftWidth = Math.max(0, gapLeft - -LANE_HALF_WIDTH);
+            if (
+              leftWidth > 0.05 &&
+              aabbHit(
+                runtime.playerX,
+                PLAYER_RADIUS,
+                -LANE_HALF_WIDTH + leftWidth * 0.5,
+                segment.z,
+                leftWidth * 0.5,
+                segment.obstacleDepth
+              )
+            ) {
+              gameOver = true;
+              break;
+            }
+
+            const rightWidth = Math.max(0, LANE_HALF_WIDTH - gapRight);
+            if (
+              rightWidth > 0.05 &&
+              aabbHit(
+                runtime.playerX,
+                PLAYER_RADIUS,
+                gapRight + rightWidth * 0.5,
+                segment.z,
+                rightWidth * 0.5,
+                segment.obstacleDepth
+              )
+            ) {
+              gameOver = true;
+              break;
+            }
+          } else if (
+            aabbHit(
+              runtime.playerX,
+              PLAYER_RADIUS,
+              segment.spikeX,
+              segment.z,
+              segment.spikeW * 0.5,
+              segment.obstacleDepth
+            )
+          ) {
+            gameOver = true;
             break;
           }
-          polarityState.addScore(1);
-          gatesRef.current.splice(i, 1);
-        } else if (relativeZ < DESPAWN_Z) {
-          gatesRef.current.splice(i, 1);
+        }
+
+        if (segment.orbActive && !segment.orbCollected) {
+          if (
+            aabbHit(
+              runtime.playerX,
+              PLAYER_RADIUS,
+              segment.orbX,
+              segment.z,
+              ORB_RADIUS,
+              ORB_RADIUS
+            )
+          ) {
+            segment.orbCollected = true;
+            runtime.orbCount += 1;
+            runtime.multiplier = clamp(runtime.multiplier + 0.42, 1, 6);
+            runtime.bonusScore += 22;
+          }
+        }
+
+        if (!segment.passed && segment.z > 0.58) {
+          segment.passed = true;
+          let nearMiss = false;
+          if (segment.obstacleKind === 'gate' || segment.obstacleKind === 'slit') {
+            const clearance = segment.gapW * 0.5 - Math.abs(runtime.playerX - segment.gapX) - PLAYER_RADIUS;
+            nearMiss = clearance >= 0 && clearance < 0.22;
+          } else {
+            const clearance = Math.abs(runtime.playerX - segment.spikeX) - (segment.spikeW * 0.5 + PLAYER_RADIUS);
+            nearMiss = clearance >= 0 && clearance < 0.2;
+          }
+
+          if (nearMiss) {
+            runtime.nearMissStreak += 1;
+            runtime.bonusScore += 12 + runtime.nearMissStreak * 7;
+            runtime.multiplier = clamp(runtime.multiplier + 0.16, 1, 6);
+          } else {
+            runtime.nearMissStreak = 0;
+          }
+        }
+      }
+
+      if (gameOver) {
+        const finalScore = makeScore(runtime);
+        runtime.currentScore = finalScore;
+        usePolarityStore.getState().endRun(finalScore);
+      } else {
+        runtime.distance += scrollSpeed * dt * (0.86 + 0.22 * runtime.multiplier);
+        const nextScore = makeScore(runtime);
+        runtime.currentScore = nextScore;
+
+        if (runtime.commitTimer >= 0.08) {
+          runtime.commitTimer = 0;
+          usePolarityStore
+            .getState()
+            .updateRuntimeHud(nextScore, runtime.multiplier, runtime.nearMissStreak);
+        }
+      }
+
+      for (const segment of runtime.segments) {
+        if (segment.z <= DESPAWN_Z) continue;
+        let minZ = Infinity;
+        for (const other of runtime.segments) {
+          if (other.z < minZ) minZ = other.z;
+        }
+        const spacing = lerp(4.7, 2.9, difficultyAt(runtime)) + Math.random() * 1.15;
+        seedSegment(segment, runtime, minZ - spacing);
+      }
+    }
+
+    runtime.shakeTime = Math.max(0, runtime.shakeTime - dt * 4.5);
+    const shakeAmp = runtime.shakeTime * 0.065;
+    const targetCamX = runtime.playerX * 0.2;
+    const jitterX = (Math.random() - 0.5) * shakeAmp;
+    const jitterY = (Math.random() - 0.5) * shakeAmp * 0.45;
+    const jitterZ = (Math.random() - 0.5) * shakeAmp * 0.35;
+    camTarget.set(targetCamX + jitterX, 2.18 + jitterY, 6.45 + jitterZ);
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.5 * dt));
+    camera.lookAt(runtime.playerX * 0.12, 0.3, 0);
+
+    if (playerRef.current) {
+      playerRef.current.position.x = runtime.playerX;
+      playerRef.current.position.y = 0.27;
+    }
+
+    if (pylonRef.current) {
+      let idx = 0;
+      for (const segment of runtime.segments) {
+        dummy.position.set(segment.leftX, 0.9, segment.z);
+        dummy.scale.set(0.16, 1.9, 0.16);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        pylonRef.current.setMatrixAt(idx, dummy.matrix);
+        pylonRef.current.setColorAt(idx, segment.leftPolarity === 1 ? CYAN : MAGENTA);
+        idx += 1;
+
+        dummy.position.set(segment.rightX, 0.9, segment.z);
+        dummy.scale.set(0.16, 1.9, 0.16);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        pylonRef.current.setMatrixAt(idx, dummy.matrix);
+        pylonRef.current.setColorAt(idx, segment.rightPolarity === 1 ? CYAN : MAGENTA);
+        idx += 1;
+      }
+      while (idx < PYLON_INSTANCE_COUNT) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(tinyScale);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        pylonRef.current.setMatrixAt(idx, dummy.matrix);
+        pylonRef.current.setColorAt(idx, CYAN);
+        idx += 1;
+      }
+      pylonRef.current.instanceMatrix.needsUpdate = true;
+      if (pylonRef.current.instanceColor) pylonRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (obstacleRef.current) {
+      let idx = 0;
+      for (const segment of runtime.segments) {
+        if (segment.obstacleKind === 'gate' || segment.obstacleKind === 'slit') {
+          const gapLeft = segment.gapX - segment.gapW * 0.5;
+          const gapRight = segment.gapX + segment.gapW * 0.5;
+          const leftWidth = Math.max(0, gapLeft - -LANE_HALF_WIDTH);
+          const rightWidth = Math.max(0, LANE_HALF_WIDTH - gapRight);
+
+          if (leftWidth > 0.05 && idx < OBSTACLE_INSTANCE_COUNT) {
+            dummy.position.set(-LANE_HALF_WIDTH + leftWidth * 0.5, 0.28, segment.z);
+            dummy.scale.set(leftWidth, 0.56, segment.obstacleDepth * 2);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            obstacleRef.current.setMatrixAt(idx, dummy.matrix);
+            obstacleRef.current.setColorAt(idx, HOT);
+            idx += 1;
+          }
+          if (rightWidth > 0.05 && idx < OBSTACLE_INSTANCE_COUNT) {
+            dummy.position.set(gapRight + rightWidth * 0.5, 0.28, segment.z);
+            dummy.scale.set(rightWidth, 0.56, segment.obstacleDepth * 2);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            obstacleRef.current.setMatrixAt(idx, dummy.matrix);
+            obstacleRef.current.setColorAt(idx, HOT);
+            idx += 1;
+          }
+        } else if (idx < OBSTACLE_INSTANCE_COUNT) {
+          dummy.position.set(segment.spikeX, 0.28, segment.z);
+          dummy.scale.set(segment.spikeW, 0.64, segment.obstacleDepth * 2);
+          dummy.rotation.set(0, 0.06, 0);
+          dummy.updateMatrix();
+          obstacleRef.current.setMatrixAt(idx, dummy.matrix);
+          obstacleRef.current.setColorAt(idx, HOT);
+          idx += 1;
+        }
+      }
+
+      while (idx < OBSTACLE_INSTANCE_COUNT) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(tinyScale);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        obstacleRef.current.setMatrixAt(idx, dummy.matrix);
+        obstacleRef.current.setColorAt(idx, HOT);
+        idx += 1;
+      }
+      obstacleRef.current.instanceMatrix.needsUpdate = true;
+      if (obstacleRef.current.instanceColor) obstacleRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (orbRef.current) {
+      let idx = 0;
+      for (const segment of runtime.segments) {
+        if (segment.orbActive && !segment.orbCollected) {
+          dummy.position.set(segment.orbX, 0.32, segment.z);
+          dummy.scale.set(1, 1, 1);
+          dummy.rotation.set(0, state.clock.elapsedTime * 1.2, 0);
+          dummy.updateMatrix();
+          orbRef.current.setMatrixAt(idx, dummy.matrix);
+          orbRef.current.setColorAt(idx, GOLD);
+          idx += 1;
+        }
+      }
+      while (idx < ORB_INSTANCE_COUNT) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(tinyScale);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        orbRef.current.setMatrixAt(idx, dummy.matrix);
+        orbRef.current.setColorAt(idx, GOLD);
+        idx += 1;
+      }
+      orbRef.current.instanceMatrix.needsUpdate = true;
+      if (orbRef.current.instanceColor) orbRef.current.instanceColor.needsUpdate = true;
+    }
+
+    const attr = fieldGeometry.getAttribute('position') as THREE.BufferAttribute;
+    let lineCount = 0;
+    if (store.status === 'PLAYING' && runtime.nearbyPylons.length > 0) {
+      const pylons = runtime.nearbyPylons;
+      for (let pylonIndex = 0; pylonIndex < pylons.length && lineCount < FIELD_LINE_CAP; pylonIndex += 1) {
+        const pylon = pylons[pylonIndex];
+        const arcs = 8;
+        for (let i = 0; i < arcs && lineCount < FIELD_LINE_CAP; i += 1) {
+          const phase = state.clock.elapsedTime * 8 + i * 0.9 + pylonIndex * 1.37;
+          const startX = runtime.playerX + Math.sin(phase) * 0.07;
+          const startZ = Math.cos(phase * 0.77) * 0.09;
+          const t = 0.5 + i * 0.04;
+          const bend = Math.sin(phase * 1.1) * 0.18;
+          const endX = lerp(runtime.playerX, pylon.x, t) + bend;
+          const endZ = lerp(0, pylon.z, t) + Math.cos(phase * 0.9) * 0.12;
+          const ptr = lineCount * 6;
+          fieldPositions[ptr] = startX;
+          fieldPositions[ptr + 1] = 0.31;
+          fieldPositions[ptr + 2] = startZ;
+          fieldPositions[ptr + 3] = endX;
+          fieldPositions[ptr + 4] = 0.48 + Math.sin(phase) * 0.04;
+          fieldPositions[ptr + 5] = endZ;
+          lineCount += 1;
         }
       }
     }
+    fieldGeometry.setDrawRange(0, lineCount * 2);
+    attr.needsUpdate = true;
 
     clearFrameInput(inputRef);
   });
 
-  const playerX = RAIL_X[snap.charge];
-  const scoreText = Math.floor(snap.score).toString();
-  const bestText = Math.floor(snap.bestScore).toString();
-  const survivability = sampleSurvivability('polarity', elapsedRef.current);
-  const lateTelegraphHideZ = 10 / survivability.telegraphScale;
-  const shellStatus = snap.gameOver
-    ? 'gameover'
-    : started
-      ? 'playing'
-      : 'ready';
+  const playerPolarity = usePolarityStore((store) => store.playerPolarity);
+  const playerColor = playerPolarity === 1 ? '#22d3ee' : '#ff4fd8';
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 5.2, 9]} fov={42} />
-      <color attach="background" args={['#0a1221']} />
-      <fog attach="fog" args={['#0a1221', 9, 34]} />
-      <ambientLight intensity={0.75} />
-      <directionalLight position={[6, 10, 5]} intensity={1.25} />
+      <PerspectiveCamera makeDefault position={[0, 2.2, 6.45]} fov={44} />
+      <color attach="background" args={['#06080f']} />
+      <fog attach="fog" args={['#06080f', 7, 32]} />
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.35, 22]}>
-        <planeGeometry args={[14, 140]} />
-        <meshStandardMaterial color="#0d1f3a" />
+      <ambientLight intensity={0.33} />
+      <directionalLight position={[2, 6, 5]} intensity={0.72} />
+      <pointLight position={[0, 1.6, 3.2]} intensity={0.42} color="#9ee8ff" />
+
+      <mesh position={[0, -0.01, -5]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[8.5, 60]} />
+        <meshStandardMaterial color="#0c121e" roughness={0.9} metalness={0.05} />
       </mesh>
 
-      {[1 as PolarityCharge, -1 as PolarityCharge].map((charge) => (
-        <mesh
-          key={`rail-${charge}`}
-          position={[RAIL_X[charge], -0.18, 22]}
-          rotation={[-Math.PI / 2, 0, 0]}
-        >
-          <planeGeometry args={[1.2, 140]} />
-          <meshStandardMaterial
-            color={charge === 1 ? '#20c9b2' : '#ff5a5f'}
-            emissive={charge === 1 ? '#0f8b78' : '#ac2f34'}
-            emissiveIntensity={0.55}
-          />
-        </mesh>
-      ))}
+      <mesh position={[-LANE_HALF_WIDTH, 0.22, -5]}>
+        <boxGeometry args={[0.12, 0.5, 60]} />
+        <meshBasicMaterial color="#22d3ee" toneMapped={false} />
+      </mesh>
+      <mesh position={[LANE_HALF_WIDTH, 0.22, -5]}>
+        <boxGeometry args={[0.12, 0.5, 60]} />
+        <meshBasicMaterial color="#ff4fd8" toneMapped={false} />
+      </mesh>
 
-      <mesh position={[playerX, 0.15, PLAYER_Z]}>
-        <sphereGeometry args={[0.42, 20, 20]} />
-        <meshStandardMaterial
-          color={snap.charge === 1 ? '#20c9b2' : '#ff5a5f'}
-          emissive={snap.charge === 1 ? '#0a7464' : '#8b2529'}
-          emissiveIntensity={0.8}
+      <instancedMesh ref={pylonRef} args={[undefined, undefined, PYLON_INSTANCE_COUNT]} castShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
+      <instancedMesh ref={obstacleRef} args={[undefined, undefined, OBSTACLE_INSTANCE_COUNT]} castShadow>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
+      <instancedMesh ref={orbRef} args={[undefined, undefined, ORB_INSTANCE_COUNT]}>
+        <sphereGeometry args={[ORB_RADIUS, 10, 10]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
+      <lineSegments geometry={fieldGeometry}>
+        <lineBasicMaterial
+          color="#83f0ff"
+          transparent
+          opacity={0.55}
+          blending={THREE.AdditiveBlending}
+          toneMapped={false}
         />
+      </lineSegments>
+
+      <mesh ref={playerRef} position={[0, 0.27, 0]} castShadow>
+        <sphereGeometry args={[PLAYER_RADIUS, 20, 20]} />
+        <meshStandardMaterial color={playerColor} emissive={playerColor} emissiveIntensity={0.42} roughness={0.32} />
       </mesh>
 
-      {gatesRef.current.map((gate) => {
-        const z = gate.z - progressRef.current;
-        const hiddenByLateTelegraph =
-          gate.telegraphLate && z > lateTelegraphHideZ;
-        if (hiddenByLateTelegraph || z < DESPAWN_Z || z > 44) return null;
-        const gateColor = gate.required === 1 ? '#2fe0ca' : '#ff6b72';
-        return (
-          <group key={gate.id} position={[RAIL_X[gate.required], 0.18, z]}>
-            <mesh>
-              <boxGeometry args={[1.2, 1.05, 0.42]} />
-              <meshStandardMaterial color={gateColor} emissive={gateColor} />
-            </mesh>
-            <mesh position={[0, 0, 0.24]}>
-              <planeGeometry args={[0.65, 0.65]} />
-              <meshBasicMaterial
-                color={gate.required === 1 ? '#d5fff6' : '#ffe3e4'}
-              />
-            </mesh>
-          </group>
-        );
-      })}
+      <EffectComposer enableNormalPass={false} multisampling={0}>
+        <Bloom intensity={0.42} luminanceThreshold={0.55} luminanceSmoothing={0.22} mipmapBlur />
+        <Vignette eskil={false} offset={0.12} darkness={0.58} />
+        <Noise premultiply opacity={0.025} />
+      </EffectComposer>
 
       <Html fullscreen>
-        <KetchappGameShell
-          gameId="polarity"
-          score={scoreText}
-          best={bestText}
-          status={shellStatus}
-          deathTitle="Wrong Charge"
-          containerClassName="fixed inset-0"
-        />
+        <PolarityOverlay />
       </Html>
     </>
   );
-};
+}
 
 const Polarity: React.FC<{ soundsOn?: boolean }> = () => {
   return <PolarityScene />;

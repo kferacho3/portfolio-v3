@@ -36,24 +36,24 @@ function pickSize(rand: () => number) {
   if (r < 0.55) {
     return {
       tier: WORLD_TIER_NAMES[0],
-      size: 0.26 + rand() * 0.36,
+      size: 0.24 + rand() * 0.3,
     };
   }
   if (r < 0.84) {
     return {
       tier: WORLD_TIER_NAMES[1],
-      size: 0.62 + rand() * 0.56,
+      size: 0.58 + rand() * 0.48,
     };
   }
   if (r < 0.96) {
     return {
       tier: WORLD_TIER_NAMES[2],
-      size: 1.15 + rand() * 0.85,
+      size: 1.06 + rand() * 0.72,
     };
   }
   return {
     tier: WORLD_TIER_NAMES[3],
-    size: 2 + rand() * 1.35,
+    size: 1.84 + rand() * 1.1,
   };
 }
 
@@ -103,6 +103,13 @@ function makeWorldData(seed: number, count: number): WorldRuntimeData {
       z = Math.sin(angle) * radial;
     }
 
+    const radialDistance = Math.sqrt(x * x + z * z);
+    if (radialDistance < WORLD_TUNING.ringStartRadius - 1.4) {
+      const push = (WORLD_TUNING.ringStartRadius - 1.4) / Math.max(0.0001, radialDistance);
+      x *= push;
+      z *= push;
+    }
+
     x = THREE.MathUtils.clamp(x, -WORLD_TUNING.halfExtent + 8, WORLD_TUNING.halfExtent - 8);
     z = THREE.MathUtils.clamp(z, -WORLD_TUNING.halfExtent + 8, WORLD_TUNING.halfExtent - 8);
 
@@ -115,11 +122,11 @@ function makeWorldData(seed: number, count: number): WorldRuntimeData {
     const rotY = rand() * Math.PI;
     const rotZ = rand() * Math.PI;
 
-    const m = 2 + Math.floor(rand() * 11);
-    const n1 = 0.22 + rand() * 2.35;
-    const n2 = 0.18 + rand() * 3.7;
-    const n3 = 0.2 + rand() * 3.4;
-    const visualScale = 0.82 + rand() * 0.48;
+    const m = 2 + Math.floor(rand() * 6);
+    const n1 = 1.15 + rand() * 1.35;
+    const n2 = 1.05 + rand() * 1.25;
+    const n3 = 1.05 + rand() * 1.25;
+    const visualScale = 0.88 + rand() * 0.2;
 
     shapeParams[i * 4 + 0] = m;
     shapeParams[i * 4 + 1] = n1;
@@ -243,6 +250,13 @@ export default function ProceduralWorld({
 
   useEffect(() => {
     return () => {
+      worldBodiesRef.current = null;
+      worldMeshRef.current = null;
+    };
+  }, [worldBodiesRef, worldMeshRef]);
+
+  useEffect(() => {
+    return () => {
       geometry.dispose();
       material.dispose();
     };
@@ -253,11 +267,7 @@ export default function ProceduralWorld({
       ref={worldBodiesRef}
       instances={worldData.instances}
       colliders="ball"
-      type="dynamic"
-      gravityScale={0}
-      linearDamping={2.4}
-      angularDamping={2.4}
-      canSleep
+      type="fixed"
       collisionGroups={interactionGroups(COLLISION_GROUPS.WORLD, [
         COLLISION_GROUPS.PLAYER,
       ])}

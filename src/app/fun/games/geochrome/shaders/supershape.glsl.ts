@@ -22,7 +22,8 @@ export const supershapeVertex = /* glsl */ `
     float p2 = pow(abs(sin(m * angle * 0.25) / b), n3);
 
     float inside = max(0.0001, p1 + p2);
-    return pow(inside, -1.0 / max(0.08, n1));
+    float r = pow(inside, -1.0 / max(0.5, n1));
+    return clamp(r, 0.72, 1.28);
   }
 
   void main() {
@@ -40,11 +41,11 @@ export const supershapeVertex = /* glsl */ `
     float r1 = superformula(theta, m, n1, n2, n3);
     float r2 = superformula(phi, m + 0.5, n1 + 0.2, n2, n3 + 0.1);
 
-    float shapeRadius = r1 * r2;
+    float shapeRadius = clamp(r1 * r2, 0.76, 1.24);
     float q = clamp(uQuality, 0.0, 1.0);
     float radius = mix(1.0, shapeRadius, q);
 
-    float pulse = 0.93 + 0.07 * sin(uTime * 0.8 + m * 0.2);
+    float pulse = 0.97 + 0.03 * sin(uTime * 0.8 + m * 0.2);
     vec3 supershapePos = unitPos * radius * aItemScale * pulse;
 
     vec3 transformed = supershapePos;

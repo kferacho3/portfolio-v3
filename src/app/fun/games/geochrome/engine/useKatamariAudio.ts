@@ -73,7 +73,12 @@ export function useKatamariAudio({
     const roll = rollSoundRef.current;
     if (!rb || !roll) return;
 
-    const v = rb.linvel();
+    let v;
+    try {
+      v = rb.linvel();
+    } catch {
+      return;
+    }
     const speed = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
 
     const targetVolume = THREE.MathUtils.clamp(

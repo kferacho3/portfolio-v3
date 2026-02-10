@@ -41,8 +41,12 @@ export function usePhysicsCuller({
     const bodies = worldBodiesRef.current;
     if (!body || !bodies) return;
 
-    const t = body.translation();
-    playerPosition.set(t.x, t.y, t.z);
+    try {
+      const t = body.translation();
+      playerPosition.set(t.x, t.y, t.z);
+    } catch {
+      return;
+    }
 
     const activeRadius = lowPerf
       ? PHYSICS_CULLING.liteRadius
@@ -61,36 +65,31 @@ export function usePhysicsCuller({
       const candidate = bodies[i];
       if (!candidate) continue;
 
-      const bodyData =
+      let bodyData =
         typeof candidate.userData === 'object' && candidate.userData !== null
           ? (candidate.userData as Record<string, unknown>)
           : undefined;
 
-      if (bodyData?.collected === true) {
-        if (candidate.isEnabled()) {
-          candidate.setEnabled(false);
-        }
+      if (bodyData?.collected === true) continue;
+
+      try {
+        const p = candidate.translation();
+        bodyPosition.set(p.x, p.y, p.z);
+      } catch {
+        bodies[i] = null;
         continue;
       }
-
-      const p = candidate.translation();
-      bodyPosition.set(p.x, p.y, p.z);
 
       const inRadius =
         playerPosition.distanceToSquared(bodyPosition) <= activeRadiusSq;
       const inView = !lowPerf || frustum.containsPoint(bodyPosition);
-      const shouldEnable = inRadius && inView;
+      const inActiveZone = inRadius && inView;
 
-      if (shouldEnable) {
-        if (!candidate.isEnabled()) {
-          candidate.setEnabled(true);
-        }
-        if (candidate.isSleeping()) {
-          candidate.wakeUp();
-        }
-      } else if (candidate.isEnabled()) {
-        candidate.setEnabled(false);
+      if (!bodyData) {
+        bodyData = {};
       }
+      bodyData.inActiveZone = inActiveZone;
+      candidate.userData = bodyData;
     }
   });
 }
