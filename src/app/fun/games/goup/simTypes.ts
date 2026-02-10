@@ -8,11 +8,16 @@ export type Step = {
   length: number;
   width: number;
   height: number; // Top plane y
+  riseToNext: number;
   gapAfter: boolean;
   gapLength: number;
+  spike?: {
+    along: number;
+    clearance: number;
+    hit: boolean;
+  };
   gem?: {
     offset: SimVec3;
     collected: boolean;
   };
 };
-

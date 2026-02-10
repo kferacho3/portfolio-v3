@@ -3,6 +3,10 @@ import { mulberry32 } from './rng';
 import type { SimDir, SimVec3, Step } from './simTypes';
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+const randRange = (rng: () => number, min: number, max: number) =>
+  min + (max - min) * rng();
+const randIntRange = (rng: () => number, min: number, max: number) =>
+  Math.floor(min + rng() * (max - min + 1));
 
 function normalizeXZ(x: number, z: number): [number, number] {
   const len = Math.hypot(x, z);
@@ -69,25 +73,40 @@ export function generateChunk(
 
   let segmentTurn = 0;
   let segmentRemain = 0;
+  let inTension = false;
+  let phaseRemain = randIntRange(
+    rng,
+    CFG.STEP.calmRunMin,
+    CFG.STEP.calmRunMax
+  );
 
   for (let k = 0; k < CFG.STEPS_PER_CHUNK; k += 1) {
     const i = startStepIndex + k;
     const difficulty = clamp01(i / 700);
-    const gapChance =
+    const gapBase =
       CFG.STEP.gapChance +
       difficulty * (CFG.DIFFICULTY.gapChanceMax - CFG.STEP.gapChance);
 
+    if (phaseRemain <= 0) {
+      inTension = !inTension;
+      phaseRemain = inTension
+        ? randIntRange(rng, CFG.STEP.tensionRunMin, CFG.STEP.tensionRunMax)
+        : randIntRange(rng, CFG.STEP.calmRunMin, CFG.STEP.calmRunMax);
+    }
+    phaseRemain -= 1;
+
     if (segmentRemain <= 0) {
       const hardTurn = rng() < CFG.STEP.hardTurnChance;
-      const maxTurn = hardTurn ? CFG.STEP.turnHardRange : CFG.STEP.turnGentleRange;
+      const maxTurn = hardTurn
+        ? CFG.STEP.turnHardRange
+        : CFG.STEP.turnGentleRange;
       const signedTurn = (rng() < 0.5 ? -1 : 1) * (0.04 + rng() * maxTurn);
-      const shouldTurn = rng() < CFG.STEP.turnChance;
+      const shouldTurn =
+        rng() <
+        (inTension ? CFG.STEP.turnChanceTension : CFG.STEP.turnChanceCalm);
       segmentRemain = Math.max(
         1,
-        Math.floor(
-          CFG.STEP.turnSegmentMin +
-            rng() * (CFG.STEP.turnSegmentMax - CFG.STEP.turnSegmentMin + 1)
-        )
+        randIntRange(rng, CFG.STEP.turnSegmentMin, CFG.STEP.turnSegmentMax)
       );
       segmentTurn = shouldTurn ? signedTurn / segmentRemain : 0;
     }
@@ -101,11 +120,27 @@ export function generateChunk(
     heading = steerHeadingToTowerBand(heading, pos, rng);
     dir = dirFromHeading(heading);
 
+    const riseToNext = inTension
+      ? randRange(rng, CFG.STEP.riseTensionMin, CFG.STEP.riseTensionMax)
+      : randRange(rng, CFG.STEP.riseCalmMin, CFG.STEP.riseCalmMax);
+
+    const gapChance = inTension
+      ? clamp01(
+          gapBase + CFG.STEP.gapChanceTensionBoost * (0.7 + difficulty * 0.5)
+        )
+      : gapBase * CFG.STEP.gapChanceCalmMultiplier;
+
     const gapAfter = rng() < gapChance;
     const gapLength = gapAfter
       ? CFG.STEP.gapLengthMin +
         (CFG.STEP.gapLengthMax - CFG.STEP.gapLengthMin) * rng()
       : 0;
+
+    const spikeChanceRaw = inTension
+      ? CFG.STEP.spikeChanceTension
+      : CFG.STEP.spikeChanceCalm;
+    const spikeChance = clamp01(spikeChanceRaw + difficulty * 0.06);
+    const hasSpike = !gapAfter && rng() < spikeChance;
 
     const centerX = pos[0] + dir[0] * (length * 0.5);
     const centerZ = pos[2] + dir[2] * (length * 0.5);
@@ -117,8 +152,18 @@ export function generateChunk(
       length,
       width: CFG.STEP.width,
       height: pos[1],
+      riseToNext,
       gapAfter,
       gapLength,
+      spike: hasSpike
+        ? {
+            along:
+              length *
+              randRange(rng, CFG.STEP.spikeAlongMin, CFG.STEP.spikeAlongMax),
+            clearance: CFG.STEP.spikeClearance,
+            hit: false,
+          }
+        : undefined,
       gem:
         rng() < CFG.STEP.gemChance
           ? {
@@ -136,7 +181,7 @@ export function generateChunk(
 
     const prevX = pos[0];
     const prevZ = pos[2];
-    const nextY = pos[1] + CFG.STEP.rise;
+    const nextY = pos[1] + riseToNext;
     const nextX = pos[0] + dir[0] * (length + gapLength);
     const nextZ = pos[2] + dir[2] * (length + gapLength);
     const [normX, normZ] = normalizeXZ(nextX, nextZ);

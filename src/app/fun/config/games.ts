@@ -639,8 +639,8 @@ export const GAME_RULES: Record<string, GameRules> = {
   goup: {
     controls: 'Tap/Space/Click to jump • R to restart',
     objective:
-      'Climb a procedural stair tower. Time each jump to clear risers, cross gaps, and keep your ascent alive.',
-    tips: 'Jump slightly early on fast runs. Landing low at the step edge usually means a riser collision next.',
+      'Climb a procedural stair tower. Ride calm ramps, then survive tense clusters of risers, spike lines, and gaps.',
+    tips: 'Use calm stretches to reset timing, then jump earlier through obstacle clusters. Low landings usually mean a riser hit next.',
   },
   growth: {
     controls:

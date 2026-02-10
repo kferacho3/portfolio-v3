@@ -17,6 +17,8 @@ export const GoUpMenu: React.FC<{
     switch (snap.crashType) {
       case 'riser':
         return 'Riser hit!';
+      case 'spike':
+        return 'Spiked!';
       case 'fell':
         return 'Missed step!';
       default:
@@ -170,7 +172,7 @@ export const GoUpMenu: React.FC<{
               </div>
               <div style={{ marginTop: 4, fontSize: 13, opacity: 0.65 }}>
                 Gems: {snap.gems} • Gaps: {snap.gapsJumped} • Steps:{' '}
-                {snap.wallsClimbed}
+                {snap.wallsClimbed} • Spikes: {snap.spikesAvoided}
               </div>
             </div>
           )}
@@ -183,7 +185,7 @@ export const GoUpMenu: React.FC<{
               lineHeight: 1.5,
             }}
           >
-            Auto climb the tower. Tap to jump over risers and clear gaps.
+            Auto climb the tower. Tap to clear risers, gaps, and spike lines.
           </div>
 
           <div style={{ marginTop: 12, fontSize: 11, opacity: 0.4 }}>

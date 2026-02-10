@@ -50,6 +50,7 @@ type BurstParticle = {
 const MAX_STEP_INSTANCES =
   (CFG.KEEP_CHUNKS_BEHIND + CFG.KEEP_CHUNKS_AHEAD + 3) * CFG.STEPS_PER_CHUNK;
 const MAX_GEM_INSTANCES = MAX_STEP_INSTANCES;
+const MAX_SPIKE_INSTANCES = MAX_STEP_INSTANCES;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -90,6 +91,7 @@ export const GoUpWorld: React.FC<{
   const stepBodyMeshRef = useRef<THREE.InstancedMesh>(null);
   const stepTopMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
+  const spikeMeshRef = useRef<THREE.InstancedMesh>(null);
   const bgCubeMeshRef = useRef<THREE.InstancedMesh>(null);
   const towerCoreMeshRef = useRef<THREE.Mesh>(null);
 
@@ -120,6 +122,7 @@ export const GoUpWorld: React.FC<{
   const stepBodyColor = useMemo(() => new THREE.Color(), []);
   const stepTopColor = useMemo(() => new THREE.Color(), []);
   const burstColor = useMemo(() => new THREE.Color(), []);
+  const spikeColor = useMemo(() => new THREE.Color(), []);
   const stepBodyGeometry = useMemo(
     () => new RoundedBoxGeometry(1, 1, 1, 4, 0.12),
     []
@@ -140,7 +143,8 @@ export const GoUpWorld: React.FC<{
     const stepBodyMesh = stepBodyMeshRef.current;
     const stepTopMesh = stepTopMeshRef.current;
     const gemMesh = gemMeshRef.current;
-    if (!stepBodyMesh || !stepTopMesh || !gemMesh) return;
+    const spikeMesh = spikeMeshRef.current;
+    if (!stepBodyMesh || !stepTopMesh || !gemMesh || !spikeMesh) return;
 
     const director = directorRef.current;
     const steps = director.getVisibleSteps();
@@ -151,6 +155,7 @@ export const GoUpWorld: React.FC<{
 
     let stepCount = 0;
     let gemCount = 0;
+    let spikeCount = 0;
 
     for (let i = 0; i < steps.length && stepCount < MAX_STEP_INSTANCES; i += 1) {
       const step = steps[i];
@@ -204,6 +209,21 @@ export const GoUpWorld: React.FC<{
         gemMesh.setColorAt(gemCount, gemColor);
         gemCount += 1;
       }
+
+      if (step.spike && !step.spike.hit && spikeCount < MAX_SPIKE_INSTANCES) {
+        const [sx, sy, sz] = director.getSpikeWorldPos(step);
+        const [dx, , dz] = step.dir;
+        const yaw = Math.atan2(dx, dz);
+
+        dummy.position.set(sx, sy, sz);
+        dummy.rotation.set(0, yaw, 0);
+        dummy.scale.set(1, 1, 1);
+        dummy.updateMatrix();
+        spikeMesh.setMatrixAt(spikeCount, dummy.matrix);
+        spikeColor.setHSL(arena.spikeHue, arena.spikeSat, arena.spikeLight);
+        spikeMesh.setColorAt(spikeCount, spikeColor);
+        spikeCount += 1;
+      }
     }
 
     for (let i = stepCount; i < MAX_STEP_INSTANCES; i += 1) {
@@ -221,19 +241,32 @@ export const GoUpWorld: React.FC<{
       gemMesh.setMatrixAt(i, dummy.matrix);
     }
 
+    for (let i = spikeCount; i < MAX_SPIKE_INSTANCES; i += 1) {
+      dummy.position.set(0, -9999, 0);
+      dummy.scale.set(0.0001, 0.0001, 0.0001);
+      dummy.updateMatrix();
+      spikeMesh.setMatrixAt(i, dummy.matrix);
+    }
+
     stepBodyMesh.instanceMatrix.needsUpdate = true;
     if (stepBodyMesh.instanceColor) stepBodyMesh.instanceColor.needsUpdate = true;
     stepTopMesh.instanceMatrix.needsUpdate = true;
     if (stepTopMesh.instanceColor) stepTopMesh.instanceColor.needsUpdate = true;
     gemMesh.instanceMatrix.needsUpdate = true;
     if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
+    spikeMesh.instanceMatrix.needsUpdate = true;
+    if (spikeMesh.instanceColor) spikeMesh.instanceColor.needsUpdate = true;
   }, [
     arena.gemHue,
     arena.pathHue,
     arena.pathLight,
     arena.pathSat,
+    arena.spikeHue,
+    arena.spikeLight,
+    arena.spikeSat,
     dummy,
     gemColor,
+    spikeColor,
     stepBodyColor,
     stepTopColor,
   ]);
@@ -311,7 +344,7 @@ export const GoUpWorld: React.FC<{
     goUpState.gems = d.gems;
     goUpState.gapsJumped = d.gapsCleared;
     goUpState.wallsClimbed = d.stepsCleared;
-    goUpState.spikesAvoided = 0;
+    goUpState.spikesAvoided = d.spikesCleared;
   }, []);
 
   useEffect(() => {
@@ -443,7 +476,7 @@ export const GoUpWorld: React.FC<{
         deathHandledRef.current = true;
         const [x, y, z] = d.getPlayerWorldPos();
         spawnBurst(x, y, z, snap.worldSeed + d.score * 11);
-        goUpState.endGame(d.deathReason === 'riser' ? 'riser' : 'fell', x, y, z);
+        goUpState.endGame(d.deathReason ?? 'fell', x, y, z);
       }
     }
 
@@ -477,11 +510,15 @@ export const GoUpWorld: React.FC<{
 
     const t = smoothingFactor(CFG.CAMERA.followSharpness, dt);
     const followY = py + CFG.CAMERA.yOffset;
+    const followX = px + CFG.CAMERA.xOffset;
+    const followZ = pz + CFG.CAMERA.zOffset;
+    const lookX = currentStep ? px + currentStep.dir[0] * 1.2 : px;
+    const lookZ = currentStep ? pz + currentStep.dir[2] * 1.2 : pz;
 
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, CFG.CAMERA.x, t);
+    camera.position.x = THREE.MathUtils.lerp(camera.position.x, followX, t);
     camera.position.y = THREE.MathUtils.lerp(camera.position.y, followY, t);
-    camera.position.z = THREE.MathUtils.lerp(camera.position.z, CFG.CAMERA.z, t);
-    camera.lookAt(0, py + CFG.CAMERA.lookOffset, 0);
+    camera.position.z = THREE.MathUtils.lerp(camera.position.z, followZ, t);
+    camera.lookAt(lookX, py + CFG.CAMERA.lookOffset, lookZ);
 
     if (bgCubeMeshRef.current) {
       bgCubeMeshRef.current.position.set(0, Math.max(8, py * 0.35), 0);
@@ -504,7 +541,7 @@ export const GoUpWorld: React.FC<{
         near={0.1}
         far={260}
         zoom={orthoZoom}
-        position={[CFG.CAMERA.x, CFG.CAMERA.yOffset, CFG.CAMERA.z]}
+        position={[CFG.CAMERA.xOffset, CFG.CAMERA.yOffset, CFG.CAMERA.zOffset]}
       />
 
       <SkyMesh arena={arena} playerPos={skyAnchorPos} />
@@ -591,6 +628,22 @@ export const GoUpWorld: React.FC<{
           emissiveIntensity={1.6}
           roughness={0.1}
           metalness={0.7}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={spikeMeshRef}
+        args={[undefined, undefined, MAX_SPIKE_INSTANCES]}
+        castShadow
+        receiveShadow
+      >
+        <coneGeometry args={[0.17, 0.36, 8]} />
+        <meshStandardMaterial
+          vertexColors
+          emissive={hslToColor(arena.spikeHue, arena.spikeSat, arena.spikeLight)}
+          emissiveIntensity={0.62}
+          roughness={0.32}
+          metalness={0.22}
         />
       </instancedMesh>
 

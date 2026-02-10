@@ -3,7 +3,7 @@ import { generateChunk } from './generateChunk';
 import type { SimDir, SimVec3, Step } from './simTypes';
 
 export type DirectorPhase = 'menu' | 'playing' | 'dead';
-export type DeathReason = 'fell' | 'riser';
+export type DeathReason = 'fell' | 'riser' | 'spike';
 
 const distSq = (
   ax: number,
@@ -27,6 +27,7 @@ export class GoUpDirector {
   gems = 0;
   gapsCleared = 0;
   stepsCleared = 0;
+  spikesCleared = 0;
 
   baseSeed = 1337;
 
@@ -54,6 +55,7 @@ export class GoUpDirector {
     this.gems = 0;
     this.gapsCleared = 0;
     this.stepsCleared = 0;
+    this.spikesCleared = 0;
     this.deathReason = null;
 
     this.steps = [];
@@ -80,6 +82,7 @@ export class GoUpDirector {
     this.gems = 0;
     this.gapsCleared = 0;
     this.stepsCleared = 0;
+    this.spikesCleared = 0;
     this.deathReason = null;
     this.stepIndex = 0;
     this.sOnStep = 0;
@@ -117,6 +120,7 @@ export class GoUpDirector {
       CFG.DIFFICULTY.maxSpeed
     );
 
+    const prevAlong = this.sOnStep;
     this.sOnStep += speed * dt;
     this.vy += CFG.PLAYER.gravity * dt;
     this.y += this.vy * dt;
@@ -135,6 +139,9 @@ export class GoUpDirector {
         this.jumpPulse = 1;
       }
     }
+
+    this.processSpike(cur, prevAlong, this.sOnStep);
+    if (this.phase !== 'playing') return;
 
     let loopGuard = 0;
     while (loopGuard < 6 && this.phase === 'playing') {
@@ -239,6 +246,16 @@ export class GoUpDirector {
     ];
   }
 
+  getSpikeWorldPos(step: Step): SimVec3 {
+    if (!step.spike) return [step.pos[0], step.height + 0.22, step.pos[2]];
+    const [dx, , dz] = step.dir;
+    const startX = step.pos[0] - dx * (step.length * 0.5);
+    const startZ = step.pos[2] - dz * (step.length * 0.5);
+    const spikeX = startX + dx * step.spike.along;
+    const spikeZ = startZ + dz * step.spike.along;
+    return [spikeX, step.height + 0.2, spikeZ];
+  }
+
   private collectNearbyGems() {
     const [px, py, pz] = this.getPlayerWorldPos();
     const minIndex = Math.max(0, this.stepIndex - 1);
@@ -294,6 +311,23 @@ export class GoUpDirector {
     for (const index of this.stepByIndex.keys()) {
       if (index < minKeep) this.stepByIndex.delete(index);
     }
+  }
+
+  private processSpike(step: Step, fromAlong: number, toAlong: number) {
+    if (!step.spike || step.spike.hit) return;
+    const from = Math.max(0, fromAlong);
+    const to = Math.max(0, toAlong);
+    const crossed = from <= step.spike.along && to >= step.spike.along;
+    if (!crossed) return;
+
+    const requiredY = step.height + CFG.PLAYER.radius + step.spike.clearance;
+    if (this.y < requiredY) {
+      this.die('spike');
+      return;
+    }
+
+    step.spike.hit = true;
+    this.spikesCleared += 1;
   }
 
   private die(reason: DeathReason) {
