@@ -253,7 +253,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'portalpunch',
     title: 'Portal Punch',
     description:
-      'Data-driven portal laser puzzler: route recursive beams through mirrors, prisms, filters, gates, and phase chambers.',
+      '100-level portal laser puzzler: route recursive beams through mirrors, prisms, filters, gates, and phase chambers.',
     accent: '#fb7185',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PortalPunch.webp',
@@ -629,8 +629,8 @@ export const GAME_RULES: Record<string, GameRules> = {
     controls:
       'Move: WASD/Arrows • Interact: E/Space/Click • Toggle Phase: Q • N next level • R restart',
     objective:
-      'Solve each chamber by directing mathematically transformed beams to all required targets.',
-    tips: 'Rotate mirrors/prisms near your avatar, manage gate timers with receptors, and watch color/phase/intensity constraints.',
+      'Solve each chamber by directing mathematically transformed beams to all required targets across 100 intricately themed levels.',
+    tips: 'Difficulty is intentionally non-linear and assigned per level. Rotate mirrors/prisms near your avatar, manage gate timers, and watch color/phase/intensity constraints.',
   },
   conveyorchaos: {
     controls: 'Tap/Click to rotate diverter clockwise • R to restart',

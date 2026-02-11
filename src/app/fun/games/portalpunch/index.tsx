@@ -247,16 +247,18 @@ const Overlay: React.FC<{
 }> = ({ runtime, level, onStart, onRestart, onNext }) => {
   const solvedCount = runtime.lastSolve.solvedTargets.size;
   const objectiveCount = level.objective.targetIds.length;
+  const difficultyText = `${level.difficulty.tag} ${level.difficulty.rating}/5`;
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/35 bg-black/45 px-3 py-2 backdrop-blur-sm">
         <div className="text-[11px] uppercase tracking-[0.25em] text-cyan-200/90">
-          Portal Punch L{level.id}
+          Portal Punch L{level.id}/{PORTAL_PUNCH_LEVELS.length}
         </div>
         <div className="text-base font-semibold">{level.name}</div>
         <div className="text-xs text-cyan-50/80">{level.subtitle}</div>
         <div className="mt-1 text-[11px] text-white/70">Phase {runtime.phase}</div>
+        <div className="text-[11px] text-amber-200/90">Difficulty {difficultyText}</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-indigo-100/35 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
@@ -292,6 +294,9 @@ const Overlay: React.FC<{
             <div className="text-2xl font-black">PORTAL PUNCH</div>
             <div className="mt-2 text-sm text-white/85">Recursive portal laser puzzle simulation</div>
             <div className="mt-1 text-sm text-white/75">Use mirrors, prisms, filters, gates, and phase switching.</div>
+            <div className="mt-1 text-xs text-amber-200/85">
+              Randomized difficulty tags per level, handcrafted chamber logic.
+            </div>
             <button
               onClick={onStart}
               className="pointer-events-auto mt-4 rounded-md border border-cyan-200/60 px-4 py-1.5 text-sm text-cyan-100 hover:bg-cyan-400/15"
@@ -307,6 +312,9 @@ const Overlay: React.FC<{
           <div className="rounded-xl border border-emerald-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-emerald-200">Chamber Solved</div>
             <div className="mt-2 text-sm text-white/85">{level.name}</div>
+            <div className="text-xs text-amber-200/80">
+              Difficulty {level.difficulty.tag} {level.difficulty.rating}/5
+            </div>
             <div className="text-sm text-white/75">Score {runtime.score}</div>
             <div className="mt-4 flex items-center justify-center gap-3">
               <button

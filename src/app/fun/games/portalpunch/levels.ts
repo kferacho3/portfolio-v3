@@ -1,9 +1,74 @@
 import type {
   Entity,
+  LevelDifficultyTag,
   LaserColor,
   PortalPunchLevel,
   TargetEntity,
 } from './types';
+
+type LevelStyle = NonNullable<PortalPunchLevel['style']>;
+type LevelDifficulty = PortalPunchLevel['difficulty'];
+type DraftLevel = Omit<PortalPunchLevel, 'difficulty'> & {
+  difficulty?: LevelDifficulty;
+};
+
+const TOTAL_LEVELS = 100;
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
+
+const mulberry32 = (seed: number) => {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6d2b79f5;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x ^= x + Math.imul(x ^ (x >>> 7), 61 | x);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const hashSeed = (a: number, b = 0x9e3779b9) => {
+  let x = (a ^ b) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b);
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b);
+  return (x ^ (x >>> 16)) >>> 0;
+};
+
+const deepClone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const DIFFICULTY_TAGS: Record<1 | 2 | 3 | 4 | 5, LevelDifficultyTag> = {
+  1: 'Easy',
+  2: 'Normal',
+  3: 'Hard',
+  4: 'Expert',
+  5: 'Master',
+};
+
+const assignDifficulty = (levelId: number, salt = 0): LevelDifficulty => {
+  const rng = mulberry32(hashSeed(levelId * 1013 + salt * 53));
+  const roll = rng();
+  const rating = (
+    roll < 0.2 ? 1 : roll < 0.46 ? 2 : roll < 0.72 ? 3 : roll < 0.9 ? 4 : 5
+  ) as 1 | 2 | 3 | 4 | 5;
+  return {
+    rating,
+    tag: DIFFICULTY_TAGS[rating],
+    seed: Math.floor(rng() * 1_000_000_000),
+  };
+};
+
+const REMIX_TITLES = [
+  'Neon Drift',
+  'Glass Matrix',
+  'Signal Bloom',
+  'Null Chamber',
+  'Fractal Deck',
+  'Aether Relay',
+  'Phase Garden',
+  'Cryo Lattice',
+  'Nova Frame',
+  'Pulse Theater',
+] as const;
 
 const target = (
   id: string,
@@ -26,8 +91,8 @@ const collect = (id: string, x: number, y: number, score = 40): Entity => ({
   score,
 });
 
-const palette = (idx: number) => {
-  const pools = [
+const palette = (idx: number): LevelStyle => {
+  const pools: LevelStyle[] = [
     {
       floorA: '#0c111f',
       floorB: '#17213f',
@@ -86,7 +151,7 @@ const dualPrism = (id: string, x: number, y: number): Entity => ({
   orientation: 0,
 });
 
-const BASE_LEVELS: PortalPunchLevel[] = [
+const BASE_LEVELS: DraftLevel[] = [
   {
     id: 1,
     key: 'level_1',
@@ -933,11 +998,111 @@ const BASE_LEVELS: PortalPunchLevel[] = [
   },
 ];
 
+const styleRemix = (base: LevelStyle, id: number): LevelStyle => {
+  const rng = mulberry32(hashSeed(0xace + id * 31));
+  const tone = (hex: string, delta: number) => {
+    const clean = hex.replace('#', '');
+    const r = parseInt(clean.slice(0, 2), 16);
+    const g = parseInt(clean.slice(2, 4), 16);
+    const b = parseInt(clean.slice(4, 6), 16);
+    const mix = (v: number) => clamp(Math.round(v + delta), 0, 255);
+    return `#${mix(r).toString(16).padStart(2, '0')}${mix(g)
+      .toString(16)
+      .padStart(2, '0')}${mix(b).toString(16).padStart(2, '0')}`;
+  };
+
+  const shift = (rng() - 0.5) * 34;
+  return {
+    floorA: tone(base.floorA, shift),
+    floorB: tone(base.floorB, -shift * 0.7),
+    fog: tone(base.fog, shift * 0.35),
+    bloom: clamp(base.bloom + (rng() - 0.5) * 0.2, 0.4, 0.82),
+    chroma: clamp(base.chroma + (rng() - 0.5) * 0.0006, 0.00045, 0.0018),
+  };
+};
+
+const addDecorCollectibles = (draft: DraftLevel, id: number) => {
+  const rng = mulberry32(hashSeed(id * 17, 0x71f0));
+  const occupied = new Set(
+    draft.entities.map((entity) => `${entity.pos.x},${entity.pos.y}`)
+  );
+
+  const count = 1 + Math.floor(rng() * 3);
+  for (let i = 0; i < count; i += 1) {
+    let tries = 0;
+    while (tries < 20) {
+      tries += 1;
+      const x = 1 + Math.floor(rng() * (draft.grid.w - 2));
+      const y = 1 + Math.floor(rng() * (draft.grid.h - 2));
+      const key = `${x},${y}`;
+      if (occupied.has(key)) continue;
+      occupied.add(key);
+      draft.entities.push(collect(`rmx_${id}_${i}`, x, y, 30 + Math.floor(rng() * 80)));
+      break;
+    }
+  }
+};
+
+const remixLevel = (base: DraftLevel, id: number): DraftLevel => {
+  const rng = mulberry32(hashSeed(id * 97, 0x55aa));
+  const clone = deepClone(base);
+  const remixIndex = id - BASE_LEVELS.length;
+  const remixTitle = REMIX_TITLES[Math.floor(rng() * REMIX_TITLES.length)];
+
+  clone.id = id;
+  clone.key = `level_${id}`;
+  clone.name = `${base.name} ${remixTitle}`;
+  clone.subtitle = `Remix ${remixIndex}: ${base.subtitle}`;
+  clone.style = styleRemix(base.style ?? palette(id), id);
+
+  clone.camera = {
+    distance: clamp((base.camera?.distance ?? 14) + (rng() - 0.5) * 2.6, 12, 22),
+    height: clamp((base.camera?.height ?? 10) + (rng() - 0.5) * 1.6, 8.5, 14),
+    lookZ: base.camera?.lookZ ?? 0,
+  };
+
+  for (const entity of clone.entities) {
+    if (entity.type === 'MIRROR' && entity.interactable && rng() < 0.55) {
+      entity.orientation = (entity.orientation + 1) % 2;
+    }
+    if (entity.type === 'PRISM' && entity.interactable) {
+      entity.orientation = ((entity.orientation ?? 0) + Math.floor(rng() * 4)) % 4;
+    }
+    if (entity.type === 'MIRROR' && entity.moving) {
+      entity.moving.speed = clamp(entity.moving.speed * (0.85 + rng() * 0.5), 1.1, 3.5);
+      entity.moving.phase = (entity.moving.phase + rng() * Math.PI * 2) % (Math.PI * 2);
+    }
+    if (entity.type === 'GRAVITY_NODE') {
+      entity.mass = clamp(entity.mass * (0.85 + rng() * 0.45), 10, 34);
+      entity.radius = clamp(entity.radius * (0.85 + rng() * 0.38), 2.8, 6.2);
+    }
+  }
+
+  addDecorCollectibles(clone, id);
+  clone.difficulty = assignDifficulty(id, 19);
+  return clone;
+};
+
+const REMIX_LEVELS: DraftLevel[] = [];
+for (let id = BASE_LEVELS.length + 1; id <= TOTAL_LEVELS; id += 1) {
+  const rng = mulberry32(hashSeed(id * 131, 0x1f3d));
+  const base = BASE_LEVELS[Math.floor(rng() * BASE_LEVELS.length)];
+  REMIX_LEVELS.push(remixLevel(base, id));
+}
+
 export const PORTAL_PUNCH_LEVELS: PortalPunchLevel[] = BASE_LEVELS.map(
   (level, idx) => ({
     ...level,
     style: level.style ?? palette(idx),
+    difficulty: level.difficulty ?? assignDifficulty(level.id, idx + 7),
   })
+).concat(
+  REMIX_LEVELS.map((level, idx) => ({
+    ...level,
+    style: level.style ?? palette(idx + BASE_LEVELS.length),
+    difficulty:
+      level.difficulty ?? assignDifficulty(level.id, idx + BASE_LEVELS.length + 29),
+  }))
 );
 
 export const PORTAL_PUNCH_LEVEL_BY_ID = new Map(

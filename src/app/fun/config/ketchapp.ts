@@ -96,7 +96,8 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
     title: 'Portal Punch',
     verb: 'Portal logic',
     input: 'tap',
-    tutorial: 'Route beams with mirrors, portals, and phase switches to satisfy all targets.',
+    tutorial:
+      'Route beams with mirrors, portals, prisms, and phase switches; each chamber has its own difficulty tag.',
     failCondition: 'timing miss',
     chunkProfile: 'timing-defense',
     endlessFirst: true,

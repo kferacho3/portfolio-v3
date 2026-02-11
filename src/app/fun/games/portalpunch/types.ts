@@ -1,4 +1,5 @@
 export type GameStatus = 'START' | 'PLAYING' | 'SOLVED' | 'GAMEOVER';
+export type LevelDifficultyTag = 'Easy' | 'Normal' | 'Hard' | 'Expert' | 'Master';
 
 export type PhaseId = 'A' | 'B';
 
@@ -170,6 +171,11 @@ export type PortalPunchLevel = {
   source: LaserSource;
   entities: Entity[];
   objective: LevelObjective;
+  difficulty: {
+    rating: 1 | 2 | 3 | 4 | 5;
+    tag: LevelDifficultyTag;
+    seed: number;
+  };
   camera?: {
     distance: number;
     height: number;
