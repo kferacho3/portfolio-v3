@@ -276,7 +276,6 @@ export default function GamePage({ params }: GamePageProps) {
     'waveflip',
     'bouncer',
     'onepath',
-    'oscillate',
   ];
   const hasOwnCanvas = gamesWithOwnCanvas.includes(gameId);
 

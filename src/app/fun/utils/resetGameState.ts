@@ -33,6 +33,7 @@ import { bouncerState } from '../games/bouncer';
 import { knotHopState } from '../games/knothop';
 import { octaSurgeState } from '../games/octasurge';
 import { prismJumpState } from '../games/prismjump';
+import { onePathState } from '../games/onepath';
 import { oscillateState } from '../games/oscillate';
 import { rolletteClassicState } from '../games/rolletteClassic';
 import { skyBlitzClassicState } from '../games/skyblitzClassic';
@@ -151,7 +152,7 @@ export function resetGameState(gameId: GameId): void {
       knotHopState.phase = 'menu';
       return;
     case 'oscillate':
-      oscillateState.retry();
+      onePathState.retry();
       return;
     case 'rolletteClassic':
       rolletteClassicState.reset();

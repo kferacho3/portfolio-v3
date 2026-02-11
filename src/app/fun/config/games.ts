@@ -351,12 +351,12 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'onepath',
-    title: 'Oscillate',
+    title: 'One Path',
     description:
       'The Walls-inspired corridor runner. Bounce between two walls and tap at the perfect alignment to take each perpendicular path.',
     accent: '#6b4cff',
     poster:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
     hotkey: '',
   },
   {
@@ -410,12 +410,12 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'oscillate',
-    title: 'One Path',
+    title: 'Oscillate',
     description:
-      'Compatibility route name for Oscillate. Same The Walls-style gameplay.',
+      'Orthographic vertical runner with rhythm wall-switching, patterned hazards, and capped infinite difficulty.',
     accent: '#6b4cff',
     poster:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
     hotkey: '',
   },
   {
@@ -718,10 +718,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Flip the platform’s direction before you hop to line up your jump. Use gems to unlock new balls and platform colors.',
   },
   oscillate: {
-    controls: 'Tap/Space/Click to turn at walls • R to restart',
+    controls: 'Tap/Space/Enter to switch walls • R to restart',
     objective:
-      'Compatibility alias for One Path. Bounce between two walls and tap in the connector window to take each new perpendicular corridor.',
-    tips: 'Stay centered, wait for alignment, and do not over-bounce or the active wall pair will break.',
+      'Climb endlessly in an orthographic vertical runner. Switch between left and right walls, dodge hazard patterns, and push distance.',
+    tips: 'Tap with rhythm, not panic. Early reads and clean wall-switch timing keep multiplier and survival stable.',
   },
   waveflip: {
     controls: 'Tap/Click to flip the wave • R to restart',

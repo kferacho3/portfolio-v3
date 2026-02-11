@@ -4,7 +4,6 @@ import * as React from 'react';
 import { Html } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise } from '@react-three/postprocessing';
-import { usePathname } from 'next/navigation';
 import { useSnapshot } from 'valtio';
 import * as THREE from 'three';
 
@@ -24,11 +23,6 @@ function formatLevel(n: number) {
 
 function Overlay() {
   const snap = useSnapshot(onePathState);
-  const pathname = usePathname();
-  const normalizedPathname = pathname?.replace(/\/+$/, '');
-  const gameTitle = normalizedPathname?.endsWith('/onepath')
-    ? 'Oscillate'
-    : 'One Path';
 
   const levelLabel =
     snap.phase === 'playing'
@@ -73,7 +67,7 @@ function Overlay() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="text-4xl font-black" style={{ color: COLORS.hudInk }}>
-                  {gameTitle}
+                  One Path
                 </h1>
                 <p className="mt-2 text-black/70 leading-relaxed">
                   The Walls style rhythm-runner: oscillate between the two

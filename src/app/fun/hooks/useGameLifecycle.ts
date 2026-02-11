@@ -67,7 +67,7 @@ const GAME_STATE_RESETTERS: Partial<Record<GameId, () => void>> = {
   pave: () => paveState.reset(),
   voidrunner: () => voidRunnerState.reset(),
   apex: () => apexState.reset(),
-  onepath: () => onePathState.retry(),
+  onepath: () => oscillateState.retry(),
   slowmo: () => slowMoState.backToMenu(),
   bouncer: () => {
     bouncerState.phase = 'menu';
@@ -79,7 +79,7 @@ const GAME_STATE_RESETTERS: Partial<Record<GameId, () => void>> = {
   knothop: () => {
     knotHopState.phase = 'menu';
   },
-  oscillate: () => oscillateState.retry(),
+  oscillate: () => onePathState.retry(),
   growth: () => growthState.reset(),
   // Classic ports
   rolletteClassic: () => rolletteClassicState.reset(),

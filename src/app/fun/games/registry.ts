@@ -72,7 +72,7 @@ const gameLoaders: Record<GameId, () => Promise<GameModule>> = {
   prismjump: () => import('./prismjump'),
   octasurge: () => import('./octasurge'),
   knothop: () => import('./knothop'),
-  oscillate: () => import('./oscillate'),
+  oscillate: () => import('./onepath'),
   waveflip: () => import('./waveflip'),
   slipstream: () => import('./slipstream'),
   runeroll: () => import('./runeroll'),
@@ -128,7 +128,7 @@ const stateGetters: Partial<Record<GameId, (mod: GameModule) => any>> = {
   prismjump: (mod) => mod.prismJumpState,
   octasurge: (mod) => mod.octaSurgeState,
   knothop: (mod) => mod.knotHopState,
-  oscillate: (mod) => mod.oscillateState,
+  oscillate: (mod) => mod.onePathState,
   rolletteClassic: (mod) => mod.rolletteClassicState,
   skyblitzClassic: (mod) => mod.skyBlitzClassicState,
   dropperClassic: (mod) => mod.dropperClassicState,
@@ -183,7 +183,7 @@ const resetters: Partial<Record<GameId, (mod: GameModule) => void>> = {
   knothop: (mod) => {
     mod.knotHopState.phase = 'menu';
   },
-  oscillate: (mod) => mod.oscillateState.retry(),
+  oscillate: (mod) => mod.onePathState.retry(),
   rolletteClassic: (mod) => mod.rolletteClassicState.reset(),
   skyblitzClassic: (mod) => mod.skyBlitzClassicState.reset(),
   dropperClassic: (mod) => mod.dropperClassicState.reset(),
@@ -326,7 +326,7 @@ function renderGameContent(
     case 'polyforge':
       return render();
     case 'onepath':
-      return render({ key: buildKey(gameId, restartSeed) });
+      return renderStandaloneGame();
     case 'slowmo':
       return render({ key: buildKey(gameId, restartSeed) });
     case 'bouncer':
@@ -338,7 +338,7 @@ function renderGameContent(
     case 'knothop':
       return render({ key: buildKey(gameId, restartSeed) });
     case 'oscillate':
-      return renderStandaloneGame();
+      return render({ key: buildKey(gameId, restartSeed) });
     case 'waveflip':
       return renderStandaloneGame();
     case 'slipstream':
