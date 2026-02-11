@@ -168,7 +168,7 @@ const writeBest = (score: number) => {
 
 const failReasonLabel = (reason: FailReason) => {
   if (reason === 'rim') return 'Glove clipped the portal rim.';
-  if (reason === 'core') return 'Portal pass, but core miss.';
+  if (reason === 'core') return 'Portal pass, but the core was missed.';
   if (reason === 'slow') return 'Too much hesitation. Keep punching.';
   return 'Whiffed the punch timing.';
 };
@@ -349,8 +349,8 @@ const seedPortal = (runtime: Runtime, portal: PortalEntity, z: number) => {
   portal.coreGap = clamp(lerp(0.85, 1.28, d) + tier * 0.03, 0.76, 1.42);
   portal.coreRadius = clamp(lerp(0.34, 0.2, d) - tier * 0.01 + Math.random() * 0.03, 0.16, 0.36);
 
-  const fakeChanceBase = runtime.elapsed < 18 ? 0 : clamp((runtime.elapsed - 18) / 82, 0, 0.22);
-  const fakeTierBoost = Math.max(0, tier - 2) * 0.05;
+  const fakeChanceBase = runtime.elapsed < 28 ? 0 : clamp((runtime.elapsed - 28) / 90, 0, 0.08);
+  const fakeTierBoost = Math.max(0, tier - 2) * 0.02;
   portal.fake = Math.random() < fakeChanceBase + fakeTierBoost;
   portal.tint = Math.random();
 };
@@ -404,7 +404,7 @@ function PortalPunchOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/16 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Portal Punch</div>
-        <div className="text-[11px] text-cyan-50/85">Tap when the bright guide line says NOW.</div>
+        <div className="text-[11px] text-cyan-50/85">Punch through ring center, then hit the core behind it.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-rose-100/55 bg-gradient-to-br from-rose-500/24 via-fuchsia-500/16 to-indigo-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -427,8 +427,8 @@ function PortalPunchOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/82 via-indigo-950/45 to-rose-950/35 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PORTAL PUNCH</div>
-            <div className="mt-2 text-sm text-white/85">Wait for the center guide to glow, then tap once.</div>
-            <div className="mt-1 text-sm text-white/80">Clip the rim or miss the core and run ends.</div>
+            <div className="mt-2 text-sm text-white/85">Wait for the guide to glow, then tap one clean punch.</div>
+            <div className="mt-1 text-sm text-white/80">Pass ring center first, then land the core hit for combo.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -476,7 +476,7 @@ function PortalPunchOverlay() {
 
 function PortalPunchScene() {
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'arrowup', 'w', 'W'],
   });
   const resetVersion = useSnapshot(portalPunchState).resetVersion;
 
@@ -582,7 +582,6 @@ function PortalPunchScene() {
   useFrame((state, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -705,12 +704,13 @@ function PortalPunchScene() {
               portalInverse.copy(portalMatrix).invert();
               localPoint.copy(point).applyMatrix4(portalInverse);
               const r = Math.hypot(localPoint.x, localPoint.y);
-              const rimFailRadius = portal.innerRadius - GLOVE_RADIUS * 0.16;
+              const rimFailRadius = portal.innerRadius - GLOVE_RADIUS * 0.12;
+              const forgivingRimRadius = rimFailRadius + 0.1;
 
-              if (portal.fake || r >= rimFailRadius) {
+              if (portal.fake || r >= forgivingRimRadius) {
                 if (
                   !portal.fake &&
-                  withinGraceWindow(runtime.elapsed, runtime.lastPunchAt, 0.1)
+                  withinGraceWindow(runtime.elapsed, runtime.lastPunchAt, 0.14)
                 ) {
                   attempt.crossedPortal = true;
                   attempt.centerRatio = r / Math.max(0.0001, portal.innerRadius);
@@ -730,7 +730,7 @@ function PortalPunchScene() {
               const coreZ = portal.z - portal.coreGap;
               if (crossedPlane(runtime.glovePrevZ, runtime.gloveZ, coreZ)) {
                 const distXY = Math.hypot(portal.x, portal.y);
-                if (distXY <= portal.coreRadius + GLOVE_RADIUS * 0.3) {
+                if (distXY <= portal.coreRadius + GLOVE_RADIUS * 0.44) {
                   attempt.hitCore = true;
                   attempt.resolved = true;
                   runtime.shake = Math.min(1.35, runtime.shake + 0.72);
@@ -768,7 +768,7 @@ function PortalPunchScene() {
         }
       }
 
-      if (!runtime.punchActive && runtime.elapsed - runtime.lastPunchAt > 2.75) {
+      if (!runtime.punchActive && runtime.elapsed - runtime.lastPunchAt > 4.1) {
         failRun(runtime, 'slow');
       }
 
@@ -954,13 +954,13 @@ function PortalPunchScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0.28, 7.25]} fov={42} />
+      <PerspectiveCamera makeDefault position={[0, 0.76, 6.9]} fov={45} />
       <color attach="background" args={['#1b2b4a']} />
       <fog attach="fog" args={['#1b2b4a', 10, 52]} />
 
-      <ambientLight intensity={0.58} />
+      <ambientLight intensity={0.68} />
       <hemisphereLight args={['#b9f1ff', '#3a2a52', 0.34]} />
-      <directionalLight position={[2.6, 4.2, 5.4]} intensity={0.96} color="#d8f5ff" />
+      <directionalLight position={[2.6, 4.2, 5.4]} intensity={1.08} color="#d8f5ff" />
       <pointLight position={[0, 0.8, 3.7]} intensity={0.68} color="#9fe7ff" />
 
       <mesh position={[0, -1.1, -10]} rotation={[-Math.PI / 2, 0, 0]}>

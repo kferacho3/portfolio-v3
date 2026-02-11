@@ -498,7 +498,7 @@ function ConveyorChaosOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-sky-100/55 bg-gradient-to-br from-sky-500/22 via-cyan-500/16 to-emerald-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Conveyor Chaos</div>
         <div className="text-[11px] text-cyan-50/85">
-          Tap to rotate switch. Route locks at center.
+          Tap rotates switch. Arrow keys set a direction instantly.
         </div>
       </div>
 
@@ -529,6 +529,7 @@ function ConveyorChaosOverlay() {
           <div className="rounded-xl border border-sky-100/42 bg-gradient-to-br from-slate-950/80 via-sky-950/44 to-amber-950/30 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">CONVEYOR CHAOS</div>
             <div className="mt-2 text-sm text-white/85">Tap rotates the arrow 90° clockwise.</div>
+            <div className="mt-1 text-sm text-white/80">Arrow keys set North/East/South/West directly.</div>
             <div className="mt-1 text-sm text-white/80">
               Set direction before the package crosses the center lock line.
             </div>
@@ -579,7 +580,25 @@ function ConveyorChaosOverlay() {
 
 function ConveyorChaosScene() {
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'arrowdown',
+      'a',
+      'd',
+      'w',
+      's',
+      'A',
+      'D',
+      'W',
+      'S',
+    ],
   });
   const resetVersion = useSnapshot(conveyorChaosState).resetVersion;
 
@@ -645,7 +664,6 @@ function ConveyorChaosScene() {
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -658,13 +676,31 @@ function ConveyorChaosScene() {
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
+    const leftPressed =
+      input.justPressed.has('arrowleft') ||
+      input.justPressed.has('a');
+    const rightPressed =
+      input.justPressed.has('arrowright') ||
+      input.justPressed.has('d');
+    const upPressed =
+      input.justPressed.has('arrowup') ||
+      input.justPressed.has('w');
+    const downPressed =
+      input.justPressed.has('arrowdown') ||
+      input.justPressed.has('s');
+    const hasDirectDir = leftPressed || rightPressed || upPressed || downPressed;
 
-    if (tap) {
+    if (tap || hasDirectDir) {
       if (store.status !== 'PLAYING') {
         resetRuntime(runtime);
         useConveyorStore.getState().startRun();
       } else {
-        const nextDir = ((runtime.diverterDir + 1) % 4) as ExitDir;
+        let nextDir: ExitDir;
+        if (upPressed) nextDir = 0;
+        else if (rightPressed) nextDir = 1;
+        else if (downPressed) nextDir = 2;
+        else if (leftPressed) nextDir = 3;
+        else nextDir = ((runtime.diverterDir + 1) % 4) as ExitDir;
         runtime.diverterDir = nextDir;
         runtime.diverterTargetAngle = angleForDir(nextDir);
         runtime.lastRotateAt = runtime.elapsed;
@@ -704,7 +740,6 @@ function ConveyorChaosScene() {
           pkg.z = lerp(APPROACH_START_Z, CENTER_Z, t);
 
           if (pkg.t >= 1) {
-            const hadStreak = runtime.streak > 0;
             if (runtime.diverterDir !== pkg.targetExit) {
               if (withinGraceWindow(runtime.elapsed, runtime.lastRotateAt, 0.1)) {
                 runtime.diverterDir = pkg.targetExit;
@@ -713,10 +748,6 @@ function ConveyorChaosScene() {
                 failRun('Wrong diverter direction.');
                 break;
               }
-            }
-            if (pkg.dualTag && !hadStreak) {
-              failRun('Dual-tag required two in a row.');
-              break;
             }
 
             pkg.phase = 'exit';
@@ -879,8 +910,8 @@ function ConveyorChaosScene() {
       <color attach="background" args={['#18243a']} />
       <fog attach="fog" args={['#18243a', 6, 28]} />
 
-      <ambientLight intensity={0.6} />
-      <hemisphereLight args={['#b6e8ff', '#2d3950', 0.28]} />
+      <ambientLight intensity={0.72} />
+      <hemisphereLight args={['#b6e8ff', '#2d3950', 0.38]} />
       <directionalLight position={[3.2, 8.2, 2.4]} intensity={0.92} color="#d6edff" />
       <pointLight position={[0, 2.8, 0]} intensity={0.42} color="#8be8ff" />
 

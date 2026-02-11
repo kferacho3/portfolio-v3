@@ -55,6 +55,7 @@ type Shard = {
 type Runtime = {
   elapsed: number;
   score: number;
+  lives: number;
   parries: number;
   perfectCombo: number;
   multiplier: number;
@@ -101,6 +102,7 @@ type PulseParryStore = {
   status: GameStatus;
   score: number;
   best: number;
+  lives: number;
   parries: number;
   combo: number;
   multiplier: number;
@@ -109,6 +111,7 @@ type PulseParryStore = {
   perfectNonce: number;
   startRun: () => void;
   resetToStart: () => void;
+  setLives: (lives: number) => void;
   onTapFx: () => void;
   onPerfectFx: () => void;
   updateHud: (
@@ -233,6 +236,7 @@ const createShard = (slot: number): Shard => ({
 const createRuntime = (): Runtime => ({
   elapsed: 0,
   score: 0,
+  lives: 3,
   parries: 0,
   perfectCombo: 0,
   multiplier: 1,
@@ -278,6 +282,7 @@ const createRuntime = (): Runtime => ({
 const resetRuntime = (runtime: Runtime) => {
   runtime.elapsed = 0;
   runtime.score = 0;
+  runtime.lives = 3;
   runtime.parries = 0;
   runtime.perfectCombo = 0;
   runtime.multiplier = 1;
@@ -336,6 +341,7 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
   status: 'START',
   score: 0,
   best: readBest(),
+  lives: 3,
   parries: 0,
   combo: 0,
   multiplier: 1,
@@ -346,6 +352,7 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
     set({
       status: 'PLAYING',
       score: 0,
+      lives: 3,
       parries: 0,
       combo: 0,
       multiplier: 1,
@@ -355,11 +362,13 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
     set({
       status: 'START',
       score: 0,
+      lives: 3,
       parries: 0,
       combo: 0,
       multiplier: 1,
       failMessage: '',
     }),
+  setLives: (lives) => set({ lives }),
   onTapFx: () => set((state) => ({ tapNonce: state.tapNonce + 1 })),
   onPerfectFx: () => set((state) => ({ perfectNonce: state.perfectNonce + 1 })),
   updateHud: (score, parries, combo, multiplier) =>
@@ -376,6 +385,7 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       return {
         status: 'GAMEOVER',
         score: Math.floor(score),
+        lives: 0,
         best: nextBest,
         parries: state.parries,
         combo: 0,
@@ -499,6 +509,7 @@ function PulseParryOverlay() {
   const status = usePulseParryStore((state) => state.status);
   const score = usePulseParryStore((state) => state.score);
   const best = usePulseParryStore((state) => state.best);
+  const lives = usePulseParryStore((state) => state.lives);
   const parries = usePulseParryStore((state) => state.parries);
   const combo = usePulseParryStore((state) => state.combo);
   const multiplier = usePulseParryStore((state) => state.multiplier);
@@ -511,7 +522,7 @@ function PulseParryOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
         <div className="text-[11px] text-cyan-50/85">
-          Cursor rotates. Tap to lock a parry lane.
+          Read the lane, tap once, and protect the core.
         </div>
       </div>
 
@@ -524,6 +535,9 @@ function PulseParryOverlay() {
         <div className="absolute left-4 top-[92px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
           <div>
             Parries <span className="font-semibold text-cyan-200">{parries}</span>
+          </div>
+          <div>
+            Core <span className="font-semibold text-lime-200">{lives}</span>
           </div>
           <div>
             Perfect Combo <span className="font-semibold text-fuchsia-200">{combo}</span>
@@ -542,7 +556,7 @@ function PulseParryOverlay() {
               Time the rotating cursor to the incoming lane.
             </div>
             <div className="mt-1 text-sm text-white/80">
-              Tap on the guide ring to reflect and build combo.
+              Tap on the guide ring to reflect, protect 3 core lives, and build combo.
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
@@ -613,7 +627,17 @@ function PulseParryOverlay() {
 
 function PulseParryScene() {
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'arrowup',
+      'arrowdown',
+      'arrowleft',
+      'arrowright',
+    ],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
@@ -685,7 +709,6 @@ function PulseParryScene() {
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -709,7 +732,7 @@ function PulseParryScene() {
         runtime.shockActive = true;
         runtime.shockRadius = runtime.parryRadius;
         runtime.shockLife = runtime.shockDuration;
-        runtime.tapCooldown = 0.09;
+        runtime.tapCooldown = 0.03;
         runtime.lastTapAt = runtime.elapsed;
         runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
         usePulseParryStore.getState().onTapFx();
@@ -823,13 +846,28 @@ function PulseParryScene() {
               runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.14);
             } else {
               runtime.resonance = Math.max(0, runtime.resonance - 0.8);
-              runtime.failMessage = 'A pulse breached the core.';
               runtime.shake = Math.min(1.5, runtime.shake + 0.72);
               runtime.perfectFlash = 1;
               spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
-              usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
-              failed = true;
-              break;
+              if (runtime.lives > 1) {
+                runtime.lives -= 1;
+                runtime.perfectCombo = 0;
+                runtime.multiplier = Math.max(1, runtime.multiplier * 0.72);
+                runtime.coreGlow = Math.min(1.35, runtime.coreGlow + 0.25);
+                runtime.parryWindowLeft = 0;
+                runtime.shockActive = false;
+                runtime.shockLife = 0;
+                pulse.active = false;
+                usePulseParryStore.getState().setLives(runtime.lives);
+                usePulseParryStore
+                  .getState()
+                  .updateHud(runtime.score, runtime.parries, runtime.perfectCombo, runtime.multiplier);
+              } else {
+                runtime.failMessage = 'Core integrity depleted.';
+                usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
+                failed = true;
+                break;
+              }
             }
           }
         } else {
@@ -983,7 +1021,7 @@ function PulseParryScene() {
           Math.sin(pulse.angle) * pulse.radius
         );
         const s = Math.max(0.001, pulse.thickness * 0.6);
-        dummy.scale.setScalar(s);
+        dummy.scale.setScalar(s * 1.18);
         dummy.rotation.set(0, runtime.elapsed * 0.8, 0);
         dummy.updateMatrix();
         pulseRef.current.setMatrixAt(i, dummy.matrix);
@@ -1069,8 +1107,8 @@ function PulseParryScene() {
       <color attach="background" args={['#0c1b2b']} />
       <fog attach="fog" args={['#0c1b2b', 8, 24]} />
 
-      <ambientLight intensity={0.5} />
-      <hemisphereLight args={['#6ee7ff', '#1a2842', 0.36]} />
+      <ambientLight intensity={0.58} />
+      <hemisphereLight args={['#6ee7ff', '#1a2842', 0.42]} />
       <pointLight position={[0, 3.8, 0]} intensity={0.58} color="#6cffb9" />
       <pointLight position={[0, 1.5, 0]} intensity={0.5} color="#ffd166" />
 
@@ -1299,7 +1337,7 @@ function PulseParryScene() {
 const PulseParry: React.FC<{ soundsOn?: boolean }> = () => {
   return (
     <Canvas
-      dpr={[1, 1.6]}
+      dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
       className="absolute inset-0 h-full w-full"
       onContextMenu={(event) => event.preventDefault()}

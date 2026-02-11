@@ -125,7 +125,7 @@ const WAVE_NORMAL_OFFSET = 0.12;
 
 const OBSTACLE_POOL = 72;
 const COLLECTIBLE_POOL = 40;
-const NEAR_FLIP_WINDOW = 0.15;
+const NEAR_FLIP_WINDOW = 0.22;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -192,7 +192,7 @@ const circleVsAabb = (
   by: number,
   hw: number,
   hh: number
-) => circleVsAabbForgiving(px, py, r, bx, by, hw, hh, 0.9);
+) => circleVsAabbForgiving(px, py, r, bx, by, hw, hh, 0.84);
 
 const waveSampleForSign = (x: number, sign: number, runtime: Runtime) => {
   const arg = runtime.waveFreq * (x + runtime.phaseScroll);
@@ -230,7 +230,7 @@ const chooseChunk = (runtime: Runtime) => {
 
 const spawnInterval = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
-  const tutorialSlow = runtime.elapsed < 14 ? 0.2 : runtime.elapsed < 24 ? 0.08 : 0;
+  const tutorialSlow = runtime.elapsed < 16 ? 0.32 : runtime.elapsed < 28 ? 0.14 : 0;
   return clamp(
     lerp(0.86, 0.44, d) + (3 - tier) * 0.04 + tutorialSlow + Math.random() * 0.1,
     0.22,
@@ -299,8 +299,8 @@ const spawnObstacleSet = (runtime: Runtime) => {
     obstacle.active = true;
     obstacle.x = baseX + i * spacing;
     obstacle.y = waveBlockY;
-    obstacle.w = clamp(lerp(0.74, 1.02, d) + tier * 0.03, 0.68, 1.14);
-    obstacle.h = clamp(lerp(1.62, 2.06, d) + tier * 0.06, 1.48, 2.4);
+    obstacle.w = clamp(lerp(0.66, 0.94, d) + tier * 0.02, 0.62, 1.06);
+    obstacle.h = clamp(lerp(1.46, 1.92, d) + tier * 0.04, 1.36, 2.16);
     obstacle.requiredSign = requiredSign;
     obstacle.kind =
       runtime.elapsed > 26 && Math.random() < 0.24
@@ -712,7 +712,6 @@ function WaveFlipScene() {
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -734,7 +733,7 @@ function WaveFlipScene() {
         runtime.waveSign = runtime.waveSign === 1 ? -1 : 1;
         runtime.playerTargetSign = runtime.waveSign;
         runtime.lastFlipAt = runtime.elapsed;
-        runtime.flipGrace = 0.18;
+        runtime.flipGrace = 0.24;
         runtime.shake = Math.min(1.2, runtime.shake + 0.36);
         useWaveFlipStore.getState().onFlipFx();
         playWhoop();
@@ -750,14 +749,14 @@ function WaveFlipScene() {
       runtime.waveFreq = lerp(1.46, 2.76, d);
       runtime.waveAmp = lerp(0.34, 0.52, d);
       runtime.waveBase = lerp(0.92, 1.08, d);
-      runtime.displaySign = lerp(runtime.displaySign, runtime.waveSign, 1 - Math.exp(-14 * dt));
+      runtime.displaySign = lerp(runtime.displaySign, runtime.waveSign, 1 - Math.exp(-10.5 * dt));
       runtime.flipGrace = Math.max(0, runtime.flipGrace - dt);
 
       runtime.phaseScroll += speed * dt * 0.86;
       runtime.hudCommit += dt;
 
       const playerSample = waveSampleForSign(PLAYER_X, runtime.playerTargetSign, runtime);
-      const playerResponse = runtime.flipGrace > 0 ? 30 : 22;
+      const playerResponse = runtime.flipGrace > 0 ? 24 : 17;
       runtime.playerY = lerp(runtime.playerY, playerSample.yRider, 1 - Math.exp(-playerResponse * dt));
       runtime.playerNormalY = lerp(
         runtime.playerNormalY,
@@ -791,7 +790,7 @@ function WaveFlipScene() {
         if (hit) {
           if (
             runtime.flipGrace > 0 ||
-            withinGraceWindow(runtime.elapsed, runtime.lastFlipAt, 0.1)
+            withinGraceWindow(runtime.elapsed, runtime.lastFlipAt, 0.14)
           ) {
             obstacle.glow = 1;
             runtime.score += 0.12;
@@ -1050,11 +1049,11 @@ function WaveFlipScene() {
   return (
     <>
       <OrthographicCamera makeDefault position={[0, 0, 9]} zoom={58} near={0.1} far={40} />
-      <color attach="background" args={['#15366b']} />
-      <fog attach="fog" args={['#15366b', 9, 28]} />
+      <color attach="background" args={['#1b4f8d']} />
+      <fog attach="fog" args={['#1b4f8d', 10, 29]} />
 
-      <ambientLight intensity={0.66} />
-      <hemisphereLight args={['#98eeff', '#4a2b7f', 0.32]} />
+      <ambientLight intensity={0.74} />
+      <hemisphereLight args={['#98eeff', '#4a2b7f', 0.4]} />
       <pointLight position={[0, 2.4, 4]} intensity={0.68} color="#8af4ff" />
       <pointLight position={[0, -1.8, 4]} intensity={0.56} color="#ff8dc0" />
 
@@ -1179,7 +1178,7 @@ function WaveFlipScene() {
 const WaveFlip: React.FC<{ soundsOn?: boolean }> = () => {
   return (
     <Canvas
-      dpr={[1, 1.6]}
+      dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
       className="absolute inset-0 h-full w-full"
       onContextMenu={(event) => event.preventDefault()}

@@ -554,7 +554,7 @@ function RuneRollOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/22 via-indigo-500/15 to-amber-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
         <div className="text-[11px] text-cyan-50/85">
-          Each tap rolls one step and flips direction.
+          Tap to step. Choose left/right before each roll.
         </div>
       </div>
 
@@ -587,7 +587,8 @@ function RuneRollOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-violet-100/42 bg-gradient-to-br from-slate-950/80 via-violet-950/46 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">RUNE ROLL</div>
-            <div className="mt-2 text-sm text-white/85">Tap to roll one step at a time.</div>
+            <div className="mt-2 text-sm text-white/85">Tap/Space rolls one step at a time.</div>
+            <div className="mt-1 text-sm text-white/80">Left side or A/Left = step left. Right side or D/Right = step right.</div>
             <div className="mt-1 text-sm text-white/80">Bottom rune must match the tile rune.</div>
             <div className="mt-1 text-sm text-cyan-200/85">The run waits for your tap.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
@@ -637,7 +638,19 @@ function RuneRollOverlay() {
 
 function RuneRollScene() {
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'arrowleft',
+      'arrowright',
+      'a',
+      'd',
+      'A',
+      'D',
+    ],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
@@ -754,7 +767,6 @@ function RuneRollScene() {
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -762,8 +774,17 @@ function RuneRollScene() {
     const input = inputRef.current;
     const store = useRuneRollStore.getState();
 
+    const pointerTap = input.pointerJustDown;
+    const leftPressed =
+      input.justPressed.has('arrowleft') ||
+      input.justPressed.has('a');
+    const rightPressed =
+      input.justPressed.has('arrowright') ||
+      input.justPressed.has('d');
     const tap =
-      input.pointerJustDown ||
+      pointerTap ||
+      leftPressed ||
+      rightPressed ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
@@ -773,7 +794,14 @@ function RuneRollScene() {
         resetRuntime(runtime);
         useRuneRollStore.getState().startRun();
       } else {
-        runtime.nextDir = runtime.nextDir === 1 ? -1 : 1;
+        if (leftPressed) {
+          runtime.nextDir = -1;
+        } else if (rightPressed) {
+          runtime.nextDir = 1;
+        } else if (pointerTap) {
+          if (input.pointerX < -0.15) runtime.nextDir = -1;
+          else if (input.pointerX > 0.15) runtime.nextDir = 1;
+        }
         runtime.pendingStep = true;
         runtime.shake = Math.min(1.15, runtime.shake + 0.2);
         useRuneRollStore.getState().onTapFx();
@@ -781,7 +809,7 @@ function RuneRollScene() {
     }
 
     if (store.status === 'PLAYING') {
-      runtime.elapsed += dt * (runtime.stepActive ? 1 : 0.35);
+      runtime.elapsed += dt * (runtime.stepActive ? 1 : 0.08);
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
 
@@ -1244,7 +1272,7 @@ function RuneRollScene() {
 const RuneRoll: React.FC<{ soundsOn?: boolean }> = () => {
   return (
     <Canvas
-      dpr={[1, 1.6]}
+      dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
       className="absolute inset-0 h-full w-full"
       onContextMenu={(event) => event.preventDefault()}

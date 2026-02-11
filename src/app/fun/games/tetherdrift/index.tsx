@@ -69,6 +69,7 @@ type Runtime = {
   debrisCursorZ: number;
   hudCommit: number;
   shake: number;
+  tapHoldGrace: number;
   tether: Tether | null;
   anchors: Anchor[];
   gates: Gate[];
@@ -273,6 +274,7 @@ const createRuntime = (): Runtime => ({
   debrisCursorZ: -14,
   hudCommit: 0,
   shake: 0,
+  tapHoldGrace: 0,
   tether: null,
   anchors: Array.from({ length: ANCHOR_POOL }, createAnchor),
   gates: Array.from({ length: GATE_POOL }, createGate),
@@ -344,6 +346,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.debrisCursorZ = -12;
   runtime.hudCommit = 0;
   runtime.shake = 0;
+  runtime.tapHoldGrace = 0;
   runtime.tether = null;
 
   for (const anchor of runtime.anchors) {
@@ -373,7 +376,7 @@ function TetherDriftOverlay() {
     <div className="absolute inset-0 pointer-events-none select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/14 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.24em] text-cyan-100/80">Tether Drift</div>
-        <div className="text-[11px] text-cyan-50/80">Hold to latch nearest blue anchor. Release to drift.</div>
+        <div className="text-[11px] text-cyan-50/80">Hold or tap to latch nearest blue anchor. Release to drift.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/24 via-fuchsia-500/16 to-cyan-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -390,7 +393,7 @@ function TetherDriftOverlay() {
             Perfect Streak <span className="font-semibold text-fuchsia-200">{perfectStreak}</span>
           </div>
           <div>
-            Misses <span className="font-semibold text-orange-200">{missedConsecutive}/2</span>
+            Misses <span className="font-semibold text-orange-200">{missedConsecutive}/3</span>
           </div>
           <div>
             Tether <span className="font-semibold">{tethered ? 'LOCKED' : 'DRIFT'}</span>
@@ -404,7 +407,7 @@ function TetherDriftOverlay() {
             <div className="text-2xl font-black tracking-wide">TETHER DRIFT</div>
             <div className="mt-2 text-sm text-white/85">Tap to begin. Hold to tether, release to slingshot.</div>
             <div className="mt-1 text-sm text-white/85">Fly through ring centers. Avoid ring rims and debris.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Miss 2 gates in a row and you crash.</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Miss 3 gates in a row and you crash.</div>
           </div>
         </div>
       )}
@@ -507,7 +510,6 @@ function TetherDriftScene() {
   useFrame((state, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -515,7 +517,11 @@ function TetherDriftScene() {
     const game = useTetherStore.getState();
     const input = inputRef.current;
 
-    const holdDown = input.pointerDown || input.keysDown.has(' ');
+    runtime.tapHoldGrace = Math.max(0, runtime.tapHoldGrace - dt);
+    const holdDown =
+      input.pointerDown ||
+      input.keysDown.has(' ') ||
+      runtime.tapHoldGrace > 0;
     const tap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
@@ -533,6 +539,9 @@ function TetherDriftScene() {
         trailAttr.array[ptr + 2] = 0;
       }
       trailAttr.needsUpdate = true;
+    } else if (tap && game.status === 'PLAYING') {
+      // Small grace makes single taps feel responsive on touch devices.
+      runtime.tapHoldGrace = 0.2;
     }
 
     if (game.status === 'PLAYING') {
@@ -697,7 +706,7 @@ function TetherDriftScene() {
           } else {
             runtime.missedConsecutive += 1;
             runtime.perfectStreak = 0;
-            if (runtime.missedConsecutive >= 2) {
+            if (runtime.missedConsecutive >= 3) {
               gameOver = true;
               break;
             }
@@ -956,8 +965,8 @@ function TetherDriftScene() {
 
       <Stars radius={95} depth={56} count={1200} factor={2.5} saturation={0.55} fade speed={0.4} />
 
-      <ambientLight intensity={0.72} />
-      <hemisphereLight args={['#d2fbff', '#415798', 0.34]} />
+      <ambientLight intensity={0.82} />
+      <hemisphereLight args={['#d2fbff', '#415798', 0.42]} />
       <pointLight position={[0, 3.1, 2.2]} intensity={0.68} color="#9deeff" />
       <pointLight position={[-2.2, -0.5, -8]} intensity={0.38} color="#c39dff" />
       <pointLight position={[2.2, -0.3, -7]} intensity={0.3} color="#ffb6a0" />

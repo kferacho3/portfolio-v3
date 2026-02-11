@@ -557,7 +557,7 @@ function PolarityScene() {
           const dz = segment.z;
           const distSq = dx * dx + dz * dz * 0.42 + 1.0;
           const base = segment.strength / (distSq + 1);
-          const forceMag = clamp(base * segmentWeight, 0, 3.3);
+          const forceMag = clamp(base * segmentWeight, 0, 2.6);
           const dirSign = Math.sign(dx) || 1;
           const attractOrRepel = activePolarity !== polarity ? 1 : -1;
           netForceX += dirSign * attractOrRepel * forceMag;
@@ -585,13 +585,16 @@ function PolarityScene() {
       runtime.nearbyPylons.length = Math.min(runtime.nearbyPylons.length, 4);
 
       const switchBoostScale = 1 + runtime.chargeSwitchBoost * 0.88;
-      const equilibriumX = clamp(runtime.playerX + netForceX * 0.34, -LANE_HALF_WIDTH + 0.2, LANE_HALF_WIDTH - 0.2);
-      const spring = 18 + difficulty * 8;
-      const damp = 10 + difficulty * 2.4;
-      runtime.playerVelX += (equilibriumX - runtime.playerX) * spring * dt;
-      runtime.playerVelX *= Math.exp(-damp * dt);
-      runtime.playerVelX += clamp(netForceX * switchBoostScale * 0.06, -0.38, 0.38);
-      runtime.playerVelX = clamp(runtime.playerVelX, -6.6, 6.6);
+      const boundedForce = clamp(netForceX, -5.4, 5.4);
+      const targetVel = boundedForce * (0.22 + difficulty * 0.16) * switchBoostScale;
+      const velResponse = 9.6 + difficulty * 3.2;
+      runtime.playerVelX = lerp(
+        runtime.playerVelX,
+        targetVel,
+        1 - Math.exp(-velResponse * dt)
+      );
+      runtime.playerVelX *= Math.exp(-(4.8 + difficulty * 1.6) * dt);
+      runtime.playerVelX = clamp(runtime.playerVelX, -5.8, 5.8);
       runtime.playerX += runtime.playerVelX * dt;
 
       let gameOver = false;
@@ -936,7 +939,7 @@ function PolarityScene() {
       <color attach="background" args={['#1f3960']} />
       <fog attach="fog" args={['#1f3960', 10, 48]} />
 
-      <ambientLight intensity={0.68} color="#dff3ff" />
+      <ambientLight intensity={0.76} color="#dff3ff" />
       <directionalLight position={[2.6, 6.8, 5.2]} intensity={1.06} color="#e5f8ff" />
       <pointLight position={[0, 2.1, 3.2]} intensity={0.76} color="#b6f3ff" />
       <pointLight position={[0, 1.9, -8]} intensity={0.5} color="#ff9fe7" />

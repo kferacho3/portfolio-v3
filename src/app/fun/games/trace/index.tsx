@@ -96,10 +96,10 @@ type TraceStore = {
 const BEST_KEY = 'trace_hyper_best_v1';
 
 const CELL_SIZE = 0.44;
-const TRAIL_THICKNESS = 0.13;
+const TRAIL_THICKNESS = 0.16;
 const PLAYER_RADIUS = 0.12;
-const MAX_TRAIL_SEGMENTS = 1200;
-const TRAIL_INSTANCE_CAP = 1400;
+const MAX_TRAIL_SEGMENTS = 4200;
+const TRAIL_INSTANCE_CAP = 2600;
 const VOID_POOL = 20;
 const PICKUP_POOL = 10;
 const MAX_SPARKS = 96;
@@ -464,6 +464,7 @@ function TraceOverlay() {
             <div className="text-2xl font-black tracking-wide">TRACE</div>
             <div className="mt-2 text-sm text-white/85">One tap. One turn direction.</div>
             <div className="mt-1 text-sm text-white/85">Don’t hit walls, your trail, or void blocks.</div>
+            <div className="mt-1 text-sm text-white/80">Your full path stays drawn so you can plan safe turns.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap to start.</div>
           </div>
         </div>
@@ -751,7 +752,7 @@ function TraceScene() {
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
         const age = runtime.elapsed - seg.createdAt;
-        const fade = clamp(1 - age / 180, 0.24, 1);
+        const fade = clamp(1 - age / 1200, 0.72, 1);
         const gradient = count > 1 ? i / (count - 1) : 0;
         segColor.copy(CYAN).lerp(MAGENTA, clamp(gradient * 0.78 + 0.14, 0, 1));
         segColor.multiplyScalar(fade * (1 + runtime.danger * 0.45));
@@ -800,7 +801,7 @@ function TraceScene() {
       trailMatRef.current.opacity =
         runtime.phaseTimer > 0
           ? clamp(0.25 + 0.45 * (Math.sin(runtime.elapsed * 45) * 0.5 + 0.5), 0.2, 0.72)
-          : 0.9;
+          : 0.96;
       trailMatRef.current.color.copy(runtime.phaseTimer > 0 ? MAGENTA : CYAN);
     }
 

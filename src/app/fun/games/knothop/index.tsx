@@ -80,6 +80,10 @@ export default function KnotHop() {
       'arrowright',
       'arrowup',
       'arrowdown',
+      'a',
+      'd',
+      'A',
+      'D',
     ],
   });
 
@@ -132,8 +136,8 @@ export default function KnotHop() {
   useEffect(() => {
     gl.domElement.style.touchAction = 'none';
 
-    scene.background = new THREE.Color('#e8ecf7');
-    scene.fog = new THREE.FogExp2('#c5d4f0', 0.038);
+    scene.background = new THREE.Color('#b9dcff');
+    scene.fog = new THREE.FogExp2('#9ecbff', 0.028);
 
     return () => {
       gl.domElement.style.touchAction = 'auto';
@@ -199,10 +203,17 @@ export default function KnotHop() {
     const w = world.current;
     const isPaused = uiSnap.paused;
 
-    // Space (or Enter) = hop only; click platform = flip twist direction
+    // Tap/click/Space/Enter = hop. Left/Right (or A/D) controls platform twist direction.
     const hop =
+      input.current.pointerJustDown ||
       input.current.justPressed.has(' ') ||
       input.current.justPressed.has('Enter');
+    const turnLeft =
+      input.current.justPressed.has('arrowleft') ||
+      input.current.justPressed.has('a');
+    const turnRight =
+      input.current.justPressed.has('arrowright') ||
+      input.current.justPressed.has('d');
 
     if (snap.phase !== 'playing' || isPaused) {
       clearFrameInput(input);
@@ -218,6 +229,8 @@ export default function KnotHop() {
     // Update twist of current platform
     const current = platforms[w.currentIndex];
     if (current) {
+      if (turnLeft) current.twistSpeed = -Math.abs(current.twistSpeed);
+      if (turnRight) current.twistSpeed = Math.abs(current.twistSpeed);
       current.yaw += current.twistSpeed * delta * (1 + difficulty * 0.8);
       // Keep yaws bounded (avoid float blowup)
       if (current.yaw > Math.PI * 2) current.yaw -= Math.PI * 2;
@@ -388,9 +401,11 @@ export default function KnotHop() {
 
       {/* World lights */}
       <ambientLight intensity={0.72} color="#e8f0ff" />
+      <pointLight position={[0, 7, 2]} intensity={0.32} color="#7ad8ff" />
+      <pointLight position={[3, 5, -4]} intensity={0.28} color="#ff9ed1" />
       <directionalLight
         position={[8, 14, 6]}
-        intensity={1.1}
+        intensity={1.22}
         color="#fffaf5"
         castShadow
         shadow-mapSize-width={1024}
@@ -404,7 +419,7 @@ export default function KnotHop() {
       />
       <directionalLight
         position={[-4, 6, -3]}
-        intensity={0.35}
+        intensity={0.46}
         color="#a8c8ff"
       />
 
@@ -427,8 +442,10 @@ export default function KnotHop() {
             <boxGeometry args={[p.width, GAME.platformHeight, p.length]} />
             <meshStandardMaterial
               color={theme.edgeColor}
-              roughness={0.5}
-              metalness={0.08}
+              roughness={0.45}
+              metalness={0.12}
+              emissive={new THREE.Color(theme.edgeColor)}
+              emissiveIntensity={0.04}
             />
           </mesh>
           {/* Top — click to flip twist direction */}
@@ -451,10 +468,10 @@ export default function KnotHop() {
             <boxGeometry args={[p.width * 0.96, 0.08, p.length * 0.96]} />
             <meshStandardMaterial
               color={theme.topColor}
-              roughness={0.3}
-              metalness={0.12}
+              roughness={0.24}
+              metalness={0.18}
               emissive={new THREE.Color(theme.topColor)}
-              emissiveIntensity={0.06}
+              emissiveIntensity={0.16}
             />
           </mesh>
 

@@ -157,8 +157,8 @@ const STREAK_POOL = 88;
 const FRONT_Z = 6;
 const FAR_Z = -92;
 
-const COMET_COLLIDE_Z = 0.5;
-const GUST_COLLIDE_Z = 0.46;
+const COMET_COLLIDE_Z = 0.38;
+const GUST_COLLIDE_Z = 0.38;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -478,13 +478,13 @@ const spawnComet = (runtime: Runtime) => {
   const comet = acquireComet(runtime);
   comet.active = true;
   comet.lane = lane;
-  comet.z = -15.5 - Math.random() * 6.5;
+  comet.z = -18.8 - Math.random() * 9.2;
   comet.x = LANE_X[lane];
   comet.weaveAmp = lerp(0.02, 0.18, d) * (0.62 + tier * 0.1) * earlyScale;
   comet.weaveFreq = lerp(0.8, 1.7, d) + Math.random() * 0.35;
   comet.phase = Math.random() * Math.PI * 2;
   comet.speedFactor = clamp(lerp(0.95, 1.24, d) + tier * 0.04 + (Math.random() * 2 - 1) * 0.05, 0.88, 1.42);
-  comet.radius = clamp(lerp(0.38, 0.54, d) + tier * 0.02, 0.34, 0.6);
+  comet.radius = clamp(lerp(0.48, 0.74, d) + tier * 0.03, 0.44, 0.86);
   comet.slipMin = 0.82;
   comet.slipMax = clamp(lerp(5.0, 3.7, d) + tier * 0.1, 3.0, 5.3);
   comet.nearAwarded = false;
@@ -503,11 +503,11 @@ const spawnGust = (runtime: Runtime) => {
 
   gust.active = true;
   gust.lane = lane;
-  gust.z = -16.2 - Math.random() * 7.2;
+  gust.z = -19.2 - Math.random() * 9.6;
   gust.x = LANE_X[lane];
-  gust.width = clamp(1.14 + Math.random() * 0.26, 1.02, 1.54);
-  gust.height = clamp(0.42 + Math.random() * 0.22, 0.36, 0.78);
-  gust.depth = clamp(0.72 + Math.random() * 0.26, 0.64, 1.02);
+  gust.width = clamp(1.28 + Math.random() * 0.34, 1.14, 1.78);
+  gust.height = clamp(0.56 + Math.random() * 0.26, 0.46, 0.88);
+  gust.depth = clamp(0.82 + Math.random() * 0.34, 0.72, 1.24);
   gust.swayAmp = lerp(0.02, 0.16, d) * (0.52 + tier * 0.08);
   gust.swayFreq = lerp(0.9, 1.9, d) + Math.random() * 0.42;
   gust.phase = Math.random() * Math.PI * 2;
@@ -618,7 +618,19 @@ function SlipStreamOverlay() {
 
 function SlipStreamScene() {
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'arrowleft',
+      'arrowright',
+      'a',
+      'd',
+      'A',
+      'D',
+    ],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
@@ -666,7 +678,6 @@ function SlipStreamScene() {
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -674,8 +685,17 @@ function SlipStreamScene() {
     const input = inputRef.current;
     const store = useSlipStreamStore.getState();
 
+    const pointerTap = input.pointerJustDown;
+    const leftPressed =
+      input.justPressed.has('arrowleft') ||
+      input.justPressed.has('a');
+    const rightPressed =
+      input.justPressed.has('arrowright') ||
+      input.justPressed.has('d');
     const tap =
-      input.pointerJustDown ||
+      pointerTap ||
+      leftPressed ||
+      rightPressed ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
@@ -685,10 +705,27 @@ function SlipStreamScene() {
         resetRuntime(runtime);
         useSlipStreamStore.getState().startRun();
       } else {
-        runtime.laneIndex = ((runtime.laneIndex + 1) % 3) as LaneIndex;
+        const previousLane = runtime.laneIndex;
+        if (leftPressed) {
+          runtime.laneIndex = clamp(runtime.laneIndex - 1, 0, 2) as LaneIndex;
+        } else if (rightPressed) {
+          runtime.laneIndex = clamp(runtime.laneIndex + 1, 0, 2) as LaneIndex;
+        } else if (pointerTap) {
+          if (input.pointerX < -0.18) {
+            runtime.laneIndex = clamp(runtime.laneIndex - 1, 0, 2) as LaneIndex;
+          } else if (input.pointerX > 0.18) {
+            runtime.laneIndex = clamp(runtime.laneIndex + 1, 0, 2) as LaneIndex;
+          } else {
+            runtime.laneIndex = ((runtime.laneIndex + 1) % 3) as LaneIndex;
+          }
+        } else {
+          runtime.laneIndex = ((runtime.laneIndex + 1) % 3) as LaneIndex;
+        }
         runtime.targetX = LANE_X[runtime.laneIndex];
-        runtime.shake = Math.min(1.15, runtime.shake + 0.24);
-        useSlipStreamStore.getState().onTapFx();
+        if (runtime.laneIndex !== previousLane) {
+          runtime.shake = Math.min(1.15, runtime.shake + 0.24);
+          useSlipStreamStore.getState().onTapFx();
+        }
       }
     }
 
@@ -1041,10 +1078,10 @@ function SlipStreamScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 2.5, 6.35]} fov={38} near={0.1} far={120} />
-      <color attach="background" args={['#1d8fb4']} />
-      <fog attach="fog" args={['#1d8fb4', 14, 70]} />
+      <color attach="background" args={['#1f81a8']} />
+      <fog attach="fog" args={['#1f81a8', 14, 70]} />
 
-      <ambientLight intensity={0.78} />
+      <ambientLight intensity={0.86} />
       <hemisphereLight args={['#c4fbff', '#2a6c85', 0.52]} />
       <pointLight position={[0, 3.6, 4]} intensity={0.84} color="#c8faff" />
       <pointLight position={[0, -1.3, 4]} intensity={0.5} color="#ffd7a8" />
@@ -1156,27 +1193,38 @@ function SlipStreamScene() {
 
       <instancedMesh ref={cometRef} args={[undefined, undefined, COMET_POOL]}>
         <icosahedronGeometry args={[1, 1]} />
-        <meshBasicMaterial color={COMET_COLOR} vertexColors toneMapped={false} />
+        <meshStandardMaterial
+          color={COMET_COLOR}
+          vertexColors
+          emissive="#f27a3d"
+          emissiveIntensity={0.28}
+          roughness={0.3}
+          metalness={0.08}
+          toneMapped={false}
+        />
       </instancedMesh>
 
       <instancedMesh ref={gustRef} args={[undefined, undefined, GUST_POOL]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           color={GUST_COLOR}
           vertexColors
-          transparent
-          opacity={0.92}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
+          emissive="#7f68ff"
+          emissiveIntensity={0.3}
+          roughness={0.38}
+          metalness={0.05}
           toneMapped={false}
         />
       </instancedMesh>
 
       <mesh ref={playerRef} position={[0, 0.08, 0.28]} rotation={[Math.PI * 0.5, 0, 0]}>
         <cylinderGeometry args={[0.17, 0.17, 0.54, 16]} />
-        <meshBasicMaterial
-          color="#ffe39b"
-          toneMapped={false}
+        <meshStandardMaterial
+          color="#f3c086"
+          emissive="#c6854b"
+          emissiveIntensity={0.2}
+          roughness={0.42}
+          metalness={0.04}
         />
       </mesh>
 
@@ -1197,7 +1245,7 @@ function SlipStreamScene() {
 const Slipstream: React.FC<{ soundsOn?: boolean }> = () => {
   return (
     <Canvas
-      dpr={[1, 1.6]}
+      dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
       className="absolute inset-0 h-full w-full"
       onContextMenu={(event) => event.preventDefault()}

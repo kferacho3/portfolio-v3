@@ -274,8 +274,8 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
   runtime.gapRun = 0;
   runtime.lastHeight = 0;
 
-  const ruleChance = lerp(0.22, 0.58, d);
-  if (Math.random() < ruleChance) {
+  const elevatedRuleChance = lerp(0.48, 0.86, d);
+  if (Math.random() < elevatedRuleChance) {
     if (runtime.lastRule === 'UPRIGHT') {
       tile.rule = Math.random() < 0.65 ? 'FLAT' : 'UPRIGHT';
     } else if (runtime.lastRule === 'FLAT') {
@@ -488,7 +488,25 @@ function FlipBoxOverlay() {
 
 function FlipBoxScene() {
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'arrowleft',
+      'arrowright',
+      'arrowup',
+      'arrowdown',
+      'a',
+      'd',
+      'w',
+      's',
+      'A',
+      'D',
+      'W',
+      'S',
+    ],
   });
   const resetVersion = useSnapshot(flipBoxState).resetVersion;
 
@@ -542,19 +560,33 @@ function FlipBoxScene() {
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
+    const forceFlat =
+      input.justPressed.has('arrowleft') ||
+      input.justPressed.has('arrowdown') ||
+      input.justPressed.has('a') ||
+      input.justPressed.has('s');
+    const forceUpright =
+      input.justPressed.has('arrowright') ||
+      input.justPressed.has('arrowup') ||
+      input.justPressed.has('d') ||
+      input.justPressed.has('w');
 
     if (tap && store.status !== 'PLAYING') {
       resetRuntime(runtime);
       useFlipBoxStore.getState().startRun();
       useFlipBoxStore.getState().setPosture('UPRIGHT');
       useFlipBoxStore.getState().setNextRule('ANY');
-    } else if (tap && store.status === 'PLAYING') {
-      runtime.targetOrientation = runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
-      runtime.orientation = runtime.targetOrientation;
-      runtime.rotTargetX -= Math.PI * 0.5;
-      runtime.flipTimer = 0;
-      runtime.cameraKick = Math.min(1, runtime.cameraKick + 0.38);
-      useFlipBoxStore.getState().setPosture(runtime.orientation);
+    } else if (store.status === 'PLAYING' && (tap || forceFlat || forceUpright)) {
+      if (forceFlat) runtime.targetOrientation = 'FLAT';
+      else if (forceUpright) runtime.targetOrientation = 'UPRIGHT';
+      else runtime.targetOrientation = runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
+      if (runtime.targetOrientation !== runtime.orientation) {
+        runtime.orientation = runtime.targetOrientation;
+        runtime.rotTargetX -= Math.PI * 0.5;
+        runtime.flipTimer = 0;
+        runtime.cameraKick = Math.min(1, runtime.cameraKick + 0.38);
+        useFlipBoxStore.getState().setPosture(runtime.orientation);
+      }
     }
 
     if (store.status === 'PLAYING') {

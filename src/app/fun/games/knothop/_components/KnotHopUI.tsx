@@ -198,7 +198,7 @@ export function KnotHopUI() {
                 {KNOT_HOP_TITLE}
               </div>
               <div style={{ fontSize: 12, opacity: 0.7 }}>
-                Space to hop · click platform to change direction
+                Tap/Space to hop · A/D or arrows set twist direction
               </div>
             </div>
 
@@ -345,9 +345,9 @@ export function KnotHopUI() {
               </div>
 
               <div style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.72 }}>
-                Space to hop. Platforms twist—click the one you&apos;re on to
-                flip its spin. Land on the next platform, collect gems,
-                don&apos;t fall.
+                Tap or press Space to hop. Use left/right (or A/D) to control
+                platform twist, then land cleanly, collect gems, and chain
+                perfect hops.
               </div>
 
               {toastVisible && (
