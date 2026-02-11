@@ -103,6 +103,7 @@ const MAX_GRID = 22;
 const BOARD_WORLD_SIZE = 8.8;
 
 const CELL_INSTANCE_CAP = MAX_GRID * MAX_GRID;
+const TRAIL_CELL_INSTANCE_CAP = MAX_GRID * MAX_GRID;
 const TRAIL_INSTANCE_CAP = 2600;
 const COLLECTIBLE_CAP = 24;
 const SPARK_CAP = 120;
@@ -149,6 +150,9 @@ const medalLabel = (medal: TraceMedal) => {
   if (medal === 'bronze') return 'Bronze';
   return 'None';
 };
+
+const headStyleLabel = (style: TraceHeadStyle) =>
+  style[0].toUpperCase() + style.slice(1);
 
 const medalColor = (medal: TraceMedal) => {
   if (medal === 'diamond') return '#8be9ff';
@@ -344,7 +348,7 @@ function TraceOverlay({ onStartRun }: { onStartRun: () => void }) {
   const snap = useSnapshot(traceState);
   const palette = TRACE_PALETTES[snap.paletteIndex] ?? TRACE_PALETTES[0];
 
-  const headLabel = snap.headStyle[0].toUpperCase() + snap.headStyle.slice(1);
+  const headLabel = headStyleLabel(snap.headStyle);
   const medalHex = medalColor(snap.currentMedal);
 
   return (
@@ -376,6 +380,13 @@ function TraceOverlay({ onStartRun }: { onStartRun: () => void }) {
           <div>
             Medal <span className="font-semibold" style={{ color: medalHex }}>{medalLabel(snap.currentMedal)}</span>
           </div>
+          <div>
+            Palette <span className="font-semibold text-violet-100">{palette.name}</span>
+          </div>
+          <div>
+            Head <span className="font-semibold text-cyan-50">{headLabel}</span>
+          </div>
+          <div className="pt-1 text-[10px] text-white/70">C palette • H head</div>
         </div>
       )}
 
@@ -438,7 +449,7 @@ function TraceOverlay({ onStartRun }: { onStartRun: () => void }) {
               <div className="rounded border border-white/20 bg-black/22 px-2 py-1">Diamond {snap.diamond}</div>
             </div>
 
-            <div className="mt-3 text-xs text-cyan-100/90">Tap or Space to turn while playing. R restarts instantly.</div>
+            <div className="mt-3 text-xs text-cyan-100/90">Tap or Space to turn while playing. C palette • H head • R restarts.</div>
           </div>
         </div>
       )}
@@ -451,13 +462,26 @@ function TraceScene() {
   const ui = useGameUIState();
 
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'r',
+      'R',
+      'c',
+      'C',
+      'h',
+      'H',
+    ],
   });
 
   const runtimeRef = useRef<Runtime>(createRuntime());
   const fixedStepRef = useRef(createFixedStepState());
 
   const cellMeshRef = useRef<THREE.InstancedMesh>(null);
+  const trailCellMeshRef = useRef<THREE.InstancedMesh>(null);
   const trailMeshRef = useRef<THREE.InstancedMesh>(null);
   const collectibleMeshRef = useRef<THREE.InstancedMesh>(null);
   const headGroupRef = useRef<THREE.Group>(null);
@@ -527,6 +551,19 @@ function TraceScene() {
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
     const restart = input.justPressed.has('r');
+    const cyclePalette = input.justPressed.has('c');
+    const cycleHead = input.justPressed.has('h');
+
+    if (traceState.phase === 'playing' && cyclePalette) {
+      traceState.nextPalette();
+      const nextPalette = TRACE_PALETTES[traceState.paletteIndex] ?? TRACE_PALETTES[0];
+      traceState.setToast(`PALETTE ${nextPalette.name.toUpperCase()}`, 0.65);
+    }
+
+    if (traceState.phase === 'playing' && cycleHead) {
+      traceState.nextHeadStyle();
+      traceState.setToast(`HEAD ${headStyleLabel(traceState.headStyle).toUpperCase()}`, 0.65);
+    }
 
     if ((tap || restart) && traceState.phase !== 'playing') {
       startRun();
@@ -689,6 +726,8 @@ function TraceScene() {
     const palette = TRACE_PALETTES[traceState.paletteIndex] ?? TRACE_PALETTES[0];
     trailColorA.set(palette.trailA);
     trailColorB.set(palette.trailB);
+    const drawX = lerp(runtime.renderFromX, runtime.renderToX, runtime.moveProgress);
+    const drawZ = lerp(runtime.renderFromZ, runtime.renderToZ, runtime.moveProgress);
 
     if (cellMeshRef.current) {
       let idx = 0;
@@ -704,15 +743,7 @@ function TraceScene() {
         dummy.scale.set(runtime.cellSize * 0.9, 0.05, runtime.cellSize * 0.9);
         dummy.updateMatrix();
         cellMeshRef.current.setMatrixAt(idx, dummy.matrix);
-
-        const visit = runtime.visited[cell];
-        if (visit > 0) {
-          const t = clamp(visit / Math.max(1, runtime.visitSerial), 0, 1);
-          colorScratch.copy(trailColorA).lerp(trailColorB, t * 0.9 + 0.1);
-        } else {
-          colorScratch.set(palette.unfilled);
-        }
-        cellMeshRef.current.setColorAt(idx, colorScratch);
+        cellMeshRef.current.setColorAt(idx, colorScratch.set(palette.unfilled));
         idx += 1;
       }
 
@@ -730,6 +761,50 @@ function TraceScene() {
       if (cellMeshRef.current.instanceColor) cellMeshRef.current.instanceColor.needsUpdate = true;
     }
 
+    if (trailCellMeshRef.current) {
+      let idx = 0;
+      const total = runtime.totalCells;
+
+      for (let cell = 0; cell < total && idx < TRAIL_CELL_INSTANCE_CAP; cell += 1) {
+        const visit = runtime.visited[cell];
+        if (visit <= 0) continue;
+
+        const ix = cell % runtime.gridSize;
+        const iz = Math.floor(cell / runtime.gridSize);
+        const pos = worldOfCell(ix, iz, runtime.gridSize, runtime.cellSize);
+
+        dummy.position.set(pos.x, 0.08, pos.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(
+          runtime.cellSize * 0.82,
+          TRAIL_THICKNESS * 0.76,
+          runtime.cellSize * 0.82
+        );
+        dummy.updateMatrix();
+        trailCellMeshRef.current.setMatrixAt(idx, dummy.matrix);
+
+        const t = clamp(visit / Math.max(1, runtime.visitSerial), 0, 1);
+        colorScratch.copy(trailColorA).lerp(trailColorB, t * 0.9 + 0.1);
+        trailCellMeshRef.current.setColorAt(idx, colorScratch);
+        idx += 1;
+      }
+
+      while (idx < TRAIL_CELL_INSTANCE_CAP) {
+        dummy.position.set(9999, 9999, 9999);
+        dummy.scale.set(0.0001, 0.0001, 0.0001);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        trailCellMeshRef.current.setMatrixAt(idx, dummy.matrix);
+        trailCellMeshRef.current.setColorAt(idx, trailColorA);
+        idx += 1;
+      }
+
+      trailCellMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (trailCellMeshRef.current.instanceColor) {
+        trailCellMeshRef.current.instanceColor.needsUpdate = true;
+      }
+    }
+
     if (trailMeshRef.current) {
       let idx = 0;
 
@@ -740,9 +815,9 @@ function TraceScene() {
         const len = Math.hypot(dx, dz);
         if (len < 0.0001) continue;
 
-        dummy.position.set((seg.ax + seg.bx) * 0.5, 0.08, (seg.az + seg.bz) * 0.5);
+        dummy.position.set((seg.ax + seg.bx) * 0.5, 0.11, (seg.az + seg.bz) * 0.5);
         dummy.rotation.set(0, Math.atan2(dx, dz), 0);
-        dummy.scale.set(runtime.cellSize * 0.2, 0.08, len + 0.01);
+        dummy.scale.set(runtime.cellSize * 0.24, TRAIL_THICKNESS * 0.84, len + 0.03);
         dummy.updateMatrix();
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
@@ -750,6 +825,36 @@ function TraceScene() {
         colorScratch.copy(trailColorA).lerp(trailColorB, t * 0.92 + 0.08);
         trailMeshRef.current.setColorAt(idx, colorScratch);
         idx += 1;
+      }
+
+      if (
+        traceState.phase === 'playing' &&
+        runtime.moveProgress < 0.999 &&
+        idx < TRAIL_INSTANCE_CAP
+      ) {
+        const activeDx = drawX - runtime.renderFromX;
+        const activeDz = drawZ - runtime.renderFromZ;
+        const activeLen = Math.hypot(activeDx, activeDz);
+
+        if (activeLen > 0.0001) {
+          dummy.position.set(
+            (runtime.renderFromX + drawX) * 0.5,
+            0.11,
+            (runtime.renderFromZ + drawZ) * 0.5
+          );
+          dummy.rotation.set(0, Math.atan2(activeDx, activeDz), 0);
+          dummy.scale.set(
+            runtime.cellSize * 0.24,
+            TRAIL_THICKNESS * 0.84,
+            activeLen + 0.02
+          );
+          dummy.updateMatrix();
+          trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
+
+          colorScratch.copy(trailColorA).lerp(trailColorB, clamp(runtime.moveProgress, 0, 1));
+          trailMeshRef.current.setColorAt(idx, colorScratch);
+          idx += 1;
+        }
       }
 
       while (idx < TRAIL_INSTANCE_CAP) {
@@ -800,9 +905,6 @@ function TraceScene() {
       if (collectibleMeshRef.current.instanceColor)
         collectibleMeshRef.current.instanceColor.needsUpdate = true;
     }
-
-    const drawX = lerp(runtime.renderFromX, runtime.renderToX, runtime.moveProgress);
-    const drawZ = lerp(runtime.renderFromZ, runtime.renderToZ, runtime.moveProgress);
 
     if (headGroupRef.current) {
       headGroupRef.current.position.set(drawX, 0.14, drawZ);
@@ -900,6 +1002,14 @@ function TraceScene() {
       ))}
 
       <instancedMesh ref={cellMeshRef} args={[undefined, undefined, CELL_INSTANCE_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={trailCellMeshRef}
+        args={[undefined, undefined, TRAIL_CELL_INSTANCE_CAP]}
+      >
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
