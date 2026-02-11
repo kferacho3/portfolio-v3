@@ -23,6 +23,7 @@ import {
 import { orbitLatchState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
+type OrbitMode = 'classic' | 'scattered';
 
 type Planet = {
   slot: number;
@@ -60,11 +61,28 @@ type Shard = {
   color: THREE.Color;
 };
 
+type Hazard = {
+  slot: number;
+  active: boolean;
+  x: number;
+  y: number;
+  radius: number;
+  spin: number;
+  spinVel: number;
+  phase: number;
+  drift: number;
+  colorIndex: number;
+  glow: number;
+};
+
 type Runtime = {
+  mode: OrbitMode;
   elapsed: number;
   score: number;
   latches: number;
   stars: number;
+  timeRemaining: number;
+  releaseCount: number;
   tightReleases: number;
   streak: number;
   multiplier: number;
@@ -101,44 +119,62 @@ type Runtime = {
   lastSpawnX: number;
   lastSpawnY: number;
   hasSpawnAnchor: boolean;
+  scatterBandCursor: number;
+  scatterBandSize: number;
   nextStarSlot: number;
+  nextHazardSlot: number;
 
   planets: Planet[];
   starsPool: StarPickup[];
+  hazardsPool: Hazard[];
   shards: Shard[];
 };
 
 type OrbitStore = {
   status: GameStatus;
+  mode: OrbitMode;
   score: number;
   best: number;
+  bestByMode: Record<OrbitMode, number>;
   latches: number;
   stars: number;
+  timeRemaining: number;
   tightReleases: number;
   multiplier: number;
   latched: boolean;
   failMessage: string;
   tapNonce: number;
-  startRun: () => void;
+  setMode: (mode: OrbitMode) => void;
+  startRun: (mode?: OrbitMode) => void;
   resetToStart: () => void;
   onTapFx: () => void;
   updateHud: (
     score: number,
     latches: number,
     stars: number,
+    timeRemaining: number,
     tightReleases: number,
     multiplier: number,
     latched: boolean
   ) => void;
   endRun: (score: number, reason: string) => void;
 };
-
-const BEST_KEY = 'orbitlatch_hyper_best_v3';
+const ORBIT_MODES = ['classic', 'scattered'] as const satisfies readonly OrbitMode[];
+const BEST_KEYS: Record<OrbitMode, string> = {
+  classic: 'orbitlatch_hyper_best_classic_v1',
+  scattered: 'orbitlatch_hyper_best_scattered_v1',
+};
+const MODE_KEY = 'orbitlatch_hyper_mode_v1';
 
 const PLANET_POOL = 24;
 const STAR_POOL = 42;
+const HAZARD_POOL = 30;
 const SHARD_POOL = 120;
 const TRAIL_POINTS = 54;
+
+const SCATTERED_TIME_LIMIT = 80;
+const CLASSIC_MIN_FORWARD_TARGETS = 4;
+const SCATTERED_MIN_FORWARD_TARGETS = 8;
 
 const FIELD_HALF_X = 4.2;
 const SAFE_FALL_BACK = 10.5;
@@ -150,39 +186,56 @@ const PLAYER_RADIUS = 0.12;
 const RELATCH_LOOKAHEAD_BASE = 0.12;
 
 const STAR_COLORS = [
-  new THREE.Color('#55f4ff'),
-  new THREE.Color('#ff68d4'),
-  new THREE.Color('#c5ff66'),
-  new THREE.Color('#ffbf4b'),
+  new THREE.Color('#22d3ee'),
+  new THREE.Color('#ff44eb'),
+  new THREE.Color('#f59e0b'),
+  new THREE.Color('#a78bfa'),
+  new THREE.Color('#34d399'),
+  new THREE.Color('#fb7185'),
 ] as const;
 const PLANET_COLORS = [
-  new THREE.Color('#33dcff'),
-  new THREE.Color('#ff4fbe'),
-  new THREE.Color('#7dff73'),
-  new THREE.Color('#ffa945'),
-  new THREE.Color('#8f7bff'),
+  new THREE.Color('#00ffff'),
+  new THREE.Color('#ff00ff'),
+  new THREE.Color('#6c5ce7'),
+  new THREE.Color('#f39c12'),
+  new THREE.Color('#34d399'),
+  new THREE.Color('#f43f5e'),
+] as const;
+const HAZARD_COLORS = [
+  new THREE.Color('#ff4d74'),
+  new THREE.Color('#fb7185'),
+  new THREE.Color('#f97316'),
+  new THREE.Color('#f43f5e'),
 ] as const;
 const WHITE = new THREE.Color('#fdffff');
 const DANGER = new THREE.Color('#ff4d74');
-
-const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
-const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 let audioContextRef: AudioContext | null = null;
 
-const readBest = () => {
+const readMode = (): OrbitMode => {
+  if (typeof window === 'undefined') return 'classic';
+  const raw = window.localStorage.getItem(MODE_KEY);
+  return ORBIT_MODES.includes(raw as OrbitMode) ? (raw as OrbitMode) : 'classic';
+};
+
+const writeMode = (mode: OrbitMode) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(MODE_KEY, mode);
+};
+
+const readBest = (mode: OrbitMode) => {
   if (typeof window === 'undefined') return 0;
-  const raw = window.localStorage.getItem(BEST_KEY);
+  const raw = window.localStorage.getItem(BEST_KEYS[mode]);
   const parsed = Number(raw ?? 0);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
 };
 
-const writeBest = (score: number) => {
+const writeBest = (mode: OrbitMode, score: number) => {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
+  window.localStorage.setItem(BEST_KEYS[mode], String(Math.max(0, Math.floor(score))));
 };
 
 const maybeVibrate = (ms: number) => {
@@ -256,11 +309,28 @@ const makeShard = (slot: number): Shard => ({
   color: new THREE.Color('#ffffff'),
 });
 
+const makeHazard = (slot: number): Hazard => ({
+  slot,
+  active: false,
+  x: 0,
+  y: 0,
+  radius: 0.2,
+  spin: Math.random() * Math.PI * 2,
+  spinVel: 1.1 + Math.random() * 1.8,
+  phase: Math.random() * Math.PI * 2,
+  drift: 0.1 + Math.random() * 0.28,
+  colorIndex: slot % HAZARD_COLORS.length,
+  glow: 0,
+});
+
 const createRuntime = (): Runtime => ({
+  mode: 'classic',
   elapsed: 0,
   score: 0,
   latches: 0,
   stars: 0,
+  timeRemaining: 0,
+  releaseCount: 0,
   tightReleases: 0,
   streak: 0,
   multiplier: 1,
@@ -297,64 +367,100 @@ const createRuntime = (): Runtime => ({
   lastSpawnX: 0,
   lastSpawnY: 0,
   hasSpawnAnchor: false,
+  scatterBandCursor: 0,
+  scatterBandSize: 0,
   nextStarSlot: 0,
+  nextHazardSlot: 0,
 
   planets: Array.from({ length: PLANET_POOL }, (_, idx) => makePlanet(idx)),
   starsPool: Array.from({ length: STAR_POOL }, (_, idx) => makeStar(idx)),
+  hazardsPool: Array.from({ length: HAZARD_POOL }, (_, idx) => makeHazard(idx)),
   shards: Array.from({ length: SHARD_POOL }, (_, idx) => makeShard(idx)),
 });
 
-const useOrbitStore = create<OrbitStore>((set) => ({
+const initialMode = readMode();
+const initialBestByMode: Record<OrbitMode, number> = {
+  classic: readBest('classic'),
+  scattered: readBest('scattered'),
+};
+
+const useOrbitStore = create<OrbitStore>((set, get) => ({
   status: 'START',
+  mode: initialMode,
   score: 0,
-  best: readBest(),
+  best: initialBestByMode[initialMode],
+  bestByMode: initialBestByMode,
   latches: 0,
   stars: 0,
+  timeRemaining: initialMode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
   tightReleases: 0,
   multiplier: 1,
   latched: false,
   failMessage: '',
   tapNonce: 0,
-  startRun: () =>
-    set({
+  setMode: (mode) =>
+    set((state) => {
+      if (state.mode === mode) return {};
+      writeMode(mode);
+      return {
+        mode,
+        best: state.bestByMode[mode],
+        timeRemaining: mode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
+      };
+    }),
+  startRun: (mode) => {
+    const nextMode = mode ?? get().mode;
+    writeMode(nextMode);
+    set((state) => ({
       status: 'PLAYING',
+      mode: nextMode,
+      best: state.bestByMode[nextMode],
       score: 0,
       latches: 0,
       stars: 0,
       tightReleases: 0,
+      timeRemaining: nextMode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
       multiplier: 1,
       latched: true,
       failMessage: '',
-    }),
+    }));
+  },
   resetToStart: () =>
-    set({
+    set((state) => ({
       status: 'START',
       score: 0,
       latches: 0,
       stars: 0,
       tightReleases: 0,
+      timeRemaining: state.mode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
       multiplier: 1,
       latched: false,
       failMessage: '',
-    }),
+      best: state.bestByMode[state.mode],
+    })),
   onTapFx: () => set((state) => ({ tapNonce: state.tapNonce + 1 })),
-  updateHud: (score, latches, stars, tightReleases, multiplier, latched) =>
+  updateHud: (score, latches, stars, timeRemaining, tightReleases, multiplier, latched) =>
     set({
       score: Math.floor(score),
       latches,
       stars,
+      timeRemaining,
       tightReleases,
       multiplier,
       latched,
     }),
   endRun: (score, reason) =>
     set((state) => {
-      const nextBest = Math.max(state.best, Math.floor(score));
-      if (nextBest !== state.best) writeBest(nextBest);
+      const scoreInt = Math.floor(score);
+      const modeBest = state.bestByMode[state.mode];
+      const nextBest = Math.max(modeBest, scoreInt);
+      const nextByMode = { ...state.bestByMode, [state.mode]: nextBest };
+      if (nextBest > modeBest) writeBest(state.mode, nextBest);
       return {
         status: 'GAMEOVER',
-        score: Math.floor(score),
+        score: scoreInt,
         best: nextBest,
+        bestByMode: nextByMode,
         latched: false,
         failMessage: reason,
       };
@@ -372,18 +478,25 @@ const chooseChunk = (runtime: Runtime) => {
   );
   runtime.chunkPlanetsLeft = Math.max(
     2,
-    Math.round(runtime.currentChunk.durationSeconds * (1.55 + runtime.difficulty.eventRate * 1.35))
+    Math.round(
+      runtime.currentChunk.durationSeconds *
+        (1.55 + runtime.difficulty.eventRate * 1.35) *
+        (runtime.mode === 'scattered' ? 1.24 : 1)
+    )
   );
 };
 
 const nextSpacing = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
+  if (runtime.mode === 'scattered') {
+    return clamp(
+      lerp(2.15, 1.45, d) + (3 - tier) * 0.09 + (runtime.elapsed < 12 ? 0.18 : 0) + Math.random() * 0.24,
+      1.05,
+      2.45
+    );
+  }
   const earlySlow = runtime.elapsed < 12 ? 0.55 : runtime.elapsed < 22 ? 0.3 : 0;
-  return clamp(
-    lerp(3.4, 2.1, d) + (3 - tier) * 0.12 + earlySlow + Math.random() * 0.32,
-    1.9,
-    4.25
-  );
+  return clamp(lerp(3.4, 2.1, d) + (3 - tier) * 0.12 + earlySlow + Math.random() * 0.32, 1.9, 4.25);
 };
 
 const acquireStar = (runtime: Runtime) => {
@@ -397,6 +510,20 @@ const acquireStar = (runtime: Runtime) => {
   }
   const fallback = runtime.starsPool[runtime.nextStarSlot];
   runtime.nextStarSlot = (runtime.nextStarSlot + 1) % runtime.starsPool.length;
+  return fallback;
+};
+
+const acquireHazard = (runtime: Runtime) => {
+  for (let i = 0; i < runtime.hazardsPool.length; i += 1) {
+    const idx = (runtime.nextHazardSlot + i) % runtime.hazardsPool.length;
+    const hazard = runtime.hazardsPool[idx];
+    if (!hazard.active) {
+      runtime.nextHazardSlot = (idx + 1) % runtime.hazardsPool.length;
+      return hazard;
+    }
+  }
+  const fallback = runtime.hazardsPool[runtime.nextHazardSlot];
+  runtime.nextHazardSlot = (runtime.nextHazardSlot + 1) % runtime.hazardsPool.length;
   return fallback;
 };
 
@@ -428,6 +555,42 @@ const spawnStarBetween = (
   star.glow = 0;
 };
 
+const spawnHazardBetween = (
+  runtime: Runtime,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  tier: number
+) => {
+  if (runtime.mode !== 'scattered') return;
+  const chance = clamp(0.26 + tier * 0.08 + runtime.elapsed * 0.0015, 0.24, 0.58);
+  if (Math.random() > chance) return;
+
+  const hazard = acquireHazard(runtime);
+  const t = 0.4 + Math.random() * 0.28;
+  const mx = lerp(fromX, toX, t);
+  const my = lerp(fromY, toY, t);
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const len = Math.hypot(dx, dy) || 1;
+  const px = -dy / len;
+  const py = dx / len;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const offset = side * (0.78 + Math.random() * 0.52);
+
+  hazard.active = true;
+  hazard.x = clamp(mx + px * offset, -FIELD_HALF_X + 0.54, FIELD_HALF_X - 0.54);
+  hazard.y = my + py * offset * 0.28;
+  hazard.radius = 0.16 + Math.random() * 0.12;
+  hazard.spin = Math.random() * Math.PI * 2;
+  hazard.spinVel = 1.1 + Math.random() * 2.3;
+  hazard.phase = Math.random() * Math.PI * 2;
+  hazard.drift = 0.08 + Math.random() * 0.26;
+  hazard.colorIndex = Math.floor(Math.random() * HAZARD_COLORS.length);
+  hazard.glow = 0;
+};
+
 const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
   if (!initial) {
     if (!runtime.currentChunk || runtime.chunkPlanetsLeft <= 0) chooseChunk(runtime);
@@ -443,6 +606,25 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
     nextX = 0;
     nextY = 0;
     runtime.hasSpawnAnchor = true;
+    runtime.scatterBandCursor = 0;
+    runtime.scatterBandSize = 0;
+  } else if (runtime.mode === 'scattered') {
+    if (runtime.scatterBandCursor <= 0) {
+      runtime.spawnCursorY += nextSpacing(runtime, tier);
+      runtime.scatterBandSize = 3 + (Math.random() < 0.45 ? 1 : 0);
+      runtime.scatterBandCursor = runtime.scatterBandSize;
+    }
+    const bandIndex = runtime.scatterBandSize - runtime.scatterBandCursor;
+    const laneSpread = FIELD_HALF_X - 0.7;
+    const laneT = runtime.scatterBandSize <= 1 ? 0.5 : bandIndex / (runtime.scatterBandSize - 1);
+    nextX = clamp(
+      lerp(-laneSpread, laneSpread, laneT) + (Math.random() * 2 - 1) * 0.42,
+      -FIELD_HALF_X + 0.62,
+      FIELD_HALF_X - 0.62
+    );
+    nextY = runtime.spawnCursorY + (Math.random() * 2 - 1) * (0.26 + tier * 0.02);
+    runtime.scatterBandCursor -= 1;
+    if (runtime.scatterBandCursor <= 0) runtime.spawnCursorY += 0.22 + Math.random() * 0.28;
   } else {
     const spacing = nextSpacing(runtime, tier);
     nextY = runtime.spawnCursorY + spacing;
@@ -461,15 +643,28 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
     }
   }
 
-  const radius = clamp(lerp(0.52, 0.8, d) + (Math.random() * 2 - 1) * 0.08, 0.45, 0.9);
+  const radius =
+    runtime.mode === 'scattered'
+      ? clamp(lerp(0.46, 0.66, d) + (Math.random() * 2 - 1) * 0.07, 0.4, 0.78)
+      : clamp(lerp(0.52, 0.8, d) + (Math.random() * 2 - 1) * 0.08, 0.45, 0.9);
   const orbitRadius = clamp(
-    radius + lerp(0.95, 0.72, d) + (Math.random() * 2 - 1) * 0.12 - tier * 0.02,
-    radius + 0.52,
-    radius + 1.25
+    radius +
+      (runtime.mode === 'scattered' ? lerp(0.84, 0.6, d) : lerp(0.95, 0.72, d)) +
+      (Math.random() * 2 - 1) * 0.12 -
+      tier * 0.02,
+    radius + 0.48,
+    runtime.mode === 'scattered' ? radius + 1.08 : radius + 1.25
   );
-  const orbitAngularVelSign = runtime.nextOrbitDirection >= 0 ? 1 : -1;
-  runtime.nextOrbitDirection *= -1;
-  const orbitAngularVel = orbitAngularVelSign * clamp(lerp(1.3, 2.75, d) + tier * 0.08 + Math.random() * 0.22, 1.1, 3.4);
+  const orbitAngularVelSign =
+    runtime.mode === 'scattered' ? (Math.random() < 0.5 ? -1 : 1) : runtime.nextOrbitDirection >= 0 ? 1 : -1;
+  if (runtime.mode !== 'scattered') runtime.nextOrbitDirection *= -1;
+  const orbitAngularVel =
+    orbitAngularVelSign *
+    clamp(
+      (runtime.mode === 'scattered' ? lerp(1.45, 3.1, d) : lerp(1.3, 2.75, d)) + tier * 0.08 + Math.random() * 0.24,
+      runtime.mode === 'scattered' ? 1.2 : 1.1,
+      runtime.mode === 'scattered' ? 3.9 : 3.4
+    );
 
   planet.x = nextX;
   planet.y = nextY;
@@ -489,11 +684,57 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
       nextY,
       tier
     );
+    spawnHazardBetween(runtime, runtime.lastSpawnX, runtime.lastSpawnY, nextX, nextY, tier);
   }
 
   runtime.spawnCursorY = nextY;
   runtime.lastSpawnX = nextX;
   runtime.lastSpawnY = nextY;
+};
+
+const findNearestAheadPlanet = (runtime: Runtime, fromX: number, fromY: number, excludeSlot?: number) => {
+  let bestPlanet: Planet | null = null;
+  let bestScore = Infinity;
+  for (const planet of runtime.planets) {
+    if (excludeSlot !== undefined && planet.slot === excludeSlot) continue;
+    const dy = planet.y - fromY;
+    if (dy <= 0) continue;
+    const dx = planet.x - fromX;
+    const score = dy + Math.abs(dx) * 0.75;
+    if (score < bestScore) {
+      bestScore = score;
+      bestPlanet = planet;
+    }
+  }
+  return bestPlanet;
+};
+
+const ensureForwardTargets = (runtime: Runtime) => {
+  const minTargets = runtime.mode === 'scattered' ? SCATTERED_MIN_FORWARD_TARGETS : CLASSIC_MIN_FORWARD_TARGETS;
+  let ahead = 0;
+  let furthestY = runtime.playerY;
+  for (const planet of runtime.planets) {
+    furthestY = Math.max(furthestY, planet.y);
+    if (planet.y > runtime.playerY + 0.45) ahead += 1;
+  }
+  if (ahead >= minTargets) return;
+
+  let needed = minTargets - ahead;
+  const recycle = runtime.planets
+    .filter((planet) => planet.y <= runtime.playerY + 0.45 && (!runtime.latched || planet.slot !== runtime.latchedPlanet))
+    .sort((a, b) => a.y - b.y);
+  let anchorY = furthestY;
+
+  for (const planet of recycle) {
+    if (needed <= 0) break;
+    runtime.spawnCursorY = Math.max(runtime.spawnCursorY, anchorY - 0.12);
+    seedPlanet(runtime, planet, false);
+    if (planet.y <= anchorY + 0.36) {
+      planet.y = anchorY + 0.36 + Math.random() * 0.52;
+    }
+    anchorY = planet.y;
+    needed -= 1;
+  }
 };
 
 const acquireShard = (runtime: Runtime) => {
@@ -529,30 +770,40 @@ const spawnBurst = (
 
 function OrbitLatchOverlay() {
   const status = useOrbitStore((state) => state.status);
+  const mode = useOrbitStore((state) => state.mode);
+  const setMode = useOrbitStore((state) => state.setMode);
   const score = useOrbitStore((state) => state.score);
   const best = useOrbitStore((state) => state.best);
   const latches = useOrbitStore((state) => state.latches);
   const stars = useOrbitStore((state) => state.stars);
+  const timeRemaining = useOrbitStore((state) => state.timeRemaining);
   const tightReleases = useOrbitStore((state) => state.tightReleases);
   const multiplier = useOrbitStore((state) => state.multiplier);
   const latched = useOrbitStore((state) => state.latched);
   const failMessage = useOrbitStore((state) => state.failMessage);
   const tapNonce = useOrbitStore((state) => state.tapNonce);
+  const timerText = `${Math.max(0, timeRemaining).toFixed(1)}s`;
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/23 via-sky-500/16 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/18 to-fuchsia-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Orbit Latch</div>
-        <div className="text-[11px] text-cyan-50/85">Tap to latch near ring. Tap again to release.</div>
+        <div className="text-[11px] text-cyan-50/85">Tap to latch near orbit rings. Tap again to slingshot.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/22 via-fuchsia-500/16 to-violet-500/20 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/50 bg-gradient-to-br from-fuchsia-500/22 via-cyan-500/16 to-amber-500/20 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-amber-900/24 px-3 py-2 text-xs">
+        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/78 via-cyan-900/30 to-fuchsia-900/22 px-3 py-2 text-xs">
+          <div>
+            Mode{' '}
+            <span className="font-semibold uppercase tracking-[0.12em] text-sky-200">
+              {mode === 'classic' ? 'Classic' : 'Scattered'}
+            </span>
+          </div>
           <div>
             State{' '}
             <span className={`font-semibold ${latched ? 'text-cyan-200' : 'text-fuchsia-200'}`}>
@@ -571,27 +822,76 @@ function OrbitLatchOverlay() {
           <div>
             Multiplier <span className="font-semibold text-violet-200">x{multiplier.toFixed(2)}</span>
           </div>
+          {mode === 'scattered' && (
+            <div>
+              Time <span className="font-semibold text-rose-200">{timerText}</span>
+            </div>
+          )}
         </div>
       )}
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/80 via-cyan-950/44 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black tracking-wide">ORBIT LATCH</div>
-            <div className="mt-2 text-sm text-white/85">Tap to latch when crossing an orbit ring.</div>
-            <div className="mt-1 text-sm text-white/80">Tap again to release and slingshot to the next world.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/85 via-indigo-950/45 to-fuchsia-950/30 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black tracking-wide text-transparent bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-amber-300 bg-clip-text">
+              ORBIT LATCH
+            </div>
+            <div className="mt-2 text-sm text-white/88">Tap to latch when crossing an orbit ring.</div>
+            <div className="mt-1 text-sm text-white/82">
+              Tap again to release and steer into your next orbit.
+            </div>
+            <div className="pointer-events-auto mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMode('classic');
+                }}
+                className={`rounded-md border px-3 py-2 text-left transition ${
+                  mode === 'classic'
+                    ? 'border-cyan-100/80 bg-cyan-400/22'
+                    : 'border-white/20 bg-white/5 hover:border-cyan-100/50'
+                }`}
+              >
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-100">Classic</div>
+                <div className="mt-1 text-[11px] text-white/75">Endless vertical chain with clean rhythm.</div>
+              </button>
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMode('scattered');
+                }}
+                className={`rounded-md border px-3 py-2 text-left transition ${
+                  mode === 'scattered'
+                    ? 'border-fuchsia-100/80 bg-fuchsia-400/22'
+                    : 'border-white/20 bg-white/5 hover:border-fuchsia-100/50'
+                }`}
+              >
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-100">Scattered</div>
+                <div className="mt-1 text-[11px] text-white/75">Dense orbit fields, hazards, and a timer.</div>
+              </button>
+            </div>
+            <div className="mt-3 text-sm text-cyan-200/90">
+              Tap anywhere outside the mode buttons to start.
+            </div>
           </div>
         </div>
       )}
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/45 to-cyan-950/28 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black text-rose-200">Orbit Lost</div>
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/45 to-indigo-950/30 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-rose-200">
+              {mode === 'scattered' ? 'Window Closed' : 'Orbit Lost'}
+            </div>
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
-            <div className="mt-1 text-sm text-white/75">Best {best}</div>
+            <div className="mt-1 text-sm text-white/75">
+              Best {best} • {mode === 'classic' ? 'Classic' : 'Scattered'}
+            </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
           </div>
         </div>
@@ -602,7 +902,7 @@ function OrbitLatchOverlay() {
           <div
             className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/70"
             style={{
-              animation: 'orbitlatch-pulse 220ms ease-out forwards',
+              animation: 'orbitlatch-pulse 260ms ease-out forwards',
               opacity: 0,
             }}
           />
@@ -636,6 +936,7 @@ function OrbitLatchScene() {
   const planetRef = useRef<THREE.InstancedMesh>(null);
   const ringRef = useRef<THREE.InstancedMesh>(null);
   const starRef = useRef<THREE.InstancedMesh>(null);
+  const hazardRef = useRef<THREE.InstancedMesh>(null);
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const satRef = useRef<THREE.Mesh>(null);
   const latchSparkRef = useRef<THREE.Mesh>(null);
@@ -655,7 +956,14 @@ function OrbitLatchScene() {
     return geo;
   }, [trailPositions]);
   const trailMaterial = useMemo(
-    () => new THREE.LineBasicMaterial({ color: '#8fffd6', transparent: true, opacity: 0.62, toneMapped: false }),
+    () =>
+      new THREE.LineBasicMaterial({
+        color: '#74f5ff',
+        transparent: true,
+        opacity: 0.74,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
     []
   );
   const trailObject = useMemo(
@@ -665,11 +973,14 @@ function OrbitLatchScene() {
 
   const { camera } = useThree();
 
-  const resetRuntime = (runtime: Runtime) => {
+  const resetRuntime = (runtime: Runtime, mode: OrbitMode) => {
+    runtime.mode = mode;
     runtime.elapsed = 0;
     runtime.score = 0;
     runtime.latches = 0;
     runtime.stars = 0;
+    runtime.timeRemaining = mode === 'scattered' ? SCATTERED_TIME_LIMIT : 0;
+    runtime.releaseCount = 0;
     runtime.tightReleases = 0;
     runtime.streak = 0;
     runtime.multiplier = 1;
@@ -705,11 +1016,18 @@ function OrbitLatchScene() {
     runtime.lastSpawnX = 0;
     runtime.lastSpawnY = 0;
     runtime.hasSpawnAnchor = false;
+    runtime.scatterBandCursor = 0;
+    runtime.scatterBandSize = 0;
     runtime.nextStarSlot = 0;
+    runtime.nextHazardSlot = 0;
 
     for (const star of runtime.starsPool) {
       star.active = false;
       star.glow = 0;
+    }
+    for (const hazard of runtime.hazardsPool) {
+      hazard.active = false;
+      hazard.glow = 0;
     }
     for (const shard of runtime.shards) {
       shard.active = false;
@@ -717,9 +1035,10 @@ function OrbitLatchScene() {
     }
 
     for (let i = 0; i < runtime.planets.length; i += 1) {
-      seedPlanet(runtime, runtime.planets[i], i < 2);
+      seedPlanet(runtime, runtime.planets[i], i < (mode === 'scattered' ? 6 : 2));
     }
     for (let i = 0; i < runtime.planets.length; i += 1) {
+      if (mode === 'scattered') continue;
       if (i >= 2 && runtime.planets[i].y <= runtime.planets[i - 1].y + 0.4) {
         runtime.planets[i].y = runtime.planets[i - 1].y + nextSpacing(runtime, 0);
       }
@@ -728,10 +1047,11 @@ function OrbitLatchScene() {
     runtime.latchedPlanet = runtime.planets[0].slot;
     runtime.orbitRadius = runtime.planets[0].orbitRadius;
     runtime.orbitAngularVel = runtime.planets[0].orbitAngularVel;
-    runtime.orbitAngle = Math.PI * 0.2;
+    runtime.orbitAngle = mode === 'scattered' ? Math.PI * 0.16 : Math.PI * 0.2;
     runtime.playerX = runtime.planets[0].x + Math.cos(runtime.orbitAngle) * runtime.orbitRadius;
     runtime.playerY = runtime.planets[0].y + Math.sin(runtime.orbitAngle) * runtime.orbitRadius;
     runtime.maxYReached = runtime.playerY;
+    ensureForwardTargets(runtime);
 
     const world = simToWorld(runtime.playerX, runtime.playerY, trailWorld);
     for (let i = 0; i < TRAIL_POINTS; i += 1) {
@@ -743,7 +1063,8 @@ function OrbitLatchScene() {
   };
 
   useEffect(() => {
-    resetRuntime(runtimeRef.current);
+    const initial = useOrbitStore.getState().mode;
+    resetRuntime(runtimeRef.current, initial);
     useOrbitStore.getState().resetToStart();
     orbitLatchState.status = 'menu';
     orbitLatchState.score = 0;
@@ -794,8 +1115,8 @@ function OrbitLatchScene() {
     if (tap) {
       runtime.lastTapAt = runtime.elapsed;
       if (store.status !== 'PLAYING') {
-        resetRuntime(runtime);
-        useOrbitStore.getState().startRun();
+        resetRuntime(runtime, store.mode);
+        useOrbitStore.getState().startRun(store.mode);
       } else if (runtime.latched) {
         const planet = runtime.planets.find((p) => p.slot === runtime.latchedPlanet);
         if (planet) {
@@ -809,29 +1130,25 @@ function OrbitLatchScene() {
           runtime.velX = tangentX * orbitalLinear * launchScale + radialX * 0.22;
           runtime.velY = tangentY * orbitalLinear * launchScale + radialY * 0.22 + 0.38;
 
-          // Keep early transfers playable even when clockwise orbits launch downward.
-          let nearestAhead: Planet | null = null;
-          let nearestAheadDy = Infinity;
-          for (const other of runtime.planets) {
-            if (other.slot === planet.slot) continue;
-            const dy = other.y - runtime.playerY;
-            if (dy <= 0) continue;
-            if (dy < nearestAheadDy) {
-              nearestAheadDy = dy;
-              nearestAhead = other;
-            }
-          }
+          runtime.releaseCount += 1;
+          ensureForwardTargets(runtime);
+          const nearestAhead = findNearestAheadPlanet(runtime, runtime.playerX, runtime.playerY, planet.slot);
           if (nearestAhead) {
             const ax = nearestAhead.x - runtime.playerX;
             const ay = nearestAhead.y - runtime.playerY;
             const len = Math.hypot(ax, ay) || 1;
-            runtime.velX += (ax / len) * 0.26;
-            runtime.velY += Math.max(0, ay / len) * 0.42;
+            const firstRelease = runtime.releaseCount === 1;
+            runtime.velX += (ax / len) * (firstRelease ? 0.46 : 0.26);
+            runtime.velY += Math.max(0, ay / len) * (firstRelease ? 0.68 : 0.42);
           }
-          runtime.velY = Math.max(runtime.velY, 0.42);
+          if (runtime.releaseCount === 1) {
+            runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.86 : 0.94);
+            runtime.velX *= 0.95;
+          }
+          runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.52 : 0.42);
 
           runtime.latched = false;
-          runtime.driftTimer = 0;
+          runtime.driftTimer = runtime.releaseCount === 1 ? -0.18 : 0;
           runtime.coreGlow = Math.min(1.2, runtime.coreGlow + 0.15);
           runtime.shake = Math.min(1.2, runtime.shake + 0.2);
           useOrbitStore.getState().onTapFx();
@@ -857,21 +1174,26 @@ function OrbitLatchScene() {
         let bestDelta = Infinity;
         const dNorm = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
         const speed = Math.hypot(runtime.velX, runtime.velY);
-        const speedAssist = clamp(speed * 0.08, 0, 0.16);
+        const speedAssist = clamp(speed * 0.08, 0, runtime.mode === 'scattered' ? 0.22 : 0.16);
+        const firstLatchAssist = runtime.latches === 0 ? 0.09 : 0;
+        const modeAssist = runtime.mode === 'scattered' ? 0.05 : 0;
         const lookAhead = clamp(
-          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.55,
+          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.55 + firstLatchAssist * 0.35 + modeAssist * 0.4,
           RELATCH_LOOKAHEAD_BASE,
-          0.26
+          runtime.mode === 'scattered' ? 0.34 : 0.3
         );
         const predictX = runtime.playerX + runtime.velX * lookAhead;
         const predictY = runtime.playerY + runtime.velY * lookAhead;
         const latchDistance = clamp(
-          LATCH_BASE_DISTANCE + 0.04 + speedAssist - dNorm * 0.08,
+          LATCH_BASE_DISTANCE + 0.04 + speedAssist - dNorm * 0.08 + firstLatchAssist + modeAssist,
           0.22,
-          0.48
+          runtime.mode === 'scattered' ? 0.62 : 0.56
         );
 
         for (const planet of runtime.planets) {
+          if (runtime.latches === 0 && runtime.releaseCount <= 1 && planet.slot === runtime.latchedPlanet) {
+            continue;
+          }
           const dx = runtime.playerX - planet.x;
           const dy = runtime.playerY - planet.y;
           const dist = Math.hypot(dx, dy);
@@ -954,10 +1276,17 @@ function OrbitLatchScene() {
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('orbit-chain', runtime.elapsed);
+      if (runtime.mode === 'scattered') {
+        runtime.timeRemaining = Math.max(0, runtime.timeRemaining - dt);
+        if (runtime.timeRemaining <= 0) {
+          failRun('Time limit reached before extraction.', STAR_COLORS[2]);
+        }
+      }
 
       const d = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
-      const gravityScale = lerp(0.34, 0.68, d);
-      const driftFail = lerp(DRIFT_FAIL_BASE, 3.9, d);
+      const gravityScale = lerp(0.34, 0.68, d) * (runtime.mode === 'scattered' ? 1.12 : 1);
+      const driftFail =
+        runtime.mode === 'scattered' ? lerp(DRIFT_FAIL_BASE - 1.1, 3.5, d) : lerp(DRIFT_FAIL_BASE, 3.9, d);
 
       for (const planet of runtime.planets) {
         planet.glow = Math.max(0, planet.glow - dt * 2.2);
@@ -1054,12 +1383,35 @@ function OrbitLatchScene() {
         }
       }
 
+      for (const hazard of runtime.hazardsPool) {
+        if (!hazard.active) continue;
+        hazard.spin += dt * hazard.spinVel;
+        hazard.glow = Math.max(0, hazard.glow - dt * 2.4);
+        hazard.x += Math.sin(runtime.elapsed * 1.35 + hazard.phase) * hazard.drift * dt;
+        hazard.x = clamp(hazard.x, -FIELD_HALF_X + 0.46, FIELD_HALF_X - 0.46);
+
+        const dx = runtime.playerX - hazard.x;
+        const dy = runtime.playerY - hazard.y;
+        const hitRadius = hazard.radius + PLAYER_RADIUS * 0.82;
+        if (dx * dx + dy * dy < 2.2) {
+          hazard.glow = Math.min(1.2, hazard.glow + dt * 2.9);
+        }
+        if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+          failRun('Satellite shattered on a hazard shard.', HAZARD_COLORS[hazard.colorIndex]);
+          break;
+        }
+        if (hazard.y < runtime.playerY - 10) {
+          hazard.active = false;
+        }
+      }
+
       for (const planet of runtime.planets) {
         if (planet.slot === runtime.latchedPlanet && runtime.latched) continue;
-        if (planet.y < runtime.playerY - 12) {
+        if (planet.y < runtime.playerY - (runtime.mode === 'scattered' ? 10.5 : 12)) {
           seedPlanet(runtime, planet, false);
         }
       }
+      ensureForwardTargets(runtime);
 
       if (runtime.hudCommit >= 0.08) {
         runtime.hudCommit = 0;
@@ -1069,6 +1421,7 @@ function OrbitLatchScene() {
             runtime.score,
             runtime.latches,
             runtime.stars,
+            runtime.timeRemaining,
             runtime.tightReleases,
             runtime.multiplier,
             runtime.latched
@@ -1113,16 +1466,19 @@ function OrbitLatchScene() {
 
     const shakeAmp = runtime.shake * 0.09;
     const shakeTime = runtime.elapsed * 21;
+    const scatteredCamLift = runtime.mode === 'scattered' ? 0.95 : 0;
+    const scatteredCamPull = runtime.mode === 'scattered' ? 1.05 : 0;
     camTarget.set(
       runtime.playerX * 0.3 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
-      7.3 + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
-      -runtime.playerY + 4.9 + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
+      7.3 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
+      -runtime.playerY + 4.9 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
-    lookTarget.set(runtime.playerX * 0.2, 0, -runtime.playerY - 3.4);
+    lookTarget.set(runtime.playerX * 0.2, 0, -runtime.playerY - (runtime.mode === 'scattered' ? 4.2 : 3.4));
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
-      camera.fov = lerp(camera.fov, 39 - runtime.coreGlow * 1.6, 1 - Math.exp(-6 * dt));
+      const baseFov = runtime.mode === 'scattered' ? 44 : 39;
+      camera.fov = lerp(camera.fov, baseFov - runtime.coreGlow * 1.8, 1 - Math.exp(-6 * dt));
       camera.updateProjectionMatrix();
     }
 
@@ -1214,6 +1570,33 @@ function OrbitLatchScene() {
       if (starRef.current.instanceColor) starRef.current.instanceColor.needsUpdate = true;
     }
 
+    if (hazardRef.current) {
+      let hazardCount = 0;
+      for (const hazard of runtime.hazardsPool) {
+        if (!hazard.active) continue;
+        const world = simToWorld(hazard.x, hazard.y, trailWorld);
+        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 3.2 + hazard.phase);
+        dummy.position.set(world.x, 0.05 + Math.sin(runtime.elapsed * 1.7 + hazard.phase) * 0.04, world.z);
+        dummy.scale.setScalar(hazard.radius * (1 + pulse * 0.22 + hazard.glow * 0.18));
+        dummy.rotation.set(
+          runtime.elapsed * 0.8 + hazard.spin,
+          runtime.elapsed * 1.05 + hazard.spin * 0.5,
+          runtime.elapsed * 1.35
+        );
+        dummy.updateMatrix();
+        hazardRef.current.setMatrixAt(hazardCount, dummy.matrix);
+
+        colorScratch
+          .copy(HAZARD_COLORS[hazard.colorIndex])
+          .lerp(WHITE, clamp(0.16 + hazard.glow * 0.58 + pulse * 0.16, 0, 0.9));
+        hazardRef.current.setColorAt(hazardCount, colorScratch);
+        hazardCount += 1;
+      }
+      hazardRef.current.count = hazardCount;
+      hazardRef.current.instanceMatrix.needsUpdate = true;
+      if (hazardRef.current.instanceColor) hazardRef.current.instanceColor.needsUpdate = true;
+    }
+
     if (shardRef.current) {
       let shardCount = 0;
       for (const shard of runtime.shards) {
@@ -1237,7 +1620,11 @@ function OrbitLatchScene() {
     }
 
     if (bloomRef.current) {
-      bloomRef.current.intensity = lerp(0.38, 0.98, clamp(runtime.coreGlow * 0.7 + runtime.latchFlash * 0.4, 0, 1));
+      bloomRef.current.intensity = lerp(
+        0.52,
+        1.24,
+        clamp(runtime.coreGlow * 0.7 + runtime.latchFlash * 0.42 + (runtime.mode === 'scattered' ? 0.12 : 0), 0, 1)
+      );
     }
     if (impactOverlayRef.current) {
       impactOverlayRef.current.style.opacity = `${clamp(runtime.impactFlash * 0.74, 0, 0.74)}`;
@@ -1249,14 +1636,15 @@ function OrbitLatchScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.3, 4.9]} fov={39} near={0.1} far={120} />
-      <color attach="background" args={['#171d3f']} />
-      <fog attach="fog" args={['#171d3f', 11, 74]} />
+      <color attach="background" args={['#0a0a15']} />
+      <fog attach="fog" args={['#0f0a1d', 8, 86]} />
 
-      <ambientLight intensity={0.5} />
-      <hemisphereLight args={['#9ad9ff', '#2f264f', 0.28]} />
-      <pointLight position={[0, 3.8, 1]} intensity={0.6} color="#55f4ff" />
-      <pointLight position={[0, 2.2, -2]} intensity={0.5} color="#ff7fd0" />
-      <pointLight position={[-1.8, 2.5, -1.4]} intensity={0.34} color="#c5ff66" />
+      <ambientLight intensity={0.42} />
+      <directionalLight position={[6, 9, 3]} intensity={0.58} color="#8ad9ff" />
+      <hemisphereLight args={['#6de6ff', '#1b1236', 0.3]} />
+      <pointLight position={[0, 4.1, 2]} intensity={0.72} color="#22d3ee" />
+      <pointLight position={[2.2, 2.8, -3.2]} intensity={0.52} color="#ff44eb" />
+      <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.36} color="#f59e0b" />
 
       <mesh position={[0, -0.85, -30]}>
         <planeGeometry args={[42, 34]} />
@@ -1277,17 +1665,20 @@ function OrbitLatchScene() {
             void main() {
               vec2 p = vUv * 2.0 - 1.0;
               float r = length(p);
-              vec3 deep = vec3(0.03, 0.05, 0.13);
-              vec3 violet = vec3(0.2, 0.07, 0.24);
-              vec3 cyan = vec3(0.07, 0.23, 0.27);
-              float grad = smoothstep(0.0, 1.0, vUv.y);
-              float wave = sin((vUv.x * 3.0 + uTime * 0.25) * 6.2831853) * 0.5 + 0.5;
-              float grain = fract(sin(dot(vUv * (uTime + 1.37), vec2(12.9898, 78.233))) * 43758.5453);
-              vec3 col = mix(deep, violet, grad * 0.8);
-              col = mix(col, cyan, wave * 0.16);
-              col += (grain - 0.5) * 0.018;
-              col += vec3(0.35, 0.29, 0.18) * uGlow * 0.13;
-              col *= smoothstep(1.15, 0.18, r);
+              vec3 deep = vec3(0.02, 0.02, 0.08);
+              vec3 cyan = vec3(0.02, 0.36, 0.42);
+              vec3 magenta = vec3(0.44, 0.05, 0.35);
+              vec3 amber = vec3(0.42, 0.2, 0.04);
+              float grad = smoothstep(-0.25, 1.2, vUv.y);
+              float waveA = sin((vUv.x * 2.8 + uTime * 0.18) * 6.2831853) * 0.5 + 0.5;
+              float waveB = sin((vUv.y * 3.7 - uTime * 0.23) * 6.2831853) * 0.5 + 0.5;
+              float rim = smoothstep(1.25, 0.28, r);
+              float grain = fract(sin(dot(vUv * (uTime + 3.17), vec2(12.9898, 78.233))) * 43758.5453);
+              vec3 col = mix(deep, magenta, grad * 0.72);
+              col = mix(col, cyan, waveA * 0.28);
+              col += amber * (waveB * 0.08 + uGlow * 0.16);
+              col += (grain - 0.5) * 0.02;
+              col *= rim;
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -1297,15 +1688,15 @@ function OrbitLatchScene() {
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]}>
         <icosahedronGeometry args={[1, 2]} />
-        <meshStandardMaterial vertexColors roughness={0.5} metalness={0.1} />
+        <meshStandardMaterial vertexColors roughness={0.26} metalness={0.32} />
       </instancedMesh>
 
       <instancedMesh ref={ringRef} args={[undefined, undefined, PLANET_POOL]}>
-        <torusGeometry args={[1, 0.028, 10, 80]} />
+        <torusGeometry args={[1, 0.032, 12, 96]} />
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.82}
+          opacity={0.92}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
@@ -1318,11 +1709,16 @@ function OrbitLatchScene() {
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.95}
+          opacity={0.98}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
         />
+      </instancedMesh>
+
+      <instancedMesh ref={hazardRef} args={[undefined, undefined, HAZARD_POOL]}>
+        <icosahedronGeometry args={[1, 1]} />
+        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.56} />
       </instancedMesh>
 
       <primitive object={trailObject} />
@@ -1330,11 +1726,11 @@ function OrbitLatchScene() {
       <mesh ref={satRef} position={[0, 0.03, 0]}>
         <sphereGeometry args={[PLAYER_RADIUS, 18, 18]} />
         <meshStandardMaterial
-          color="#f7fcff"
-          emissive="#8ce9ff"
-          emissiveIntensity={0.62}
-          roughness={0.18}
-          metalness={0.06}
+          color="#f8fdff"
+          emissive="#34d9ff"
+          emissiveIntensity={0.72}
+          roughness={0.12}
+          metalness={0.18}
         />
       </mesh>
 
@@ -1363,15 +1759,15 @@ function OrbitLatchScene() {
       </instancedMesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom ref={bloomRef} intensity={0.4} luminanceThreshold={0.54} luminanceSmoothing={0.24} mipmapBlur />
-        <Vignette eskil={false} offset={0.14} darkness={0.68} />
-        <Noise premultiply opacity={0.018} />
+        <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
+        <Vignette eskil={false} offset={0.16} darkness={0.72} />
+        <Noise premultiply opacity={0.024} />
       </EffectComposer>
 
       <Html fullscreen>
         <div
           ref={impactOverlayRef}
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,112,170,0.45),rgba(255,73,112,0.3),rgba(12,7,25,0))]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,68,235,0.42),rgba(34,211,238,0.26),rgba(10,10,21,0))]"
           style={{ opacity: 0, mixBlendMode: 'screen' }}
         />
         <OrbitLatchOverlay />

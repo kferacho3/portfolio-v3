@@ -750,8 +750,9 @@ export const GAME_RULES: Record<string, GameRules> = {
   orbitlatch: {
     controls: 'Tap/Click to latch or release • R to restart',
     objective:
-      'Chain orbital transfers between planets, collect stars, and avoid collisions.',
-    tips: 'Release tangentially toward the next ring and relatch before drift timeout.',
+      'Classic: endless orbital chaining and star routing. Scattered: denser multi-orbit fields with hazards under a hard timer.',
+    tips:
+      'For first transfer, release toward the nearest forward ring. In Scattered mode, prioritize survival lines over star greed when time is low.',
   },
 };
 
