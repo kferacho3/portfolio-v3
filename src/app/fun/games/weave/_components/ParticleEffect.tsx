@@ -4,10 +4,21 @@ import type { Particle } from '../types';
 const ParticleEffect: React.FC<{ particles: Particle[] }> = ({ particles }) => (
   <>
     {particles.map((p) => (
-      <mesh key={p.id} position={[p.x, p.y, 0]}>
-        <circleGeometry args={[p.size * p.life, 6]} />
-        <meshBasicMaterial color={p.color} transparent opacity={p.life * 0.8} />
-      </mesh>
+      <group key={p.id} position={[p.x, p.y, p.z]}>
+        <mesh rotation={[0, 0, p.spin * (1 - p.life)]}>
+          <octahedronGeometry args={[p.size * (0.35 + p.life * 0.85)]} />
+          <meshBasicMaterial color={p.color} transparent opacity={p.life * 0.9} />
+        </mesh>
+        <mesh>
+          <sphereGeometry args={[p.size * p.glow * (0.55 + p.life), 10, 10]} />
+          <meshBasicMaterial
+            color={p.color}
+            transparent
+            opacity={p.life * 0.24}
+            depthWrite={false}
+          />
+        </mesh>
+      </group>
     ))}
   </>
 );

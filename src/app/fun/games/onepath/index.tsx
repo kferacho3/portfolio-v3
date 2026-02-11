@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Html, OrthographicCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
+import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import { useSnapshot } from 'valtio';
 import * as THREE from 'three';
 
@@ -446,14 +447,20 @@ const spawnWindow = (
   warnings: WarningLine[],
   collectibles: Collectible[],
   startY: number,
-  now: number
+  now: number,
+  tier: 0 | 1 | 2
 ) => {
   const arm = now + 0.85;
   spawnBird(obstacles, warnings, startY + 1.2, 0, 2.4, arm);
-  spawnBird(obstacles, warnings, startY + 3.0, Math.PI, 2.1, arm + 0.1);
+  if (tier > 0) {
+    spawnBird(obstacles, warnings, startY + 3.0, Math.PI, 2.1, arm + 0.1);
+  }
 
   spawnGem(collectibles, 0, startY + 2.15);
-  run.spawnCriticalY = Math.max(run.spawnCriticalY, startY + 3.0);
+  run.spawnCriticalY = Math.max(
+    run.spawnCriticalY,
+    startY + (tier > 0 ? 3.0 : 1.2)
+  );
 };
 
 const spawnCorridor = (
@@ -464,7 +471,7 @@ const spawnCorridor = (
 ) => {
   const safeSide = rand(run) < 0.5 ? -1 : 1;
   const blocked = nextSide(safeSide);
-  const count = tier === 2 ? 6 : 5;
+  const count = tier === 0 ? 4 : tier === 1 ? 5 : 6;
   for (let i = 0; i < count; i += 1) {
     spawnSpike(obstacles, blocked, startY + 0.9 + i * 1.35, 0.96);
   }
@@ -499,17 +506,17 @@ const spawnTierExtras = (
   startY: number,
   now: number
 ) => {
-  if (diff.tier >= 1 && rand(run) < 0.32) {
+  if (diff.tier >= 1 && rand(run) < 0.22) {
     const side = rand(run) < 0.5 ? -1 : 1;
     spawnTar(obstacles, side, startY + 1.8 + rand(run) * 2.1);
   }
 
-  if (diff.tier >= 1 && rand(run) < 0.26) {
+  if (diff.tier >= 1 && rand(run) < 0.18) {
     const side = rand(run) < 0.5 ? -1 : 1;
     spawnPortal(obstacles, side, startY + 1.3 + rand(run) * 2.3);
   }
 
-  if (diff.tier >= 2 && rand(run) < 0.38) {
+  if (diff.tier >= 2 && rand(run) < 0.28) {
     const side = rand(run) < 0.5 ? -1 : 1;
     spawnProjectile(
       obstacles,
@@ -520,7 +527,7 @@ const spawnTierExtras = (
     );
   }
 
-  if (rand(run) < 0.28) {
+  if (rand(run) < 0.34) {
     const baseY = startY + 1.6 + rand(run) * 2.2;
     const span = wallX(1) - wallX(-1);
     const x0 = wallX(-1) + 0.7;
@@ -545,20 +552,20 @@ const spawnPattern = (
   const r = rand(run);
 
   if (diff.tier === 0) {
-    if (r < 0.58) spawnSlalom(run, obstacles, collectibles, startY);
+    if (r < 0.66) spawnSlalom(run, obstacles, collectibles, startY);
     else if (r < 0.86) spawnCorridor(run, obstacles, startY, diff.tier);
-    else spawnWindow(run, obstacles, warnings, collectibles, startY, now);
+    else spawnWindow(run, obstacles, warnings, collectibles, startY, now, diff.tier);
   } else if (diff.tier === 1) {
-    if (r < 0.34) spawnSlalom(run, obstacles, collectibles, startY);
+    if (r < 0.4) spawnSlalom(run, obstacles, collectibles, startY);
     else if (r < 0.62)
-      spawnWindow(run, obstacles, warnings, collectibles, startY, now);
-    else if (r < 0.86) spawnCorridor(run, obstacles, startY, diff.tier);
+      spawnWindow(run, obstacles, warnings, collectibles, startY, now, diff.tier);
+    else if (r < 0.9) spawnCorridor(run, obstacles, startY, diff.tier);
     else spawnFalseFloorPattern(run, obstacles, startY, diff.tier);
   } else {
-    if (r < 0.24) spawnSlalom(run, obstacles, collectibles, startY);
-    else if (r < 0.54)
-      spawnWindow(run, obstacles, warnings, collectibles, startY, now);
-    else if (r < 0.78)
+    if (r < 0.3) spawnSlalom(run, obstacles, collectibles, startY);
+    else if (r < 0.62)
+      spawnWindow(run, obstacles, warnings, collectibles, startY, now, diff.tier);
+    else if (r < 0.82)
       spawnFalseFloorPattern(run, obstacles, startY, diff.tier);
     else spawnCorridor(run, obstacles, startY, diff.tier);
   }
@@ -630,11 +637,11 @@ function Overlay() {
                   }`}
                   onClick={() => onePathState.selectMode('infinite')}
                 >
-                  <div className="text-lg font-black">Infinite Mode</div>
+                  <div className="text-lg font-black">Infinite Endless Runner</div>
                   <div
                     className={`${snap.mode === 'infinite' ? 'text-white/80' : 'text-black/60'}`}
                   >
-                    Endless climb with capped ramp. Best distance:{' '}
+                    Endless climb with a smooth capped ramp. Best distance:{' '}
                     {snap.bestInfiniteDistance}m
                   </div>
                 </button>
@@ -648,7 +655,7 @@ function Overlay() {
                         Selected level
                       </div>
                       <div className="text-xs text-black/60">
-                        Goal distance scales by level
+                        Starts at 15m and scales gradually
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -923,20 +930,20 @@ function Scene() {
   const obstacleMat = React.useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#56e2ff',
-        roughness: 0.35,
-        emissive: '#56e2ff',
-        emissiveIntensity: 0.2,
+        color: '#74dcff',
+        roughness: 0.45,
+        emissive: '#74dcff',
+        emissiveIntensity: 0.12,
       }),
     []
   );
   const dangerMat = React.useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#ff5b83',
-        roughness: 0.25,
-        emissive: '#ff5b83',
-        emissiveIntensity: 0.35,
+        color: '#ff6d8b',
+        roughness: 0.34,
+        emissive: '#ff6d8b',
+        emissiveIntensity: 0.16,
       }),
     []
   );
@@ -947,47 +954,47 @@ function Scene() {
   const portalMat = React.useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#6cf7d7',
-        emissive: '#6cf7d7',
-        emissiveIntensity: 0.35,
-        roughness: 0.2,
+        color: '#73f8df',
+        emissive: '#73f8df',
+        emissiveIntensity: 0.2,
+        roughness: 0.26,
       }),
     []
   );
   const gemMat = React.useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#ffd76a',
-        emissive: '#ffd76a',
-        emissiveIntensity: 0.3,
-        roughness: 0.2,
+        color: '#ffd56c',
+        emissive: '#ffd56c',
+        emissiveIntensity: 0.18,
+        roughness: 0.24,
       }),
     []
   );
   const shieldOrbMat = React.useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#7df4ff',
-        emissive: '#7df4ff',
-        emissiveIntensity: 0.4,
-        roughness: 0.15,
+        color: '#73f8df',
+        emissive: '#73f8df',
+        emissiveIntensity: 0.2,
+        roughness: 0.2,
       }),
     []
   );
 
   const bgBackMat = React.useMemo(
     () =>
-      new THREE.MeshBasicMaterial({ color: '#f2f7ff', side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: '#08101c', side: THREE.DoubleSide }),
     []
   );
   const bgMidMat = React.useMemo(
     () =>
-      new THREE.MeshBasicMaterial({ color: '#dfe9ff', side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: '#0d1a2c', side: THREE.DoubleSide }),
     []
   );
   const bgFrontMat = React.useMemo(
     () =>
-      new THREE.MeshBasicMaterial({ color: '#eef4ff', side: THREE.DoubleSide }),
+      new THREE.MeshBasicMaterial({ color: '#142238', side: THREE.DoubleSide }),
     []
   );
   const paletteColors = React.useMemo(
@@ -1014,11 +1021,11 @@ function Scene() {
   const trailMat = React.useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#8be7ff',
-        emissive: '#8be7ff',
-        emissiveIntensity: 0.24,
+        color: '#8ee8ff',
+        emissive: '#8ee8ff',
+        emissiveIntensity: 0.12,
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.18,
       }),
     []
   );
@@ -1669,11 +1676,11 @@ function Scene() {
       else ref.material = obstacleMat;
 
       if (o.armedAt > run.t) {
-        const alpha = 0.22 + 0.18 * Math.sin(run.t * 20 + i);
+        const alpha = 0.12 + 0.12 * Math.sin(run.t * 20 + i);
         (ref.material as THREE.MeshStandardMaterial).emissiveIntensity = alpha;
       } else {
         (ref.material as THREE.MeshStandardMaterial).emissiveIntensity =
-          o.kind === 'tar' ? 0 : o.kind === 'portal' ? 0.35 : 0.24;
+          o.kind === 'tar' ? 0 : o.kind === 'portal' ? 0.2 : 0.14;
       }
     }
 
@@ -1741,18 +1748,18 @@ function Scene() {
       />
 
       <color attach="background" args={[BIOME_PALETTES[0].bgA]} />
-      <ambientLight intensity={0.9} />
-      <directionalLight position={[8, 14, 14]} intensity={0.95} />
-      <directionalLight position={[-7, 6, 10]} intensity={0.35} />
+      <ambientLight intensity={0.42} />
+      <directionalLight position={[8, 14, 14]} intensity={0.56} />
+      <directionalLight position={[-7, 6, 10]} intensity={0.2} />
 
       <mesh position={[0, 0, -24]} material={bgBackMat}>
-        <planeGeometry args={[80, 200]} />
+        <planeGeometry args={[98, 240]} />
       </mesh>
       <mesh position={[0, 0, -14]} material={bgMidMat}>
-        <planeGeometry args={[58, 200]} />
+        <planeGeometry args={[72, 240]} />
       </mesh>
       <mesh position={[0, 0, -6]} material={bgFrontMat}>
-        <planeGeometry args={[40, 200]} />
+        <planeGeometry args={[52, 240]} />
       </mesh>
 
       <mesh
@@ -1777,7 +1784,7 @@ function Scene() {
       </mesh>
 
       <mesh ref={waveRef} material={dangerMat}>
-        <boxGeometry args={[8.6, 1.1, 0.8]} />
+        <boxGeometry args={[10.2, 1.1, 0.8]} />
       </mesh>
 
       <instancedMesh
@@ -1788,23 +1795,25 @@ function Scene() {
       <mesh ref={playerRef} position={[wallX(-1), 0, 1.2]}>
         <sphereGeometry args={[TUNING.player.radius, 20, 20]} />
         <meshStandardMaterial
-          color={'#111827'}
-          roughness={0.25}
-          metalness={0.18}
+          color={'#eefbff'}
+          roughness={0.2}
+          metalness={0.22}
+          emissive={'#89deff'}
+          emissiveIntensity={0.28}
         />
       </mesh>
 
       {obstacleRefs.map((ref, i) => (
         <mesh key={`ob-${i}`} ref={ref} visible={false}>
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial color={'#56e2ff'} />
+          <meshStandardMaterial color={'#74dcff'} />
         </mesh>
       ))}
 
       {collectibleRefs.map((ref, i) => (
         <mesh key={`co-${i}`} ref={ref} visible={false}>
           <octahedronGeometry args={[0.3, 0]} />
-          <meshStandardMaterial color={'#ffd76a'} />
+          <meshStandardMaterial color={'#ffd56c'} />
         </mesh>
       ))}
 
@@ -1818,6 +1827,12 @@ function Scene() {
       {snap.phase === 'playing' && (
         <HUD runRef={runRef} biomeProgress={biomeProgress} />
       )}
+
+      <EffectComposer enableNormalPass={false} multisampling={0}>
+        <Bloom intensity={0.22} luminanceThreshold={0.72} luminanceSmoothing={0.3} mipmapBlur />
+        <Vignette eskil={false} offset={0.2} darkness={0.5} />
+        <Noise premultiply opacity={0.02} />
+      </EffectComposer>
     </>
   );
 }

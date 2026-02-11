@@ -23,7 +23,12 @@ export interface Particle {
   y: number;
   vx: number;
   vy: number;
+  z: number;
+  vz: number;
   life: number;
   color: string;
   size: number;
+  drag: number;
+  spin: number;
+  glow: number;
 }

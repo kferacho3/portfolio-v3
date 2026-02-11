@@ -116,7 +116,7 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
     title: 'WaveFlip',
     verb: 'Flip gravity',
     input: 'tap',
-    tutorial: 'Tap to flip floor and ceiling.',
+    tutorial: 'Tap or swipe to choose upper/lower wave lane before hazards arrive.',
     failCondition: 'collision',
     chunkProfile: 'wave-timing',
     endlessFirst: true,

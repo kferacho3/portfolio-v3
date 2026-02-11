@@ -79,6 +79,7 @@ const PLATFORM_HALF_HEIGHT = PLATFORM_HEIGHT / 2;
 const PLAYER_HEIGHT = PLAYER_SIZE * 1.6;
 const PLAYER_HALF_HEIGHT = PLAYER_HEIGHT / 2;
 const FALL_Y = -12;
+const MOVE_TIME_PER_SIDE_MS = 1000;
 
 const PRISM_COLORS: Record<PrismType, string> = {
   normal: '#48dbfb',
@@ -357,11 +358,22 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const [isGrounded, setIsGrounded] = useState(true);
   const [playerSides, setPlayerSides] = useState<PlayerShape>(3);
   const [gameStarted, setGameStarted] = useState(false);
+  const [showTouchControls, setShowTouchControls] = useState(false);
+  const [moveTimerMs, setMoveTimerMs] = useState(0);
+  const [moveTimerTotalMs, setMoveTimerTotalMs] = useState(
+    MIN_SIDES * MOVE_TIME_PER_SIDE_MS
+  );
+  const [gameOverReason, setGameOverReason] = useState<
+    'mismatch' | 'timeout' | 'fall' | null
+  >(null);
+  const [midairPrompt, setMidairPrompt] = useState('');
+  const [controlHint, setControlHint] = useState('');
   const [lastMismatch, setLastMismatch] = useState<{
     platformSides: PlayerShape;
     playerSides: PlayerShape;
   } | null>(null);
 
+  const platformsRef = useRef<Platform[]>([]);
   const rngRef = useRef(new SeededRandom(Date.now()));
   const justLandedRef = useRef(false);
   const jumpQueuedRef = useRef(false);
@@ -369,10 +381,86 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const crackedBreakAt = useRef<number | null>(null);
   const crackedPlatformId = useRef<string | null>(null);
   const playerSidesRef = useRef<number>(3);
+  const moveDeadlineAtRef = useRef(0);
+  const moveTimerSidesRef = useRef(MIN_SIDES);
+  const mobileSteerRef = useRef(0);
+  const midairMatchedRef = useRef(false);
+  const midairPromptUntilRef = useRef(0);
+  const controlHintUntilRef = useRef(0);
 
   useEffect(() => {
     playerSidesRef.current = clampSides(playerSides);
   }, [playerSides]);
+
+  useEffect(() => {
+    platformsRef.current = platforms;
+  }, [platforms]);
+
+  const showMidairPrompt = useCallback((message: string, ms = 850) => {
+    midairPromptUntilRef.current = performance.now() + ms;
+    setMidairPrompt(message);
+  }, []);
+
+  const showControlHint = useCallback((message: string, ms = 750) => {
+    controlHintUntilRef.current = performance.now() + ms;
+    setControlHint(message);
+  }, []);
+
+  const armMoveTimer = useCallback((sides: number) => {
+    const clampedSides = clampSides(sides);
+    moveTimerSidesRef.current = clampedSides;
+    const total = clampedSides * MOVE_TIME_PER_SIDE_MS;
+    moveDeadlineAtRef.current = performance.now() + total;
+    setMoveTimerTotalMs(total);
+    setMoveTimerMs(total);
+  }, []);
+
+  const requestShapeSelect = useCallback(
+    (rawSides: number) => {
+      if (snap.gameOver || !gameStarted) return;
+      if (isGroundedRef.current) {
+        showControlHint('Switch shape while airborne');
+        return;
+      }
+      const nextSides = clampSides(rawSides);
+      playerSidesRef.current = nextSides;
+      setPlayerSides(nextSides);
+
+      const nextPlatform =
+        platformsRef.current[currentPlatformIndexRef.current + 1];
+      if (
+        nextPlatform &&
+        clampSides(nextPlatform.sides) === clampSides(nextSides)
+      ) {
+        midairMatchedRef.current = true;
+        showMidairPrompt('Midair lock');
+      }
+    },
+    [snap.gameOver, gameStarted, showControlHint, showMidairPrompt]
+  );
+
+  const requestJump = useCallback(() => {
+    if (snap.gameOver) return;
+    if (!gameStarted) {
+      setGameStarted(true);
+    }
+    jumpQueuedRef.current = true;
+    jumpQueuedUntil.current = performance.now() + 160;
+  }, [snap.gameOver, gameStarted]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(pointer: coarse), (hover: none)');
+    const refresh = () => {
+      setShowTouchControls(media.matches || window.innerWidth <= 980);
+    };
+    refresh();
+    media.addEventListener('change', refresh);
+    window.addEventListener('resize', refresh);
+    return () => {
+      media.removeEventListener('change', refresh);
+      window.removeEventListener('resize', refresh);
+    };
+  }, []);
 
   // Initialize scene
   useEffect(() => {
@@ -443,12 +531,23 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           setIsGrounded(true);
           setPlayerSides(3);
           setGameStarted(false);
+          setMoveTimerMs(0);
+          setMoveTimerTotalMs(MIN_SIDES * MOVE_TIME_PER_SIDE_MS);
+          setGameOverReason(null);
+          setMidairPrompt('');
+          setControlHint('');
           setLastMismatch(null);
           justLandedRef.current = false;
           jumpQueuedRef.current = false;
           jumpQueuedUntil.current = 0;
           crackedBreakAt.current = null;
           crackedPlatformId.current = null;
+          moveDeadlineAtRef.current = 0;
+          moveTimerSidesRef.current = MIN_SIDES;
+          mobileSteerRef.current = 0;
+          midairMatchedRef.current = false;
+          midairPromptUntilRef.current = 0;
+          controlHintUntilRef.current = 0;
           rngRef.current = new SeededRandom(Date.now());
 
           // Regenerate platforms
@@ -491,7 +590,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
       const key = e.key.toLowerCase();
 
-      // Shape selection with number keys 1..9 => 3..11 sides.
+      // Shape selection with number keys 3..9 => 3..9 sides.
       const mappedSides = digitToSides(key);
       if (mappedSides != null) {
         // Prevent the arcade shell hotkeys from stealing number presses.
@@ -499,8 +598,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         e.stopPropagation();
         // @ts-expect-error stopImmediatePropagation exists on Event in browsers
         e.stopImmediatePropagation?.();
-        playerSidesRef.current = clampSides(mappedSides);
-        setPlayerSides(playerSidesRef.current);
+        requestShapeSelect(mappedSides);
         return;
       }
 
@@ -510,9 +608,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           e.stopPropagation();
           // @ts-expect-error stopImmediatePropagation exists on Event in browsers
           e.stopImmediatePropagation?.();
-          setGameStarted(true);
-          jumpQueuedRef.current = true;
-          jumpQueuedUntil.current = performance.now() + 160;
+          requestJump();
         }
         return;
       }
@@ -525,29 +621,27 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         e.stopPropagation();
         // @ts-expect-error stopImmediatePropagation exists on Event in browsers
         e.stopImmediatePropagation?.();
-        jumpQueuedRef.current = true;
-        jumpQueuedUntil.current = performance.now() + 160; // jump buffer
+        requestJump();
       }
     };
 
-    const handlePointerDown = () => {
-      if (snap.gameOver) return;
-      if (!gameStarted) {
-        setGameStarted(true);
-      }
-      jumpQueuedRef.current = true;
-      jumpQueuedUntil.current = performance.now() + 160;
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-prism-control="1"]')) return;
+      requestJump();
     };
 
     const handleWheel = (e: WheelEvent) => {
       if (snap.gameOver || !gameStarted) return;
-      // Optional: mouse wheel cycles shape (still available, but number keys are the main control).
+      if (isGroundedRef.current) {
+        showControlHint('Switch shape while airborne');
+        return;
+      }
+      // Optional: mouse wheel cycles shape while airborne.
       if (Math.abs(e.deltaY) < 2) return;
       e.preventDefault();
       const direction = e.deltaY < 0 ? 1 : -1;
-      const next = clampSides(playerSidesRef.current + direction);
-      playerSidesRef.current = next;
-      setPlayerSides(next);
+      requestShapeSelect(playerSidesRef.current + direction);
     };
 
     // Capture phase so we can override arcade-wide number hotkeys (1-9) while playing Prism.
@@ -561,7 +655,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('wheel', handleWheel as EventListener);
     };
-  }, [snap.gameOver, gameStarted]);
+  }, [snap.gameOver, gameStarted, requestJump, requestShapeSelect, showControlHint]);
 
   // Game loop
   useFrame((state, delta) => {
@@ -573,6 +667,33 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     const idx = currentPlatformIndexRef.current;
 
     const now = performance.now();
+
+    if (midairPromptUntilRef.current > 0 && now > midairPromptUntilRef.current) {
+      midairPromptUntilRef.current = 0;
+      setMidairPrompt('');
+    }
+    if (controlHintUntilRef.current > 0 && now > controlHintUntilRef.current) {
+      controlHintUntilRef.current = 0;
+      setControlHint('');
+    }
+
+    // While grounded, player must make the next move (jump) before timer expires.
+    if (isGroundedRef.current && moveDeadlineAtRef.current > 0) {
+      const remaining = Math.max(0, moveDeadlineAtRef.current - now);
+      setMoveTimerMs(remaining);
+      if (remaining <= 0) {
+        prismState.gameOver = true;
+        setGameOverReason('timeout');
+        isGroundedRef.current = false;
+        setIsGrounded(false);
+        playerVelRef.current.set(0, -5, 0);
+        setPlayerVel(playerVelRef.current.clone());
+        moveDeadlineAtRef.current = 0;
+        return;
+      }
+    } else if (!isGroundedRef.current && moveTimerMs !== 0) {
+      setMoveTimerMs(0);
+    }
 
     // Allow a short buffered jump window.
     const wantsJump = jumpQueuedRef.current || now < jumpQueuedUntil.current;
@@ -613,8 +734,11 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       isGroundedRef.current = false;
       setIsGrounded(false);
       justLandedRef.current = false;
+      midairMatchedRef.current = false;
       crackedBreakAt.current = null;
       crackedPlatformId.current = null;
+      moveDeadlineAtRef.current = 0;
+      setMoveTimerMs(0);
     }
     jumpQueuedRef.current = false;
     jumpQueuedUntil.current = 0;
@@ -629,8 +753,12 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
       // Lateral drift control with pointer (target-based, with deadzone; no runaway accumulation)
       const px = Math.abs(state.pointer.x) < 0.12 ? 0 : state.pointer.x;
+      const steerX =
+        Math.abs(mobileSteerRef.current) > 0.01
+          ? mobileSteerRef.current * 0.95
+          : px;
       // Keep drift in a range that still allows consistent landings.
-      const desiredZ = THREE.MathUtils.clamp(px * 1.6, -1.4, 1.4);
+      const desiredZ = THREE.MathUtils.clamp(steerX * 1.6, -1.4, 1.4);
       newPos.z = THREE.MathUtils.lerp(
         newPos.z,
         desiredZ,
@@ -661,6 +789,8 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       justLandedRef.current = false;
       crackedBreakAt.current = null;
       crackedPlatformId.current = null;
+      moveDeadlineAtRef.current = 0;
+      setMoveTimerMs(0);
     }
 
     // Check platform collision only when falling (swept foot check to prevent phasing)
@@ -712,6 +842,11 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
               prismState.score += 5;
               prismState.combo = 0;
             }
+            if (midairMatchedRef.current) {
+              prismState.score += 6;
+              showMidairPrompt('Air match +6', 920);
+              midairMatchedRef.current = false;
+            }
             justLandedRef.current = true;
           }
 
@@ -726,6 +861,7 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
     if (mismatchedLanding && mismatchedPlatform) {
       prismState.gameOver = true;
+      setGameOverReason('mismatch');
       isGroundedRef.current = false;
       setIsGrounded(false);
       playerVelRef.current.set(0, -6, 0);
@@ -751,11 +887,15 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         crackedPlatformId.current = landedPlatform.id;
         crackedBreakAt.current = now + 650; // ms standing grace
       }
+
+      const nextPlatform = platforms[landedPlatformIndex + 1];
+      armMoveTimer(nextPlatform?.sides ?? MIN_SIDES);
     }
 
     // Check fall off
     if (newPos.y < FALL_Y) {
       prismState.gameOver = true;
+      setGameOverReason('fall');
     }
 
     playerPosRef.current.copy(newPos);
@@ -899,18 +1039,147 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
                 ? `${getShapeLabel(platforms[currentPlatformIndex + 1].sides)} (${clampSides(platforms[currentPlatformIndex + 1].sides)})`
                 : '---'}
             </div>
+            <div className="mt-1 text-white/60">Next move timer</div>
+            <div className="text-sm font-semibold">
+              {isGrounded && gameStarted && !snap.gameOver
+                ? `${Math.max(0, moveTimerMs / 1000).toFixed(1)}s (${moveTimerSidesRef.current}s cap)`
+                : 'In air'}
+            </div>
+            <div className="mt-1 h-1.5 w-40 bg-white/15 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-[width] duration-75"
+                style={{
+                  width:
+                    moveTimerTotalMs > 0
+                      ? `${Math.max(0, Math.min(100, (moveTimerMs / moveTimerTotalMs) * 100))}%`
+                      : '0%',
+                  background:
+                    moveTimerMs > moveTimerTotalMs * 0.45
+                      ? '#00ff88'
+                      : moveTimerMs > moveTimerTotalMs * 0.2
+                        ? '#feca57'
+                        : '#ff4757',
+                }}
+              />
+            </div>
           </div>
         </div>
 
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
           <div>Space / Click to jump</div>
           <div className="text-xs mt-1">
-            3–9 sets sides • Match the platform before landing
+            3–9 sets sides midair • Match the next platform before landing
           </div>
           <div className="text-xs mt-1">
-            Move mouse to drift • Land centered for bonus
+            Next jump timer = next platform sides in seconds
           </div>
         </div>
+
+        {midairPrompt && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-16 z-50">
+            <div className="rounded-full border border-emerald-300/60 bg-emerald-500/20 px-4 py-1.5 text-xs font-semibold tracking-wide text-emerald-100">
+              {midairPrompt}
+            </div>
+          </div>
+        )}
+
+        {controlHint && (
+          <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50">
+            <div className="rounded-full border border-white/20 bg-black/60 px-3 py-1 text-xs text-white/85">
+              {controlHint}
+            </div>
+          </div>
+        )}
+
+        {showTouchControls && !snap.gameOver && gameStarted && (
+          <>
+            <div className="absolute bottom-4 right-4 z-50 pointer-events-auto">
+              <button
+                data-prism-control="1"
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  requestJump();
+                }}
+                className="rounded-full border border-cyan-300/60 bg-cyan-400/20 px-5 py-3 text-xs font-semibold text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.25)] active:scale-95"
+              >
+                Jump
+              </button>
+            </div>
+            <div className="absolute bottom-4 left-4 z-50 pointer-events-auto flex gap-2">
+              <button
+                data-prism-control="1"
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  mobileSteerRef.current = -1;
+                }}
+                onPointerUp={() => {
+                  mobileSteerRef.current = 0;
+                }}
+                onPointerLeave={() => {
+                  mobileSteerRef.current = 0;
+                }}
+                onPointerCancel={() => {
+                  mobileSteerRef.current = 0;
+                }}
+                className="rounded-lg border border-white/25 bg-black/50 px-4 py-2 text-xs text-white/90 active:scale-95"
+              >
+                Drift ◀
+              </button>
+              <button
+                data-prism-control="1"
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  mobileSteerRef.current = 1;
+                }}
+                onPointerUp={() => {
+                  mobileSteerRef.current = 0;
+                }}
+                onPointerLeave={() => {
+                  mobileSteerRef.current = 0;
+                }}
+                onPointerCancel={() => {
+                  mobileSteerRef.current = 0;
+                }}
+                className="rounded-lg border border-white/25 bg-black/50 px-4 py-2 text-xs text-white/90 active:scale-95"
+              >
+                Drift ▶
+              </button>
+            </div>
+            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
+              <div className="rounded-2xl border border-white/15 bg-black/55 px-2 py-2 backdrop-blur-sm">
+                <div className="grid grid-cols-4 gap-1">
+                  {[3, 4, 5, 6, 7, 8, 9].map((sides) => {
+                    const active = clampSides(playerSides) === sides;
+                    return (
+                      <button
+                        key={sides}
+                        data-prism-control="1"
+                        type="button"
+                        onPointerDown={(e) => {
+                          e.preventDefault();
+                          requestShapeSelect(sides);
+                        }}
+                        className={`h-8 w-8 rounded-md text-[11px] font-semibold transition ${
+                          active
+                            ? 'bg-white text-black'
+                            : 'bg-white/10 text-white/90 hover:bg-white/20'
+                        }`}
+                        style={{
+                          border: `1px solid ${getShapeColor(sides)}55`,
+                        }}
+                      >
+                        {sides}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {!gameStarted && !snap.gameOver && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 pointer-events-auto">
@@ -919,17 +1188,19 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
               <p className="text-white/70 text-sm leading-relaxed mb-5">
                 Jump forward and land on the next tile.
                 <br />
-                Before you land, morph your shape to match the tile’s sides.
+                Morph your shape midair to match the tile’s sides.
+                <br />
+                On each landing, the next jump timer equals the next tile's sides.
               </p>
               <div className="text-white/60 text-sm mb-6 space-y-1">
                 <div>
                   <span className="text-white">Space / Click</span> to jump
                 </div>
                 <div>
-                  <span className="text-white">3–9</span> to set sides
+                  <span className="text-white">3–9</span> to set sides midair
                 </div>
                 <div>
-                  <span className="text-white">Mouse</span> to drift
+                  <span className="text-white">Mouse / Drift buttons</span> to steer
                 </div>
               </div>
               <p className="text-white/50 text-xs animate-pulse">
@@ -954,6 +1225,16 @@ const Prism: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
                 <p className="text-lg text-white/70 mb-1">
                   Mismatch: {getShapeLabel(lastMismatch.playerSides)} on{' '}
                   {getShapeLabel(lastMismatch.platformSides)}
+                </p>
+              )}
+              {gameOverReason === 'timeout' && (
+                <p className="text-lg text-amber-300/90 mb-1">
+                  Too slow: jump before the side-count timer expires
+                </p>
+              )}
+              {gameOverReason === 'fall' && (
+                <p className="text-lg text-white/70 mb-1">
+                  Missed landing
                 </p>
               )}
               <p className="text-lg text-white/60 mb-6">

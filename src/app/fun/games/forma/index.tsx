@@ -150,21 +150,137 @@ export const formaState = proxy({
 // POLYGON COLORS
 // ═══════════════════════════════════════════════════════════════════════════
 
-const POLYGON_COLORS: Record<number, string> = {
-  3: '#ff6b6b', // Triangle - Red
-  4: '#feca57', // Square - Yellow
-  5: '#48dbfb', // Pentagon - Cyan
-  6: '#ff9ff3', // Hexagon - Pink
-  7: '#54a0ff', // Heptagon - Blue
-  8: '#5f27cd', // Octagon - Purple
-  9: '#00d2d3', // Nonagon - Teal
-  10: '#ff6348', // Decagon - Orange
-  11: '#26de81', // 11-gon - Green
-  12: '#fd79a8', // Dodecagon - Light Pink
-  13: '#a29bfe', // 13-gon - Lavender
-  14: '#ffeaa7', // 14-gon - Light Yellow
-  15: '#81ecec', // 15-gon - Light Cyan
-  16: '#fab1a0', // 16-gon - Peach
+const MIN_COLOR_SIDE = 3;
+const MAX_COLOR_SIDE = 16;
+
+interface FormaPalette {
+  name: string;
+  seedHue: number;
+  colors: Record<number, string>;
+}
+
+const createPalette = (
+  name: string,
+  seedHue: number,
+  swatches: string[]
+): FormaPalette => {
+  const colors: Record<number, string> = {};
+  for (let i = 0; i < swatches.length; i += 1) {
+    colors[MIN_COLOR_SIDE + i] = swatches[i];
+  }
+  return { name, seedHue, colors };
+};
+
+const FORMA_PALETTES: FormaPalette[] = [
+  createPalette('Solar Pulse', 18, [
+    '#ff5d8f',
+    '#ff9f1c',
+    '#ffe066',
+    '#2ec4b6',
+    '#4cc9f0',
+    '#3a86ff',
+    '#7b2cbf',
+    '#ff006e',
+    '#fb5607',
+    '#80ed99',
+    '#00f5d4',
+    '#9bf6ff',
+    '#b8c0ff',
+    '#ffd6ff',
+  ]),
+  createPalette('Glacier Neon', 204, [
+    '#ff4d6d',
+    '#ffbe0b',
+    '#06d6a0',
+    '#00bbf9',
+    '#43aa8b',
+    '#3f8efc',
+    '#577590',
+    '#9d4edd',
+    '#f15bb5',
+    '#00f5ff',
+    '#83c5be',
+    '#ffd166',
+    '#bde0fe',
+    '#caffbf',
+  ]),
+  createPalette('Electric Dusk', 276, [
+    '#ff006e',
+    '#ff7f51',
+    '#fcbf49',
+    '#2a9d8f',
+    '#48cae4',
+    '#4361ee',
+    '#560bad',
+    '#b5179e',
+    '#ff758f',
+    '#06ffa5',
+    '#72efdd',
+    '#a8dadc',
+    '#d0bfff',
+    '#ffcad4',
+  ]),
+  createPalette('Aurora Glass', 142, [
+    '#ff4f79',
+    '#ff9f43',
+    '#ffd60a',
+    '#38b000',
+    '#00d4ff',
+    '#4361ee',
+    '#7b2cbf',
+    '#c77dff',
+    '#f15bb5',
+    '#00f5a0',
+    '#8ecae6',
+    '#90e0ef',
+    '#caf0f8',
+    '#ffd6a5',
+  ]),
+  createPalette('Candy Plasma', 328, [
+    '#ff595e',
+    '#ffca3a',
+    '#8ac926',
+    '#00c2a8',
+    '#1982c4',
+    '#4263eb',
+    '#7209b7',
+    '#f72585',
+    '#ff70a6',
+    '#70d6ff',
+    '#ff9770',
+    '#9dffb0',
+    '#bdb2ff',
+    '#ffc6ff',
+  ]),
+  createPalette('Obsidian Bloom', 58, [
+    '#ff477e',
+    '#ff9e00',
+    '#ffd166',
+    '#06d6a0',
+    '#118ab2',
+    '#3f37c9',
+    '#8338ec',
+    '#ff006e',
+    '#ff5400',
+    '#4cc9f0',
+    '#80ffdb',
+    '#c77dff',
+    '#bde0fe',
+    '#ffe5ec',
+  ]),
+];
+
+const colorForSides = (sides: number, palette: FormaPalette): string => {
+  const normalized = Math.max(MIN_COLOR_SIDE, Math.floor(sides));
+  if (normalized <= MAX_COLOR_SIDE) {
+    return palette.colors[normalized] || '#ffffff';
+  }
+
+  // Extend beyond 16 sides with a deterministic hue walk per run palette.
+  const hue = (palette.seedHue + (normalized - MIN_COLOR_SIDE) * 37) % 360;
+  const saturation = 72 + ((normalized * 11) % 18);
+  const lightness = 54 + ((normalized * 7) % 12);
+  return `hsl(${hue}, ${Math.min(92, saturation)}%, ${Math.min(68, lightness)}%)`;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -211,6 +327,18 @@ const getGridPosition = (
   return [x, y, 0];
 };
 
+const getGridBounds = (config: GridConfig) => {
+  const totalWidth =
+    config.size * (config.cellSize + config.cellGap) - config.cellGap;
+  const halfExtent = totalWidth / 2 - config.cellSize / 2;
+  return {
+    minX: -halfExtent,
+    maxX: halfExtent,
+    minY: -halfExtent,
+    maxY: halfExtent,
+  };
+};
+
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -219,26 +347,41 @@ const getGridPosition = (
 const PolygonTile: React.FC<{
   tile: Tile;
   config: GridConfig;
-}> = ({ tile, config }) => {
+  palette: FormaPalette;
+}> = ({ tile, config, palette }) => {
+  const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const targetPos = useRef(getGridPosition(tile.row, tile.col, config));
-  const [position, setPosition] = useState(
-    getGridPosition(tile.row, tile.col, config)
+  const [initialX, initialY, initialZ] = getGridPosition(tile.row, tile.col, config);
+  const targetPos = useRef(new THREE.Vector3(initialX, initialY, initialZ));
+  const scaleRef = useRef(tile.isNew ? 0 : 1);
+  const rotationRef = useRef(0);
+  const bounds = useMemo(
+    () => getGridBounds(config),
+    [config.size, config.cellSize, config.cellGap]
   );
-  const [scale, setScale] = useState(tile.isNew ? 0 : 1);
-  const [rotation, setRotation] = useState(0);
 
-  const color =
-    POLYGON_COLORS[tile.sides] ||
-    POLYGON_COLORS[Math.min(tile.sides, 16)] ||
-    '#ffffff';
+  const color = colorForSides(tile.sides, palette);
   const isUnstable = tile.unstable !== undefined;
 
   // Update target position when tile moves
   useEffect(() => {
-    targetPos.current = getGridPosition(tile.row, tile.col, config);
-  }, [tile.row, tile.col, config]);
+    const [x, y, z] = getGridPosition(tile.row, tile.col, config);
+    targetPos.current.set(
+      THREE.MathUtils.clamp(x, bounds.minX, bounds.maxX),
+      THREE.MathUtils.clamp(y, bounds.minY, bounds.maxY),
+      z
+    );
+  }, [tile.row, tile.col, config, bounds.minX, bounds.maxX, bounds.minY, bounds.maxY]);
+
+  // Hard reset transforms whenever a new tile component mounts.
+  useEffect(() => {
+    if (!groupRef.current || !meshRef.current) return;
+    groupRef.current.position.copy(targetPos.current);
+    meshRef.current.position.set(0, 0, 0);
+    scaleRef.current = tile.isNew ? 0 : 1;
+    rotationRef.current = 0;
+  }, [tile.id, tile.isNew]);
 
   // Create polygon geometry
   const geometry = useMemo(() => {
@@ -269,53 +412,76 @@ const PolygonTile: React.FC<{
   }, [tile.sides, config.cellSize]);
 
   // Animate position, scale, and rotation
-  useFrame((_, delta) => {
-    // Smooth position transition
-    setPosition((prev) => [
-      THREE.MathUtils.lerp(
-        prev[0],
-        targetPos.current[0],
-        Math.min(delta * 15, 1)
-      ),
-      THREE.MathUtils.lerp(
-        prev[1],
-        targetPos.current[1],
-        Math.min(delta * 15, 1)
-      ),
-      prev[2],
-    ]);
-
-    // Scale animation for new tiles
-    if (tile.isNew && scale < 1) {
-      setScale((prev) => Math.min(1, prev + delta * 12));
+  useFrame((state, delta) => {
+    if (groupRef.current) {
+      groupRef.current.position.x = THREE.MathUtils.lerp(
+        groupRef.current.position.x,
+        targetPos.current.x,
+        Math.min(delta * 16, 1)
+      );
+      groupRef.current.position.y = THREE.MathUtils.lerp(
+        groupRef.current.position.y,
+        targetPos.current.y,
+        Math.min(delta * 16, 1)
+      );
+      groupRef.current.position.x = THREE.MathUtils.clamp(
+        groupRef.current.position.x,
+        bounds.minX,
+        bounds.maxX
+      );
+      groupRef.current.position.y = THREE.MathUtils.clamp(
+        groupRef.current.position.y,
+        bounds.minY,
+        bounds.maxY
+      );
+      groupRef.current.position.z = targetPos.current.z;
     }
 
-    // Merge pop animation
-    if (tile.merging) {
-      setScale((prev) => {
-        if (prev > 1.15)
-          return THREE.MathUtils.lerp(prev, 1, Math.min(delta * 10, 1));
-        return Math.min(1.2, prev + delta * 20);
-      });
+    // Scale animation for new tiles and merge pops.
+    if (tile.isNew && scaleRef.current < 1) {
+      scaleRef.current = Math.min(1, scaleRef.current + delta * 12);
+    } else if (tile.merging) {
+      if (scaleRef.current > 1.15) {
+        scaleRef.current = THREE.MathUtils.lerp(
+          scaleRef.current,
+          1,
+          Math.min(delta * 10, 1)
+        );
+      } else {
+        scaleRef.current = Math.min(1.2, scaleRef.current + delta * 20);
+      }
+    } else if (scaleRef.current !== 1) {
+      scaleRef.current = THREE.MathUtils.lerp(
+        scaleRef.current,
+        1,
+        Math.min(delta * 12, 1)
+      );
     }
 
-    // Constant rotation (slower for larger polygons)
-    setRotation((prev) => prev + delta * (1.2 / Math.max(tile.sides - 2, 1)));
+    rotationRef.current += delta * (1.2 / Math.max(tile.sides - 2, 1));
 
-    // Unstable tile shake
-    if (meshRef.current && isUnstable) {
-      const shake =
-        Math.sin(Date.now() * 0.02) *
-        config.cellSize *
-        0.02 *
-        (1 - (tile.unstable || 0));
-      meshRef.current.position.x = position[0] + shake;
+    if (meshRef.current) {
+      meshRef.current.rotation.set(0, 0, rotationRef.current);
+      meshRef.current.scale.setScalar(scaleRef.current);
+
+      // Shake should stay local to the tile, never include world/grid offsets.
+      if (isUnstable) {
+        const shake =
+          Math.sin(state.clock.elapsedTime * 19.4) *
+          config.cellSize *
+          0.02 *
+          (1 - (tile.unstable || 0));
+        meshRef.current.position.set(shake, 0, 0);
+      } else {
+        meshRef.current.position.set(0, 0, 0);
+      }
     }
 
-    // Glow pulse for unstable
     if (glowRef.current && isUnstable) {
-      const pulse = 0.3 + Math.sin(Date.now() * 0.01) * 0.2;
-      glowRef.current.scale.setScalar(1.1 + pulse * 0.1);
+      const pulse = 0.3 + Math.sin(state.clock.elapsedTime * 7.2) * 0.2;
+      const glowScale = scaleRef.current * (1.1 + pulse * 0.1);
+      glowRef.current.rotation.set(0, 0, rotationRef.current);
+      glowRef.current.scale.set(glowScale, glowScale, 1);
     }
   });
 
@@ -323,14 +489,9 @@ const PolygonTile: React.FC<{
   const emissiveIntensity = tile.merging ? 0.8 : isUnstable ? 0.6 : 0.3;
 
   return (
-    <group position={position}>
+    <group ref={groupRef} position={[initialX, initialY, initialZ]}>
       {/* Main polygon */}
-      <mesh
-        ref={meshRef}
-        geometry={geometry}
-        rotation={[0, 0, rotation]}
-        scale={[scale, scale, scale]}
-      >
+      <mesh ref={meshRef} geometry={geometry}>
         <meshStandardMaterial
           color={color}
           emissive={color}
@@ -344,11 +505,7 @@ const PolygonTile: React.FC<{
 
       {/* Glow effect for unstable tiles */}
       {isUnstable && (
-        <mesh
-          ref={glowRef}
-          rotation={[0, 0, rotation]}
-          scale={[scale * 1.1, scale * 1.1, 1]}
-        >
+        <mesh ref={glowRef}>
           <circleGeometry
             args={[config.cellSize * 0.45, Math.min(tile.sides, 16)]}
           />
@@ -514,9 +671,14 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     createEmptyGrid(config.size)
   );
   const [tiles, setTiles] = useState<Tile[]>([]);
+  const [activePalette, setActivePalette] = useState<FormaPalette>(
+    FORMA_PALETTES[0]
+  );
 
   const rngRef = useRef(new SeededRandom(Date.now()));
   const tileIdCounter = useRef(0);
+  const gameRunRef = useRef(0);
+  const paletteIndexRef = useRef(0);
   const canMove = useRef(true);
 
   // Camera setup - updates when grid size changes
@@ -525,6 +687,18 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     camera.lookAt(0, 0, 0);
     scene.background = new THREE.Color('#0a0a1a');
   }, [camera, scene, config.cameraZ]);
+
+  const randomizePaletteForRun = useCallback(() => {
+    if (FORMA_PALETTES.length === 0) return;
+    let nextIndex = rngRef.current.int(0, FORMA_PALETTES.length - 1);
+    if (FORMA_PALETTES.length > 1 && nextIndex === paletteIndexRef.current) {
+      nextIndex =
+        (nextIndex + 1 + rngRef.current.int(0, FORMA_PALETTES.length - 2)) %
+        FORMA_PALETTES.length;
+    }
+    paletteIndexRef.current = nextIndex;
+    setActivePalette(FORMA_PALETTES[nextIndex]);
+  }, []);
 
   // Spawn new tile
   const spawnTile = useCallback(
@@ -552,7 +726,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       );
 
       const tile: Tile = {
-        id: `tile-${tileIdCounter.current++}`,
+        id: `run-${gameRunRef.current}-tile-${tileIdCounter.current++}`,
         sides,
         row,
         col,
@@ -568,6 +742,10 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   // Initialize game when starting
   const initializeGame = useCallback(() => {
     const cfg = GRID_CONFIGS[formaState.gridSize];
+    gameRunRef.current += 1;
+    tileIdCounter.current = 0;
+    rngRef.current = new SeededRandom(Date.now() + gameRunRef.current * 101);
+    randomizePaletteForRun();
     const initialGrid = createEmptyGrid(cfg.size);
 
     for (let i = 0; i < cfg.initialTiles; i++) {
@@ -580,9 +758,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     setGrid(initialGrid);
     const tilesFromGrid = buildTilesFromGrid(initialGrid);
     setTiles(tilesFromGrid);
-    tileIdCounter.current = tilesFromGrid.length;
-    rngRef.current = new SeededRandom(Date.now());
-  }, [spawnTile]);
+  }, [spawnTile, randomizePaletteForRun]);
 
   // Initialize when game starts
   useEffect(() => {
@@ -878,7 +1054,12 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
       {/* Tiles */}
       {tiles.map((tile) => (
-        <PolygonTile key={tile.id} tile={tile} config={config} />
+        <PolygonTile
+          key={tile.id}
+          tile={tile}
+          config={config}
+          palette={activePalette}
+        />
       ))}
 
       {/* HUD */}
@@ -898,6 +1079,9 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
             <div className="font-medium text-cyan-400">{config.name}</div>
             <div className="text-xs text-white/50">
               {snap.gridSize}×{snap.gridSize} Grid
+            </div>
+            <div className="text-xs text-white/45 mt-1">
+              Palette: {activePalette.name}
             </div>
             <div className="text-xs text-white/40 mt-1">
               Merges: {snap.mergeCount}
@@ -923,28 +1107,28 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-3 h-3 rounded"
-              style={{ background: POLYGON_COLORS[3] }}
+              style={{ background: colorForSides(3, activePalette) }}
             />
             <span>3 sides</span>
           </div>
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-3 h-3 rounded"
-              style={{ background: POLYGON_COLORS[4] }}
+              style={{ background: colorForSides(4, activePalette) }}
             />
             <span>4 sides</span>
           </div>
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-3 h-3 rounded"
-              style={{ background: POLYGON_COLORS[5] }}
+              style={{ background: colorForSides(5, activePalette) }}
             />
             <span>5 sides</span>
           </div>
           <div className="flex items-center gap-2">
             <div
               className="w-3 h-3 rounded"
-              style={{ background: POLYGON_COLORS[6] }}
+              style={{ background: colorForSides(6, activePalette) }}
             />
             <span>6+ sides</span>
           </div>

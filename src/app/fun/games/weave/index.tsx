@@ -48,6 +48,23 @@ export { weaveState } from './state';
 export * from './constants';
 export * from './types';
 
+type ParticleBurstOptions = {
+  speedMin?: number;
+  speedMax?: number;
+  lifeMin?: number;
+  lifeMax?: number;
+  sizeMin?: number;
+  sizeMax?: number;
+  dragMin?: number;
+  dragMax?: number;
+  glowMin?: number;
+  glowMax?: number;
+  zMin?: number;
+  zMax?: number;
+  vzMin?: number;
+  vzMax?: number;
+};
+
 const Weave: React.FC<{ soundsOn?: boolean }> = ({
   soundsOn: _soundsOn = true,
 }) => {
@@ -63,6 +80,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
   const [corePulse, setCorePulse] = useState(0);
   const [laserCount, setLaserCount] = useState(1);
   const [laserBurstLabel, setLaserBurstLabel] = useState<string | null>(null);
+  const [damageFlash, setDamageFlash] = useState(0);
 
   const playerDirection = useRef(0);
   const lastNonZeroDirection = useRef<1 | -1>(1);
@@ -75,6 +93,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
   const milestone3Done = useRef(false);
   const milestone4Done = useRef(false);
   const rotationDirectionRef = useRef<1 | -1>(Math.random() > 0.5 ? 1 : -1);
+  const cameraShake = useRef(0);
 
   const currentColor = NEON_COLORS[(snap.level - 1) % NEON_COLORS.length];
 
@@ -115,20 +134,46 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
   }, [generateArms]);
 
   const spawnParticles = useCallback(
-    (x: number, y: number, color: string, count: number) => {
+    (
+      x: number,
+      y: number,
+      color: string,
+      count: number,
+      options: ParticleBurstOptions = {}
+    ) => {
+      const speedMin = options.speedMin ?? 1;
+      const speedMax = options.speedMax ?? 2.5;
+      const lifeMin = options.lifeMin ?? 0.45;
+      const lifeMax = options.lifeMax ?? 0.95;
+      const sizeMin = options.sizeMin ?? 0.05;
+      const sizeMax = options.sizeMax ?? 0.12;
+      const dragMin = options.dragMin ?? 0.8;
+      const dragMax = options.dragMax ?? 0.93;
+      const glowMin = options.glowMin ?? 1;
+      const glowMax = options.glowMax ?? 1.8;
+      const zMin = options.zMin ?? -0.06;
+      const zMax = options.zMax ?? 0.22;
+      const vzMin = options.vzMin ?? -0.6;
+      const vzMax = options.vzMax ?? 0.9;
+
       const newParticles: Particle[] = [];
       for (let i = 0; i < count; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = 1 + Math.random() * 2;
+        const speed = speedMin + Math.random() * (speedMax - speedMin);
         newParticles.push({
           id: `p-${Date.now()}-${i}`,
           x,
           y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: 1,
+          z: zMin + Math.random() * (zMax - zMin),
+          vz: vzMin + Math.random() * (vzMax - vzMin),
+          life: lifeMin + Math.random() * (lifeMax - lifeMin),
           color,
-          size: 0.05 + Math.random() * 0.08,
+          size: sizeMin + Math.random() * (sizeMax - sizeMin),
+          drag: dragMin + Math.random() * (dragMax - dragMin),
+          spin: (Math.random() - 0.5) * 16,
+          glow: glowMin + Math.random() * (glowMax - glowMin),
         });
       }
       setParticles((prev) => [...prev, ...newParticles]);
@@ -145,6 +190,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
     rotationDirectionRef.current = Math.random() > 0.5 ? 1 : -1;
     setArms(generateArms(1, 1, 0));
     setGameStarted(true);
+    setDamageFlash(0);
     levelOrbCount.current = 0;
     gameTime.current = 0;
     lastOrbSpawn.current = 0;
@@ -152,6 +198,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
     nextBurstAt.current = 12;
     milestone3Done.current = false;
     milestone4Done.current = false;
+    cameraShake.current = 0;
   }, [generateArms]);
 
   useEffect(() => {
@@ -375,7 +422,40 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
 
         const px = Math.cos(playerAngle) * PLAYER_ORBIT_RADIUS;
         const py = Math.sin(playerAngle) * PLAYER_ORBIT_RADIUS;
-        spawnParticles(px, py, '#ff3366', 15);
+        spawnParticles(px, py, '#ff3366', 28, {
+          speedMin: 2.2,
+          speedMax: 4.8,
+          lifeMin: 0.65,
+          lifeMax: 1.15,
+          sizeMin: 0.06,
+          sizeMax: 0.14,
+          glowMin: 1.3,
+          glowMax: 2.2,
+          dragMin: 0.75,
+          dragMax: 0.88,
+          zMin: -0.08,
+          zMax: 0.24,
+          vzMin: -1.1,
+          vzMax: 1.4,
+        });
+        spawnParticles(px, py, '#ffd6e3', 10, {
+          speedMin: 1.3,
+          speedMax: 2.6,
+          lifeMin: 0.5,
+          lifeMax: 0.9,
+          sizeMin: 0.04,
+          sizeMax: 0.08,
+          glowMin: 1.1,
+          glowMax: 1.6,
+          dragMin: 0.82,
+          dragMax: 0.92,
+          zMin: -0.03,
+          zMax: 0.16,
+          vzMin: -0.5,
+          vzMax: 0.9,
+        });
+        cameraShake.current = Math.min(1, cameraShake.current + 0.95);
+        setDamageFlash(1);
 
         if (weaveState.lives <= 0) {
           weaveState.gameOver = true;
@@ -451,7 +531,26 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
             weaveState.bestCombo = weaveState.combo;
           }
 
-          spawnParticles(ox, oy, orb.isBonus ? BONUS_ORB_COLOR : ORB_COLOR, 8);
+          spawnParticles(ox, oy, orb.isBonus ? BONUS_ORB_COLOR : ORB_COLOR, orb.isBonus ? 18 : 12, {
+            speedMin: orb.isBonus ? 1.9 : 1.2,
+            speedMax: orb.isBonus ? 3.2 : 2.2,
+            lifeMin: 0.42,
+            lifeMax: orb.isBonus ? 0.95 : 0.75,
+            sizeMin: 0.04,
+            sizeMax: orb.isBonus ? 0.1 : 0.08,
+            glowMin: orb.isBonus ? 1.35 : 1.1,
+            glowMax: orb.isBonus ? 2.15 : 1.55,
+            dragMin: 0.8,
+            dragMax: 0.92,
+            zMin: -0.03,
+            zMax: 0.22,
+            vzMin: -0.4,
+            vzMax: 1.2,
+          });
+          cameraShake.current = Math.min(
+            1,
+            cameraShake.current + (orb.isBonus ? 0.22 : 0.09)
+          );
           setCorePulse(1);
           setTimeout(() => setCorePulse(0), 150);
 
@@ -484,13 +583,32 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
           ...p,
           x: p.x + p.vx * delta,
           y: p.y + p.vy * delta,
-          life: p.life - delta * 2,
+          z: p.z + p.vz * delta,
+          vx: p.vx * Math.pow(p.drag, delta * 60),
+          vy: p.vy * Math.pow(p.drag, delta * 60),
+          vz: p.vz * Math.pow(p.drag, delta * 60),
+          life: p.life - delta * (1.5 + p.size * 1.2),
         }))
         .filter((p) => p.life > 0)
     );
+
+    if (damageFlash > 0) {
+      setDamageFlash((prev) => Math.max(0, prev - delta * 2.8));
+    }
+
+    cameraShake.current = Math.max(0, cameraShake.current - delta * 1.9);
+    const shake = cameraShake.current * cameraShake.current;
+    const camT = gameTime.current;
+    const breathing = Math.sin(camT * 0.7) * 0.05;
+    camera.position.x = Math.sin(camT * 28.1 + 1.2) * shake * 0.18;
+    camera.position.y = Math.cos(camT * 24.7 + 2.4) * shake * 0.18;
+    camera.position.z = 10 + breathing + shake * 0.22;
+    camera.lookAt(0, 0, 0);
   });
 
   const levelProgress = (levelOrbCount.current / LEVEL_UP_ORBS) * 100;
+  const playerX = Math.cos(playerAngle) * PLAYER_ORBIT_RADIUS;
+  const playerY = Math.sin(playerAngle) * PLAYER_ORBIT_RADIUS;
 
   return (
     <>
@@ -508,7 +626,13 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
       ))}
 
       {orbs.map((orb) => (
-        <OrbEntity key={orb.id} orb={orb} currentTime={gameTime.current} />
+        <OrbEntity
+          key={orb.id}
+          orb={orb}
+          currentTime={gameTime.current}
+          playerX={playerX}
+          playerY={playerY}
+        />
       ))}
 
       <ParticleEffect particles={particles} />
@@ -519,6 +643,17 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
         isHit={isHit}
         invincible={snap.invincible}
       />
+
+      {damageFlash > 0 && (
+        <mesh position={[0, 0, 1.2]}>
+          <planeGeometry args={[16, 16]} />
+          <meshBasicMaterial
+            color="#ff3b6f"
+            transparent
+            opacity={damageFlash * 0.16}
+          />
+        </mesh>
+      )}
 
       <WeaveHUD
         score={snap.score}

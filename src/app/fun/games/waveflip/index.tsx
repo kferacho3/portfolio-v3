@@ -117,12 +117,12 @@ type WaveFlipStore = {
 
 const BEST_KEY = 'waveflip_hyper_best_v3';
 
-const VIEW_MIN_X = -7.2;
-const VIEW_MAX_X = 7.2;
-const PLAYER_X = -2.7;
+const VIEW_MIN_X = -12.8;
+const VIEW_MAX_X = 12.8;
+const PLAYER_X = -4.6;
 const PLAYER_R = 0.22;
 
-const WAVE_POINTS = 200;
+const WAVE_POINTS = 280;
 const WAVE_HALF_THICKNESS = 0.16;
 const WAVE_NORMAL_OFFSET = 0.12;
 
@@ -135,8 +135,8 @@ const TAP_DRIFT_MAX = 0.12;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
-const WAVE_NEON = new THREE.Color('#7ce9ff');
-const WAVE_EDGE = new THREE.Color('#ff89cf');
+const WAVE_NEON = new THREE.Color('#8df2ff');
+const WAVE_EDGE = new THREE.Color('#9fc8ff');
 const SPIKE_TOP = new THREE.Color('#ff5d8b');
 const SPIKE_BOTTOM = new THREE.Color('#6f8eff');
 const OBSTACLE_ORANGE = new THREE.Color('#ffb05a');
@@ -145,7 +145,7 @@ const SAFE_MARKER = new THREE.Color('#8ffff2');
 const COLLECTIBLE_A = new THREE.Color('#ffe66f');
 const COLLECTIBLE_B = new THREE.Color('#ff8df5');
 const WHITE = new THREE.Color('#f8fbff');
-const BG_BOTTOM = new THREE.Color('#42a7f7');
+const BG_BOTTOM = new THREE.Color('#1f4e86');
 
 let audioContextRef: AudioContext | null = null;
 
@@ -399,9 +399,9 @@ const createRuntime = (): Runtime => ({
   flipGrace: 0,
   phaseScroll: 0,
   waveFreq: 1.52,
-  waveAmp: 0.34,
-  waveBase: 0.92,
-  playerY: 0.96,
+  waveAmp: 0.42,
+  waveBase: 1.26,
+  playerY: 1.32,
   playerNormalY: 1,
   lastFlipAt: -99,
   hudCommit: 0,
@@ -436,9 +436,9 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.flipGrace = 0;
   runtime.phaseScroll = 0;
   runtime.waveFreq = 1.52;
-  runtime.waveAmp = 0.34;
-  runtime.waveBase = 0.92;
-  runtime.playerY = 0.96;
+  runtime.waveAmp = 0.42;
+  runtime.waveBase = 1.26;
+  runtime.playerY = 1.32;
   runtime.playerNormalY = 1;
   runtime.lastFlipAt = -99;
   runtime.hudCommit = 0;
@@ -551,7 +551,7 @@ function WaveFlipOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/25 via-blue-500/15 to-indigo-500/25 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">WaveFlip</div>
         <div className="text-[11px] text-cyan-50/85">
-          Swipe up/down to phase the wave. Spikes punish the wrong side.
+          Pick upper or lower wave lane and pre-flip before hazard sets.
         </div>
       </div>
 
@@ -578,10 +578,11 @@ function WaveFlipOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/78 via-blue-950/55 to-fuchsia-950/40 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">WAVEFLIP</div>
-            <div className="mt-2 text-sm text-white/85">Mobile: swipe up for top rail, swipe down for bottom rail.</div>
+            <div className="mt-2 text-sm text-white/85">Choose the upper or lower wave lane before each obstacle cluster arrives.</div>
             <div className="mt-1 text-sm text-white/80">
-              Desktop: ArrowUp/W for top, ArrowDown/S for bottom, Space/click toggles.
+              Mobile: swipe up/down. Desktop: ArrowUp/W for top, ArrowDown/S for bottom, Space/click toggles.
             </div>
+            <div className="mt-1 text-sm text-cyan-100/85">Pale lane markers show the safer side around each cluster.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -840,8 +841,8 @@ function WaveFlipScene() {
       const d = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
       const intensity = clamp(d * 0.64 + pressure * 0.36, 0, 1);
       runtime.waveFreq = lerp(1.48, 2.95, intensity);
-      runtime.waveAmp = lerp(0.34, 0.56, intensity);
-      runtime.waveBase = lerp(0.92, 1.14, intensity);
+      runtime.waveAmp = lerp(0.42, 0.68, intensity);
+      runtime.waveBase = lerp(1.26, 1.62, intensity);
       runtime.displaySign = lerp(runtime.displaySign, runtime.waveSign, 1 - Math.exp(-(runtime.flipGrace > 0 ? 22 : 13) * dt));
       runtime.flipGrace = Math.max(0, runtime.flipGrace - dt);
 
@@ -963,7 +964,7 @@ function WaveFlipScene() {
     camTarget.set(
       shakeNoiseSigned(shakeTime, 2.3) * shakeAmp,
       shakeNoiseSigned(shakeTime, 8.8) * shakeAmp * 0.5,
-      9 + shakeNoiseSigned(shakeTime, 16.4) * shakeAmp * 0.35
+      9.8 + shakeNoiseSigned(shakeTime, 16.4) * shakeAmp * 0.35
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     camera.lookAt(0, 0, 0);
@@ -1153,18 +1154,18 @@ function WaveFlipScene() {
 
   return (
     <>
-      <OrthographicCamera makeDefault position={[0, 0, 9]} zoom={58} near={0.1} far={40} />
+      <OrthographicCamera makeDefault position={[0, 0, 9.8]} zoom={52} near={0.1} far={44} />
       <color attach="background" args={[BG_BOTTOM]} />
-      <fog attach="fog" args={[BG_BOTTOM, 9, 30]} />
+      <fog attach="fog" args={[BG_BOTTOM, 10, 34]} />
 
-      <ambientLight intensity={0.66} />
-      <hemisphereLight args={['#b4f7ff', '#46308f', 0.54]} />
-      <directionalLight position={[2.8, 2.6, 6]} intensity={0.6} color="#eef8ff" />
-      <pointLight position={[0, 2.7, 4]} intensity={0.86} color="#9bf8ff" />
-      <pointLight position={[0, -2.1, 4]} intensity={0.76} color="#ff9bd8" />
+      <ambientLight intensity={0.48} />
+      <hemisphereLight args={['#9fd9ff', '#2f3f8f', 0.36]} />
+      <directionalLight position={[2.8, 2.6, 6]} intensity={0.42} color="#dff5ff" />
+      <pointLight position={[0, 3.1, 4]} intensity={0.42} color="#86e5ff" />
+      <pointLight position={[0, -2.8, 4]} intensity={0.3} color="#8fb0ff" />
 
       <mesh position={[0, 0, -2.2]}>
-        <planeGeometry args={[26, 14]} />
+        <planeGeometry args={[34, 21]} />
         <shaderMaterial
           ref={bgMaterialRef}
           uniforms={{ uTime: { value: 0 } }}
@@ -1202,9 +1203,9 @@ function WaveFlipScene() {
               return v;
             }
             void main() {
-              vec3 deep = vec3(0.14, 0.38, 0.76);
-              vec3 purple = vec3(0.58, 0.29, 0.84);
-              vec3 glow = vec3(0.72, 0.84, 0.98);
+              vec3 deep = vec3(0.08, 0.24, 0.46);
+              vec3 purple = vec3(0.34, 0.30, 0.70);
+              vec3 glow = vec3(0.56, 0.73, 0.94);
               float grad = smoothstep(0.0, 1.0, vUv.y);
               vec2 uv = vUv * vec2(3.2, 8.4);
               float drift = uTime * 0.12;
@@ -1212,9 +1213,9 @@ function WaveFlipScene() {
               float ribbons = fbm2(uv * vec2(0.8, 1.7) - vec2(drift, 0.0));
               float grain = hash21(vUv * (uTime + 1.9));
               vec3 col = mix(deep, purple, grad);
-              col = mix(col, glow, smoothstep(0.52, 0.94, cloud + ribbons * 0.35) * 0.18);
-              col += (grain - 0.5) * 0.03;
-              col += vec3(0.03, 0.05, 0.08);
+              col = mix(col, glow, smoothstep(0.54, 0.94, cloud + ribbons * 0.35) * 0.11);
+              col += (grain - 0.5) * 0.018;
+              col += vec3(0.014, 0.028, 0.042);
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -1226,7 +1227,7 @@ function WaveFlipScene() {
         <meshBasicMaterial
           color={WAVE_NEON}
           transparent
-          opacity={0.82}
+          opacity={0.9}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
@@ -1300,9 +1301,9 @@ function WaveFlipScene() {
       </mesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.62} luminanceThreshold={0.48} luminanceSmoothing={0.2} mipmapBlur />
-        <Vignette eskil={false} offset={0.13} darkness={0.62} />
-        <Noise premultiply opacity={0.018} />
+        <Bloom intensity={0.36} luminanceThreshold={0.62} luminanceSmoothing={0.28} mipmapBlur />
+        <Vignette eskil={false} offset={0.16} darkness={0.56} />
+        <Noise premultiply opacity={0.014} />
       </EffectComposer>
 
       <Html fullscreen>

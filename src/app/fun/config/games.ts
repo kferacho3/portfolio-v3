@@ -151,7 +151,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'prism',
     title: 'Prism',
     description:
-      'Match color AND shape to pass. Precision runner with a twist.',
+      'Midair shape-match runner. Jump, morph, and beat the side-count timer.',
     accent: '#3366ff',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Prism.webp',
@@ -413,7 +413,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'oscillate',
     title: 'Oscillate',
     description:
-      'Orthographic vertical runner with rhythm wall-switching, patterned hazards, and capped infinite difficulty.',
+      'Stylized wall-switch runner with calmer contrast, larger arena framing, level goals, and infinite endless mode.',
     accent: '#6b4cff',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
@@ -549,16 +549,18 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Gentle rotations give more control.',
   },
   gyro: {
-    controls: 'Space/Click to change shape',
+    controls:
+      'Space/Click/E/D = next shape • Q/A/Left = previous shape • Right-click = previous • 1/2/3 difficulty',
     objective:
       'Spin through the helix. Match your shape to pass through gates. Super Hexagon meets 3D.',
-    tips: 'Stay calm. Focus on the approaching gate shape.',
+    tips: 'Use both directions instead of spam-cycling. Lock your match before the gate crosses center and watch the gate-lock meter.',
   },
   prism: {
-    controls: 'Space/Click to jump • Mouse to drift',
+    controls:
+      'Space/Click to jump • 3-9 to morph in midair • Touch: jump, drift, and on-screen 3-9 buttons',
     objective:
-      'Match color AND shape to pass platforms. Land centered for bonus points.',
-    tips: 'Watch ahead for platform types. Combo perfect landings.',
+      'Jump between prisms, morph midair to match the target shape, and make each next jump before the side-count timer expires.',
+    tips: 'Shape swaps only count in the air. Landing centered gives bigger score; locking match early grants an air-match bonus.',
   },
   forma: {
     controls: 'WASD or Arrow Keys to merge',
@@ -720,14 +722,14 @@ export const GAME_RULES: Record<string, GameRules> = {
   oscillate: {
     controls: 'Tap/Space/Enter to switch walls • R to restart',
     objective:
-      'Climb endlessly in an orthographic vertical runner. Switch between left and right walls, dodge hazard patterns, and push distance.',
-    tips: 'Tap with rhythm, not panic. Early reads and clean wall-switch timing keep multiplier and survival stable.',
+      'Play Levels mode with distance goals (Level 1 starts at 15m) or Infinite Endless Runner mode for pure survival distance.',
+    tips: 'Switch early, read patterns two beats ahead, and use the wider lane to set cleaner lines around hazards.',
   },
   waveflip: {
-    controls: 'Tap/Click to flip the wave • R to restart',
+    controls: 'Swipe up/down or ArrowUp/ArrowDown (Space/Click toggles) • R to restart',
     objective:
-      'Mirror your wave line to dodge ceiling and floor spikes in an endless rhythm run.',
-    tips: 'Flip for the next obstacle, not the one you already cleared.',
+      'Choose upper or lower wave lanes and pre-flip into the safe lane before each obstacle cluster reaches you.',
+    tips: 'Read the pale safe-lane markers ahead and commit early. Late panic flips cause most crashes.',
   },
   slipstream: {
     controls: 'Tap/Click to switch lanes • R to restart',
