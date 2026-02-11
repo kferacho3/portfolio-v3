@@ -21,6 +21,7 @@ type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
 type LaneIndex = 0 | 1 | 2;
 type MoveDir = 'left' | 'up' | 'right' | 'back';
 type RuneId = 0 | 1 | 2 | 3;
+type ForwardMove = Exclude<MoveDir, 'back'>;
 
 type FaceMap = {
   top: RuneId;
@@ -61,7 +62,8 @@ type Runtime = {
   score: number;
   streak: number;
   multiplier: number;
-  forgiveness: number;
+  illegalMoves: number;
+  illegalLimit: number;
   nearPerfects: number;
   failMessage: string;
   shake: number;
@@ -104,27 +106,43 @@ type Runtime = {
   shards: Shard[];
 };
 
+type MovePreview = {
+  move: ForwardMove;
+  lane: LaneIndex | null;
+  available: boolean;
+  targetRune: RuneId;
+  tileRune: RuneId | null;
+  tileWild: boolean;
+  legal: boolean;
+};
+
 type RuneRollStore = {
   status: GameStatus;
   score: number;
   best: number;
   multiplier: number;
   streak: number;
-  forgiveness: number;
+  illegalMoves: number;
+  illegalLimit: number;
   direction: 'L' | 'U' | 'R' | 'B';
   bottomRune: RuneId;
+  previews: MovePreview[];
+  suddenDeath: boolean;
   failMessage: string;
   pulseNonce: number;
   startRun: () => void;
   resetToStart: () => void;
   onTapFx: () => void;
+  toggleSuddenDeath: () => void;
   updateHud: (
     score: number,
     multiplier: number,
     streak: number,
-    forgiveness: number,
+    illegalMoves: number,
+    illegalLimit: number,
     direction: 'L' | 'U' | 'R' | 'B',
-    bottomRune: RuneId
+    bottomRune: RuneId,
+    previews: MovePreview[]
   ) => void;
   endRun: (score: number, reason: string) => void;
 };
@@ -171,6 +189,7 @@ const normAngle = (v: number) => {
 const bit = (lane: number) => 1 << lane;
 const moveLabel = (move: MoveDir): 'L' | 'U' | 'R' | 'B' =>
   move === 'left' ? 'L' : move === 'right' ? 'R' : move === 'back' ? 'B' : 'U';
+const FORWARD_MOVES: ForwardMove[] = ['left', 'up', 'right'];
 
 const laneForForwardMove = (
   currentLane: LaneIndex,
@@ -291,6 +310,16 @@ const resolveBackLane = (runtime: Runtime): LaneIndex | null => {
 
 const initialFaces = createFaces();
 const initialBottomRune = initialFaces.bottom;
+const createEmptyMovePreviews = (): MovePreview[] =>
+  FORWARD_MOVES.map((move) => ({
+    move,
+    lane: null,
+    available: false,
+    targetRune: 0,
+    tileRune: null,
+    tileWild: false,
+    legal: false,
+  }));
 
 const useRuneRollStore = create<RuneRollStore>((set) => ({
   status: 'START',
@@ -298,9 +327,12 @@ const useRuneRollStore = create<RuneRollStore>((set) => ({
   best: readBest(),
   multiplier: 1,
   streak: 0,
-  forgiveness: 1,
+  illegalMoves: 0,
+  illegalLimit: 3,
   direction: 'U',
   bottomRune: initialBottomRune,
+  previews: createEmptyMovePreviews(),
+  suddenDeath: false,
   failMessage: '',
   pulseNonce: 0,
   startRun: () =>
@@ -309,9 +341,10 @@ const useRuneRollStore = create<RuneRollStore>((set) => ({
       score: 0,
       multiplier: 1,
       streak: 0,
-      forgiveness: 1,
+      illegalMoves: 0,
       direction: 'U',
       bottomRune: initialBottomRune,
+      previews: createEmptyMovePreviews(),
       failMessage: '',
     }),
   resetToStart: () =>
@@ -320,20 +353,30 @@ const useRuneRollStore = create<RuneRollStore>((set) => ({
       score: 0,
       multiplier: 1,
       streak: 0,
-      forgiveness: 1,
+      illegalMoves: 0,
       direction: 'U',
       bottomRune: initialBottomRune,
+      previews: createEmptyMovePreviews(),
       failMessage: '',
     }),
   onTapFx: () => set((state) => ({ pulseNonce: state.pulseNonce + 1 })),
-  updateHud: (score, multiplier, streak, forgiveness, direction, bottomRune) =>
+  toggleSuddenDeath: () =>
+    set((state) => ({
+      suddenDeath: !state.suddenDeath,
+      illegalLimit: state.suddenDeath ? 3 : 1,
+      illegalMoves: 0,
+      previews: createEmptyMovePreviews(),
+    })),
+  updateHud: (score, multiplier, streak, illegalMoves, illegalLimit, direction, bottomRune, previews) =>
     set({
       score: Math.floor(score),
       multiplier,
       streak,
-      forgiveness,
+      illegalMoves,
+      illegalLimit,
       direction,
       bottomRune,
+      previews,
     }),
   endRun: (score, reason) =>
     set((state) => {
@@ -345,7 +388,7 @@ const useRuneRollStore = create<RuneRollStore>((set) => ({
         best: nextBest,
         multiplier: 1,
         streak: 0,
-        forgiveness: 1,
+        illegalMoves: state.illegalMoves,
         direction: 'U',
         failMessage: reason,
       };
@@ -357,7 +400,8 @@ const createRuntime = (): Runtime => ({
   score: 0,
   streak: 0,
   multiplier: 1,
-  forgiveness: 1,
+  illegalMoves: 0,
+  illegalLimit: 3,
   nearPerfects: 0,
   failMessage: '',
   shake: 0,
@@ -574,6 +618,43 @@ const enforceReachability = (runtime: Runtime, row: RowData, currentLane: LaneIn
   }
 };
 
+const buildMovePreviews = (runtime: Runtime): MovePreview[] => {
+  const row = ensureRow(runtime, runtime.currentRow + 1);
+  enforceReachability(runtime, row, runtime.currentLane);
+
+  return FORWARD_MOVES.map((move) => {
+    const lane = laneForForwardMove(runtime.currentLane, move);
+    const targetRune = rollFaces(runtime.faces, move).bottom;
+    if (lane === null) {
+      return {
+        move,
+        lane: null,
+        available: false,
+        targetRune,
+        tileRune: null,
+        tileWild: false,
+        legal: false,
+      };
+    }
+
+    const laneBit = bit(lane);
+    const available = (row.mask & laneBit) !== 0;
+    const tileWild = available && (row.wildMask & laneBit) !== 0;
+    const tileRune = available ? row.runes[lane] : null;
+    const legal = available && (tileWild || tileRune === targetRune);
+
+    return {
+      move,
+      lane,
+      available,
+      targetRune,
+      tileRune,
+      tileWild,
+      legal,
+    };
+  });
+};
+
 const acquireShard = (runtime: Runtime) => {
   for (const shard of runtime.shards) {
     if (!shard.active) return shard;
@@ -621,12 +702,16 @@ function RuneRollOverlay() {
   const best = useRuneRollStore((state) => state.best);
   const multiplier = useRuneRollStore((state) => state.multiplier);
   const streak = useRuneRollStore((state) => state.streak);
-  const forgiveness = useRuneRollStore((state) => state.forgiveness);
+  const illegalMoves = useRuneRollStore((state) => state.illegalMoves);
+  const illegalLimit = useRuneRollStore((state) => state.illegalLimit);
   const direction = useRuneRollStore((state) => state.direction);
   const bottomRune = useRuneRollStore((state) => state.bottomRune);
+  const previews = useRuneRollStore((state) => state.previews);
+  const suddenDeath = useRuneRollStore((state) => state.suddenDeath);
   const failMessage = useRuneRollStore((state) => state.failMessage);
   const pulseNonce = useRuneRollStore((state) => state.pulseNonce);
   const startRun = useRuneRollStore((state) => state.startRun);
+  const toggleSuddenDeath = useRuneRollStore((state) => state.toggleSuddenDeath);
 
   const bottomColor = RUNE_COLORS[bottomRune].getStyle();
   const nextLabel =
@@ -655,6 +740,12 @@ function RuneRollOverlay() {
       {status === 'PLAYING' && (
         <div className="absolute left-4 top-[92px] rounded-md border border-violet-100/35 bg-gradient-to-br from-slate-950/72 via-indigo-900/35 to-amber-900/22 px-3 py-2 text-xs">
           <div>
+            Mode{' '}
+            <span className="font-semibold text-amber-200">
+              {suddenDeath ? 'Sudden Death' : 'Classic 3-Strike'}
+            </span>
+          </div>
+          <div>
             Next <span className="font-semibold text-cyan-200">{nextLabel}</span>
           </div>
           <div>
@@ -664,6 +755,52 @@ function RuneRollOverlay() {
               style={{ background: bottomColor, boxShadow: `0 0 12px ${bottomColor}` }}
             />
             <span className="ml-1 font-semibold text-fuchsia-200">{bottomRune + 1}</span>
+          </div>
+          <div className="mt-1 grid grid-cols-3 gap-1">
+            {previews.map((preview) => {
+              const targetColor = RUNE_COLORS[preview.targetRune].getStyle();
+              const tileColor = preview.tileWild
+                ? WILD.getStyle()
+                : preview.tileRune !== null
+                  ? RUNE_COLORS[preview.tileRune].getStyle()
+                  : '#475569';
+              const label = preview.move === 'left' ? 'L' : preview.move === 'right' ? 'R' : 'U';
+              const legalityText = preview.available
+                ? preview.legal
+                  ? 'OK'
+                  : 'X'
+                : '--';
+              const legalityClass = preview.available
+                ? preview.legal
+                  ? 'text-emerald-200'
+                  : 'text-rose-200'
+                : 'text-slate-300';
+
+              return (
+                <div
+                  key={preview.move}
+                  className="rounded border border-white/20 bg-black/28 px-1.5 py-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-cyan-100">{label}</span>
+                    <span className={`font-semibold ${legalityClass}`}>{legalityText}</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-1">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ background: targetColor, boxShadow: `0 0 8px ${targetColor}` }}
+                      title="Bottom face after move"
+                    />
+                    <span className="text-[10px] text-white/70">vs</span>
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ background: tileColor, boxShadow: `0 0 8px ${tileColor}` }}
+                      title="Tile color in that lane"
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="mt-1 flex items-center gap-1">
             {RUNE_COLORS.map((color, idx) => (
@@ -682,7 +819,10 @@ function RuneRollOverlay() {
             Streak <span className="font-semibold text-emerald-200">{streak}</span>
           </div>
           <div>
-            Ward <span className="font-semibold text-sky-200">{forgiveness}</span>
+            Illegal{' '}
+            <span className="font-semibold text-sky-200">
+              {illegalMoves}/{illegalLimit}
+            </span>
           </div>
         </div>
       )}
@@ -694,7 +834,18 @@ function RuneRollOverlay() {
             <div className="mt-2 text-sm text-white/85">Controls: Left, Up, Right. Down = back one tile.</div>
             <div className="mt-1 text-sm text-white/80">Desktop: A/Left, W/Up/Space, D/Right, S/Down.</div>
             <div className="mt-1 text-sm text-white/80">Mobile: tap left/center/right zones. Tap lower center to back.</div>
-            <div className="mt-1 text-sm text-cyan-200/85">Only one tile behind stays reachable. Keep moving forward.</div>
+            <div className="mt-1 text-sm text-white/80">Pick a lane where your predicted bottom color matches the tile color.</div>
+            <div className="mt-1 text-sm text-cyan-200/85">The direction map shows legal choices. You lose after 3 illegal moves.</div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 rounded-md border border-amber-100/55 bg-amber-300/16 px-4 py-1.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/28"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleSuddenDeath();
+              }}
+            >
+              Mode: {suddenDeath ? 'Sudden Death (1 Strike)' : 'Classic (3 Strikes)'}
+            </button>
             <button
               type="button"
               className="pointer-events-auto mt-3 rounded-md border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
@@ -717,6 +868,16 @@ function RuneRollOverlay() {
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 rounded-md border border-amber-100/55 bg-amber-300/16 px-4 py-1.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/28"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleSuddenDeath();
+              }}
+            >
+              Mode: {suddenDeath ? 'Sudden Death (1 Strike)' : 'Classic (3 Strikes)'}
+            </button>
             <button
               type="button"
               className="pointer-events-auto mt-3 rounded-md border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
@@ -777,11 +938,13 @@ function RuneRollScene() {
       'd',
       's',
       'q',
+      'm',
       'A',
       'W',
       'D',
       'S',
       'Q',
+      'M',
     ],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
@@ -815,7 +978,8 @@ function RuneRollScene() {
     runtime.score = 0;
     runtime.streak = 0;
     runtime.multiplier = 1;
-    runtime.forgiveness = 1;
+    runtime.illegalMoves = 0;
+    runtime.illegalLimit = useRuneRollStore.getState().suddenDeath ? 1 : 3;
     runtime.nearPerfects = 0;
     runtime.failMessage = '';
     runtime.shake = 0;
@@ -930,6 +1094,7 @@ function RuneRollScene() {
       input.justPressed.has('arrowdown') ||
       input.justPressed.has('s') ||
       input.justPressed.has('q');
+    const toggleModePressed = input.justPressed.has('m');
 
     let requestedMove: MoveDir | null = null;
     if (leftPressed) requestedMove = 'left';
@@ -937,6 +1102,12 @@ function RuneRollScene() {
     else if (upPressed) requestedMove = 'up';
     else if (backPressed) requestedMove = 'back';
     else if (pointerTap) requestedMove = mapPointerToMove(input.pointerX, input.pointerY);
+
+    if (toggleModePressed && store.status !== 'PLAYING') {
+      useRuneRollStore.getState().toggleSuddenDeath();
+      runtime.illegalLimit = useRuneRollStore.getState().suddenDeath ? 1 : 3;
+      runtime.illegalMoves = 0;
+    }
 
     if (requestedMove) {
       if (store.status !== 'PLAYING') {
@@ -955,6 +1126,21 @@ function RuneRollScene() {
       runtime.elapsed += dt * (runtime.stepActive ? 1 : 0.08);
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
+      let previews = buildMovePreviews(runtime);
+
+      if (!previews.some((preview) => preview.legal)) {
+        const row = ensureRow(runtime, runtime.currentRow + 1);
+        const fallback =
+          previews.find((preview) => preview.lane !== null && preview.available) ??
+          previews.find((preview) => preview.lane !== null);
+        if (fallback && fallback.lane !== null) {
+          const lane = fallback.lane;
+          row.mask |= bit(lane);
+          row.runes[lane] = fallback.targetRune;
+          row.wildMask &= ~bit(lane);
+          previews = buildMovePreviews(runtime);
+        }
+      }
 
       for (const row of runtime.rows) {
         if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 2.8);
@@ -989,8 +1175,15 @@ function RuneRollScene() {
           if (!movingBack && (row.mask & bit(nextLane)) === 0) {
             const z = -(nextRow - runtime.progressRow) * ROW_SPACING;
             spawnBurst(runtime, LANE_X[nextLane], z, DANGER, 9, 2.4, 2.7);
-            runtime.failMessage = 'That branch is closed.';
-            useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+            row.glowLane = nextLane;
+            row.glow = 0.32;
+            runtime.illegalMoves += 1;
+            runtime.streak = 0;
+            runtime.multiplier = 1;
+            if (runtime.illegalMoves >= runtime.illegalLimit) {
+              runtime.failMessage = 'Too many illegal moves. Branch closed.';
+              useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+            }
           } else {
             runtime.stepActive = true;
             runtime.stepTime = 0;
@@ -1064,9 +1257,6 @@ function RuneRollScene() {
                 runtime.nearPerfects += 1;
                 runtime.score += 0.5;
               }
-              if (runtime.forgiveness < 1 && runtime.streak > 0 && runtime.streak % 22 === 0) {
-                runtime.forgiveness = 1;
-              }
               runtime.scoredRow = runtime.currentRow;
             }
 
@@ -1082,19 +1272,22 @@ function RuneRollScene() {
                 isWild ? 2.6 : 2.1
               );
             }
-          } else if (runtime.stepMove !== 'back' && runtime.forgiveness > 0) {
-            runtime.forgiveness -= 1;
+          } else if (runtime.stepMove !== 'back') {
+            runtime.illegalMoves += 1;
             runtime.streak = 0;
             runtime.multiplier = 1;
             landedRow.glowLane = landedLane;
             landedRow.glow = 0.3;
             const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
             spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 6, 1.3, 2.0);
-          } else if (runtime.stepMove !== 'back') {
-            const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
-            spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 10, 2.6, 3.2);
-            runtime.failMessage = 'Bottom rune mismatch.';
-            useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+            if (runtime.illegalMoves >= runtime.illegalLimit) {
+              spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 10, 2.6, 3.2);
+              runtime.failMessage =
+                runtime.illegalLimit === 1
+                  ? 'Sudden death: bottom rune mismatch.'
+                  : 'Bottom rune mismatch. Third illegal move.';
+              useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+            }
           }
         }
       } else {
@@ -1108,9 +1301,11 @@ function RuneRollScene() {
           runtime.score,
           runtime.multiplier,
           runtime.streak,
-          runtime.forgiveness,
+          runtime.illegalMoves,
+          runtime.illegalLimit,
           moveLabel(runtime.nextMove),
-          runtime.faces.bottom
+          runtime.faces.bottom,
+          previews
         );
       }
     } else {

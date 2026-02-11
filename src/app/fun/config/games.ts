@@ -743,10 +743,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Do not overstay high-value lanes when the safe lane is the only clear path.',
   },
   runeroll: {
-    controls: 'Tap/Click to toggle left-right step • R to restart',
+    controls: 'A/W/D or ←/↑/→ to roll • S or ↓ to backstep • M toggles Sudden Death • R to restart',
     objective:
-      'Step across floating rune stones and make the die bottom rune match each landing tile.',
-    tips: 'Tap early to set your next branch. Wild tiles save runs and boost points.',
+      'Roll onto tiles that match your cube’s landing-face color. Use the direction color map to pick legal moves and avoid illegal strikes.',
+    tips: 'There is always at least one legal forward move. Classic mode allows 3 illegal moves; Sudden Death ends the run on the first illegal move.',
   },
   pulseparry: {
     controls: 'Tap/Click to emit parry shockwave • R to restart',
