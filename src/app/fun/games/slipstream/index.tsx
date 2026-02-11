@@ -1518,17 +1518,45 @@ function SlipStreamScene() {
             uniform float uTime;
             uniform float uSlip;
             varying vec2 vUv;
+            float hash21(vec2 p) {
+              return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+            }
+            float noise2(vec2 p) {
+              vec2 i = floor(p);
+              vec2 f = fract(p);
+              f = f * f * (3.0 - 2.0 * f);
+              float a = hash21(i);
+              float b = hash21(i + vec2(1.0, 0.0));
+              float c = hash21(i + vec2(0.0, 1.0));
+              float d = hash21(i + vec2(1.0, 1.0));
+              return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+            }
+            float fbm2(vec2 p) {
+              float a = 0.5;
+              float v = 0.0;
+              for (int i = 0; i < 4; i++) {
+                v += a * noise2(p);
+                p = p * 2.02 + vec2(7.3, 2.1);
+                a *= 0.52;
+              }
+              return v;
+            }
             void main() {
-              vec3 deep = vec3(0.10, 0.46, 0.58);
-              vec3 foam = vec3(0.36, 0.82, 0.90);
-              vec3 cool = vec3(0.26, 0.64, 0.74);
+              vec3 deep = vec3(0.05, 0.24, 0.40);
+              vec3 mid = vec3(0.10, 0.47, 0.66);
+              vec3 foam = vec3(0.34, 0.87, 0.93);
+              vec3 apexGlow = vec3(0.44, 0.88, 0.95);
+              vec2 uv = vUv * vec2(3.4, 12.2);
+              float drift = uTime * 0.12;
+              float river = fbm2(uv + vec2(drift, -drift * 0.5));
+              float streaks = fbm2(uv * vec2(1.0, 1.8) - vec2(drift * 0.8, drift * 1.2));
+              float foamMask = smoothstep(0.52, 0.88, river + streaks * 0.32);
               float grad = smoothstep(0.0, 1.0, vUv.y);
-              float pulse = 0.5 + 0.5 * sin((vUv.y * 4.6 + uTime * 0.35) * 6.2831853);
-              float grain = fract(sin(dot(vUv * (uTime + 1.37), vec2(12.9898, 78.233))) * 43758.5453);
-              vec3 col = mix(deep, foam, grad * 0.55);
-              col = mix(col, cool, uSlip * (0.3 + pulse * 0.26));
-              col += (grain - 0.5) * 0.03;
-              col += vec3(0.02, 0.06, 0.08) * pulse;
+              float pulse = 0.5 + 0.5 * sin((vUv.y * 5.4 + uTime * 0.45) * 6.2831853);
+              vec3 col = mix(deep, mid, grad * 0.72);
+              col = mix(col, foam, foamMask * 0.34);
+              col = mix(col, apexGlow, uSlip * (0.24 + pulse * 0.36));
+              col += vec3(0.02, 0.05, 0.08) * (pulse * 0.8 + river * 0.3);
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -1538,7 +1566,7 @@ function SlipStreamScene() {
 
       <mesh position={[0, -0.1, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[4.45, 126]} />
-        <meshBasicMaterial color={TRACK_MAIN} transparent opacity={0.9} toneMapped={false} />
+        <meshBasicMaterial color={TRACK_MAIN} transparent opacity={0.94} toneMapped={false} />
       </mesh>
 
       <mesh position={[0, -0.07, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
@@ -1546,7 +1574,7 @@ function SlipStreamScene() {
         <meshBasicMaterial
           color={TRACK_GLOW}
           transparent
-          opacity={0.26}
+          opacity={0.34}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -1556,9 +1584,9 @@ function SlipStreamScene() {
       <mesh position={[-(TUNNEL_HALF_W + 1.65), -0.34, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[4.2, 124]} />
         <meshBasicMaterial
-          color="#4fcfe2"
+          color="#5fe9ff"
           transparent
-          opacity={0.72}
+          opacity={0.64}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -1568,9 +1596,9 @@ function SlipStreamScene() {
       <mesh position={[TUNNEL_HALF_W + 1.65, -0.34, -34]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[4.2, 124]} />
         <meshBasicMaterial
-          color="#4fcfe2"
+          color="#5fe9ff"
           transparent
-          opacity={0.72}
+          opacity={0.64}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -1579,7 +1607,15 @@ function SlipStreamScene() {
 
       <instancedMesh ref={tunnelRef} args={[undefined, undefined, TUNNEL_INSTANCE_COUNT]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial color={TRACK_MAIN} vertexColors toneMapped={false} />
+        <meshStandardMaterial
+          color={TRACK_MAIN}
+          vertexColors
+          emissive="#66dfff"
+          emissiveIntensity={0.16}
+          roughness={0.5}
+          metalness={0.12}
+          toneMapped={false}
+        />
       </instancedMesh>
 
       <instancedMesh ref={streakRef} args={[undefined, undefined, STREAK_POOL]}>
@@ -1599,7 +1635,7 @@ function SlipStreamScene() {
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.16}
+          opacity={0.22}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           side={THREE.DoubleSide}
@@ -1608,14 +1644,15 @@ function SlipStreamScene() {
       </instancedMesh>
 
       <instancedMesh ref={cometRef} args={[undefined, undefined, COMET_POOL]}>
-        <icosahedronGeometry args={[1, 1]} />
+        <icosahedronGeometry args={[1, 2]} />
         <meshStandardMaterial
+          ref={cometMatRef}
           color={COMET_COLOR}
           vertexColors
-          emissive="#f27a3d"
-          emissiveIntensity={0.28}
-          roughness={0.3}
-          metalness={0.08}
+          emissive="#ff8a47"
+          emissiveIntensity={0.36}
+          roughness={0.24}
+          metalness={0.24}
           toneMapped={false}
         />
       </instancedMesh>
@@ -1623,32 +1660,49 @@ function SlipStreamScene() {
       <instancedMesh ref={gustRef} args={[undefined, undefined, GUST_POOL]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
+          ref={gustMatRef}
           color={GUST_COLOR}
           vertexColors
-          emissive="#7f68ff"
-          emissiveIntensity={0.3}
-          roughness={0.38}
-          metalness={0.05}
+          emissive="#8f73ff"
+          emissiveIntensity={0.32}
+          roughness={0.3}
+          metalness={0.16}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={relicRef} args={[undefined, undefined, RELIC_POOL]}>
+        <dodecahedronGeometry args={[1, 1]} />
+        <meshStandardMaterial
+          ref={relicMatRef}
+          color={RELIC_COLOR}
+          vertexColors
+          emissive="#57ffd5"
+          emissiveIntensity={0.38}
+          roughness={0.2}
+          metalness={0.22}
           toneMapped={false}
         />
       </instancedMesh>
 
       <mesh ref={playerRef} position={[0, 0.08, 0.28]} rotation={[Math.PI * 0.5, 0, 0]}>
         <cylinderGeometry args={[0.17, 0.17, 0.54, 16]} />
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color="#f3c086"
-          emissive="#c6854b"
-          emissiveIntensity={0.2}
-          roughness={0.42}
-          metalness={0.04}
+          emissive="#c78546"
+          emissiveIntensity={0.24}
+          roughness={0.3}
+          metalness={0.09}
+          clearcoat={0.42}
+          clearcoatRoughness={0.35}
         />
       </mesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom ref={bloomRef} intensity={0.42} luminanceThreshold={0.5} luminanceSmoothing={0.2} mipmapBlur />
+        <Bloom ref={bloomRef} intensity={0.58} luminanceThreshold={0.36} luminanceSmoothing={0.24} mipmapBlur />
         <ChromaticAberration offset={chromaOffset} radialModulation modulationOffset={0.44} />
-        <Vignette eskil={false} offset={0.12} darkness={0.62} />
-        <Noise premultiply opacity={0.028} />
+        <Vignette eskil={false} offset={0.09} darkness={0.56} />
+        <Noise premultiply opacity={0.022} />
       </EffectComposer>
 
       <Html fullscreen>
