@@ -223,7 +223,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'tetherdrift',
     title: 'Tether Drift',
     description:
-      'An endless elastic runner: hold to reel your tether tight, release to drift wide, and thread slit gates with your trailing orb.',
+      'A tethered drift car endless run: hold to tighten your line, release to sling around blockers, and hit neon boosts for speed surges.',
     accent: '#4fd6c4',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/TetherDrift.webp',
@@ -604,8 +604,8 @@ export const GAME_RULES: Record<string, GameRules> = {
   tetherdrift: {
     controls: 'Hold/Space to reel in • Release to drift out • R to restart',
     objective:
-      'Guide a trailing orb through endless slit gates using only tether tension. Survive as speed ramps.',
-    tips: 'Reel early to center up, then release to let momentum carry into the next lane.',
+      'Drive a drift car through an endless obstacle corridor using tether tension for lane control.',
+    tips: 'Tighten early to snap into the safe gap, then release for a wide slide. Chain boost pads to keep momentum.',
   },
   trace: {
     controls: 'Drag to stay on path • R to restart',

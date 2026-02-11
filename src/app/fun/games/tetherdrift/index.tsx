@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { useGameUIState } from '../../store/selectors';
 import {
   consumeFixedStep,
   createFixedStepState,
@@ -15,22 +16,22 @@ import {
 } from '../_shared/hyperUpgradeKit';
 import { tetherDriftState } from './state';
 
-type Gate = {
+type ObstacleCluster = {
   z: number;
-  gapX: number;
-  gapW: number;
-  hue: number;
-  passed: boolean;
-  pulse: number;
+  mask: number;
+  gapLane: number;
+  resolved: boolean;
   flash: number;
+  pulse: number;
+  hue: number;
 };
 
-type Pickup = {
+type BoostPad = {
   z: number;
   x: number;
   active: boolean;
   collected: boolean;
-  spin: number;
+  pulse: number;
   hue: number;
 };
 
@@ -39,61 +40,74 @@ type Runtime = {
   distance: number;
   speed: number;
   score: number;
-  gatesPassed: number;
-  perfects: number;
-  pickupsCollected: number;
+
   combo: number;
   comboTimer: number;
+  clustersPassed: number;
+  perfects: number;
+
+  carX: number;
+  carVx: number;
+  carYaw: number;
+  carRoll: number;
 
   anchorX: number;
   anchorVel: number;
-  drifterX: number;
-  drifterVel: number;
+  leadGapX: number;
+  leadGapZ: number;
 
   tetherLen: number;
   tetherTargetLen: number;
   tension: number;
   holdVisual: number;
 
+  boostTime: number;
+  boostMix: number;
+
   serial: number;
-  waveSeed: number;
-  gateCursorZ: number;
-  pickupCursorZ: number;
+  clusterCursorZ: number;
+  boostCursorZ: number;
   hudCommit: number;
   shake: number;
 
-  guideX: number;
-  guideZ: number;
-
-  gates: Gate[];
-  pickups: Pickup[];
+  clusters: ObstacleCluster[];
+  boosts: BoostPad[];
 };
 
-const BEST_KEY = 'tether_drift_hyper_best_v2';
+const BEST_KEY = 'tether_drift_hyper_best_v3';
 
-const GATE_POOL = 44;
-const PICKUP_POOL = 34;
-const TETHER_POINT_COUNT = 14;
-const TRAIL_POINT_COUNT = 48;
+const LANE_COUNT = 5;
+const LANE_SPACING = 1.65;
+const CLUSTER_POOL = 40;
+const BOOST_POOL = 34;
+const BARRIER_INSTANCES = CLUSTER_POOL * LANE_COUNT;
+const TETHER_POINTS = 14;
+const TRAIL_POINTS = 50;
 
-const FIELD_HALF_X = 4.6;
-const GATE_HEIGHT = 2.7;
-const GATE_DEPTH = 0.42;
-const PLAYER_RADIUS = 0.24;
-const PICKUP_RADIUS = 0.2;
+const FIELD_HALF_X = ((LANE_COUNT - 1) * LANE_SPACING) / 2 + 0.95;
+const ROAD_HALF_WIDTH = FIELD_HALF_X + 0.85;
 
-const ANCHOR_Y = 0.26;
-const ANCHOR_Z = 0.8;
-const PLAYER_Y = 0.2;
-const PLAYER_Z = 0;
+const CAR_Z = 0;
+const CAR_Y = 0.2;
+const CAR_HALF_W = 0.36;
 
-const START_SPEED = 7.2;
-const MAX_SPEED = 16.2;
+const BARRIER_HALF_W = 0.55;
+const BARRIER_DEPTH = 0.52;
 
-const MINT = new THREE.Color('#57d6c9');
-const CORAL = new THREE.Color('#ff9d6c');
-const PEARL = new THREE.Color('#fff8ef');
-const SUN = new THREE.Color('#ffd9a8');
+const BOOST_W = 0.9;
+
+const ANCHOR_Z = -2.35;
+const ANCHOR_Y = 0.42;
+
+const BASE_SPEED = 9;
+const MAX_SPEED = 18.4;
+const BOOST_WINDOW = 4.2;
+
+const MINT = new THREE.Color('#50e0bf');
+const LIME = new THREE.Color('#8effb8');
+const CORAL = new THREE.Color('#ff8b72');
+const AMBER = new THREE.Color('#ffc981');
+const PEARL = new THREE.Color('#f8fffe');
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
@@ -102,6 +116,9 @@ let audioContextRef: AudioContext | null = null;
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+const laneX = (lane: number) =>
+  (lane - (LANE_COUNT - 1) * 0.5) * LANE_SPACING;
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -140,7 +157,7 @@ const playTone = (frequency: number, duration = 0.05, volume = 0.03) => {
 
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = 'sine';
+  osc.type = 'triangle';
   osc.frequency.value = frequency;
   gain.gain.value = volume;
 
@@ -154,173 +171,210 @@ const playTone = (frequency: number, duration = 0.05, volume = 0.03) => {
   osc.stop(t0 + duration);
 };
 
-const createGate = (): Gate => ({
+const createCluster = (): ObstacleCluster => ({
   z: -10,
-  gapX: 0,
-  gapW: 2.8,
-  hue: 0,
-  passed: false,
-  pulse: 0,
+  mask: 0,
+  gapLane: 2,
+  resolved: false,
   flash: 0,
+  pulse: 0,
+  hue: 0,
 });
 
-const createPickup = (): Pickup => ({
+const createBoostPad = (): BoostPad => ({
   z: -10,
   x: 0,
   active: true,
   collected: false,
-  spin: 0,
+  pulse: 0,
   hue: 0,
 });
 
 const createRuntime = (): Runtime => ({
   elapsed: 0,
   distance: 0,
-  speed: START_SPEED,
+  speed: BASE_SPEED,
   score: 0,
-  gatesPassed: 0,
-  perfects: 0,
-  pickupsCollected: 0,
+
   combo: 0,
   comboTimer: 0,
+  clustersPassed: 0,
+  perfects: 0,
+
+  carX: 0,
+  carVx: 0,
+  carYaw: 0,
+  carRoll: 0,
 
   anchorX: 0,
   anchorVel: 0,
-  drifterX: 0,
-  drifterVel: 0,
+  leadGapX: 0,
+  leadGapZ: -6,
 
-  tetherLen: 1.8,
-  tetherTargetLen: 1.8,
+  tetherLen: 2.3,
+  tetherTargetLen: 2.3,
   tension: 0,
   holdVisual: 0,
 
+  boostTime: 0,
+  boostMix: 0,
+
   serial: 0,
-  waveSeed: Math.random() * Math.PI * 2,
-  gateCursorZ: -10,
-  pickupCursorZ: -8,
+  clusterCursorZ: -9,
+  boostCursorZ: -8,
   hudCommit: 0,
   shake: 0,
 
-  guideX: 0,
-  guideZ: -6,
-
-  gates: Array.from({ length: GATE_POOL }, createGate),
-  pickups: Array.from({ length: PICKUP_POOL }, createPickup),
+  clusters: Array.from({ length: CLUSTER_POOL }, createCluster),
+  boosts: Array.from({ length: BOOST_POOL }, createBoostPad),
 });
 
 const difficultyAt = (runtime: Runtime) =>
-  clamp(runtime.distance / 260 + runtime.gatesPassed / 150, 0, 1);
+  clamp(runtime.distance / 280 + runtime.clustersPassed / 160, 0, 1);
 
-const seedGate = (gate: Gate, runtime: Runtime, z: number) => {
-  const d = difficultyAt(runtime);
-  runtime.serial += 1;
-  const curve =
-    Math.sin(runtime.serial * 0.62 + runtime.waveSeed) * lerp(0.8, 3.1, d);
-  const jitter = (Math.random() * 2 - 1) * lerp(0.2, 0.85, d);
+const pickGapLane = (runtime: Runtime) => {
+  const prevGap = runtime.serial > 0 ? runtime.clusters[(runtime.serial - 1) % CLUSTER_POOL].gapLane : 2;
+  const r = Math.random();
 
-  gate.z = z;
-  gate.gapX = clamp(curve + jitter, -FIELD_HALF_X + 0.95, FIELD_HALF_X - 0.95);
-  gate.gapW = clamp(
-    lerp(3.2, 1.35, d) + (Math.random() * 2 - 1) * 0.3,
-    1.15,
-    3.35
-  );
-  gate.hue = Math.random();
-  gate.passed = false;
-  gate.pulse = Math.random() * Math.PI * 2;
-  gate.flash = 0;
+  let delta = 0;
+  if (r < 0.42) delta = 0;
+  else if (r < 0.68) delta = 1;
+  else if (r < 0.9) delta = -1;
+  else delta = Math.random() < 0.5 ? 2 : -2;
+
+  return clamp(prevGap + delta, 0, LANE_COUNT - 1);
 };
 
-const seedPickup = (pickup: Pickup, runtime: Runtime, z: number) => {
+const seedCluster = (cluster: ObstacleCluster, runtime: Runtime, z: number) => {
   const d = difficultyAt(runtime);
-  pickup.z = z;
-  pickup.active = Math.random() < lerp(0.45, 0.78, d);
-  pickup.collected = false;
-  pickup.spin = (Math.random() * 2 - 1) * lerp(1.2, 3.2, d);
-  pickup.hue = Math.random();
+  runtime.serial += 1;
 
-  const side = Math.random() < 0.5 ? -1 : 1;
-  const base = Math.sin((runtime.serial + Math.random()) * 0.68 + runtime.waveSeed);
-  const bias = base * lerp(0.9, 2.6, d) + side * lerp(0.2, 0.95, d);
-  pickup.x = clamp(bias, -FIELD_HALF_X + 0.35, FIELD_HALF_X - 0.35);
+  const gapLane = pickGapLane(runtime);
+  let mask = 0;
+
+  const openNeighborChance = lerp(0.4, 0.08, d);
+  let extraOpenLane = -1;
+  if (Math.random() < openNeighborChance) {
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    extraOpenLane = clamp(gapLane + dir, 0, LANE_COUNT - 1);
+  }
+
+  for (let lane = 0; lane < LANE_COUNT; lane += 1) {
+    const isSafeLane = lane === gapLane || lane === extraOpenLane;
+    if (isSafeLane) continue;
+
+    const skipChance = lane === gapLane ? 0 : lerp(0.16, 0.02, d);
+    if (Math.random() < skipChance) continue;
+    mask |= 1 << lane;
+  }
+
+  if (mask === 0) {
+    const fallbackLane = gapLane === 2 ? 1 : 2;
+    mask |= 1 << fallbackLane;
+  }
+
+  cluster.z = z;
+  cluster.mask = mask;
+  cluster.gapLane = gapLane;
+  cluster.resolved = false;
+  cluster.flash = 0;
+  cluster.pulse = Math.random() * Math.PI * 2;
+  cluster.hue = Math.random();
+};
+
+const seedBoost = (boost: BoostPad, runtime: Runtime, z: number) => {
+  const d = difficultyAt(runtime);
+  boost.z = z;
+  boost.active = Math.random() < lerp(0.48, 0.72, d);
+  boost.collected = false;
+  boost.pulse = Math.random() * Math.PI * 2;
+  boost.hue = Math.random();
+
+  const leadLane = runtime.serial > 0 ? runtime.clusters[(runtime.serial - 1) % CLUSTER_POOL].gapLane : 2;
+  const lane = Math.random() < 0.64 ? leadLane : Math.floor(Math.random() * LANE_COUNT);
+  boost.x = laneX(lane) + (Math.random() * 2 - 1) * 0.16;
 };
 
 const resetRuntime = (runtime: Runtime) => {
   runtime.elapsed = 0;
   runtime.distance = 0;
-  runtime.speed = START_SPEED;
+  runtime.speed = BASE_SPEED;
   runtime.score = 0;
-  runtime.gatesPassed = 0;
-  runtime.perfects = 0;
-  runtime.pickupsCollected = 0;
+
   runtime.combo = 0;
   runtime.comboTimer = 0;
+  runtime.clustersPassed = 0;
+  runtime.perfects = 0;
+
+  runtime.carX = 0;
+  runtime.carVx = 0;
+  runtime.carYaw = 0;
+  runtime.carRoll = 0;
 
   runtime.anchorX = 0;
   runtime.anchorVel = 0;
-  runtime.drifterX = 0;
-  runtime.drifterVel = 0;
+  runtime.leadGapX = 0;
+  runtime.leadGapZ = -6;
 
-  runtime.tetherLen = 1.8;
-  runtime.tetherTargetLen = 1.8;
+  runtime.tetherLen = 2.3;
+  runtime.tetherTargetLen = 2.3;
   runtime.tension = 0;
   runtime.holdVisual = 0;
 
+  runtime.boostTime = 0;
+  runtime.boostMix = 0;
+
   runtime.serial = 0;
-  runtime.waveSeed = Math.random() * Math.PI * 2;
-  runtime.gateCursorZ = -9;
-  runtime.pickupCursorZ = -7;
+  runtime.clusterCursorZ = -9;
+  runtime.boostCursorZ = -8;
   runtime.hudCommit = 0;
   runtime.shake = 0;
-  runtime.guideX = 0;
-  runtime.guideZ = -6;
 
-  for (const gate of runtime.gates) {
-    seedGate(gate, runtime, runtime.gateCursorZ);
-    runtime.gateCursorZ -= 4.4 + Math.random() * 1.5;
+  for (const cluster of runtime.clusters) {
+    seedCluster(cluster, runtime, runtime.clusterCursorZ);
+    runtime.clusterCursorZ -= 5 + Math.random() * 1.5;
   }
 
-  for (const pickup of runtime.pickups) {
-    seedPickup(pickup, runtime, runtime.pickupCursorZ);
-    runtime.pickupCursorZ -= 3.6 + Math.random() * 1.7;
+  for (const boost of runtime.boosts) {
+    seedBoost(boost, runtime, runtime.boostCursorZ);
+    runtime.boostCursorZ -= 4.2 + Math.random() * 1.8;
   }
 };
 
-const findLeadGate = (runtime: Runtime): Gate | null => {
-  let lead: Gate | null = null;
+const findLeadCluster = (runtime: Runtime): ObstacleCluster | null => {
+  let lead: ObstacleCluster | null = null;
   let leadZ = -Infinity;
-  for (const gate of runtime.gates) {
-    if (gate.z >= -0.45 || gate.z < -22) continue;
-    if (gate.z > leadZ) {
-      lead = gate;
-      leadZ = gate.z;
+  for (const cluster of runtime.clusters) {
+    if (cluster.z > -0.4 || cluster.z < -18) continue;
+    if (cluster.z > leadZ) {
+      lead = cluster;
+      leadZ = cluster.z;
     }
   }
   return lead;
 };
 
 const syncHud = (runtime: Runtime, holding: boolean) => {
-  const stability = clamp(
-    100 - Math.abs(runtime.drifterX) * 11 - runtime.tension * 34,
-    15,
-    100
-  );
+  const lanePressure = Math.abs(runtime.carX) / (FIELD_HALF_X - CAR_HALF_W);
+  const stability = clamp(100 - lanePressure * 42 - runtime.tension * 48, 18, 100);
+
   tetherDriftState.phase = 'playing';
   tetherDriftState.score = Math.floor(runtime.score);
-  tetherDriftState.health = Math.round(stability);
+  tetherDriftState.health = Math.floor(stability);
   tetherDriftState.gameOver = false;
   tetherDriftState.chain = runtime.combo;
   tetherDriftState.chainTime = runtime.comboTimer;
-  tetherDriftState.heat = Math.round(runtime.tension * 100);
+  tetherDriftState.heat = Math.floor(runtime.tension * 100);
   tetherDriftState.speed = runtime.speed;
   tetherDriftState.reeling = holding;
   tetherDriftState.perfects = runtime.perfects;
-  tetherDriftState.constellationsCleared = runtime.gatesPassed;
+  tetherDriftState.constellationsCleared = runtime.clustersPassed;
   tetherDriftState.elapsed = runtime.elapsed;
 };
 
 const beginRun = (runtime: Runtime) => {
   resetRuntime(runtime);
+
   tetherDriftState.phase = 'playing';
   tetherDriftState.score = 0;
   tetherDriftState.health = 100;
@@ -328,7 +382,7 @@ const beginRun = (runtime: Runtime) => {
   tetherDriftState.chain = 0;
   tetherDriftState.chainTime = 0;
   tetherDriftState.heat = 0;
-  tetherDriftState.speed = START_SPEED;
+  tetherDriftState.speed = BASE_SPEED;
   tetherDriftState.reeling = false;
   tetherDriftState.perfectFlash = 0;
   tetherDriftState.perfects = 0;
@@ -354,22 +408,20 @@ const endRun = (runtime: Runtime) => {
   tetherDriftState.reeling = false;
   tetherDriftState.speed = runtime.speed;
   tetherDriftState.chainTime = 0;
-  tetherDriftState.toastText = '';
-  tetherDriftState.toastTime = 0;
 };
 
 function TetherDriftOverlay() {
   const snap = useSnapshot(tetherDriftState);
-  const flash = clamp(snap.perfectFlash * 2.2, 0, 1);
+  const flash = clamp(snap.perfectFlash * 2.3, 0, 1);
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-amber-100/50 bg-gradient-to-br from-emerald-500/24 via-cyan-500/18 to-orange-500/24 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/60 bg-gradient-to-br from-emerald-500/30 via-cyan-500/24 to-sky-500/26 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">Tether Drift</div>
-        <div className="text-[11px] text-cyan-50/85">Hold to reel the tether. Release to drift wide.</div>
+        <div className="text-[11px] text-cyan-50/85">Hold to tighten tether and carve drift lines. Release to slide out.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/60 via-cyan-800/40 to-orange-700/35 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/60 via-cyan-900/42 to-emerald-700/35 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{snap.score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {snap.bestScore}</div>
       </div>
@@ -377,29 +429,29 @@ function TetherDriftOverlay() {
       {snap.phase === 'playing' && (
         <div
           className="absolute left-4 top-[92px] rounded-md border border-white/30 bg-black/35 px-3 py-2 text-xs text-white/90"
-          style={{ boxShadow: `0 0 ${18 * flash}px rgba(255, 230, 180, ${0.55 * flash})` }}
+          style={{ boxShadow: `0 0 ${18 * flash}px rgba(138,255,232,${0.52 * flash})` }}
         >
           <div>
             Gates <span className="font-semibold text-cyan-100">{snap.constellationsCleared}</span>
           </div>
           <div>
-            Combo <span className="font-semibold text-emerald-100">x{Math.max(1, snap.chain)}</span>
+            Drift Combo <span className="font-semibold text-emerald-100">x{Math.max(1, snap.chain)}</span>
           </div>
           <div>
-            Speed <span className="font-semibold text-amber-100">{snap.speed.toFixed(1)}</span>
+            Speed <span className="font-semibold text-lime-100">{snap.speed.toFixed(1)}</span>
           </div>
           <div>
-            Tension <span className="font-semibold text-orange-100">{Math.round(snap.heat)}%</span>
+            Tension <span className="font-semibold text-amber-100">{Math.round(snap.heat)}%</span>
           </div>
           <div>
-            Mode <span className="font-semibold">{snap.reeling ? 'REEL' : 'DRIFT'}</span>
+            Mode <span className="font-semibold">{snap.reeling ? 'TETHERED' : 'DRIFTING'}</span>
           </div>
         </div>
       )}
 
       {snap.toastTime > 0 && snap.toastText && (
         <div className="absolute inset-x-0 top-20 flex justify-center">
-          <div className="rounded-md border border-amber-100/50 bg-black/45 px-4 py-1 text-sm font-semibold tracking-[0.12em] text-amber-100">
+          <div className="rounded-md border border-cyan-100/55 bg-black/44 px-4 py-1 text-sm font-semibold tracking-[0.12em] text-cyan-100">
             {snap.toastText}
           </div>
         </div>
@@ -407,10 +459,11 @@ function TetherDriftOverlay() {
 
       {snap.phase === 'menu' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-amber-100/45 bg-gradient-to-br from-slate-900/78 via-cyan-900/45 to-amber-800/28 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-cyan-100/45 bg-gradient-to-br from-slate-900/80 via-cyan-900/44 to-emerald-800/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">TETHER DRIFT</div>
-            <div className="mt-2 text-sm text-white/85">The lead drone drifts forward. Your orb follows on an elastic line.</div>
-            <div className="mt-1 text-sm text-white/85">Thread every slit gate with the trailing orb. Hold to tighten. Release to swing out.</div>
+            <div className="mt-2 text-sm text-white/85">A tethered drift car blasts through an endless corridor.</div>
+            <div className="mt-1 text-sm text-white/85">Hold to reel your anchor and snap into line. Release to sling wide around blockers.</div>
+            <div className="mt-1 text-sm text-white/85">Hit neon boost pads to surge and chain higher scores.</div>
             <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
           </div>
         </div>
@@ -418,8 +471,8 @@ function TetherDriftOverlay() {
 
       {snap.phase === 'gameover' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-orange-100/45 bg-gradient-to-br from-black/84 via-orange-900/44 to-cyan-900/32 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black text-amber-100">Tension Snapped</div>
+          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-900/42 to-cyan-900/30 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-cyan-100">Drift Crashed</div>
             <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
             <div className="mt-1 text-sm text-white/75">Best {snap.bestScore}</div>
             <div className="mt-3 text-sm text-cyan-100/90">Tap to run again.</div>
@@ -431,8 +484,8 @@ function TetherDriftOverlay() {
 }
 
 function TetherDriftScene() {
-  const resetVersion = useSnapshot(tetherDriftState).resetVersion;
-  const phase = useSnapshot(tetherDriftState).phase;
+  const snap = useSnapshot(tetherDriftState);
+  const { paused, restartSeed } = useGameUIState();
 
   const inputRef = useInputRef({
     preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
@@ -442,12 +495,12 @@ function TetherDriftScene() {
   const fixedStepRef = useRef(createFixedStepState());
 
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
-  const gateLeftRef = useRef<THREE.InstancedMesh>(null);
-  const gateRightRef = useRef<THREE.InstancedMesh>(null);
-  const gateWindowRef = useRef<THREE.InstancedMesh>(null);
-  const pickupRef = useRef<THREE.InstancedMesh>(null);
+  const roadMatRef = useRef<THREE.ShaderMaterial>(null);
+  const barrierRef = useRef<THREE.InstancedMesh>(null);
+  const gapMarkerRef = useRef<THREE.InstancedMesh>(null);
+  const boostRef = useRef<THREE.InstancedMesh>(null);
+  const carGroupRef = useRef<THREE.Group>(null);
   const anchorRef = useRef<THREE.Mesh>(null);
-  const playerRef = useRef<THREE.Mesh>(null);
   const tetherLineRef = useRef<any>(null);
   const guideLineRef = useRef<any>(null);
 
@@ -457,13 +510,10 @@ function TetherDriftScene() {
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
 
   const tetherPoints = useMemo(
-    () => Array.from({ length: TETHER_POINT_COUNT }, () => new THREE.Vector3()),
+    () => Array.from({ length: TETHER_POINTS }, () => new THREE.Vector3()),
     []
   );
-  const tetherFlat = useMemo(
-    () => new Float32Array(TETHER_POINT_COUNT * 3),
-    []
-  );
+  const tetherFlat = useMemo(() => new Float32Array(TETHER_POINTS * 3), []);
 
   const guidePoints = useMemo(
     () => [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)],
@@ -472,22 +522,22 @@ function TetherDriftScene() {
   const guideFlat = useMemo(() => new Float32Array(6), []);
 
   const trailAttr = useMemo(
-    () => new THREE.BufferAttribute(new Float32Array(TRAIL_POINT_COUNT * 3), 3),
+    () => new THREE.BufferAttribute(new Float32Array(TRAIL_POINTS * 3), 3),
     []
   );
   const trailGeometry = useMemo(() => {
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', trailAttr);
-    return geom;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', trailAttr);
+    return g;
   }, [trailAttr]);
 
   const { camera } = useThree();
 
   const primeTrail = (x: number) => {
-    for (let i = 0; i < TRAIL_POINT_COUNT; i += 1) {
+    for (let i = 0; i < TRAIL_POINTS; i += 1) {
       const ptr = i * 3;
       trailAttr.array[ptr] = x;
-      trailAttr.array[ptr + 1] = PLAYER_Y;
+      trailAttr.array[ptr + 1] = CAR_Y;
       trailAttr.array[ptr + 2] = -i * 0.12;
     }
     trailAttr.needsUpdate = true;
@@ -505,7 +555,13 @@ function TetherDriftScene() {
     tetherDriftState.bestScore = Math.max(tetherDriftState.bestScore, best);
     resetRuntime(runtimeRef.current);
     primeTrail(0);
-  }, [resetVersion]);
+  }, [snap.resetVersion]);
+
+  useEffect(() => {
+    if (restartSeed <= 0) return;
+    beginRun(runtimeRef.current);
+    primeTrail(runtimeRef.current.carX);
+  }, [restartSeed]);
 
   useEffect(
     () => () => {
@@ -523,8 +579,7 @@ function TetherDriftScene() {
     const runtime = runtimeRef.current;
     const input = inputRef.current;
 
-    tetherDriftState.toastTime = Math.max(0, tetherDriftState.toastTime - dt);
-    tetherDriftState.perfectFlash = Math.max(0, tetherDriftState.perfectFlash - dt * 2.8);
+    tetherDriftState.tick(dt);
 
     const tap =
       input.pointerJustDown ||
@@ -535,180 +590,175 @@ function TetherDriftScene() {
 
     if ((tap || restart) && tetherDriftState.phase !== 'playing') {
       beginRun(runtime);
-      primeTrail(runtime.drifterX);
-      maybeVibrate(12);
-      playTone(560, 0.06, 0.028);
+      primeTrail(runtime.carX);
+      maybeVibrate(10);
+      playTone(580, 0.06, 0.03);
     } else if (restart && tetherDriftState.phase === 'playing') {
       beginRun(runtime);
-      primeTrail(runtime.drifterX);
+      primeTrail(runtime.carX);
     }
 
     const holding =
       tetherDriftState.phase === 'playing' &&
+      !paused &&
       (input.pointerDown ||
         input.keysDown.has(' ') ||
         input.keysDown.has('space') ||
         input.keysDown.has('enter'));
 
-    if (tetherDriftState.phase === 'playing') {
+    if (tetherDriftState.phase === 'playing' && !paused) {
       runtime.elapsed += dt;
       runtime.comboTimer = Math.max(0, runtime.comboTimer - dt);
       if (runtime.comboTimer <= 0) runtime.combo = 0;
 
       const d = difficultyAt(runtime);
-      runtime.speed = lerp(START_SPEED, MAX_SPEED, d);
+      const baseSpeed = lerp(BASE_SPEED, MAX_SPEED, d);
+
+      runtime.boostTime = Math.max(0, runtime.boostTime - dt);
+      runtime.boostMix = clamp(runtime.boostTime / BOOST_WINDOW, 0, 1);
+      const boostScale = 1 + runtime.boostMix * 0.46;
+      runtime.speed = baseSpeed * boostScale;
       runtime.hudCommit += dt;
 
-      for (const gate of runtime.gates) {
-        gate.z += runtime.speed * dt;
-        gate.flash = Math.max(0, gate.flash - dt * 3.4);
+      for (const cluster of runtime.clusters) {
+        cluster.z += runtime.speed * dt;
+        cluster.flash = Math.max(0, cluster.flash - dt * 3.3);
 
-        if (gate.z > 9) {
-          seedGate(gate, runtime, runtime.gateCursorZ);
-          runtime.gateCursorZ -= lerp(5.9, 3.7, d) + Math.random() * 1.5;
+        if (cluster.z > 8.6) {
+          seedCluster(cluster, runtime, runtime.clusterCursorZ);
+          runtime.clusterCursorZ -= lerp(5.9, 3.4, d) + Math.random() * 1.4;
         }
       }
 
-      for (const pickup of runtime.pickups) {
-        pickup.z += runtime.speed * dt;
-        if (pickup.z > 8.5) {
-          seedPickup(pickup, runtime, runtime.pickupCursorZ);
-          runtime.pickupCursorZ -= lerp(4.8, 2.8, d) + Math.random() * 1.8;
+      for (const boost of runtime.boosts) {
+        boost.z += runtime.speed * dt;
+        if (boost.z > 8.2) {
+          seedBoost(boost, runtime, runtime.boostCursorZ);
+          runtime.boostCursorZ -= lerp(5, 2.8, d) + Math.random() * 1.7;
         }
       }
 
-      const leadGate = findLeadGate(runtime);
-      runtime.guideX = leadGate ? leadGate.gapX : runtime.anchorX;
-      runtime.guideZ = leadGate ? leadGate.z : -6;
+      const lead = findLeadCluster(runtime);
+      runtime.leadGapX = lead ? laneX(lead.gapLane) : runtime.anchorX;
+      runtime.leadGapZ = lead ? lead.z : -6;
 
-      const driftWave =
-        Math.sin(runtime.elapsed * 0.9 + runtime.waveSeed) * 1.1 +
-        Math.sin(runtime.elapsed * 0.43 + 1.7) * 0.65;
-      const leadBias = leadGate ? leadGate.gapX * 0.66 : 0;
-      const anchorTarget = clamp(
-        driftWave * 0.55 + leadBias,
-        -FIELD_HALF_X * 0.82,
-        FIELD_HALF_X * 0.82
-      );
+      const wave =
+        Math.sin(runtime.elapsed * 0.8 + runtime.serial * 0.02) * 0.4 +
+        Math.sin(runtime.elapsed * 1.3) * 0.2;
+      const targetX = clamp(runtime.leadGapX * 0.86 + wave, -FIELD_HALF_X * 0.9, FIELD_HALF_X * 0.9);
 
-      runtime.anchorVel += (anchorTarget - runtime.anchorX) * (7.4 + d * 3.7) * dt;
-      runtime.anchorVel *= Math.exp(-(4.8 + d * 1.6) * dt);
+      runtime.anchorVel += (targetX - runtime.anchorX) * (8 + d * 4.2) * dt;
+      runtime.anchorVel *= Math.exp(-(4.9 + d * 1.6) * dt);
       runtime.anchorX += runtime.anchorVel * dt;
 
-      runtime.tetherTargetLen = holding
-        ? lerp(0.48, 0.35, d)
-        : lerp(2.15, 2.75, d * 0.7);
-      runtime.tetherLen = lerp(
-        runtime.tetherLen,
-        runtime.tetherTargetLen,
-        1 - Math.exp(-8.8 * dt)
-      );
-      runtime.holdVisual = lerp(
-        runtime.holdVisual,
-        holding ? 1 : 0,
-        1 - Math.exp(-12 * dt)
-      );
+      runtime.tetherTargetLen = holding ? lerp(0.58, 0.44, d) : lerp(2.4, 3.1, d * 0.8);
+      runtime.tetherLen = lerp(runtime.tetherLen, runtime.tetherTargetLen, 1 - Math.exp(-9.2 * dt));
+      runtime.holdVisual = lerp(runtime.holdVisual, holding ? 1 : 0, 1 - Math.exp(-12 * dt));
 
-      const dx = runtime.drifterX - runtime.anchorX;
+      const dx = runtime.carX - runtime.anchorX;
       const dist = Math.abs(dx);
       const dir = dx >= 0 ? 1 : -1;
       const stretch = Math.max(0, dist - runtime.tetherLen);
-      const ropeForce = -dir * stretch * (86 + d * 58);
-      const centerForce = -runtime.drifterX * (0.62 + d * 0.42);
-      const carryForce = runtime.anchorVel * 0.28;
 
-      runtime.drifterVel += (ropeForce + centerForce + carryForce) * dt;
-      runtime.drifterVel *= Math.exp(-(2.8 + runtime.holdVisual * 1.6) * dt);
-      runtime.drifterX += runtime.drifterVel * dt;
+      const springK = holding ? lerp(96, 146, d) : lerp(46, 78, d);
+      const ropeForce = -dir * stretch * springK;
+      const assistForce = (runtime.anchorX - runtime.carX) * (holding ? 10 : 2.1);
 
-      const postDx = runtime.drifterX - runtime.anchorX;
-      const maxDist = runtime.tetherLen * 1.05;
-      if (Math.abs(postDx) > maxDist) {
-        const side = postDx >= 0 ? 1 : -1;
-        runtime.drifterX = runtime.anchorX + side * maxDist;
-        const outwardVel = runtime.drifterVel * side;
-        if (outwardVel > 0) {
-          runtime.drifterVel -= outwardVel * 0.88 * side;
-        }
-      }
+      runtime.carVx += (ropeForce + assistForce) * dt;
+      const drag = holding ? 4.2 : 1.9;
+      runtime.carVx *= Math.exp(-drag * dt);
+      runtime.carX += runtime.carVx * dt;
 
       runtime.tension = clamp(
-        Math.abs(runtime.drifterX - runtime.anchorX) /
-          Math.max(0.0001, runtime.tetherLen),
+        Math.abs(runtime.carX - runtime.anchorX) / Math.max(0.0001, runtime.tetherLen),
         0,
         1
       );
 
+      const yawTarget = clamp(-runtime.carVx * 0.32, -0.6, 0.6);
+      const rollTarget = clamp(-runtime.carVx * 0.45, -0.55, 0.55);
+      runtime.carYaw = lerp(runtime.carYaw, yawTarget, 1 - Math.exp(-8.4 * dt));
+      runtime.carRoll = lerp(runtime.carRoll, rollTarget, 1 - Math.exp(-9.4 * dt));
+
       let crashed = false;
 
-      if (Math.abs(runtime.drifterX) > FIELD_HALF_X - PLAYER_RADIUS * 0.44) {
+      if (Math.abs(runtime.carX) > FIELD_HALF_X - CAR_HALF_W * 0.72) {
         crashed = true;
       }
 
-      for (const gate of runtime.gates) {
+      for (const cluster of runtime.clusters) {
         if (crashed) break;
-        if (!gate.passed && gate.z > PLAYER_Z + GATE_DEPTH * 0.5) {
-          gate.passed = true;
 
-          const safeHalf = Math.max(0.09, gate.gapW * 0.5 - PLAYER_RADIUS * 0.84);
-          const offset = Math.abs(runtime.drifterX - gate.gapX);
+        if (!cluster.resolved && cluster.z > CAR_Z + BARRIER_DEPTH * 0.55) {
+          cluster.resolved = true;
 
-          if (offset > safeHalf) {
+          let collision = false;
+          for (let lane = 0; lane < LANE_COUNT; lane += 1) {
+            if ((cluster.mask & (1 << lane)) === 0) continue;
+            const bx = laneX(lane);
+            if (Math.abs(runtime.carX - bx) < BARRIER_HALF_W + CAR_HALF_W * 0.84) {
+              collision = true;
+              break;
+            }
+          }
+
+          if (collision) {
             crashed = true;
             break;
           }
 
-          runtime.gatesPassed += 1;
-          const perfectWindow = Math.max(0.1, gate.gapW * 0.14);
-          const perfect = offset < perfectWindow;
+          runtime.clustersPassed += 1;
+          const gapX = laneX(cluster.gapLane);
+          const offset = Math.abs(runtime.carX - gapX);
+          const perfect = offset < 0.28;
 
           if (perfect) {
-            runtime.combo = Math.min(runtime.combo + 1, 24);
-            runtime.comboTimer = 2.2;
+            runtime.combo = Math.min(runtime.combo + 1, 30);
+            runtime.comboTimer = 2.1;
             runtime.perfects += 1;
-            runtime.score += 28 + runtime.combo * 7;
-            runtime.shake = Math.min(1.3, runtime.shake + 0.2);
-            gate.flash = 1;
-            tetherDriftState.perfectFlash = 0.26;
+            runtime.score += 26 + runtime.combo * 7;
+            cluster.flash = 1;
+            runtime.shake = Math.min(1.2, runtime.shake + 0.2);
+            tetherDriftState.perfectFlash = 0.28;
             if (runtime.combo >= 2) {
-              tetherDriftState.toastText = `FLOW x${runtime.combo}`;
-              tetherDriftState.toastTime = 0.42;
+              tetherDriftState.setToast(`DRIFT FLOW x${runtime.combo}`, 0.45);
             }
-            maybeVibrate(5);
-            playTone(900 + runtime.combo * 8, 0.06, 0.032);
+            playTone(960 + runtime.combo * 6, 0.05, 0.03);
           } else {
+            runtime.combo = Math.max(0, runtime.combo - 1);
             runtime.comboTimer = Math.max(runtime.comboTimer, 0.95);
-            runtime.score += 16 + Math.floor(runtime.speed * 0.8);
-            gate.flash = 0.55;
-            playTone(640, 0.035, 0.022);
+            runtime.score += 14 + Math.floor(runtime.speed * 0.9);
+            cluster.flash = 0.56;
+            playTone(640, 0.035, 0.02);
           }
         }
       }
 
-      for (const pickup of runtime.pickups) {
+      for (const boost of runtime.boosts) {
         if (crashed) break;
-        if (!pickup.active || pickup.collected) continue;
-        if (Math.abs(pickup.z - PLAYER_Z) > 0.52) continue;
+        if (!boost.active || boost.collected) continue;
+        if (Math.abs(boost.z - CAR_Z) > 0.54) continue;
 
-        if (Math.abs(pickup.x - runtime.drifterX) < PICKUP_RADIUS + PLAYER_RADIUS * 0.8) {
-          pickup.collected = true;
-          runtime.pickupsCollected += 1;
-          runtime.score += 24 + runtime.combo * 4;
-          runtime.shake = Math.min(1.3, runtime.shake + 0.12);
-          playTone(1040, 0.05, 0.03);
+        if (Math.abs(boost.x - runtime.carX) < BOOST_W * 0.5 + CAR_HALF_W * 0.85) {
+          boost.collected = true;
+          runtime.boostTime = clamp(runtime.boostTime + 1.9, 0, BOOST_WINDOW);
+          runtime.score += 36 + runtime.combo * 3;
+          runtime.shake = Math.min(1.3, runtime.shake + 0.16);
+          tetherDriftState.setToast('BOOST', 0.35);
+          playTone(1180, 0.06, 0.032);
+          maybeVibrate(6);
         }
       }
 
       if (crashed) {
-        runtime.shake = 1.2;
-        maybeVibrate(20);
-        playTone(200, 0.12, 0.055);
+        runtime.shake = 1.3;
+        maybeVibrate(18);
+        playTone(200, 0.11, 0.055);
         endRun(runtime);
       } else {
         runtime.distance += runtime.speed * dt;
-        const paceScore = runtime.distance * 0.72;
-        const progression =
-          runtime.gatesPassed * 18 + runtime.perfects * 8 + runtime.pickupsCollected * 6;
+        const paceScore = runtime.distance * 0.7;
+        const progression = runtime.clustersPassed * 12 + runtime.perfects * 8;
         runtime.score = Math.max(runtime.score, Math.floor(paceScore + progression));
 
         if (runtime.hudCommit >= 0.08) {
@@ -717,183 +767,158 @@ function TetherDriftScene() {
         }
       }
     } else {
-      runtime.elapsed += dt * 0.55;
-      runtime.anchorX = Math.sin(runtime.elapsed * 0.82 + runtime.waveSeed) * 0.6;
-      runtime.drifterX = lerp(
-        runtime.drifterX,
-        runtime.anchorX + Math.sin(runtime.elapsed * 1.35) * 0.55,
-        1 - Math.exp(-2.3 * dt)
-      );
-      runtime.drifterVel *= Math.exp(-3.4 * dt);
-      runtime.tetherLen = lerp(runtime.tetherLen, 1.8, 1 - Math.exp(-2.8 * dt));
+      runtime.elapsed += dt * 0.5;
+      runtime.anchorX = Math.sin(runtime.elapsed * 1.1) * 0.8;
+      runtime.carX = lerp(runtime.carX, runtime.anchorX + Math.sin(runtime.elapsed * 1.6) * 0.6, 1 - Math.exp(-2.4 * dt));
+      runtime.carVx *= Math.exp(-3.5 * dt);
+      runtime.tetherLen = lerp(runtime.tetherLen, 2.3, 1 - Math.exp(-2.2 * dt));
       runtime.holdVisual = lerp(runtime.holdVisual, 0, 1 - Math.exp(-4.2 * dt));
       runtime.tension = clamp(
-        Math.abs(runtime.drifterX - runtime.anchorX) /
-          Math.max(0.0001, runtime.tetherLen),
+        Math.abs(runtime.carX - runtime.anchorX) / Math.max(0.0001, runtime.tetherLen),
         0,
         1
       );
-      runtime.guideX = runtime.anchorX;
-      runtime.guideZ = -6;
+      runtime.carYaw = lerp(runtime.carYaw, 0, 1 - Math.exp(-4.5 * dt));
+      runtime.carRoll = lerp(runtime.carRoll, 0, 1 - Math.exp(-4.5 * dt));
+      runtime.leadGapX = runtime.anchorX;
+      runtime.leadGapZ = -6;
+      runtime.boostMix = Math.max(0, runtime.boostMix - dt * 0.8);
     }
 
-    runtime.shake = Math.max(0, runtime.shake - dt * 4.7);
+    runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
     const shakeAmp = runtime.shake * 0.07;
-    const shakeTime = runtime.elapsed * 19;
-    const jitterX = shakeNoiseSigned(shakeTime, 1.1) * shakeAmp;
-    const jitterY = shakeNoiseSigned(shakeTime, 4.7) * shakeAmp * 0.35;
-    const jitterZ = shakeNoiseSigned(shakeTime, 8.9) * shakeAmp * 0.5;
+    const shakeTime = runtime.elapsed * 20;
+    const jitterX = shakeNoiseSigned(shakeTime, 1.2) * shakeAmp;
+    const jitterY = shakeNoiseSigned(shakeTime, 5.8) * shakeAmp * 0.34;
+    const jitterZ = shakeNoiseSigned(shakeTime, 9.7) * shakeAmp * 0.4;
 
-    camTarget.set(runtime.drifterX * 0.35 + jitterX, 3.05 + jitterY, 7.2 + jitterZ);
-    lookTarget.set(runtime.drifterX * 0.24, 0.18, -2.8);
+    camTarget.set(runtime.carX * 0.38 + jitterX, 2.8 + runtime.boostMix * 0.22 + jitterY, 6.8 + jitterZ);
+    lookTarget.set(runtime.carX * 0.24, 0.18, -3);
     camera.position.lerp(camTarget, 1 - Math.exp(-6.6 * step.renderDt));
     camera.lookAt(lookTarget);
 
     if (bgMatRef.current) {
       bgMatRef.current.uniforms.uTime.value += dt;
     }
+    if (roadMatRef.current) {
+      roadMatRef.current.uniforms.uTime.value += dt * (1 + runtime.boostMix * 0.8);
+      roadMatRef.current.uniforms.uBoost.value = runtime.boostMix;
+    }
 
     if (anchorRef.current) {
+      const pulse = 1 + Math.sin(runtime.elapsed * 8.6) * 0.06;
       anchorRef.current.position.set(runtime.anchorX, ANCHOR_Y, ANCHOR_Z);
-      const pulse = 1 + Math.sin(runtime.elapsed * 8.2) * 0.05;
       anchorRef.current.scale.setScalar(pulse + runtime.holdVisual * 0.12);
     }
 
-    if (playerRef.current) {
-      playerRef.current.position.set(runtime.drifterX, PLAYER_Y, PLAYER_Z);
-      const pulse = 1 + runtime.tension * 0.14 + Math.sin(runtime.elapsed * 6.8) * 0.03;
-      playerRef.current.scale.set(pulse, 1 - runtime.tension * 0.08, pulse);
+    if (carGroupRef.current) {
+      carGroupRef.current.position.set(runtime.carX, CAR_Y, CAR_Z);
+      carGroupRef.current.rotation.set(0, runtime.carYaw, runtime.carRoll);
     }
 
-    if (gateLeftRef.current && gateRightRef.current && gateWindowRef.current) {
-      for (let i = 0; i < runtime.gates.length; i += 1) {
-        const gate = runtime.gates[i];
-        const halfGap = gate.gapW * 0.5;
-        const gapLeft = gate.gapX - halfGap;
-        const gapRight = gate.gapX + halfGap;
+    if (barrierRef.current && gapMarkerRef.current) {
+      let index = 0;
 
-        const leftWidth = Math.max(0, gapLeft + FIELD_HALF_X);
-        const rightWidth = Math.max(0, FIELD_HALF_X - gapRight);
+      for (let i = 0; i < runtime.clusters.length; i += 1) {
+        const cluster = runtime.clusters[i];
+        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.3 + cluster.pulse);
 
-        const phasePulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 3.7 + gate.pulse);
+        for (let lane = 0; lane < LANE_COUNT; lane += 1) {
+          if ((cluster.mask & (1 << lane)) !== 0) {
+            dummy.position.set(laneX(lane), 0.36, cluster.z);
+            dummy.rotation.set(0, 0, 0);
+            dummy.scale.set(1.08, 1.06, 0.82);
+            dummy.updateMatrix();
+            barrierRef.current.setMatrixAt(index, dummy.matrix);
 
-        if (leftWidth > 0.02) {
-          dummy.position.set(-FIELD_HALF_X + leftWidth * 0.5, 0.2, gate.z);
-          dummy.rotation.set(0, 0, 0);
-          dummy.scale.set(leftWidth, GATE_HEIGHT, GATE_DEPTH);
-          dummy.updateMatrix();
-          gateLeftRef.current.setMatrixAt(i, dummy.matrix);
-          const gateColor = colorScratch
-            .setHSL(0.48 + gate.hue * 0.12, 0.78, 0.42 + phasePulse * 0.12)
-            .lerp(SUN, gate.flash * 0.35);
-          gateLeftRef.current.setColorAt(i, gateColor);
-        } else {
-          dummy.position.copy(OFFSCREEN_POS);
-          dummy.scale.copy(TINY_SCALE);
-          dummy.rotation.set(0, 0, 0);
-          dummy.updateMatrix();
-          gateLeftRef.current.setMatrixAt(i, dummy.matrix);
-          gateLeftRef.current.setColorAt(i, MINT);
+            const barrierColor = colorScratch
+              .setHSL(0.43 + cluster.hue * 0.14, 0.78, 0.38 + pulse * 0.12)
+              .lerp(CORAL, cluster.flash * 0.36)
+              .lerp(AMBER, runtime.boostMix * 0.2);
+            barrierRef.current.setColorAt(index, barrierColor);
+          } else {
+            dummy.position.copy(OFFSCREEN_POS);
+            dummy.scale.copy(TINY_SCALE);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            barrierRef.current.setMatrixAt(index, dummy.matrix);
+            barrierRef.current.setColorAt(index, MINT);
+          }
+          index += 1;
         }
 
-        if (rightWidth > 0.02) {
-          dummy.position.set(gapRight + rightWidth * 0.5, 0.2, gate.z);
-          dummy.rotation.set(0, 0, 0);
-          dummy.scale.set(rightWidth, GATE_HEIGHT, GATE_DEPTH);
-          dummy.updateMatrix();
-          gateRightRef.current.setMatrixAt(i, dummy.matrix);
-          const gateColor = colorScratch
-            .setHSL(0.46 + gate.hue * 0.1, 0.75, 0.42 + phasePulse * 0.14)
-            .lerp(CORAL, gate.flash * 0.28);
-          gateRightRef.current.setColorAt(i, gateColor);
-        } else {
-          dummy.position.copy(OFFSCREEN_POS);
-          dummy.scale.copy(TINY_SCALE);
-          dummy.rotation.set(0, 0, 0);
-          dummy.updateMatrix();
-          gateRightRef.current.setMatrixAt(i, dummy.matrix);
-          gateRightRef.current.setColorAt(i, MINT);
-        }
-
-        dummy.position.set(gate.gapX, 0.2, gate.z + 0.01);
-        dummy.rotation.set(0, 0, 0);
-        dummy.scale.set(gate.gapW, 0.7, 1);
+        dummy.position.set(laneX(cluster.gapLane), 0.12, cluster.z + 0.01);
+        dummy.rotation.set(Math.PI / 2, 0, 0);
+        const markerScale = 0.6 + pulse * 0.06 + cluster.flash * 0.38;
+        dummy.scale.set(markerScale, markerScale, markerScale);
         dummy.updateMatrix();
-        gateWindowRef.current.setMatrixAt(i, dummy.matrix);
-        const windowColor = colorScratch
-          .copy(MINT)
-          .lerp(PEARL, 0.28 + phasePulse * 0.26 + gate.flash * 0.35);
-        gateWindowRef.current.setColorAt(i, windowColor);
+        gapMarkerRef.current.setMatrixAt(i, dummy.matrix);
+
+        const markerColor = colorScratch
+          .copy(LIME)
+          .lerp(PEARL, 0.35 + pulse * 0.25 + cluster.flash * 0.25);
+        gapMarkerRef.current.setColorAt(i, markerColor);
       }
 
-      gateLeftRef.current.instanceMatrix.needsUpdate = true;
-      gateRightRef.current.instanceMatrix.needsUpdate = true;
-      gateWindowRef.current.instanceMatrix.needsUpdate = true;
-      if (gateLeftRef.current.instanceColor) gateLeftRef.current.instanceColor.needsUpdate = true;
-      if (gateRightRef.current.instanceColor) gateRightRef.current.instanceColor.needsUpdate = true;
-      if (gateWindowRef.current.instanceColor) gateWindowRef.current.instanceColor.needsUpdate = true;
+      barrierRef.current.instanceMatrix.needsUpdate = true;
+      gapMarkerRef.current.instanceMatrix.needsUpdate = true;
+      if (barrierRef.current.instanceColor) barrierRef.current.instanceColor.needsUpdate = true;
+      if (gapMarkerRef.current.instanceColor) gapMarkerRef.current.instanceColor.needsUpdate = true;
     }
 
-    if (pickupRef.current) {
-      for (let i = 0; i < runtime.pickups.length; i += 1) {
-        const pickup = runtime.pickups[i];
-        if (pickup.active && !pickup.collected) {
-          dummy.position.set(
-            pickup.x,
-            PLAYER_Y + 0.14 + Math.sin(runtime.elapsed * 4 + i * 0.7) * 0.05,
-            pickup.z
-          );
-          dummy.rotation.set(
-            runtime.elapsed * pickup.spin * 0.7,
-            runtime.elapsed * pickup.spin,
-            0
-          );
-          dummy.scale.setScalar(0.16);
+    if (boostRef.current) {
+      for (let i = 0; i < runtime.boosts.length; i += 1) {
+        const boost = runtime.boosts[i];
+        if (boost.active && !boost.collected) {
+          const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 6 + boost.pulse);
+          dummy.position.set(boost.x, 0.05, boost.z);
+          dummy.rotation.set(0, runtime.elapsed * 0.9 + boost.pulse, 0);
+          dummy.scale.set(0.88, 0.14 + pulse * 0.06, 0.82);
           dummy.updateMatrix();
-          pickupRef.current.setMatrixAt(i, dummy.matrix);
-          const pickupColor = colorScratch
-            .setHSL(0.08 + pickup.hue * 0.11, 0.7, 0.56)
-            .lerp(PEARL, 0.28);
-          pickupRef.current.setColorAt(i, pickupColor);
+          boostRef.current.setMatrixAt(i, dummy.matrix);
+
+          const boostColor = colorScratch
+            .setHSL(0.27 + boost.hue * 0.1, 0.75, 0.46 + pulse * 0.16)
+            .lerp(PEARL, 0.24 + runtime.boostMix * 0.24);
+          boostRef.current.setColorAt(i, boostColor);
         } else {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
-          pickupRef.current.setMatrixAt(i, dummy.matrix);
-          pickupRef.current.setColorAt(i, SUN);
+          boostRef.current.setMatrixAt(i, dummy.matrix);
+          boostRef.current.setColorAt(i, LIME);
         }
       }
-      pickupRef.current.instanceMatrix.needsUpdate = true;
-      if (pickupRef.current.instanceColor) pickupRef.current.instanceColor.needsUpdate = true;
+      boostRef.current.instanceMatrix.needsUpdate = true;
+      if (boostRef.current.instanceColor) boostRef.current.instanceColor.needsUpdate = true;
     }
 
-    for (let i = TRAIL_POINT_COUNT - 1; i > 0; i -= 1) {
+    for (let i = TRAIL_POINTS - 1; i > 0; i -= 1) {
       const ptr = i * 3;
       const prev = (i - 1) * 3;
       trailAttr.array[ptr] = trailAttr.array[prev];
       trailAttr.array[ptr + 1] = trailAttr.array[prev + 1];
-      trailAttr.array[ptr + 2] = -i * 0.12;
+      trailAttr.array[ptr + 2] = -i * 0.13;
     }
-    trailAttr.array[0] = runtime.drifterX;
-    trailAttr.array[1] = PLAYER_Y;
+    trailAttr.array[0] = runtime.carX;
+    trailAttr.array[1] = CAR_Y + 0.02;
     trailAttr.array[2] = 0;
     trailAttr.needsUpdate = true;
 
     const ax = runtime.anchorX;
     const ay = ANCHOR_Y;
     const az = ANCHOR_Z;
-    const px = runtime.drifterX;
-    const py = PLAYER_Y;
-    const pz = PLAYER_Z;
+    const px = runtime.carX;
+    const py = CAR_Y + 0.15;
+    const pz = CAR_Z + 0.28;
 
-    for (let i = 0; i < TETHER_POINT_COUNT; i += 1) {
-      const t = i / (TETHER_POINT_COUNT - 1);
-      const sag =
-        Math.sin(Math.PI * t) *
-        (0.16 * (1 - runtime.holdVisual * 0.55) + runtime.tension * 0.06);
+    for (let i = 0; i < TETHER_POINTS; i += 1) {
+      const t = i / (TETHER_POINTS - 1);
+      const centerBias = 1 - Math.abs(t * 2 - 1);
+      const hum = Math.sin(runtime.elapsed * 12 + i * 0.6) * (0.06 * centerBias + runtime.tension * 0.05);
       const tx = lerp(px, ax, t);
-      const ty = lerp(py, ay, t) - sag;
+      const ty = lerp(py, ay, t) - 0.08 * Math.sin(Math.PI * t) + hum * 0.22;
       const tz = lerp(pz, az, t);
       tetherPoints[i].set(tx, ty, tz);
 
@@ -906,8 +931,8 @@ function TetherDriftScene() {
     if (tetherGeom?.setFromPoints) tetherGeom.setFromPoints(tetherPoints);
     else if (tetherGeom?.setPositions) tetherGeom.setPositions(tetherFlat);
 
-    guidePoints[0].set(px, py, pz);
-    guidePoints[1].set(runtime.guideX, PLAYER_Y, runtime.guideZ);
+    guidePoints[0].set(px, CAR_Y + 0.06, 0);
+    guidePoints[1].set(runtime.leadGapX, 0.08, runtime.leadGapZ);
     guideFlat[0] = guidePoints[0].x;
     guideFlat[1] = guidePoints[0].y;
     guideFlat[2] = guidePoints[0].z;
@@ -923,20 +948,24 @@ function TetherDriftScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 3.0, 7.2]} fov={44} />
-      <color attach="background" args={['#f4d8b8']} />
-      <fog attach="fog" args={['#f4d8b8', 10, 44]} />
+      <PerspectiveCamera makeDefault position={[0, 2.8, 6.8]} fov={46} />
+      <color attach="background" args={['#66c5bd']} />
+      <fog attach="fog" args={['#66c5bd', 8, 44]} />
 
-      <Stars radius={92} depth={54} count={950} factor={2.2} saturation={0.35} fade speed={0.2} />
+      <Html fullscreen>
+        <TetherDriftOverlay />
+      </Html>
 
-      <ambientLight intensity={0.82} />
-      <hemisphereLight args={['#effffe', '#8ec5c2', 0.56]} />
-      <directionalLight position={[2.5, 5.2, 3.8]} intensity={0.8} color="#fff7e6" />
-      <pointLight position={[-3.4, 2.4, -7]} intensity={0.45} color="#69d8cc" />
-      <pointLight position={[2.8, 1.8, -9]} intensity={0.3} color="#ffb176" />
+      <Stars radius={95} depth={60} count={1200} factor={2.4} saturation={0.38} fade speed={0.25} />
 
-      <mesh position={[0, 0.2, -10]}>
-        <planeGeometry args={[22, 14]} />
+      <ambientLight intensity={0.84} />
+      <hemisphereLight args={['#f2fffb', '#4ca89f', 0.58]} />
+      <directionalLight position={[2.8, 5.8, 4]} intensity={0.92} color="#f8fff2" />
+      <pointLight position={[-3.2, 2.4, -8]} intensity={0.46} color="#5be7d0" />
+      <pointLight position={[2.8, 2.2, -9]} intensity={0.34} color="#75d6ff" />
+
+      <mesh position={[0, 0.35, -10]}>
+        <planeGeometry args={[24, 16]} />
         <shaderMaterial
           ref={bgMatRef}
           uniforms={{ uTime: { value: 0 } }}
@@ -951,17 +980,16 @@ function TetherDriftScene() {
             uniform float uTime;
             varying vec2 vUv;
             void main() {
-              vec3 dawn = vec3(0.99, 0.84, 0.66);
-              vec3 sea = vec3(0.34, 0.83, 0.77);
-              vec3 mist = vec3(0.87, 0.98, 1.0);
+              vec3 sea = vec3(0.22, 0.72, 0.66);
+              vec3 sky = vec3(0.38, 0.84, 0.94);
+              vec3 mist = vec3(0.86, 0.99, 0.97);
 
               float grad = smoothstep(0.0, 1.0, vUv.y);
-              float ribbon = 0.5 + 0.5 * sin((vUv.x * 1.8 + uTime * 0.11) * 6.2831853);
-              float haze = 0.5 + 0.5 * sin((vUv.y * 3.2 + uTime * 0.08) * 6.2831853);
+              float flow = 0.5 + 0.5 * sin((vUv.x * 2.0 + uTime * 0.12) * 6.2831853);
+              float haze = 0.5 + 0.5 * sin((vUv.y * 3.3 + uTime * 0.08) * 6.2831853);
 
-              vec3 col = mix(dawn, sea, grad * 0.78);
-              col = mix(col, mist, (1.0 - grad) * 0.24 + ribbon * 0.08 + haze * 0.06);
-
+              vec3 col = mix(sea, sky, grad * 0.75);
+              col = mix(col, mist, (1.0 - grad) * 0.24 + flow * 0.08 + haze * 0.05);
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -969,101 +997,135 @@ function TetherDriftScene() {
         />
       </mesh>
 
-      <mesh position={[-FIELD_HALF_X - 0.05, 0.2, -7.8]}>
-        <boxGeometry args={[0.12, 2.9, 28]} />
-        <meshStandardMaterial color="#98e9df" emissive="#4bb6ab" emissiveIntensity={0.45} />
-      </mesh>
-      <mesh position={[FIELD_HALF_X + 0.05, 0.2, -7.8]}>
-        <boxGeometry args={[0.12, 2.9, 28]} />
-        <meshStandardMaterial color="#ffc28e" emissive="#d67a46" emissiveIntensity={0.32} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -12]}>
+        <planeGeometry args={[ROAD_HALF_WIDTH * 2, 60]} />
+        <shaderMaterial
+          ref={roadMatRef}
+          uniforms={{ uTime: { value: 0 }, uBoost: { value: 0 } }}
+          vertexShader={`
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            uniform float uTime;
+            uniform float uBoost;
+            varying vec2 vUv;
+
+            void main() {
+              float edge = smoothstep(0.0, 0.06, vUv.x) * (1.0 - smoothstep(0.94, 1.0, vUv.x));
+              float lane = sin((vUv.y * 30.0 - uTime * (18.0 + uBoost * 14.0)) * 6.2831853);
+              float laneGlow = smoothstep(0.92, 1.0, lane);
+              float center = exp(-pow((vUv.x - 0.5) * 4.0, 2.0));
+              vec3 base = mix(vec3(0.05, 0.18, 0.16), vec3(0.08, 0.28, 0.24), center);
+              vec3 stripe = mix(vec3(0.33, 0.95, 0.85), vec3(0.92, 1.0, 0.95), uBoost * 0.7);
+              vec3 col = base + stripe * laneGlow * edge * (0.32 + uBoost * 0.35);
+              gl_FragColor = vec4(col, 1.0);
+            }
+          `}
+          toneMapped={false}
+        />
       </mesh>
 
-      <instancedMesh ref={gateLeftRef} args={[undefined, undefined, GATE_POOL]}>
+      <mesh position={[-ROAD_HALF_WIDTH, 0.24, -12]}>
+        <boxGeometry args={[0.18, 0.5, 60]} />
+        <meshStandardMaterial color="#7cf0de" emissive="#35b7a6" emissiveIntensity={0.46} roughness={0.25} />
+      </mesh>
+      <mesh position={[ROAD_HALF_WIDTH, 0.24, -12]}>
+        <boxGeometry args={[0.18, 0.5, 60]} />
+        <meshStandardMaterial color="#7fdffc" emissive="#3f9ec4" emissiveIntensity={0.42} roughness={0.25} />
+      </mesh>
+
+      <instancedMesh ref={barrierRef} args={[undefined, undefined, BARRIER_INSTANCES]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           vertexColors
           roughness={0.24}
           metalness={0.18}
-          emissive="#3a6963"
+          emissive="#2f746a"
           emissiveIntensity={0.42}
         />
       </instancedMesh>
 
-      <instancedMesh ref={gateRightRef} args={[undefined, undefined, GATE_POOL]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.24}
-          metalness={0.18}
-          emissive="#70462d"
-          emissiveIntensity={0.36}
-        />
-      </instancedMesh>
-
-      <instancedMesh ref={gateWindowRef} args={[undefined, undefined, GATE_POOL]}>
-        <planeGeometry args={[1, 1]} />
+      <instancedMesh ref={gapMarkerRef} args={[undefined, undefined, CLUSTER_POOL]}>
+        <torusGeometry args={[0.26, 0.05, 10, 24]} />
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.34}
+          opacity={0.84}
+          toneMapped={false}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
-          toneMapped={false}
         />
       </instancedMesh>
 
-      <instancedMesh ref={pickupRef} args={[undefined, undefined, PICKUP_POOL]}>
-        <octahedronGeometry args={[1, 0]} />
+      <instancedMesh ref={boostRef} args={[undefined, undefined, BOOST_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           vertexColors
-          roughness={0.25}
-          metalness={0.3}
-          emissive="#8e5a35"
+          roughness={0.2}
+          metalness={0.25}
+          emissive="#8cd74a"
           emissiveIntensity={0.38}
         />
       </instancedMesh>
 
       <mesh ref={anchorRef} position={[0, ANCHOR_Y, ANCHOR_Z]}>
-        <icosahedronGeometry args={[0.2, 0]} />
-        <meshStandardMaterial color="#e2fffb" emissive="#6dd6ca" emissiveIntensity={0.5} roughness={0.18} />
+        <icosahedronGeometry args={[0.16, 0]} />
+        <meshStandardMaterial color="#d7fff7" emissive="#63e6ce" emissiveIntensity={0.6} roughness={0.16} />
       </mesh>
 
-      <mesh ref={playerRef} position={[0, PLAYER_Y, PLAYER_Z]}>
-        <sphereGeometry args={[0.23, 24, 24]} />
-        <meshStandardMaterial color="#fff9ef" emissive="#ffb279" emissiveIntensity={0.44} roughness={0.15} metalness={0.2} />
-      </mesh>
+      <group ref={carGroupRef} position={[0, CAR_Y, CAR_Z]}>
+        <mesh position={[0, 0.1, 0]} castShadow>
+          <boxGeometry args={[0.72, 0.22, 1.3]} />
+          <meshStandardMaterial color="#fffef8" emissive="#52ddc3" emissiveIntensity={0.34} roughness={0.14} metalness={0.26} />
+        </mesh>
+
+        <mesh position={[0, 0.24, -0.08]} castShadow>
+          <boxGeometry args={[0.5, 0.2, 0.48]} />
+          <meshStandardMaterial color="#d2fdf5" emissive="#3bc3ad" emissiveIntensity={0.22} roughness={0.2} metalness={0.22} />
+        </mesh>
+
+        <mesh position={[0, 0.03, -0.52]}>
+          <boxGeometry args={[0.58, 0.08, 0.22]} />
+          <meshStandardMaterial color="#86ffe5" emissive="#86ffe5" emissiveIntensity={0.92} roughness={0.1} metalness={0.3} />
+        </mesh>
+
+        <mesh position={[0, 0.03, 0.56]}>
+          <boxGeometry args={[0.58, 0.08, 0.2]} />
+          <meshStandardMaterial color="#9fd8ff" emissive="#9fd8ff" emissiveIntensity={0.72} roughness={0.1} metalness={0.3} />
+        </mesh>
+      </group>
 
       <Line
         ref={tetherLineRef}
         points={tetherPoints}
-        color="#f7fff4"
+        color="#e5fff9"
         lineWidth={2.6}
         transparent
-        opacity={phase === 'playing' ? 0.96 : 0.78}
+        opacity={snap.phase === 'playing' ? 0.95 : 0.72}
       />
 
       <Line
         ref={guideLineRef}
         points={guidePoints}
-        color="#bafaf2"
+        color="#95ffdf"
         lineWidth={1.2}
         transparent
-        opacity={phase === 'playing' ? 0.45 : 0.2}
+        opacity={snap.phase === 'playing' ? 0.38 : 0.2}
       />
 
       <points geometry={trailGeometry}>
-        <pointsMaterial color="#fff4dd" size={0.06} sizeAttenuation transparent opacity={0.62} />
+        <pointsMaterial color="#f0fffd" size={0.055} sizeAttenuation transparent opacity={0.62} />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.55} luminanceThreshold={0.48} luminanceSmoothing={0.26} mipmapBlur />
-        <Vignette eskil={false} offset={0.09} darkness={0.28} />
+        <Bloom intensity={0.72} luminanceThreshold={0.42} luminanceSmoothing={0.22} mipmapBlur />
+        <Vignette eskil={false} offset={0.08} darkness={0.32} />
         <Noise premultiply opacity={0.01} />
       </EffectComposer>
-
-      <Html fullscreen>
-        <TetherDriftOverlay />
-      </Html>
     </>
   );
 }

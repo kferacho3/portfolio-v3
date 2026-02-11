@@ -66,7 +66,7 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
     title: 'Tether Drift',
     verb: 'Reel and drift',
     input: 'hold',
-    tutorial: 'Hold to reel in. Release to drift through the next slit.',
+    tutorial: 'Hold to tighten your tether line, release to drift around blockers.',
     failCondition: 'collision',
     chunkProfile: 'swing-chain',
     endlessFirst: true,
