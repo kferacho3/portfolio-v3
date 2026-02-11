@@ -34,13 +34,22 @@ const VoidRunner: React.FC<VoidRunnerProps> = ({ soundsOn = true }) => {
 
   return (
     <>
-      <ambientLight intensity={0.2} />
+      <ambientLight intensity={0.26} />
+      <hemisphereLight args={['#89d8ff', '#130b2a', 0.42]} />
       <directionalLight
-        position={[0, 50, -100]}
-        intensity={0.8}
+        position={[0, 55, -90]}
+        intensity={0.95}
         color="#ff2190"
       />
-      <pointLight position={[0, 30, 0]} intensity={0.5} color="#00ffff" />
+      <pointLight position={[0, 30, 0]} intensity={0.64} color="#00ffff" />
+      <pointLight position={[0, 16, -50]} intensity={0.45} color="#a855f7" />
+      <spotLight
+        position={[0, 42, -20]}
+        angle={0.42}
+        penumbra={0.68}
+        intensity={0.4}
+        color="#7af8ff"
+      />
 
       <CameraSetup phase={snap.phase} />
       <SpaceSkybox />

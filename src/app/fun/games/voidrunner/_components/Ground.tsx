@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber';
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { COLORS, LEVEL_SIZE, PLANE_SIZE } from '../constants';
+import { COLORS, PLANE_SIZE } from '../constants';
 import { mutation, voidRunnerState } from '../state';
 
 const Ground: React.FC = () => {
@@ -38,10 +38,6 @@ const Ground: React.FC = () => {
         moveCounter.current === 1 ||
         Math.abs(playerZ) - Math.abs(lastMove.current) <= 10
       ) {
-        if (moveCounter.current % LEVEL_SIZE === 0) {
-          voidRunnerState.incrementLevel();
-        }
-
         if (moveCounter.current % 2 === 0 && ground2Ref.current) {
           ground2Ref.current.position.z -= PLANE_SIZE * 2;
           lastMove.current = ground2Ref.current.position.z;

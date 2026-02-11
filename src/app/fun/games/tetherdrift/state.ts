@@ -19,6 +19,10 @@ export const tetherDriftState = proxy({
   heat: 0,
   speed: 0,
   reeling: false,
+  ammo: 0,
+  collectibles: 0,
+  shotsFired: 0,
+  paletteName: 'Sea Glass',
 
   // Momentary feedback
   perfectFlash: 0,
@@ -41,6 +45,10 @@ export const tetherDriftState = proxy({
     this.heat = 0;
     this.speed = 0;
     this.reeling = false;
+    this.ammo = 0;
+    this.collectibles = 0;
+    this.shotsFired = 0;
+    this.paletteName = 'Sea Glass';
     this.perfectFlash = 0;
     this.perfects = 0;
     this.constellationsCleared = 0;

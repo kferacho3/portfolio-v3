@@ -10,8 +10,10 @@ const KeyboardControls: React.FC = () => {
       const isArrow =
         code === 'ArrowLeft' ||
         code === 'ArrowRight' ||
+        code === 'ArrowUp' ||
         key === 'arrowleft' ||
-        key === 'arrowright';
+        key === 'arrowright' ||
+        key === 'arrowup';
 
       if (
         isArrow ||
@@ -38,6 +40,11 @@ const KeyboardControls: React.FC = () => {
         key === 'd'
       ) {
         voidRunnerState.controls.right = true;
+      }
+      if (voidRunnerState.phase === 'playing') {
+        if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW') {
+          voidRunnerState.queueJump();
+        }
       }
       if (
         code === 'Space' ||
@@ -79,6 +86,9 @@ const KeyboardControls: React.FC = () => {
         key === 'd'
       ) {
         voidRunnerState.controls.right = false;
+      }
+      if (code === 'Space' || code === 'ArrowUp' || code === 'KeyW') {
+        voidRunnerState.controls.jump = false;
       }
     };
 

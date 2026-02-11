@@ -26,13 +26,66 @@ type ObstacleCluster = {
   hue: number;
 };
 
-type BoostPad = {
+type PickupKind = 'boost' | 'shard' | 'blaster';
+
+type PickupPad = {
   z: number;
   x: number;
+  y: number;
   active: boolean;
   collected: boolean;
   pulse: number;
   hue: number;
+  kind: PickupKind;
+};
+
+type BreakShard = {
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  spin: number;
+  spinV: number;
+  hue: number;
+};
+
+type DriftPalette = {
+  name: string;
+  clear: string;
+  fog: string;
+  bgSea: string;
+  bgSky: string;
+  bgMist: string;
+  roadBaseA: string;
+  roadBaseB: string;
+  roadStripeA: string;
+  roadStripeB: string;
+  railA: string;
+  railB: string;
+  anchor: string;
+  carBody: string;
+  carCockpit: string;
+  carFront: string;
+  carRear: string;
+  tether: string;
+  guide: string;
+  barrierCore: string;
+  barrierHit: string;
+  marker: string;
+  collectible: string;
+  blaster: string;
+  boost: string;
+  hemiSky: string;
+  hemiGround: string;
+  dirLight: string;
+  pointA: string;
+  pointB: string;
 };
 
 type Runtime = {
@@ -45,6 +98,9 @@ type Runtime = {
   comboTimer: number;
   clustersPassed: number;
   perfects: number;
+  collectibles: number;
+  ammo: number;
+  shotsFired: number;
 
   carX: number;
   carVx: number;
@@ -63,15 +119,19 @@ type Runtime = {
 
   boostTime: number;
   boostMix: number;
+  shootCooldown: number;
 
   serial: number;
   clusterCursorZ: number;
   boostCursorZ: number;
+  shardCursor: number;
   hudCommit: number;
   shake: number;
+  paletteIndex: number;
 
   clusters: ObstacleCluster[];
-  boosts: BoostPad[];
+  pickups: PickupPad[];
+  shards: BreakShard[];
 };
 
 const BEST_KEY = 'tether_drift_hyper_best_v3';
@@ -79,10 +139,11 @@ const BEST_KEY = 'tether_drift_hyper_best_v3';
 const LANE_COUNT = 5;
 const LANE_SPACING = 1.65;
 const CLUSTER_POOL = 40;
-const BOOST_POOL = 34;
+const PICKUP_POOL = 38;
 const BARRIER_INSTANCES = CLUSTER_POOL * LANE_COUNT;
 const TETHER_POINTS = 14;
 const TRAIL_POINTS = 50;
+const BREAK_SHARD_POOL = 220;
 
 const FIELD_HALF_X = ((LANE_COUNT - 1) * LANE_SPACING) / 2 + 0.95;
 const ROAD_HALF_WIDTH = FIELD_HALF_X + 0.85;
@@ -95,6 +156,8 @@ const BARRIER_HALF_W = 0.55;
 const BARRIER_DEPTH = 0.52;
 
 const BOOST_W = 0.9;
+const SHARD_W = 0.7;
+const BLASTER_W = 0.8;
 
 const ANCHOR_Z = -2.35;
 const ANCHOR_Y = 0.42;
@@ -102,12 +165,172 @@ const ANCHOR_Y = 0.42;
 const BASE_SPEED = 9;
 const MAX_SPEED = 18.4;
 const BOOST_WINDOW = 4.2;
+const SHOOT_COOLDOWN = 0.22;
+const MAX_AMMO = 7;
 
-const MINT = new THREE.Color('#50e0bf');
-const LIME = new THREE.Color('#8effb8');
-const CORAL = new THREE.Color('#ff8b72');
-const AMBER = new THREE.Color('#ffc981');
-const PEARL = new THREE.Color('#f8fffe');
+const PALETTES: DriftPalette[] = [
+  {
+    name: 'Peach Teal',
+    clear: '#a9ddd6',
+    fog: '#9bd2cb',
+    bgSea: '#77cfc2',
+    bgSky: '#f3d8c4',
+    bgMist: '#f7f1ea',
+    roadBaseA: '#2e5f66',
+    roadBaseB: '#457a80',
+    roadStripeA: '#9ef3de',
+    roadStripeB: '#fcecc8',
+    railA: '#95f3df',
+    railB: '#bbd9ff',
+    anchor: '#e8fff8',
+    carBody: '#fff7ef',
+    carCockpit: '#d2faf1',
+    carFront: '#9efae0',
+    carRear: '#a6d8ff',
+    tether: '#f2fff9',
+    guide: '#98ffe1',
+    barrierCore: '#3e8378',
+    barrierHit: '#f5a892',
+    marker: '#b8fff0',
+    collectible: '#ffcf9f',
+    blaster: '#b09aff',
+    boost: '#8fffbe',
+    hemiSky: '#f7f7ff',
+    hemiGround: '#4aa297',
+    dirLight: '#fff8ef',
+    pointA: '#66e6cb',
+    pointB: '#9ad5ff',
+  },
+  {
+    name: 'Lilac Silver',
+    clear: '#b5bfd8',
+    fog: '#a4bad2',
+    bgSea: '#8ea5c7',
+    bgSky: '#d8caec',
+    bgMist: '#f4f6ff',
+    roadBaseA: '#2b3f63',
+    roadBaseB: '#3e587d',
+    roadStripeA: '#c8e5ff',
+    roadStripeB: '#efe3ff',
+    railA: '#d0eaff',
+    railB: '#dfd4ff',
+    anchor: '#f1f7ff',
+    carBody: '#f7f9ff',
+    carCockpit: '#dbe9ff',
+    carFront: '#b2f5ff',
+    carRear: '#d0c5ff',
+    tether: '#eef6ff',
+    guide: '#c2e6ff',
+    barrierCore: '#47608f',
+    barrierHit: '#f4b9cb',
+    marker: '#d6f1ff',
+    collectible: '#fbe6a6',
+    blaster: '#c4afff',
+    boost: '#9eefff',
+    hemiSky: '#f8f2ff',
+    hemiGround: '#536a96',
+    dirLight: '#fdfbff',
+    pointA: '#92b7ff',
+    pointB: '#d2c3ff',
+  },
+  {
+    name: 'Crystal Aura',
+    clear: '#99d4d0',
+    fog: '#8ec8c7',
+    bgSea: '#6fb6b8',
+    bgSky: '#b6c3ef',
+    bgMist: '#ebf4ff',
+    roadBaseA: '#29505a',
+    roadBaseB: '#3e6d77',
+    roadStripeA: '#9bf2ff',
+    roadStripeB: '#e4d4ff',
+    railA: '#84f5de',
+    railB: '#b9d6ff',
+    anchor: '#e6fff9',
+    carBody: '#f5fffd',
+    carCockpit: '#c8f4ef',
+    carFront: '#9de8e8',
+    carRear: '#b0bbff',
+    tether: '#e4fff9',
+    guide: '#98ffe8',
+    barrierCore: '#3b726f',
+    barrierHit: '#f2b19e',
+    marker: '#b8fff1',
+    collectible: '#f8d78f',
+    blaster: '#a8b3ff',
+    boost: '#8ef5ba',
+    hemiSky: '#f2fcff',
+    hemiGround: '#4f8f8d',
+    dirLight: '#f6feff',
+    pointA: '#69dfd6',
+    pointB: '#9cbfff',
+  },
+  {
+    name: 'Silver Rose',
+    clear: '#c7c8cf',
+    fog: '#bcbec9',
+    bgSea: '#8ea0ae',
+    bgSky: '#efcbd7',
+    bgMist: '#f8f8fb',
+    roadBaseA: '#485462',
+    roadBaseB: '#62707f',
+    roadStripeA: '#c8f3ff',
+    roadStripeB: '#f8dde8',
+    railA: '#d2efff',
+    railB: '#ffd5e8',
+    anchor: '#f7fcff',
+    carBody: '#ffffff',
+    carCockpit: '#edf4ff',
+    carFront: '#b7f1ff',
+    carRear: '#ffc7d7',
+    tether: '#f2fdff',
+    guide: '#c5ecff',
+    barrierCore: '#5f7284',
+    barrierHit: '#ffaf98',
+    marker: '#d3f3ff',
+    collectible: '#f8d88e',
+    blaster: '#d2b5ff',
+    boost: '#a6f3ca',
+    hemiSky: '#fff6fb',
+    hemiGround: '#5a6b7d',
+    dirLight: '#fffef9',
+    pointA: '#abc9ff',
+    pointB: '#ffc6db',
+  },
+  {
+    name: 'Soft Aurora',
+    clear: '#a9d8e4',
+    fog: '#9fcfdb',
+    bgSea: '#7ab5c8',
+    bgSky: '#c6dafb',
+    bgMist: '#edf8ff',
+    roadBaseA: '#33576f',
+    roadBaseB: '#4a6f89',
+    roadStripeA: '#9ef5ff',
+    roadStripeB: '#d9e7ff',
+    railA: '#92f2e1',
+    railB: '#aad8ff',
+    anchor: '#e8fbff',
+    carBody: '#f8feff',
+    carCockpit: '#d9f2ff',
+    carFront: '#9cefff',
+    carRear: '#b3ceff',
+    tether: '#e4fcff',
+    guide: '#9fe7ff',
+    barrierCore: '#446d89',
+    barrierHit: '#f2bf8f',
+    marker: '#c4edff',
+    collectible: '#ffd99c',
+    blaster: '#b5c1ff',
+    boost: '#8bf2cf',
+    hemiSky: '#f2fcff',
+    hemiGround: '#4f7590',
+    dirLight: '#f3ffff',
+    pointA: '#6ce6ea',
+    pointB: '#90c6ff',
+  },
+];
+
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
@@ -119,6 +342,11 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 const laneX = (lane: number) =>
   (lane - (LANE_COUNT - 1) * 0.5) * LANE_SPACING;
+
+const nearestLaneIndex = (x: number) =>
+  Math.round(
+    clamp(x / LANE_SPACING + (LANE_COUNT - 1) * 0.5, 0, LANE_COUNT - 1)
+  );
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -181,12 +409,30 @@ const createCluster = (): ObstacleCluster => ({
   hue: 0,
 });
 
-const createBoostPad = (): BoostPad => ({
+const createPickupPad = (): PickupPad => ({
   z: -10,
   x: 0,
+  y: 0.05,
   active: true,
   collected: false,
   pulse: 0,
+  hue: 0,
+  kind: 'boost',
+});
+
+const createBreakShard = (): BreakShard => ({
+  active: false,
+  x: 0,
+  y: -10,
+  z: 0,
+  vx: 0,
+  vy: 0,
+  vz: 0,
+  life: 0,
+  maxLife: 0,
+  size: 0.08,
+  spin: 0,
+  spinV: 0,
   hue: 0,
 });
 
@@ -218,15 +464,22 @@ const createRuntime = (): Runtime => ({
 
   boostTime: 0,
   boostMix: 0,
+  shootCooldown: 0,
 
   serial: 0,
   clusterCursorZ: -9,
   boostCursorZ: -8,
+  shardCursor: 0,
   hudCommit: 0,
   shake: 0,
+  paletteIndex: 0,
+  ammo: 2,
+  collectibles: 0,
+  shotsFired: 0,
 
   clusters: Array.from({ length: CLUSTER_POOL }, createCluster),
-  boosts: Array.from({ length: BOOST_POOL }, createBoostPad),
+  pickups: Array.from({ length: PICKUP_POOL }, createPickupPad),
+  shards: Array.from({ length: BREAK_SHARD_POOL }, createBreakShard),
 });
 
 const difficultyAt = (runtime: Runtime) =>
@@ -282,10 +535,18 @@ const seedCluster = (cluster: ObstacleCluster, runtime: Runtime, z: number) => {
   cluster.hue = Math.random();
 };
 
-const seedBoost = (boost: BoostPad, runtime: Runtime, z: number) => {
+const seedPickup = (boost: PickupPad, runtime: Runtime, z: number) => {
   const d = difficultyAt(runtime);
   boost.z = z;
-  boost.active = Math.random() < lerp(0.48, 0.72, d);
+  const r = Math.random();
+  if (r < lerp(0.46, 0.58, d)) {
+    boost.kind = 'boost';
+  } else if (r < lerp(0.84, 0.74, d)) {
+    boost.kind = 'shard';
+  } else {
+    boost.kind = 'blaster';
+  }
+  boost.active = Math.random() < lerp(0.5, 0.8, d);
   boost.collected = false;
   boost.pulse = Math.random() * Math.PI * 2;
   boost.hue = Math.random();
@@ -293,6 +554,46 @@ const seedBoost = (boost: BoostPad, runtime: Runtime, z: number) => {
   const leadLane = runtime.serial > 0 ? runtime.clusters[(runtime.serial - 1) % CLUSTER_POOL].gapLane : 2;
   const lane = Math.random() < 0.64 ? leadLane : Math.floor(Math.random() * LANE_COUNT);
   boost.x = laneX(lane) + (Math.random() * 2 - 1) * 0.16;
+  boost.y = boost.kind === 'boost' ? 0.05 : boost.kind === 'blaster' ? 0.2 : 0.32;
+};
+
+const pickNextPalette = (prev: number) => {
+  if (PALETTES.length <= 1) return 0;
+  let idx = Math.floor(Math.random() * PALETTES.length);
+  if (idx === prev) {
+    idx = (idx + 1 + Math.floor(Math.random() * (PALETTES.length - 1))) % PALETTES.length;
+  }
+  return idx;
+};
+
+const spawnShatterBurst = (
+  runtime: Runtime,
+  x: number,
+  z: number,
+  hue: number,
+  power = 1
+) => {
+  const pieces = Math.floor(10 + power * 9);
+  for (let i = 0; i < pieces; i += 1) {
+    const shard = runtime.shards[runtime.shardCursor % runtime.shards.length];
+    runtime.shardCursor = (runtime.shardCursor + 1) % runtime.shards.length;
+
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (1.6 + Math.random() * 3.8) * (0.75 + power * 0.35);
+    shard.active = true;
+    shard.x = x + (Math.random() * 2 - 1) * 0.12;
+    shard.y = 0.34 + Math.random() * 0.18;
+    shard.z = z + (Math.random() * 2 - 1) * 0.1;
+    shard.vx = Math.cos(angle) * speed;
+    shard.vy = 0.4 + Math.random() * 2.3;
+    shard.vz = (Math.random() * 2 - 1) * speed * 0.38;
+    shard.maxLife = 0.32 + Math.random() * 0.5;
+    shard.life = shard.maxLife;
+    shard.size = 0.06 + Math.random() * 0.08 * (0.7 + power * 0.35);
+    shard.spin = Math.random() * Math.PI * 2;
+    shard.spinV = (Math.random() * 2 - 1) * (6 + power * 4);
+    shard.hue = hue + (Math.random() * 2 - 1) * 0.06;
+  }
 };
 
 const resetRuntime = (runtime: Runtime) => {
@@ -323,21 +624,31 @@ const resetRuntime = (runtime: Runtime) => {
 
   runtime.boostTime = 0;
   runtime.boostMix = 0;
+  runtime.shootCooldown = 0;
 
   runtime.serial = 0;
   runtime.clusterCursorZ = -9;
   runtime.boostCursorZ = -8;
+  runtime.shardCursor = 0;
   runtime.hudCommit = 0;
   runtime.shake = 0;
+  runtime.collectibles = 0;
+  runtime.ammo = 2;
+  runtime.shotsFired = 0;
 
   for (const cluster of runtime.clusters) {
     seedCluster(cluster, runtime, runtime.clusterCursorZ);
     runtime.clusterCursorZ -= 5 + Math.random() * 1.5;
   }
 
-  for (const boost of runtime.boosts) {
-    seedBoost(boost, runtime, runtime.boostCursorZ);
+  for (const boost of runtime.pickups) {
+    seedPickup(boost, runtime, runtime.boostCursorZ);
     runtime.boostCursorZ -= 4.2 + Math.random() * 1.8;
+  }
+
+  for (const shard of runtime.shards) {
+    shard.active = false;
+    shard.life = 0;
   }
 };
 
@@ -367,12 +678,17 @@ const syncHud = (runtime: Runtime, holding: boolean) => {
   tetherDriftState.heat = Math.floor(runtime.tension * 100);
   tetherDriftState.speed = runtime.speed;
   tetherDriftState.reeling = holding;
+  tetherDriftState.ammo = runtime.ammo;
+  tetherDriftState.collectibles = runtime.collectibles;
+  tetherDriftState.shotsFired = runtime.shotsFired;
+  tetherDriftState.paletteName = PALETTES[runtime.paletteIndex]?.name ?? PALETTES[0].name;
   tetherDriftState.perfects = runtime.perfects;
   tetherDriftState.constellationsCleared = runtime.clustersPassed;
   tetherDriftState.elapsed = runtime.elapsed;
 };
 
 const beginRun = (runtime: Runtime) => {
+  runtime.paletteIndex = pickNextPalette(runtime.paletteIndex);
   resetRuntime(runtime);
 
   tetherDriftState.phase = 'playing';
@@ -384,6 +700,10 @@ const beginRun = (runtime: Runtime) => {
   tetherDriftState.heat = 0;
   tetherDriftState.speed = BASE_SPEED;
   tetherDriftState.reeling = false;
+  tetherDriftState.ammo = runtime.ammo;
+  tetherDriftState.collectibles = runtime.collectibles;
+  tetherDriftState.shotsFired = runtime.shotsFired;
+  tetherDriftState.paletteName = PALETTES[runtime.paletteIndex]?.name ?? PALETTES[0].name;
   tetherDriftState.perfectFlash = 0;
   tetherDriftState.perfects = 0;
   tetherDriftState.constellationsCleared = 0;
@@ -408,6 +728,10 @@ const endRun = (runtime: Runtime) => {
   tetherDriftState.reeling = false;
   tetherDriftState.speed = runtime.speed;
   tetherDriftState.chainTime = 0;
+  tetherDriftState.ammo = runtime.ammo;
+  tetherDriftState.collectibles = runtime.collectibles;
+  tetherDriftState.shotsFired = runtime.shotsFired;
+  tetherDriftState.paletteName = PALETTES[runtime.paletteIndex]?.name ?? PALETTES[0].name;
 };
 
 function TetherDriftOverlay() {
@@ -419,6 +743,7 @@ function TetherDriftOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/60 bg-gradient-to-br from-emerald-500/30 via-cyan-500/24 to-sky-500/26 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">Tether Drift</div>
         <div className="text-[11px] text-cyan-50/85">Hold to tighten tether and carve drift lines. Release to slide out.</div>
+        <div className="text-[11px] text-cyan-50/85">A/D or Arrow keys steer. Press F to blast blockers when ammo is loaded.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/60 via-cyan-900/42 to-emerald-700/35 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -446,6 +771,15 @@ function TetherDriftOverlay() {
           <div>
             Mode <span className="font-semibold">{snap.reeling ? 'TETHERED' : 'DRIFTING'}</span>
           </div>
+          <div>
+            Crystals <span className="font-semibold text-violet-100">{snap.collectibles}</span>
+          </div>
+          <div>
+            Blaster Ammo <span className="font-semibold text-cyan-100">{snap.ammo}</span>
+          </div>
+          <div>
+            World <span className="font-semibold text-rose-100">{snap.paletteName}</span>
+          </div>
         </div>
       )}
 
@@ -463,7 +797,8 @@ function TetherDriftOverlay() {
             <div className="text-2xl font-black tracking-wide">TETHER DRIFT</div>
             <div className="mt-2 text-sm text-white/85">A tethered drift car blasts through an endless corridor.</div>
             <div className="mt-1 text-sm text-white/85">Hold to reel your anchor and snap into line. Release to sling wide around blockers.</div>
-            <div className="mt-1 text-sm text-white/85">Hit neon boost pads to surge and chain higher scores.</div>
+            <div className="mt-1 text-sm text-white/85">Steer with A/D or ←/→. Collect crystals and power cells. Press F to shoot blockers away.</div>
+            <div className="mt-1 text-sm text-white/85">Every new run rotates to a fresh crystal palette.</div>
             <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
           </div>
         </div>
@@ -475,6 +810,7 @@ function TetherDriftOverlay() {
             <div className="text-2xl font-black text-cyan-100">Drift Crashed</div>
             <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
             <div className="mt-1 text-sm text-white/75">Best {snap.bestScore}</div>
+            <div className="mt-1 text-sm text-white/75">Crystals {snap.collectibles} • Shots {snap.shotsFired}</div>
             <div className="mt-3 text-sm text-cyan-100/90">Tap to run again.</div>
           </div>
         </div>
@@ -488,7 +824,7 @@ function TetherDriftScene() {
   const { paused, restartSeed } = useGameUIState();
 
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R', 'f', 'F'],
   });
 
   const runtimeRef = useRef<Runtime>(createRuntime());
@@ -498,14 +834,30 @@ function TetherDriftScene() {
   const roadMatRef = useRef<THREE.ShaderMaterial>(null);
   const barrierRef = useRef<THREE.InstancedMesh>(null);
   const gapMarkerRef = useRef<THREE.InstancedMesh>(null);
-  const boostRef = useRef<THREE.InstancedMesh>(null);
+  const pickupRef = useRef<THREE.InstancedMesh>(null);
+  const breakShardRef = useRef<THREE.InstancedMesh>(null);
   const carGroupRef = useRef<THREE.Group>(null);
   const anchorRef = useRef<THREE.Mesh>(null);
+  const anchorMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const leftRailMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const rightRailMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const carBodyMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const carCockpitMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const carFrontMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const carRearMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const trailMatRef = useRef<THREE.PointsMaterial>(null);
+  const hemiLightRef = useRef<THREE.HemisphereLight>(null);
+  const dirLightRef = useRef<THREE.DirectionalLight>(null);
+  const pointLightARef = useRef<THREE.PointLight>(null);
+  const pointLightBRef = useRef<THREE.PointLight>(null);
+  const fogRef = useRef<THREE.Fog>(null);
   const tetherLineRef = useRef<any>(null);
   const guideLineRef = useRef<any>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
+  const colorScratchB = useMemo(() => new THREE.Color(), []);
+  const colorScratchC = useMemo(() => new THREE.Color(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
 
@@ -531,7 +883,7 @@ function TetherDriftScene() {
     return g;
   }, [trailAttr]);
 
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
 
   const primeTrail = (x: number) => {
     for (let i = 0; i < TRAIL_POINTS; i += 1) {
@@ -546,7 +898,12 @@ function TetherDriftScene() {
   useEffect(() => {
     const best = readBest();
     tetherDriftState.bestScore = Math.max(tetherDriftState.bestScore, best);
+    runtimeRef.current.paletteIndex = Math.floor(Math.random() * PALETTES.length);
     resetRuntime(runtimeRef.current);
+    tetherDriftState.paletteName = PALETTES[runtimeRef.current.paletteIndex]?.name ?? PALETTES[0].name;
+    tetherDriftState.ammo = runtimeRef.current.ammo;
+    tetherDriftState.collectibles = runtimeRef.current.collectibles;
+    tetherDriftState.shotsFired = runtimeRef.current.shotsFired;
     primeTrail(0);
   }, []);
 
@@ -554,6 +911,10 @@ function TetherDriftScene() {
     const best = readBest();
     tetherDriftState.bestScore = Math.max(tetherDriftState.bestScore, best);
     resetRuntime(runtimeRef.current);
+    tetherDriftState.paletteName = PALETTES[runtimeRef.current.paletteIndex]?.name ?? PALETTES[0].name;
+    tetherDriftState.ammo = runtimeRef.current.ammo;
+    tetherDriftState.collectibles = runtimeRef.current.collectibles;
+    tetherDriftState.shotsFired = runtimeRef.current.shotsFired;
     primeTrail(0);
   }, [snap.resetVersion]);
 
@@ -606,6 +967,21 @@ function TetherDriftScene() {
         input.keysDown.has('space') ||
         input.keysDown.has('enter'));
 
+    const leftPressed = input.keysDown.has('a') || input.keysDown.has('arrowleft');
+    const rightPressed = input.keysDown.has('d') || input.keysDown.has('arrowright');
+    let steerInput = (rightPressed ? 1 : 0) - (leftPressed ? 1 : 0);
+    if (input.pointerDown && Math.abs(input.pointerX) > 0.16) {
+      steerInput += clamp(input.pointerX, -1, 1) * 0.95;
+    }
+    steerInput = clamp(steerInput, -1, 1);
+
+    const shootPressed =
+      tetherDriftState.phase === 'playing' &&
+      !paused &&
+      (input.justPressed.has('f') || input.justPressed.has('x'));
+
+    const activePalette = PALETTES[runtime.paletteIndex] ?? PALETTES[0];
+
     if (tetherDriftState.phase === 'playing' && !paused) {
       runtime.elapsed += dt;
       runtime.comboTimer = Math.max(0, runtime.comboTimer - dt);
@@ -616,6 +992,7 @@ function TetherDriftScene() {
 
       runtime.boostTime = Math.max(0, runtime.boostTime - dt);
       runtime.boostMix = clamp(runtime.boostTime / BOOST_WINDOW, 0, 1);
+      runtime.shootCooldown = Math.max(0, runtime.shootCooldown - dt);
       const boostScale = 1 + runtime.boostMix * 0.46;
       runtime.speed = baseSpeed * boostScale;
       runtime.hudCommit += dt;
@@ -630,10 +1007,10 @@ function TetherDriftScene() {
         }
       }
 
-      for (const boost of runtime.boosts) {
+      for (const boost of runtime.pickups) {
         boost.z += runtime.speed * dt;
         if (boost.z > 8.2) {
-          seedBoost(boost, runtime, runtime.boostCursorZ);
+          seedPickup(boost, runtime, runtime.boostCursorZ);
           runtime.boostCursorZ -= lerp(5, 2.8, d) + Math.random() * 1.7;
         }
       }
@@ -663,8 +1040,9 @@ function TetherDriftScene() {
       const springK = holding ? lerp(96, 146, d) : lerp(46, 78, d);
       const ropeForce = -dir * stretch * springK;
       const assistForce = (runtime.anchorX - runtime.carX) * (holding ? 10 : 2.1);
+      const steerForce = steerInput * (holding ? 64 : 78) * (1 + runtime.boostMix * 0.24);
 
-      runtime.carVx += (ropeForce + assistForce) * dt;
+      runtime.carVx += (ropeForce + assistForce + steerForce) * dt;
       const drag = holding ? 4.2 : 1.9;
       runtime.carVx *= Math.exp(-drag * dt);
       runtime.carX += runtime.carVx * dt;
@@ -684,6 +1062,61 @@ function TetherDriftScene() {
 
       if (Math.abs(runtime.carX) > FIELD_HALF_X - CAR_HALF_W * 0.72) {
         crashed = true;
+      }
+
+      if (shootPressed && runtime.shootCooldown <= 0) {
+        if (runtime.ammo > 0) {
+          let targetCluster: ObstacleCluster | null = null;
+          let targetZ = -Infinity;
+
+          for (const cluster of runtime.clusters) {
+            if (cluster.resolved || cluster.mask === 0) continue;
+            if (cluster.z < -9.4 || cluster.z > 1.6) continue;
+            if (cluster.z > targetZ) {
+              targetCluster = cluster;
+              targetZ = cluster.z;
+            }
+          }
+
+          if (targetCluster) {
+            const lanePref = nearestLaneIndex(runtime.carX);
+            let laneToBlast = -1;
+            if ((targetCluster.mask & (1 << lanePref)) !== 0) {
+              laneToBlast = lanePref;
+            } else {
+              let bestDist = Infinity;
+              for (let lane = 0; lane < LANE_COUNT; lane += 1) {
+                if ((targetCluster.mask & (1 << lane)) === 0) continue;
+                const distLane = Math.abs(laneX(lane) - runtime.carX);
+                if (distLane < bestDist) {
+                  bestDist = distLane;
+                  laneToBlast = lane;
+                }
+              }
+            }
+
+            if (laneToBlast >= 0) {
+              targetCluster.mask &= ~(1 << laneToBlast);
+              if (targetCluster.mask === 0) {
+                targetCluster.gapLane = laneToBlast;
+              }
+              targetCluster.flash = 1;
+              runtime.ammo = Math.max(0, runtime.ammo - 1);
+              runtime.shotsFired += 1;
+              runtime.shootCooldown = SHOOT_COOLDOWN;
+              runtime.score += 12 + runtime.combo * 2;
+              runtime.shake = Math.min(1.4, runtime.shake + 0.12);
+              spawnShatterBurst(runtime, laneX(laneToBlast), targetCluster.z, targetCluster.hue, 1.25);
+              tetherDriftState.setToast('BLAST', 0.3);
+              playTone(1320, 0.04, 0.034);
+            }
+          } else {
+            tetherDriftState.setToast('NO TARGET', 0.22);
+          }
+        } else {
+          tetherDriftState.setToast('NO AMMO', 0.3);
+          playTone(340, 0.03, 0.02);
+        }
       }
 
       for (const cluster of runtime.clusters) {
@@ -734,19 +1167,49 @@ function TetherDriftScene() {
         }
       }
 
-      for (const boost of runtime.boosts) {
+      for (const boost of runtime.pickups) {
         if (crashed) break;
         if (!boost.active || boost.collected) continue;
-        if (Math.abs(boost.z - CAR_Z) > 0.54) continue;
+        if (Math.abs(boost.z - CAR_Z) > 0.64) continue;
 
-        if (Math.abs(boost.x - runtime.carX) < BOOST_W * 0.5 + CAR_HALF_W * 0.85) {
+        const pickupHalfW =
+          boost.kind === 'boost'
+            ? BOOST_W * 0.5
+            : boost.kind === 'blaster'
+              ? BLASTER_W * 0.5
+              : SHARD_W * 0.5;
+
+        if (Math.abs(boost.x - runtime.carX) < pickupHalfW + CAR_HALF_W * 0.85) {
           boost.collected = true;
-          runtime.boostTime = clamp(runtime.boostTime + 1.9, 0, BOOST_WINDOW);
-          runtime.score += 36 + runtime.combo * 3;
-          runtime.shake = Math.min(1.3, runtime.shake + 0.16);
-          tetherDriftState.setToast('BOOST', 0.35);
-          playTone(1180, 0.06, 0.032);
-          maybeVibrate(6);
+          if (boost.kind === 'boost') {
+            runtime.boostTime = clamp(runtime.boostTime + 1.9, 0, BOOST_WINDOW);
+            runtime.score += 36 + runtime.combo * 3;
+            runtime.shake = Math.min(1.3, runtime.shake + 0.16);
+            tetherDriftState.setToast('BOOST', 0.35);
+            playTone(1180, 0.06, 0.032);
+            maybeVibrate(6);
+          } else if (boost.kind === 'shard') {
+            runtime.collectibles += 1;
+            runtime.score += 22 + runtime.combo * 2;
+            runtime.shake = Math.min(1.24, runtime.shake + 0.08);
+            if (runtime.collectibles % 5 === 0 && runtime.ammo < MAX_AMMO) {
+              runtime.ammo += 1;
+              tetherDriftState.setToast('CRYSTAL + AMMO', 0.5);
+            } else {
+              tetherDriftState.setToast('CRYSTAL', 0.25);
+            }
+            spawnShatterBurst(runtime, boost.x, boost.z, 0.1 + boost.hue * 0.2, 0.78);
+            playTone(870, 0.04, 0.028);
+          } else {
+            runtime.ammo = clamp(runtime.ammo + 2, 0, MAX_AMMO);
+            runtime.score += 28 + runtime.combo * 2;
+            runtime.boostTime = clamp(runtime.boostTime + 0.8, 0, BOOST_WINDOW);
+            runtime.shake = Math.min(1.28, runtime.shake + 0.11);
+            tetherDriftState.setToast('BLASTER +2', 0.45);
+            spawnShatterBurst(runtime, boost.x, boost.z, 0.68 + boost.hue * 0.1, 1);
+            playTone(1040, 0.06, 0.03);
+            maybeVibrate(8);
+          }
         }
       }
 
@@ -783,6 +1246,7 @@ function TetherDriftScene() {
       runtime.leadGapX = runtime.anchorX;
       runtime.leadGapZ = -6;
       runtime.boostMix = Math.max(0, runtime.boostMix - dt * 0.8);
+      runtime.shootCooldown = Math.max(0, runtime.shootCooldown - dt);
     }
 
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
@@ -799,10 +1263,62 @@ function TetherDriftScene() {
 
     if (bgMatRef.current) {
       bgMatRef.current.uniforms.uTime.value += dt;
+      bgMatRef.current.uniforms.uSea.value.set(activePalette.bgSea);
+      bgMatRef.current.uniforms.uSky.value.set(activePalette.bgSky);
+      bgMatRef.current.uniforms.uMist.value.set(activePalette.bgMist);
     }
     if (roadMatRef.current) {
       roadMatRef.current.uniforms.uTime.value += dt * (1 + runtime.boostMix * 0.8);
       roadMatRef.current.uniforms.uBoost.value = runtime.boostMix;
+      roadMatRef.current.uniforms.uBaseA.value.set(activePalette.roadBaseA);
+      roadMatRef.current.uniforms.uBaseB.value.set(activePalette.roadBaseB);
+      roadMatRef.current.uniforms.uStripeA.value.set(activePalette.roadStripeA);
+      roadMatRef.current.uniforms.uStripeB.value.set(activePalette.roadStripeB);
+    }
+
+    if (scene.background) {
+      (scene.background as THREE.Color).set(activePalette.clear);
+    }
+    if (fogRef.current) {
+      fogRef.current.color.set(activePalette.fog);
+    }
+    if (hemiLightRef.current) {
+      hemiLightRef.current.color.set(activePalette.hemiSky);
+      hemiLightRef.current.groundColor.set(activePalette.hemiGround);
+    }
+    if (dirLightRef.current) dirLightRef.current.color.set(activePalette.dirLight);
+    if (pointLightARef.current) pointLightARef.current.color.set(activePalette.pointA);
+    if (pointLightBRef.current) pointLightBRef.current.color.set(activePalette.pointB);
+    if (leftRailMatRef.current) {
+      leftRailMatRef.current.color.set(activePalette.railA);
+      leftRailMatRef.current.emissive.set(activePalette.railA);
+    }
+    if (rightRailMatRef.current) {
+      rightRailMatRef.current.color.set(activePalette.railB);
+      rightRailMatRef.current.emissive.set(activePalette.railB);
+    }
+    if (anchorMatRef.current) {
+      anchorMatRef.current.color.set(activePalette.anchor);
+      anchorMatRef.current.emissive.set(activePalette.anchor);
+    }
+    if (carBodyMatRef.current) {
+      carBodyMatRef.current.color.set(activePalette.carBody);
+      carBodyMatRef.current.emissive.set(activePalette.carCockpit);
+    }
+    if (carCockpitMatRef.current) {
+      carCockpitMatRef.current.color.set(activePalette.carCockpit);
+      carCockpitMatRef.current.emissive.set(activePalette.carFront);
+    }
+    if (carFrontMatRef.current) {
+      carFrontMatRef.current.color.set(activePalette.carFront);
+      carFrontMatRef.current.emissive.set(activePalette.carFront);
+    }
+    if (carRearMatRef.current) {
+      carRearMatRef.current.color.set(activePalette.carRear);
+      carRearMatRef.current.emissive.set(activePalette.carRear);
+    }
+    if (trailMatRef.current) {
+      trailMatRef.current.color.set(activePalette.tether);
     }
 
     if (anchorRef.current) {
@@ -815,6 +1331,11 @@ function TetherDriftScene() {
       carGroupRef.current.position.set(runtime.carX, CAR_Y, CAR_Z);
       carGroupRef.current.rotation.set(0, runtime.carYaw, runtime.carRoll);
     }
+
+    const tetherMaterial = tetherLineRef.current?.material as THREE.LineBasicMaterial | undefined;
+    if (tetherMaterial?.color) tetherMaterial.color.set(activePalette.tether);
+    const guideMaterial = guideLineRef.current?.material as THREE.LineBasicMaterial | undefined;
+    if (guideMaterial?.color) guideMaterial.color.set(activePalette.guide);
 
     if (barrierRef.current && gapMarkerRef.current) {
       let index = 0;
@@ -832,9 +1353,10 @@ function TetherDriftScene() {
             barrierRef.current.setMatrixAt(index, dummy.matrix);
 
             const barrierColor = colorScratch
-              .setHSL(0.43 + cluster.hue * 0.14, 0.78, 0.38 + pulse * 0.12)
-              .lerp(CORAL, cluster.flash * 0.36)
-              .lerp(AMBER, runtime.boostMix * 0.2);
+              .set(activePalette.barrierCore)
+              .offsetHSL(cluster.hue * 0.08, 0, pulse * 0.08)
+              .lerp(colorScratchB.set(activePalette.barrierHit), cluster.flash * 0.46)
+              .lerp(colorScratchC.set(activePalette.boost), runtime.boostMix * 0.24);
             barrierRef.current.setColorAt(index, barrierColor);
           } else {
             dummy.position.copy(OFFSCREEN_POS);
@@ -842,7 +1364,7 @@ function TetherDriftScene() {
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
             barrierRef.current.setMatrixAt(index, dummy.matrix);
-            barrierRef.current.setColorAt(index, MINT);
+            barrierRef.current.setColorAt(index, colorScratchB.set(activePalette.barrierCore));
           }
           index += 1;
         }
@@ -855,8 +1377,8 @@ function TetherDriftScene() {
         gapMarkerRef.current.setMatrixAt(i, dummy.matrix);
 
         const markerColor = colorScratch
-          .copy(LIME)
-          .lerp(PEARL, 0.35 + pulse * 0.25 + cluster.flash * 0.25);
+          .set(activePalette.marker)
+          .lerp(colorScratchB.set(activePalette.tether), 0.35 + pulse * 0.25 + cluster.flash * 0.25);
         gapMarkerRef.current.setColorAt(i, markerColor);
       }
 
@@ -866,32 +1388,95 @@ function TetherDriftScene() {
       if (gapMarkerRef.current.instanceColor) gapMarkerRef.current.instanceColor.needsUpdate = true;
     }
 
-    if (boostRef.current) {
-      for (let i = 0; i < runtime.boosts.length; i += 1) {
-        const boost = runtime.boosts[i];
+    if (pickupRef.current) {
+      for (let i = 0; i < runtime.pickups.length; i += 1) {
+        const boost = runtime.pickups[i];
         if (boost.active && !boost.collected) {
           const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 6 + boost.pulse);
-          dummy.position.set(boost.x, 0.05, boost.z);
+          const y = boost.y + Math.sin(runtime.elapsed * 3.2 + boost.pulse) * 0.04;
+          dummy.position.set(boost.x, y, boost.z);
           dummy.rotation.set(0, runtime.elapsed * 0.9 + boost.pulse, 0);
-          dummy.scale.set(0.88, 0.14 + pulse * 0.06, 0.82);
+          if (boost.kind === 'boost') {
+            dummy.scale.set(0.88, 0.14 + pulse * 0.06, 0.82);
+          } else if (boost.kind === 'blaster') {
+            const s = 0.52 + pulse * 0.12;
+            dummy.scale.set(s, s, s);
+          } else {
+            const s = 0.44 + pulse * 0.08;
+            dummy.scale.set(s, s, s);
+          }
           dummy.updateMatrix();
-          boostRef.current.setMatrixAt(i, dummy.matrix);
+          pickupRef.current.setMatrixAt(i, dummy.matrix);
 
+          const baseColor =
+            boost.kind === 'boost'
+              ? activePalette.boost
+              : boost.kind === 'blaster'
+                ? activePalette.blaster
+                : activePalette.collectible;
           const boostColor = colorScratch
-            .setHSL(0.27 + boost.hue * 0.1, 0.75, 0.46 + pulse * 0.16)
-            .lerp(PEARL, 0.24 + runtime.boostMix * 0.24);
-          boostRef.current.setColorAt(i, boostColor);
+            .set(baseColor)
+            .offsetHSL(boost.hue * 0.08, 0, pulse * 0.14)
+            .lerp(colorScratchB.set(activePalette.tether), 0.2 + runtime.boostMix * 0.22);
+          pickupRef.current.setColorAt(i, boostColor);
         } else {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
-          boostRef.current.setMatrixAt(i, dummy.matrix);
-          boostRef.current.setColorAt(i, LIME);
+          pickupRef.current.setMatrixAt(i, dummy.matrix);
+          pickupRef.current.setColorAt(i, colorScratchB.set(activePalette.boost));
         }
       }
-      boostRef.current.instanceMatrix.needsUpdate = true;
-      if (boostRef.current.instanceColor) boostRef.current.instanceColor.needsUpdate = true;
+      pickupRef.current.instanceMatrix.needsUpdate = true;
+      if (pickupRef.current.instanceColor) pickupRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (breakShardRef.current) {
+      for (let i = 0; i < runtime.shards.length; i += 1) {
+        const shard = runtime.shards[i];
+        if (shard.active) {
+          shard.life -= dt;
+          if (shard.life <= 0 || shard.z > 8.8) {
+            shard.active = false;
+          } else {
+            const lifeN = clamp(shard.life / Math.max(0.001, shard.maxLife), 0, 1);
+            shard.vy -= 7.2 * dt;
+            shard.vx *= Math.exp(-1.6 * dt);
+            shard.vy *= Math.exp(-1.4 * dt);
+            shard.vz *= Math.exp(-1.9 * dt);
+            shard.x += shard.vx * dt;
+            shard.y += shard.vy * dt;
+            shard.z += (runtime.speed + shard.vz) * dt;
+            shard.spin += shard.spinV * dt;
+
+            dummy.position.set(shard.x, shard.y, shard.z);
+            dummy.rotation.set(shard.spin, shard.spin * 0.6, shard.spin * 0.3);
+            const s = shard.size * (0.48 + lifeN * 0.72);
+            dummy.scale.set(s, s, s);
+            dummy.updateMatrix();
+            breakShardRef.current.setMatrixAt(i, dummy.matrix);
+
+            const shardColor = colorScratch
+              .set(activePalette.collectible)
+              .offsetHSL(shard.hue, 0.05, lifeN * 0.12)
+              .lerp(colorScratchB.set(activePalette.blaster), 0.36 * (1 - lifeN));
+            breakShardRef.current.setColorAt(i, shardColor);
+            continue;
+          }
+        }
+
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(TINY_SCALE);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        breakShardRef.current.setMatrixAt(i, dummy.matrix);
+        breakShardRef.current.setColorAt(i, colorScratchB.set(activePalette.collectible));
+      }
+      breakShardRef.current.instanceMatrix.needsUpdate = true;
+      if (breakShardRef.current.instanceColor) {
+        breakShardRef.current.instanceColor.needsUpdate = true;
+      }
     }
 
     for (let i = TRAIL_POINTS - 1; i > 0; i -= 1) {
@@ -949,8 +1534,8 @@ function TetherDriftScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 2.8, 6.8]} fov={46} />
-      <color attach="background" args={['#66c5bd']} />
-      <fog attach="fog" args={['#66c5bd', 8, 44]} />
+      <color attach="background" args={[PALETTES[0].clear]} />
+      <fog ref={fogRef} attach="fog" args={[PALETTES[0].fog, 8, 44]} />
 
       <Html fullscreen>
         <TetherDriftOverlay />
@@ -959,10 +1544,28 @@ function TetherDriftScene() {
       <Stars radius={95} depth={60} count={1200} factor={2.4} saturation={0.38} fade speed={0.25} />
 
       <ambientLight intensity={0.84} />
-      <hemisphereLight args={['#f2fffb', '#4ca89f', 0.58]} />
-      <directionalLight position={[2.8, 5.8, 4]} intensity={0.92} color="#f8fff2" />
-      <pointLight position={[-3.2, 2.4, -8]} intensity={0.46} color="#5be7d0" />
-      <pointLight position={[2.8, 2.2, -9]} intensity={0.34} color="#75d6ff" />
+      <hemisphereLight
+        ref={hemiLightRef}
+        args={[PALETTES[0].hemiSky, PALETTES[0].hemiGround, 0.58]}
+      />
+      <directionalLight
+        ref={dirLightRef}
+        position={[2.8, 5.8, 4]}
+        intensity={0.92}
+        color={PALETTES[0].dirLight}
+      />
+      <pointLight
+        ref={pointLightARef}
+        position={[-3.2, 2.4, -8]}
+        intensity={0.46}
+        color={PALETTES[0].pointA}
+      />
+      <pointLight
+        ref={pointLightBRef}
+        position={[2.8, 2.2, -9]}
+        intensity={0.34}
+        color={PALETTES[0].pointB}
+      />
 
       <mesh position={[0, 0.35, -10]}>
         <planeGeometry args={[24, 16]} />

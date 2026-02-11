@@ -30,6 +30,7 @@ export interface VoidRunnerGameState {
   score: number;
   level: number;
   speed: number;
+  bonusScore: number;
   highScore: number;
   controls: Controls;
   mode: GameMode;

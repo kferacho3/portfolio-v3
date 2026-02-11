@@ -192,7 +192,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'voidrunner',
     title: 'Void Runner',
     description:
-      'Synthwave endless runner inspired by Cuberun. Dodge cubes, level up, chase high scores.',
+      'Cube-runner inspired void maze: dodge neon blockers, jump spikes, collect boosts, and survive escalating speed.',
     accent: '#ff2190',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/VoidRunner.webp',
@@ -587,10 +587,11 @@ export const GAME_RULES: Record<string, GameRules> = {
       'Explore featured builds and systems. A curated walkthrough of recent work.',
   },
   voidrunner: {
-    controls: 'A/D or Arrow Keys to move • Space to start • R to restart',
+    controls:
+      'A/D or Arrow Keys to move • Space/W/↑ to jump • Enter/Space to start • R to restart',
     objective:
-      'Dodge cubes in this endless synthwave runner. Speed increases each level. Survive as long as you can!',
-    tips: 'Near misses build combo multiplier. Try Zen mode for relaxed play without death.',
+      'Race through a neon obstacle maze, jump spike lanes, grab speed boosts and shards, and survive as difficulty ramps every 1000 score.',
+    tips: 'New obstacle sets are introduced through 3000 score, then runs focus on pickups plus speed pressure. Near-misses build multiplier and Zen mode removes death.',
   },
   apex: {
     controls: 'Tap/Space/Click to change direction • R to restart',
