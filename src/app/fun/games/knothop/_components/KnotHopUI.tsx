@@ -11,48 +11,51 @@ export function KnotHopUI() {
   return (
     <Html fullscreen>
       <div className="absolute inset-0 pointer-events-none select-none text-white">
-        <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/28 via-cyan-500/20 to-sky-500/24 px-3 py-2 backdrop-blur-[2px]">
+        <div className="absolute left-4 top-4 rounded-md border border-cyan-100/35 bg-gradient-to-br from-cyan-900/38 via-slate-900/50 to-teal-900/32 px-3 py-2 backdrop-blur-[2px]">
           <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">Knot Hop</div>
-          <div className="text-[11px] text-cyan-50/85">Tap to hop around the rope before each knot arrives.</div>
+          <div className="text-[11px] text-cyan-50/80">Tap to reverse spiral direction, dodge coral shards, and collect gold orbs.</div>
         </div>
 
-        <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/62 via-cyan-800/40 to-emerald-700/30 px-3 py-2 text-right backdrop-blur-[2px]">
+        <div className="absolute right-4 top-4 rounded-md border border-cyan-100/35 bg-black/45 px-3 py-2 text-right backdrop-blur-[2px]">
           <div className="text-2xl font-black tabular-nums">{snap.score}</div>
           <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {snap.best}</div>
         </div>
 
         {snap.phase === 'playing' && (
-          <div className="absolute left-4 top-[92px] rounded-md border border-white/30 bg-black/35 px-3 py-2 text-xs text-white/90">
+          <div className="absolute left-4 top-[92px] rounded-md border border-white/20 bg-black/38 px-3 py-2 text-xs text-white/90">
             <div>
-              Knots <span className="font-semibold text-cyan-100">{snap.knotsPassed}</span>
+              Dodged <span className="font-semibold text-cyan-100">{snap.dodged}</span>
             </div>
             <div>
-              Combo <span className="font-semibold text-emerald-100">x{Math.max(1, snap.combo)}</span>
+              Collected <span className="font-semibold text-amber-100">{snap.collected}</span>
             </div>
             <div>
-              Perfect <span className="font-semibold text-sky-100">{snap.perfects}</span>
+              Streak <span className="font-semibold text-emerald-100">x{Math.max(1, snap.streak)}</span>
             </div>
             <div>
-              Speed <span className="font-semibold text-amber-100">{snap.speed.toFixed(1)}</span>
+              Speed <span className="font-semibold text-sky-100">{snap.speed.toFixed(1)}</span>
+            </div>
+            <div>
+              Direction <span className="font-semibold text-violet-100">{snap.direction}</span>
             </div>
           </div>
         )}
 
         {snap.phase === 'menu' && (
           <div className="absolute inset-0 grid place-items-center">
-            <div className="rounded-xl border border-emerald-100/45 bg-gradient-to-br from-slate-900/80 via-cyan-900/44 to-emerald-800/30 px-6 py-5 text-center backdrop-blur-md">
+            <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/84 via-cyan-950/38 to-teal-950/30 px-6 py-5 text-center backdrop-blur-md">
               <div className="text-2xl font-black tracking-wide">KNOT HOP</div>
-              <div className="mt-2 text-sm text-white/85">A bead rides an endless rope. Each knot leaves one safe side.</div>
-              <div className="mt-1 text-sm text-white/85">Tap to hop clockwise around the rope and line up with the safe pocket.</div>
-              <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
+              <div className="mt-2 text-sm text-white/85">A prism spirals forward through an endless tunnel.</div>
+              <div className="mt-1 text-sm text-white/85">Tap to reverse spiral direction, avoid coral shards, and line up with gold orbs.</div>
+              <div className="mt-3 text-sm text-cyan-100/90">Tap, click, or press Space to start.</div>
             </div>
           </div>
         )}
 
         {snap.phase === 'gameover' && (
           <div className="absolute inset-0 grid place-items-center">
-            <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-900/40 to-cyan-900/30 px-6 py-5 text-center backdrop-blur-md">
-              <div className="text-2xl font-black text-cyan-100">Knot Hit</div>
+            <div className="rounded-xl border border-rose-100/40 bg-gradient-to-br from-black/84 via-rose-950/34 to-cyan-950/26 px-6 py-5 text-center backdrop-blur-md">
+              <div className="text-2xl font-black text-cyan-100">Signal Lost</div>
               <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
               <div className="mt-1 text-sm text-white/75">Best {snap.best}</div>
               <div className="mt-3 text-sm text-cyan-100/90">Tap to run again.</div>
@@ -62,7 +65,7 @@ export function KnotHopUI() {
 
         {snap.toastTime > 0 && snap.toastText && (
           <div className="absolute inset-x-0 top-20 flex justify-center">
-            <div className="rounded-md border border-cyan-100/55 bg-black/42 px-4 py-1 text-sm font-semibold tracking-[0.11em] text-cyan-100">
+            <div className="rounded-md border border-cyan-100/45 bg-black/45 px-4 py-1 text-sm font-semibold tracking-[0.11em] text-cyan-100">
               {snap.toastText}
             </div>
           </div>

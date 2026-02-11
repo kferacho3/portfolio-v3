@@ -233,7 +233,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'trace',
     title: 'Trace',
     description:
-      'Tap to rotate 90° and survive the neon arena without crossing your own trail.',
+      'Tap to turn 90° and fill expanding neon grids while keeping your full trail alive.',
     accent: '#facc15',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Trace.webp',
@@ -403,7 +403,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'knothop',
     title: 'Knot Hop',
     description:
-      'One-tap rope runner: hop your bead around the rope and slip through each oncoming knot’s safe pocket.',
+      'One-tap spiral runner: reverse direction to dodge coral hazards and collect gold shards on a flowing helix path.',
     accent: '#5edfc7',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/KnotHop.webp',
@@ -608,10 +608,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Tighten early to snap into the safe gap, then release for a wide slide. Chain boost pads to keep momentum.',
   },
   trace: {
-    controls: 'Drag to stay on path • R to restart',
+    controls: 'Tap/Space/Click to turn clockwise • R to restart',
     objective:
-      'Follow the luminous line, stay centered through turns, and avoid leaving the ribbon.',
-    tips: 'Small corrections are safer than late, wide swipes.',
+      'Fill each level grid without crossing your own trail. Level 1 starts small, each clear increases grid size and speed.',
+    tips: 'Collect shards for bonus score. Crash at 70%+ still clears with medals: Bronze 70-79, Silver 80-89, Gold 90-99, Diamond 100.',
   },
   flipbox: {
     controls: 'Tap/Click to flip forward • R to restart',
@@ -712,10 +712,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Time your movements perfectly. Watch the gate angles.',
   },
   knothop: {
-    controls: 'Tap/Click/Space to hop clockwise around rope • R to restart',
+    controls: 'Tap/Click/Space to reverse spiral direction • R to restart',
     objective:
-      'Ride the rope endlessly and line up your bead with each knot’s single safe side as speed ramps.',
-    tips: 'Read the glowing safe ring early. One calm tap per knot beats late panic taps.',
+      'Guide your prism through an endless spiral lane. Dodge hazards, collect shards, and survive as speed and spin ramp.',
+    tips: 'Flip direction early to line up angles. Staying calm and reading two beats ahead is safer than panic reversals.',
   },
   oscillate: {
     controls: 'Tap/Space/Enter to switch walls • R to restart',

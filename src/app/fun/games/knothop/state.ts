@@ -1,8 +1,9 @@
 import { proxy } from 'valtio';
 
 export type KnotHopPhase = 'menu' | 'playing' | 'gameover';
+export type SpiralDirection = 'CW' | 'CCW';
 
-const BEST_KEY = 'knothop_hyper_best_v2';
+const BEST_KEY = 'knothop_spiral_best_v3';
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
@@ -23,10 +24,12 @@ export const knotHopState = proxy({
   phase: 'menu' as KnotHopPhase,
   score: 0,
   best: 0,
-  combo: 0,
-  knotsPassed: 0,
-  perfects: 0,
+
+  streak: 0,
+  dodged: 0,
+  collected: 0,
   speed: 0,
+  direction: 'CW' as SpiralDirection,
 
   gameOver: false,
   resetVersion: 0,
@@ -42,10 +45,11 @@ export const knotHopState = proxy({
     this.resetVersion += 1;
     this.phase = 'menu';
     this.score = 0;
-    this.combo = 0;
-    this.knotsPassed = 0;
-    this.perfects = 0;
+    this.streak = 0;
+    this.dodged = 0;
+    this.collected = 0;
     this.speed = 0;
+    this.direction = 'CW';
     this.gameOver = false;
     this.toastText = '';
     this.toastTime = 0;
@@ -54,10 +58,11 @@ export const knotHopState = proxy({
   start() {
     this.phase = 'playing';
     this.score = 0;
-    this.combo = 0;
-    this.knotsPassed = 0;
-    this.perfects = 0;
+    this.streak = 0;
+    this.dodged = 0;
+    this.collected = 0;
     this.speed = 0;
+    this.direction = 'CW';
     this.gameOver = false;
     this.toastText = '';
     this.toastTime = 0;
@@ -75,17 +80,19 @@ export const knotHopState = proxy({
 
   updateHud(hud: {
     score: number;
-    combo: number;
-    knotsPassed: number;
-    perfects: number;
+    streak: number;
+    dodged: number;
+    collected: number;
     speed: number;
+    direction: SpiralDirection;
   }) {
     if (this.phase !== 'playing') return;
     this.score = Math.max(0, Math.floor(hud.score));
-    this.combo = Math.max(0, Math.floor(hud.combo));
-    this.knotsPassed = Math.max(0, Math.floor(hud.knotsPassed));
-    this.perfects = Math.max(0, Math.floor(hud.perfects));
+    this.streak = Math.max(0, Math.floor(hud.streak));
+    this.dodged = Math.max(0, Math.floor(hud.dodged));
+    this.collected = Math.max(0, Math.floor(hud.collected));
     this.speed = clamp(hud.speed, 0, 999);
+    this.direction = hud.direction;
   },
 
   end(finalScore: number) {

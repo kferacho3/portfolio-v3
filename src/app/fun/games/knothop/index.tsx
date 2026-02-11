@@ -15,15 +15,20 @@ import {
   shakeNoiseSigned,
 } from '../_shared/hyperUpgradeKit';
 import { KnotHopUI } from './_components/KnotHopUI';
-import { knotHopState } from './state';
+import { knotHopState, type SpiralDirection } from './state';
 
 export { knotHopState } from './state';
 
-type KnotGate = {
+type SpiralEventKind = 'obstacle' | 'collectible';
+
+type SpiralEvent = {
+  id: number;
+  kind: SpiralEventKind;
   z: number;
-  safeSlot: number;
+  theta: number;
   pulse: number;
-  hue: number;
+  spin: number;
+  active: boolean;
   resolved: boolean;
   flash: number;
 };
@@ -32,49 +37,56 @@ type Runtime = {
   elapsed: number;
   distance: number;
   speed: number;
+  spinSpeed: number;
   score: number;
 
-  combo: number;
-  comboTimer: number;
-  knotsPassed: number;
-  perfects: number;
+  streak: number;
+  dodged: number;
+  collected: number;
 
-  playerAngle: number;
-  targetAngle: number;
-  angleVel: number;
+  spinDir: 1 | -1;
+  theta: number;
+  angularVelocity: number;
+  targetAngularVelocity: number;
   hopPulse: number;
 
   serial: number;
-  knotCursorZ: number;
+  eventCursorZ: number;
   hudCommit: number;
   shake: number;
 
-  gates: KnotGate[];
+  obstacleStreak: number;
+  lastSpawnTheta: number;
+
+  events: SpiralEvent[];
 };
 
-const KNOT_POOL = 52;
-const KNOT_BULGES = KNOT_POOL * 4;
-const TRAIL_POINTS = 44;
-const SPIRAL_POINTS = 96;
+const EVENT_POOL = 72;
+const GUIDE_POINTS = 132;
+const TRAIL_POINTS = 38;
 
 const PLAYER_Z = 0;
-const ORBIT_RADIUS = 1.24;
-const CORE_RADIUS = 0.3;
+const PASS_Z = PLAYER_Z + 0.18;
+const DESPAWN_Z = 10.5;
+const START_CURSOR_Z = -14;
 
-const BASE_SPEED = 8;
-const MAX_SPEED = 17.4;
+const ORBIT_RADIUS = 1.34;
+const CORE_RADIUS = 0.28;
 
-const PASS_ANGLE = 0.52;
-const PERFECT_ANGLE = 0.18;
+const BASE_SPEED = 6.4;
+const MAX_SPEED = 11.6;
+
+const BASE_SPIN = 1.86;
+const MAX_SPIN = 3.15;
+
+const SPACING_START = 5.3;
+const SPACING_END = 3.35;
+
+const HIT_ANGLE = 0.34;
+const COLLECT_ANGLE = 0.4;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
-
-const MINT = new THREE.Color('#5edfc7');
-const PEARL = new THREE.Color('#f6fffc');
-const CORAL = new THREE.Color('#ff8b7b');
-const SEA = new THREE.Color('#9ce9da');
-const WHITE = new THREE.Color('#faffff');
 
 let audioContextRef: AudioContext | null = null;
 
@@ -92,14 +104,12 @@ const normalizeAngle = (angle: number) => {
 const shortestAngleDiff = (target: number, from: number) =>
   normalizeAngle(target - from);
 
-const angleForSlot = (slot: number) => Math.PI / 2 - slot * (Math.PI / 2);
-
 const maybeVibrate = (ms: number) => {
   if (typeof navigator === 'undefined') return;
   if ('vibrate' in navigator) navigator.vibrate(ms);
 };
 
-const playTone = (frequency: number, duration = 0.05, volume = 0.03) => {
+const playTone = (frequency: number, duration = 0.05, volume = 0.025) => {
   if (typeof window === 'undefined') return;
 
   const Context =
@@ -135,11 +145,14 @@ const playTone = (frequency: number, duration = 0.05, volume = 0.03) => {
   osc.stop(t0 + duration);
 };
 
-const createGate = (): KnotGate => ({
+const createEvent = (): SpiralEvent => ({
+  id: 0,
+  kind: 'obstacle',
   z: -10,
-  safeSlot: 0,
+  theta: 0,
   pulse: 0,
-  hue: 0,
+  spin: 0,
+  active: true,
   resolved: false,
   flash: 0,
 });
@@ -148,89 +161,138 @@ const createRuntime = (): Runtime => ({
   elapsed: 0,
   distance: 0,
   speed: BASE_SPEED,
+  spinSpeed: BASE_SPIN,
   score: 0,
 
-  combo: 0,
-  comboTimer: 0,
-  knotsPassed: 0,
-  perfects: 0,
+  streak: 0,
+  dodged: 0,
+  collected: 0,
 
-  playerAngle: angleForSlot(0),
-  targetAngle: angleForSlot(0),
-  angleVel: 0,
+  spinDir: 1,
+  theta: 0,
+  angularVelocity: BASE_SPIN,
+  targetAngularVelocity: BASE_SPIN,
   hopPulse: 0,
 
   serial: 0,
-  knotCursorZ: -9,
+  eventCursorZ: START_CURSOR_Z,
   hudCommit: 0,
   shake: 0,
 
-  gates: Array.from({ length: KNOT_POOL }, createGate),
+  obstacleStreak: 0,
+  lastSpawnTheta: 0,
+
+  events: Array.from({ length: EVENT_POOL }, createEvent),
 });
 
-const difficultyAt = (runtime: Runtime) =>
-  clamp(runtime.distance / 240 + runtime.knotsPassed / 140, 0, 1);
+const directionLabel = (spinDir: 1 | -1): SpiralDirection =>
+  spinDir > 0 ? 'CW' : 'CCW';
 
-const pickSafeSlot = (runtime: Runtime) => {
-  const prev = runtime.serial > 0 ? runtime.gates[(runtime.serial - 1) % KNOT_POOL].safeSlot : 0;
-  const r = Math.random();
-  let delta = 0;
-  if (r < 0.42) delta = 0;
-  else if (r < 0.68) delta = 1;
-  else if (r < 0.9) delta = -1;
-  else delta = Math.random() < 0.5 ? 2 : -2;
-  return (prev + delta + 8) % 4;
+const difficultyAt = (runtime: Runtime) =>
+  clamp(runtime.distance / 280 + (runtime.dodged + runtime.collected) / 120, 0, 1);
+
+const spacingAtDifficulty = (difficulty: number) =>
+  lerp(SPACING_START, SPACING_END, clamp(difficulty, 0, 1));
+
+const pickEventKind = (runtime: Runtime, difficulty: number): SpiralEventKind => {
+  if (runtime.obstacleStreak >= 2) return 'collectible';
+  const obstacleChance = lerp(0.54, 0.72, difficulty);
+  return Math.random() < obstacleChance ? 'obstacle' : 'collectible';
 };
 
-const seedGate = (gate: KnotGate, runtime: Runtime, z: number) => {
+const chooseThetaForEvent = (
+  runtime: Runtime,
+  kind: SpiralEventKind,
+  z: number
+) => {
+  const travelTime = Math.abs(z - PLAYER_Z) / Math.max(0.1, runtime.speed);
+  const predicted = runtime.theta + runtime.targetAngularVelocity * travelTime;
+
+  let theta = predicted;
+  if (kind === 'obstacle') {
+    const near = [-0.64, -0.38, 0, 0.38, 0.64];
+    const wide = [-1.1, 1.1, -1.35, 1.35];
+    const source = Math.random() < 0.76 ? near : wide;
+    theta += source[Math.floor(Math.random() * source.length)];
+  } else {
+    const collectOffsets = [-1.36, -1.04, -0.72, 0.72, 1.04, 1.36];
+    theta += collectOffsets[Math.floor(Math.random() * collectOffsets.length)];
+  }
+
+  theta = normalizeAngle(theta);
+
+  if (Math.abs(shortestAngleDiff(theta, runtime.lastSpawnTheta)) < 0.2) {
+    theta = normalizeAngle(theta + (Math.random() < 0.5 ? -0.42 : 0.42));
+  }
+
+  runtime.lastSpawnTheta = theta;
+  return theta;
+};
+
+const seedEvent = (event: SpiralEvent, runtime: Runtime, z: number) => {
   runtime.serial += 1;
-  gate.z = z;
-  gate.safeSlot = pickSafeSlot(runtime);
-  gate.pulse = Math.random() * Math.PI * 2;
-  gate.hue = Math.random();
-  gate.resolved = false;
-  gate.flash = 0;
+  const difficulty = difficultyAt(runtime);
+  const kind = pickEventKind(runtime, difficulty);
+
+  event.id = runtime.serial;
+  event.kind = kind;
+  event.z = z;
+  event.theta = chooseThetaForEvent(runtime, kind, z);
+  event.pulse = Math.random() * Math.PI * 2;
+  event.spin = Math.random() * Math.PI * 2;
+  event.active = true;
+  event.resolved = false;
+  event.flash = 0;
+
+  if (kind === 'obstacle') runtime.obstacleStreak += 1;
+  else runtime.obstacleStreak = 0;
 };
 
 const resetRuntime = (runtime: Runtime) => {
   runtime.elapsed = 0;
   runtime.distance = 0;
   runtime.speed = BASE_SPEED;
+  runtime.spinSpeed = BASE_SPIN;
   runtime.score = 0;
 
-  runtime.combo = 0;
-  runtime.comboTimer = 0;
-  runtime.knotsPassed = 0;
-  runtime.perfects = 0;
+  runtime.streak = 0;
+  runtime.dodged = 0;
+  runtime.collected = 0;
 
-  runtime.playerAngle = angleForSlot(0);
-  runtime.targetAngle = angleForSlot(0);
-  runtime.angleVel = 0;
+  runtime.spinDir = 1;
+  runtime.theta = 0;
+  runtime.angularVelocity = BASE_SPIN;
+  runtime.targetAngularVelocity = BASE_SPIN;
   runtime.hopPulse = 0;
 
   runtime.serial = 0;
-  runtime.knotCursorZ = -8;
+  runtime.eventCursorZ = START_CURSOR_Z;
   runtime.hudCommit = 0;
   runtime.shake = 0;
 
-  for (const gate of runtime.gates) {
-    seedGate(gate, runtime, runtime.knotCursorZ);
-    runtime.knotCursorZ -= 4.6 + Math.random() * 1.5;
+  runtime.obstacleStreak = 0;
+  runtime.lastSpawnTheta = 0;
+
+  for (const event of runtime.events) {
+    seedEvent(event, runtime, runtime.eventCursorZ);
+    runtime.eventCursorZ -= spacingAtDifficulty(0) + Math.random() * 1.15;
   }
 };
 
 const startRun = (runtime: Runtime) => {
   resetRuntime(runtime);
   knotHopState.start();
+  knotHopState.setToast('FLOW START', 0.5);
 };
 
 const syncHud = (runtime: Runtime) => {
   knotHopState.updateHud({
     score: runtime.score,
-    combo: runtime.combo,
-    knotsPassed: runtime.knotsPassed,
-    perfects: runtime.perfects,
+    streak: runtime.streak,
+    dodged: runtime.dodged,
+    collected: runtime.collected,
     speed: runtime.speed,
+    direction: directionLabel(runtime.spinDir),
   });
 };
 
@@ -247,12 +309,21 @@ function KnotHop() {
 
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
   const coreMatRef = useRef<THREE.MeshStandardMaterial>(null);
-  const bulgeRef = useRef<THREE.InstancedMesh>(null);
-  const safeRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleRef = useRef<THREE.InstancedMesh>(null);
+  const collectibleRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
+
+  const guideLineARef = useRef<any>(null);
+  const guideLineBRef = useRef<any>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
+
+  const obstacleColor = useMemo(() => new THREE.Color('#ff7a67'), []);
+  const obstacleFlashColor = useMemo(() => new THREE.Color('#ffd0b3'), []);
+  const collectibleColorA = useMemo(() => new THREE.Color('#ffd56b'), []);
+  const collectibleColorB = useMemo(() => new THREE.Color('#fff2be'), []);
+
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
 
@@ -266,13 +337,16 @@ function KnotHop() {
     return geom;
   }, [trailAttr]);
 
-  const spiralPoints = useMemo(
-    () => Array.from({ length: SPIRAL_POINTS }, () => new THREE.Vector3()),
+  const guidePointsA = useMemo(
+    () => Array.from({ length: GUIDE_POINTS }, () => new THREE.Vector3()),
     []
   );
-  const spiralFlat = useMemo(() => new Float32Array(SPIRAL_POINTS * 3), []);
-
-  const spiralLineRef = useRef<any>(null);
+  const guidePointsB = useMemo(
+    () => Array.from({ length: GUIDE_POINTS }, () => new THREE.Vector3()),
+    []
+  );
+  const guideFlatA = useMemo(() => new Float32Array(GUIDE_POINTS * 3), []);
+  const guideFlatB = useMemo(() => new Float32Array(GUIDE_POINTS * 3), []);
 
   const { camera } = useThree();
 
@@ -281,7 +355,7 @@ function KnotHop() {
       const ptr = i * 3;
       trailAttr.array[ptr] = x;
       trailAttr.array[ptr + 1] = y;
-      trailAttr.array[ptr + 2] = -i * 0.13;
+      trailAttr.array[ptr + 2] = -i * 0.18;
     }
     trailAttr.needsUpdate = true;
   };
@@ -289,18 +363,28 @@ function KnotHop() {
   useEffect(() => {
     knotHopState.load();
     resetRuntime(runtimeRef.current);
-    const angle = runtimeRef.current.playerAngle;
-    primeTrail(Math.cos(angle) * ORBIT_RADIUS, Math.sin(angle) * ORBIT_RADIUS);
+
+    const startX = Math.cos(runtimeRef.current.theta) * ORBIT_RADIUS;
+    const startY = Math.sin(runtimeRef.current.theta) * ORBIT_RADIUS;
+    primeTrail(startX, startY);
   }, []);
 
   useEffect(() => {
     if (snap.resetVersion <= 0) return;
     resetRuntime(runtimeRef.current);
+
+    const startX = Math.cos(runtimeRef.current.theta) * ORBIT_RADIUS;
+    const startY = Math.sin(runtimeRef.current.theta) * ORBIT_RADIUS;
+    primeTrail(startX, startY);
   }, [snap.resetVersion]);
 
   useEffect(() => {
     if (uiSnap.restartSeed <= 0) return;
+
     startRun(runtimeRef.current);
+    const startX = Math.cos(runtimeRef.current.theta) * ORBIT_RADIUS;
+    const startY = Math.sin(runtimeRef.current.theta) * ORBIT_RADIUS;
+    primeTrail(startX, startY);
   }, [uiSnap.restartSeed]);
 
   useEffect(
@@ -330,93 +414,101 @@ function KnotHop() {
 
     if ((tap || restart) && knotHopState.phase !== 'playing') {
       startRun(runtime);
-      const angle = runtime.playerAngle;
-      primeTrail(Math.cos(angle) * ORBIT_RADIUS, Math.sin(angle) * ORBIT_RADIUS);
+      const startX = Math.cos(runtime.theta) * ORBIT_RADIUS;
+      const startY = Math.sin(runtime.theta) * ORBIT_RADIUS;
+      primeTrail(startX, startY);
       maybeVibrate(10);
-      playTone(560, 0.05, 0.028);
+      playTone(520, 0.045, 0.024);
     } else if (restart && knotHopState.phase === 'playing') {
       startRun(runtime);
-      const angle = runtime.playerAngle;
-      primeTrail(Math.cos(angle) * ORBIT_RADIUS, Math.sin(angle) * ORBIT_RADIUS);
+      const startX = Math.cos(runtime.theta) * ORBIT_RADIUS;
+      const startY = Math.sin(runtime.theta) * ORBIT_RADIUS;
+      primeTrail(startX, startY);
     }
 
     if (knotHopState.phase === 'playing' && !uiSnap.paused) {
       runtime.elapsed += dt;
-      runtime.comboTimer = Math.max(0, runtime.comboTimer - dt);
-      if (runtime.comboTimer <= 0) runtime.combo = 0;
 
-      const d = difficultyAt(runtime);
-      runtime.speed = lerp(BASE_SPEED, MAX_SPEED, d);
+      const difficulty = difficultyAt(runtime);
+      runtime.speed = lerp(BASE_SPEED, MAX_SPEED, difficulty);
+      runtime.spinSpeed = lerp(BASE_SPIN, MAX_SPIN, difficulty);
       runtime.hudCommit += dt;
 
       if (tap) {
-        runtime.targetAngle -= Math.PI / 2;
-        runtime.targetAngle = normalizeAngle(runtime.targetAngle);
+        runtime.spinDir = runtime.spinDir > 0 ? -1 : 1;
         runtime.hopPulse = 1;
         playTone(720, 0.03, 0.02);
       }
 
-      const spring = 30 + d * 13;
-      const damp = 7 + d * 2;
-      const angleDiff = shortestAngleDiff(runtime.targetAngle, runtime.playerAngle);
-      runtime.angleVel += angleDiff * spring * dt;
-      runtime.angleVel *= Math.exp(-damp * dt);
-      runtime.playerAngle = normalizeAngle(runtime.playerAngle + runtime.angleVel * dt);
-      runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 4.8);
+      runtime.targetAngularVelocity = runtime.spinDir * runtime.spinSpeed;
 
-      for (const gate of runtime.gates) {
-        gate.z += runtime.speed * dt;
-        gate.flash = Math.max(0, gate.flash - dt * 3.2);
+      const turnResponse = 9.4;
+      runtime.angularVelocity = lerp(
+        runtime.angularVelocity,
+        runtime.targetAngularVelocity,
+        1 - Math.exp(-turnResponse * dt)
+      );
+      runtime.theta = normalizeAngle(runtime.theta + runtime.angularVelocity * dt);
+      runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 5.1);
 
-        if (gate.z > 8.8) {
-          seedGate(gate, runtime, runtime.knotCursorZ);
-          runtime.knotCursorZ -= lerp(5.4, 3.1, d) + Math.random() * 1.35;
-        }
+      let crashed = false;
 
-        if (!gate.resolved && gate.z > PLAYER_Z + 0.22) {
-          gate.resolved = true;
-          const safeAngle = angleForSlot(gate.safeSlot);
-          const err = Math.abs(shortestAngleDiff(safeAngle, runtime.playerAngle));
+      for (const event of runtime.events) {
+        event.z += runtime.speed * dt;
+        event.pulse += dt * (event.kind === 'collectible' ? 5.8 : 3.2);
+        event.spin += dt * (event.kind === 'collectible' ? 2.8 : 1.7);
+        event.flash = Math.max(0, event.flash - dt * 3.6);
 
-          if (err > PASS_ANGLE) {
-            runtime.shake = 1.1;
-            maybeVibrate(20);
-            playTone(200, 0.12, 0.055);
-            knotHopState.end(runtime.score);
-            break;
-          }
+        if (!event.resolved && event.z >= PASS_Z) {
+          event.resolved = true;
 
-          runtime.knotsPassed += 1;
-          const perfect = err < PERFECT_ANGLE;
+          const err = Math.abs(shortestAngleDiff(event.theta, runtime.theta));
 
-          if (perfect) {
-            runtime.combo = Math.min(runtime.combo + 1, 30);
-            runtime.comboTimer = 2.2;
-            runtime.perfects += 1;
-            runtime.score += 18 + runtime.combo * 6;
-            gate.flash = 1;
-            runtime.shake = Math.min(1.25, runtime.shake + 0.24);
-            playTone(940 + runtime.combo * 7, 0.05, 0.03);
-            if (runtime.combo >= 2) {
-              knotHopState.setToast(`FLOW x${runtime.combo}`, 0.45);
+          if (event.kind === 'obstacle') {
+            if (err <= HIT_ANGLE) {
+              runtime.shake = 1.1;
+              maybeVibrate(22);
+              playTone(180, 0.13, 0.05);
+              knotHopState.setToast('CRASH', 0.65);
+              knotHopState.end(runtime.score);
+              crashed = true;
+              break;
+            }
+
+            runtime.dodged += 1;
+            runtime.streak = Math.min(runtime.streak + 1, 50);
+            runtime.score += 13 + Math.min(runtime.streak, 25) * 2.2;
+            event.flash = 1;
+
+            if (runtime.streak >= 3 && runtime.streak % 7 === 0) {
+              knotHopState.setToast(`FLOW x${runtime.streak}`, 0.55);
+            }
+          } else if (err <= COLLECT_ANGLE) {
+            runtime.collected += 1;
+            runtime.streak = Math.min(runtime.streak + 1, 50);
+            runtime.score += 18 + Math.min(runtime.streak, 24) * 2.6;
+            event.flash = 1;
+            runtime.shake = Math.min(1, runtime.shake + 0.08);
+            playTone(940, 0.04, 0.02);
+
+            if (runtime.collected > 0 && runtime.collected % 5 === 0) {
+              knotHopState.setToast('SHARD CHAIN', 0.46);
             }
           } else {
-            runtime.combo = Math.max(0, runtime.combo - 1);
-            runtime.comboTimer = Math.max(runtime.comboTimer, 0.9);
-            runtime.score += 11;
-            gate.flash = 0.56;
-            playTone(620, 0.03, 0.02);
+            runtime.streak = Math.max(0, runtime.streak - 1);
           }
+        }
+
+        if (event.z > DESPAWN_Z) {
+          seedEvent(event, runtime, runtime.eventCursorZ);
+          runtime.eventCursorZ -=
+            spacingAtDifficulty(difficulty) + Math.random() * 1.12;
         }
       }
 
-      if (knotHopState.phase === 'playing') {
+      if (!crashed && knotHopState.phase === 'playing') {
         runtime.distance += runtime.speed * dt;
-        const paceScore = runtime.distance * 0.58;
-        runtime.score = Math.max(
-          runtime.score,
-          Math.floor(paceScore + runtime.knotsPassed * 10 + runtime.perfects * 6)
-        );
+        runtime.score += dt * (5.4 + difficulty * 4.1);
 
         if (runtime.hudCommit >= 0.08) {
           runtime.hudCommit = 0;
@@ -424,28 +516,31 @@ function KnotHop() {
         }
       }
     } else {
-      runtime.elapsed += dt * 0.42;
-      runtime.targetAngle = normalizeAngle(runtime.targetAngle + dt * 0.28);
-      const angleDiff = shortestAngleDiff(runtime.targetAngle, runtime.playerAngle);
-      runtime.angleVel += angleDiff * 7.5 * dt;
-      runtime.angleVel *= Math.exp(-5 * dt);
-      runtime.playerAngle = normalizeAngle(runtime.playerAngle + runtime.angleVel * dt);
-      runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 2.2);
+      runtime.elapsed += dt * 0.36;
+      runtime.targetAngularVelocity = runtime.spinDir * BASE_SPIN * 0.68;
+      runtime.angularVelocity = lerp(
+        runtime.angularVelocity,
+        runtime.targetAngularVelocity,
+        1 - Math.exp(-4.8 * dt)
+      );
+      runtime.theta = normalizeAngle(runtime.theta + runtime.angularVelocity * dt);
+      runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 2.8);
     }
 
-    runtime.shake = Math.max(0, runtime.shake - dt * 4.2);
-    const shakeAmp = runtime.shake * 0.06;
-    const shakeTime = runtime.elapsed * 18;
-    const jitterX = shakeNoiseSigned(shakeTime, 2.1) * shakeAmp;
-    const jitterY = shakeNoiseSigned(shakeTime, 5.7) * shakeAmp * 0.35;
-    const jitterZ = shakeNoiseSigned(shakeTime, 9.8) * shakeAmp * 0.42;
+    runtime.shake = Math.max(0, runtime.shake - dt * 4.4);
+    const shakeAmp = runtime.shake * 0.055;
+    const shakeTime = runtime.elapsed * 16;
 
-    const px = Math.cos(runtime.playerAngle) * (ORBIT_RADIUS + runtime.hopPulse * 0.16);
-    const py = Math.sin(runtime.playerAngle) * (ORBIT_RADIUS + runtime.hopPulse * 0.16);
+    const px = Math.cos(runtime.theta) * (ORBIT_RADIUS + runtime.hopPulse * 0.12);
+    const py = Math.sin(runtime.theta) * (ORBIT_RADIUS + runtime.hopPulse * 0.12);
 
-    camTarget.set(px * 0.3 + jitterX, 3.3 + py * 0.22 + jitterY, 7.2 + jitterZ);
-    lookTarget.set(px * 0.28, py * 0.2, -3.2);
-    camera.position.lerp(camTarget, 1 - Math.exp(-6.8 * step.renderDt));
+    camTarget.set(
+      px * 0.24 + shakeNoiseSigned(shakeTime, 2.2) * shakeAmp,
+      2.8 + py * 0.15 + shakeNoiseSigned(shakeTime, 4.5) * shakeAmp * 0.35,
+      7.5 + shakeNoiseSigned(shakeTime, 8.1) * shakeAmp * 0.45
+    );
+    lookTarget.set(px * 0.1, py * 0.08, -7);
+    camera.position.lerp(camTarget, 1 - Math.exp(-7.1 * step.renderDt));
     camera.lookAt(lookTarget);
 
     if (bgMatRef.current) {
@@ -453,70 +548,87 @@ function KnotHop() {
     }
 
     if (coreMatRef.current) {
-      coreMatRef.current.emissiveIntensity = 0.34 + runtime.shake * 0.2;
+      coreMatRef.current.emissiveIntensity = 0.2 + runtime.shake * 0.18;
     }
 
     if (playerRef.current) {
       playerRef.current.position.set(px, py, PLAYER_Z);
-      const pulse = 1 + runtime.hopPulse * 0.15 + Math.sin(runtime.elapsed * 7.2) * 0.03;
+      const pulse = 1 + runtime.hopPulse * 0.14 + Math.sin(runtime.elapsed * 7.2) * 0.02;
       playerRef.current.scale.setScalar(pulse);
+      playerRef.current.rotation.set(0, 0, runtime.theta + Math.PI / 2);
     }
 
-    if (bulgeRef.current && safeRef.current) {
-      let idx = 0;
-      for (let i = 0; i < runtime.gates.length; i += 1) {
-        const gate = runtime.gates[i];
-        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.6 + gate.pulse);
+    if (obstacleRef.current && collectibleRef.current) {
+      let obstacleIdx = 0;
+      let collectibleIdx = 0;
 
-        for (let slot = 0; slot < 4; slot += 1) {
-          if (slot === gate.safeSlot) {
-            dummy.position.copy(OFFSCREEN_POS);
-            dummy.scale.copy(TINY_SCALE);
-            dummy.rotation.set(0, 0, 0);
-            dummy.updateMatrix();
-            bulgeRef.current.setMatrixAt(idx, dummy.matrix);
-            bulgeRef.current.setColorAt(idx, MINT);
-            idx += 1;
-            continue;
-          }
+      for (const event of runtime.events) {
+        if (!event.active) continue;
 
-          const angle = angleForSlot(slot);
-          const r = CORE_RADIUS + 0.2;
-          dummy.position.set(Math.cos(angle) * r, Math.sin(angle) * r, gate.z);
-          dummy.rotation.set(0, 0, runtime.elapsed * 0.8 + slot * 0.1);
-          dummy.scale.set(0.32, 0.24, 0.32);
+        const x = Math.cos(event.theta) * ORBIT_RADIUS;
+        const y = Math.sin(event.theta) * ORBIT_RADIUS;
+
+        if (event.kind === 'obstacle') {
+          dummy.position.set(x, y, event.z);
+          dummy.rotation.set(event.spin * 0.45, event.spin, event.spin * 0.22);
+          const hazardScale = 0.25 + Math.sin(event.pulse) * 0.03 + event.flash * 0.08;
+          dummy.scale.setScalar(hazardScale);
           dummy.updateMatrix();
-          bulgeRef.current.setMatrixAt(idx, dummy.matrix);
 
-          const col = colorScratch
-            .setHSL(0.45 + gate.hue * 0.08, 0.75, 0.38 + pulse * 0.15)
-            .lerp(CORAL, gate.flash * 0.32);
-          bulgeRef.current.setColorAt(idx, col);
-          idx += 1;
+          obstacleRef.current.setMatrixAt(obstacleIdx, dummy.matrix);
+
+          colorScratch
+            .copy(obstacleColor)
+            .lerp(obstacleFlashColor, event.flash * 0.55 + 0.08);
+          obstacleRef.current.setColorAt(obstacleIdx, colorScratch);
+
+          obstacleIdx += 1;
+        } else {
+          dummy.position.set(x, y, event.z);
+          dummy.rotation.set(event.spin * 0.2, event.spin, event.spin * 0.28);
+          const collectScale = 0.16 + Math.sin(event.pulse) * 0.02 + event.flash * 0.05;
+          dummy.scale.setScalar(collectScale);
+          dummy.updateMatrix();
+
+          collectibleRef.current.setMatrixAt(collectibleIdx, dummy.matrix);
+
+          colorScratch
+            .copy(collectibleColorA)
+            .lerp(
+              collectibleColorB,
+              (Math.sin(event.pulse * 0.7) * 0.5 + 0.5) * 0.55 + event.flash * 0.35
+            );
+          collectibleRef.current.setColorAt(collectibleIdx, colorScratch);
+
+          collectibleIdx += 1;
         }
-
-        const safeAngle = angleForSlot(gate.safeSlot);
-        dummy.position.set(
-          Math.cos(safeAngle) * (CORE_RADIUS + 0.28),
-          Math.sin(safeAngle) * (CORE_RADIUS + 0.28),
-          gate.z
-        );
-        dummy.rotation.set(Math.PI / 2, 0, safeAngle);
-        const markerScale = 0.7 + pulse * 0.08 + gate.flash * 0.4;
-        dummy.scale.set(markerScale, markerScale, markerScale);
-        dummy.updateMatrix();
-        safeRef.current.setMatrixAt(i, dummy.matrix);
-
-        const markerColor = colorScratch
-          .copy(SEA)
-          .lerp(WHITE, 0.35 + pulse * 0.3 + gate.flash * 0.3);
-        safeRef.current.setColorAt(i, markerColor);
       }
 
-      bulgeRef.current.instanceMatrix.needsUpdate = true;
-      safeRef.current.instanceMatrix.needsUpdate = true;
-      if (bulgeRef.current.instanceColor) bulgeRef.current.instanceColor.needsUpdate = true;
-      if (safeRef.current.instanceColor) safeRef.current.instanceColor.needsUpdate = true;
+      while (obstacleIdx < EVENT_POOL) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(TINY_SCALE);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        obstacleRef.current.setMatrixAt(obstacleIdx, dummy.matrix);
+        obstacleRef.current.setColorAt(obstacleIdx, obstacleColor);
+        obstacleIdx += 1;
+      }
+
+      while (collectibleIdx < EVENT_POOL) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(TINY_SCALE);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        collectibleRef.current.setMatrixAt(collectibleIdx, dummy.matrix);
+        collectibleRef.current.setColorAt(collectibleIdx, collectibleColorA);
+        collectibleIdx += 1;
+      }
+
+      obstacleRef.current.instanceMatrix.needsUpdate = true;
+      collectibleRef.current.instanceMatrix.needsUpdate = true;
+      if (obstacleRef.current.instanceColor) obstacleRef.current.instanceColor.needsUpdate = true;
+      if (collectibleRef.current.instanceColor)
+        collectibleRef.current.instanceColor.needsUpdate = true;
     }
 
     for (let i = TRAIL_POINTS - 1; i > 0; i -= 1) {
@@ -524,53 +636,65 @@ function KnotHop() {
       const prev = (i - 1) * 3;
       trailAttr.array[ptr] = trailAttr.array[prev];
       trailAttr.array[ptr + 1] = trailAttr.array[prev + 1];
-      trailAttr.array[ptr + 2] = -i * 0.14;
+      trailAttr.array[ptr + 2] = -i * 0.18;
     }
-
     trailAttr.array[0] = px;
     trailAttr.array[1] = py;
     trailAttr.array[2] = 0;
     trailAttr.needsUpdate = true;
 
-    for (let i = 0; i < SPIRAL_POINTS; i += 1) {
-      const t = i / (SPIRAL_POINTS - 1);
-      const z = -t * 58;
-      const turn = runtime.elapsed * 0.34 - t * 18;
-      const sx = Math.cos(turn) * (CORE_RADIUS + 0.08);
-      const sy = Math.sin(turn) * (CORE_RADIUS + 0.08);
-      spiralPoints[i].set(sx, sy, z);
+    for (let i = 0; i < GUIDE_POINTS; i += 1) {
+      const t = i / (GUIDE_POINTS - 1);
+      const z = 1.2 - t * 72;
+      const angle = runtime.theta + runtime.spinDir * t * 15.5;
+
+      const ax = Math.cos(angle) * ORBIT_RADIUS;
+      const ay = Math.sin(angle) * ORBIT_RADIUS;
+      const bx = Math.cos(angle + Math.PI) * ORBIT_RADIUS;
+      const by = Math.sin(angle + Math.PI) * ORBIT_RADIUS;
+
+      guidePointsA[i].set(ax, ay, z);
+      guidePointsB[i].set(bx, by, z);
 
       const ptr = i * 3;
-      spiralFlat[ptr] = sx;
-      spiralFlat[ptr + 1] = sy;
-      spiralFlat[ptr + 2] = z;
+      guideFlatA[ptr] = ax;
+      guideFlatA[ptr + 1] = ay;
+      guideFlatA[ptr + 2] = z;
+
+      guideFlatB[ptr] = bx;
+      guideFlatB[ptr + 1] = by;
+      guideFlatB[ptr + 2] = z;
     }
 
-    const spiralGeom: any = spiralLineRef.current?.geometry;
-    if (spiralGeom?.setFromPoints) spiralGeom.setFromPoints(spiralPoints);
-    else if (spiralGeom?.setPositions) spiralGeom.setPositions(spiralFlat);
+    const guideGeomA: any = guideLineARef.current?.geometry;
+    if (guideGeomA?.setFromPoints) guideGeomA.setFromPoints(guidePointsA);
+    else if (guideGeomA?.setPositions) guideGeomA.setPositions(guideFlatA);
+
+    const guideGeomB: any = guideLineBRef.current?.geometry;
+    if (guideGeomB?.setFromPoints) guideGeomB.setFromPoints(guidePointsB);
+    else if (guideGeomB?.setPositions) guideGeomB.setPositions(guideFlatB);
 
     clearFrameInput(inputRef);
   });
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 3.3, 7.2]} fov={45} />
-      <color attach="background" args={['#9adad2']} />
-      <fog attach="fog" args={['#9adad2', 8, 42]} />
+      <PerspectiveCamera makeDefault position={[0, 2.8, 7.5]} fov={46} />
+      <color attach="background" args={['#050a12']} />
+      <fog attach="fog" args={['#050a12', 9, 46]} />
 
       <KnotHopUI />
 
-      <Stars radius={86} depth={50} count={820} factor={1.9} saturation={0.3} fade speed={0.22} />
+      <Stars radius={80} depth={44} count={280} factor={1.2} saturation={0.05} fade speed={0.15} />
 
-      <ambientLight intensity={0.86} />
-      <hemisphereLight args={['#f2fff9', '#79b8b1', 0.52]} />
-      <directionalLight position={[3.2, 5.6, 4]} intensity={0.84} color="#fafff1" />
-      <pointLight position={[-3.1, 2.2, -8]} intensity={0.42} color="#66d5c5" />
-      <pointLight position={[2.7, 1.8, -9]} intensity={0.3} color="#7bd5ff" />
+      <ambientLight intensity={0.32} />
+      <hemisphereLight args={['#9bc5d9', '#102431', 0.34]} />
+      <directionalLight position={[2.4, 3.8, 3]} intensity={0.5} color="#c5ecff" />
+      <pointLight position={[-2.3, 1.7, -8.5]} intensity={0.26} color="#3db0bf" />
+      <pointLight position={[2.2, 1.4, -10]} intensity={0.2} color="#4b78d9" />
 
-      <mesh position={[0, 0, -10]}>
-        <planeGeometry args={[22, 14]} />
+      <mesh position={[0, 0, -20]}>
+        <planeGeometry args={[28, 18]} />
         <shaderMaterial
           ref={bgMatRef}
           uniforms={{ uTime: { value: 0 } }}
@@ -584,17 +708,18 @@ function KnotHop() {
           fragmentShader={`
             uniform float uTime;
             varying vec2 vUv;
+
             void main() {
-              vec3 sea = vec3(0.28, 0.82, 0.74);
-              vec3 sky = vec3(0.56, 0.86, 0.97);
-              vec3 mist = vec3(0.88, 0.99, 0.97);
+              vec3 deep = vec3(0.01, 0.03, 0.06);
+              vec3 mid = vec3(0.03, 0.08, 0.14);
+              vec3 accent = vec3(0.08, 0.20, 0.24);
 
               float grad = smoothstep(0.0, 1.0, vUv.y);
-              float waves = 0.5 + 0.5 * sin((vUv.x * 2.1 + uTime * 0.12) * 6.2831853);
-              float drift = 0.5 + 0.5 * sin((vUv.y * 3.1 + uTime * 0.07) * 6.2831853);
+              float drift = 0.5 + 0.5 * sin((vUv.x * 2.1 + uTime * 0.05) * 6.2831853);
 
-              vec3 col = mix(sea, sky, grad * 0.72);
-              col = mix(col, mist, (1.0 - grad) * 0.22 + waves * 0.08 + drift * 0.06);
+              vec3 col = mix(deep, mid, grad);
+              col = mix(col, accent, (1.0 - grad) * 0.16 + drift * 0.04);
+
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -602,74 +727,81 @@ function KnotHop() {
         />
       </mesh>
 
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -24]}>
-        <cylinderGeometry args={[CORE_RADIUS, CORE_RADIUS, 78, 18, 1, true]} />
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -26]}>
+        <cylinderGeometry args={[CORE_RADIUS, CORE_RADIUS, 90, 22, 1, true]} />
         <meshStandardMaterial
           ref={coreMatRef}
-          color="#f0fffb"
-          emissive="#5acdb9"
-          emissiveIntensity={0.34}
-          roughness={0.2}
-          metalness={0.15}
-        />
-      </mesh>
-
-      <Line
-        ref={spiralLineRef}
-        points={spiralPoints}
-        color="#cafff6"
-        lineWidth={1.3}
-        transparent
-        opacity={0.52}
-      />
-
-      <instancedMesh ref={bulgeRef} args={[undefined, undefined, KNOT_BULGES]}>
-        <sphereGeometry args={[1, 12, 12]} />
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.28}
-          metalness={0.12}
-          emissive="#2f8376"
-          emissiveIntensity={0.36}
-        />
-      </instancedMesh>
-
-      <instancedMesh ref={safeRef} args={[undefined, undefined, KNOT_POOL]}>
-        <torusGeometry args={[0.18, 0.04, 10, 24]} />
-        <meshBasicMaterial
-          vertexColors
-          transparent
-          opacity={0.85}
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </instancedMesh>
-
-      <mesh ref={playerRef} position={[0, ORBIT_RADIUS, PLAYER_Z]}>
-        <sphereGeometry args={[0.24, 24, 24]} />
-        <meshStandardMaterial
-          color="#fffef6"
-          emissive="#6df1de"
-          emissiveIntensity={0.48}
-          roughness={0.14}
+          color="#132734"
+          emissive="#24555f"
+          emissiveIntensity={0.2}
+          roughness={0.36}
           metalness={0.2}
         />
       </mesh>
 
+      <Line
+        ref={guideLineARef}
+        points={guidePointsA}
+        color="#6fd6ff"
+        lineWidth={1}
+        transparent
+        opacity={0.38}
+      />
+      <Line
+        ref={guideLineBRef}
+        points={guidePointsB}
+        color="#7cf7d2"
+        lineWidth={1}
+        transparent
+        opacity={0.34}
+      />
+
+      <instancedMesh ref={obstacleRef} args={[undefined, undefined, EVENT_POOL]}>
+        <octahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.3}
+          metalness={0.16}
+          emissive="#5f211d"
+          emissiveIntensity={0.22}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={collectibleRef} args={[undefined, undefined, EVENT_POOL]}>
+        <icosahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.16}
+          metalness={0.22}
+          emissive="#7f6515"
+          emissiveIntensity={0.24}
+        />
+      </instancedMesh>
+
+      <mesh ref={playerRef} position={[ORBIT_RADIUS, 0, PLAYER_Z]}>
+        <dodecahedronGeometry args={[0.24, 0]} />
+        <meshStandardMaterial
+          color="#f2fbff"
+          emissive="#7ceeff"
+          emissiveIntensity={0.42}
+          roughness={0.14}
+          metalness={0.23}
+        />
+      </mesh>
+
       <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[ORBIT_RADIUS, 0.012, 8, 64]} />
-        <meshBasicMaterial color="#dbfff7" transparent opacity={0.42} toneMapped={false} />
+        <torusGeometry args={[ORBIT_RADIUS, 0.014, 8, 84]} />
+        <meshBasicMaterial color="#7dc7d8" transparent opacity={0.34} toneMapped={false} />
       </mesh>
 
       <points geometry={trailGeometry}>
-        <pointsMaterial color="#f6fffe" size={0.06} sizeAttenuation transparent opacity={0.64} />
+        <pointsMaterial color="#d2f7ff" size={0.06} sizeAttenuation transparent opacity={0.52} />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.58} luminanceThreshold={0.48} luminanceSmoothing={0.24} mipmapBlur />
-        <Vignette eskil={false} offset={0.1} darkness={0.3} />
-        <Noise premultiply opacity={0.01} />
+        <Bloom intensity={0.3} luminanceThreshold={0.74} luminanceSmoothing={0.25} mipmapBlur />
+        <Vignette eskil={false} offset={0.18} darkness={0.58} />
+        <Noise premultiply opacity={0.02} />
       </EffectComposer>
     </>
   );

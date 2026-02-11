@@ -76,7 +76,7 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
     title: 'Trace',
     verb: 'Turn clockwise',
     input: 'tap',
-    tutorial: 'Tap to turn 90° clockwise.',
+    tutorial: 'Tap to turn 90° clockwise and fill the grid without crossing your trail.',
     failCondition: 'collision',
     chunkProfile: 'path-follow',
     endlessFirst: true,

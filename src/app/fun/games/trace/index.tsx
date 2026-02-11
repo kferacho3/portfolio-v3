@@ -6,37 +6,39 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { create } from 'zustand';
-import { clearFrameInput, useInputRef } from '../../hooks/useInput';
-import { traceState } from './state';
 
-type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
+import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import { useGameUIState } from '../../store/selectors';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+} from '../_shared/hyperUpgradeKit';
+import {
+  TRACE_PALETTES,
+  traceState,
+  type TraceHeadStyle,
+  type TraceMedal,
+} from './state';
+
 type DirectionIndex = 0 | 1 | 2 | 3;
 
 type TrailSegment = {
-  id: number;
   ax: number;
   az: number;
   bx: number;
   bz: number;
-  thickness: number;
-  createdAt: number;
+  order: number;
 };
 
-type VoidSquare = {
+type Collectible = {
+  id: number;
+  cell: number;
   x: number;
   z: number;
-  size: number;
-  ttl: number;
   active: boolean;
-};
-
-type PhasePickup = {
-  x: number;
-  z: number;
+  pulse: number;
   spin: number;
-  ttl: number;
-  active: boolean;
 };
 
 type Spark = {
@@ -45,81 +47,50 @@ type Spark = {
   vx: number;
   vz: number;
   life: number;
+  tint: number;
 };
 
 type Runtime = {
   elapsed: number;
   score: number;
-  tightTurnBonus: number;
-  tightTurns: number;
-  danger: number;
-  speed: number;
-  bound: number;
-  playerX: number;
-  playerZ: number;
+  level: number;
+
+  gridSize: number;
+  cellSize: number;
+  boardHalf: number;
+  stepInterval: number;
+
+  moveAccumulator: number;
+  moveProgress: number;
+  queuedTurns: number;
+
+  ix: number;
+  iz: number;
   dir: DirectionIndex;
-  playerYaw: number;
-  targetYaw: number;
-  trailStartX: number;
-  trailStartZ: number;
-  turnAnchorX: number;
-  turnAnchorZ: number;
-  ignoreSegmentId: number;
-  phaseCharges: number;
-  phaseTimer: number;
-  phaseInvuln: number;
+
+  renderFromX: number;
+  renderFromZ: number;
+  renderToX: number;
+  renderToZ: number;
+
+  visited: Uint16Array;
+  visitSerial: number;
+  visitedCount: number;
+  totalCells: number;
+
   segments: TrailSegment[];
-  segmentMap: Map<number, TrailSegment>;
-  buckets: Map<string, number[]>;
-  nextSegmentId: number;
-  voids: VoidSquare[];
-  pickups: PhasePickup[];
-  voidSpawnTimer: number;
-  pickupSpawnTimer: number;
-  sparks: Spark[];
+  collectibles: Collectible[];
+  nextCollectibleId: number;
+  collectiblesRunCount: number;
+
+  transitionTimer: number;
   hudCommit: number;
+  shake: number;
+
+  sparks: Spark[];
 };
 
-type TraceStore = {
-  status: GameStatus;
-  score: number;
-  best: number;
-  tightTurns: number;
-  phaseCharges: number;
-  startRun: () => void;
-  endRun: (score: number) => void;
-  resetToStart: () => void;
-  setPhaseCharges: (phaseCharges: number) => void;
-  updateHud: (score: number, tightTurns: number) => void;
-};
-
-const BEST_KEY = 'trace_hyper_best_v1';
-
-const CELL_SIZE = 0.44;
-const TRAIL_THICKNESS = 0.16;
-const PLAYER_RADIUS = 0.12;
-const MAX_TRAIL_SEGMENTS = 4200;
-const TRAIL_INSTANCE_CAP = 2600;
-const VOID_POOL = 20;
-const PICKUP_POOL = 10;
-const MAX_SPARKS = 96;
-const GRID_LINE_CAP = 36;
-
-const ARENA_START_BOUND = 4.3;
-const ARENA_MIN_BOUND = 2.65;
-const TIGHT_TURN_THRESHOLD = 0.58;
-
-const SPEED_START = 2.28;
-const SPEED_MAX = 4.65;
-
-const CYAN = new THREE.Color('#2be4ff');
-const MAGENTA = new THREE.Color('#ff48d8');
-const AMBER = new THREE.Color('#ffd46c');
-const HOT = new THREE.Color('#ff5f78');
-const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
-const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
-
-const DIRECTIONS: Array<{ x: number; z: number }> = [
+const DIRS: Array<{ x: number; z: number }> = [
   { x: 1, z: 0 },
   { x: 0, z: -1 },
   { x: -1, z: 0 },
@@ -127,356 +98,347 @@ const DIRECTIONS: Array<{ x: number; z: number }> = [
 ];
 const DIR_YAWS: number[] = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const MIN_GRID = 6;
+const MAX_GRID = 22;
+const BOARD_WORLD_SIZE = 8.8;
+
+const CELL_INSTANCE_CAP = MAX_GRID * MAX_GRID;
+const TRAIL_INSTANCE_CAP = 2600;
+const COLLECTIBLE_CAP = 24;
+const SPARK_CAP = 120;
+
+const HEAD_RADIUS = 0.17;
+const TRAIL_THICKNESS = 0.12;
+const COLLECTIBLE_RADIUS = 0.2;
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const lerpAngle = (a: number, b: number, t: number) => {
-  let diff = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
-  if (diff < -Math.PI) diff += Math.PI * 2;
-  return a + diff * t;
-};
 
-const readBest = () => {
-  if (typeof window === 'undefined') return 0;
-  const raw = window.localStorage.getItem(BEST_KEY);
-  const parsed = Number(raw ?? 0);
-  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
-};
+const gridSizeForLevel = (level: number) =>
+  clamp(6 + Math.floor((level - 1) * 0.8), MIN_GRID, MAX_GRID);
 
-const writeBest = (score: number) => {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
-};
+const stepIntervalForLevel = (level: number) =>
+  clamp(0.37 - (level - 1) * 0.0115, 0.13, 0.37);
 
-const bucketKey = (x: number, z: number) => `${x},${z}`;
+const boardHalfForGrid = (gridSize: number, cellSize: number) =>
+  (gridSize * cellSize) * 0.5;
 
-const toCell = (v: number) => Math.floor(v / CELL_SIZE);
+const cellToWorld = (index: number, gridSize: number, cellSize: number) =>
+  (index - (gridSize - 1) * 0.5) * cellSize;
 
-const pointSegmentDistance = (
-  px: number,
-  pz: number,
-  ax: number,
-  az: number,
-  bx: number,
-  bz: number
-) => {
-  const vx = bx - ax;
-  const vz = bz - az;
-  const lenSq = vx * vx + vz * vz;
-  if (lenSq <= 0.000001) return Math.hypot(px - ax, pz - az);
-  let t = ((px - ax) * vx + (pz - az) * vz) / lenSq;
-  t = clamp(t, 0, 1);
-  const cx = ax + vx * t;
-  const cz = az + vz * t;
-  return Math.hypot(px - cx, pz - cz);
-};
-
-const useTraceStore = create<TraceStore>((set) => ({
-  status: 'START',
-  score: 0,
-  best: readBest(),
-  tightTurns: 0,
-  phaseCharges: 0,
-  startRun: () =>
-    set({
-      status: 'PLAYING',
-      score: 0,
-      tightTurns: 0,
-      phaseCharges: 0,
-    }),
-  endRun: (score) =>
-    set((state) => {
-      const nextBest = Math.max(state.best, Math.floor(score));
-      if (nextBest !== state.best) writeBest(nextBest);
-      return {
-        status: 'GAMEOVER',
-        score: Math.floor(score),
-        best: nextBest,
-      };
-    }),
-  resetToStart: () =>
-    set({
-      status: 'START',
-      score: 0,
-      tightTurns: 0,
-      phaseCharges: 0,
-    }),
-  setPhaseCharges: (phaseCharges) => set({ phaseCharges }),
-  updateHud: (score, tightTurns) =>
-    set({
-      score: Math.floor(score),
-      tightTurns,
-    }),
-}));
-
-const createVoid = (): VoidSquare => ({
-  x: 0,
-  z: 0,
-  size: 0.42,
-  ttl: 0,
-  active: false,
+const worldOfCell = (ix: number, iz: number, gridSize: number, cellSize: number) => ({
+  x: cellToWorld(ix, gridSize, cellSize),
+  z: cellToWorld(iz, gridSize, cellSize),
 });
 
-const createPickup = (): PhasePickup => ({
-  x: 0,
-  z: 0,
-  spin: 0,
-  ttl: 0,
-  active: false,
-});
+const cellIndex = (ix: number, iz: number, gridSize: number) => iz * gridSize + ix;
+
+const medalFromCompletion = (completion: number): TraceMedal => {
+  if (completion >= 100) return 'diamond';
+  if (completion >= 90) return 'gold';
+  if (completion >= 80) return 'silver';
+  if (completion >= 70) return 'bronze';
+  return 'none';
+};
+
+const medalLabel = (medal: TraceMedal) => {
+  if (medal === 'diamond') return 'Diamond';
+  if (medal === 'gold') return 'Gold';
+  if (medal === 'silver') return 'Silver';
+  if (medal === 'bronze') return 'Bronze';
+  return 'None';
+};
+
+const medalColor = (medal: TraceMedal) => {
+  if (medal === 'diamond') return '#8be9ff';
+  if (medal === 'gold') return '#ffd572';
+  if (medal === 'silver') return '#d8deea';
+  if (medal === 'bronze') return '#d99d6e';
+  return '#ffffff';
+};
+
+const bonusForMedal = (medal: TraceMedal, level: number) => {
+  if (medal === 'diamond') return 360 + level * 26;
+  if (medal === 'gold') return 240 + level * 20;
+  if (medal === 'silver') return 170 + level * 16;
+  if (medal === 'bronze') return 110 + level * 14;
+  return 0;
+};
 
 const createRuntime = (): Runtime => ({
   elapsed: 0,
   score: 0,
-  tightTurnBonus: 0,
-  tightTurns: 0,
-  danger: 0,
-  speed: SPEED_START,
-  bound: ARENA_START_BOUND,
-  playerX: 0,
-  playerZ: 0,
+  level: 1,
+
+  gridSize: MIN_GRID,
+  cellSize: BOARD_WORLD_SIZE / MIN_GRID,
+  boardHalf: BOARD_WORLD_SIZE * 0.5,
+  stepInterval: stepIntervalForLevel(1),
+
+  moveAccumulator: 0,
+  moveProgress: 1,
+  queuedTurns: 0,
+
+  ix: 0,
+  iz: 0,
   dir: 0,
-  playerYaw: DIR_YAWS[0],
-  targetYaw: DIR_YAWS[0],
-  trailStartX: 0,
-  trailStartZ: 0,
-  turnAnchorX: 0,
-  turnAnchorZ: 0,
-  ignoreSegmentId: -1,
-  phaseCharges: 0,
-  phaseTimer: 0,
-  phaseInvuln: 0,
+
+  renderFromX: 0,
+  renderFromZ: 0,
+  renderToX: 0,
+  renderToZ: 0,
+
+  visited: new Uint16Array(MIN_GRID * MIN_GRID),
+  visitSerial: 0,
+  visitedCount: 0,
+  totalCells: MIN_GRID * MIN_GRID,
+
   segments: [],
-  segmentMap: new Map(),
-  buckets: new Map(),
-  nextSegmentId: 1,
-  voids: Array.from({ length: VOID_POOL }, createVoid),
-  pickups: Array.from({ length: PICKUP_POOL }, createPickup),
-  voidSpawnTimer: 0.7,
-  pickupSpawnTimer: 4.6,
-  sparks: [],
+  collectibles: [],
+  nextCollectibleId: 1,
+  collectiblesRunCount: 0,
+
+  transitionTimer: 0,
   hudCommit: 0,
+  shake: 0,
+
+  sparks: [],
 });
 
-const difficultyAt = (runtime: Runtime) => clamp(runtime.elapsed / 85, 0, 1);
-
-const rebuildHash = (runtime: Runtime) => {
-  runtime.buckets.clear();
-  runtime.segmentMap.clear();
-  for (const seg of runtime.segments) {
-    runtime.segmentMap.set(seg.id, seg);
-    const minX = Math.min(seg.ax, seg.bx) - seg.thickness;
-    const maxX = Math.max(seg.ax, seg.bx) + seg.thickness;
-    const minZ = Math.min(seg.az, seg.bz) - seg.thickness;
-    const maxZ = Math.max(seg.az, seg.bz) + seg.thickness;
-    const ix0 = toCell(minX);
-    const ix1 = toCell(maxX);
-    const iz0 = toCell(minZ);
-    const iz1 = toCell(maxZ);
-    for (let ix = ix0; ix <= ix1; ix += 1) {
-      for (let iz = iz0; iz <= iz1; iz += 1) {
-        const key = bucketKey(ix, iz);
-        const bucket = runtime.buckets.get(key);
-        if (bucket) {
-          bucket.push(seg.id);
-        } else {
-          runtime.buckets.set(key, [seg.id]);
-        }
-      }
-    }
+const pushSparkBurst = (
+  runtime: Runtime,
+  x: number,
+  z: number,
+  count: number,
+  tint: number
+) => {
+  for (let i = 0; i < count; i += 1) {
+    if (runtime.sparks.length >= SPARK_CAP) runtime.sparks.shift();
+    const a = (Math.PI * 2 * i) / count + Math.random() * 0.7;
+    const speed = 1.4 + Math.random() * 1.8;
+    runtime.sparks.push({
+      x,
+      z,
+      vx: Math.cos(a) * speed,
+      vz: Math.sin(a) * speed,
+      life: 0.26 + Math.random() * 0.22,
+      tint,
+    });
   }
 };
 
-const addSegment = (runtime: Runtime, seg: TrailSegment) => {
-  runtime.segments.push(seg);
-  if (runtime.segments.length > MAX_TRAIL_SEGMENTS) {
-    runtime.segments.splice(0, runtime.segments.length - MAX_TRAIL_SEGMENTS);
-  }
-  rebuildHash(runtime);
+const setStateFromRuntime = (runtime: Runtime) => {
+  traceState.score = Math.floor(runtime.score);
+  traceState.level = runtime.level;
+  traceState.gridSize = runtime.gridSize;
+  traceState.completion =
+    runtime.totalCells > 0
+      ? clamp((runtime.visitedCount / runtime.totalCells) * 100, 0, 100)
+      : 0;
 };
 
-const finalizeCurrentSegment = (runtime: Runtime, endX: number, endZ: number) => {
-  const dx = endX - runtime.trailStartX;
-  const dz = endZ - runtime.trailStartZ;
-  if (dx * dx + dz * dz < 0.0006) {
-    runtime.trailStartX = endX;
-    runtime.trailStartZ = endZ;
-    runtime.turnAnchorX = endX;
-    runtime.turnAnchorZ = endZ;
-    return;
+const spawnCollectiblesForLevel = (runtime: Runtime) => {
+  runtime.collectibles.length = 0;
+
+  const target = clamp(1 + Math.floor(runtime.gridSize / 5), 1, COLLECTIBLE_CAP);
+  let attempts = 0;
+
+  while (runtime.collectibles.length < target && attempts < target * 20) {
+    attempts += 1;
+    const ix = Math.floor(Math.random() * runtime.gridSize);
+    const iz = Math.floor(Math.random() * runtime.gridSize);
+
+    if (ix === runtime.ix && iz === runtime.iz) continue;
+
+    const idx = cellIndex(ix, iz, runtime.gridSize);
+    if (runtime.visited[idx] > 0) continue;
+    if (runtime.collectibles.some((c) => c.active && c.cell === idx)) continue;
+
+    const world = worldOfCell(ix, iz, runtime.gridSize, runtime.cellSize);
+    runtime.collectibles.push({
+      id: runtime.nextCollectibleId++,
+      cell: idx,
+      x: world.x,
+      z: world.z,
+      active: true,
+      pulse: Math.random() * Math.PI * 2,
+      spin: Math.random() * Math.PI * 2,
+    });
   }
-  const seg: TrailSegment = {
-    id: runtime.nextSegmentId++,
-    ax: runtime.trailStartX,
-    az: runtime.trailStartZ,
-    bx: endX,
-    bz: endZ,
-    thickness: TRAIL_THICKNESS,
-    createdAt: runtime.elapsed,
-  };
-  addSegment(runtime, seg);
-  runtime.ignoreSegmentId = seg.id;
-  runtime.trailStartX = endX;
-  runtime.trailStartZ = endZ;
-  runtime.turnAnchorX = endX;
-  runtime.turnAnchorZ = endZ;
 };
 
-const queryNearbySegmentIds = (runtime: Runtime, x: number, z: number) => {
-  const ix = toCell(x);
-  const iz = toCell(z);
-  const out = new Set<number>();
-  for (let dx = -2; dx <= 2; dx += 1) {
-    for (let dz = -2; dz <= 2; dz += 1) {
-      const bucket = runtime.buckets.get(bucketKey(ix + dx, iz + dz));
-      if (!bucket) continue;
-      for (const id of bucket) out.add(id);
-    }
-  }
-  return out;
-};
+const setupLevel = (runtime: Runtime, level: number, keepScore: boolean) => {
+  runtime.level = level;
+  runtime.gridSize = gridSizeForLevel(level);
+  runtime.cellSize = BOARD_WORLD_SIZE / runtime.gridSize;
+  runtime.boardHalf = boardHalfForGrid(runtime.gridSize, runtime.cellSize);
+  runtime.stepInterval = stepIntervalForLevel(level);
 
-const checkTrailCollision = (runtime: Runtime, x: number, z: number) => {
-  if (runtime.phaseInvuln > 0) return { hit: false, near: false };
-  const ids = queryNearbySegmentIds(runtime, x, z);
-  let near = false;
-  const hitThreshold = TRAIL_THICKNESS + PLAYER_RADIUS * 0.9;
-  const nearThreshold = TRAIL_THICKNESS + PLAYER_RADIUS * 1.85;
-  for (const id of ids) {
-    if (id === runtime.ignoreSegmentId) continue;
-    const seg = runtime.segmentMap.get(id);
-    if (!seg) continue;
-    const d = pointSegmentDistance(x, z, seg.ax, seg.az, seg.bx, seg.bz);
-    if (d < hitThreshold) return { hit: true, near: true };
-    if (d < nearThreshold) near = true;
-  }
-  return { hit: false, near };
-};
+  runtime.totalCells = runtime.gridSize * runtime.gridSize;
+  runtime.visited = new Uint16Array(runtime.totalCells);
+  runtime.visitSerial = 0;
+  runtime.visitedCount = 0;
 
-const resetRuntime = (runtime: Runtime) => {
-  runtime.elapsed = 0;
-  runtime.score = 0;
-  runtime.tightTurnBonus = 0;
-  runtime.tightTurns = 0;
-  runtime.danger = 0;
-  runtime.speed = SPEED_START;
-  runtime.bound = ARENA_START_BOUND;
-  runtime.playerX = 0;
-  runtime.playerZ = 0;
-  runtime.dir = 0;
-  runtime.playerYaw = DIR_YAWS[0];
-  runtime.targetYaw = DIR_YAWS[0];
-  runtime.trailStartX = 0;
-  runtime.trailStartZ = 0;
-  runtime.turnAnchorX = 0;
-  runtime.turnAnchorZ = 0;
-  runtime.ignoreSegmentId = -1;
-  runtime.phaseCharges = 0;
-  runtime.phaseTimer = 0;
-  runtime.phaseInvuln = 0;
   runtime.segments.length = 0;
-  runtime.segmentMap.clear();
-  runtime.buckets.clear();
-  runtime.nextSegmentId = 1;
-  runtime.voidSpawnTimer = 0.7;
-  runtime.pickupSpawnTimer = 4.6;
-  runtime.sparks.length = 0;
-  runtime.hudCommit = 0;
-  for (const v of runtime.voids) {
-    v.active = false;
-    v.ttl = 0;
-  }
-  for (const p of runtime.pickups) {
-    p.active = false;
-    p.ttl = 0;
-    p.spin = 0;
-  }
+  runtime.queuedTurns = 0;
+  runtime.moveAccumulator = 0;
+  runtime.moveProgress = 1;
+  runtime.transitionTimer = 0.4;
+
+  if (!keepScore) runtime.score = 0;
+
+  runtime.dir = 0;
+  runtime.ix = Math.floor(runtime.gridSize / 2);
+  runtime.iz = Math.floor(runtime.gridSize / 2);
+
+  const start = worldOfCell(runtime.ix, runtime.iz, runtime.gridSize, runtime.cellSize);
+  runtime.renderFromX = start.x;
+  runtime.renderFromZ = start.z;
+  runtime.renderToX = start.x;
+  runtime.renderToZ = start.z;
+
+  const startIdx = cellIndex(runtime.ix, runtime.iz, runtime.gridSize);
+  runtime.visitSerial = 1;
+  runtime.visited[startIdx] = runtime.visitSerial;
+  runtime.visitedCount = 1;
+
+  spawnCollectiblesForLevel(runtime);
+  setStateFromRuntime(runtime);
 };
 
-const spawnVoid = (runtime: Runtime) => {
-  const slot = runtime.voids.find((v) => !v.active) ?? runtime.voids[Math.floor(Math.random() * runtime.voids.length)];
-  const d = difficultyAt(runtime);
-  const size = clamp(lerp(0.33, 0.9, d) + Math.random() * 0.14, 0.3, 0.98);
-  const margin = size * 0.5 + 0.3;
-  for (let i = 0; i < 8; i += 1) {
-    const x = (Math.random() * 2 - 1) * (runtime.bound - margin);
-    const z = (Math.random() * 2 - 1) * (runtime.bound - margin);
-    if (Math.hypot(x - runtime.playerX, z - runtime.playerZ) < 1.15) continue;
-    slot.x = x;
-    slot.z = z;
-    slot.size = size;
-    slot.ttl = lerp(7.5, 4.0, d) + Math.random() * 2.8;
-    slot.active = true;
-    return;
-  }
+const evaluateCrashResult = (runtime: Runtime) => {
+  const completion =
+    runtime.totalCells > 0
+      ? clamp((runtime.visitedCount / runtime.totalCells) * 100, 0, 100)
+      : 0;
+
+  const medal = medalFromCompletion(completion);
+  return { medal, completion };
 };
 
-const spawnPickup = (runtime: Runtime) => {
-  const slot =
-    runtime.pickups.find((p) => !p.active) ??
-    runtime.pickups[Math.floor(Math.random() * runtime.pickups.length)];
-  const margin = 0.6;
-  for (let i = 0; i < 8; i += 1) {
-    const x = (Math.random() * 2 - 1) * (runtime.bound - margin);
-    const z = (Math.random() * 2 - 1) * (runtime.bound - margin);
-    if (Math.hypot(x - runtime.playerX, z - runtime.playerZ) < 1.0) continue;
-    slot.x = x;
-    slot.z = z;
-    slot.spin = Math.random() * Math.PI * 2;
-    slot.ttl = 11 + Math.random() * 8;
-    slot.active = true;
-    return;
-  }
+const completeLevel = (
+  runtime: Runtime,
+  medal: TraceMedal,
+  completion: number,
+  crashed: boolean
+) => {
+  const bonus = bonusForMedal(medal, runtime.level);
+  runtime.score += bonus;
+
+  traceState.currentMedal = medal;
+  if (medal === 'bronze') traceState.bronze += 1;
+  if (medal === 'silver') traceState.silver += 1;
+  if (medal === 'gold') traceState.gold += 1;
+  if (medal === 'diamond') traceState.diamond += 1;
+
+  const label = medalLabel(medal).toUpperCase();
+  const crashTag = crashed ? ' (Crash Clear)' : '';
+  traceState.setToast(`LEVEL ${runtime.level} ${label} ${Math.floor(completion)}%${crashTag}`, 1.25);
+
+  const nextLevel = runtime.level + 1;
+  setupLevel(runtime, nextLevel, true);
 };
 
-function TraceOverlay() {
-  const status = useTraceStore((s) => s.status);
-  const score = useTraceStore((s) => s.score);
-  const best = useTraceStore((s) => s.best);
-  const tightTurns = useTraceStore((s) => s.tightTurns);
-  const phaseCharges = useTraceStore((s) => s.phaseCharges);
+function TraceOverlay({ onStartRun }: { onStartRun: () => void }) {
+  const snap = useSnapshot(traceState);
+  const palette = TRACE_PALETTES[snap.paletteIndex] ?? TRACE_PALETTES[0];
+
+  const headLabel = snap.headStyle[0].toUpperCase() + snap.headStyle.slice(1);
+  const medalHex = medalColor(snap.currentMedal);
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/16 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
-        <div className="text-xs uppercase tracking-[0.24em] text-cyan-100/80">Trace</div>
-        <div className="text-[11px] text-cyan-50/80">Tap to turn 90° clockwise.</div>
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/24 via-sky-500/18 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
+        <div className="text-xs uppercase tracking-[0.24em] text-cyan-100/85">Trace</div>
+        <div className="text-[11px] text-cyan-50/80">Tap to turn 90° clockwise and fill the grid.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/24 via-fuchsia-500/16 to-violet-500/20 px-3 py-2 text-right backdrop-blur-[2px]">
-        <div className="text-2xl font-black tabular-nums">{score}</div>
-        <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {best}</div>
+      <div className="absolute right-4 top-4 rounded-md border border-white/45 bg-black/38 px-3 py-2 text-right backdrop-blur-[2px]">
+        <div className="text-2xl font-black tabular-nums">{snap.score}</div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {snap.bestScore}</div>
       </div>
 
-      {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-amber-900/22 px-3 py-2 text-xs text-white/90">
+      {snap.phase === 'playing' && (
+        <div className="absolute left-4 top-[92px] rounded-md border border-white/28 bg-black/34 px-3 py-2 text-xs text-white/90">
           <div>
-            Tight Turns <span className="font-semibold text-cyan-200">{tightTurns}</span>
+            Level <span className="font-semibold text-cyan-100">{snap.level}</span>
           </div>
           <div>
-            PHASE <span className="font-semibold text-fuchsia-200">{phaseCharges}</span>
+            Grid <span className="font-semibold text-emerald-100">{snap.gridSize}x{snap.gridSize}</span>
+          </div>
+          <div>
+            Fill <span className="font-semibold text-amber-100">{snap.completion.toFixed(1)}%</span>
+          </div>
+          <div>
+            Collected <span className="font-semibold text-sky-100">{snap.collectibles}</span>
+          </div>
+          <div>
+            Medal <span className="font-semibold" style={{ color: medalHex }}>{medalLabel(snap.currentMedal)}</span>
           </div>
         </div>
       )}
 
-      {status === 'START' && (
+      {snap.toastTime > 0 && snap.toastText && (
+        <div className="absolute inset-x-0 top-20 flex justify-center">
+          <div className="rounded-md border border-cyan-100/55 bg-black/44 px-4 py-1 text-sm font-semibold tracking-[0.11em] text-cyan-100">
+            {snap.toastText}
+          </div>
+        </div>
+      )}
+
+      {snap.phase !== 'playing' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/82 via-cyan-950/46 to-amber-950/30 px-6 py-5 text-center backdrop-blur-md">
+          <div className="pointer-events-auto w-[min(92vw,480px)] rounded-xl border border-cyan-100/45 bg-gradient-to-br from-slate-950/84 via-cyan-950/46 to-emerald-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">TRACE</div>
-            <div className="mt-2 text-sm text-white/85">One tap. One turn direction.</div>
-            <div className="mt-1 text-sm text-white/85">Don’t hit walls, your trail, or void blocks.</div>
-            <div className="mt-1 text-sm text-white/80">Your full path stays drawn so you can plan safe turns.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap to start.</div>
-          </div>
-        </div>
-      )}
+            <div className="mt-2 text-sm text-white/85">Fill each grid while avoiding your own trail. Level 1 starts small and grows every clear.</div>
+            <div className="mt-2 text-sm text-white/80">Crash at 70%+ still clears the level with medal: Bronze 70-79, Silver 80-89, Gold 90-99, Diamond 100.</div>
 
-      {status === 'GAMEOVER' && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/44 to-cyan-950/30 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black text-fuchsia-200">Trace Lost</div>
-            <div className="mt-2 text-sm text-white/80">Score {score}</div>
-            <div className="mt-1 text-sm text-white/75">Best {best}</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+            {snap.phase === 'gameover' && (
+              <div className="mt-3 rounded-md border border-white/20 bg-black/28 px-3 py-2 text-sm text-white/85">
+                <div>Run ended at Level {snap.level}</div>
+                <div>Final Fill {snap.completion.toFixed(1)}%</div>
+              </div>
+            )}
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <button
+                className="rounded-md border border-white/30 bg-white/10 px-3 py-2 text-white hover:bg-white/18"
+                onClick={() => traceState.nextPalette()}
+              >
+                Palette: {palette.name}
+              </button>
+
+              <button
+                className="rounded-md border border-white/30 bg-white/10 px-3 py-2 text-white hover:bg-white/18"
+                onClick={() => traceState.toggleAutoPalette()}
+              >
+                Random Palette: {snap.autoPalette ? 'ON' : 'OFF'}
+              </button>
+
+              <button
+                className="rounded-md border border-white/30 bg-white/10 px-3 py-2 text-white hover:bg-white/18"
+                onClick={() => traceState.nextHeadStyle()}
+              >
+                Head Style: {headLabel}
+              </button>
+
+              <button
+                className="rounded-md border border-cyan-200/65 bg-cyan-500/22 px-3 py-2 font-semibold text-cyan-50 hover:bg-cyan-500/32"
+                onClick={onStartRun}
+              >
+                {snap.phase === 'gameover' ? 'Run Again' : 'Start Run'}
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-4 gap-2 text-xs text-white/85">
+              <div className="rounded border border-white/20 bg-black/22 px-2 py-1">Bronze {snap.bronze}</div>
+              <div className="rounded border border-white/20 bg-black/22 px-2 py-1">Silver {snap.silver}</div>
+              <div className="rounded border border-white/20 bg-black/22 px-2 py-1">Gold {snap.gold}</div>
+              <div className="rounded border border-white/20 bg-black/22 px-2 py-1">Diamond {snap.diamond}</div>
+            </div>
+
+            <div className="mt-3 text-xs text-cyan-100/90">Tap or Space to turn while playing. R restarts instantly.</div>
           </div>
         </div>
       )}
@@ -485,71 +447,62 @@ function TraceOverlay() {
 }
 
 function TraceScene() {
-  const resetVersion = useSnapshot(traceState).resetVersion;
+  const snap = useSnapshot(traceState);
+  const ui = useGameUIState();
+
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
   });
 
   const runtimeRef = useRef<Runtime>(createRuntime());
+  const fixedStepRef = useRef(createFixedStepState());
 
+  const cellMeshRef = useRef<THREE.InstancedMesh>(null);
   const trailMeshRef = useRef<THREE.InstancedMesh>(null);
-  const voidMeshRef = useRef<THREE.InstancedMesh>(null);
-  const pickupMeshRef = useRef<THREE.InstancedMesh>(null);
-  const gridLineRef = useRef<THREE.InstancedMesh>(null);
-  const playerRef = useRef<THREE.Mesh>(null);
-  const playerNoseRef = useRef<THREE.Mesh>(null);
-  const currentTrailRef = useRef<THREE.Mesh>(null);
-  const trailMatRef = useRef<THREE.MeshBasicMaterial>(null);
-  const playerMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const collectibleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const headGroupRef = useRef<THREE.Group>(null);
   const sparkPointsRef = useRef<THREE.Points>(null);
-  const glowLightRef = useRef<THREE.PointLight>(null);
   const borderRefs = useRef<Array<THREE.Mesh | null>>([]);
-  const cornerRefs = useRef<Array<THREE.Mesh | null>>([]);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  const segDirection = useMemo(() => new THREE.Vector3(), []);
-  const segColor = useMemo(() => new THREE.Color(), []);
-  const edgeColor = useMemo(() => new THREE.Color(), []);
-  const cameraPosTarget = useMemo(() => new THREE.Vector3(), []);
-  const cameraLookTarget = useMemo(() => new THREE.Vector3(), []);
-  const cameraUp = useMemo(() => new THREE.Vector3(), []);
-  const sparkPositions = useMemo(() => new Float32Array(MAX_SPARKS * 3), []);
+  const colorScratch = useMemo(() => new THREE.Color(), []);
+  const trailColorA = useMemo(() => new THREE.Color(), []);
+  const trailColorB = useMemo(() => new THREE.Color(), []);
+
+  const camTarget = useMemo(() => new THREE.Vector3(), []);
+  const lookTarget = useMemo(() => new THREE.Vector3(), []);
+
+  const sparkPositions = useMemo(() => new Float32Array(SPARK_CAP * 3), []);
   const sparkGeometry = useMemo(() => {
-    const geom = new THREE.BufferGeometry();
-    geom.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
-    geom.setDrawRange(0, 0);
-    return geom;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
+    g.setDrawRange(0, 0);
+    return g;
   }, [sparkPositions]);
 
   const { camera } = useThree();
 
+  const startRun = () => {
+    traceState.startRun();
+    setupLevel(runtimeRef.current, 1, false);
+    traceState.setToast('LEVEL 1', 0.8);
+  };
+
   useEffect(() => {
-    resetRuntime(runtimeRef.current);
-    useTraceStore.getState().resetToStart();
+    traceState.load();
+    setupLevel(runtimeRef.current, 1, false);
   }, []);
 
   useEffect(() => {
-    resetRuntime(runtimeRef.current);
-    useTraceStore.getState().resetToStart();
-  }, [resetVersion]);
+    if (snap.resetVersion <= 0) return;
+    setupLevel(runtimeRef.current, 1, false);
+  }, [snap.resetVersion]);
 
   useEffect(() => {
-    const snap = useTraceStore.getState();
-    traceState.score = snap.score;
-    traceState.bestScore = snap.best;
-    traceState.gameOver = snap.status === 'GAMEOVER';
-    traceState.phaseCharges = snap.phaseCharges;
-
-    const unsubscribe = useTraceStore.subscribe((storeState) => {
-      traceState.score = storeState.score;
-      traceState.bestScore = storeState.best;
-      traceState.gameOver = storeState.status === 'GAMEOVER';
-      traceState.phaseCharges = storeState.phaseCharges;
-      traceState.combo = storeState.tightTurns;
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (ui.restartSeed <= 0) return;
+    traceState.startRun();
+    setupLevel(runtimeRef.current, 1, false);
+  }, [ui.restartSeed]);
 
   useEffect(
     () => () => {
@@ -558,169 +511,167 @@ function TraceScene() {
     [sparkGeometry]
   );
 
-  useFrame((state, delta) => {
-    const dt = Math.min(0.033, Math.max(0.001, delta));
+  useFrame((_state, delta) => {
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) return;
+
+    const dt = step.dt;
     const runtime = runtimeRef.current;
-    const store = useTraceStore.getState();
     const input = inputRef.current;
+
+    traceState.tick(dt);
 
     const tap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
+    const restart = input.justPressed.has('r');
 
-    if (tap) {
-      if (store.status !== 'PLAYING') {
-        resetRuntime(runtime);
-        useTraceStore.getState().startRun();
-      } else {
-        finalizeCurrentSegment(runtime, runtime.playerX, runtime.playerZ);
-        runtime.dir = (((runtime.dir + 1) % 4) as DirectionIndex);
-        runtime.targetYaw = DIR_YAWS[runtime.dir];
+    if ((tap || restart) && traceState.phase !== 'playing') {
+      startRun();
+    } else if (restart && traceState.phase === 'playing') {
+      startRun();
+    }
 
-        const distToWall = Math.min(
-          runtime.bound - Math.abs(runtime.playerX),
-          runtime.bound - Math.abs(runtime.playerZ)
-        );
-        if (distToWall < TIGHT_TURN_THRESHOLD) {
-          const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 120);
-          runtime.tightTurnBonus += bonus;
-          runtime.tightTurns += 1;
-          runtime.score += bonus;
-        }
+    if (traceState.phase === 'playing' && !ui.paused) {
+      if (tap) {
+        runtime.queuedTurns = clamp(runtime.queuedTurns + 1, 0, 3);
+      }
 
-        for (let i = 0; i < 8; i += 1) {
-          if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
-          const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.7;
-          const speed = 1.6 + Math.random() * 1.5;
-          runtime.sparks.push({
-            x: runtime.playerX,
-            z: runtime.playerZ,
-            vx: Math.cos(a) * speed,
-            vz: Math.sin(a) * speed,
-            life: 0.33 + Math.random() * 0.24,
+      runtime.elapsed += dt;
+      runtime.hudCommit += dt;
+      runtime.transitionTimer = Math.max(0, runtime.transitionTimer - dt);
+      runtime.moveProgress = clamp(runtime.moveProgress + dt / runtime.stepInterval, 0, 1);
+
+      if (runtime.transitionTimer <= 0) {
+        runtime.moveAccumulator += dt;
+
+        while (runtime.moveAccumulator >= runtime.stepInterval) {
+          runtime.moveAccumulator -= runtime.stepInterval;
+
+          if (runtime.queuedTurns > 0) {
+            runtime.dir = (((runtime.dir + 1) % 4) as DirectionIndex);
+            runtime.queuedTurns -= 1;
+
+            const turnX = lerp(runtime.renderFromX, runtime.renderToX, runtime.moveProgress);
+            const turnZ = lerp(runtime.renderFromZ, runtime.renderToZ, runtime.moveProgress);
+            pushSparkBurst(runtime, turnX, turnZ, 7, 0.7);
+          }
+
+          const prevIx = runtime.ix;
+          const prevIz = runtime.iz;
+          const dir = DIRS[runtime.dir];
+          const nextIx = prevIx + dir.x;
+          const nextIz = prevIz + dir.z;
+
+          const crashIntoWall =
+            nextIx < 0 ||
+            nextIz < 0 ||
+            nextIx >= runtime.gridSize ||
+            nextIz >= runtime.gridSize;
+
+          const crashIntoTrail =
+            !crashIntoWall &&
+            runtime.visited[cellIndex(nextIx, nextIz, runtime.gridSize)] > 0;
+
+          if (crashIntoWall || crashIntoTrail) {
+            const result = evaluateCrashResult(runtime);
+            traceState.completion = result.completion;
+
+            if (result.medal !== 'none') {
+              completeLevel(runtime, result.medal, result.completion, true);
+              pushSparkBurst(
+                runtime,
+                runtime.renderToX,
+                runtime.renderToZ,
+                14,
+                result.medal === 'diamond' ? 1 : 0.4
+              );
+              runtime.shake = Math.min(1.2, runtime.shake + 0.24);
+            } else {
+              traceState.setToast(
+                `FAILED ${Math.floor(result.completion)}% (Need 70%)`,
+                1.15
+              );
+              traceState.endRun(runtime.score);
+              runtime.shake = 1.25;
+            }
+            break;
+          }
+
+          const from = worldOfCell(prevIx, prevIz, runtime.gridSize, runtime.cellSize);
+          const to = worldOfCell(nextIx, nextIz, runtime.gridSize, runtime.cellSize);
+
+          runtime.segments.push({
+            ax: from.x,
+            az: from.z,
+            bx: to.x,
+            bz: to.z,
+            order: runtime.visitSerial,
           });
+          if (runtime.segments.length > TRAIL_INSTANCE_CAP) {
+            runtime.segments.splice(0, runtime.segments.length - TRAIL_INSTANCE_CAP);
+          }
+
+          runtime.ix = nextIx;
+          runtime.iz = nextIz;
+
+          const idx = cellIndex(nextIx, nextIz, runtime.gridSize);
+          if (runtime.visited[idx] === 0) {
+            runtime.visitSerial += 1;
+            runtime.visited[idx] = runtime.visitSerial;
+            runtime.visitedCount += 1;
+            runtime.score += 6 + runtime.level * 2;
+          }
+
+          for (const c of runtime.collectibles) {
+            if (!c.active) continue;
+            if (c.cell !== idx) continue;
+
+            c.active = false;
+            runtime.score += 45 + runtime.level * 6;
+            runtime.collectiblesRunCount += 1;
+            traceState.collectibles = runtime.collectiblesRunCount;
+            traceState.setToast('COLLECTED', 0.55);
+            pushSparkBurst(runtime, c.x, c.z, 10, 1);
+            runtime.shake = Math.min(1.2, runtime.shake + 0.18);
+            break;
+          }
+
+          runtime.renderFromX = from.x;
+          runtime.renderFromZ = from.z;
+          runtime.renderToX = to.x;
+          runtime.renderToZ = to.z;
+          runtime.moveProgress = 0;
+
+          const completion =
+            runtime.totalCells > 0
+              ? clamp((runtime.visitedCount / runtime.totalCells) * 100, 0, 100)
+              : 0;
+
+          if (runtime.visitedCount >= runtime.totalCells) {
+            completeLevel(runtime, 'diamond', 100, false);
+            pushSparkBurst(runtime, to.x, to.z, 16, 1);
+            runtime.shake = Math.min(1.2, runtime.shake + 0.24);
+            break;
+          }
+
+          traceState.completion = completion;
         }
+      }
+
+      if (runtime.hudCommit >= 0.08) {
+        runtime.hudCommit = 0;
+        setStateFromRuntime(runtime);
       }
     }
 
-    if (store.status === 'PLAYING') {
-      runtime.elapsed += dt;
-      runtime.hudCommit += dt;
-      runtime.phaseTimer = Math.max(0, runtime.phaseTimer - dt);
-      runtime.phaseInvuln = Math.max(0, runtime.phaseInvuln - dt);
-
-      const d = difficultyAt(runtime);
-      runtime.speed = lerp(SPEED_START, SPEED_MAX, d);
-      runtime.bound = lerp(ARENA_START_BOUND, ARENA_MIN_BOUND, clamp(runtime.elapsed / 95, 0, 1));
-      runtime.danger = Math.max(0, runtime.danger - dt * 1.9);
-
-      runtime.voidSpawnTimer -= dt;
-      runtime.pickupSpawnTimer -= dt;
-      if (runtime.voidSpawnTimer <= 0) {
-        spawnVoid(runtime);
-        runtime.voidSpawnTimer = lerp(2.8, 1.15, d) + Math.random() * 0.9;
-      }
-      if (runtime.pickupSpawnTimer <= 0) {
-        spawnPickup(runtime);
-        runtime.pickupSpawnTimer = 8.5 + Math.random() * 4.5;
-      }
-
-      for (const v of runtime.voids) {
-        if (!v.active) continue;
-        v.ttl -= dt;
-        if (v.ttl <= 0) v.active = false;
-      }
-      for (const p of runtime.pickups) {
-        if (!p.active) continue;
-        p.ttl -= dt;
-        p.spin += dt * 2.3;
-        if (p.ttl <= 0) p.active = false;
-      }
-
-      if (
-        runtime.ignoreSegmentId !== -1 &&
-        Math.hypot(runtime.playerX - runtime.turnAnchorX, runtime.playerZ - runtime.turnAnchorZ) >
-          TRAIL_THICKNESS * 2.8
-      ) {
-        runtime.ignoreSegmentId = -1;
-      }
-
-      const dir = DIRECTIONS[runtime.dir];
-      const stepCount = Math.max(1, Math.ceil((runtime.speed * dt) / 0.045));
-      const subDt = dt / stepCount;
-      let gameOver = false;
-
-      for (let i = 0; i < stepCount; i += 1) {
-        runtime.playerX += dir.x * runtime.speed * subDt;
-        runtime.playerZ += dir.z * runtime.speed * subDt;
-
-        if (
-          Math.abs(runtime.playerX) + PLAYER_RADIUS > runtime.bound ||
-          Math.abs(runtime.playerZ) + PLAYER_RADIUS > runtime.bound
-        ) {
-          gameOver = true;
-          break;
-        }
-
-        let trailHit = false;
-        const trailCollision = checkTrailCollision(runtime, runtime.playerX, runtime.playerZ);
-        if (trailCollision.hit) {
-          trailHit = true;
-        } else if (trailCollision.near) {
-          runtime.danger = Math.min(1, runtime.danger + 0.35);
-        }
-
-        if (trailHit) {
-          if (runtime.phaseCharges > 0) {
-            runtime.phaseCharges -= 1;
-            runtime.phaseTimer = 0.52;
-            runtime.phaseInvuln = 0.52;
-            useTraceStore.getState().setPhaseCharges(runtime.phaseCharges);
-          } else {
-            gameOver = true;
-            break;
-          }
-        }
-
-        for (const v of runtime.voids) {
-          if (!v.active) continue;
-          const half = v.size * 0.5;
-          if (
-            Math.abs(runtime.playerX - v.x) < half + PLAYER_RADIUS * 0.86 &&
-            Math.abs(runtime.playerZ - v.z) < half + PLAYER_RADIUS * 0.86
-          ) {
-            gameOver = true;
-            break;
-          }
-        }
-        if (gameOver) break;
-
-        for (const p of runtime.pickups) {
-          if (!p.active) continue;
-          if (Math.hypot(runtime.playerX - p.x, runtime.playerZ - p.z) < PLAYER_RADIUS + 0.17) {
-            p.active = false;
-            runtime.phaseCharges = clamp(runtime.phaseCharges + 1, 0, 3);
-            useTraceStore.getState().setPhaseCharges(runtime.phaseCharges);
-            runtime.score += 45;
-          }
-        }
-      }
-
-      if (gameOver) {
-        finalizeCurrentSegment(runtime, runtime.playerX, runtime.playerZ);
-        useTraceStore.getState().endRun(runtime.score);
-      } else {
-        runtime.score += dt * 14.5;
-        runtime.score += dt * runtime.tightTurnBonus * 0.085;
-
-        if (runtime.hudCommit >= 0.08) {
-          runtime.hudCommit = 0;
-          useTraceStore.getState().setPhaseCharges(runtime.phaseCharges);
-          useTraceStore.getState().updateHud(runtime.score, runtime.tightTurns);
-        }
-      }
+    for (let i = runtime.collectibles.length - 1; i >= 0; i -= 1) {
+      const c = runtime.collectibles[i];
+      if (!c.active) continue;
+      c.spin += dt * 2.4;
+      c.pulse += dt * 4.8;
     }
 
     for (let i = runtime.sparks.length - 1; i >= 0; i -= 1) {
@@ -728,48 +679,86 @@ function TraceScene() {
       s.life -= dt;
       s.x += s.vx * dt;
       s.z += s.vz * dt;
-      s.vx *= Math.max(0, 1 - 4.8 * dt);
-      s.vz *= Math.max(0, 1 - 4.8 * dt);
+      s.vx *= Math.max(0, 1 - 5.5 * dt);
+      s.vz *= Math.max(0, 1 - 5.5 * dt);
       if (s.life <= 0) runtime.sparks.splice(i, 1);
+    }
+
+    runtime.shake = Math.max(0, runtime.shake - dt * 4.4);
+
+    const palette = TRACE_PALETTES[traceState.paletteIndex] ?? TRACE_PALETTES[0];
+    trailColorA.set(palette.trailA);
+    trailColorB.set(palette.trailB);
+
+    if (cellMeshRef.current) {
+      let idx = 0;
+      const total = runtime.totalCells;
+
+      for (let cell = 0; cell < total && idx < CELL_INSTANCE_CAP; cell += 1) {
+        const ix = cell % runtime.gridSize;
+        const iz = Math.floor(cell / runtime.gridSize);
+        const pos = worldOfCell(ix, iz, runtime.gridSize, runtime.cellSize);
+
+        dummy.position.set(pos.x, 0.02, pos.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(runtime.cellSize * 0.9, 0.05, runtime.cellSize * 0.9);
+        dummy.updateMatrix();
+        cellMeshRef.current.setMatrixAt(idx, dummy.matrix);
+
+        const visit = runtime.visited[cell];
+        if (visit > 0) {
+          const t = clamp(visit / Math.max(1, runtime.visitSerial), 0, 1);
+          colorScratch.copy(trailColorA).lerp(trailColorB, t * 0.9 + 0.1);
+        } else {
+          colorScratch.set(palette.unfilled);
+        }
+        cellMeshRef.current.setColorAt(idx, colorScratch);
+        idx += 1;
+      }
+
+      while (idx < CELL_INSTANCE_CAP) {
+        dummy.position.set(9999, 9999, 9999);
+        dummy.scale.set(0.0001, 0.0001, 0.0001);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        cellMeshRef.current.setMatrixAt(idx, dummy.matrix);
+        cellMeshRef.current.setColorAt(idx, colorScratch.set(palette.unfilled));
+        idx += 1;
+      }
+
+      cellMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (cellMeshRef.current.instanceColor) cellMeshRef.current.instanceColor.needsUpdate = true;
     }
 
     if (trailMeshRef.current) {
       let idx = 0;
-      const count = runtime.segments.length;
-      for (let i = 0; i < count && idx < TRAIL_INSTANCE_CAP; i += 1) {
+
+      for (let i = 0; i < runtime.segments.length && idx < TRAIL_INSTANCE_CAP; i += 1) {
         const seg = runtime.segments[i];
         const dx = seg.bx - seg.ax;
         const dz = seg.bz - seg.az;
         const len = Math.hypot(dx, dz);
-        if (len < 0.001) continue;
-        const midX = (seg.ax + seg.bx) * 0.5;
-        const midZ = (seg.az + seg.bz) * 0.5;
-        dummy.position.set(midX, 0.13, midZ);
-        segDirection.set(dx / len, 0, dz / len);
-        dummy.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, segDirection);
-        dummy.scale.set(seg.thickness, len, seg.thickness);
+        if (len < 0.0001) continue;
+
+        dummy.position.set((seg.ax + seg.bx) * 0.5, 0.08, (seg.az + seg.bz) * 0.5);
+        dummy.rotation.set(0, Math.atan2(dx, dz), 0);
+        dummy.scale.set(runtime.cellSize * 0.2, 0.08, len + 0.01);
         dummy.updateMatrix();
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
-        const age = runtime.elapsed - seg.createdAt;
-        const fade = clamp(1 - age / 1200, 0.72, 1);
-        const gradient = count > 1 ? i / (count - 1) : 0;
-        segColor.copy(CYAN).lerp(MAGENTA, clamp(gradient * 0.78 + 0.14, 0, 1));
-        segColor.multiplyScalar(fade * (1 + runtime.danger * 0.45));
-        if (runtime.phaseTimer > 0 && (i % 2 === 0)) {
-          segColor.multiplyScalar(0.28 + Math.sin(runtime.elapsed * 44) * 0.12 + 0.25);
-        }
-        trailMeshRef.current.setColorAt(idx, segColor);
+        const t = clamp(seg.order / Math.max(1, runtime.visitSerial), 0, 1);
+        colorScratch.copy(trailColorA).lerp(trailColorB, t * 0.92 + 0.08);
+        trailMeshRef.current.setColorAt(idx, colorScratch);
         idx += 1;
       }
 
       while (idx < TRAIL_INSTANCE_CAP) {
-        dummy.position.copy(OFFSCREEN_POS);
-        dummy.scale.copy(TINY_SCALE);
+        dummy.position.set(9999, 9999, 9999);
+        dummy.scale.set(0.0001, 0.0001, 0.0001);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
-        trailMeshRef.current.setColorAt(idx, CYAN);
+        trailMeshRef.current.setColorAt(idx, trailColorA);
         idx += 1;
       }
 
@@ -777,248 +766,126 @@ function TraceScene() {
       if (trailMeshRef.current.instanceColor) trailMeshRef.current.instanceColor.needsUpdate = true;
     }
 
-    if (currentTrailRef.current) {
-      const dx = runtime.playerX - runtime.trailStartX;
-      const dz = runtime.playerZ - runtime.trailStartZ;
-      const len = Math.hypot(dx, dz);
-      if (len > 0.001) {
-        const midX = (runtime.trailStartX + runtime.playerX) * 0.5;
-        const midZ = (runtime.trailStartZ + runtime.playerZ) * 0.5;
-        currentTrailRef.current.position.set(midX, 0.13, midZ);
-        segDirection.set(dx / len, 0, dz / len);
-        currentTrailRef.current.quaternion.setFromUnitVectors(
-          THREE.Object3D.DEFAULT_UP,
-          segDirection
-        );
-        currentTrailRef.current.scale.set(TRAIL_THICKNESS * 1.05, len, TRAIL_THICKNESS * 1.05);
-        currentTrailRef.current.visible = true;
-      } else {
-        currentTrailRef.current.visible = false;
-      }
-    }
-
-    if (trailMatRef.current) {
-      trailMatRef.current.opacity =
-        runtime.phaseTimer > 0
-          ? clamp(0.25 + 0.45 * (Math.sin(runtime.elapsed * 45) * 0.5 + 0.5), 0.2, 0.72)
-          : 0.96;
-      trailMatRef.current.color.copy(runtime.phaseTimer > 0 ? MAGENTA : CYAN);
-    }
-
-    if (voidMeshRef.current) {
+    if (collectibleMeshRef.current) {
       let idx = 0;
-      for (const v of runtime.voids) {
-        if (!v.active) continue;
-        dummy.position.set(v.x, 0.09, v.z);
-        dummy.scale.set(v.size, 0.08, v.size);
-        dummy.rotation.set(0, runtime.elapsed * 0.24, 0);
+      for (const c of runtime.collectibles) {
+        if (!c.active || idx >= COLLECTIBLE_CAP) continue;
+
+        const bob = Math.sin(c.pulse) * 0.05;
+        const pulseScale = 1 + Math.sin(c.pulse * 0.75) * 0.14;
+        dummy.position.set(c.x, 0.18 + bob, c.z);
+        dummy.rotation.set(0, c.spin, 0);
+        dummy.scale.setScalar(COLLECTIBLE_RADIUS * pulseScale);
         dummy.updateMatrix();
-        voidMeshRef.current.setMatrixAt(idx, dummy.matrix);
-        voidMeshRef.current.setColorAt(idx, HOT);
+        collectibleMeshRef.current.setMatrixAt(idx, dummy.matrix);
+
+        colorScratch
+          .set(palette.collectibleA)
+          .lerp(new THREE.Color(palette.collectibleB), (Math.sin(c.pulse) * 0.5 + 0.5) * 0.75);
+        collectibleMeshRef.current.setColorAt(idx, colorScratch);
         idx += 1;
       }
-      while (idx < VOID_POOL) {
-        dummy.position.copy(OFFSCREEN_POS);
-        dummy.scale.copy(TINY_SCALE);
+
+      while (idx < COLLECTIBLE_CAP) {
+        dummy.position.set(9999, 9999, 9999);
+        dummy.scale.set(0.0001, 0.0001, 0.0001);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
-        voidMeshRef.current.setMatrixAt(idx, dummy.matrix);
-        voidMeshRef.current.setColorAt(idx, HOT);
+        collectibleMeshRef.current.setMatrixAt(idx, dummy.matrix);
+        collectibleMeshRef.current.setColorAt(idx, new THREE.Color(palette.collectibleA));
         idx += 1;
       }
-      voidMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (voidMeshRef.current.instanceColor) voidMeshRef.current.instanceColor.needsUpdate = true;
+
+      collectibleMeshRef.current.instanceMatrix.needsUpdate = true;
+      if (collectibleMeshRef.current.instanceColor)
+        collectibleMeshRef.current.instanceColor.needsUpdate = true;
     }
 
-    if (pickupMeshRef.current) {
-      let idx = 0;
-      for (const p of runtime.pickups) {
-        if (!p.active) continue;
-        dummy.position.set(p.x, 0.17, p.z);
-        dummy.scale.set(0.14, 0.14, 0.14);
-        dummy.rotation.set(0, p.spin, 0);
-        dummy.updateMatrix();
-        pickupMeshRef.current.setMatrixAt(idx, dummy.matrix);
-        pickupMeshRef.current.setColorAt(idx, AMBER);
-        idx += 1;
-      }
-      while (idx < PICKUP_POOL) {
-        dummy.position.copy(OFFSCREEN_POS);
-        dummy.scale.copy(TINY_SCALE);
-        dummy.rotation.set(0, 0, 0);
-        dummy.updateMatrix();
-        pickupMeshRef.current.setMatrixAt(idx, dummy.matrix);
-        pickupMeshRef.current.setColorAt(idx, AMBER);
-        idx += 1;
-      }
-      pickupMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (pickupMeshRef.current.instanceColor) pickupMeshRef.current.instanceColor.needsUpdate = true;
-    }
+    const drawX = lerp(runtime.renderFromX, runtime.renderToX, runtime.moveProgress);
+    const drawZ = lerp(runtime.renderFromZ, runtime.renderToZ, runtime.moveProgress);
 
-    runtime.playerYaw = lerpAngle(runtime.playerYaw, runtime.targetYaw, 1 - Math.exp(-8.2 * dt));
-
-    if (playerRef.current) {
-      playerRef.current.position.set(runtime.playerX, 0.16, runtime.playerZ);
-      playerRef.current.rotation.set(0, runtime.playerYaw, 0);
+    if (headGroupRef.current) {
+      headGroupRef.current.position.set(drawX, 0.14, drawZ);
+      const t = clamp(runtime.moveProgress, 0, 1);
+      const dir = DIRS[runtime.dir];
+      headGroupRef.current.rotation.set(0, DIR_YAWS[runtime.dir], 0);
+      headGroupRef.current.position.x += dir.x * runtime.cellSize * 0.5 * (t - 0.5) * 0.16;
+      headGroupRef.current.position.z += dir.z * runtime.cellSize * 0.5 * (t - 0.5) * 0.16;
     }
-    if (playerNoseRef.current) {
-      playerNoseRef.current.position.set(runtime.playerX, 0.2, runtime.playerZ);
-      playerNoseRef.current.rotation.set(Math.PI * 0.5, runtime.playerYaw, 0);
-      const pulse = runtime.phaseTimer > 0 ? 1.18 : 1;
-      playerNoseRef.current.scale.setScalar(pulse);
-    }
-    if (playerMatRef.current) {
-      playerMatRef.current.emissiveIntensity = 0.5 + runtime.danger * 1.15 + runtime.phaseTimer * 0.45;
-      playerMatRef.current.color.copy(runtime.phaseTimer > 0 ? MAGENTA : CYAN);
-      playerMatRef.current.emissive.copy(runtime.phaseTimer > 0 ? MAGENTA : CYAN);
-    }
-    if (glowLightRef.current) {
-      glowLightRef.current.position.set(runtime.playerX, 0.35, runtime.playerZ);
-      glowLightRef.current.intensity = 0.32 + runtime.danger * 1.2 + runtime.phaseTimer * 0.3;
-      glowLightRef.current.color.copy(runtime.phaseTimer > 0 ? MAGENTA : CYAN);
-    }
-
-    const arenaBound = runtime.bound;
-    const arenaSpan = arenaBound * 2;
-    const boundDanger = clamp(
-      runtime.danger + (ARENA_START_BOUND - arenaBound) / (ARENA_START_BOUND - ARENA_MIN_BOUND + 0.0001),
-      0,
-      1
-    );
-    const edgeGlow = 0.18 + boundDanger * 0.75;
 
     if (borderRefs.current.length >= 4) {
-      const edgeW = 0.05;
-      const edgeH = 0.07;
-
       const top = borderRefs.current[0];
       const bottom = borderRefs.current[1];
       const left = borderRefs.current[2];
       const right = borderRefs.current[3];
 
+      const edgeW = 0.08;
+      const edgeH = 0.07;
+      const span = runtime.boardHalf * 2 + 0.1;
+
       if (top) {
-        top.position.set(0, 0.035, -arenaBound);
-        top.scale.set(arenaSpan + 0.2, edgeH, edgeW);
-        (top.material as THREE.MeshBasicMaterial).color.set('#66c8ff');
+        top.position.set(0, 0.035, -runtime.boardHalf);
+        top.scale.set(span, edgeH, edgeW);
       }
       if (bottom) {
-        bottom.position.set(0, 0.035, arenaBound);
-        bottom.scale.set(arenaSpan + 0.2, edgeH, edgeW);
-        (bottom.material as THREE.MeshBasicMaterial).color.set('#66c8ff');
+        bottom.position.set(0, 0.035, runtime.boardHalf);
+        bottom.scale.set(span, edgeH, edgeW);
       }
       if (left) {
-        left.position.set(-arenaBound, 0.035, 0);
-        left.scale.set(edgeW, edgeH, arenaSpan + 0.2);
-        (left.material as THREE.MeshBasicMaterial).color.set('#ff73e3');
+        left.position.set(-runtime.boardHalf, 0.035, 0);
+        left.scale.set(edgeW, edgeH, span);
       }
       if (right) {
-        right.position.set(arenaBound, 0.035, 0);
-        right.scale.set(edgeW, edgeH, arenaSpan + 0.2);
-        (right.material as THREE.MeshBasicMaterial).color.set('#ff73e3');
+        right.position.set(runtime.boardHalf, 0.035, 0);
+        right.scale.set(edgeW, edgeH, span);
       }
-    }
-
-    if (cornerRefs.current.length >= 4) {
-      const cs = 0.09 + boundDanger * 0.03;
-      const corners = [
-        [-arenaBound, -arenaBound],
-        [arenaBound, -arenaBound],
-        [arenaBound, arenaBound],
-        [-arenaBound, arenaBound],
-      ];
-      for (let i = 0; i < 4; i += 1) {
-        const corner = cornerRefs.current[i];
-        if (!corner) continue;
-        corner.position.set(corners[i][0], 0.05, corners[i][1]);
-        corner.scale.setScalar(cs);
-        (corner.material as THREE.MeshBasicMaterial).color.set('#e8f7ff');
-      }
-    }
-
-    if (gridLineRef.current) {
-      const divisions = 8;
-      let idx = 0;
-      for (let i = 0; i <= divisions; i += 1) {
-        const t = i / divisions;
-        const offset = -arenaBound + arenaSpan * t;
-
-        dummy.position.set(offset, 0.01, 0);
-        dummy.scale.set(0.01, 0.02, arenaSpan);
-        dummy.rotation.set(0, 0, 0);
-        dummy.updateMatrix();
-        gridLineRef.current.setMatrixAt(idx, dummy.matrix);
-        edgeColor.set('#1f4962').lerp(CYAN, 0.24 + edgeGlow * 0.18);
-        gridLineRef.current.setColorAt(idx, edgeColor);
-        idx += 1;
-
-        dummy.position.set(0, 0.01, offset);
-        dummy.scale.set(arenaSpan, 0.02, 0.01);
-        dummy.rotation.set(0, 0, 0);
-        dummy.updateMatrix();
-        gridLineRef.current.setMatrixAt(idx, dummy.matrix);
-        edgeColor.set('#3a234a').lerp(MAGENTA, 0.2 + edgeGlow * 0.17);
-        gridLineRef.current.setColorAt(idx, edgeColor);
-        idx += 1;
-      }
-      while (idx < GRID_LINE_CAP) {
-        dummy.position.copy(OFFSCREEN_POS);
-        dummy.scale.copy(TINY_SCALE);
-        dummy.rotation.set(0, 0, 0);
-        dummy.updateMatrix();
-        gridLineRef.current.setMatrixAt(idx, dummy.matrix);
-        gridLineRef.current.setColorAt(idx, CYAN);
-        idx += 1;
-      }
-      gridLineRef.current.instanceMatrix.needsUpdate = true;
-      if (gridLineRef.current.instanceColor) gridLineRef.current.instanceColor.needsUpdate = true;
     }
 
     const sparkAttr = sparkGeometry.getAttribute('position') as THREE.BufferAttribute;
     let sparkCount = 0;
-    for (let i = 0; i < runtime.sparks.length && sparkCount < MAX_SPARKS; i += 1) {
+    for (let i = 0; i < runtime.sparks.length && sparkCount < SPARK_CAP; i += 1) {
       const s = runtime.sparks[i];
       const ptr = sparkCount * 3;
       sparkPositions[ptr] = s.x;
-      sparkPositions[ptr + 1] = 0.18;
+      sparkPositions[ptr + 1] = 0.14;
       sparkPositions[ptr + 2] = s.z;
       sparkCount += 1;
     }
     sparkGeometry.setDrawRange(0, sparkCount);
     sparkAttr.needsUpdate = true;
 
-    const driftX = Math.sin(runtime.elapsed * 0.18) * 0.05;
-    const driftZ = Math.cos(runtime.elapsed * 0.21) * 0.05;
-    const tilt = Math.sin(runtime.elapsed * 0.33) * 0.012;
-    cameraPosTarget.set(driftX, 9.2, driftZ);
-    camera.position.lerp(cameraPosTarget, 1 - Math.exp(-4.7 * dt));
-    cameraLookTarget.set(runtime.playerX * 0.07, 0, runtime.playerZ * 0.07);
-    camera.lookAt(cameraLookTarget);
-    cameraUp.set(Math.sin(tilt), 1, Math.cos(tilt));
-    camera.up.lerp(cameraUp, 1 - Math.exp(-5 * dt));
+    const jitter = runtime.shake * 0.08;
+    camTarget.set(
+      shakeNoiseSigned(runtime.elapsed * 14, 1.7) * jitter,
+      9,
+      shakeNoiseSigned(runtime.elapsed * 14, 3.2) * jitter
+    );
+    lookTarget.set(drawX * 0.1, 0, drawZ * 0.1);
+
+    camera.position.lerp(camTarget, 1 - Math.exp(-5 * dt));
+    camera.lookAt(lookTarget);
 
     clearFrameInput(inputRef);
   });
 
+  const palette = TRACE_PALETTES[snap.paletteIndex] ?? TRACE_PALETTES[0];
+
+  const headStyle = snap.headStyle as TraceHeadStyle;
+
   return (
     <>
-      <OrthographicCamera makeDefault position={[0, 9.2, 0]} zoom={96} near={0.1} far={50} />
-      <color attach="background" args={['#0a0f16']} />
-      <fog attach="fog" args={['#0a0f16', 8, 26]} />
+      <OrthographicCamera makeDefault position={[0, 9, 0]} zoom={97} near={0.1} far={50} />
+      <color attach="background" args={[palette.bg]} />
+      <fog attach="fog" args={[palette.fog, 8, 24]} />
 
-      <ambientLight intensity={0.32} />
-      <pointLight position={[0, 1.6, 0]} intensity={0.34} color="#73f4ff" />
-      <pointLight position={[0, 2.5, 0]} intensity={0.24} color="#ff52d8" />
-      <pointLight ref={glowLightRef} position={[0, 0.35, 0]} intensity={0.35} color="#73f4ff" distance={2.2} />
+      <ambientLight intensity={0.36} />
+      <pointLight position={[0, 2.4, 0]} intensity={0.34} color={palette.accent} />
+      <pointLight position={[0, 3.2, 0]} intensity={0.22} color={palette.trailA} />
 
       <mesh position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[12, 12]} />
-        <meshStandardMaterial color="#111722" roughness={0.92} metalness={0.04} />
+        <planeGeometry args={[BOARD_WORLD_SIZE + 2.4, BOARD_WORLD_SIZE + 2.4]} />
+        <meshStandardMaterial color={palette.grid} roughness={0.92} metalness={0.04} />
       </mesh>
-
-      <instancedMesh ref={gridLineRef} args={[undefined, undefined, GRID_LINE_CAP]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.76} />
-      </instancedMesh>
 
       {[0, 1, 2, 3].map((idx) => (
         <mesh
@@ -1028,78 +895,110 @@ function TraceScene() {
           }}
         >
           <boxGeometry args={[1, 1, 1]} />
-          <meshBasicMaterial color="#2f6f9a" toneMapped={false} />
+          <meshBasicMaterial color={palette.accent} toneMapped={false} />
         </mesh>
       ))}
 
-      {[0, 1, 2, 3].map((idx) => (
-        <mesh
-          key={`trace-corner-${idx}`}
-          ref={(node) => {
-            cornerRefs.current[idx] = node;
-          }}
-        >
-          <boxGeometry args={[1, 1, 1]} />
-          <meshBasicMaterial color="#e4f8ff" toneMapped={false} />
-        </mesh>
-      ))}
-
-      <instancedMesh ref={trailMeshRef} args={[undefined, undefined, TRAIL_INSTANCE_CAP]}>
-        <cylinderGeometry args={[1, 1, 1, 8]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
-      </instancedMesh>
-
-      <mesh ref={currentTrailRef} position={[0, 0.13, 0]}>
-        <cylinderGeometry args={[1, 1, 1, 8]} />
-        <meshBasicMaterial
-          ref={trailMatRef}
-          color="#2be4ff"
-          transparent
-          opacity={0.9}
-          blending={THREE.AdditiveBlending}
-          toneMapped={false}
-        />
-      </mesh>
-
-      <instancedMesh ref={voidMeshRef} args={[undefined, undefined, VOID_POOL]}>
+      <instancedMesh ref={cellMeshRef} args={[undefined, undefined, CELL_INSTANCE_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
-      <instancedMesh ref={pickupMeshRef} args={[undefined, undefined, PICKUP_POOL]}>
-        <octahedronGeometry args={[1, 0]} />
+      <instancedMesh ref={trailMeshRef} args={[undefined, undefined, TRAIL_INSTANCE_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
-      <mesh ref={playerRef} position={[0, 0.16, 0]}>
-        <sphereGeometry args={[PLAYER_RADIUS, 20, 20]} />
+      <instancedMesh ref={collectibleMeshRef} args={[undefined, undefined, COLLECTIBLE_CAP]}>
+        <octahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
-          ref={playerMatRef}
-          color="#2be4ff"
-          emissive="#2be4ff"
-          emissiveIntensity={0.5}
-          roughness={0.28}
-          metalness={0.15}
+          vertexColors
+          roughness={0.2}
+          metalness={0.25}
+          emissive={palette.collectibleA}
+          emissiveIntensity={0.36}
         />
-      </mesh>
+      </instancedMesh>
 
-      <mesh ref={playerNoseRef} position={[0, 0.2, 0]} rotation={[Math.PI * 0.5, 0, 0]}>
-        <coneGeometry args={[0.065, 0.22, 12]} />
-        <meshBasicMaterial color="#ecfcff" toneMapped={false} />
-      </mesh>
+      <group ref={headGroupRef} position={[0, 0.14, 0]}>
+        {headStyle === 'orb' && (
+          <mesh>
+            <sphereGeometry args={[HEAD_RADIUS, 20, 20]} />
+            <meshStandardMaterial
+              color={palette.head}
+              emissive={palette.trailA}
+              emissiveIntensity={0.45}
+              roughness={0.2}
+              metalness={0.18}
+            />
+          </mesh>
+        )}
+
+        {headStyle === 'cube' && (
+          <mesh>
+            <boxGeometry args={[HEAD_RADIUS * 1.8, HEAD_RADIUS * 1.8, HEAD_RADIUS * 1.8]} />
+            <meshStandardMaterial
+              color={palette.head}
+              emissive={palette.trailB}
+              emissiveIntensity={0.42}
+              roughness={0.16}
+              metalness={0.22}
+            />
+          </mesh>
+        )}
+
+        {headStyle === 'diamond' && (
+          <mesh rotation={[0, Math.PI / 4, 0]}>
+            <octahedronGeometry args={[HEAD_RADIUS * 1.22, 0]} />
+            <meshStandardMaterial
+              color={palette.head}
+              emissive={palette.accent}
+              emissiveIntensity={0.45}
+              roughness={0.14}
+              metalness={0.25}
+            />
+          </mesh>
+        )}
+
+        {headStyle === 'dart' && (
+          <mesh rotation={[Math.PI * 0.5, 0, 0]}>
+            <coneGeometry args={[HEAD_RADIUS * 0.8, HEAD_RADIUS * 2.2, 14]} />
+            <meshStandardMaterial
+              color={palette.head}
+              emissive={palette.trailA}
+              emissiveIntensity={0.42}
+              roughness={0.2}
+              metalness={0.18}
+            />
+          </mesh>
+        )}
+
+        {headStyle === 'capsule' && (
+          <mesh>
+            <capsuleGeometry args={[HEAD_RADIUS * 0.6, HEAD_RADIUS * 1.3, 6, 12]} />
+            <meshStandardMaterial
+              color={palette.head}
+              emissive={palette.trailB}
+              emissiveIntensity={0.42}
+              roughness={0.22}
+              metalness={0.15}
+            />
+          </mesh>
+        )}
+      </group>
 
       <points ref={sparkPointsRef} geometry={sparkGeometry}>
-        <pointsMaterial color="#ffd46c" size={0.09} transparent opacity={0.75} sizeAttenuation />
+        <pointsMaterial color={palette.collectibleA} size={0.07} transparent opacity={0.76} sizeAttenuation />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.5} luminanceThreshold={0.5} luminanceSmoothing={0.22} mipmapBlur />
-        <Vignette eskil={false} offset={0.11} darkness={0.64} />
-        <Noise premultiply opacity={0.03} />
+        <Bloom intensity={0.55} luminanceThreshold={0.48} luminanceSmoothing={0.24} mipmapBlur />
+        <Vignette eskil={false} offset={0.11} darkness={0.56} />
+        <Noise premultiply opacity={0.025} />
       </EffectComposer>
 
       <Html fullscreen>
-        <TraceOverlay />
+        <TraceOverlay onStartRun={startRun} />
       </Html>
     </>
   );
