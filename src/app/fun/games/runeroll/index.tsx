@@ -19,7 +19,7 @@ import { runeRollState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
 type LaneIndex = 0 | 1 | 2;
-type StepDir = -1 | 1;
+type MoveDir = 'left' | 'up' | 'right' | 'back';
 type RuneId = 0 | 1 | 2 | 3;
 
 type FaceMap = {
@@ -70,8 +70,12 @@ type Runtime = {
   currentRow: number;
   currentLane: LaneIndex;
   progressRow: number;
-  nextDir: StepDir;
+  nextMove: MoveDir;
+  maxReachedRow: number;
+  scoredRow: number;
+  pathLanes: LaneIndex[];
   playerX: number;
+  cubeRotX: number;
   cubeRotZ: number;
 
   faces: FaceMap;
@@ -84,11 +88,11 @@ type Runtime = {
   toRow: number;
   fromLane: LaneIndex;
   toLane: LaneIndex;
-  fromRot: number;
-  toRot: number;
-
-  forcedDir: StepDir;
-  forcedSteps: number;
+  stepMove: MoveDir;
+  fromRotX: number;
+  toRotX: number;
+  fromRotZ: number;
+  toRotZ: number;
   pendingStep: boolean;
 
   difficulty: DifficultySample;
@@ -107,7 +111,7 @@ type RuneRollStore = {
   multiplier: number;
   streak: number;
   forgiveness: number;
-  direction: 'L' | 'R';
+  direction: 'L' | 'U' | 'R' | 'B';
   bottomRune: RuneId;
   failMessage: string;
   pulseNonce: number;
@@ -119,7 +123,7 @@ type RuneRollStore = {
     multiplier: number,
     streak: number,
     forgiveness: number,
-    direction: 'L' | 'R',
+    direction: 'L' | 'U' | 'R' | 'B',
     bottomRune: RuneId
   ) => void;
   endRun: (score: number, reason: string) => void;
@@ -136,7 +140,6 @@ const CUBE_SIZE = 0.72;
 const ROW_POOL = 280;
 const SHARD_POOL = 108;
 
-const DRAW_BACK_ROWS = 6;
 const DRAW_AHEAD_ROWS = 34;
 const TILE_DRAW_CAP = 220;
 const GLYPH_DRAW_CAP = 220;
@@ -145,7 +148,6 @@ const SHATTER_Y = TILE_HEIGHT * 0.62;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
-const STONE = new THREE.Color('#252b38');
 const STONE_EDGE = new THREE.Color('#4b556b');
 const WHITE = new THREE.Color('#f8fbff');
 const DANGER = new THREE.Color('#ff657f');
@@ -167,6 +169,18 @@ const normAngle = (v: number) => {
 };
 
 const bit = (lane: number) => 1 << lane;
+const moveLabel = (move: MoveDir): 'L' | 'U' | 'R' | 'B' =>
+  move === 'left' ? 'L' : move === 'right' ? 'R' : move === 'back' ? 'B' : 'U';
+
+const laneForForwardMove = (
+  currentLane: LaneIndex,
+  move: MoveDir
+): LaneIndex | null => {
+  if (move === 'up') return currentLane;
+  if (move === 'left') return currentLane > 0 ? ((currentLane - 1) as LaneIndex) : null;
+  if (move === 'right') return currentLane < 2 ? ((currentLane + 1) as LaneIndex) : null;
+  return null;
+};
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -189,8 +203,8 @@ const createFaces = (): FaceMap => ({
   back: 1,
 });
 
-const rollFaces = (faces: FaceMap, dir: StepDir): FaceMap => {
-  if (dir === 1) {
+const rollFaces = (faces: FaceMap, move: MoveDir): FaceMap => {
+  if (move === 'right') {
     return {
       top: faces.left,
       bottom: faces.right,
@@ -200,15 +214,191 @@ const rollFaces = (faces: FaceMap, dir: StepDir): FaceMap => {
       back: faces.back,
     };
   }
+  if (move === 'left') {
+    return {
+      top: faces.right,
+      bottom: faces.left,
+      left: faces.top,
+      right: faces.bottom,
+      front: faces.front,
+      back: faces.back,
+    };
+  }
+  if (move === 'up') {
+    return {
+      top: faces.back,
+      bottom: faces.front,
+      left: faces.left,
+      right: faces.right,
+      front: faces.top,
+      back: faces.bottom,
+    };
+  }
   return {
-    top: faces.right,
-    bottom: faces.left,
-    left: faces.top,
-    right: faces.bottom,
-    front: faces.front,
-    back: faces.back,
+    top: faces.front,
+    bottom: faces.back,
+    left: faces.left,
+    right: faces.right,
+    front: faces.bottom,
+    back: faces.top,
   };
 };
+
+const forwardCandidates = (runtime: Runtime) => {
+  const lane = runtime.currentLane;
+  const list: Array<{ lane: LaneIndex; move: Exclude<MoveDir, 'back'>; targetBottom: RuneId }> = [
+    {
+      lane,
+      move: 'up',
+      targetBottom: rollFaces(runtime.faces, 'up').bottom,
+    },
+  ];
+  if (lane > 0) {
+    list.push({
+      lane: (lane - 1) as LaneIndex,
+      move: 'left',
+      targetBottom: rollFaces(runtime.faces, 'left').bottom,
+    });
+  }
+  if (lane < 2) {
+    list.push({
+      lane: (lane + 1) as LaneIndex,
+      move: 'right',
+      targetBottom: rollFaces(runtime.faces, 'right').bottom,
+    });
+  }
+  return list;
+};
+
+const mapPointerToMove = (x: number, y: number): MoveDir => {
+  if (y < -0.34) return 'back';
+  if (x < -0.33) return 'left';
+  if (x > 0.33) return 'right';
+  return 'up';
+};
+
+const canStepBack = (runtime: Runtime) =>
+  runtime.currentRow > 0 && runtime.currentRow === runtime.maxReachedRow;
+
+const minVisibleRow = (runtime: Runtime) => Math.max(0, runtime.maxReachedRow - 1);
+
+const resolveBackLane = (runtime: Runtime): LaneIndex | null => {
+  const row = runtime.currentRow - 1;
+  if (row < 0) return null;
+  const lane = runtime.pathLanes[row];
+  return lane === undefined ? null : lane;
+};
+
+const initialFaces = createFaces();
+const initialBottomRune = initialFaces.bottom;
+
+const useRuneRollStore = create<RuneRollStore>((set) => ({
+  status: 'START',
+  score: 0,
+  best: readBest(),
+  multiplier: 1,
+  streak: 0,
+  forgiveness: 1,
+  direction: 'U',
+  bottomRune: initialBottomRune,
+  failMessage: '',
+  pulseNonce: 0,
+  startRun: () =>
+    set({
+      status: 'PLAYING',
+      score: 0,
+      multiplier: 1,
+      streak: 0,
+      forgiveness: 1,
+      direction: 'U',
+      bottomRune: initialBottomRune,
+      failMessage: '',
+    }),
+  resetToStart: () =>
+    set({
+      status: 'START',
+      score: 0,
+      multiplier: 1,
+      streak: 0,
+      forgiveness: 1,
+      direction: 'U',
+      bottomRune: initialBottomRune,
+      failMessage: '',
+    }),
+  onTapFx: () => set((state) => ({ pulseNonce: state.pulseNonce + 1 })),
+  updateHud: (score, multiplier, streak, forgiveness, direction, bottomRune) =>
+    set({
+      score: Math.floor(score),
+      multiplier,
+      streak,
+      forgiveness,
+      direction,
+      bottomRune,
+    }),
+  endRun: (score, reason) =>
+    set((state) => {
+      const nextBest = Math.max(state.best, Math.floor(score));
+      if (nextBest !== state.best) writeBest(nextBest);
+      return {
+        status: 'GAMEOVER',
+        score: Math.floor(score),
+        best: nextBest,
+        multiplier: 1,
+        streak: 0,
+        forgiveness: 1,
+        direction: 'U',
+        failMessage: reason,
+      };
+    }),
+}));
+
+const createRuntime = (): Runtime => ({
+  elapsed: 0,
+  score: 0,
+  streak: 0,
+  multiplier: 1,
+  forgiveness: 1,
+  nearPerfects: 0,
+  failMessage: '',
+  shake: 0,
+  hudCommit: 0,
+
+  currentRow: 0,
+  currentLane: 1,
+  progressRow: 0,
+  nextMove: 'up',
+  maxReachedRow: 0,
+  scoredRow: 0,
+  pathLanes: [1],
+  playerX: LANE_X[1],
+  cubeRotX: 0,
+  cubeRotZ: 0,
+
+  faces: createFaces(),
+  targetFaces: createFaces(),
+
+  stepActive: false,
+  stepTime: 0,
+  stepDuration: 0.2,
+  fromRow: 0,
+  toRow: 1,
+  fromLane: 1,
+  toLane: 1,
+  stepMove: 'up',
+  fromRotX: 0,
+  toRotX: Math.PI * 0.5,
+  fromRotZ: 0,
+  toRotZ: 0,
+  pendingStep: false,
+
+  difficulty: sampleDifficulty('timing-defense', 0),
+  chunkLibrary: buildPatternLibraryTemplate('runeroll'),
+  currentChunk: null,
+  chunkRowsLeft: 0,
+
+  rows: Array.from({ length: ROW_POOL }, (_, idx) => createRow(idx)),
+  shards: Array.from({ length: SHARD_POOL }, (_, idx) => createShard(idx)),
+});
 
 const createRow = (slot: number): RowData => ({
   slot,
@@ -233,110 +423,6 @@ const createShard = (slot: number): Shard => ({
   maxLife: 1,
   size: 0.05,
   color: new THREE.Color('#ffffff'),
-});
-
-const useRuneRollStore = create<RuneRollStore>((set) => ({
-  status: 'START',
-  score: 0,
-  best: readBest(),
-  multiplier: 1,
-  streak: 0,
-  forgiveness: 1,
-  direction: 'R',
-  bottomRune: 1,
-  failMessage: '',
-  pulseNonce: 0,
-  startRun: () =>
-    set({
-      status: 'PLAYING',
-      score: 0,
-      multiplier: 1,
-      streak: 0,
-      forgiveness: 1,
-      direction: 'R',
-      bottomRune: 1,
-      failMessage: '',
-    }),
-  resetToStart: () =>
-    set({
-      status: 'START',
-      score: 0,
-      multiplier: 1,
-      streak: 0,
-      forgiveness: 1,
-      direction: 'R',
-      bottomRune: 1,
-      failMessage: '',
-    }),
-  onTapFx: () => set((state) => ({ pulseNonce: state.pulseNonce + 1 })),
-  updateHud: (score, multiplier, streak, forgiveness, direction, bottomRune) =>
-    set({
-      score: Math.floor(score),
-      multiplier,
-      streak,
-      forgiveness,
-      direction,
-      bottomRune,
-    }),
-  endRun: (score, reason) =>
-    set((state) => {
-      const nextBest = Math.max(state.best, Math.floor(score));
-      if (nextBest !== state.best) writeBest(nextBest);
-      return {
-        status: 'GAMEOVER',
-        score: Math.floor(score),
-        best: nextBest,
-        multiplier: 1,
-        streak: 0,
-        forgiveness: 1,
-        direction: 'R',
-        failMessage: reason,
-      };
-    }),
-}));
-
-const createRuntime = (): Runtime => ({
-  elapsed: 0,
-  score: 0,
-  streak: 0,
-  multiplier: 1,
-  forgiveness: 1,
-  nearPerfects: 0,
-  failMessage: '',
-  shake: 0,
-  hudCommit: 0,
-
-  currentRow: 0,
-  currentLane: 1,
-  progressRow: 0,
-  nextDir: 1,
-  playerX: LANE_X[1],
-  cubeRotZ: 0,
-
-  faces: createFaces(),
-  targetFaces: createFaces(),
-
-  stepActive: false,
-  stepTime: 0,
-  stepDuration: 0.2,
-  fromRow: 0,
-  toRow: 1,
-  fromLane: 1,
-  toLane: 2,
-  fromRot: 0,
-  toRot: -Math.PI * 0.5,
-
-  forcedDir: 1,
-  forcedSteps: 0,
-  pendingStep: false,
-
-  difficulty: sampleDifficulty('timing-defense', 0),
-  chunkLibrary: buildPatternLibraryTemplate('runeroll'),
-  currentChunk: null,
-  chunkRowsLeft: 0,
-
-  rows: Array.from({ length: ROW_POOL }, (_, idx) => createRow(idx)),
-  shards: Array.from({ length: SHARD_POOL }, (_, idx) => createShard(idx)),
 });
 
 const activeRuneCount = (runtime: Runtime) => {
@@ -407,48 +493,54 @@ const ensureRow = (runtime: Runtime, rowIndex: number) => {
 };
 
 const enforceReachability = (runtime: Runtime, row: RowData, currentLane: LaneIndex) => {
-  const leftMask = currentLane > 0 ? bit(currentLane - 1) : 0;
-  const rightMask = currentLane < 2 ? bit(currentLane + 1) : 0;
-  const reachableMask = leftMask | rightMask;
-  if (reachableMask === 0) return;
+  const candidates: Array<{ lane: LaneIndex; move: Exclude<MoveDir, 'back'>; targetBottom: RuneId }> = [
+    {
+      lane: currentLane,
+      move: 'up',
+      targetBottom: rollFaces(runtime.faces, 'up').bottom,
+    },
+  ];
+  if (currentLane > 0) {
+    candidates.push({
+      lane: (currentLane - 1) as LaneIndex,
+      move: 'left',
+      targetBottom: rollFaces(runtime.faces, 'left').bottom,
+    });
+  }
+  if (currentLane < 2) {
+    candidates.push({
+      lane: (currentLane + 1) as LaneIndex,
+      move: 'right',
+      targetBottom: rollFaces(runtime.faces, 'right').bottom,
+    });
+  }
+  const allowedMask = candidates.reduce((acc, item) => acc | bit(item.lane), 0);
+  if (allowedMask === 0) return;
 
   const d = clamp((runtime.difficulty.speed - 3) / 3.6, 0, 1);
   const tier = runtime.currentChunk?.tier ?? 0;
+  const preferredMove = runtime.nextMove === 'back' ? 'up' : runtime.nextMove;
+  const preferredCandidate =
+    candidates.find((candidate) => candidate.move === preferredMove) ??
+    candidates[Math.floor(Math.random() * candidates.length)];
 
-  if (runtime.forcedSteps <= 0 && runtime.elapsed > 20) {
-    const forceChance = clamp(0.02 + Math.max(0, tier - 1) * 0.04 + d * 0.08, 0, 0.22);
-    if (Math.random() < forceChance) {
-      const candidates: StepDir[] = [];
-      if (currentLane > 0) candidates.push(-1);
-      if (currentLane < 2) candidates.push(1);
-      if (candidates.length > 0) {
-        runtime.forcedDir = candidates[Math.floor(Math.random() * candidates.length)];
-        runtime.forcedSteps = 1 + Math.floor(Math.random() * 2);
+  row.mask &= allowedMask;
+  if (row.mask === 0) row.mask = bit(preferredCandidate.lane);
+
+  if (runtime.elapsed > 10) {
+    const tightenChance = clamp(0.12 + tier * 0.08 + d * 0.18, 0.1, 0.72);
+    if (Math.random() < tightenChance) {
+      row.mask = bit(preferredCandidate.lane);
+    } else {
+      for (const candidate of candidates) {
+        if ((row.mask & bit(candidate.lane)) !== 0) continue;
+        if (Math.random() < clamp(0.34 - tier * 0.03 - d * 0.05, 0.12, 0.38)) {
+          row.mask |= bit(candidate.lane);
+        }
       }
     }
-  }
-
-  if (runtime.forcedSteps > 0) {
-    const forcedLane = currentLane + runtime.forcedDir;
-    if (forcedLane >= 0 && forcedLane <= 2) {
-      row.mask = bit(forcedLane);
-      row.wildMask &= bit(forcedLane);
-      runtime.forcedSteps -= 1;
-    } else {
-      runtime.forcedSteps = 0;
-    }
-  }
-
-  if (runtime.elapsed < 10) {
-    row.mask |= reachableMask;
-  } else if ((row.mask & reachableMask) === 0) {
-    const pickLane =
-      currentLane > 0 && currentLane < 2
-        ? (Math.random() < 0.5 ? currentLane - 1 : currentLane + 1)
-        : currentLane === 0
-          ? 1
-          : 1;
-    row.mask |= bit(pickLane);
+  } else {
+    row.mask |= allowedMask;
   }
 
   const runeCount = activeRuneCount(runtime);
@@ -462,37 +554,23 @@ const enforceReachability = (runtime: Runtime, row: RowData, currentLane: LaneIn
     }
   }
 
-  const candidates: Array<{ lane: LaneIndex; dir: StepDir; targetBottom: RuneId }> = [];
-  if (currentLane > 0 && (row.mask & bit(currentLane - 1)) !== 0) {
-    const dir: StepDir = -1;
-    candidates.push({
-      lane: (currentLane - 1) as LaneIndex,
-      dir,
-      targetBottom: rollFaces(runtime.faces, dir).bottom,
-    });
-  }
-  if (currentLane < 2 && (row.mask & bit(currentLane + 1)) !== 0) {
-    const dir: StepDir = 1;
-    candidates.push({
-      lane: (currentLane + 1) as LaneIndex,
-      dir,
-      targetBottom: rollFaces(runtime.faces, dir).bottom,
-    });
+  const activeCandidates = candidates.filter((candidate) => (row.mask & bit(candidate.lane)) !== 0);
+  if (activeCandidates.length === 0) {
+    row.mask = bit(preferredCandidate.lane);
+    activeCandidates.push(preferredCandidate);
   }
 
-  if (candidates.length === 0) return;
-
-  const hasPlayableMatch = candidates.some((candidate) => {
+  const hasPlayableMatch = activeCandidates.some((candidate) => {
     const isWild = (row.wildMask & bit(candidate.lane)) !== 0;
     return isWild || row.runes[candidate.lane] === candidate.targetBottom;
   });
 
   if (!hasPlayableMatch) {
-    const preferred =
-      candidates.find((candidate) => candidate.dir === runtime.nextDir) ??
-      candidates[Math.floor(Math.random() * candidates.length)];
-    row.runes[preferred.lane] = preferred.targetBottom;
-    row.wildMask &= ~bit(preferred.lane);
+    const pick =
+      activeCandidates.find((candidate) => candidate.move === preferredMove) ??
+      activeCandidates[Math.floor(Math.random() * activeCandidates.length)];
+    row.runes[pick.lane] = pick.targetBottom;
+    row.wildMask &= ~bit(pick.lane);
   }
 };
 
@@ -548,13 +626,24 @@ function RuneRollOverlay() {
   const bottomRune = useRuneRollStore((state) => state.bottomRune);
   const failMessage = useRuneRollStore((state) => state.failMessage);
   const pulseNonce = useRuneRollStore((state) => state.pulseNonce);
+  const startRun = useRuneRollStore((state) => state.startRun);
+
+  const bottomColor = RUNE_COLORS[bottomRune].getStyle();
+  const nextLabel =
+    direction === 'L'
+      ? 'Left'
+      : direction === 'R'
+        ? 'Right'
+        : direction === 'B'
+          ? 'Back'
+          : 'Up';
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/22 via-indigo-500/15 to-amber-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
         <div className="text-[11px] text-cyan-50/85">
-          Tap to step. Choose left/right before each roll.
+          Match your cube's bottom color with the tile color.
         </div>
       </div>
 
@@ -566,10 +655,25 @@ function RuneRollOverlay() {
       {status === 'PLAYING' && (
         <div className="absolute left-4 top-[92px] rounded-md border border-violet-100/35 bg-gradient-to-br from-slate-950/72 via-indigo-900/35 to-amber-900/22 px-3 py-2 text-xs">
           <div>
-            Next <span className="font-semibold text-cyan-200">{direction === 'L' ? 'Left' : 'Right'}</span>
+            Next <span className="font-semibold text-cyan-200">{nextLabel}</span>
           </div>
           <div>
-            Bottom Rune <span className="font-semibold text-fuchsia-200">{bottomRune + 1}</span>
+            Bottom Tile
+            <span
+              className="ml-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
+              style={{ background: bottomColor, boxShadow: `0 0 12px ${bottomColor}` }}
+            />
+            <span className="ml-1 font-semibold text-fuchsia-200">{bottomRune + 1}</span>
+          </div>
+          <div className="mt-1 flex items-center gap-1">
+            {RUNE_COLORS.map((color, idx) => (
+              <span
+                key={idx}
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ background: color.getStyle(), boxShadow: `0 0 8px ${color.getStyle()}` }}
+                title={`Rune ${idx + 1}`}
+              />
+            ))}
           </div>
           <div>
             Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
@@ -587,11 +691,21 @@ function RuneRollOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-violet-100/42 bg-gradient-to-br from-slate-950/80 via-violet-950/46 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">RUNE ROLL</div>
-            <div className="mt-2 text-sm text-white/85">Tap/Space rolls one step at a time.</div>
-            <div className="mt-1 text-sm text-white/80">Left side or A/Left = step left. Right side or D/Right = step right.</div>
-            <div className="mt-1 text-sm text-white/80">Bottom rune must match the tile rune.</div>
-            <div className="mt-1 text-sm text-cyan-200/85">The run waits for your tap.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+            <div className="mt-2 text-sm text-white/85">Controls: Left, Up, Right. Down = back one tile.</div>
+            <div className="mt-1 text-sm text-white/80">Desktop: A/Left, W/Up/Space, D/Right, S/Down.</div>
+            <div className="mt-1 text-sm text-white/80">Mobile: tap left/center/right zones. Tap lower center to back.</div>
+            <div className="mt-1 text-sm text-cyan-200/85">Only one tile behind stays reachable. Keep moving forward.</div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 rounded-md border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
+              onClick={(event) => {
+                event.stopPropagation();
+                startRun();
+              }}
+            >
+              Start Run
+            </button>
+            <div className="mt-2 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
       )}
@@ -603,7 +717,17 @@ function RuneRollOverlay() {
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 rounded-md border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
+              onClick={(event) => {
+                event.stopPropagation();
+                startRun();
+              }}
+            >
+              Retry
+            </button>
+            <div className="mt-2 text-sm text-cyan-200/90">Tap instantly to retry.</div>
           </div>
         </div>
       )}
@@ -645,11 +769,19 @@ function RuneRollScene() {
       'enter',
       'Enter',
       'arrowleft',
+      'arrowup',
       'arrowright',
+      'arrowdown',
       'a',
+      'w',
       'd',
+      's',
+      'q',
       'A',
+      'W',
       'D',
+      'S',
+      'Q',
     ],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
@@ -671,6 +803,7 @@ function RuneRollScene() {
   const colorScratch = useMemo(() => new THREE.Color(), []);
 
   const { camera } = useThree();
+  const status = useRuneRollStore((state) => state.status);
 
   const runeInstanceRefs = useMemo(
     () => [runeRef0, runeRef1, runeRef2, runeRef3, runeRefWild],
@@ -691,8 +824,12 @@ function RuneRollScene() {
     runtime.currentRow = 0;
     runtime.currentLane = 1;
     runtime.progressRow = 0;
-    runtime.nextDir = 1;
+    runtime.nextMove = 'up';
+    runtime.maxReachedRow = 0;
+    runtime.scoredRow = 0;
+    runtime.pathLanes = [1];
     runtime.playerX = LANE_X[1];
+    runtime.cubeRotX = 0;
     runtime.cubeRotZ = 0;
 
     runtime.faces = createFaces();
@@ -704,12 +841,12 @@ function RuneRollScene() {
     runtime.fromRow = 0;
     runtime.toRow = 1;
     runtime.fromLane = 1;
-    runtime.toLane = 2;
-    runtime.fromRot = 0;
-    runtime.toRot = -Math.PI * 0.5;
-
-    runtime.forcedDir = 1;
-    runtime.forcedSteps = 0;
+    runtime.toLane = 1;
+    runtime.stepMove = 'up';
+    runtime.fromRotX = 0;
+    runtime.toRotX = Math.PI * 0.5;
+    runtime.fromRotZ = 0;
+    runtime.toRotZ = 0;
     runtime.pendingStep = false;
 
     runtime.difficulty = sampleDifficulty('timing-defense', 0);
@@ -743,7 +880,7 @@ function RuneRollScene() {
     useRuneRollStore.getState().resetToStart();
     runeRollState.status = 'menu';
     runeRollState.score = 0;
-    runeRollState.rune = 1;
+    runeRollState.rune = initialBottomRune;
   }, []);
 
   useEffect(() => {
@@ -764,6 +901,12 @@ function RuneRollScene() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    if (status !== 'PLAYING') return;
+    const runtime = runtimeRef.current;
+    resetRuntime(runtime);
+  }, [status]);
+
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
@@ -775,33 +918,33 @@ function RuneRollScene() {
     const store = useRuneRollStore.getState();
 
     const pointerTap = input.pointerJustDown;
-    const leftPressed =
-      input.justPressed.has('arrowleft') ||
-      input.justPressed.has('a');
-    const rightPressed =
-      input.justPressed.has('arrowright') ||
-      input.justPressed.has('d');
-    const tap =
-      pointerTap ||
-      leftPressed ||
-      rightPressed ||
+    const leftPressed = input.justPressed.has('arrowleft') || input.justPressed.has('a');
+    const rightPressed = input.justPressed.has('arrowright') || input.justPressed.has('d');
+    const upPressed =
+      input.justPressed.has('arrowup') ||
+      input.justPressed.has('w') ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
+    const backPressed =
+      input.justPressed.has('arrowdown') ||
+      input.justPressed.has('s') ||
+      input.justPressed.has('q');
 
-    if (tap) {
+    let requestedMove: MoveDir | null = null;
+    if (leftPressed) requestedMove = 'left';
+    else if (rightPressed) requestedMove = 'right';
+    else if (upPressed) requestedMove = 'up';
+    else if (backPressed) requestedMove = 'back';
+    else if (pointerTap) requestedMove = mapPointerToMove(input.pointerX, input.pointerY);
+
+    if (requestedMove) {
       if (store.status !== 'PLAYING') {
         resetRuntime(runtime);
+        runtime.nextMove = requestedMove === 'back' ? 'up' : requestedMove;
         useRuneRollStore.getState().startRun();
       } else {
-        if (leftPressed) {
-          runtime.nextDir = -1;
-        } else if (rightPressed) {
-          runtime.nextDir = 1;
-        } else if (pointerTap) {
-          if (input.pointerX < -0.15) runtime.nextDir = -1;
-          else if (input.pointerX > 0.15) runtime.nextDir = 1;
-        }
+        runtime.nextMove = requestedMove;
         runtime.pendingStep = true;
         runtime.shake = Math.min(1.15, runtime.shake + 0.2);
         useRuneRollStore.getState().onTapFx();
@@ -819,38 +962,54 @@ function RuneRollScene() {
 
       if (!runtime.stepActive && runtime.pendingStep) {
         runtime.pendingStep = false;
-        const nextRow = runtime.currentRow + 1;
-        let stepDir: StepDir = runtime.nextDir;
-        let nextLane = runtime.currentLane + stepDir;
-        if (nextLane < 0 || nextLane > 2) {
-          if (runtime.elapsed < 7) {
-            stepDir = nextLane < 0 ? 1 : -1;
-            runtime.nextDir = stepDir;
-            nextLane = runtime.currentLane + stepDir;
-          }
-        }
-        const row = ensureRow(runtime, nextRow);
-        enforceReachability(runtime, row, runtime.currentLane);
+        const move = runtime.nextMove;
+        let nextRow = runtime.currentRow;
+        let nextLane: LaneIndex | null = null;
+        let movingBack = false;
 
-        if (nextLane < 0 || nextLane > 2) {
-          runtime.failMessage = 'Stepped off the path into the void.';
-          useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
-        } else if ((row.mask & bit(nextLane)) === 0) {
-          const z = -(nextRow - runtime.progressRow) * ROW_SPACING;
-          spawnBurst(runtime, LANE_X[nextLane as LaneIndex], z, DANGER, 9, 2.4, 2.7);
-          runtime.failMessage = 'No tile on that branch.';
-          useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+        if (move === 'back') {
+          if (!canStepBack(runtime)) {
+            runtime.shake = Math.min(1.2, runtime.shake + 0.18);
+          } else {
+            movingBack = true;
+            nextRow = runtime.currentRow - 1;
+            nextLane = resolveBackLane(runtime);
+          }
         } else {
-          runtime.stepActive = true;
-          runtime.stepTime = 0;
-          runtime.stepDuration = stepDurationFor(runtime);
-          runtime.fromRow = runtime.currentRow;
-          runtime.toRow = nextRow;
-          runtime.fromLane = runtime.currentLane;
-          runtime.toLane = nextLane as LaneIndex;
-          runtime.fromRot = runtime.cubeRotZ;
-          runtime.toRot = runtime.cubeRotZ - stepDir * (Math.PI * 0.5);
-          runtime.targetFaces = rollFaces(runtime.faces, stepDir);
+          nextRow = runtime.currentRow + 1;
+          nextLane = laneForForwardMove(runtime.currentLane, move);
+        }
+
+        if (nextLane === null) {
+          runtime.shake = Math.min(1.2, runtime.shake + 0.2);
+        } else {
+          const row = ensureRow(runtime, nextRow);
+          if (!movingBack) enforceReachability(runtime, row, runtime.currentLane);
+
+          if (!movingBack && (row.mask & bit(nextLane)) === 0) {
+            const z = -(nextRow - runtime.progressRow) * ROW_SPACING;
+            spawnBurst(runtime, LANE_X[nextLane], z, DANGER, 9, 2.4, 2.7);
+            runtime.failMessage = 'That branch is closed.';
+            useRuneRollStore.getState().endRun(runtime.score, runtime.failMessage);
+          } else {
+            runtime.stepActive = true;
+            runtime.stepTime = 0;
+            runtime.stepDuration = stepDurationFor(runtime);
+            runtime.fromRow = runtime.currentRow;
+            runtime.toRow = nextRow;
+            runtime.fromLane = runtime.currentLane;
+            runtime.toLane = nextLane;
+            runtime.stepMove = move;
+            runtime.fromRotX = runtime.cubeRotX;
+            runtime.fromRotZ = runtime.cubeRotZ;
+            runtime.toRotX = runtime.cubeRotX;
+            runtime.toRotZ = runtime.cubeRotZ;
+            if (move === 'left') runtime.toRotZ += Math.PI * 0.5;
+            else if (move === 'right') runtime.toRotZ -= Math.PI * 0.5;
+            else if (move === 'up') runtime.toRotX += Math.PI * 0.5;
+            else runtime.toRotX -= Math.PI * 0.5;
+            runtime.targetFaces = rollFaces(runtime.faces, move);
+          }
         }
       }
 
@@ -858,9 +1017,13 @@ function RuneRollScene() {
         runtime.stepTime += dt;
         const t = clamp(runtime.stepTime / runtime.stepDuration, 0, 1);
         const eased = easeInOut(t);
-        runtime.progressRow = runtime.fromRow + eased;
+        runtime.progressRow =
+          runtime.stepMove === 'back'
+            ? runtime.fromRow - eased
+            : runtime.fromRow + eased;
         runtime.playerX = lerp(LANE_X[runtime.fromLane], LANE_X[runtime.toLane], eased);
-        runtime.cubeRotZ = lerp(runtime.fromRot, runtime.toRot, eased);
+        runtime.cubeRotX = lerp(runtime.fromRotX, runtime.toRotX, eased);
+        runtime.cubeRotZ = lerp(runtime.fromRotZ, runtime.toRotZ, eased);
 
         if (t >= 1) {
           runtime.stepActive = false;
@@ -869,47 +1032,57 @@ function RuneRollScene() {
           runtime.progressRow = runtime.currentRow;
           runtime.playerX = LANE_X[runtime.currentLane];
           runtime.faces = runtime.targetFaces;
-          runtime.cubeRotZ = normAngle(runtime.toRot);
+          runtime.cubeRotX = normAngle(runtime.toRotX);
+          runtime.cubeRotZ = normAngle(runtime.toRotZ);
+
+          if (runtime.stepMove !== 'back') {
+            runtime.maxReachedRow = Math.max(runtime.maxReachedRow, runtime.currentRow);
+            runtime.pathLanes[runtime.currentRow] = runtime.currentLane;
+          }
 
           const landedRow = ensureRow(runtime, runtime.currentRow);
           const landedLane = runtime.currentLane;
           const isWild = (landedRow.wildMask & bit(landedLane)) !== 0;
           const requiredRune = landedRow.runes[landedLane];
-          const matched = isWild || runtime.faces.bottom === requiredRune;
+          const matched =
+            runtime.stepMove === 'back' || isWild || runtime.faces.bottom === requiredRune;
+          const firstTimeProgress = runtime.currentRow > runtime.scoredRow;
 
           if (matched) {
             landedRow.glowLane = landedLane;
-            landedRow.glow = 0.46;
-            runtime.streak += 1;
-            runtime.multiplier = 1 + Math.min(runtime.streak, 26) * 0.08;
-
-            const stepPoints = isWild ? 3 : 1;
-            runtime.score += stepPoints * runtime.multiplier;
-            if (isWild) runtime.score += 1;
-
-            const lanePerfect =
-              Math.abs(runtime.playerX - LANE_X[landedLane]) < 0.025 &&
-              runtime.stepDuration <= 0.19;
-            if (lanePerfect) {
-              runtime.nearPerfects += 1;
-              runtime.score += 0.5;
+            landedRow.glow = runtime.stepMove === 'back' ? 0.24 : 0.46;
+            if (runtime.stepMove !== 'back' && firstTimeProgress) {
+              runtime.streak += 1;
+              runtime.multiplier = 1 + Math.min(runtime.streak, 26) * 0.08;
+              const stepPoints = isWild ? 3 : 1;
+              runtime.score += stepPoints * runtime.multiplier;
+              if (isWild) runtime.score += 1;
+              const lanePerfect =
+                Math.abs(runtime.playerX - LANE_X[landedLane]) < 0.025 &&
+                runtime.stepDuration <= 0.19;
+              if (lanePerfect) {
+                runtime.nearPerfects += 1;
+                runtime.score += 0.5;
+              }
+              if (runtime.forgiveness < 1 && runtime.streak > 0 && runtime.streak % 22 === 0) {
+                runtime.forgiveness = 1;
+              }
+              runtime.scoredRow = runtime.currentRow;
             }
 
-            if (runtime.forgiveness < 1 && runtime.streak > 0 && runtime.streak % 22 === 0) {
-              runtime.forgiveness = 1;
+            if (runtime.stepMove !== 'back') {
+              const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
+              spawnBurst(
+                runtime,
+                LANE_X[landedLane],
+                z,
+                isWild ? WILD : RUNE_COLORS[requiredRune],
+                isWild ? 7 : 5,
+                isWild ? 1.4 : 1.15,
+                isWild ? 2.6 : 2.1
+              );
             }
-
-            const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
-            spawnBurst(
-              runtime,
-              LANE_X[landedLane],
-              z,
-              isWild ? WILD : RUNE_COLORS[requiredRune],
-              isWild ? 7 : 5,
-              isWild ? 1.4 : 1.15,
-              isWild ? 2.6 : 2.1
-            );
-          } else if (runtime.forgiveness > 0) {
+          } else if (runtime.stepMove !== 'back' && runtime.forgiveness > 0) {
             runtime.forgiveness -= 1;
             runtime.streak = 0;
             runtime.multiplier = 1;
@@ -917,7 +1090,7 @@ function RuneRollScene() {
             landedRow.glow = 0.3;
             const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
             spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 6, 1.3, 2.0);
-          } else {
+          } else if (runtime.stepMove !== 'back') {
             const z = -(runtime.currentRow - runtime.progressRow) * ROW_SPACING;
             spawnBurst(runtime, LANE_X[landedLane], z, DANGER, 10, 2.6, 3.2);
             runtime.failMessage = 'Bottom rune mismatch.';
@@ -936,7 +1109,7 @@ function RuneRollScene() {
           runtime.multiplier,
           runtime.streak,
           runtime.forgiveness,
-          runtime.nextDir === -1 ? 'L' : 'R',
+          moveLabel(runtime.nextMove),
           runtime.faces.bottom
         );
       }
@@ -979,7 +1152,7 @@ function RuneRollScene() {
 
     if (cubeRef.current) {
       cubeRef.current.position.set(runtime.playerX, TILE_HEIGHT + CUBE_SIZE * 0.5, 0);
-      cubeRef.current.rotation.set(0, Math.PI * 0.25, runtime.cubeRotZ);
+      cubeRef.current.rotation.set(runtime.cubeRotX, Math.PI * 0.25, runtime.cubeRotZ);
       const scale = 1 + runtime.shake * 0.03;
       cubeRef.current.scale.setScalar(scale);
     }
@@ -996,10 +1169,13 @@ function RuneRollScene() {
     if (tileRef.current) {
       const glyphCounts = [0, 0, 0, 0, 0];
       let tileCount = 0;
-      const startRow = Math.floor(runtime.progressRow) - DRAW_BACK_ROWS;
+      const startRow = Math.max(minVisibleRow(runtime), Math.floor(runtime.progressRow) - 1);
       const endRow = Math.floor(runtime.progressRow) + DRAW_AHEAD_ROWS;
+      const nextRowIndex = runtime.currentRow + 1;
+      const selectableLanes = new Set(forwardCandidates(runtime).map((candidate) => candidate.lane));
 
       for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
+        if (rowIndex < minVisibleRow(runtime)) continue;
         const row = ensureRow(runtime, rowIndex);
         const z = -(rowIndex - runtime.progressRow) * ROW_SPACING;
         if (z < -45 || z > 13) continue;
@@ -1009,21 +1185,27 @@ function RuneRollScene() {
           if (tileCount >= TILE_DRAW_CAP) break;
 
           const x = LANE_X[lane as LaneIndex];
+          const laneIdx = lane as LaneIndex;
+          const isWild = (row.wildMask & bit(lane)) !== 0;
+          const rune = row.runes[lane];
           dummy.position.set(x, 0, z);
           dummy.scale.set(TILE_SIZE, TILE_HEIGHT, TILE_SIZE);
           dummy.rotation.set(0, Math.PI * 0.25, 0);
           dummy.updateMatrix();
           tileRef.current.setMatrixAt(tileCount, dummy.matrix);
 
-          colorScratch.copy(STONE).lerp(STONE_EDGE, 0.22);
-          const rune = row.runes[lane];
-          colorScratch.lerp(RUNE_COLORS[rune], 0.18);
-          if ((row.wildMask & bit(lane)) !== 0) colorScratch.lerp(WILD, 0.36);
+          if (isWild) colorScratch.copy(WILD).lerp(WHITE, 0.16);
+          else colorScratch.copy(RUNE_COLORS[rune]).lerp(STONE_EDGE, 0.14);
+          if (rowIndex === runtime.currentRow && laneIdx === runtime.currentLane) {
+            colorScratch.lerp(WHITE, 0.28);
+          } else if (rowIndex === nextRowIndex && selectableLanes.has(laneIdx)) {
+            colorScratch.lerp(WHITE, 0.14);
+          }
           if (row.glowLane === lane && row.glow > 0) colorScratch.lerp(WHITE, clamp(row.glow, 0, 0.78));
           tileRef.current.setColorAt(tileCount, colorScratch);
           tileCount += 1;
 
-          const glyphType = (row.wildMask & bit(lane)) !== 0 ? 4 : rune;
+          const glyphType = isWild ? 4 : rune;
           const glyphMeshRef = runeInstanceRefs[glyphType];
           const glyphMesh = glyphMeshRef.current;
           if (!glyphMesh) continue;
