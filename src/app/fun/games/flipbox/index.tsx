@@ -14,6 +14,14 @@ type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
 type OrientationState = 'UPRIGHT' | 'FLAT';
 type TileRule = 'ANY' | 'UPRIGHT' | 'FLAT';
 type FailReason = 'gap' | 'rule' | 'height';
+type PlayerBodyId = 'compact' | 'classic' | 'bloxorz' | 'tower';
+type PlayerSkinId =
+  | 'glacier'
+  | 'sunset'
+  | 'bloxorz-rust'
+  | 'signal-lost'
+  | 'violet-carbon';
+type PlayerTextureKey = 'glacier' | 'sunset' | 'bloxorz' | 'signal' | 'violet';
 
 type TileRecord = {
   id: number;
@@ -31,6 +39,30 @@ type SupportResult = {
   ok: boolean;
   reason: FailReason;
   baseY: number;
+};
+
+type PlayerBodyOption = {
+  id: PlayerBodyId;
+  name: string;
+  scale: THREE.Vector3;
+  outlineScale: number;
+};
+
+type PlayerSkinOption = {
+  id: PlayerSkinId;
+  name: string;
+  color: string;
+  emissive: string;
+  emissiveIntensity: number;
+  roughness: number;
+  metalness: number;
+  textureKey: PlayerTextureKey;
+  wireColor: string;
+};
+
+type FlipBoxPrefs = {
+  body: PlayerBodyId;
+  skin: PlayerSkinId;
 };
 
 type Runtime = {
@@ -71,18 +103,25 @@ type FlipBoxStore = {
   failMessage: string;
   posture: OrientationState;
   nextRule: TileRule;
+  body: PlayerBodyId;
+  skin: PlayerSkinId;
   pulseNonce: number;
   crashNonce: number;
   startRun: () => void;
   resetToStart: () => void;
   setPosture: (value: OrientationState) => void;
   setNextRule: (value: TileRule) => void;
+  cycleBody: () => void;
+  cycleSkin: () => void;
+  setBody: (value: PlayerBodyId) => void;
+  setSkin: (value: PlayerSkinId) => void;
   updateHud: (score: number, multiplier: number, perfectStreak: number, perfect: boolean) => void;
   endRun: (score: number, reason: string) => void;
   flashCrash: () => void;
 };
 
 const BEST_KEY = 'flip_box_hyper_best_v4';
+const PREFS_KEY = 'flip_box_hyper_prefs_v1';
 
 const TILE_POOL = 260;
 const TILE_SPACING = 0.9;
@@ -91,12 +130,11 @@ const TILE_THICKNESS = 0.22;
 const TILE_LENGTH = 0.96;
 const TILE_HEIGHT_STEP = 0.32;
 
-const UPRIGHT_SIZE = new THREE.Vector3(0.9, 1.82, 0.9);
-const FLAT_SIZE = new THREE.Vector3(0.9, 0.92, 1.82);
+// Slightly smaller than before so the block reads cleaner against each tile gate.
+const UPRIGHT_SIZE = new THREE.Vector3(0.66, 1.56, 0.66);
+const FLAT_SIZE = new THREE.Vector3(0.66, 0.66, 1.56);
 
 const SUPPORT_GRACE = 0.08;
-const SUPPORT_FLAT_A = -0.45;
-const SUPPORT_FLAT_B = 0.45;
 
 const DRAW_MIN_Z = -54;
 const DRAW_MAX_Z = 14;
@@ -106,6 +144,103 @@ const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const BG = '#f4f7ff';
+
+const PLAYER_BODIES: PlayerBodyOption[] = [
+  {
+    id: 'compact',
+    name: 'Compact',
+    scale: new THREE.Vector3(0.92, 0.92, 0.92),
+    outlineScale: 1.02,
+  },
+  {
+    id: 'classic',
+    name: 'Classic',
+    scale: new THREE.Vector3(1, 1, 1),
+    outlineScale: 1.02,
+  },
+  {
+    id: 'bloxorz',
+    name: 'Bloxorz',
+    scale: new THREE.Vector3(0.96, 1.1, 0.96),
+    outlineScale: 1.018,
+  },
+  {
+    id: 'tower',
+    name: 'Tower',
+    scale: new THREE.Vector3(0.82, 1.18, 0.82),
+    outlineScale: 1.022,
+  },
+];
+
+const PLAYER_SKINS: PlayerSkinOption[] = [
+  {
+    id: 'glacier',
+    name: 'Glacier Wire',
+    color: '#f6fdff',
+    emissive: '#7dd3fc',
+    emissiveIntensity: 0.32,
+    roughness: 0.2,
+    metalness: 0.08,
+    textureKey: 'glacier',
+    wireColor: '#63dfff',
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset Fade',
+    color: '#fff5f9',
+    emissive: '#ff9dd2',
+    emissiveIntensity: 0.24,
+    roughness: 0.34,
+    metalness: 0.06,
+    textureKey: 'sunset',
+    wireColor: '#ff93d0',
+  },
+  {
+    id: 'bloxorz-rust',
+    name: 'Bloxorz Rust',
+    color: '#6a4f45',
+    emissive: '#2e1a15',
+    emissiveIntensity: 0.08,
+    roughness: 0.74,
+    metalness: 0.18,
+    textureKey: 'bloxorz',
+    wireColor: '#b37d64',
+  },
+  {
+    id: 'signal-lost',
+    name: 'Signal Lost',
+    color: '#f2f2f2',
+    emissive: '#f8f8f8',
+    emissiveIntensity: 0.06,
+    roughness: 0.82,
+    metalness: 0.02,
+    textureKey: 'signal',
+    wireColor: '#f2f2f2',
+  },
+  {
+    id: 'violet-carbon',
+    name: 'Violet Carbon',
+    color: '#f5eeff',
+    emissive: '#b28dff',
+    emissiveIntensity: 0.18,
+    roughness: 0.52,
+    metalness: 0.22,
+    textureKey: 'violet',
+    wireColor: '#bd9fff',
+  },
+];
+
+const DEFAULT_BODY = PLAYER_BODIES[0];
+const DEFAULT_SKIN = PLAYER_SKINS[0];
+
+const findBody = (id: PlayerBodyId) =>
+  PLAYER_BODIES.find((option) => option.id === id) ?? DEFAULT_BODY;
+
+const findSkin = (id: PlayerSkinId) =>
+  PLAYER_SKINS.find((option) => option.id === id) ?? DEFAULT_SKIN;
+
+const PLAYER_BODY_IDS = PLAYER_BODIES.map((option) => option.id);
+const PLAYER_SKIN_IDS = PLAYER_SKINS.map((option) => option.id);
 
 const TILE_BASE_COLORS = [
   new THREE.Color('#bdd8ff'),
@@ -135,6 +270,191 @@ const writeBest = (score: number) => {
   window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
 };
 
+const readPrefs = (): FlipBoxPrefs => {
+  if (typeof window === 'undefined') {
+    return { body: DEFAULT_BODY.id, skin: DEFAULT_SKIN.id };
+  }
+
+  const raw = window.localStorage.getItem(PREFS_KEY);
+  if (!raw) return { body: DEFAULT_BODY.id, skin: DEFAULT_SKIN.id };
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<FlipBoxPrefs>;
+    const body = parsed.body && PLAYER_BODY_IDS.includes(parsed.body) ? parsed.body : DEFAULT_BODY.id;
+    const skin = parsed.skin && PLAYER_SKIN_IDS.includes(parsed.skin) ? parsed.skin : DEFAULT_SKIN.id;
+    return { body, skin };
+  } catch {
+    return { body: DEFAULT_BODY.id, skin: DEFAULT_SKIN.id };
+  }
+};
+
+const writePrefs = (prefs: FlipBoxPrefs) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+};
+
+const nextBodyId = (id: PlayerBodyId): PlayerBodyId => {
+  const idx = PLAYER_BODIES.findIndex((option) => option.id === id);
+  return PLAYER_BODIES[(idx + 1 + PLAYER_BODIES.length) % PLAYER_BODIES.length].id;
+};
+
+const nextSkinId = (id: PlayerSkinId): PlayerSkinId => {
+  const idx = PLAYER_SKINS.findIndex((option) => option.id === id);
+  return PLAYER_SKINS[(idx + 1 + PLAYER_SKINS.length) % PLAYER_SKINS.length].id;
+};
+
+const createFallbackTexture = (r = 255, g = 255, b = 255) => {
+  const data = new Uint8Array([r, g, b, 255]);
+  const texture = new THREE.DataTexture(data, 1, 1);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+};
+
+const createPaintedTexture = (
+  size: number,
+  paint: (ctx: CanvasRenderingContext2D, size: number) => void,
+  nearest = false
+) => {
+  if (typeof document === 'undefined') return createFallbackTexture();
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return createFallbackTexture();
+
+  paint(ctx, size);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  if (nearest) {
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
+  } else {
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+  }
+  texture.needsUpdate = true;
+  return texture;
+};
+
+const createSkinTextures = (): Record<PlayerTextureKey, THREE.Texture> => {
+  const glacier = createPaintedTexture(128, (ctx, size) => {
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.45, '#daf6ff');
+    grad.addColorStop(1, '#b8ebff');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    for (let i = 0; i < 18; i += 1) {
+      const y = (i / 18) * size;
+      ctx.fillRect(0, y, size, 1);
+    }
+  });
+
+  const sunset = createPaintedTexture(128, (ctx, size) => {
+    const grad = ctx.createLinearGradient(0, 0, size, size);
+    grad.addColorStop(0, '#ffd7f6');
+    grad.addColorStop(0.35, '#ffb6d9');
+    grad.addColorStop(0.7, '#ffb9a3');
+    grad.addColorStop(1, '#ffe7bd');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    for (let i = 0; i < 12; i += 1) {
+      const x = (i / 12) * size;
+      ctx.fillRect(x, 0, 1, size);
+    }
+  });
+
+  const bloxorz = createPaintedTexture(128, (ctx, size) => {
+    ctx.fillStyle = '#4a3e37';
+    ctx.fillRect(0, 0, size, size);
+
+    for (let i = 0; i < 140; i += 1) {
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      const w = 2 + Math.random() * 12;
+      const h = 2 + Math.random() * 10;
+      const alpha = 0.18 + Math.random() * 0.32;
+      ctx.fillStyle = `rgba(${92 + Math.floor(Math.random() * 80)}, ${38 + Math.floor(Math.random() * 45)}, ${25 + Math.floor(Math.random() * 30)}, ${alpha})`;
+      ctx.fillRect(x, y, w, h);
+    }
+
+    ctx.strokeStyle = 'rgba(35, 20, 16, 0.4)';
+    for (let i = 0; i < 22; i += 1) {
+      ctx.beginPath();
+      const x = Math.random() * size;
+      const y = Math.random() * size;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (Math.random() - 0.5) * 22, y + (Math.random() - 0.5) * 22);
+      ctx.stroke();
+    }
+  });
+
+  const signal = createPaintedTexture(
+    96,
+    (ctx, size) => {
+      const px = 4;
+      ctx.fillStyle = '#0a0a0a';
+      ctx.fillRect(0, 0, size, size);
+
+      for (let y = 0; y < size; y += px) {
+        for (let x = 0; x < size; x += px) {
+          const r = Math.random();
+          const shade =
+            r < 0.08
+              ? 238
+              : r < 0.24
+                ? 188
+                : r < 0.88
+                  ? 34 + Math.floor(Math.random() * 52)
+                  : 132;
+          ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+          ctx.fillRect(x, y, px, px);
+        }
+      }
+
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      for (let y = 0; y < size; y += 8) {
+        ctx.fillRect(0, y, size, 1);
+      }
+
+      for (let i = 0; i < 7; i += 1) {
+        const y = Math.random() * size;
+        const h = 1 + Math.random() * 2;
+        ctx.fillStyle = `rgba(255,255,255,${0.14 + Math.random() * 0.22})`;
+        ctx.fillRect(0, y, size, h);
+      }
+    },
+    true
+  );
+
+  const violet = createPaintedTexture(128, (ctx, size) => {
+    const grad = ctx.createLinearGradient(0, size, size, 0);
+    grad.addColorStop(0, '#201a36');
+    grad.addColorStop(0.45, '#3a2d62');
+    grad.addColorStop(1, '#66509c');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = 'rgba(215, 190, 255, 0.08)';
+    for (let i = 0; i < 18; i += 1) {
+      const y = (i / 18) * size;
+      ctx.fillRect(0, y, size, 2);
+    }
+  });
+
+  return { glacier, sunset, bloxorz, signal, violet };
+};
+
 const orientationHalfHeight = (orientation: OrientationState) =>
   orientation === 'UPRIGHT' ? UPRIGHT_SIZE.y * 0.5 : FLAT_SIZE.y * 0.5;
 
@@ -161,7 +481,9 @@ const createTile = (id: number): TileRecord => ({
   colorSeed: 0,
 });
 
-const useFlipBoxStore = create<FlipBoxStore>((set) => ({
+const initialPrefs = readPrefs();
+
+const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
   status: 'START',
   score: 0,
   best: readBest(),
@@ -170,6 +492,8 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
   failMessage: '',
   posture: 'UPRIGHT',
   nextRule: 'ANY',
+  body: initialPrefs.body,
+  skin: initialPrefs.skin,
   pulseNonce: 0,
   crashNonce: 0,
   startRun: () =>
@@ -194,6 +518,28 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
     }),
   setPosture: (value) => set({ posture: value }),
   setNextRule: (value) => set({ nextRule: value }),
+  cycleBody: () =>
+    set((state) => {
+      const next = nextBodyId(state.body);
+      writePrefs({ body: next, skin: state.skin });
+      return { body: next };
+    }),
+  cycleSkin: () =>
+    set((state) => {
+      const next = nextSkinId(state.skin);
+      writePrefs({ body: state.body, skin: next });
+      return { skin: next };
+    }),
+  setBody: (value) =>
+    set((state) => {
+      writePrefs({ body: value, skin: state.skin });
+      return { body: value };
+    }),
+  setSkin: (value) =>
+    set((state) => {
+      writePrefs({ body: state.body, skin: value });
+      return { skin: value };
+    }),
   updateHud: (score, multiplier, perfectStreak, perfect) =>
     set((state) => ({
       score: Math.floor(score),
@@ -214,7 +560,10 @@ const useFlipBoxStore = create<FlipBoxStore>((set) => ({
         failMessage: reason,
       };
     }),
-  flashCrash: () => set((state) => ({ crashNonce: state.crashNonce + 1 })),
+  flashCrash: () => {
+    const state = get();
+    set({ crashNonce: state.crashNonce + 1 });
+  },
 }));
 
 const createRuntime = (): Runtime => ({
@@ -337,15 +686,20 @@ const findSupportTileAtZ = (runtime: Runtime, sampleZ: number) => {
   return null;
 };
 
-const evaluateSupport = (runtime: Runtime): SupportResult => {
+const evaluateSupport = (runtime: Runtime, bodyOption: PlayerBodyOption): SupportResult => {
   if (runtime.orientation === 'UPRIGHT') {
     const tile = findSupportTileAtZ(runtime, 0);
     if (!tile) return { ok: false, reason: 'gap', baseY: runtime.playerY - 0.25 };
     return { ok: true, reason: 'gap', baseY: worldYForHeight(tile.heightLevel) };
   }
 
-  const a = findSupportTileAtZ(runtime, SUPPORT_FLAT_A);
-  const b = findSupportTileAtZ(runtime, SUPPORT_FLAT_B);
+  const supportOffset = clamp(
+    FLAT_SIZE.z * bodyOption.scale.z * 0.29,
+    TILE_SPACING * 0.34,
+    TILE_SPACING * 0.56
+  );
+  const a = findSupportTileAtZ(runtime, -supportOffset);
+  const b = findSupportTileAtZ(runtime, supportOffset);
 
   if (!a || !b) {
     return { ok: false, reason: 'gap', baseY: runtime.playerY - 0.25 };
@@ -371,8 +725,15 @@ function FlipBoxOverlay() {
   const failMessage = useFlipBoxStore((state) => state.failMessage);
   const posture = useFlipBoxStore((state) => state.posture);
   const nextRule = useFlipBoxStore((state) => state.nextRule);
+  const body = useFlipBoxStore((state) => state.body);
+  const skin = useFlipBoxStore((state) => state.skin);
+  const cycleBody = useFlipBoxStore((state) => state.cycleBody);
+  const cycleSkin = useFlipBoxStore((state) => state.cycleSkin);
   const pulseNonce = useFlipBoxStore((state) => state.pulseNonce);
   const crashNonce = useFlipBoxStore((state) => state.crashNonce);
+
+  const bodyLabel = findBody(body).name;
+  const skinLabel = findSkin(skin).name;
 
   const nextRuleLabel =
     nextRule === 'UPRIGHT' ? 'UPRIGHT' : nextRule === 'FLAT' ? 'FLAT' : 'ANY';
@@ -388,6 +749,7 @@ function FlipBoxOverlay() {
       <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/70 bg-gradient-to-br from-cyan-500/28 via-sky-500/18 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-50">Flip Box</div>
         <div className="text-[11px] text-white/90">Tap to switch square/rectangle and fit gates.</div>
+        <div className="pt-1 text-[10px] text-cyan-100/85">B body • C skin</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-xl border border-rose-100/60 bg-gradient-to-br from-rose-400/24 via-fuchsia-400/18 to-amber-300/16 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -412,27 +774,62 @@ function FlipBoxOverlay() {
           <div>
             Next Glyph <span className={`font-semibold ${nextRuleClass}`}>{nextRuleLabel}</span>
           </div>
+          <div>
+            Body <span className="font-semibold text-cyan-100">{bodyLabel}</span>
+          </div>
+          <div>
+            Skin <span className="font-semibold text-rose-100">{skinLabel}</span>
+          </div>
         </div>
       )}
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
+          <div className="pointer-events-auto rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">FLIP BOX</div>
             <div className="mt-2 text-sm text-white/90">Single gate = upright box. Wide slot = flat box.</div>
             <div className="mt-1 text-sm text-white/85">Tap anytime to flip shape before each gate.</div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <button
+                className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
+                onClick={cycleBody}
+              >
+                Body: {bodyLabel}
+              </button>
+              <button
+                className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
+                onClick={cycleSkin}
+              >
+                Skin: {skinLabel}
+              </button>
+            </div>
             <div className="mt-3 text-sm text-cyan-200/95">Tap to play.</div>
+            <div className="mt-1 text-[11px] text-cyan-100/80">B cycles body • C cycles skin</div>
           </div>
         </div>
       )}
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-2xl border border-rose-200/50 bg-gradient-to-br from-black/80 via-rose-950/42 to-indigo-950/24 px-6 py-5 text-center backdrop-blur-md">
+          <div className="pointer-events-auto rounded-2xl border border-rose-200/50 bg-gradient-to-br from-black/80 via-rose-950/42 to-indigo-950/24 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Game Over</div>
             <div className="mt-2 text-sm text-white/86">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
             <div className="mt-1 text-sm text-white/80">Best {best}</div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <button
+                className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
+                onClick={cycleBody}
+              >
+                Body: {bodyLabel}
+              </button>
+              <button
+                className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
+                onClick={cycleSkin}
+              >
+                Skin: {skinLabel}
+              </button>
+            </div>
             <div className="mt-3 text-sm text-cyan-200/95">Tap instantly to retry.</div>
           </div>
         </div>
@@ -506,11 +903,18 @@ function FlipBoxScene() {
       'D',
       'W',
       'S',
+      'b',
+      'B',
+      'c',
+      'C',
     ],
   });
   const resetVersion = useSnapshot(flipBoxState).resetVersion;
+  const bodyId = useFlipBoxStore((state) => state.body);
+  const skinId = useFlipBoxStore((state) => state.skin);
 
   const runtimeRef = useRef<Runtime>(createRuntime());
+  const skinTextures = useMemo(() => createSkinTextures(), []);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
@@ -524,6 +928,16 @@ function FlipBoxScene() {
   const crashRingRef = useRef<THREE.Mesh>(null);
 
   const { camera } = useThree();
+  const bodyOption = useMemo(() => findBody(bodyId), [bodyId]);
+  const skinOption = useMemo(() => findSkin(skinId), [skinId]);
+  const skinTexture = skinTextures[skinOption.textureKey];
+
+  useEffect(() => {
+    const prefs = readPrefs();
+    const store = useFlipBoxStore.getState();
+    if (store.body !== prefs.body) store.setBody(prefs.body);
+    if (store.skin !== prefs.skin) store.setSkin(prefs.skin);
+  }, []);
 
   useEffect(() => {
     resetRuntime(runtimeRef.current);
@@ -534,6 +948,13 @@ function FlipBoxScene() {
     resetRuntime(runtimeRef.current);
     useFlipBoxStore.getState().resetToStart();
   }, [resetVersion]);
+
+  useEffect(
+    () => () => {
+      Object.values(skinTextures).forEach((texture) => texture.dispose());
+    },
+    [skinTextures]
+  );
 
   useEffect(() => {
     const apply = (state: ReturnType<typeof useFlipBoxStore.getState>) => {
@@ -570,6 +991,11 @@ function FlipBoxScene() {
       input.justPressed.has('arrowup') ||
       input.justPressed.has('d') ||
       input.justPressed.has('w');
+    const cycleBody = input.justPressed.has('b');
+    const cycleSkin = input.justPressed.has('c');
+
+    if (cycleBody) useFlipBoxStore.getState().cycleBody();
+    if (cycleSkin) useFlipBoxStore.getState().cycleSkin();
 
     if (tap && store.status !== 'PLAYING') {
       resetRuntime(runtime);
@@ -633,7 +1059,7 @@ function FlipBoxScene() {
         }
       }
 
-      const support = evaluateSupport(runtime);
+      const support = evaluateSupport(runtime, bodyOption);
       if (!support.ok) {
         runtime.unsupportedTime += dt;
         runtime.targetY = runtime.playerY - dt * 2.8;
@@ -686,23 +1112,39 @@ function FlipBoxScene() {
     runtime.rotX = lerp(runtime.rotX, runtime.rotTargetX, 1 - Math.exp(-15 * dt));
     runtime.playerY = lerp(runtime.playerY, runtime.targetY, 1 - Math.exp(-14 * dt));
 
+    const visualScaleX = runtime.displayScale.x * bodyOption.scale.x;
+    const visualScaleY = runtime.displayScale.y * bodyOption.scale.y;
+    const visualScaleZ = runtime.displayScale.z * bodyOption.scale.z;
+    const visualHalfY = visualScaleY * 0.5;
+    const physicalHalfY = runtime.displayScale.y * 0.5;
+    const playerVisualY = runtime.playerY + (visualHalfY - physicalHalfY);
+
     if (playerRef.current && playerOutlineRef.current) {
-      playerRef.current.position.set(0, runtime.playerY, 0);
+      playerRef.current.position.set(0, playerVisualY, 0);
       playerRef.current.rotation.set(runtime.rotX, 0, 0);
-      playerRef.current.scale.copy(runtime.displayScale);
+      playerRef.current.scale.set(visualScaleX, visualScaleY, visualScaleZ);
 
       playerOutlineRef.current.position.copy(playerRef.current.position);
       playerOutlineRef.current.rotation.copy(playerRef.current.rotation);
-      playerOutlineRef.current.scale.copy(playerRef.current.scale).multiplyScalar(1.022);
+      playerOutlineRef.current.scale
+        .copy(playerRef.current.scale)
+        .multiplyScalar(bodyOption.outlineScale);
     }
 
     if (crashRingRef.current) {
       const s = 0.8 + (1 - runtime.crashFx) * 1.15;
       crashRingRef.current.visible = runtime.crashFx > 0.001;
-      crashRingRef.current.position.set(0, runtime.playerY - 0.32, 0.02);
+      crashRingRef.current.position.set(0, playerVisualY - 0.32, 0.02);
       crashRingRef.current.scale.setScalar(s);
       const mat = crashRingRef.current.material as THREE.MeshBasicMaterial;
       mat.opacity = runtime.crashFx * 0.8;
+    }
+
+    if (skinOption.id === 'signal-lost') {
+      skinTexture.offset.x = (Math.sin(runtime.elapsed * 8.5) * 0.02 + 1) % 1;
+      skinTexture.offset.y = (runtime.elapsed * 0.42) % 1;
+    } else {
+      skinTexture.offset.set(0, 0);
     }
 
     const jitter = runtime.cameraKick * 0.09;
@@ -854,17 +1296,18 @@ function FlipBoxScene() {
       <mesh ref={playerRef} castShadow>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
-          color="#f8fcff"
-          emissive="#7dd3fc"
-          emissiveIntensity={0.35}
-          roughness={0.2}
-          metalness={0.05}
+          color={skinOption.color}
+          map={skinTexture}
+          emissive={skinOption.emissive}
+          emissiveIntensity={skinOption.emissiveIntensity}
+          roughness={skinOption.roughness}
+          metalness={skinOption.metalness}
         />
       </mesh>
 
       <mesh ref={playerOutlineRef}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial color="#5ed5ff" wireframe toneMapped={false} />
+        <meshBasicMaterial color={skinOption.wireColor} wireframe toneMapped={false} />
       </mesh>
 
       <mesh ref={crashRingRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>

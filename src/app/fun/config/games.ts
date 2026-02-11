@@ -619,7 +619,8 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Collect shards for bonus score. Crash at 70%+ still clears with medals: Bronze 70-79, Silver 80-89, Gold 90-99, Diamond 100.',
   },
   flipbox: {
-    controls: 'Tap/Click to flip forward • R to restart',
+    controls:
+      'Tap/Click to flip forward • Arrow/WASD force posture • B cycle block body • C cycle skin • R to restart',
     objective:
       'Flip across an endless tile stream, matching upright and flat glyph rules while gaps and height steps tighten.',
     tips: 'Treat taps like rhythm cues: steady cadence first, then hunt perfect center landings for multiplier streaks.',
