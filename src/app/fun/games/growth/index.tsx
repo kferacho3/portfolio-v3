@@ -20,7 +20,6 @@ import {
   PLAYER_COLLISION_RADIUS,
   SEGMENT_HALF,
   SEGMENT_POOL,
-  SEGMENT_SIZE,
   SEGMENT_SPACING,
   SHIELD_DURATION,
   SPAWN_START_Z,
@@ -28,7 +27,7 @@ import {
 import { gameplayConfig } from './gameplayConfig';
 import { pickGraphicsPreset } from './graphicsPresets';
 import { growthState } from './state';
-import type { Face, GrowthSegment, PowerupType } from './types';
+import type { Face, GrowthPathStyleId, GrowthSegment, PowerupType } from './types';
 import { validateObstacleLayout } from './validateObstacleLayout';
 import CharacterSelection from './_components/CharacterSelection';
 import { useCameraShake } from './useCameraShake';
@@ -46,25 +45,116 @@ export * from './graphicsPresets';
 const FACE_LIST: Face[] = [0, 1, 2, 3];
 const PLAYER_FACE_BY_ROTATION: Face[] = [2, 0, 3, 1];
 
-const TILE_COLOR_LIGHT = new THREE.Color('#eaf1ff');
-const TILE_COLOR_DARK = new THREE.Color('#c8d9f4');
-const OBSTACLE_COLORS = [
-  new THREE.Color('#fb923c'),
-  new THREE.Color('#f97316'),
-  new THREE.Color('#f43f5e'),
-];
 const GEM_COLOR = new THREE.Color('#facc15');
 const BOOST_COLOR = new THREE.Color('#22d3ee');
 const SHIELD_COLOR = new THREE.Color('#818cf8');
 
+type PathStyleDefinition = {
+  id: GrowthPathStyleId;
+  label: string;
+  subtitle: string;
+  tileScale: [number, number, number];
+  tileColors: [THREE.Color, THREE.Color];
+  tileAlternating: boolean;
+  tileRoughness: number;
+  tileMetalness: number;
+  obstacleColors: [THREE.Color, THREE.Color, THREE.Color];
+  branchThickness: number;
+  branchDepth: number;
+  obstacleEmissive: THREE.Color;
+  obstacleEmissiveIntensity: number;
+  gemRadius: number;
+  powerupRadius: number;
+  playerBodyColor: THREE.Color;
+  playerBodyEmissive: THREE.Color;
+  haloColor: THREE.Color;
+  menuAccent: string;
+};
+
+const PATH_STYLE_IDS: GrowthPathStyleId[] = ['voxelized', 'classic', 'apex'];
+
+const PATH_STYLES: Record<GrowthPathStyleId, PathStyleDefinition> = {
+  voxelized: {
+    id: 'voxelized',
+    label: 'Voxelized Cubed Path',
+    subtitle: 'Chunked voxel beam with crisp stepped blocks.',
+    tileScale: [1, 1, SEGMENT_SPACING * 0.9],
+    tileColors: [new THREE.Color('#eaf1ff'), new THREE.Color('#c8d9f4')],
+    tileAlternating: true,
+    tileRoughness: 0.24,
+    tileMetalness: 0.14,
+    obstacleColors: [
+      new THREE.Color('#fb923c'),
+      new THREE.Color('#f97316'),
+      new THREE.Color('#f43f5e'),
+    ],
+    branchThickness: 0.18,
+    branchDepth: SEGMENT_SPACING * 0.66,
+    obstacleEmissive: new THREE.Color('#4a1524'),
+    obstacleEmissiveIntensity: 0.22,
+    gemRadius: SEGMENT_HALF + 0.16,
+    powerupRadius: SEGMENT_HALF + 0.2,
+    playerBodyColor: new THREE.Color('#fb7185'),
+    playerBodyEmissive: new THREE.Color('#3f0f1c'),
+    haloColor: new THREE.Color('#34d399'),
+    menuAccent: '#fda4af',
+  },
+  classic: {
+    id: 'classic',
+    label: 'Classic Branch Beam',
+    subtitle: 'Single continuous beam with classic branch silhouettes.',
+    tileScale: [0.84, 0.84, SEGMENT_SPACING * 1.02],
+    tileColors: [new THREE.Color('#f6dc9f'), new THREE.Color('#f6dc9f')],
+    tileAlternating: false,
+    tileRoughness: 0.36,
+    tileMetalness: 0.04,
+    obstacleColors: [
+      new THREE.Color('#f4b287'),
+      new THREE.Color('#f08d76'),
+      new THREE.Color('#e8787a'),
+    ],
+    branchThickness: 0.22,
+    branchDepth: SEGMENT_SPACING * 0.84,
+    obstacleEmissive: new THREE.Color('#56262a'),
+    obstacleEmissiveIntensity: 0.16,
+    gemRadius: SEGMENT_HALF + 0.12,
+    powerupRadius: SEGMENT_HALF + 0.15,
+    playerBodyColor: new THREE.Color('#5b1f1f'),
+    playerBodyEmissive: new THREE.Color('#20100a'),
+    haloColor: new THREE.Color('#f59e0b'),
+    menuAccent: '#fbbf24',
+  },
+  apex: {
+    id: 'apex',
+    label: 'Apex Neon Run',
+    subtitle: 'Apex-inspired polished lane with bright neon branches.',
+    tileScale: [0.94, 0.94, SEGMENT_SPACING * 0.97],
+    tileColors: [new THREE.Color('#c9f0ff'), new THREE.Color('#8ed8f8')],
+    tileAlternating: true,
+    tileRoughness: 0.2,
+    tileMetalness: 0.28,
+    obstacleColors: [
+      new THREE.Color('#22d3ee'),
+      new THREE.Color('#0ea5e9'),
+      new THREE.Color('#38bdf8'),
+    ],
+    branchThickness: 0.17,
+    branchDepth: SEGMENT_SPACING * 0.78,
+    obstacleEmissive: new THREE.Color('#0c4a6e'),
+    obstacleEmissiveIntensity: 0.36,
+    gemRadius: SEGMENT_HALF + 0.18,
+    powerupRadius: SEGMENT_HALF + 0.22,
+    playerBodyColor: new THREE.Color('#f472b6'),
+    playerBodyEmissive: new THREE.Color('#701a75'),
+    haloColor: new THREE.Color('#67e8f9'),
+    menuAccent: '#38bdf8',
+  },
+};
+
 const OBSTACLE_INSTANCES_PER_SEGMENT = 3;
 const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
 
-const BRANCH_DEPTH = SEGMENT_SPACING * 0.66;
-const BRANCH_BASE_THICKNESS = 0.18;
 const BRANCH_INITIAL_HEIGHT = 0.05;
-const GEM_RADIUS = SEGMENT_HALF + 0.16;
-const POWERUP_RADIUS = SEGMENT_HALF + 0.2;
 const HIDE_POSITION_Y = -9999;
 const PLAYER_BASE_Y = SEGMENT_HALF + PLAYER_COLLISION_RADIUS * 0.7;
 
@@ -225,18 +315,44 @@ const InputController: React.FC<InputControllerProps> = ({
     const handlePointerDown = (event: PointerEvent) => {
       // Touch input is owned by swipe controls (tap/swipe).
       if (event.pointerType === 'touch') return;
+      if (event.target instanceof HTMLElement) {
+        if (event.target.closest('button, a, input, select, textarea')) {
+          return;
+        }
+      }
       if (canStart) {
         startOrRestart();
         return;
       }
-      if (canJump) {
+      if (!canRotate) {
+        if (canJump) jump();
+        return;
+      }
+
+      const centerX = window.innerWidth * 0.5;
+      const centerJumpBand = window.innerWidth * 0.1;
+      if (canJump && Math.abs(event.clientX - centerX) <= centerJumpBand) {
         jump();
+        return;
+      }
+
+      if (event.clientX < centerX) rotateLeft();
+      else rotateRight();
+    };
+
+    const handleContextMenu = (event: MouseEvent) => {
+      if (canRotate || canJump) {
+        event.preventDefault();
       }
     };
 
     window.addEventListener('pointerdown', handlePointerDown);
-    return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [canJump, canStart, jump, startOrRestart]);
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [canJump, canRotate, canStart, jump, rotateLeft, rotateRight, startOrRestart]);
 
   return null;
 };
@@ -260,6 +376,7 @@ const Growth: React.FC = () => {
   const { paused } = useGameUIState();
   const { setPaused } = useGameStateActions();
   const { camera, scene, gl } = useThree();
+  const activePathStyle = PATH_STYLES[snap.pathStyle] ?? PATH_STYLES.voxelized;
 
   const graphicsPreset = useMemo(() => pickGraphicsPreset(), []);
   const rotation = useWorldRotation();
@@ -282,14 +399,24 @@ const Growth: React.FC = () => {
   const playerRef = useRef<THREE.Group>(null);
   const atmosphereRef = useRef<THREE.Group>(null);
   const tileMeshRef = useRef<THREE.InstancedMesh>(null);
+  const tileMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const powerupMeshRef = useRef<THREE.InstancedMesh>(null);
   const orthoRef = useRef<THREE.OrthographicCamera>(null);
+  const playerBodyMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const playerHaloMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const deathBurstRef = useRef<THREE.Mesh>(null);
+  const deathBurstMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const jumpState = useRef({
     height: 0,
     velocity: 0,
     grounded: true,
+  });
+  const deathFx = useRef({
+    active: false,
+    elapsedMs: 0,
   });
 
   const runtime = useRef<RuntimeState>({
@@ -325,15 +452,23 @@ const Growth: React.FC = () => {
       if (!tileMeshRef.current) return;
       matrixDummy.position.set(0, 0, segment.z);
       matrixDummy.rotation.set(0, 0, 0);
-      matrixDummy.scale.set(1, 1, 1);
+      matrixDummy.scale.set(
+        activePathStyle.tileScale[0],
+        activePathStyle.tileScale[1],
+        activePathStyle.tileScale[2]
+      );
       matrixDummy.updateMatrix();
       tileMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
       tileMeshRef.current.setColorAt(
         segment.slot,
-        segment.sequence % 2 === 0 ? TILE_COLOR_LIGHT : TILE_COLOR_DARK
+        activePathStyle.tileAlternating
+          ? segment.sequence % 2 === 0
+            ? activePathStyle.tileColors[0]
+            : activePathStyle.tileColors[1]
+          : activePathStyle.tileColors[0]
       );
     },
-    [matrixDummy]
+    [activePathStyle, matrixDummy]
   );
 
   const writeObstacleInstances = useCallback(
@@ -382,16 +517,22 @@ const Growth: React.FC = () => {
 
         matrixDummy.position.set(x, y, segment.z);
         matrixDummy.rotation.set(0, 0, angle);
-        matrixDummy.scale.set(height, 1, 1);
+        matrixDummy.scale.set(
+          height,
+          activePathStyle.branchThickness,
+          activePathStyle.branchDepth
+        );
         matrixDummy.updateMatrix();
         mesh.setMatrixAt(instanceId, matrixDummy.matrix);
         mesh.setColorAt(
           instanceId,
-          OBSTACLE_COLORS[Math.min(i, OBSTACLE_COLORS.length - 1)]
+          activePathStyle.obstacleColors[
+            Math.min(i, activePathStyle.obstacleColors.length - 1)
+          ]
         );
       }
     },
-    [hideInstance, matrixDummy]
+    [activePathStyle, hideInstance, matrixDummy]
   );
 
   const writeGemInstance = useCallback(
@@ -402,7 +543,7 @@ const Growth: React.FC = () => {
         return;
       }
 
-      const [gx, gy] = getFaceOffset(segment.gemFace, GEM_RADIUS);
+      const [gx, gy] = getFaceOffset(segment.gemFace, activePathStyle.gemRadius);
       matrixDummy.position.set(gx, gy, segment.z);
       matrixDummy.rotation.set(0.4, 0.2, 0.1);
       matrixDummy.scale.set(0.28, 0.28, 0.28);
@@ -410,7 +551,7 @@ const Growth: React.FC = () => {
       gemMeshRef.current.setMatrixAt(segment.slot, matrixDummy.matrix);
       gemMeshRef.current.setColorAt(segment.slot, GEM_COLOR);
     },
-    [hideInstance, matrixDummy]
+    [activePathStyle.gemRadius, hideInstance, matrixDummy]
   );
 
   const writePowerupInstance = useCallback(
@@ -425,7 +566,10 @@ const Growth: React.FC = () => {
         return;
       }
 
-      const [px, py] = getFaceOffset(segment.powerupFace, POWERUP_RADIUS);
+      const [px, py] = getFaceOffset(
+        segment.powerupFace,
+        activePathStyle.powerupRadius
+      );
       matrixDummy.position.set(px, py, segment.z);
       matrixDummy.rotation.set(
         0,
@@ -440,7 +584,7 @@ const Growth: React.FC = () => {
         segment.powerupType === 'boost' ? BOOST_COLOR : SHIELD_COLOR
       );
     },
-    [hideInstance, matrixDummy]
+    [activePathStyle.powerupRadius, hideInstance, matrixDummy]
   );
 
   const flushInstances = useCallback(() => {
@@ -602,6 +746,11 @@ const Growth: React.FC = () => {
         powerupType,
         gemTaken: false,
         powerupTaken: false,
+        growthActivated: false,
+        growthStartZ: runtime.current.rng.float(
+          gameplayConfig.branchGrowthViewportZ.min,
+          gameplayConfig.branchGrowthViewportZ.max
+        ),
         cleared: false,
       };
     },
@@ -673,6 +822,8 @@ const Growth: React.FC = () => {
     jumpState.current.height = 0;
     jumpState.current.velocity = 0;
     jumpState.current.grounded = true;
+    deathFx.current.active = false;
+    deathFx.current.elapsedMs = 0;
     runtime.current.nextSequence = SEGMENT_POOL;
     runtime.current.hardStreak = 0;
     runtime.current.farthestZ =
@@ -697,6 +848,18 @@ const Growth: React.FC = () => {
     if (worldRef.current) {
       worldRef.current.position.set(0, 0, 0);
       worldRef.current.rotation.set(0, 0, 0);
+    }
+    if (playerRef.current) {
+      playerRef.current.position.set(0, PLAYER_BASE_Y, 0);
+      playerRef.current.rotation.set(0, 0, 0);
+      playerRef.current.scale.set(1, 1, 1);
+    }
+    if (deathBurstRef.current) {
+      deathBurstRef.current.visible = false;
+      deathBurstRef.current.scale.set(1, 1, 1);
+    }
+    if (deathBurstMaterialRef.current) {
+      deathBurstMaterialRef.current.opacity = 0;
     }
     resetWorldRotation(worldRef);
     flushInstances();
@@ -758,6 +921,78 @@ const Growth: React.FC = () => {
     else growthState.resume();
   }, [paused]);
 
+  const setPathStyle = useCallback((style: GrowthPathStyleId) => {
+    growthState.setPathStyle(style);
+  }, []);
+
+  useEffect(() => {
+    const handleStyleShortcut = (event: KeyboardEvent) => {
+      if (snap.phase === 'playing') return;
+      if (event.target instanceof HTMLElement) {
+        const tag = event.target.tagName;
+        if (
+          event.target.isContentEditable ||
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT'
+        ) {
+          return;
+        }
+      }
+
+      if (event.key === '1') {
+        event.preventDefault();
+        setPathStyle('voxelized');
+      } else if (event.key === '2') {
+        event.preventDefault();
+        setPathStyle('classic');
+      } else if (event.key === '3') {
+        event.preventDefault();
+        setPathStyle('apex');
+      }
+    };
+
+    window.addEventListener('keydown', handleStyleShortcut);
+    return () => window.removeEventListener('keydown', handleStyleShortcut);
+  }, [setPathStyle, snap.phase]);
+
+  useEffect(() => {
+    if (tileMaterialRef.current) {
+      tileMaterialRef.current.roughness = activePathStyle.tileRoughness;
+      tileMaterialRef.current.metalness = activePathStyle.tileMetalness;
+    }
+    if (obstacleMaterialRef.current) {
+      obstacleMaterialRef.current.emissive.copy(activePathStyle.obstacleEmissive);
+      obstacleMaterialRef.current.emissiveIntensity =
+        activePathStyle.obstacleEmissiveIntensity *
+        (graphicsPreset.name === 'HIGH' ? 1.2 : 1);
+    }
+    if (playerBodyMaterialRef.current) {
+      playerBodyMaterialRef.current.color.copy(activePathStyle.playerBodyColor);
+      playerBodyMaterialRef.current.emissive.copy(activePathStyle.playerBodyEmissive);
+    }
+    if (playerHaloMaterialRef.current) {
+      playerHaloMaterialRef.current.color.copy(activePathStyle.haloColor);
+    }
+
+    for (let i = 0; i < runtime.current.segments.length; i += 1) {
+      const segment = runtime.current.segments[i];
+      writeTileInstance(segment);
+      writeObstacleInstances(segment);
+      writeGemInstance(segment);
+      writePowerupInstance(segment);
+    }
+    flushInstances();
+  }, [
+    activePathStyle,
+    flushInstances,
+    graphicsPreset.name,
+    writeGemInstance,
+    writeObstacleInstances,
+    writePowerupInstance,
+    writeTileInstance,
+  ]);
+
   useEffect(() => {
     if (graphicsPreset.fog) {
       scene.fog = new THREE.Fog(graphicsPreset.fogColor, 8, 54);
@@ -781,17 +1016,21 @@ const Growth: React.FC = () => {
   ]);
 
   useFrame((state, dt) => {
-    const nowMs = state.clock.elapsedTime * 1000;
+    const nowMs = performance.now();
     updateWorldRotation(nowMs, worldRef);
-    jellySquash.update(dt, playerRef);
+    if (!(deathFx.current.active && growthState.phase === 'gameover')) {
+      jellySquash.update(dt, playerRef);
+    }
     if (atmosphereRef.current) {
       atmosphereRef.current.rotation.z += dt * 0.03;
     }
 
     if (growthState.phase !== 'playing') {
-      jumpState.current.height = 0;
-      jumpState.current.velocity = 0;
-      jumpState.current.grounded = true;
+      if (!deathFx.current.active) {
+        jumpState.current.height = 0;
+        jumpState.current.velocity = 0;
+        jumpState.current.grounded = true;
+      }
     } else if (!paused && !jumpState.current.grounded) {
       jumpState.current.velocity -= gameplayConfig.jumpGravity * dt;
       jumpState.current.height += jumpState.current.velocity * dt;
@@ -802,12 +1041,64 @@ const Growth: React.FC = () => {
       }
     }
 
+    if (deathFx.current.active) {
+      deathFx.current.elapsedMs += dt * 1000;
+      if (deathFx.current.elapsedMs >= gameplayConfig.deathFxDurationMs) {
+        deathFx.current.active = false;
+      }
+    }
+
+    if (deathBurstRef.current && deathBurstMaterialRef.current) {
+      if (deathFx.current.active) {
+        const progress = clamp(
+          deathFx.current.elapsedMs / gameplayConfig.deathFxDurationMs,
+          0,
+          1
+        );
+        deathBurstRef.current.visible = true;
+        deathBurstRef.current.position.set(0, 0, 0);
+        const burstScale = 1 + progress * 4.2;
+        deathBurstRef.current.scale.set(
+          burstScale,
+          burstScale,
+          burstScale
+        );
+        deathBurstRef.current.rotation.z += dt * 2.4;
+        deathBurstMaterialRef.current.opacity = (1 - progress) * 0.65;
+      } else {
+        deathBurstRef.current.visible = false;
+        deathBurstMaterialRef.current.opacity = 0;
+      }
+    }
+
     if (playerRef.current) {
-      playerRef.current.position.set(0, PLAYER_BASE_Y + jumpState.current.height, 0);
+      if (growthState.phase === 'gameover' && deathFx.current.active) {
+        const progress = clamp(
+          deathFx.current.elapsedMs / gameplayConfig.deathFxDurationMs,
+          0,
+          1
+        );
+        const fallOffset = progress * 1.8;
+        const spin = progress * Math.PI * 1.9;
+        playerRef.current.position.set(
+          0,
+          PLAYER_BASE_Y + jumpState.current.height - fallOffset,
+          0
+        );
+        playerRef.current.rotation.set(spin * 0.36, spin * 0.18, spin);
+      } else {
+        playerRef.current.position.set(
+          0,
+          PLAYER_BASE_Y + jumpState.current.height,
+          0
+        );
+        playerRef.current.rotation.set(0, 0, 0);
+      }
     }
 
     if (growthState.phase === 'playing' && !paused) {
       runtime.current.elapsed += dt;
+      growthState.time = runtime.current.elapsed;
       growthState.tickTimers(dt);
 
       let speed =
@@ -840,7 +1131,10 @@ const Growth: React.FC = () => {
       for (let i = 0; i < runtime.current.segments.length; i += 1) {
         const segment = runtime.current.segments[i];
         const worldZ = segment.z - runtime.current.scroll;
-        if (worldZ < 30 && worldZ > DESPAWN_WORLD_Z - 2) {
+        if (!segment.growthActivated && worldZ <= segment.growthStartZ) {
+          segment.growthActivated = true;
+        }
+        if (segment.growthActivated && worldZ > DESPAWN_WORLD_Z - 2) {
           if (growBranchesForSegment(segment, dt)) {
             instancesDirty = true;
           }
@@ -927,6 +1221,8 @@ const Growth: React.FC = () => {
       }
 
       if (shouldEndRun) {
+        deathFx.current.active = true;
+        deathFx.current.elapsedMs = 0;
         growthState.endGame();
       } else if (instancesDirty) {
         flushInstances();
@@ -1036,13 +1332,12 @@ const Growth: React.FC = () => {
           args={[undefined, undefined, SEGMENT_POOL]}
           receiveShadow
         >
-          <boxGeometry
-            args={[SEGMENT_SIZE, SEGMENT_SIZE, SEGMENT_SPACING * 0.9]}
-          />
+          <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial
+            ref={tileMaterialRef}
             vertexColors
-            roughness={0.24}
-            metalness={0.14}
+            roughness={activePathStyle.tileRoughness}
+            metalness={activePathStyle.tileMetalness}
             flatShading
           />
         </instancedMesh>
@@ -1053,15 +1348,17 @@ const Growth: React.FC = () => {
           castShadow={graphicsPreset.shadows}
           receiveShadow
         >
-          <boxGeometry
-            args={[1, BRANCH_BASE_THICKNESS, BRANCH_DEPTH]}
-          />
+          <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial
+            ref={obstacleMaterialRef}
             vertexColors
             roughness={0.3}
             metalness={0.12}
-            emissive="#4a1524"
-            emissiveIntensity={graphicsPreset.name === 'HIGH' ? 0.28 : 0.2}
+            emissive={activePathStyle.obstacleEmissive}
+            emissiveIntensity={
+              activePathStyle.obstacleEmissiveIntensity *
+              (graphicsPreset.name === 'HIGH' ? 1.2 : 1)
+            }
             flatShading
           />
         </instancedMesh>
@@ -1105,10 +1402,11 @@ const Growth: React.FC = () => {
             ]}
           />
           <meshStandardMaterial
-            color="#fb7185"
+            ref={playerBodyMaterialRef}
+            color={activePathStyle.playerBodyColor}
             roughness={0.34}
             metalness={0.12}
-            emissive="#3f0f1c"
+            emissive={activePathStyle.playerBodyEmissive}
             emissiveIntensity={0.24}
             flatShading
           />
@@ -1129,9 +1427,26 @@ const Growth: React.FC = () => {
         >
           <ringGeometry args={[0.36, 0.43, 40]} />
           <meshBasicMaterial
-            color="#34d399"
+            ref={playerHaloMaterialRef}
+            color={activePathStyle.haloColor}
             transparent
             opacity={graphicsPreset.name === 'LOW' ? 0.16 : 0.24}
+          />
+        </mesh>
+        <mesh
+          ref={deathBurstRef}
+          position={[0, 0, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+          visible={false}
+        >
+          <ringGeometry args={[0.18, 0.36, 42]} />
+          <meshBasicMaterial
+            ref={deathBurstMaterialRef}
+            color="#fb7185"
+            transparent
+            opacity={0}
+            side={THREE.DoubleSide}
+            depthWrite={false}
           />
         </mesh>
       </group>
@@ -1152,6 +1467,9 @@ const Growth: React.FC = () => {
           <div style={{ fontSize: 13, opacity: 0.9 }}>Gems: {snap.gems}</div>
           <div style={{ fontSize: 12, opacity: 0.78 }}>
             Best: {snap.bestScore}
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>
+            Style: {activePathStyle.label}
           </div>
           <div style={{ fontSize: 12, opacity: 0.78 }}>
             Speed: {displaySpeed.toFixed(1)}
@@ -1181,7 +1499,7 @@ const Growth: React.FC = () => {
           >
             <div
               style={{
-                width: 380,
+                width: 420,
                 borderRadius: 18,
                 padding: '20px 22px',
                 background:
@@ -1204,13 +1522,55 @@ const Growth: React.FC = () => {
                 grow too high.
               </div>
               <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                A / Left Arrow / Swipe Left: rotate +90°
+                A / Q / Left Arrow / Swipe Left: rotate +90°
               </div>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
-                D / Right Arrow / Swipe Right: rotate -90°
+                D / E / Right Arrow / Swipe Right: rotate -90°
               </div>
               <div style={{ fontSize: 12, opacity: 0.75 }}>
                 Tap / Space: jump
+              </div>
+              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.9 }}>
+                Path style
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  display: 'grid',
+                  gap: 8,
+                }}
+              >
+                {PATH_STYLE_IDS.map((styleId, index) => {
+                  const option = PATH_STYLES[styleId];
+                  const active = styleId === snap.pathStyle;
+                  return (
+                    <button
+                      key={styleId}
+                      onClick={() => setPathStyle(styleId)}
+                      style={{
+                        borderRadius: 10,
+                        border: active
+                          ? `1px solid ${option.menuAccent}`
+                          : '1px solid rgba(255,255,255,0.2)',
+                        background: active
+                          ? 'rgba(255,255,255,0.12)'
+                          : 'rgba(0,0,0,0.18)',
+                        color: '#fff',
+                        textAlign: 'left',
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>
+                        {index + 1}. {option.label}
+                      </div>
+                      <div style={{ fontSize: 11, opacity: 0.74 }}>
+                        {option.subtitle}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
               {snap.phase === 'gameover' && (
                 <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>
@@ -1218,7 +1578,8 @@ const Growth: React.FC = () => {
                 </div>
               )}
               <div style={{ marginTop: 13, fontSize: 12, opacity: 0.62 }}>
-                Tap / Space to {snap.phase === 'menu' ? 'start' : 'restart'}
+                1/2/3 to switch style • Tap / Space to{' '}
+                {snap.phase === 'menu' ? 'start' : 'restart'}
               </div>
             </div>
           </div>

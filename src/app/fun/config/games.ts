@@ -644,7 +644,7 @@ export const GAME_RULES: Record<string, GameRules> = {
   },
   growth: {
     controls:
-      'A/Left Arrow/Swipe Left = rotate +90° • D/Right Arrow/Swipe Right = rotate -90° • Tap/Space = jump • R to restart',
+      'A/Q/Left Arrow/Swipe Left = rotate +90° • D/E/Right Arrow/Swipe Right = rotate -90° • Tap/Space = jump • 1/2/3 choose path style • R to restart',
     objective:
       'Ride the surface of the path, jump low branches, and rotate to an open face when tall branches become impossible to clear.',
     tips: 'Branches grow in real time. Low branches are jumpable, tall branches force a rotate. Always scan at least one segment ahead.',

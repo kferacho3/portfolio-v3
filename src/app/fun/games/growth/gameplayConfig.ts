@@ -33,6 +33,11 @@ export const gameplayConfig = {
     min: 0.5,
     max: 1.25,
   },
+  branchGrowthViewportZ: {
+    min: 7.5,
+    max: 12.5,
+  },
+  deathFxDurationMs: 620,
 } as const;
 
 export type GameplayConfig = typeof gameplayConfig;

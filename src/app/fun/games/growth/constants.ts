@@ -1,4 +1,5 @@
 export const BEST_SCORE_KEY = 'growth_best_v2';
+export const PATH_STYLE_KEY = 'growth_path_style_v1';
 
 export const QUARTER_TURN = Math.PI / 2;
 export const ROTATION_MS = 200;

@@ -105,7 +105,7 @@ export function useWorldRotation(): WorldRotationHook {
 
   const isRotating = useCallback(() => anim.current != null, []);
   const getRotationIndex = useCallback(
-    () => normalizeFaceIndex(rotationIndexRef.current),
+    () => normalizeFaceIndex(Math.round(worldRotationRef.current / QUARTER_TURN)),
     []
   );
   const getWorldRotation = useCallback(() => worldRotationRef.current, []);

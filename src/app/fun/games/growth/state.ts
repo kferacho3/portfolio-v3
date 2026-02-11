@@ -1,6 +1,11 @@
 import { proxy } from 'valtio';
-import type { GrowthGameState } from './types';
-import { BEST_SCORE_KEY } from './constants';
+import type { GrowthGameState, GrowthPathStyleId } from './types';
+import { BEST_SCORE_KEY, PATH_STYLE_KEY } from './constants';
+
+const PATH_STYLE_IDS: GrowthPathStyleId[] = ['voxelized', 'classic', 'apex'];
+
+const isGrowthPathStyle = (value: string): value is GrowthPathStyleId =>
+  PATH_STYLE_IDS.includes(value as GrowthPathStyleId);
 
 export const growthState = proxy<
   GrowthGameState & {
@@ -14,6 +19,7 @@ export const growthState = proxy<
     addPerfectTurn: () => void;
     grantShield: (durationMs?: number) => void;
     triggerBoost: (durationMs?: number) => void;
+    setPathStyle: (style: GrowthPathStyleId) => void;
     tickTimers: (dt: number) => void;
     loadBestScore: () => void;
   }
@@ -28,6 +34,7 @@ export const growthState = proxy<
   perfectTurns: 0,
   shieldMs: 0,
   boostMs: 0,
+  pathStyle: 'voxelized',
 
   reset() {
     this.phase = 'menu';
@@ -76,7 +83,6 @@ export const growthState = proxy<
 
   collectGem() {
     this.gems += 1;
-    this.score += 8;
   },
 
   addClearScore(amount = 1) {
@@ -93,6 +99,16 @@ export const growthState = proxy<
 
   triggerBoost(durationMs = 0) {
     this.boostMs = Math.max(this.boostMs, durationMs);
+  },
+
+  setPathStyle(style) {
+    if (this.pathStyle === style) return;
+    this.pathStyle = style;
+    try {
+      localStorage.setItem(PATH_STYLE_KEY, style);
+    } catch {
+      // ignore
+    }
   },
 
   tickTimers(dt: number) {
@@ -117,6 +133,10 @@ export const growthState = proxy<
     try {
       const best = localStorage.getItem(BEST_SCORE_KEY);
       if (best) this.bestScore = parseInt(best, 10) || 0;
+      const pathStyle = localStorage.getItem(PATH_STYLE_KEY);
+      if (pathStyle && isGrowthPathStyle(pathStyle)) {
+        this.pathStyle = pathStyle;
+      }
     } catch {
       // ignore
     }
