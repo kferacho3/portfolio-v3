@@ -253,6 +253,17 @@ function getDifficulty(level: number, mode: OnePathMode): DifficultyProfile {
   };
 }
 
+function resolveTurnTarget(
+  level: number,
+  mode: OnePathMode,
+  diff: DifficultyProfile,
+  seed: number
+) {
+  if (mode === 'levels') return Math.max(1, level);
+  const rand = mulberry32(hash32(seed ^ 0x4f1bbcdc));
+  return randInt(rand, diff.segmentMin, diff.segmentMax);
+}
+
 function pointOnSegment(seg: OnePathSegment, s: number, l: number) {
   if (seg.axis === 'x') {
     return { x: seg.x + seg.dir * s, z: seg.z + l };
@@ -354,33 +365,48 @@ function buildWalls(level: number, segIndex: number, threshold: number) {
   };
 }
 
-function buildFallbackLevel(level: number, mode: OnePathMode, seed: number): OnePathLevel {
+function buildFallbackLevel(
+  level: number,
+  mode: OnePathMode,
+  seed: number,
+  targetTurns: number
+): OnePathLevel {
   const diff = getDifficulty(level, mode);
+  const rand = mulberry32(hash32(seed ^ 0xa55a55a5));
   const noTouchMargin = CONST.BALL_R * CONST.NO_TOUCH_MARGIN_FACTOR;
-  const corridorWidth = Math.max(
-    MIN_CORRIDOR_WIDTH,
-    BASE_CORRIDOR_WIDTH + (diff.widthJitterMin + diff.widthJitterMax) * 0.5
-  );
-  const halfWidth = corridorWidth * 0.5;
-
-  const centerPad = CONST.BALL_R + CONST.WALL_T * 0.5;
-  const centerMin = centerPad;
-  const centerMax = 3 - centerPad;
-
+  const turnCount = Math.max(1, Math.floor(targetTurns));
   const segments: OnePathSegment[] = [];
   let cursor = { x: 0, z: 0 };
 
-  for (let i = 0; i < 10; i += 1) {
+  for (let i = 0; i < turnCount; i += 1) {
     const axis: OnePathAxis = i % 2 === 0 ? 'z' : 'x';
-    const turnS = centerMin + (centerMax - centerMin) * 0.5;
+    const dir = pickDirection(axis, cursor, rand);
+    const corridorWidth = Math.max(
+      MIN_CORRIDOR_WIDTH,
+      BASE_CORRIDOR_WIDTH + randRange(rand, diff.widthJitterMin, diff.widthJitterMax)
+    );
+    const halfWidth = corridorWidth * 0.5;
+    const length = randRange(rand, diff.lengthMin, diff.lengthMax);
+
+    const centerPad = CONST.BALL_R + CONST.WALL_T * 0.5;
+    const centerMin = centerPad;
+    const centerMax = Math.max(centerMin + 0.4, length - centerPad);
+    const turnS = centerMin + (centerMax - centerMin) * (0.35 + rand() * 0.3);
+
+    const reqAllowedMax = Math.max(0, Math.min(diff.reqMax, diff.breakThreshold - 2));
+    const reqAllowedMin = Math.min(diff.reqMin, reqAllowedMax);
+    const req =
+      rand() < diff.trapChance && reqAllowedMax > 0
+        ? randInt(rand, reqAllowedMin, reqAllowedMax)
+        : 0;
 
     const seg: OnePathSegment = {
       id: `s_fb_${level}_${i}`,
       axis,
-      dir: 1,
+      dir,
       x: cursor.x,
       z: cursor.z,
-      length: 3,
+      length,
       corridorWidth,
       halfWidth,
       centerMin,
@@ -389,8 +415,8 @@ function buildFallbackLevel(level: number, mode: OnePathMode, seed: number): One
         offset: turnS,
         triggerStart: turnS - corridorWidth * 0.22,
         triggerEnd: turnS + corridorWidth * 0.22,
-        requiredBounces: Math.min(2, i),
-        isOpen: i === 0,
+        requiredBounces: req,
+        isOpen: req <= 0,
       },
       walls: buildWalls(level, i, diff.breakThreshold),
       gems: [],
@@ -402,7 +428,18 @@ function buildFallbackLevel(level: number, mode: OnePathMode, seed: number): One
 
   const finalSeg = segments[segments.length - 1];
   const exitPoint = pointOnSegment(finalSeg, finalSeg.gate.offset, 0);
-  const tolerance = Math.max(corridorWidth * 0.18, diff.lateralSpeed * CONST.FIXED_DT * 1.25);
+  let tightestWidth = Number.POSITIVE_INFINITY;
+  let widthSum = 0;
+  for (let i = 0; i < segments.length; i += 1) {
+    const w = segments[i].corridorWidth;
+    tightestWidth = Math.min(tightestWidth, w);
+    widthSum += w;
+  }
+  const avgWidth = widthSum / segments.length;
+  const tolerance = Math.max(
+    tightestWidth * 0.18,
+    diff.lateralSpeed * CONST.FIXED_DT * 1.25
+  );
 
   return {
     id: `${mode}_lvl_${level}_fallback`,
@@ -415,7 +452,7 @@ function buildFallbackLevel(level: number, mode: OnePathMode, seed: number): One
     lateralSpeed: diff.lateralSpeed,
     tolerance,
     perfectTol: tolerance * 0.6,
-    bridgeWidth: corridorWidth,
+    bridgeWidth: avgWidth,
     baseHeight: CONST.BASE_H,
     deckHeight: CONST.DECK_H,
     fallMargin: CONST.FALL_MARGIN,
@@ -608,6 +645,7 @@ export const onePathState = proxy({
 
   // Deterministic self-avoiding generator:
   // each new branch can only connect to current segment and cannot touch older corridors.
+  // In levels mode, required turns strictly match the selected level number.
   buildLevel: (level: number, mode: OnePathMode = 'levels'): OnePathLevel => {
     const lvl = Math.max(1, Math.floor(level));
     const diff = getDifficulty(lvl, mode);
@@ -617,11 +655,11 @@ export const onePathState = proxy({
         ? hash32(lvl * 0x9e3779b1)
         : hash32(onePathState.endlessSeed ^ Math.imul(lvl, 0x85ebca6b));
 
+    const segmentCount = resolveTurnTarget(lvl, mode, diff, seed);
     const noTouchMargin = CONST.BALL_R * CONST.NO_TOUCH_MARGIN_FACTOR;
 
     for (let regen = 0; regen < 42; regen += 1) {
       const rand = mulberry32(hash32(seed ^ regen));
-      const segmentCount = randInt(rand, diff.segmentMin, diff.segmentMax);
 
       const segments: OnePathSegment[] = [];
       const occupied: AABB[] = [];
@@ -782,6 +820,6 @@ export const onePathState = proxy({
       };
     }
 
-    return buildFallbackLevel(lvl, mode, seed);
+    return buildFallbackLevel(lvl, mode, seed, segmentCount);
   },
 });

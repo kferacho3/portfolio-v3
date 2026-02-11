@@ -13,7 +13,6 @@ import {
   BOOST_DURATION,
   BOOST_MULTIPLIER,
   CLEAR_SCORE,
-  COLLISION_WINDOW,
   DESPAWN_WORLD_Z,
   GEM_SCORE,
   PERFECT_TURN_BONUS,
@@ -88,8 +87,8 @@ const PATH_STYLES: Record<GrowthPathStyleId, PathStyleDefinition> = {
       new THREE.Color('#f97316'),
       new THREE.Color('#f43f5e'),
     ],
-    branchThickness: 0.18,
-    branchDepth: SEGMENT_SPACING * 0.66,
+    branchThickness: 1,
+    branchDepth: SEGMENT_SPACING * 0.9,
     obstacleEmissive: new THREE.Color('#4a1524'),
     obstacleEmissiveIntensity: 0.22,
     gemRadius: SEGMENT_HALF + 0.16,
@@ -113,8 +112,8 @@ const PATH_STYLES: Record<GrowthPathStyleId, PathStyleDefinition> = {
       new THREE.Color('#f08d76'),
       new THREE.Color('#e8787a'),
     ],
-    branchThickness: 0.22,
-    branchDepth: SEGMENT_SPACING * 0.84,
+    branchThickness: 0.84,
+    branchDepth: SEGMENT_SPACING * 1.02,
     obstacleEmissive: new THREE.Color('#56262a'),
     obstacleEmissiveIntensity: 0.16,
     gemRadius: SEGMENT_HALF + 0.12,
@@ -138,8 +137,8 @@ const PATH_STYLES: Record<GrowthPathStyleId, PathStyleDefinition> = {
       new THREE.Color('#0ea5e9'),
       new THREE.Color('#38bdf8'),
     ],
-    branchThickness: 0.17,
-    branchDepth: SEGMENT_SPACING * 0.78,
+    branchThickness: 0.94,
+    branchDepth: SEGMENT_SPACING * 0.97,
     obstacleEmissive: new THREE.Color('#0c4a6e'),
     obstacleEmissiveIntensity: 0.36,
     gemRadius: SEGMENT_HALF + 0.18,
@@ -157,6 +156,13 @@ const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
 const BRANCH_INITIAL_HEIGHT = 0.05;
 const HIDE_POSITION_Y = -9999;
 const PLAYER_BASE_Y = SEGMENT_HALF + PLAYER_COLLISION_RADIUS * 0.7;
+const CAMERA_BASE_X = -6.8;
+const CAMERA_BASE_Y = 6.2;
+const CAMERA_BASE_Z = -14.5;
+const CAMERA_LOOK_AT_X = -2.5;
+const CAMERA_LOOK_AT_Y = 2.6;
+const CAMERA_LOOK_AT_Z = -3.8;
+const ATMOSPHERE_Z = 22;
 
 const normalizeFace = (face: number) => (((face % 4) + 4) % 4) as Face;
 const clamp = (value: number, min: number, max: number) =>
@@ -241,15 +247,23 @@ const buildObstacleTargetHeight = (rng: SeededRandom, difficulty: number) => {
     gameplayConfig.branchHeight.tallChanceEnd,
     difficulty
   );
+  const quantizeStep = 0.5;
+  const quantizeVoxelHeight = (height: number) =>
+    clamp(Math.round(height / quantizeStep) * quantizeStep, 0.5, 1.5);
+
   if (rng.bool(tallChance)) {
-    return rng.float(
+    return quantizeVoxelHeight(
+      rng.float(
       gameplayConfig.branchHeight.tallMin,
       gameplayConfig.branchHeight.tallMax
+      )
     );
   }
-  return rng.float(
-    gameplayConfig.branchHeight.shortMin,
-    gameplayConfig.branchHeight.shortMax
+  return quantizeVoxelHeight(
+    rng.float(
+      gameplayConfig.branchHeight.shortMin,
+      gameplayConfig.branchHeight.shortMax
+    )
   );
 };
 
@@ -418,6 +432,7 @@ const Growth: React.FC = () => {
     active: false,
     elapsedMs: 0,
   });
+  const previousActiveFaceRef = useRef<Face>(PLAYER_FACE_BY_ROTATION[0]);
 
   const runtime = useRef<RuntimeState>({
     rng: new SeededRandom(1),
@@ -822,6 +837,7 @@ const Growth: React.FC = () => {
     jumpState.current.height = 0;
     jumpState.current.velocity = 0;
     jumpState.current.grounded = true;
+    previousActiveFaceRef.current = PLAYER_FACE_BY_ROTATION[0];
     deathFx.current.active = false;
     deathFx.current.elapsedMs = 0;
     runtime.current.nextSequence = SEGMENT_POOL;
@@ -1016,6 +1032,7 @@ const Growth: React.FC = () => {
   ]);
 
   useFrame((state, dt) => {
+    const previousJumpHeight = jumpState.current.height;
     const nowMs = performance.now();
     updateWorldRotation(nowMs, worldRef);
     if (!(deathFx.current.active && growthState.phase === 'gameover')) {
@@ -1119,18 +1136,30 @@ const Growth: React.FC = () => {
         growthState.speed = nextSpeed;
       }
 
+      const previousScroll = runtime.current.scroll;
       runtime.current.scroll += speed * dt;
       if (worldRef.current) {
         worldRef.current.position.z = -runtime.current.scroll;
       }
 
       const activeFace = PLAYER_FACE_BY_ROTATION[getRotationIndex()];
+      const previousActiveFace = previousActiveFaceRef.current;
+      const collisionFaces =
+        previousActiveFace === activeFace
+          ? [activeFace]
+          : [previousActiveFace, activeFace];
+      const branchHalfDepth = Math.max(
+        activePathStyle.branchDepth * 0.5,
+        activePathStyle.tileScale[2] * 0.4
+      );
+      const collisionHalfDepth = branchHalfDepth + PLAYER_COLLISION_RADIUS * 0.45;
       let shouldEndRun = false;
       let instancesDirty = false;
 
       for (let i = 0; i < runtime.current.segments.length; i += 1) {
         const segment = runtime.current.segments[i];
         const worldZ = segment.z - runtime.current.scroll;
+        const previousWorldZ = segment.z - previousScroll;
         if (!segment.growthActivated && worldZ <= segment.growthStartZ) {
           segment.growthActivated = true;
         }
@@ -1140,22 +1169,46 @@ const Growth: React.FC = () => {
           }
         }
 
-        if (!segment.cleared && worldZ <= COLLISION_WINDOW) {
-          const blockedIndex = segment.blockedFaces.indexOf(activeFace);
+        if (!segment.cleared) {
+          const blockedFace =
+            collisionFaces.find((face) => segment.blockedFaces.includes(face)) ??
+            null;
+          const blockedIndex =
+            blockedFace == null ? -1 : segment.blockedFaces.indexOf(blockedFace);
           const isBlocked = blockedIndex >= 0;
           const activeObstacleHeight =
             blockedIndex >= 0
               ? segment.obstacleHeights[blockedIndex] ?? BRANCH_INITIAL_HEIGHT
               : 0;
+          const denom = Math.max(0.00001, previousWorldZ - worldZ);
+          const crossT = clamp(previousWorldZ / denom, 0, 1);
+          const jumpAtCrossing = lerp(
+            previousJumpHeight,
+            jumpState.current.height,
+            crossT
+          );
           const jumpClearHeight = Math.max(
             0,
-            activeObstacleHeight - gameplayConfig.jumpClearancePadding
+            activeObstacleHeight +
+              PLAYER_COLLISION_RADIUS * 0.24 -
+              gameplayConfig.jumpClearancePadding
           );
-          const jumpedOverObstacle =
-            !isBlocked || jumpState.current.height >= jumpClearHeight;
-          segment.cleared = true;
 
-          if (isBlocked && !jumpedOverObstacle) {
+          const enteredCollisionZone =
+            previousWorldZ > collisionHalfDepth && worldZ <= collisionHalfDepth;
+          const insideCollisionZone =
+            worldZ <= collisionHalfDepth && worldZ >= -collisionHalfDepth;
+          const sweptThroughCollisionZone =
+            previousWorldZ > collisionHalfDepth && worldZ < -collisionHalfDepth;
+          const shouldCheckCollision =
+            enteredCollisionZone || insideCollisionZone || sweptThroughCollisionZone;
+
+          if (
+            isBlocked &&
+            shouldCheckCollision &&
+            jumpAtCrossing < jumpClearHeight
+          ) {
+            segment.cleared = true;
             if (growthState.shieldMs > 0) {
               growthState.shieldMs = 0;
               cameraShake.triggerShake(0.12, 110);
@@ -1166,8 +1219,13 @@ const Growth: React.FC = () => {
               jellySquash.trigger();
               break;
             }
-          } else {
-            if (isBlocked && jumpedOverObstacle) {
+          }
+
+          const passedSegment = worldZ < -collisionHalfDepth;
+          if (!segment.cleared && passedSegment) {
+            segment.cleared = true;
+
+            if (isBlocked) {
               growthState.addClearScore(2);
               cameraShake.triggerShake(0.05, 70);
             }
@@ -1219,6 +1277,7 @@ const Growth: React.FC = () => {
           instancesDirty = true;
         }
       }
+      previousActiveFaceRef.current = activeFace;
 
       if (shouldEndRun) {
         deathFx.current.active = true;
@@ -1244,17 +1303,17 @@ const Growth: React.FC = () => {
     );
     cam.position.x = THREE.MathUtils.lerp(
       cam.position.x,
-      6.8 + shake.x,
+      CAMERA_BASE_X + shake.x,
       1 - Math.exp(-dt * 8)
     );
     cam.position.y = THREE.MathUtils.lerp(
       cam.position.y,
-      6.2 + shake.y,
+      CAMERA_BASE_Y + shake.y,
       1 - Math.exp(-dt * 8)
     );
     cam.position.z = THREE.MathUtils.lerp(
       cam.position.z,
-      14.5 + shake.z,
+      CAMERA_BASE_Z + shake.z,
       1 - Math.exp(-dt * 8)
     );
     cam.rotation.z = THREE.MathUtils.lerp(
@@ -1262,7 +1321,7 @@ const Growth: React.FC = () => {
       getWorldRotation() * 0.045,
       1 - Math.exp(-dt * 9)
     );
-    cam.lookAt(0, PLAYER_BASE_Y * 0.36, 3.8);
+    cam.lookAt(CAMERA_LOOK_AT_X, CAMERA_LOOK_AT_Y, CAMERA_LOOK_AT_Z);
     cam.updateProjectionMatrix();
   }, -1);
 
@@ -1283,7 +1342,7 @@ const Growth: React.FC = () => {
         makeDefault
         near={0.1}
         far={120}
-        position={[6.8, 6.2, 14.5]}
+        position={[CAMERA_BASE_X, CAMERA_BASE_Y, CAMERA_BASE_Z]}
         zoom={78}
       />
 
@@ -1303,7 +1362,7 @@ const Growth: React.FC = () => {
         color="#93c5fd"
         intensity={graphicsPreset.rimLightIntensity}
       />
-      <group ref={atmosphereRef} position={[0, 0, -22]}>
+      <group ref={atmosphereRef} position={[0, 0, ATMOSPHERE_Z]}>
         <mesh scale={[36, 26, 1]}>
           <planeGeometry args={[1, 1]} />
           <meshBasicMaterial color={graphicsPreset.backgroundA} />

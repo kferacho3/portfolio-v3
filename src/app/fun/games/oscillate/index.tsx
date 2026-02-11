@@ -371,6 +371,7 @@ function Scene() {
     s: 0.24,
     l: 0,
     lDir: 1,
+    visibleSegments: 1,
     y: CONST.BASE_H + CONST.DECK_H + CONST.BALL_R,
     vy: 0,
     alive: true,
@@ -391,6 +392,8 @@ function Scene() {
     stretch: 0,
     lastTapAt: -999,
     gemsThisRun: 0,
+    deathSVel: 0,
+    deathLVel: 0,
   });
 
   const simAccumulatorRef = React.useRef(0);
@@ -543,6 +546,7 @@ function Scene() {
     r.s = first ? Math.min(first.centerMax - 0.001, first.centerMin + 0.02) : 0.24;
     r.l = 0;
     r.lDir = 1;
+    r.visibleSegments = 1;
     r.y = CONST.BASE_H + CONST.DECK_H + CONST.BALL_R;
     r.vy = 0;
     r.alive = true;
@@ -563,6 +567,8 @@ function Scene() {
     r.stretch = 0;
     r.lastTapAt = -999;
     r.gemsThisRun = 0;
+    r.deathSVel = 0;
+    r.deathLVel = 0;
 
     simAccumulatorRef.current = 0;
     staticNeedsBuildRef.current = true;
@@ -587,11 +593,23 @@ function Scene() {
     runKeyRef.current = runKey;
   }, [snap.phase, snap.mode, snap.level, resetRun]);
 
-  const triggerFail = React.useCallback(() => {
+  const triggerFail = React.useCallback((forcedDir?: -1 | 1) => {
+    const lvl = levelRef.current;
     const r = runRef.current;
     if (!r.alive || r.cleared) return;
+    const seg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
+    const failDir = forcedDir ?? r.lDir;
+
     r.alive = false;
     r.vy = -2.4;
+    r.deathSVel = lvl.lateralSpeed * failDir * 1.08;
+    if (seg) {
+      const mid = (seg.centerMin + seg.centerMax) * 0.5;
+      const sidePush = r.s >= mid ? 1 : -1;
+      r.deathLVel = sidePush * Math.max(0.34, seg.halfWidth * 0.22);
+    } else {
+      r.deathLVel = 0;
+    }
     r.missFlash = 1;
     r.shake = Math.max(r.shake, 0.8);
     onePathState.fail();
@@ -612,7 +630,7 @@ function Scene() {
           wall.broken = true;
           r.gateFlash = 1;
           // Timeout pressure mechanic: waiting too long breaks a wall and ends the run.
-          triggerFail();
+          triggerFail(side === 'neg' ? -1 : 1);
           return;
         }
       }
@@ -682,7 +700,9 @@ function Scene() {
     r.s = nextSeg ? Math.min(nextSeg.centerMax - 0.001, nextSeg.centerMin + 0.01) : 0.001;
     r.l = 0;
     r.lDir = 1;
+    r.visibleSegments = Math.min(lvl.segments.length, nextIndex + 1);
     r.bouncesOnSeg = 0;
+    staticNeedsBuildRef.current = true;
 
     r.gateOpen = nextSeg?.gate ? nextSeg.gate.isOpen : true;
   }, [handleLevelClear, triggerFail]);
@@ -704,6 +724,10 @@ function Scene() {
       if (!r.alive) {
         r.vy -= 8.3 * dt;
         r.y += r.vy * dt;
+        r.s += r.deathSVel * dt;
+        r.l += r.deathLVel * dt;
+        r.deathSVel *= 1 + dt * 0.22;
+        r.deathLVel = damp(r.deathLVel, 0, 2.6, dt);
         return;
       }
 
@@ -759,7 +783,8 @@ function Scene() {
     let oddCount = 0;
     let deckCount = 0;
 
-    for (let i = 0; i < lvl.segments.length; i += 1) {
+    const visibleCount = clamp(runRef.current.visibleSegments, 1, lvl.segments.length);
+    for (let i = 0; i < visibleCount; i += 1) {
       const seg = lvl.segments[i];
       const center = segmentWorldPos(seg, seg.length * 0.5, 0);
       const rotY = seg.axis === 'z' ? Math.PI / 2 : 0;
@@ -969,6 +994,10 @@ function Scene() {
       if (!r.alive) {
         r.vy -= 8.2 * d;
         r.y += r.vy * d;
+        r.s += r.deathSVel * d;
+        r.l += r.deathLVel * d;
+        r.deathSVel *= 1 + d * 0.2;
+        r.deathLVel = damp(r.deathLVel, 0, 2.5, d);
       } else {
         const seg0 = levelRef.current.segments[0];
         if (seg0) {
@@ -988,8 +1017,16 @@ function Scene() {
 
     if (ballRef.current) {
       ballRef.current.position.set(p.x, r.y, p.z);
-      ballRef.current.rotation.y += d * 2.3;
-      ballRef.current.rotation.x += d * 1.2;
+      if (r.alive) {
+        ballRef.current.rotation.y += d * 2.3;
+        ballRef.current.rotation.x += d * 1.2;
+      } else {
+        const spin =
+          Math.min(8, Math.abs(r.deathSVel) * 0.95 + Math.abs(r.deathLVel) * 1.4) + 0.9;
+        const signedRoll = r.deathSVel >= 0 ? 1 : -1;
+        ballRef.current.rotation.x += d * spin;
+        ballRef.current.rotation.z += d * spin * 0.42 * signedRoll;
+      }
 
       const sq = r.squash;
       const sx = 1 + sq * 0.18;
@@ -998,14 +1035,18 @@ function Scene() {
     }
 
     if (portalRef.current) {
-      portalRef.current.position.set(lvl.exit.x, CONST.BASE_H + CONST.DECK_H + 0.24, lvl.exit.z);
-      portalRef.current.rotation.y += d * 0.75;
-      portalRef.current.rotation.x = Math.sin(r.t * 0.8) * 0.12;
+      const portalVisible = r.visibleSegments >= lvl.segments.length;
+      portalRef.current.visible = portalVisible;
+      if (portalVisible) {
+        portalRef.current.position.set(lvl.exit.x, CONST.BASE_H + CONST.DECK_H + 0.24, lvl.exit.z);
+        portalRef.current.rotation.y += d * 0.75;
+        portalRef.current.rotation.x = Math.sin(r.t * 0.8) * 0.12;
 
-      const portalMat = (portalRef.current.children[0] as THREE.Mesh | undefined)
-        ?.material as THREE.MeshStandardMaterial | undefined;
-      if (portalMat) {
-        portalMat.emissiveIntensity = 0.35 + Math.sin(r.t * 4.4) * 0.07;
+        const portalMat = (portalRef.current.children[0] as THREE.Mesh | undefined)
+          ?.material as THREE.MeshStandardMaterial | undefined;
+        if (portalMat) {
+          portalMat.emissiveIntensity = 0.35 + Math.sin(r.t * 4.4) * 0.07;
+        }
       }
     }
 

@@ -4,6 +4,7 @@ export type RunStatus = {
   s: number; // forward distance along segment
   l: number; // lateral offset within segment
   lDir: -1 | 1;
+  visibleSegments: number;
 
   y: number;
   vy: number;
@@ -27,6 +28,10 @@ export type RunStatus = {
   stretch: number;
   lastTapAt: number;
   gemsThisRun: number;
+
+  // Death motion keeps moving in the missed direction.
+  deathSVel: number;
+  deathLVel: number;
 };
 
 export type {
