@@ -94,9 +94,9 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
   portalpunch: {
     id: 'portalpunch',
     title: 'Portal Punch',
-    verb: 'Punch timing',
+    verb: 'Portal logic',
     input: 'tap',
-    tutorial: 'Tap to punch through portal and core.',
+    tutorial: 'Route beams with mirrors, portals, and phase switches to satisfy all targets.',
     failCondition: 'timing miss',
     chunkProfile: 'timing-defense',
     endlessFirst: true,

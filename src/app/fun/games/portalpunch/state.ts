@@ -1,13 +1,14 @@
 import { proxy } from 'valtio';
 
+export type PortalPunchEvent =
+  | 'PhaseShift'
+  | 'PrismSplit'
+  | 'PortalTransfer'
+  | 'TargetLock'
+  | null;
+
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
-
-export type PortalPunchEvent =
-  | 'DoubleTargets'
-  | 'PortalDrift'
-  | 'LaserSweep'
-  | null;
 
 export const portalPunchState = proxy({
   score: 0,
@@ -15,23 +16,27 @@ export const portalPunchState = proxy({
   gameOver: false,
   resetVersion: 0,
 
+  level: 1,
+  levelName: 'Portal Punch',
+  solved: false,
+
   chain: 0,
   chainTime: 0,
 
-  integrity: 100, // 0..100
-  integrityDecay: 2.2, // per second
-  idleTime: 0, // seconds without portal charge
+  integrity: 100,
+  integrityDecay: 0,
+  idleTime: 0,
 
-  chargedTime: 0, // seconds remaining
-  dashPrimeTime: 0, // seconds remaining
-  punchTime: 0, // seconds remaining
+  chargedTime: 0,
+  dashPrimeTime: 0,
+  punchTime: 0,
 
   elapsed: 0,
 
   event: null as PortalPunchEvent,
   eventTime: 0,
   eventDuration: 0,
-  nextEventAt: 26,
+  nextEventAt: 18,
 
   toastText: '',
   toastTime: 0,
@@ -41,6 +46,9 @@ export const portalPunchState = proxy({
     this.resetVersion += 1;
     this.score = 0;
     this.gameOver = false;
+    this.level = 1;
+    this.levelName = 'Portal Punch';
+    this.solved = false;
     this.chain = 0;
     this.chainTime = 0;
     this.integrity = 100;
@@ -52,41 +60,18 @@ export const portalPunchState = proxy({
     this.event = null;
     this.eventTime = 0;
     this.eventDuration = 0;
-    this.nextEventAt = 26;
+    this.nextEventAt = 18;
     this.toastText = '';
     this.toastTime = 0;
     this.slowMoTime = 0;
   },
 
   tick(dt: number) {
-    if (this.gameOver) return;
     this.elapsed += dt;
-
     this.toastTime = Math.max(0, this.toastTime - dt);
     this.slowMoTime = Math.max(0, this.slowMoTime - dt);
-
     this.chainTime = Math.max(0, this.chainTime - dt);
     if (this.chainTime <= 0) this.chain = 0;
-
-    this.chargedTime = Math.max(0, this.chargedTime - dt);
-    this.dashPrimeTime = Math.max(0, this.dashPrimeTime - dt);
-    this.punchTime = Math.max(0, this.punchTime - dt);
-
-    if (this.chargedTime > 0) {
-      this.idleTime = 0;
-    } else {
-      this.idleTime = Math.min(this.idleTime + dt, 6);
-    }
-    const idlePenalty = this.idleTime > 1.4 ? (this.idleTime - 1.4) * 0.6 : 0;
-    this.integrity = clamp(
-      this.integrity - (this.integrityDecay + idlePenalty) * dt,
-      0,
-      100
-    );
-    if (this.integrity <= 0) {
-      this.integrity = 0;
-      this.gameOver = true;
-    }
 
     if (this.eventTime > 0) {
       this.eventTime = Math.max(0, this.eventTime - dt);
@@ -97,41 +82,41 @@ export const portalPunchState = proxy({
     } else if (this.elapsed >= this.nextEventAt) {
       const roll = Math.random();
       this.event =
-        roll < 0.34
-          ? 'DoubleTargets'
-          : roll < 0.67
-            ? 'PortalDrift'
-            : 'LaserSweep';
-      this.eventDuration =
-        this.event === 'DoubleTargets'
-          ? 8
-          : this.event === 'PortalDrift'
-            ? 7
-            : 7.5;
+        roll < 0.25
+          ? 'PhaseShift'
+          : roll < 0.5
+            ? 'PrismSplit'
+            : roll < 0.75
+              ? 'PortalTransfer'
+              : 'TargetLock';
+      this.eventDuration = 4.5;
       this.eventTime = this.eventDuration;
-      this.nextEventAt = this.elapsed + 26;
+      this.nextEventAt = this.elapsed + 18;
     }
   },
 
-  setToast(text: string, time = 1.1, slowMo: boolean = true) {
+  setToast(text: string, time = 1.2) {
     this.toastText = text;
     this.toastTime = Math.max(this.toastTime, time);
-    if (slowMo) this.slowMoTime = Math.max(this.slowMoTime, 0.12);
   },
 
   addScore(points: number) {
-    const p = Math.max(0, Math.round(points));
+    const p = Math.max(0, Math.floor(points));
     this.score += p;
     if (this.score > this.bestScore) this.bestScore = this.score;
   },
 
-  breakChain() {
-    this.chain = 0;
-    this.chainTime = 0;
+  setLevel(level: number, name: string) {
+    this.level = level;
+    this.levelName = name;
+    this.solved = false;
+  },
+
+  markSolved() {
+    this.solved = true;
   },
 
   damageIntegrity(amount: number) {
-    if (this.gameOver) return;
     this.integrity = clamp(this.integrity - amount, 0, 100);
     if (this.integrity <= 0) {
       this.integrity = 0;
@@ -140,43 +125,6 @@ export const portalPunchState = proxy({
   },
 
   restoreIntegrity(amount: number) {
-    if (this.gameOver) return;
     this.integrity = clamp(this.integrity + amount, 0, 100);
-  },
-
-  onDash() {
-    if (this.gameOver) return;
-    this.dashPrimeTime = 0.35;
-  },
-
-  onTeleport(): { ok: boolean; punch: boolean } {
-    if (this.gameOver) return { ok: false, punch: false };
-    if (this.integrity < 12) return { ok: false, punch: false };
-    const punch = this.dashPrimeTime > 0;
-    this.integrity = clamp(this.integrity - 12, 0, 100);
-    this.chargedTime = 1.2;
-    this.dashPrimeTime = 0;
-    this.punchTime = punch ? 0.75 : 0;
-    this.chain += 1;
-    this.chainTime = 1.4;
-    this.addScore(punch ? 14 : 6);
-    if (punch) this.setToast('PUNCH TELEPORT!');
-    return { ok: true, punch };
-  },
-
-  onTargetHit(speed: number, punch: boolean) {
-    if (this.gameOver) return;
-    if (this.chainTime > 0) this.chain += 1;
-    else this.chain = 1;
-
-    this.chainTime = 1.4;
-
-    const chainMult = 1 + clamp(this.chain, 0, 25) * 0.06;
-    const speedBonus = clamp(speed * 2, 0, 45);
-    const punchBonus = punch ? 40 : 0;
-    this.addScore(60 * chainMult + speedBonus + punchBonus);
-
-    const integrityRestore = punch ? 28 : 20;
-    this.restoreIntegrity(integrityRestore);
   },
 });

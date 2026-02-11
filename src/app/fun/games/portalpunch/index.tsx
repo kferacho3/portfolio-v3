@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
-import { Html, PerspectiveCamera } from '@react-three/drei';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Html, Line, PerspectiveCamera, Text } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
@@ -12,153 +12,34 @@ import {
 } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { create } from 'zustand';
-import {
-  buildPatternLibraryTemplate,
-  pickPatternChunkForSurvivability,
-  sampleDifficulty,
-  type DifficultySample,
-  type GameChunkPatternTemplate,
-} from '../../config/ketchapp';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import {
-  consumeFixedStep,
-  createFixedStepState,
-  shakeNoiseSigned,
-  withinGraceWindow,
-} from '../_shared/hyperUpgradeKit';
+  canPlayerOccupy,
+  findInteractableNearPlayer,
+  gridToWorld,
+  resolveEntities,
+  solveLaser,
+} from './engine';
+import { LASER_COLOR_HEX, PORTAL_PUNCH_LEVELS } from './levels';
 import { portalPunchState } from './state';
+import type {
+  GameStatus,
+  LaserSolveResult,
+  PortalPunchLevel,
+  PortalPunchRuntime,
+  ResolvedEntity,
+} from './types';
 
-type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
-type FailReason = 'rim' | 'core' | 'whiff' | 'slow';
-
-type PortalEntity = {
-  id: number;
-  z: number;
-  baseX: number;
-  baseY: number;
-  x: number;
-  y: number;
-  driftAmpX: number;
-  driftAmpY: number;
-  driftFreqX: number;
-  driftFreqY: number;
-  phase: number;
-  rotX: number;
-  rotY: number;
-  rotZ: number;
-  rotSpeedX: number;
-  rotSpeedY: number;
-  rotSpeedZ: number;
-  ringRadius: number;
-  ringThickness: number;
-  innerRadius: number;
-  coreRadius: number;
-  coreGap: number;
-  fake: boolean;
-  tint: number;
-};
-
-type Shockwave = {
-  active: boolean;
-  x: number;
-  y: number;
-  z: number;
-  life: number;
-  duration: number;
-};
-
-type PunchAttempt = {
-  portalId: number;
-  crossedPortal: boolean;
-  hitCore: boolean;
-  perfect: boolean;
-  resolved: boolean;
-  centerRatio: number;
-};
-
-type Runtime = {
-  elapsed: number;
-  score: number;
-  multiplier: number;
-  perfectStreak: number;
-  lastPunchAt: number;
-  shake: number;
-  chroma: number;
-  cueIntensity: number;
-  cuePortalId: number;
-
-  gloveZ: number;
-  glovePrevZ: number;
-  gloveStretch: number;
-  punchActive: boolean;
-  punchTime: number;
-  punchExtend: number;
-  punchRetract: number;
-  attempt: PunchAttempt | null;
-
-  difficulty: DifficultySample;
-  chunkLibrary: GameChunkPatternTemplate[];
-  currentChunk: GameChunkPatternTemplate | null;
-  chunkPortalsLeft: number;
-
-  portals: PortalEntity[];
-  spawnCursorZ: number;
-  shockwaves: Shockwave[];
-};
-
-type PortalPunchStore = {
-  status: GameStatus;
-  score: number;
-  best: number;
-  multiplier: number;
-  perfectStreak: number;
-  failMessage: string;
-  pulseNonce: number;
-  startRun: () => void;
-  resetToStart: () => void;
-  updateHud: (
-    score: number,
-    multiplier: number,
-    perfectStreak: number,
-    perfectHit: boolean
-  ) => void;
-  endRun: (score: number, reason: string) => void;
-};
-
-const BEST_KEY = 'portal_punch_hyper_best_v2';
-
-const PORTAL_POOL = 34;
-const SHOCKWAVE_POOL = 14;
-
-const GLOVE_IDLE_Z = 1.55;
-const GLOVE_REACH_Z = -8.1;
-const GLOVE_RADIUS = 0.28;
-
-const PORTAL_DESPAWN_Z = 6.7;
-const PORTAL_DRAW_MIN_Z = -40;
-const PORTAL_DRAW_MAX_Z = 10;
-
-const CYAN = new THREE.Color('#4be8ff');
-const VIOLET = new THREE.Color('#a95cff');
-const HOT = new THREE.Color('#ff6b7c');
-const CORE = new THREE.Color('#ffe37b');
-const WHITE = new THREE.Color('#f8fbff');
-const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
-const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+const BEST_KEY = 'portal_punch_puzzle_best_v1';
+const EPS = 0.001;
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-const easeInOutCubic = (t: number) =>
-  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
-  const raw = window.localStorage.getItem(BEST_KEY);
-  const parsed = Number(raw ?? 0);
-  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+  const n = Number(window.localStorage.getItem(BEST_KEY) ?? 0);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
 };
 
 const writeBest = (score: number) => {
@@ -166,935 +47,794 @@ const writeBest = (score: number) => {
   window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
 };
 
-const failReasonLabel = (reason: FailReason) => {
-  if (reason === 'rim') return 'Glove clipped the portal rim.';
-  if (reason === 'core') return 'Portal pass, but the core was missed.';
-  if (reason === 'slow') return 'Too much hesitation. Keep punching.';
-  return 'Whiffed the punch timing.';
+type Runtime = PortalPunchRuntime & {
+  message: string;
+  messageTtl: number;
+  lastSolve: LaserSolveResult;
+  renderClock: number;
 };
 
-const crossedPlane = (fromZ: number, toZ: number, planeZ: number) =>
-  (fromZ >= planeZ && toZ <= planeZ) || (fromZ <= planeZ && toZ >= planeZ);
+const emptySolve = (): LaserSolveResult => ({
+  traces: [],
+  hits: [],
+  receptorHits: new Set(),
+  gateTriggers: {},
+  solvedTargets: new Set(),
+});
 
-const usePortalPunchStore = create<PortalPunchStore>((set) => ({
+const createRuntime = (best: number): Runtime => ({
   status: 'START',
-  score: 0,
-  best: readBest(),
-  multiplier: 1,
-  perfectStreak: 0,
-  failMessage: '',
-  pulseNonce: 0,
-  startRun: () =>
-    set({
-      status: 'PLAYING',
-      score: 0,
-      multiplier: 1,
-      perfectStreak: 0,
-      failMessage: '',
-    }),
-  resetToStart: () =>
-    set({
-      status: 'START',
-      score: 0,
-      multiplier: 1,
-      perfectStreak: 0,
-      failMessage: '',
-    }),
-  updateHud: (score, multiplier, perfectStreak, perfectHit) =>
-    set((state) => ({
-      score: Math.floor(score),
-      multiplier,
-      perfectStreak,
-      pulseNonce: perfectHit ? state.pulseNonce + 1 : state.pulseNonce,
-    })),
-  endRun: (score, reason) =>
-    set((state) => {
-      const nextBest = Math.max(state.best, Math.floor(score));
-      if (nextBest !== state.best) writeBest(nextBest);
-      return {
-        status: 'GAMEOVER',
-        score: Math.floor(score),
-        best: nextBest,
-        multiplier: 1,
-        perfectStreak: 0,
-        failMessage: reason,
-      };
-    }),
-}));
-
-const createPortal = (id: number): PortalEntity => ({
-  id,
-  z: -10,
-  baseX: 0,
-  baseY: 0,
-  x: 0,
-  y: 0,
-  driftAmpX: 0.2,
-  driftAmpY: 0.2,
-  driftFreqX: 1.1,
-  driftFreqY: 1.4,
-  phase: 0,
-  rotX: 0,
-  rotY: 0,
-  rotZ: 0,
-  rotSpeedX: 0,
-  rotSpeedY: 0,
-  rotSpeedZ: 1,
-  ringRadius: 1.2,
-  ringThickness: 0.2,
-  innerRadius: 1.0,
-  coreRadius: 0.24,
-  coreGap: 1,
-  fake: false,
-  tint: 0.5,
-});
-
-const createShockwave = (): Shockwave => ({
-  active: false,
-  x: 0,
-  y: 0,
-  z: 0,
-  life: 0,
-  duration: 0.34,
-});
-
-const createRuntime = (): Runtime => ({
+  levelIndex: 0,
+  phase: 'A',
+  player: { x: 0, y: 0 },
+  moves: 0,
   elapsed: 0,
+  levelStart: 0,
+  mirrors: {},
+  prisms: {},
+  gateTimers: {},
+  collected: new Set(),
+  awardedTargets: new Set(),
+  solved: false,
+  failReason: '',
   score: 0,
-  multiplier: 1,
-  perfectStreak: 0,
-  lastPunchAt: 0,
-  shake: 0,
-  chroma: 0,
-  cueIntensity: 0,
-  cuePortalId: -1,
-
-  gloveZ: GLOVE_IDLE_Z,
-  glovePrevZ: GLOVE_IDLE_Z,
-  gloveStretch: 0,
-  punchActive: false,
-  punchTime: 0,
-  punchExtend: 0.25,
-  punchRetract: 0.17,
-  attempt: null,
-
-  difficulty: sampleDifficulty('timing-defense', 0),
-  chunkLibrary: buildPatternLibraryTemplate('portalpunch'),
-  currentChunk: null,
-  chunkPortalsLeft: 0,
-
-  portals: Array.from({ length: PORTAL_POOL }, (_, idx) => createPortal(idx)),
-  spawnCursorZ: -12,
-  shockwaves: Array.from({ length: SHOCKWAVE_POOL }, createShockwave),
+  best,
+  message: 'Tap to start simulation',
+  messageTtl: 0,
+  lastSolve: emptySolve(),
+  renderClock: 0,
 });
 
-const spacingFor = (runtime: Runtime, tier: number) => {
-  const d = clamp((runtime.difficulty.speed - 3) / 3.8, 0, 1);
-  const earlySlowdown = runtime.elapsed < 16 ? 0.7 : runtime.elapsed < 24 ? 0.35 : 0;
-  return clamp(
-    lerp(4.8, 2.8, d) + (4 - tier) * 0.12 + earlySlowdown + Math.random() * 1.1,
-    2.1,
-    6.4
-  );
+const setMessage = (runtime: Runtime, message: string, ttl = 2.4) => {
+  runtime.message = message;
+  runtime.messageTtl = ttl;
+  portalPunchState.setToast(message, Math.min(2.2, ttl));
 };
 
-const pickNextChunk = (runtime: Runtime) => {
-  const intensity = clamp(runtime.elapsed / 96, 0, 1);
-  runtime.currentChunk = pickPatternChunkForSurvivability(
-    'portalpunch',
-    runtime.chunkLibrary,
-    Math.random,
-    intensity,
-    runtime.elapsed
-  );
-  const eventRate = Math.max(0.35, runtime.difficulty.eventRate);
-  runtime.chunkPortalsLeft = Math.max(
-    2,
-    Math.round(runtime.currentChunk.durationSeconds * (eventRate * 1.8 + 1.6))
-  );
-};
+const initLevel = (
+  runtime: Runtime,
+  levelIndex: number,
+  keepScore = true,
+  status: GameStatus = 'START'
+) => {
+  const idx = ((levelIndex % PORTAL_PUNCH_LEVELS.length) + PORTAL_PUNCH_LEVELS.length) %
+    PORTAL_PUNCH_LEVELS.length;
+  const level = PORTAL_PUNCH_LEVELS[idx];
 
-const seedPortal = (runtime: Runtime, portal: PortalEntity, z: number) => {
-  if (!runtime.currentChunk || runtime.chunkPortalsLeft <= 0) {
-    pickNextChunk(runtime);
-  }
-  runtime.chunkPortalsLeft -= 1;
-  const chunk = runtime.currentChunk!;
-  const tier = chunk.tier;
-  const d = clamp((runtime.difficulty.speed - 3) / 3.8, 0, 1);
-  const early = clamp(1 - runtime.elapsed / 20, 0, 1);
+  runtime.levelIndex = idx;
+  runtime.phase = 'A';
+  runtime.player = { ...level.playerStart };
+  runtime.moves = 0;
+  runtime.levelStart = runtime.elapsed;
+  runtime.mirrors = {};
+  runtime.prisms = {};
+  runtime.gateTimers = {};
+  runtime.collected = new Set();
+  runtime.awardedTargets = new Set();
+  runtime.solved = false;
+  runtime.failReason = '';
+  runtime.status = status;
+  runtime.lastSolve = emptySolve();
 
-  portal.z = z;
-  portal.baseX = (Math.random() * 2 - 1) * lerp(0.28, 1.5, d) * lerp(0.45, 1, 1 - early);
-  portal.baseY = (Math.random() * 2 - 1) * lerp(0.2, 1.05, d) * lerp(0.5, 1, 1 - early);
-  portal.phase = Math.random() * Math.PI * 2;
-
-  const driftBase = lerp(0.12, 0.82, d) * (0.75 + tier * 0.1);
-  portal.driftAmpX = driftBase * (0.65 + Math.random() * 0.75);
-  portal.driftAmpY = driftBase * (0.5 + Math.random() * 0.65);
-  portal.driftFreqX = lerp(0.65, 2.0, d) + Math.random() * 0.5;
-  portal.driftFreqY = lerp(0.7, 2.2, d) + Math.random() * 0.5;
-
-  portal.rotX = (Math.random() * 2 - 1) * lerp(0.1, 0.42, d);
-  portal.rotY = (Math.random() * 2 - 1) * lerp(0.1, 0.48, d);
-  portal.rotZ = Math.random() * Math.PI * 2;
-  portal.rotSpeedX = (Math.random() * 2 - 1) * lerp(0.08, 0.62, d);
-  portal.rotSpeedY = (Math.random() * 2 - 1) * lerp(0.08, 0.72, d);
-  portal.rotSpeedZ = (Math.random() < 0.5 ? -1 : 1) * lerp(0.7, 3.2, d) * (0.82 + tier * 0.1);
-
-  const radiusBase = lerp(1.42, 0.84, d) - tier * 0.06;
-  portal.ringRadius = clamp(radiusBase + (Math.random() * 2 - 1) * 0.08, 0.72, 1.46);
-  portal.ringThickness = clamp(lerp(0.24, 0.18, d) + tier * 0.008, 0.16, 0.28);
-  portal.innerRadius = clamp(portal.ringRadius - portal.ringThickness, 0.28, 1.16);
-  portal.coreGap = clamp(lerp(0.85, 1.28, d) + tier * 0.03, 0.76, 1.42);
-  portal.coreRadius = clamp(lerp(0.34, 0.2, d) - tier * 0.01 + Math.random() * 0.03, 0.16, 0.36);
-
-  const fakeChanceBase = runtime.elapsed < 28 ? 0 : clamp((runtime.elapsed - 28) / 90, 0, 0.08);
-  const fakeTierBoost = Math.max(0, tier - 2) * 0.02;
-  portal.fake = Math.random() < fakeChanceBase + fakeTierBoost;
-  portal.tint = Math.random();
-};
-
-const resetRuntime = (runtime: Runtime) => {
-  runtime.elapsed = 0;
-  runtime.score = 0;
-  runtime.multiplier = 1;
-  runtime.perfectStreak = 0;
-  runtime.lastPunchAt = 0;
-  runtime.shake = 0;
-  runtime.chroma = 0;
-  runtime.cueIntensity = 0;
-  runtime.cuePortalId = -1;
-
-  runtime.gloveZ = GLOVE_IDLE_Z;
-  runtime.glovePrevZ = GLOVE_IDLE_Z;
-  runtime.gloveStretch = 0;
-  runtime.punchActive = false;
-  runtime.punchTime = 0;
-  runtime.punchExtend = 0.25;
-  runtime.punchRetract = 0.17;
-  runtime.attempt = null;
-
-  runtime.difficulty = sampleDifficulty('timing-defense', 0);
-  runtime.currentChunk = null;
-  runtime.chunkPortalsLeft = 0;
-  runtime.spawnCursorZ = -12;
-
-  for (const shock of runtime.shockwaves) {
-    shock.active = false;
-    shock.life = 0;
+  for (const entity of level.entities) {
+    if (entity.type === 'MIRROR') runtime.mirrors[entity.id] = entity.orientation;
+    if (entity.type === 'PRISM') runtime.prisms[entity.id] = entity.orientation ?? 0;
+    if (entity.type === 'GATE') runtime.gateTimers[entity.id] = entity.openByDefault ? 999 : 0;
   }
 
-  for (const portal of runtime.portals) {
-    seedPortal(runtime, portal, runtime.spawnCursorZ);
-    runtime.spawnCursorZ -= spacingFor(runtime, 0);
+  if (!keepScore) {
+    runtime.score = 0;
+  }
+
+  portalPunchState.setLevel(level.id, level.name);
+  portalPunchState.solved = false;
+  portalPunchState.event = null;
+  portalPunchState.eventTime = 0;
+  portalPunchState.eventDuration = 0;
+  portalPunchState.nextEventAt = runtime.elapsed + 18;
+
+  setMessage(runtime, `Loaded ${level.name}`);
+  return level;
+};
+
+const runMove = (
+  runtime: Runtime,
+  level: PortalPunchLevel,
+  entities: ResolvedEntity[],
+  dx: number,
+  dy: number
+) => {
+  const next = { x: runtime.player.x + dx, y: runtime.player.y + dy };
+  if (!canPlayerOccupy(level, runtime, entities, next)) {
+    setMessage(runtime, 'Path blocked');
+    return false;
+  }
+
+  runtime.player = next;
+  runtime.moves += 1;
+  runtime.score += 1;
+  return true;
+};
+
+const runInteract = (runtime: Runtime, entities: ResolvedEntity[]) => {
+  const target = findInteractableNearPlayer(runtime, entities);
+  if (!target) {
+    setMessage(runtime, 'No interactable nearby');
+    return;
+  }
+
+  if (target.type === 'SWITCH') {
+    runtime.phase = runtime.phase === 'A' ? 'B' : 'A';
+    setMessage(runtime, `Phase ${runtime.phase}`);
+    portalPunchState.event = 'PhaseShift';
+    portalPunchState.eventTime = 1.4;
+    portalPunchState.eventDuration = 1.4;
+    return;
+  }
+
+  if (target.type === 'MIRROR') {
+    const current = runtime.mirrors[target.id] ?? target.orientation;
+    const next = (current + 1) % 2;
+    runtime.mirrors[target.id] = next;
+
+    // Entanglement stage coupling
+    if (target.id === 'm15a') {
+      runtime.mirrors.m15b = next === 0 ? 1 : 0;
+    }
+    if (target.id === 'm15b') {
+      runtime.mirrors.m15a = next === 0 ? 1 : 0;
+    }
+
+    setMessage(runtime, `Mirror ${target.id} rotated`);
+    return;
+  }
+
+  if (target.type === 'PRISM') {
+    const current = runtime.prisms[target.id] ?? target.orientation ?? 0;
+    runtime.prisms[target.id] = (current + 1) % 4;
+    setMessage(runtime, `Prism ${target.id} cycled`);
+    portalPunchState.event = 'PrismSplit';
+    portalPunchState.eventTime = 1.2;
+    portalPunchState.eventDuration = 1.2;
   }
 };
 
-function PortalPunchOverlay() {
-  const status = usePortalPunchStore((state) => state.status);
-  const score = usePortalPunchStore((state) => state.score);
-  const best = usePortalPunchStore((state) => state.best);
-  const multiplier = usePortalPunchStore((state) => state.multiplier);
-  const perfectStreak = usePortalPunchStore((state) => state.perfectStreak);
-  const failMessage = usePortalPunchStore((state) => state.failMessage);
-  const pulseNonce = usePortalPunchStore((state) => state.pulseNonce);
+const applySolveResult = (runtime: Runtime, level: PortalPunchLevel) => {
+  const solve = runtime.lastSolve;
+
+  for (const [gateId, duration] of Object.entries(solve.gateTriggers)) {
+    runtime.gateTimers[gateId] = Math.max(runtime.gateTimers[gateId] ?? 0, duration);
+  }
+
+  for (const targetId of solve.solvedTargets) {
+    if (!runtime.awardedTargets.has(targetId)) {
+      runtime.awardedTargets.add(targetId);
+      runtime.score += 120 + level.id * 7;
+      portalPunchState.chain += 1;
+      portalPunchState.chainTime = 1.4;
+      portalPunchState.event = 'TargetLock';
+      portalPunchState.eventTime = 1.2;
+      portalPunchState.eventDuration = 1.2;
+    }
+  }
+
+  for (const entity of level.entities) {
+    if (entity.type !== 'COLLECTIBLE') continue;
+    if (runtime.collected.has(entity.id)) continue;
+    if (entity.pos.x === runtime.player.x && entity.pos.y === runtime.player.y) {
+      runtime.collected.add(entity.id);
+      runtime.score += entity.score;
+      setMessage(runtime, `Collected +${entity.score}`);
+    }
+  }
+
+  const solvedAll = level.objective.targetIds.every((id) => solve.solvedTargets.has(id));
+  if (solvedAll && !runtime.solved) {
+    runtime.solved = true;
+    runtime.status = 'SOLVED';
+    runtime.score += Math.max(100, 480 - runtime.moves * 3);
+    setMessage(runtime, `${level.name} solved`, 2.8);
+    portalPunchState.markSolved();
+  }
+};
+
+const Overlay: React.FC<{
+  runtime: Runtime;
+  level: PortalPunchLevel;
+  onStart: () => void;
+  onRestart: () => void;
+  onNext: () => void;
+}> = ({ runtime, level, onStart, onRestart, onNext }) => {
+  const solvedCount = runtime.lastSolve.solvedTargets.size;
+  const objectiveCount = level.objective.targetIds.length;
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/16 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
-        <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Portal Punch</div>
-        <div className="text-[11px] text-cyan-50/85">Punch through ring center, then hit the core behind it.</div>
+      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/35 bg-black/45 px-3 py-2 backdrop-blur-sm">
+        <div className="text-[11px] uppercase tracking-[0.25em] text-cyan-200/90">
+          Portal Punch L{level.id}
+        </div>
+        <div className="text-base font-semibold">{level.name}</div>
+        <div className="text-xs text-cyan-50/80">{level.subtitle}</div>
+        <div className="mt-1 text-[11px] text-white/70">Phase {runtime.phase}</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-rose-100/55 bg-gradient-to-br from-rose-500/24 via-fuchsia-500/16 to-indigo-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
-        <div className="text-2xl font-black tabular-nums">{score}</div>
-        <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
+      <div className="absolute right-4 top-4 rounded-md border border-indigo-100/35 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
+        <div className="text-2xl font-black tabular-nums">{runtime.score}</div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">
+          Best {runtime.best}
+        </div>
+        <div className="mt-1 text-xs text-white/70">Moves {runtime.moves}</div>
       </div>
 
-      {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/72 via-indigo-900/30 to-rose-900/25 px-3 py-2 text-xs">
-          <div>
-            Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
-          </div>
-          <div>
-            Perfect Streak <span className="font-semibold text-cyan-200">{perfectStreak}</span>
-          </div>
+      <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-md border border-white/20 bg-black/40 px-4 py-2 text-center backdrop-blur-sm">
+        <div className="text-xs uppercase tracking-[0.25em] text-white/70">Objective</div>
+        <div className="text-sm text-white/90">{level.objective.description}</div>
+        <div className="text-xs text-cyan-200/85">
+          Targets solved {solvedCount}/{objectiveCount}
+        </div>
+      </div>
+
+      {runtime.messageTtl > 0 && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 rounded-full border border-cyan-100/40 bg-black/55 px-4 py-1.5 text-xs text-cyan-100">
+          {runtime.message}
         </div>
       )}
 
-      {status === 'START' && (
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md border border-white/20 bg-black/45 px-4 py-2 text-center text-[11px] text-white/75 backdrop-blur-sm">
+        <div>Move: WASD / Arrow Keys • Interact: E / Space / Tap • Toggle Phase: Q • Restart: R</div>
+        <div>Next Level: N or Enter (after solve)</div>
+      </div>
+
+      {runtime.status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/82 via-indigo-950/45 to-rose-950/35 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black tracking-wide">PORTAL PUNCH</div>
-            <div className="mt-2 text-sm text-white/85">Wait for the guide to glow, then tap one clean punch.</div>
-            <div className="mt-1 text-sm text-white/80">Pass ring center first, then land the core hit for combo.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+          <div className="rounded-xl border border-cyan-100/45 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black">PORTAL PUNCH</div>
+            <div className="mt-2 text-sm text-white/85">Recursive portal laser puzzle simulation</div>
+            <div className="mt-1 text-sm text-white/75">Use mirrors, prisms, filters, gates, and phase switching.</div>
+            <button
+              onClick={onStart}
+              className="pointer-events-auto mt-4 rounded-md border border-cyan-200/60 px-4 py-1.5 text-sm text-cyan-100 hover:bg-cyan-400/15"
+            >
+              Start Level
+            </button>
           </div>
         </div>
       )}
 
-      {status === 'GAMEOVER' && (
+      {runtime.status === 'SOLVED' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/44 to-indigo-950/34 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black text-rose-200">Punch Failed</div>
-            <div className="mt-2 text-sm text-white/82">{failMessage}</div>
-            <div className="mt-2 text-sm text-white/82">Score {score}</div>
-            <div className="mt-1 text-sm text-white/75">Best {best}</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+          <div className="rounded-xl border border-emerald-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-emerald-200">Chamber Solved</div>
+            <div className="mt-2 text-sm text-white/85">{level.name}</div>
+            <div className="text-sm text-white/75">Score {runtime.score}</div>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button
+                onClick={onRestart}
+                className="pointer-events-auto rounded-md border border-white/30 px-3 py-1.5 text-xs text-white hover:bg-white/10"
+              >
+                Replay
+              </button>
+              <button
+                onClick={onNext}
+                className="pointer-events-auto rounded-md border border-emerald-200/70 px-3 py-1.5 text-xs text-emerald-100 hover:bg-emerald-400/20"
+              >
+                Next Level
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {status === 'PLAYING' && (
-        <div
-          key={pulseNonce}
-          className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-fuchsia-200/70"
-          style={{
-            animation: 'portal-punch-ring 240ms ease-out forwards',
-            opacity: 0,
-            boxShadow: '0 0 32px rgba(169, 92, 255, 0.3)',
-          }}
-        />
+      {runtime.status === 'GAMEOVER' && (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="rounded-xl border border-rose-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-rose-200">Simulation Failed</div>
+            <div className="mt-2 text-sm text-white/75">{runtime.failReason}</div>
+            <button
+              onClick={onRestart}
+              className="pointer-events-auto mt-4 rounded-md border border-rose-200/60 px-4 py-1.5 text-sm text-rose-100 hover:bg-rose-400/20"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
       )}
-
-      <style jsx global>{`
-        @keyframes portal-punch-ring {
-          0% {
-            transform: translate(-50%, -50%) scale(0.55);
-            opacity: 0.8;
-          }
-          100% {
-            transform: translate(-50%, -50%) scale(1.32);
-            opacity: 0;
-          }
-        }
-      `}</style>
     </div>
   );
-}
+};
+
+const EntityVisuals: React.FC<{
+  level: PortalPunchLevel;
+  runtime: Runtime;
+  entities: ResolvedEntity[];
+}> = ({ level, runtime, entities }) => {
+  return (
+    <>
+      {entities.map((entity) => {
+        const p = gridToWorld(level, entity.resolvedPos, 0.46);
+
+        if (entity.phase && entity.phase !== 'BOTH' && entity.phase !== runtime.phase) {
+          return null;
+        }
+
+        if (entity.type === 'WALL') {
+          return (
+            <mesh key={entity.id} position={[p.x, 0.5, p.z]} castShadow receiveShadow>
+              <boxGeometry args={[0.9, 0.9, 0.9]} />
+              <meshStandardMaterial color="#1f2530" roughness={0.65} metalness={0.18} />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'GATE') {
+          const timer = runtime.gateTimers[entity.id] ?? 0;
+          const open = entity.openByDefault || timer > 0;
+          return (
+            <mesh key={entity.id} position={[p.x, open ? 1.2 : 0.46, p.z]} castShadow>
+              <boxGeometry args={[0.86, open ? 0.12 : 0.9, 0.86]} />
+              <meshStandardMaterial
+                color={open ? '#3ef8d0' : '#2a3038'}
+                emissive={open ? '#3ef8d0' : '#000000'}
+                emissiveIntensity={open ? 0.35 : 0}
+                roughness={0.42}
+                metalness={0.2}
+                transparent
+                opacity={open ? 0.65 : 1}
+              />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'MIRROR') {
+          const rot = (entity.orientation % 2 === 0 ? Math.PI / 4 : -Math.PI / 4) + Math.PI / 2;
+          return (
+            <group key={entity.id} position={[p.x, 0.45, p.z]} rotation={[0, rot, 0]}>
+              <mesh castShadow>
+                <boxGeometry args={[0.84, 0.76, 0.08]} />
+                <meshStandardMaterial color="#94d9ff" metalness={0.92} roughness={0.08} />
+              </mesh>
+              <mesh position={[0, 0, 0.05]}>
+                <boxGeometry args={[0.74, 0.66, 0.02]} />
+                <meshBasicMaterial color="#b7f4ff" transparent opacity={0.24} />
+              </mesh>
+            </group>
+          );
+        }
+
+        if (entity.type === 'PORTAL') {
+          return (
+            <group key={entity.id} position={[p.x, 0.44, p.z]}>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.34, 0.07, 12, 36]} />
+                <meshStandardMaterial color="#5f7eff" emissive="#5f7eff" emissiveIntensity={0.65} />
+              </mesh>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.26, 28]} />
+                <meshBasicMaterial color="#77f5ff" transparent opacity={0.22} />
+              </mesh>
+            </group>
+          );
+        }
+
+        if (entity.type === 'PRISM') {
+          const ori = ((entity.orientation ?? 0) % 4 + 4) % 4;
+          return (
+            <mesh key={entity.id} position={[p.x, 0.48, p.z]} rotation={[0, ori * (Math.PI / 2), 0]} castShadow>
+              <coneGeometry args={[0.34, 0.75, 3]} />
+              <meshStandardMaterial color="#ffd27d" emissive="#ffbc62" emissiveIntensity={0.35} />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'FILTER') {
+          return (
+            <mesh key={entity.id} position={[p.x, 0.44, p.z]}>
+              <boxGeometry args={[0.86, 0.66, 0.12]} />
+              <meshStandardMaterial
+                color={LASER_COLOR_HEX[entity.passColor]}
+                emissive={LASER_COLOR_HEX[entity.passColor]}
+                emissiveIntensity={0.25}
+                transparent
+                opacity={0.45}
+              />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'POLARIZER') {
+          return (
+            <group key={entity.id} position={[p.x, 0.45, p.z]}>
+              <mesh>
+                <boxGeometry args={[0.86, 0.72, 0.12]} />
+                <meshStandardMaterial color="#d5e4f2" roughness={0.45} metalness={0.12} />
+              </mesh>
+              <Text
+                position={[0, 0.48, 0]}
+                fontSize={0.18}
+                color="#0c111a"
+                anchorX="center"
+                anchorY="middle"
+              >
+                {entity.requiredAngle}°
+              </Text>
+            </group>
+          );
+        }
+
+        if (entity.type === 'LENS') {
+          return (
+            <mesh key={entity.id} position={[p.x, 0.48, p.z]}>
+              <sphereGeometry args={[0.32, 24, 24]} />
+              <meshStandardMaterial
+                color={entity.subtype === 'CONVEX' ? '#8cecff' : '#ffc786'}
+                transparent
+                opacity={0.62}
+                metalness={0.15}
+                roughness={0.12}
+              />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'PHASE_SHIFTER') {
+          return (
+            <mesh key={entity.id} position={[p.x, 0.44, p.z]}>
+              <octahedronGeometry args={[0.34]} />
+              <meshStandardMaterial color="#a182ff" emissive="#9870ff" emissiveIntensity={0.35} />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'GRAVITY_NODE') {
+          return (
+            <group key={entity.id} position={[p.x, 0.46, p.z]}>
+              <mesh>
+                <sphereGeometry args={[0.26, 18, 18]} />
+                <meshStandardMaterial color="#0d1119" emissive="#223050" emissiveIntensity={0.45} />
+              </mesh>
+              <mesh rotation={[-Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.46, 0.03, 8, 42]} />
+                <meshBasicMaterial color="#8ad7ff" transparent opacity={0.45} />
+              </mesh>
+            </group>
+          );
+        }
+
+        if (entity.type === 'SWITCH') {
+          return (
+            <group key={entity.id} position={[p.x, 0.42, p.z]}>
+              <mesh>
+                <cylinderGeometry args={[0.22, 0.22, 0.2, 20]} />
+                <meshStandardMaterial color="#f7f1dd" />
+              </mesh>
+              <mesh position={[0, 0.18, 0]}>
+                <sphereGeometry args={[0.08, 12, 12]} />
+                <meshStandardMaterial color={runtime.phase === 'A' ? '#3ba8ff' : '#ff9738'} emissive={runtime.phase === 'A' ? '#3ba8ff' : '#ff9738'} emissiveIntensity={0.45} />
+              </mesh>
+            </group>
+          );
+        }
+
+        if (entity.type === 'RECEPTOR') {
+          return (
+            <mesh key={entity.id} position={[p.x, 0.42, p.z]}>
+              <cylinderGeometry args={[0.24, 0.24, 0.24, 18]} />
+              <meshStandardMaterial color="#68ffd6" emissive="#4bffc7" emissiveIntensity={0.6} />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'TARGET') {
+          const solved = runtime.lastSolve.solvedTargets.has(entity.id);
+          return (
+            <mesh key={entity.id} position={[p.x, 0.48, p.z]} castShadow>
+              <dodecahedronGeometry args={[0.31]} />
+              <meshStandardMaterial
+                color={solved ? '#9dff96' : '#ffd966'}
+                emissive={solved ? '#7cff72' : '#ffc85f'}
+                emissiveIntensity={solved ? 0.9 : 0.35}
+                roughness={0.28}
+                metalness={0.22}
+              />
+            </mesh>
+          );
+        }
+
+        if (entity.type === 'COLLECTIBLE') {
+          if (runtime.collected.has(entity.id)) return null;
+          return (
+            <mesh key={entity.id} position={[p.x, 0.36, p.z]}>
+              <icosahedronGeometry args={[0.18]} />
+              <meshStandardMaterial color="#8dfbff" emissive="#8dfbff" emissiveIntensity={0.45} />
+            </mesh>
+          );
+        }
+
+        return null;
+      })}
+    </>
+  );
+};
 
 function PortalPunchScene() {
-  const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'arrowup', 'w', 'W'],
-  });
   const resetVersion = useSnapshot(portalPunchState).resetVersion;
+  const inputRef = useInputRef({
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'],
+  });
 
-  const runtimeRef = useRef<Runtime>(createRuntime());
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const colorScratch = useMemo(() => new THREE.Color(), []);
+  const [frameVersion, setFrameVersion] = useState(0);
+  const runtimeRef = useRef<Runtime>(createRuntime(0));
   const chromaOffset = useMemo(() => new THREE.Vector2(0, 0), []);
-  const camTarget = useMemo(() => new THREE.Vector3(), []);
-
-  const point = useMemo(() => new THREE.Vector3(), []);
-  const localPoint = useMemo(() => new THREE.Vector3(), []);
-  const portalMatrix = useMemo(() => new THREE.Matrix4(), []);
-  const portalInverse = useMemo(() => new THREE.Matrix4(), []);
-  const portalQuat = useMemo(() => new THREE.Quaternion(), []);
-  const portalEuler = useMemo(() => new THREE.Euler(), []);
-  const oneScale = useMemo(() => new THREE.Vector3(1, 1, 1), []);
-  const portalPos = useMemo(() => new THREE.Vector3(), []);
-
-  const ringRef = useRef<THREE.InstancedMesh>(null);
-  const warpRef = useRef<THREE.InstancedMesh>(null);
-  const coreRef = useRef<THREE.InstancedMesh>(null);
-  const shockRef = useRef<THREE.InstancedMesh>(null);
-  const gloveGroupRef = useRef<THREE.Group>(null);
-  const gloveHitRef = useRef<THREE.Mesh>(null);
-  const punchGuideRef = useRef<THREE.Mesh>(null);
-  const cueRingRef = useRef<THREE.Mesh>(null);
-  const warpMaterialRef = useRef<THREE.ShaderMaterial>(null);
-  const fixedStepRef = useRef(createFixedStepState());
-
   const { camera } = useThree();
 
-  const warpUniforms = useMemo(
-    () => ({
-      uTime: { value: 0 },
-    }),
-    []
-  );
-
-  const failRun = (runtime: Runtime, reason: FailReason) => {
-    const store = usePortalPunchStore.getState();
-    if (store.status !== 'PLAYING') return;
-    usePortalPunchStore.getState().endRun(runtime.score, failReasonLabel(reason));
-  };
-
-  const findPortalById = (runtime: Runtime, id: number) =>
-    runtime.portals.find((portal) => portal.id === id) ?? null;
-
-  const chooseTargetPortal = (runtime: Runtime) => {
-    let best: PortalEntity | null = null;
-    let bestDist = Infinity;
-    const targetZ = -3.1;
-    for (const portal of runtime.portals) {
-      if (portal.z > GLOVE_IDLE_Z - 0.2) continue;
-      if (portal.z < GLOVE_REACH_Z - 0.2) continue;
-      const dist = Math.abs(portal.z - targetZ);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = portal;
-      }
-    }
-    return best;
-  };
-
-  const spawnShockwave = (runtime: Runtime, x: number, y: number, z: number) => {
-    let slot = runtime.shockwaves.find((shock) => !shock.active);
-    if (!slot) {
-      slot = runtime.shockwaves.reduce((oldest, current) =>
-        current.life > oldest.life ? current : oldest
-      );
-    }
-    slot.active = true;
-    slot.x = x;
-    slot.y = y;
-    slot.z = z;
-    slot.life = 0;
-    slot.duration = 0.34;
-  };
-
-  useEffect(() => {
-    resetRuntime(runtimeRef.current);
-    usePortalPunchStore.getState().resetToStart();
-  }, []);
-
-  useEffect(() => {
-    resetRuntime(runtimeRef.current);
-    usePortalPunchStore.getState().resetToStart();
-  }, [resetVersion]);
-
-  useEffect(() => {
-    const apply = (state: ReturnType<typeof usePortalPunchStore.getState>) => {
-      portalPunchState.score = state.score;
-      portalPunchState.bestScore = state.best;
-      portalPunchState.gameOver = state.status === 'GAMEOVER';
-      portalPunchState.chain = state.perfectStreak;
-      portalPunchState.integrity = state.status === 'GAMEOVER' ? 0 : 100;
-    };
-
-    apply(usePortalPunchStore.getState());
-    const unsubscribe = usePortalPunchStore.subscribe(apply);
-    return () => unsubscribe();
-  }, []);
-
-  useFrame((state, delta) => {
-    const step = consumeFixedStep(fixedStepRef.current, delta);
-    if (step.steps <= 0) {
-      return;
-    }
-    const dt = step.dt;
+  const boot = useCallback((hardReset: boolean) => {
+    const best = readBest();
     const runtime = runtimeRef.current;
+    runtime.best = best;
+    runtime.elapsed = 0;
+    runtime.score = hardReset ? 0 : runtime.score;
+    initLevel(runtime, 0, !hardReset, 'START');
+    portalPunchState.reset();
+    portalPunchState.bestScore = best;
+    portalPunchState.score = runtime.score;
+  }, []);
+
+  useEffect(() => {
+    boot(true);
+  }, [boot]);
+
+  useEffect(() => {
+    boot(true);
+  }, [boot, resetVersion]);
+
+  const startLevel = useCallback(() => {
+    const runtime = runtimeRef.current;
+    runtime.status = 'PLAYING';
+    runtime.levelStart = runtime.elapsed;
+    setMessage(runtime, `Running ${PORTAL_PUNCH_LEVELS[runtime.levelIndex].name}`);
+    setFrameVersion((v) => v + 1);
+  }, []);
+
+  const restartLevel = useCallback(() => {
+    const runtime = runtimeRef.current;
+    initLevel(runtime, runtime.levelIndex, true, 'PLAYING');
+    setFrameVersion((v) => v + 1);
+  }, []);
+
+  const nextLevel = useCallback(() => {
+    const runtime = runtimeRef.current;
+    initLevel(runtime, runtime.levelIndex + 1, true, 'PLAYING');
+    setFrameVersion((v) => v + 1);
+  }, []);
+
+  useFrame((_state, delta) => {
+    const dt = clamp(delta, 0, 0.05);
+    const runtime = runtimeRef.current;
+    const level = PORTAL_PUNCH_LEVELS[runtime.levelIndex];
     const input = inputRef.current;
-    const store = usePortalPunchStore.getState();
-    const tap =
-      input.pointerJustDown ||
-      input.justPressed.has(' ') ||
-      input.justPressed.has('space') ||
-      input.justPressed.has('enter');
 
-    if (tap) {
-      if (store.status !== 'PLAYING') {
-        resetRuntime(runtime);
-        usePortalPunchStore.getState().startRun();
-      } else if (!runtime.punchActive) {
-        runtime.punchActive = true;
-        runtime.punchTime = 0;
-        runtime.glovePrevZ = runtime.gloveZ;
-        runtime.lastPunchAt = runtime.elapsed;
-        runtime.shake = Math.min(1.1, runtime.shake + 0.34);
-
-        const target = chooseTargetPortal(runtime);
-        runtime.attempt = {
-          portalId: target ? target.id : -1,
-          crossedPortal: false,
-          hitCore: false,
-          perfect: false,
-          resolved: false,
-          centerRatio: 1,
-        };
-      }
-    }
-
-    if (store.status === 'PLAYING') {
-      runtime.elapsed += dt;
-      runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
-      const speed = runtime.difficulty.speed * 1.18;
-
-      for (const portal of runtime.portals) {
-        portal.z += speed * dt;
-        portal.rotX += portal.rotSpeedX * dt;
-        portal.rotY += portal.rotSpeedY * dt;
-        portal.rotZ += portal.rotSpeedZ * dt;
-        portal.x =
-          portal.baseX +
-          Math.sin(runtime.elapsed * portal.driftFreqX + portal.phase) *
-            portal.driftAmpX;
-        portal.y =
-          portal.baseY +
-          Math.cos(runtime.elapsed * portal.driftFreqY + portal.phase * 1.17) *
-            portal.driftAmpY;
-      }
-
-      runtime.cueIntensity = 0;
-      runtime.cuePortalId = -1;
-      let bestCueZ = -Infinity;
-      for (const portal of runtime.portals) {
-        if (portal.fake) continue;
-        if (portal.z < -14.5 || portal.z > -2.2) continue;
-        const centerDist = Math.hypot(portal.x, portal.y);
-        const align = 1 - clamp(centerDist / Math.max(0.0001, portal.innerRadius * 0.92), 0, 1);
-        const zCue = 1 - clamp(Math.abs(portal.z - -8.2) / 6.5, 0, 1);
-        const cue = align * 0.68 + zCue * 0.32;
-        if (cue > runtime.cueIntensity || (Math.abs(cue - runtime.cueIntensity) < 0.001 && portal.z > bestCueZ)) {
-          runtime.cueIntensity = cue;
-          runtime.cuePortalId = portal.id;
-          bestCueZ = portal.z;
-        }
-      }
-
-      runtime.glovePrevZ = runtime.gloveZ;
-      runtime.gloveStretch = Math.max(0, runtime.gloveStretch - dt * 7.5);
-
-      if (runtime.punchActive) {
-        runtime.punchTime += dt;
-        const extendDur = runtime.punchExtend;
-        const retractDur = runtime.punchRetract;
-        const total = extendDur + retractDur;
-
-        if (runtime.punchTime <= extendDur) {
-          const t = easeOutCubic(clamp(runtime.punchTime / extendDur, 0, 1));
-          runtime.gloveZ = lerp(GLOVE_IDLE_Z, GLOVE_REACH_Z, t);
-          runtime.gloveStretch = Math.max(runtime.gloveStretch, 0.85 - t * 0.4);
-        } else if (runtime.punchTime <= total) {
-          const t = easeInOutCubic(
-            clamp((runtime.punchTime - extendDur) / retractDur, 0, 1)
-          );
-          runtime.gloveZ = lerp(GLOVE_REACH_Z, GLOVE_IDLE_Z, t);
-          runtime.gloveStretch = Math.max(runtime.gloveStretch, (1 - t) * 0.32);
-        } else {
-          runtime.punchActive = false;
-          runtime.punchTime = 0;
-          runtime.gloveZ = GLOVE_IDLE_Z;
-          runtime.gloveStretch = 0;
-          if (runtime.attempt && !runtime.attempt.resolved) {
-            failRun(runtime, runtime.attempt.portalId < 0 ? 'whiff' : 'core');
-            runtime.attempt.resolved = true;
-          }
-        }
-
-        const attempt = runtime.attempt;
-        if (
-          attempt &&
-          !attempt.resolved &&
-          runtime.punchTime <= runtime.punchExtend + 0.0001
-        ) {
-          const portal = findPortalById(runtime, attempt.portalId);
-          if (portal) {
-            if (
-              !attempt.crossedPortal &&
-              crossedPlane(runtime.glovePrevZ, runtime.gloveZ, portal.z)
-            ) {
-              point.set(0, 0, portal.z);
-              portalPos.set(portal.x, portal.y, portal.z);
-              portalEuler.set(portal.rotX, portal.rotY, portal.rotZ);
-              portalQuat.setFromEuler(portalEuler);
-              portalMatrix.compose(portalPos, portalQuat, oneScale);
-              portalInverse.copy(portalMatrix).invert();
-              localPoint.copy(point).applyMatrix4(portalInverse);
-              const r = Math.hypot(localPoint.x, localPoint.y);
-              const rimFailRadius = portal.innerRadius - GLOVE_RADIUS * 0.12;
-              const forgivingRimRadius = rimFailRadius + 0.1;
-
-              if (portal.fake || r >= forgivingRimRadius) {
-                if (
-                  !portal.fake &&
-                  withinGraceWindow(runtime.elapsed, runtime.lastPunchAt, 0.14)
-                ) {
-                  attempt.crossedPortal = true;
-                  attempt.centerRatio = r / Math.max(0.0001, portal.innerRadius);
-                  attempt.perfect = attempt.centerRatio <= 0.22;
-                } else {
-                  attempt.resolved = true;
-                  failRun(runtime, 'rim');
-                }
-              } else {
-                attempt.crossedPortal = true;
-                attempt.centerRatio = r / Math.max(0.0001, portal.innerRadius);
-                attempt.perfect = attempt.centerRatio <= 0.22;
-              }
-            }
-
-            if (attempt.crossedPortal && !attempt.hitCore) {
-              const coreZ = portal.z - portal.coreGap;
-              if (crossedPlane(runtime.glovePrevZ, runtime.gloveZ, coreZ)) {
-                const distXY = Math.hypot(portal.x, portal.y);
-                if (distXY <= portal.coreRadius + GLOVE_RADIUS * 0.44) {
-                  attempt.hitCore = true;
-                  attempt.resolved = true;
-                  runtime.shake = Math.min(1.35, runtime.shake + 0.72);
-                  runtime.chroma = Math.min(1.2, runtime.chroma + 0.92);
-
-                  if (attempt.perfect) {
-                    runtime.perfectStreak += 1;
-                  } else {
-                    runtime.perfectStreak = 0;
-                  }
-                  runtime.multiplier = clamp(1 + runtime.perfectStreak * 0.25, 1, 4.5);
-                  const bonus = attempt.perfect
-                    ? Math.max(0, Math.floor(runtime.multiplier - 1))
-                    : 0;
-                  runtime.score += 1 + bonus;
-
-                  usePortalPunchStore
-                    .getState()
-                    .updateHud(
-                      runtime.score,
-                      runtime.multiplier,
-                      runtime.perfectStreak,
-                      attempt.perfect
-                    );
-
-                  spawnShockwave(runtime, portal.x, portal.y, coreZ);
-                  portal.z = PORTAL_DESPAWN_Z + 0.4;
-                } else {
-                  attempt.resolved = true;
-                  failRun(runtime, 'core');
-                }
-              }
-            }
-          }
-        }
-      }
-
-      if (!runtime.punchActive && runtime.elapsed - runtime.lastPunchAt > 4.1) {
-        failRun(runtime, 'slow');
-      }
-
-      const protectedPortalId =
-        runtime.punchActive && runtime.attempt ? runtime.attempt.portalId : -1;
-      for (const portal of runtime.portals) {
-        if (portal.z <= PORTAL_DESPAWN_Z) continue;
-        if (portal.id === protectedPortalId) continue;
-
-        let minZ = Infinity;
-        for (const candidate of runtime.portals) {
-          if (candidate.id === portal.id) continue;
-          if (candidate.z < minZ) minZ = candidate.z;
-        }
-        const tier = runtime.currentChunk?.tier ?? 0;
-        const nextZ = minZ - spacingFor(runtime, tier);
-        seedPortal(runtime, portal, nextZ);
-      }
-
-      for (const shock of runtime.shockwaves) {
-        if (!shock.active) continue;
-        shock.life += dt;
-        if (shock.life >= shock.duration) {
-          shock.active = false;
-        }
-      }
-    }
-
-    runtime.shake = Math.max(0, runtime.shake - dt * 4.4);
-    runtime.chroma = Math.max(0, runtime.chroma - dt * 3.2);
-
-    const shakeAmp = runtime.shake * 0.08;
-    const shakeTime = runtime.elapsed * 26;
-    camTarget.set(
-      shakeNoiseSigned(shakeTime, 2.4) * shakeAmp,
-      0.42 + shakeNoiseSigned(shakeTime, 8.1) * shakeAmp * 0.45,
-      7.55 + shakeNoiseSigned(shakeTime, 15.7) * shakeAmp * 0.32
-    );
-    camera.position.lerp(camTarget, 1 - Math.exp(-7.8 * step.renderDt));
-    camera.lookAt(0, 0, -5.2);
-
-    chromaOffset.set(
-      runtime.chroma * 0.00075,
-      runtime.chroma * 0.00058
-    );
-
-    if (warpMaterialRef.current) {
-      warpMaterialRef.current.uniforms.uTime.value = state.clock.elapsedTime;
-    }
-
-    if (gloveGroupRef.current) {
-      gloveGroupRef.current.position.set(0, -0.2, runtime.gloveZ);
-      gloveGroupRef.current.scale.set(
-        1,
-        1 - runtime.gloveStretch * 0.08,
-        1 + runtime.gloveStretch * 0.34
-      );
-    }
-    if (gloveHitRef.current) {
-      gloveHitRef.current.position.set(0, -0.2, runtime.gloveZ - 0.12);
-    }
-    if (punchGuideRef.current) {
-      punchGuideRef.current.position.set(0, -0.2, -4.6);
-      const mat = punchGuideRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.2 + runtime.cueIntensity * 0.58;
-      mat.color.copy(runtime.cueIntensity > 0.62 ? WHITE : CYAN);
-    }
-    if (cueRingRef.current) {
-      if (runtime.cuePortalId >= 0) {
-        const portal = findPortalById(runtime, runtime.cuePortalId);
-        if (portal && !portal.fake) {
-          cueRingRef.current.visible = true;
-          cueRingRef.current.position.set(portal.x, portal.y, portal.z + 0.02);
-          cueRingRef.current.rotation.set(portal.rotX, portal.rotY, portal.rotZ);
-          const pulse = 1 + Math.sin(runtime.elapsed * 9) * 0.08;
-          const s = portal.innerRadius * (1 + runtime.cueIntensity * 0.22) * pulse;
-          cueRingRef.current.scale.set(s, s, s);
-          const mat = cueRingRef.current.material as THREE.MeshBasicMaterial;
-          mat.opacity = 0.18 + runtime.cueIntensity * 0.55;
-        } else {
-          cueRingRef.current.visible = false;
-        }
-      } else {
-        cueRingRef.current.visible = false;
-      }
-    }
-
-    if (ringRef.current && warpRef.current && coreRef.current) {
-      let idx = 0;
-      for (const portal of runtime.portals) {
-        if (portal.z < PORTAL_DRAW_MIN_Z || portal.z > PORTAL_DRAW_MAX_Z) {
-          dummy.position.copy(OFFSCREEN_POS);
-          dummy.scale.copy(TINY_SCALE);
-          dummy.rotation.set(0, 0, 0);
-          dummy.updateMatrix();
-          ringRef.current.setMatrixAt(idx, dummy.matrix);
-          warpRef.current.setMatrixAt(idx, dummy.matrix);
-          coreRef.current.setMatrixAt(idx, dummy.matrix);
-          ringRef.current.setColorAt(idx, CYAN);
-          coreRef.current.setColorAt(idx, CORE);
-          idx += 1;
-          continue;
-        }
-
-        dummy.position.set(portal.x, portal.y, portal.z);
-        dummy.rotation.set(portal.rotX, portal.rotY, portal.rotZ);
-        dummy.scale.set(portal.ringRadius, portal.ringRadius, portal.ringRadius);
-        dummy.updateMatrix();
-        ringRef.current.setMatrixAt(idx, dummy.matrix);
-
-        colorScratch.copy(CYAN).lerp(VIOLET, portal.tint);
-        if (portal.fake) colorScratch.lerp(HOT, 0.72);
-        ringRef.current.setColorAt(idx, colorScratch);
-
-        if (portal.fake) {
-          dummy.position.copy(OFFSCREEN_POS);
-          dummy.scale.copy(TINY_SCALE);
-          dummy.rotation.set(0, 0, 0);
-          dummy.updateMatrix();
-          warpRef.current.setMatrixAt(idx, dummy.matrix);
-          coreRef.current.setMatrixAt(idx, dummy.matrix);
-          coreRef.current.setColorAt(idx, CORE);
-          idx += 1;
-          continue;
-        }
-
-        dummy.position.set(portal.x, portal.y, portal.z);
-        dummy.rotation.set(portal.rotX, portal.rotY, portal.rotZ);
-        dummy.scale.set(portal.innerRadius, portal.innerRadius, portal.innerRadius);
-        dummy.updateMatrix();
-        warpRef.current.setMatrixAt(idx, dummy.matrix);
-
-        dummy.position.set(portal.x, portal.y, portal.z - portal.coreGap);
-        dummy.rotation.set(0, 0, 0);
-        dummy.scale.set(portal.coreRadius, portal.coreRadius, portal.coreRadius);
-        dummy.updateMatrix();
-        coreRef.current.setMatrixAt(idx, dummy.matrix);
-        colorScratch.copy(CORE).lerp(WHITE, portal.tint * 0.2);
-        coreRef.current.setColorAt(idx, colorScratch);
-        idx += 1;
-      }
-
-      ringRef.current.instanceMatrix.needsUpdate = true;
-      warpRef.current.instanceMatrix.needsUpdate = true;
-      coreRef.current.instanceMatrix.needsUpdate = true;
-      if (ringRef.current.instanceColor) ringRef.current.instanceColor.needsUpdate = true;
-      if (coreRef.current.instanceColor) coreRef.current.instanceColor.needsUpdate = true;
-    }
-
-    if (shockRef.current) {
-      for (let i = 0; i < runtime.shockwaves.length; i += 1) {
-        const shock = runtime.shockwaves[i];
-        if (!shock.active) {
-          dummy.position.copy(OFFSCREEN_POS);
-          dummy.scale.copy(TINY_SCALE);
-          dummy.rotation.set(0, 0, 0);
-          dummy.updateMatrix();
-          shockRef.current.setMatrixAt(i, dummy.matrix);
-          shockRef.current.setColorAt(i, WHITE);
-          continue;
-        }
-
-        const t = clamp(shock.life / shock.duration, 0, 1);
-        const scale = lerp(0.12, 1.86, t);
-        dummy.position.set(shock.x, shock.y, shock.z);
-        dummy.scale.set(scale, scale, scale);
-        dummy.rotation.set(Math.PI / 2, 0, 0);
-        dummy.updateMatrix();
-        shockRef.current.setMatrixAt(i, dummy.matrix);
-        colorScratch.copy(WHITE).lerp(VIOLET, t * 0.35);
-        shockRef.current.setColorAt(i, colorScratch);
-      }
-      shockRef.current.instanceMatrix.needsUpdate = true;
-      if (shockRef.current.instanceColor) shockRef.current.instanceColor.needsUpdate = true;
-    }
-
+    runtime.elapsed += dt;
+    runtime.messageTtl = Math.max(0, runtime.messageTtl - dt);
     portalPunchState.elapsed = runtime.elapsed;
-    portalPunchState.chain = runtime.perfectStreak;
-    portalPunchState.punchTime = runtime.punchActive ? 0.2 : 0;
+
+    if (runtime.status === 'PLAYING') {
+      portalPunchState.tick(dt);
+
+      for (const gateId of Object.keys(runtime.gateTimers)) {
+        if (runtime.gateTimers[gateId] > 990) continue;
+        runtime.gateTimers[gateId] = Math.max(0, runtime.gateTimers[gateId] - dt);
+      }
+
+      const resolved = resolveEntities(level, runtime);
+
+      const moveUp = input.justPressed.has('arrowup') || input.justPressed.has('w');
+      const moveDown = input.justPressed.has('arrowdown') || input.justPressed.has('s');
+      const moveLeft = input.justPressed.has('arrowleft') || input.justPressed.has('a');
+      const moveRight = input.justPressed.has('arrowright') || input.justPressed.has('d');
+
+      if (moveUp) runMove(runtime, level, resolved, 0, -1);
+      else if (moveDown) runMove(runtime, level, resolved, 0, 1);
+      else if (moveLeft) runMove(runtime, level, resolved, -1, 0);
+      else if (moveRight) runMove(runtime, level, resolved, 1, 0);
+
+      if (input.justPressed.has('q')) {
+        runtime.phase = runtime.phase === 'A' ? 'B' : 'A';
+        setMessage(runtime, `Phase ${runtime.phase}`);
+      }
+
+      const interact =
+        input.justPressed.has('e') ||
+        input.justPressed.has(' ') ||
+        input.justPressed.has('space') ||
+        input.pointerJustDown;
+      if (interact) {
+        runInteract(runtime, resolved);
+      }
+
+      runtime.lastSolve = solveLaser(level, runtime);
+      applySolveResult(runtime, level);
+
+      if (runtime.moves > level.grid.w * level.grid.h * 3 && !runtime.solved) {
+        runtime.status = 'GAMEOVER';
+        runtime.failReason = 'Move budget exhausted';
+      }
+
+      if (runtime.score > runtime.best) {
+        runtime.best = runtime.score;
+        writeBest(runtime.best);
+      }
+    } else {
+      if (input.pointerJustDown || input.justPressed.has('enter') || input.justPressed.has(' ')) {
+        if (runtime.status === 'START') {
+          startLevel();
+        } else if (runtime.status === 'SOLVED') {
+          nextLevel();
+        } else if (runtime.status === 'GAMEOVER') {
+          restartLevel();
+        }
+      }
+
+      runtime.lastSolve = solveLaser(level, runtime);
+    }
+
+    if (input.justPressed.has('r')) {
+      restartLevel();
+    }
+
+    if (input.justPressed.has('n') && runtime.status === 'SOLVED') {
+      nextLevel();
+    }
+
+    const style = level.style;
+    chromaOffset.set(style?.chroma ?? 0.0009, (style?.chroma ?? 0.0009) * 0.8);
+
+    const camHeight = level.camera?.height ?? 10;
+    const camDist = level.camera?.distance ?? 14;
+    const lookZ = level.camera?.lookZ ?? 0;
+    const orbit = runtime.elapsed * 0.08;
+    camera.position.set(Math.sin(orbit) * 1.8, camHeight, camDist);
+    camera.lookAt(0, 0, lookZ);
+
+    portalPunchState.score = runtime.score;
+    portalPunchState.bestScore = runtime.best;
+    portalPunchState.level = level.id;
+    portalPunchState.levelName = level.name;
+    portalPunchState.solved = runtime.status === 'SOLVED';
+    portalPunchState.gameOver = runtime.status === 'GAMEOVER';
+
+    runtime.renderClock += dt;
+    if (runtime.renderClock >= 1 / 30) {
+      runtime.renderClock = 0;
+      setFrameVersion((v) => (v + 1) % 100000);
+    }
 
     clearFrameInput(inputRef);
   });
 
+  const runtime = runtimeRef.current;
+  const level = PORTAL_PUNCH_LEVELS[runtime.levelIndex];
+  const style = level.style;
+
+  const resolvedEntities = useMemo(
+    () => resolveEntities(level, runtime),
+    [frameVersion, level, runtime.phase, runtime.levelIndex]
+  );
+
+  const floorTiles = useMemo(() => {
+    const out: Array<{ x: number; y: number; alt: boolean }> = [];
+    for (let y = 0; y < level.grid.h; y += 1) {
+      for (let x = 0; x < level.grid.w; x += 1) {
+        out.push({ x, y, alt: (x + y) % 2 === 0 });
+      }
+    }
+    return out;
+  }, [level]);
+
+  const traces = runtime.lastSolve.traces;
+
+  const playerWorld = gridToWorld(level, runtime.player, 0.5);
+
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 0.76, 6.9]} fov={45} />
-      <color attach="background" args={['#1b2b4a']} />
-      <fog attach="fog" args={['#1b2b4a', 10, 52]} />
+      <PerspectiveCamera makeDefault position={[0, level.camera?.height ?? 10, level.camera?.distance ?? 14]} fov={46} />
+      <color attach="background" args={[style?.fog ?? '#101622']} />
+      <fog attach="fog" args={[style?.fog ?? '#101622', 8, 36]} />
 
-      <ambientLight intensity={0.68} />
-      <hemisphereLight args={['#b9f1ff', '#3a2a52', 0.34]} />
-      <directionalLight position={[2.6, 4.2, 5.4]} intensity={1.08} color="#d8f5ff" />
-      <pointLight position={[0, 0.8, 3.7]} intensity={0.68} color="#9fe7ff" />
+      <ambientLight intensity={0.38} />
+      <directionalLight position={[6, 11, 5]} intensity={1.1} color="#e7f7ff" castShadow />
+      <pointLight position={[0, 3.2, 0]} intensity={0.7} color="#5f7fff" />
+      <pointLight position={[0, 2.4, -6]} intensity={0.55} color="#2ae2ff" />
 
-      <mesh position={[0, -1.1, -10]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[20, 70]} />
-        <meshStandardMaterial color="#0a1020" roughness={0.95} metalness={0.02} />
+      <mesh position={[0, -0.02, 0]} receiveShadow>
+        <boxGeometry args={[level.grid.w + 2.5, 0.08, level.grid.h + 2.5]} />
+        <meshStandardMaterial color="#0a0f16" roughness={0.78} />
       </mesh>
 
-      <mesh position={[0, -0.2, -16]}>
-        <boxGeometry args={[0.06, 0.06, 42]} />
-        <meshBasicMaterial color="#4fdfff" toneMapped={false} transparent opacity={0.36} />
+      {floorTiles.map((tile) => {
+        const p = gridToWorld(level, { x: tile.x, y: tile.y }, 0.01);
+        return (
+          <mesh key={`tile_${tile.x}_${tile.y}`} position={[p.x, 0, p.z]} receiveShadow>
+            <boxGeometry args={[0.94, 0.02, 0.94]} />
+            <meshStandardMaterial
+              color={tile.alt ? style?.floorA ?? '#0f1624' : style?.floorB ?? '#1a263d'}
+              roughness={0.78}
+              metalness={0.1}
+            />
+          </mesh>
+        );
+      })}
+
+      <mesh position={[0, 0.65, -(level.grid.h / 2 + 0.52)]}>
+        <boxGeometry args={[level.grid.w + 1.4, 1.3, 0.16]} />
+        <meshStandardMaterial color="#182033" emissive="#26395a" emissiveIntensity={0.12} />
+      </mesh>
+      <mesh position={[0, 0.65, level.grid.h / 2 + 0.52]}>
+        <boxGeometry args={[level.grid.w + 1.4, 1.3, 0.16]} />
+        <meshStandardMaterial color="#182033" emissive="#26395a" emissiveIntensity={0.12} />
+      </mesh>
+      <mesh position={[-(level.grid.w / 2 + 0.52), 0.65, 0]}>
+        <boxGeometry args={[0.16, 1.3, level.grid.h + 1.4]} />
+        <meshStandardMaterial color="#182033" emissive="#26395a" emissiveIntensity={0.12} />
+      </mesh>
+      <mesh position={[level.grid.w / 2 + 0.52, 0.65, 0]}>
+        <boxGeometry args={[0.16, 1.3, level.grid.h + 1.4]} />
+        <meshStandardMaterial color="#182033" emissive="#26395a" emissiveIntensity={0.12} />
       </mesh>
 
-      <mesh ref={punchGuideRef} position={[0, -0.2, -4.6]} rotation={[-Math.PI * 0.5, 0, 0]}>
-        <planeGeometry args={[0.42, 13.4]} />
-        <meshBasicMaterial
-          color="#52ecff"
-          transparent
-          opacity={0.24}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
+      <EntityVisuals level={level} runtime={runtime} entities={resolvedEntities} />
 
-      <instancedMesh ref={ringRef} args={[undefined, undefined, PORTAL_POOL]}>
-        <torusGeometry args={[1, 0.18, 18, 64]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
-      </instancedMesh>
-
-      <instancedMesh ref={warpRef} args={[undefined, undefined, PORTAL_POOL]}>
-        <planeGeometry args={[2, 2, 1, 1]} />
-        <shaderMaterial
-          ref={warpMaterialRef}
-          uniforms={warpUniforms}
-          vertexShader={`
-            varying vec2 vUv;
-            void main() {
-              vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `}
-          fragmentShader={`
-            uniform float uTime;
-            varying vec2 vUv;
-            void main() {
-              vec2 uv = vUv * 2.0 - 1.0;
-              float r = length(uv);
-              if (r > 1.0) discard;
-
-              float a = atan(uv.y, uv.x);
-              float swirl = sin(12.0 * r - uTime * 5.2 + a * 3.7) * 0.5 + 0.5;
-              float ripple = sin((r * 18.0 - uTime * 7.4) + a * 1.8) * 0.5 + 0.5;
-              float blend = clamp(r * 0.85 + swirl * 0.25, 0.0, 1.0);
-
-              vec3 cyan = vec3(0.16, 0.91, 1.0);
-              vec3 violet = vec3(0.66, 0.35, 1.0);
-              vec3 color = mix(cyan, violet, blend);
-
-              float alpha = smoothstep(1.0, 0.14, r);
-              alpha *= 0.3 + ripple * 0.55;
-              gl_FragColor = vec4(color, alpha);
-            }
-          `}
-          transparent
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-        />
-      </instancedMesh>
-
-      <instancedMesh ref={coreRef} args={[undefined, undefined, PORTAL_POOL]}>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
-      </instancedMesh>
-
-      <mesh ref={cueRingRef} visible={false}>
-        <torusGeometry args={[1, 0.03, 8, 48]} />
-        <meshBasicMaterial
-          color="#f4fdff"
-          transparent
-          opacity={0.55}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
-
-      <instancedMesh ref={shockRef} args={[undefined, undefined, SHOCKWAVE_POOL]}>
-        <torusGeometry args={[1, 0.03, 8, 48]} />
-        <meshBasicMaterial
-          vertexColors
-          transparent
-          opacity={0.7}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </instancedMesh>
-
-      <group ref={gloveGroupRef} position={[0, -0.2, GLOVE_IDLE_Z]}>
+      <group position={[playerWorld.x, 0.5, playerWorld.z]}>
         <mesh castShadow>
-          <sphereGeometry args={[0.43, 20, 20]} />
-          <meshStandardMaterial
-            color="#ff6b7c"
-            emissive="#ff405f"
-            emissiveIntensity={0.42}
-            roughness={0.22}
-            metalness={0.04}
-          />
+          <boxGeometry args={[0.42, 0.42, 0.42]} />
+          <meshStandardMaterial color="#f1f7ff" emissive="#70d7ff" emissiveIntensity={0.25} />
         </mesh>
-        <mesh position={[0, -0.08, 0.6]} castShadow>
-          <boxGeometry args={[0.32, 0.34, 0.95]} />
-          <meshStandardMaterial color="#fbe7ec" roughness={0.36} metalness={0.03} />
+        <mesh position={[0, 0.3, 0]}>
+          <sphereGeometry args={[0.14, 16, 16]} />
+          <meshStandardMaterial color="#70d7ff" emissive="#70d7ff" emissiveIntensity={0.5} />
         </mesh>
       </group>
 
-      <mesh ref={gloveHitRef} position={[0, -0.2, GLOVE_IDLE_Z - 0.12]}>
-        <sphereGeometry args={[GLOVE_RADIUS, 16, 16]} />
-        <meshBasicMaterial color="#ffffff" transparent opacity={0.001} />
+      <mesh position={gridToWorld(level, level.source.pos, 0.42).toArray() as [number, number, number]}>
+        <cylinderGeometry args={[0.14, 0.2, 0.3, 18]} />
+        <meshStandardMaterial color="#8be9ff" emissive="#8be9ff" emissiveIntensity={0.48} />
       </mesh>
 
+      {traces.map((trace) => (
+        <Line
+          key={trace.id}
+          points={trace.points.map((point) => [point[0], point[1], point[2]] as [number, number, number])}
+          color={LASER_COLOR_HEX[trace.color]}
+          lineWidth={clamp(1.4 + trace.intensity * 0.006 + trace.width * 0.45, 1.4, 5)}
+          transparent
+          opacity={clamp(0.24 + trace.intensity * 0.0035, 0.24, 0.95)}
+        />
+      ))}
+
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.44} luminanceThreshold={0.53} luminanceSmoothing={0.24} mipmapBlur />
+        <Bloom
+          intensity={style?.bloom ?? 0.55}
+          luminanceThreshold={0.45}
+          luminanceSmoothing={0.24}
+          mipmapBlur
+        />
         <ChromaticAberration
           offset={chromaOffset}
           radialModulation={false}
           modulationOffset={0}
         />
-        <Vignette eskil={false} offset={0.14} darkness={0.6} />
+        <Vignette eskil={false} offset={0.14} darkness={0.62} />
         <Noise premultiply opacity={0.02} />
       </EffectComposer>
 
       <Html fullscreen>
-        <PortalPunchOverlay />
+        <Overlay
+          runtime={runtime}
+          level={level}
+          onStart={startLevel}
+          onRestart={restartLevel}
+          onNext={nextLevel}
+        />
       </Html>
     </>
   );
