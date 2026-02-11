@@ -223,8 +223,8 @@ export const GAME_CARDS: GameCard[] = [
     id: 'tetherdrift',
     title: 'Tether Drift',
     description:
-      'Hold to snap a glowing tether, release to slingshot, and thread offset drift gates in zero-g.',
-    accent: '#a78bfa',
+      'An endless elastic runner: hold to reel your tether tight, release to drift wide, and thread slit gates with your trailing orb.',
+    accent: '#4fd6c4',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/TetherDrift.webp',
     hotkey: '',
@@ -402,8 +402,9 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'knothop',
     title: 'Knot Hop',
-    description: 'Hop through knot patterns. Master the rhythm and timing.',
-    accent: '#48dbfb',
+    description:
+      'One-tap rope runner: hop your bead around the rope and slip through each oncoming knot’s safe pocket.',
+    accent: '#5edfc7',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/KnotHop.webp',
     hotkey: '',
@@ -601,10 +602,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Treat every gate like a rhythm cue. One clean flip beats panic tapping.',
   },
   tetherdrift: {
-    controls: 'Hold to tether • Release to drift • R to restart',
+    controls: 'Hold/Space to reel in • Release to drift out • R to restart',
     objective:
-      'Latch anchors in sequence while climbing forever. Miss anchor range once and fall.',
-    tips: 'Release on the forward arc to carry speed into the next anchor.',
+      'Guide a trailing orb through endless slit gates using only tether tension. Survive as speed ramps.',
+    tips: 'Reel early to center up, then release to let momentum carry into the next lane.',
   },
   trace: {
     controls: 'Drag to stay on path • R to restart',
@@ -711,11 +712,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Time your movements perfectly. Watch the gate angles.',
   },
   knothop: {
-    controls:
-      'Space to hop • Click platform to flip its twist direction • R to restart',
+    controls: 'Tap/Click/Space to hop clockwise around rope • R to restart',
     objective:
-      'Hop across twisting platforms. Click the platform you’re on to reverse its spin. Collect gems to unlock balls and themes.',
-    tips: 'Flip the platform’s direction before you hop to line up your jump. Use gems to unlock new balls and platform colors.',
+      'Ride the rope endlessly and line up your bead with each knot’s single safe side as speed ramps.',
+    tips: 'Read the glowing safe ring early. One calm tap per knot beats late panic taps.',
   },
   oscillate: {
     controls: 'Tap/Space/Enter to switch walls • R to restart',

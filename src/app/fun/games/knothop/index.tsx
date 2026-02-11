@@ -1,541 +1,693 @@
 'use client';
 
-import { Html } from '@react-three/drei';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Line, PerspectiveCamera, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
-import { useInputRef, clearFrameInput } from '../../hooks/useInput';
+import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { useGameUIState } from '../../store/selectors';
-import { SeededRandom } from '../../utils/seededRandom';
-import { BALL_SKINS, GAME, PLATFORM_THEMES } from './constants';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+} from '../_shared/hyperUpgradeKit';
 import { KnotHopUI } from './_components/KnotHopUI';
 import { knotHopState } from './state';
-import type { PlatformData } from './types';
 
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
+export { knotHopState } from './state';
 
-function forwardFromYaw(yaw: number): THREE.Vector3 {
-  return new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-}
+type KnotGate = {
+  z: number;
+  safeSlot: number;
+  pulse: number;
+  hue: number;
+  resolved: boolean;
+  flash: number;
+};
 
-function makePlatform(
-  rng: SeededRandom,
-  prev: PlatformData | null,
-  id: number,
-  difficulty: number
-): PlatformData {
-  const length =
-    rng.float(GAME.lengthMin, GAME.lengthMax) * (1 - difficulty * 0.12);
-  const width = GAME.platformWidth * (1 - difficulty * 0.06);
-  const gap = rng.float(GAME.gapMin, GAME.gapMax);
+type Runtime = {
+  elapsed: number;
+  distance: number;
+  speed: number;
+  score: number;
 
-  const baseYaw = prev ? prev.baseYaw : 0;
-  const delta = rng.float(-Math.PI * 0.6, Math.PI * 0.6);
-  const yaw = baseYaw + delta;
+  combo: number;
+  comboTimer: number;
+  knotsPassed: number;
+  perfects: number;
 
-  const prevEnd = prev
-    ? new THREE.Vector3(prev.x, 0, prev.z).add(
-        forwardFromYaw(prev.baseYaw).multiplyScalar(prev.length / 2 + gap)
-      )
-    : new THREE.Vector3(0, 0, 0);
+  playerAngle: number;
+  targetAngle: number;
+  angleVel: number;
+  hopPulse: number;
 
-  const center = prevEnd
-    .clone()
-    .add(forwardFromYaw(yaw).multiplyScalar(length / 2));
+  serial: number;
+  knotCursorZ: number;
+  hudCommit: number;
+  shake: number;
 
-  const twistDir = rng.bool() ? 1 : -1;
-  const twistSpeed = twistDir * rng.float(0.25, 0.6) * (1 + difficulty * 0.9);
+  gates: KnotGate[];
+};
 
-  const gemChance = clamp(0.22 + difficulty * 0.18, 0.15, 0.45);
-  const hasGem = rng.float(0, 1) < gemChance;
+const KNOT_POOL = 52;
+const KNOT_BULGES = KNOT_POOL * 4;
+const TRAIL_POINTS = 44;
+const SPIRAL_POINTS = 96;
 
-  return {
-    id,
-    x: center.x,
-    z: center.z,
-    length,
-    width,
-    baseYaw: yaw,
-    yaw,
-    twistSpeed,
-    hasGem,
-  };
-}
+const PLAYER_Z = 0;
+const ORBIT_RADIUS = 1.24;
+const CORE_RADIUS = 0.3;
 
-export default function KnotHop() {
+const BASE_SPEED = 8;
+const MAX_SPEED = 17.4;
+
+const PASS_ANGLE = 0.52;
+const PERFECT_ANGLE = 0.18;
+
+const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
+const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+
+const MINT = new THREE.Color('#5edfc7');
+const CYAN = new THREE.Color('#72dcf7');
+const PEARL = new THREE.Color('#f6fffc');
+const CORAL = new THREE.Color('#ff8b7b');
+const SEA = new THREE.Color('#9ce9da');
+const WHITE = new THREE.Color('#faffff');
+
+let audioContextRef: AudioContext | null = null;
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+const normalizeAngle = (angle: number) => {
+  let out = angle % (Math.PI * 2);
+  if (out > Math.PI) out -= Math.PI * 2;
+  if (out < -Math.PI) out += Math.PI * 2;
+  return out;
+};
+
+const shortestAngleDiff = (target: number, from: number) =>
+  normalizeAngle(target - from);
+
+const angleForSlot = (slot: number) => Math.PI / 2 - slot * (Math.PI / 2);
+
+const slotFromAngle = (angle: number) => {
+  const normalized = normalizeAngle(angle);
+  let bestSlot = 0;
+  let best = Infinity;
+  for (let slot = 0; slot < 4; slot += 1) {
+    const diff = Math.abs(shortestAngleDiff(angleForSlot(slot), normalized));
+    if (diff < best) {
+      best = diff;
+      bestSlot = slot;
+    }
+  }
+  return bestSlot;
+};
+
+const maybeVibrate = (ms: number) => {
+  if (typeof navigator === 'undefined') return;
+  if ('vibrate' in navigator) navigator.vibrate(ms);
+};
+
+const playTone = (frequency: number, duration = 0.05, volume = 0.03) => {
+  if (typeof window === 'undefined') return;
+
+  const Context =
+    window.AudioContext ||
+    (window as Window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (!Context) return;
+
+  if (!audioContextRef) {
+    audioContextRef = new Context();
+  }
+  const ctx = audioContextRef;
+  if (!ctx) return;
+
+  if (ctx.state === 'suspended') {
+    void ctx.resume();
+  }
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = 'triangle';
+  osc.frequency.value = frequency;
+  gain.gain.value = volume;
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  const t0 = ctx.currentTime;
+  gain.gain.setValueAtTime(volume, t0);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  osc.start(t0);
+  osc.stop(t0 + duration);
+};
+
+const createGate = (): KnotGate => ({
+  z: -10,
+  safeSlot: 0,
+  pulse: 0,
+  hue: 0,
+  resolved: false,
+  flash: 0,
+});
+
+const createRuntime = (): Runtime => ({
+  elapsed: 0,
+  distance: 0,
+  speed: BASE_SPEED,
+  score: 0,
+
+  combo: 0,
+  comboTimer: 0,
+  knotsPassed: 0,
+  perfects: 0,
+
+  playerAngle: angleForSlot(0),
+  targetAngle: angleForSlot(0),
+  angleVel: 0,
+  hopPulse: 0,
+
+  serial: 0,
+  knotCursorZ: -9,
+  hudCommit: 0,
+  shake: 0,
+
+  gates: Array.from({ length: KNOT_POOL }, createGate),
+});
+
+const difficultyAt = (runtime: Runtime) =>
+  clamp(runtime.distance / 240 + runtime.knotsPassed / 140, 0, 1);
+
+const pickSafeSlot = (runtime: Runtime) => {
+  const prev = runtime.serial > 0 ? runtime.gates[(runtime.serial - 1) % KNOT_POOL].safeSlot : 0;
+  const r = Math.random();
+  let delta = 0;
+  if (r < 0.42) delta = 0;
+  else if (r < 0.68) delta = 1;
+  else if (r < 0.9) delta = -1;
+  else delta = Math.random() < 0.5 ? 2 : -2;
+  return (prev + delta + 8) % 4;
+};
+
+const seedGate = (gate: KnotGate, runtime: Runtime, z: number) => {
+  runtime.serial += 1;
+  gate.z = z;
+  gate.safeSlot = pickSafeSlot(runtime);
+  gate.pulse = Math.random() * Math.PI * 2;
+  gate.hue = Math.random();
+  gate.resolved = false;
+  gate.flash = 0;
+};
+
+const resetRuntime = (runtime: Runtime) => {
+  runtime.elapsed = 0;
+  runtime.distance = 0;
+  runtime.speed = BASE_SPEED;
+  runtime.score = 0;
+
+  runtime.combo = 0;
+  runtime.comboTimer = 0;
+  runtime.knotsPassed = 0;
+  runtime.perfects = 0;
+
+  runtime.playerAngle = angleForSlot(0);
+  runtime.targetAngle = angleForSlot(0);
+  runtime.angleVel = 0;
+  runtime.hopPulse = 0;
+
+  runtime.serial = 0;
+  runtime.knotCursorZ = -8;
+  runtime.hudCommit = 0;
+  runtime.shake = 0;
+
+  for (const gate of runtime.gates) {
+    seedGate(gate, runtime, runtime.knotCursorZ);
+    runtime.knotCursorZ -= 4.6 + Math.random() * 1.5;
+  }
+};
+
+const startRun = (runtime: Runtime) => {
+  resetRuntime(runtime);
+  knotHopState.start();
+};
+
+const syncHud = (runtime: Runtime) => {
+  knotHopState.updateHud({
+    score: runtime.score,
+    combo: runtime.combo,
+    knotsPassed: runtime.knotsPassed,
+    perfects: runtime.perfects,
+    speed: runtime.speed,
+  });
+};
+
+function KnotHop() {
   const snap = useSnapshot(knotHopState);
   const uiSnap = useGameUIState();
-  const { camera, gl, scene } = useThree();
 
-  const input = useInputRef({
-    preventDefault: [
-      ' ',
-      'Space',
-      'Enter',
-      'arrowleft',
-      'arrowright',
-      'arrowup',
-      'arrowdown',
-      'a',
-      'd',
-      'A',
-      'D',
-    ],
+  const inputRef = useInputRef({
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
   });
 
-  const rngRef = useRef(new SeededRandom(1));
+  const runtimeRef = useRef<Runtime>(createRuntime());
+  const fixedStepRef = useRef(createFixedStepState());
 
-  const platformRefs = useRef<THREE.Group[]>([]);
-  const gemRefs = useRef<THREE.Mesh[]>([]);
+  const bgMatRef = useRef<THREE.ShaderMaterial>(null);
+  const coreMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const bulgeRef = useRef<THREE.InstancedMesh>(null);
+  const safeRef = useRef<THREE.InstancedMesh>(null);
+  const playerRef = useRef<THREE.Mesh>(null);
 
-  const ballRef = useRef<THREE.Mesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const colorScratch = useMemo(() => new THREE.Color(), []);
+  const camTarget = useMemo(() => new THREE.Vector3(), []);
+  const lookTarget = useMemo(() => new THREE.Vector3(), []);
 
-  const [platforms, setPlatforms] = useState<PlatformData[]>([]);
-
-  const world = useRef({
-    currentIndex: 0,
-    grounded: true,
-    // Ball state
-    localZ: 0,
-    vel: new THREE.Vector3(),
-    pos: new THREE.Vector3(),
-    radius: 0.34,
-    jumpVy: 4.9,
-    gravity: -12,
-    // Popup
-    popupId: 1,
-    popups: [] as {
-      id: number;
-      text: string;
-      position: [number, number, number];
-    }[],
-    dummy: new THREE.Object3D(),
-  });
-
-  const theme = useMemo(
-    () =>
-      PLATFORM_THEMES.find((t) => t.id === snap.selectedTheme) ??
-      PLATFORM_THEMES[0],
-    [snap.selectedTheme]
+  const trailAttr = useMemo(
+    () => new THREE.BufferAttribute(new Float32Array(TRAIL_POINTS * 3), 3),
+    []
   );
+  const trailGeometry = useMemo(() => {
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', trailAttr);
+    return geom;
+  }, [trailAttr]);
 
-  const ballSkin = useMemo(
-    () => BALL_SKINS.find((b) => b.id === snap.selectedBall) ?? BALL_SKINS[0],
-    [snap.selectedBall]
+  const spiralPoints = useMemo(
+    () => Array.from({ length: SPIRAL_POINTS }, () => new THREE.Vector3()),
+    []
   );
+  const spiralFlat = useMemo(() => new Float32Array(SPIRAL_POINTS * 3), []);
 
-  // One-time setup
+  const spiralLineRef = useRef<any>(null);
+
+  const { camera } = useThree();
+
+  const primeTrail = (x: number, y: number) => {
+    for (let i = 0; i < TRAIL_POINTS; i += 1) {
+      const ptr = i * 3;
+      trailAttr.array[ptr] = x;
+      trailAttr.array[ptr + 1] = y;
+      trailAttr.array[ptr + 2] = -i * 0.13;
+    }
+    trailAttr.needsUpdate = true;
+  };
+
   useEffect(() => {
     knotHopState.load();
+    resetRuntime(runtimeRef.current);
+    const angle = runtimeRef.current.playerAngle;
+    primeTrail(Math.cos(angle) * ORBIT_RADIUS, Math.sin(angle) * ORBIT_RADIUS);
   }, []);
 
   useEffect(() => {
-    gl.domElement.style.touchAction = 'none';
+    if (snap.resetVersion <= 0) return;
+    resetRuntime(runtimeRef.current);
+  }, [snap.resetVersion]);
 
-    scene.background = new THREE.Color('#b9dcff');
-    scene.fog = new THREE.FogExp2('#9ecbff', 0.028);
-
-    return () => {
-      gl.domElement.style.touchAction = 'auto';
-      scene.fog = null;
-    };
-  }, [gl.domElement, scene]);
-
-  // React to global restart
   useEffect(() => {
-    if (uiSnap.restartSeed > 0) {
-      knotHopState.start();
-    }
+    if (uiSnap.restartSeed <= 0) return;
+    startRun(runtimeRef.current);
   }, [uiSnap.restartSeed]);
 
-  // Initialize run
-  useEffect(() => {
-    if (snap.phase !== 'playing') return;
+  useEffect(
+    () => () => {
+      trailGeometry.dispose();
+      trailAttr.array.fill(0);
+    },
+    [trailAttr, trailGeometry]
+  );
 
-    const w = world.current;
-    rngRef.current = new SeededRandom(snap.worldSeed || 1);
+  useFrame((_state, delta) => {
+    const step = consumeFixedStep(fixedStepRef.current, delta);
+    if (step.steps <= 0) return;
 
-    const nextPlatforms: PlatformData[] = [];
-    let prev: PlatformData | null = null;
-    const difficulty = 0;
+    const dt = step.dt;
+    const runtime = runtimeRef.current;
+    const input = inputRef.current;
 
-    const PLATFORM_COUNT = 25;
-    for (let i = 0; i < PLATFORM_COUNT; i++) {
-      const p = makePlatform(rngRef.current, prev, i, difficulty);
-      nextPlatforms.push(p);
-      prev = p;
+    knotHopState.tick(dt);
+
+    const tap =
+      input.pointerJustDown ||
+      input.justPressed.has(' ') ||
+      input.justPressed.has('space') ||
+      input.justPressed.has('enter');
+    const restart = input.justPressed.has('r');
+
+    if ((tap || restart) && knotHopState.phase !== 'playing') {
+      startRun(runtime);
+      const angle = runtime.playerAngle;
+      primeTrail(Math.cos(angle) * ORBIT_RADIUS, Math.sin(angle) * ORBIT_RADIUS);
+      maybeVibrate(10);
+      playTone(560, 0.05, 0.028);
+    } else if (restart && knotHopState.phase === 'playing') {
+      startRun(runtime);
+      const angle = runtime.playerAngle;
+      primeTrail(Math.cos(angle) * ORBIT_RADIUS, Math.sin(angle) * ORBIT_RADIUS);
     }
 
-    setPlatforms(nextPlatforms);
+    if (knotHopState.phase === 'playing' && !uiSnap.paused) {
+      runtime.elapsed += dt;
+      runtime.comboTimer = Math.max(0, runtime.comboTimer - dt);
+      if (runtime.comboTimer <= 0) runtime.combo = 0;
 
-    // Reset ball
-    w.currentIndex = 0;
-    w.grounded = true;
-    w.localZ = -nextPlatforms[0].length / 2 + w.radius + 0.05;
-    w.vel.set(0, 0, 0);
-    w.pos.set(nextPlatforms[0].x, w.radius, nextPlatforms[0].z);
-    w.popups = [];
+      const d = difficultyAt(runtime);
+      runtime.speed = lerp(BASE_SPEED, MAX_SPEED, d);
+      runtime.hudCommit += dt;
 
-    // Camera
-    camera.position.set(w.pos.x, 6, w.pos.z + 10);
-    camera.lookAt(w.pos.x, 0, w.pos.z);
-  }, [snap.phase, snap.worldSeed, camera]);
+      if (tap) {
+        runtime.targetAngle -= Math.PI / 2;
+        runtime.targetAngle = normalizeAngle(runtime.targetAngle);
+        runtime.hopPulse = 1;
+        playTone(720, 0.03, 0.02);
+      }
 
-  function addPopup(text: string, position: THREE.Vector3) {
-    const id = world.current.popupId++;
-    const p: { id: number; text: string; position: [number, number, number] } =
-      {
-        id,
-        text,
-        position: [position.x, position.y, position.z],
-      };
-    world.current.popups.push(p);
-    setTimeout(() => {
-      world.current.popups = world.current.popups.filter((pp) => pp.id !== id);
-    }, 900);
-  }
+      const spring = 30 + d * 13;
+      const damp = 7 + d * 2;
+      const angleDiff = shortestAngleDiff(runtime.targetAngle, runtime.playerAngle);
+      runtime.angleVel += angleDiff * spring * dt;
+      runtime.angleVel *= Math.exp(-damp * dt);
+      runtime.playerAngle = normalizeAngle(runtime.playerAngle + runtime.angleVel * dt);
+      runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 4.8);
 
-  useFrame((_, dt) => {
-    const w = world.current;
-    const isPaused = uiSnap.paused;
+      for (const gate of runtime.gates) {
+        gate.z += runtime.speed * dt;
+        gate.flash = Math.max(0, gate.flash - dt * 3.2);
 
-    // Tap/click/Space/Enter = hop. Left/Right (or A/D) controls platform twist direction.
-    const hop =
-      input.current.pointerJustDown ||
-      input.current.justPressed.has(' ') ||
-      input.current.justPressed.has('Enter');
-    const turnLeft =
-      input.current.justPressed.has('arrowleft') ||
-      input.current.justPressed.has('a');
-    const turnRight =
-      input.current.justPressed.has('arrowright') ||
-      input.current.justPressed.has('d');
+        if (gate.z > 8.8) {
+          seedGate(gate, runtime, runtime.knotCursorZ);
+          runtime.knotCursorZ -= lerp(5.4, 3.1, d) + Math.random() * 1.35;
+        }
 
-    if (snap.phase !== 'playing' || isPaused) {
-      clearFrameInput(input);
-      return;
-    }
+        if (!gate.resolved && gate.z > PLAYER_Z + 0.22) {
+          gate.resolved = true;
+          const safeAngle = angleForSlot(gate.safeSlot);
+          const err = Math.abs(shortestAngleDiff(safeAngle, runtime.playerAngle));
 
-    const delta = Math.min(dt, 0.033);
+          if (err > PASS_ANGLE) {
+            runtime.shake = 1.1;
+            maybeVibrate(20);
+            playTone(200, 0.12, 0.055);
+            knotHopState.end(runtime.score);
+            break;
+          }
 
-    // Difficulty ramps with score
-    const difficulty = clamp(snap.score / 60, 0, 1);
-    const runSpeed = GAME.runSpeedBase + snap.score * GAME.runSpeedIncPerScore;
+          runtime.knotsPassed += 1;
+          const perfect = err < PERFECT_ANGLE;
 
-    // Update twist of current platform
-    const current = platforms[w.currentIndex];
-    if (current) {
-      if (turnLeft) current.twistSpeed = -Math.abs(current.twistSpeed);
-      if (turnRight) current.twistSpeed = Math.abs(current.twistSpeed);
-      current.yaw += current.twistSpeed * delta * (1 + difficulty * 0.8);
-      // Keep yaws bounded (avoid float blowup)
-      if (current.yaw > Math.PI * 2) current.yaw -= Math.PI * 2;
-      if (current.yaw < -Math.PI * 2) current.yaw += Math.PI * 2;
-    }
+          if (perfect) {
+            runtime.combo = Math.min(runtime.combo + 1, 30);
+            runtime.comboTimer = 2.2;
+            runtime.perfects += 1;
+            runtime.score += 18 + runtime.combo * 6;
+            gate.flash = 1;
+            runtime.shake = Math.min(1.25, runtime.shake + 0.24);
+            playTone(940 + runtime.combo * 7, 0.05, 0.03);
+            if (runtime.combo >= 2) {
+              knotHopState.setToast(`FLOW x${runtime.combo}`, 0.45);
+            }
+          } else {
+            runtime.combo = Math.max(0, runtime.combo - 1);
+            runtime.comboTimer = Math.max(runtime.comboTimer, 0.9);
+            runtime.score += 11;
+            gate.flash = 0.56;
+            playTone(620, 0.03, 0.02);
+          }
+        }
+      }
 
-    // Hop input (Space / Enter only)
-    if (hop && w.grounded && current) {
-      w.grounded = false;
-      const fwd = forwardFromYaw(current.yaw);
-      w.vel.copy(fwd.multiplyScalar(runSpeed));
-      w.vel.y = w.jumpVy;
-    }
+      if (knotHopState.phase === 'playing') {
+        runtime.distance += runtime.speed * dt;
+        const paceScore = runtime.distance * 0.58;
+        runtime.score = Math.max(
+          runtime.score,
+          Math.floor(paceScore + runtime.knotsPassed * 10 + runtime.perfects * 6)
+        );
 
-    if (w.grounded && current) {
-      // Move forward along platform local Z
-      w.localZ += runSpeed * delta;
-
-      // Compute ball world position from platform frame
-      const fwd = forwardFromYaw(current.yaw);
-      const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
-
-      const worldPos = new THREE.Vector3(current.x, 0, current.z)
-        .add(fwd.clone().multiplyScalar(w.localZ))
-        .add(right.multiplyScalar(0));
-
-      w.pos.copy(worldPos);
-      w.pos.y = w.radius;
-
-      // Fall if reach end
-      const endZ = current.length / 2 - w.radius * 0.9;
-      if (w.localZ > endZ) {
-        knotHopState.end();
+        if (runtime.hudCommit >= 0.08) {
+          runtime.hudCommit = 0;
+          syncHud(runtime);
+        }
       }
     } else {
-      // Airborne
-      w.vel.y += w.gravity * delta;
-      w.pos.addScaledVector(w.vel, delta);
+      runtime.elapsed += dt * 0.42;
+      runtime.targetAngle = normalizeAngle(runtime.targetAngle + dt * 0.28);
+      const angleDiff = shortestAngleDiff(runtime.targetAngle, runtime.playerAngle);
+      runtime.angleVel += angleDiff * 7.5 * dt;
+      runtime.angleVel *= Math.exp(-5 * dt);
+      runtime.playerAngle = normalizeAngle(runtime.playerAngle + runtime.angleVel * dt);
+      runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 2.2);
+    }
 
-      // Attempt landing on next platform
-      const next = platforms[w.currentIndex + 1];
-      if (next && w.vel.y <= 0 && w.pos.y <= w.radius + 0.02) {
-        // Transform ball pos into next platform local space
-        const dx = w.pos.x - next.x;
-        const dz = w.pos.z - next.z;
-        const c = Math.cos(-next.baseYaw);
-        const s = Math.sin(-next.baseYaw);
-        const lx = dx * c - dz * s;
-        const lz = dx * s + dz * c;
+    runtime.shake = Math.max(0, runtime.shake - dt * 4.2);
+    const shakeAmp = runtime.shake * 0.06;
+    const shakeTime = runtime.elapsed * 18;
+    const jitterX = shakeNoiseSigned(shakeTime, 2.1) * shakeAmp;
+    const jitterY = shakeNoiseSigned(shakeTime, 5.7) * shakeAmp * 0.35;
+    const jitterZ = shakeNoiseSigned(shakeTime, 9.8) * shakeAmp * 0.42;
 
-        if (
-          Math.abs(lx) <= next.width / 2 - w.radius * 0.6 &&
-          Math.abs(lz) <= next.length / 2 - w.radius * 0.6
-        ) {
-          // Land
-          w.grounded = true;
-          w.currentIndex++;
-          w.localZ = -next.length / 2 + w.radius + 0.05;
-          w.vel.set(0, 0, 0);
-          w.pos.y = w.radius;
+    const px = Math.cos(runtime.playerAngle) * (ORBIT_RADIUS + runtime.hopPulse * 0.16);
+    const py = Math.sin(runtime.playerAngle) * (ORBIT_RADIUS + runtime.hopPulse * 0.16);
 
-          knotHopState.score += 1;
+    camTarget.set(px * 0.3 + jitterX, 3.3 + py * 0.22 + jitterY, 7.2 + jitterZ);
+    lookTarget.set(px * 0.28, py * 0.2, -3.2);
+    camera.position.lerp(camTarget, 1 - Math.exp(-6.8 * step.renderDt));
+    camera.lookAt(lookTarget);
 
-          // Collect gem
-          if (next.hasGem) {
-            next.hasGem = false;
-            knotHopState.runGems += 1;
-            knotHopState.toast = '+1 gem';
-            knotHopState.toastUntil = Date.now() + 900;
-            addPopup('+1', new THREE.Vector3(w.pos.x, w.pos.y + 0.7, w.pos.z));
+    if (bgMatRef.current) {
+      bgMatRef.current.uniforms.uTime.value += dt;
+    }
+
+    if (coreMatRef.current) {
+      coreMatRef.current.emissiveIntensity = 0.34 + runtime.shake * 0.2;
+    }
+
+    if (playerRef.current) {
+      playerRef.current.position.set(px, py, PLAYER_Z);
+      const pulse = 1 + runtime.hopPulse * 0.15 + Math.sin(runtime.elapsed * 7.2) * 0.03;
+      playerRef.current.scale.setScalar(pulse);
+    }
+
+    if (bulgeRef.current && safeRef.current) {
+      let idx = 0;
+      for (let i = 0; i < runtime.gates.length; i += 1) {
+        const gate = runtime.gates[i];
+        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.6 + gate.pulse);
+
+        for (let slot = 0; slot < 4; slot += 1) {
+          if (slot === gate.safeSlot) {
+            dummy.position.copy(OFFSCREEN_POS);
+            dummy.scale.copy(TINY_SCALE);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            bulgeRef.current.setMatrixAt(idx, dummy.matrix);
+            bulgeRef.current.setColorAt(idx, MINT);
+            idx += 1;
+            continue;
           }
 
-          // Recycle platforms behind if needed
-          if (w.currentIndex > 8) {
-            const removeCount = 4;
-            const trimmed = platforms.slice(removeCount);
-            w.currentIndex -= removeCount;
-            // Spawn new ahead
-            let prev = trimmed[trimmed.length - 1] ?? null;
-            const baseId = (prev?.id ?? 0) + 1;
-            for (let i = 0; i < removeCount; i++) {
-              const p = makePlatform(
-                rngRef.current,
-                prev,
-                baseId + i,
-                difficulty
-              );
-              trimmed.push(p);
-              prev = p;
-            }
-            setPlatforms(trimmed);
-          }
+          const angle = angleForSlot(slot);
+          const r = CORE_RADIUS + 0.2;
+          dummy.position.set(Math.cos(angle) * r, Math.sin(angle) * r, gate.z);
+          dummy.rotation.set(0, 0, runtime.elapsed * 0.8 + slot * 0.1);
+          dummy.scale.set(0.32, 0.24, 0.32);
+          dummy.updateMatrix();
+          bulgeRef.current.setMatrixAt(idx, dummy.matrix);
+
+          const col = colorScratch
+            .setHSL(0.45 + gate.hue * 0.08, 0.75, 0.38 + pulse * 0.15)
+            .lerp(CORAL, gate.flash * 0.32);
+          bulgeRef.current.setColorAt(idx, col);
+          idx += 1;
         }
+
+        const safeAngle = angleForSlot(gate.safeSlot);
+        dummy.position.set(
+          Math.cos(safeAngle) * (CORE_RADIUS + 0.28),
+          Math.sin(safeAngle) * (CORE_RADIUS + 0.28),
+          gate.z
+        );
+        dummy.rotation.set(Math.PI / 2, 0, safeAngle);
+        const markerScale = 0.7 + pulse * 0.08 + gate.flash * 0.4;
+        dummy.scale.set(markerScale, markerScale, markerScale);
+        dummy.updateMatrix();
+        safeRef.current.setMatrixAt(i, dummy.matrix);
+
+        const markerColor = colorScratch
+          .copy(SEA)
+          .lerp(WHITE, 0.35 + pulse * 0.3 + gate.flash * 0.3);
+        safeRef.current.setColorAt(i, markerColor);
       }
 
-      // If we fell below, end
-      if (w.pos.y < -6) {
-        knotHopState.end();
-      }
+      bulgeRef.current.instanceMatrix.needsUpdate = true;
+      safeRef.current.instanceMatrix.needsUpdate = true;
+      if (bulgeRef.current.instanceColor) bulgeRef.current.instanceColor.needsUpdate = true;
+      if (safeRef.current.instanceColor) safeRef.current.instanceColor.needsUpdate = true;
     }
 
-    // Update refs
-    if (ballRef.current) {
-      ballRef.current.position.copy(w.pos);
+    for (let i = TRAIL_POINTS - 1; i > 0; i -= 1) {
+      const ptr = i * 3;
+      const prev = (i - 1) * 3;
+      trailAttr.array[ptr] = trailAttr.array[prev];
+      trailAttr.array[ptr + 1] = trailAttr.array[prev + 1];
+      trailAttr.array[ptr + 2] = -i * 0.14;
     }
 
-    // Update platform meshes
-    for (let i = 0; i < platforms.length; i++) {
-      const p = platforms[i];
-      const g = platformRefs.current[i];
-      if (g) {
-        g.position.set(p.x, 0, p.z);
-        g.rotation.y = p.baseYaw;
+    trailAttr.array[0] = px;
+    trailAttr.array[1] = py;
+    trailAttr.array[2] = 0;
+    trailAttr.needsUpdate = true;
 
-        // Current platform visually twists
-        if (i === w.currentIndex) {
-          g.rotation.y = p.yaw;
-        }
-      }
+    for (let i = 0; i < SPIRAL_POINTS; i += 1) {
+      const t = i / (SPIRAL_POINTS - 1);
+      const z = -t * 58;
+      const turn = runtime.elapsed * 0.34 - t * 18;
+      const sx = Math.cos(turn) * (CORE_RADIUS + 0.08);
+      const sy = Math.sin(turn) * (CORE_RADIUS + 0.08);
+      spiralPoints[i].set(sx, sy, z);
 
-      const gem = gemRefs.current[i];
-      if (gem) {
-        gem.visible = p.hasGem;
-      }
+      const ptr = i * 3;
+      spiralFlat[ptr] = sx;
+      spiralFlat[ptr + 1] = sy;
+      spiralFlat[ptr + 2] = z;
     }
 
-    // Camera follow behind current heading
-    if (current) {
-      const followYaw = w.grounded ? current.yaw : current.baseYaw;
-      const fwd = forwardFromYaw(followYaw);
-      const desired = w.pos
-        .clone()
-        .add(new THREE.Vector3(0, 6.2, 0))
-        .add(fwd.clone().multiplyScalar(-9));
+    const spiralGeom: any = spiralLineRef.current?.geometry;
+    if (spiralGeom?.setFromPoints) spiralGeom.setFromPoints(spiralPoints);
+    else if (spiralGeom?.setPositions) spiralGeom.setPositions(spiralFlat);
 
-      camera.position.lerp(desired, 1 - Math.exp(-delta * 6));
-      camera.lookAt(w.pos.x, 0, w.pos.z);
-    }
-
-    clearFrameInput(input);
+    clearFrameInput(inputRef);
   });
-
-  const ballMaterial = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
-      color: new THREE.Color(ballSkin.color),
-      emissive: new THREE.Color(ballSkin.emissive ?? '#000000'),
-      emissiveIntensity: ballSkin.emissive ? 0.7 : 0.0,
-      roughness: ballSkin.roughness ?? 0.35,
-      metalness: ballSkin.metalness ?? 0.12,
-    });
-  }, [
-    ballSkin.color,
-    ballSkin.emissive,
-    ballSkin.roughness,
-    ballSkin.metalness,
-  ]);
-
-  const flipPlatformTwist = (i: number) => {
-    if (snap.phase !== 'playing' || uiSnap.paused) return;
-    if (i !== world.current.currentIndex) return;
-    const p = platforms[i];
-    if (p) p.twistSpeed *= -1;
-  };
 
   return (
     <>
+      <PerspectiveCamera makeDefault position={[0, 3.3, 7.2]} fov={45} />
+      <color attach="background" args={['#9adad2']} />
+      <fog attach="fog" args={['#9adad2', 8, 42]} />
+
       <KnotHopUI />
 
-      {/* World lights */}
-      <ambientLight intensity={0.72} color="#e8f0ff" />
-      <pointLight position={[0, 7, 2]} intensity={0.32} color="#7ad8ff" />
-      <pointLight position={[3, 5, -4]} intensity={0.28} color="#ff9ed1" />
-      <directionalLight
-        position={[8, 14, 6]}
-        intensity={1.22}
-        color="#fffaf5"
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-far={50}
-        shadow-camera-left={-12}
-        shadow-camera-right={12}
-        shadow-camera-top={12}
-        shadow-camera-bottom={-12}
-        shadow-bias={-0.0002}
-      />
-      <directionalLight
-        position={[-4, 6, -3]}
-        intensity={0.46}
-        color="#a8c8ff"
-      />
+      <Stars radius={86} depth={50} count={820} factor={1.9} saturation={0.3} fade speed={0.22} />
 
-      {/* Platforms */}
-      {platforms.map((p, i) => (
-        <group
-          key={p.id}
-          ref={(el) => {
-            if (el) platformRefs.current[i] = el;
-          }}
-          position={[p.x, 0, p.z]}
-          rotation={[0, p.baseYaw, 0]}
-        >
-          {/* Base */}
-          <mesh
-            position={[0, -GAME.platformHeight / 2, 0]}
-            castShadow
-            receiveShadow
-          >
-            <boxGeometry args={[p.width, GAME.platformHeight, p.length]} />
-            <meshStandardMaterial
-              color={theme.edgeColor}
-              roughness={0.45}
-              metalness={0.12}
-              emissive={new THREE.Color(theme.edgeColor)}
-              emissiveIntensity={0.04}
-            />
-          </mesh>
-          {/* Top — click to flip twist direction */}
-          <mesh
-            position={[0, 0.02, 0]}
-            castShadow
-            receiveShadow
-            onClick={(e) => {
-              e.stopPropagation();
-              flipPlatformTwist(i);
-            }}
-            onPointerOver={() => {
-              if (snap.phase === 'playing' && i === world.current.currentIndex)
-                gl.domElement.style.cursor = 'pointer';
-            }}
-            onPointerOut={() => {
-              gl.domElement.style.cursor = 'default';
-            }}
-          >
-            <boxGeometry args={[p.width * 0.96, 0.08, p.length * 0.96]} />
-            <meshStandardMaterial
-              color={theme.topColor}
-              roughness={0.24}
-              metalness={0.18}
-              emissive={new THREE.Color(theme.topColor)}
-              emissiveIntensity={0.16}
-            />
-          </mesh>
+      <ambientLight intensity={0.86} />
+      <hemisphereLight args={['#f2fff9', '#79b8b1', 0.52]} />
+      <directionalLight position={[3.2, 5.6, 4]} intensity={0.84} color="#fafff1" />
+      <pointLight position={[-3.1, 2.2, -8]} intensity={0.42} color="#66d5c5" />
+      <pointLight position={[2.7, 1.8, -9]} intensity={0.3} color="#7bd5ff" />
 
-          {/* Gem */}
-          <mesh
-            ref={(el) => {
-              if (el) gemRefs.current[i] = el;
-            }}
-            position={[0, 0.48, 0]}
-            rotation={[0, Math.PI / 4, 0]}
-            castShadow
-          >
-            <octahedronGeometry args={[0.17, 0]} />
-            <meshStandardMaterial
-              color="#FB7185"
-              emissive="#FB7185"
-              emissiveIntensity={0.55}
-              roughness={0.12}
-              metalness={0.15}
-            />
-          </mesh>
-        </group>
-      ))}
+      <mesh position={[0, 0, -10]}>
+        <planeGeometry args={[22, 14]} />
+        <shaderMaterial
+          ref={bgMatRef}
+          uniforms={{ uTime: { value: 0 } }}
+          vertexShader={`
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+          `}
+          fragmentShader={`
+            uniform float uTime;
+            varying vec2 vUv;
+            void main() {
+              vec3 sea = vec3(0.28, 0.82, 0.74);
+              vec3 sky = vec3(0.56, 0.86, 0.97);
+              vec3 mist = vec3(0.88, 0.99, 0.97);
 
-      {/* Ground — soft shadow */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, -0.5, 0]}
-        receiveShadow
-      >
-        <planeGeometry args={[120, 120]} />
-        <shadowMaterial transparent opacity={0.2} />
+              float grad = smoothstep(0.0, 1.0, vUv.y);
+              float waves = 0.5 + 0.5 * sin((vUv.x * 2.1 + uTime * 0.12) * 6.2831853);
+              float drift = 0.5 + 0.5 * sin((vUv.y * 3.1 + uTime * 0.07) * 6.2831853);
+
+              vec3 col = mix(sea, sky, grad * 0.72);
+              col = mix(col, mist, (1.0 - grad) * 0.22 + waves * 0.08 + drift * 0.06);
+              gl_FragColor = vec4(col, 1.0);
+            }
+          `}
+          toneMapped={false}
+        />
       </mesh>
 
-      {/* Player */}
-      <mesh ref={ballRef} material={ballMaterial} castShadow>
-        <sphereGeometry args={[world.current.radius, 32, 32]} />
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -24]}>
+        <cylinderGeometry args={[CORE_RADIUS, CORE_RADIUS, 78, 18, 1, true]} />
+        <meshStandardMaterial
+          ref={coreMatRef}
+          color="#f0fffb"
+          emissive="#5acdb9"
+          emissiveIntensity={0.34}
+          roughness={0.2}
+          metalness={0.15}
+        />
       </mesh>
 
-      {/* Popups */}
-      {world.current.popups.map((p) => (
-        <Html
-          key={p.id}
-          position={p.position}
-          center
-          style={{ pointerEvents: 'none' }}
-        >
-          <div
-            style={{
-              fontFamily:
-                'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-              fontWeight: 900,
-              fontSize: 18,
-              color: 'rgba(0,0,0,0.75)',
-              textShadow: '0 12px 24px rgba(255,255,255,0.75)',
-              animation: 'knothop-pop 900ms ease-out forwards',
-            }}
-          >
-            {p.text}
-          </div>
-        </Html>
-      ))}
+      <Line
+        ref={spiralLineRef}
+        points={spiralPoints}
+        color="#cafff6"
+        lineWidth={1.3}
+        transparent
+        opacity={0.52}
+      />
+
+      <instancedMesh ref={bulgeRef} args={[undefined, undefined, KNOT_BULGES]}>
+        <sphereGeometry args={[1, 12, 12]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.28}
+          metalness={0.12}
+          emissive="#2f8376"
+          emissiveIntensity={0.36}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={safeRef} args={[undefined, undefined, KNOT_POOL]}>
+        <torusGeometry args={[0.18, 0.04, 10, 24]} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.85}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </instancedMesh>
+
+      <mesh ref={playerRef} position={[0, ORBIT_RADIUS, PLAYER_Z]}>
+        <sphereGeometry args={[0.24, 24, 24]} />
+        <meshStandardMaterial
+          color="#fffef6"
+          emissive="#6df1de"
+          emissiveIntensity={0.48}
+          roughness={0.14}
+          metalness={0.2}
+        />
+      </mesh>
+
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[ORBIT_RADIUS, 0.012, 8, 64]} />
+        <meshBasicMaterial color="#dbfff7" transparent opacity={0.42} toneMapped={false} />
+      </mesh>
+
+      <points geometry={trailGeometry}>
+        <pointsMaterial color="#f6fffe" size={0.06} sizeAttenuation transparent opacity={0.64} />
+      </points>
+
+      <EffectComposer enableNormalPass={false} multisampling={0}>
+        <Bloom intensity={0.58} luminanceThreshold={0.48} luminanceSmoothing={0.24} mipmapBlur />
+        <Vignette eskil={false} offset={0.1} darkness={0.3} />
+        <Noise premultiply opacity={0.01} />
+      </EffectComposer>
     </>
   );
 }
 
-export { knotHopState };
+export default KnotHop;

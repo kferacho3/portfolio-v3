@@ -1,182 +1,103 @@
 import { proxy } from 'valtio';
 
-import {
-  BALL_SKINS,
-  DEFAULT_BALL,
-  DEFAULT_THEME,
-  PLATFORM_THEMES,
-  STORAGE_KEYS,
-} from './constants';
-import type { KnotHopPhase } from './types';
+export type KnotHopPhase = 'menu' | 'playing' | 'gameover';
 
-function safeJSONParse<T>(raw: string | null, fallback: T): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
+const BEST_KEY = 'knothop_hyper_best_v2';
 
-function uniq(arr: string[]): string[] {
-  return Array.from(new Set(arr));
-}
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 
-const BALL_IDS = BALL_SKINS.map((s) => s.id);
-const THEME_IDS = PLATFORM_THEMES.map((t) => t.id);
+const readBest = () => {
+  if (typeof window === 'undefined') return 0;
+  const raw = window.localStorage.getItem(BEST_KEY);
+  const parsed = Number(raw ?? 0);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+};
 
-const COSTS = {
-  ball: 60,
-  theme: 80,
+const writeBest = (score: number) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
 };
 
 export const knotHopState = proxy({
   phase: 'menu' as KnotHopPhase,
   score: 0,
   best: 0,
+  combo: 0,
+  knotsPassed: 0,
+  perfects: 0,
+  speed: 0,
 
-  runGems: 0,
-  totalGems: 0,
+  gameOver: false,
+  resetVersion: 0,
 
-  unlockedBalls: [DEFAULT_BALL] as string[],
-  unlockedThemes: [DEFAULT_THEME] as string[],
-  selectedBall: DEFAULT_BALL,
-  selectedTheme: DEFAULT_THEME,
+  toastText: '',
+  toastTime: 0,
 
-  toast: '' as string,
-  toastUntil: 0,
-
-  worldSeed: Math.floor(Math.random() * 1e9),
-
-  load: () => {
-    if (typeof window === 'undefined') return;
-
-    knotHopState.best =
-      Number(localStorage.getItem(STORAGE_KEYS.best) ?? '0') || 0;
-    knotHopState.totalGems =
-      Number(localStorage.getItem(STORAGE_KEYS.gems) ?? '0') || 0;
-
-    knotHopState.unlockedBalls = uniq(
-      safeJSONParse<string[]>(
-        localStorage.getItem(STORAGE_KEYS.unlockedBalls),
-        [DEFAULT_BALL]
-      ).filter((id) => BALL_IDS.includes(id))
-    );
-
-    knotHopState.unlockedThemes = uniq(
-      safeJSONParse<string[]>(
-        localStorage.getItem(STORAGE_KEYS.unlockedThemes),
-        [DEFAULT_THEME]
-      ).filter((id) => THEME_IDS.includes(id))
-    );
-
-    const selectedBall =
-      localStorage.getItem(STORAGE_KEYS.selectedBall) ?? DEFAULT_BALL;
-    if (knotHopState.unlockedBalls.includes(selectedBall))
-      knotHopState.selectedBall = selectedBall;
-
-    const selectedTheme =
-      localStorage.getItem(STORAGE_KEYS.selectedTheme) ?? DEFAULT_THEME;
-    if (knotHopState.unlockedThemes.includes(selectedTheme))
-      knotHopState.selectedTheme = selectedTheme;
+  load() {
+    this.best = readBest();
   },
 
-  save: () => {
-    if (typeof window === 'undefined') return;
-
-    localStorage.setItem(STORAGE_KEYS.best, String(knotHopState.best));
-    localStorage.setItem(STORAGE_KEYS.gems, String(knotHopState.totalGems));
-    localStorage.setItem(
-      STORAGE_KEYS.unlockedBalls,
-      JSON.stringify(knotHopState.unlockedBalls)
-    );
-    localStorage.setItem(
-      STORAGE_KEYS.unlockedThemes,
-      JSON.stringify(knotHopState.unlockedThemes)
-    );
-    localStorage.setItem(STORAGE_KEYS.selectedBall, knotHopState.selectedBall);
-    localStorage.setItem(
-      STORAGE_KEYS.selectedTheme,
-      knotHopState.selectedTheme
-    );
+  reset() {
+    this.resetVersion += 1;
+    this.phase = 'menu';
+    this.score = 0;
+    this.combo = 0;
+    this.knotsPassed = 0;
+    this.perfects = 0;
+    this.speed = 0;
+    this.gameOver = false;
+    this.toastText = '';
+    this.toastTime = 0;
   },
 
-  start: () => {
-    knotHopState.phase = 'playing';
-    knotHopState.score = 0;
-    knotHopState.runGems = 0;
-    knotHopState.toast = '';
-    knotHopState.toastUntil = 0;
-    knotHopState.worldSeed = Math.floor(Math.random() * 1e9);
+  start() {
+    this.phase = 'playing';
+    this.score = 0;
+    this.combo = 0;
+    this.knotsPassed = 0;
+    this.perfects = 0;
+    this.speed = 0;
+    this.gameOver = false;
+    this.toastText = '';
+    this.toastTime = 0;
   },
 
-  end: () => {
-    knotHopState.phase = 'gameover';
-
-    if (knotHopState.score > knotHopState.best)
-      knotHopState.best = knotHopState.score;
-
-    knotHopState.totalGems += knotHopState.runGems;
-    knotHopState.runGems = 0;
-
-    knotHopState.save();
+  tick(dt: number) {
+    if (this.phase !== 'playing') return;
+    this.toastTime = Math.max(0, this.toastTime - dt);
   },
 
-  addGem: (amount = 1) => {
-    knotHopState.runGems += amount;
+  setToast(text: string, duration = 0.55) {
+    this.toastText = text;
+    this.toastTime = Math.max(this.toastTime, duration);
   },
 
-  setBall: (id: string) => {
-    if (!knotHopState.unlockedBalls.includes(id)) return;
-    knotHopState.selectedBall = id;
-    knotHopState.save();
+  updateHud(hud: {
+    score: number;
+    combo: number;
+    knotsPassed: number;
+    perfects: number;
+    speed: number;
+  }) {
+    if (this.phase !== 'playing') return;
+    this.score = Math.max(0, Math.floor(hud.score));
+    this.combo = Math.max(0, Math.floor(hud.combo));
+    this.knotsPassed = Math.max(0, Math.floor(hud.knotsPassed));
+    this.perfects = Math.max(0, Math.floor(hud.perfects));
+    this.speed = clamp(hud.speed, 0, 999);
   },
 
-  setTheme: (id: string) => {
-    if (!knotHopState.unlockedThemes.includes(id)) return;
-    knotHopState.selectedTheme = id;
-    knotHopState.save();
-  },
+  end(finalScore: number) {
+    const score = Math.max(0, Math.floor(finalScore));
+    this.phase = 'gameover';
+    this.score = score;
+    this.gameOver = true;
 
-  unlockRandomBall: () => {
-    if (knotHopState.totalGems < COSTS.ball) return;
-
-    const locked = BALL_IDS.filter(
-      (id) => !knotHopState.unlockedBalls.includes(id)
-    );
-    if (locked.length === 0) {
-      knotHopState.toast = 'All balls unlocked';
-      knotHopState.toastUntil = Date.now() + 2000;
-      return;
+    const nextBest = Math.max(this.best, score);
+    if (nextBest !== this.best) {
+      this.best = nextBest;
+      writeBest(nextBest);
     }
-
-    const id = locked[Math.floor(Math.random() * locked.length)];
-    knotHopState.totalGems -= COSTS.ball;
-    knotHopState.unlockedBalls = uniq([...knotHopState.unlockedBalls, id]);
-    knotHopState.selectedBall = id;
-    knotHopState.toast = `Unlocked ball: ${BALL_SKINS.find((b) => b.id === id)?.name ?? id}`;
-    knotHopState.toastUntil = Date.now() + 2500;
-    knotHopState.save();
-  },
-
-  unlockRandomTheme: () => {
-    if (knotHopState.totalGems < COSTS.theme) return;
-
-    const locked = THEME_IDS.filter(
-      (id) => !knotHopState.unlockedThemes.includes(id)
-    );
-    if (locked.length === 0) {
-      knotHopState.toast = 'All platform colors unlocked';
-      knotHopState.toastUntil = Date.now() + 2000;
-      return;
-    }
-
-    const id = locked[Math.floor(Math.random() * locked.length)];
-    knotHopState.totalGems -= COSTS.theme;
-    knotHopState.unlockedThemes = uniq([...knotHopState.unlockedThemes, id]);
-    knotHopState.selectedTheme = id;
-    knotHopState.toast = `Unlocked platform: ${PLATFORM_THEMES.find((t) => t.id === id)?.name ?? id}`;
-    knotHopState.toastUntil = Date.now() + 2500;
-    knotHopState.save();
   },
 });

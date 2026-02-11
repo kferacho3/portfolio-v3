@@ -6,128 +6,101 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
-import { create } from 'zustand';
+
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
-import { consumeFixedStep, createFixedStepState, shakeNoiseSigned } from '../_shared/hyperUpgradeKit';
+import {
+  consumeFixedStep,
+  createFixedStepState,
+  shakeNoiseSigned,
+} from '../_shared/hyperUpgradeKit';
 import { tetherDriftState } from './state';
-
-type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
-
-type Anchor = {
-  z: number;
-  baseX: number;
-  baseY: number;
-  swayAmp: number;
-  swayFreq: number;
-  swayPhase: number;
-  broken: boolean;
-};
 
 type Gate = {
   z: number;
-  x: number;
-  y: number;
-  radius: number;
-  thickness: number;
-  resolved: boolean;
-  shock: number;
+  gapX: number;
+  gapW: number;
+  hue: number;
+  passed: boolean;
+  pulse: number;
+  flash: number;
 };
 
-type Debris = {
+type Pickup = {
   z: number;
   x: number;
-  y: number;
-  size: number;
-  spin: number;
   active: boolean;
-};
-
-type Tether = {
-  anchorIndex: number;
-  len: number;
-  holdTime: number;
-  broken: boolean;
+  collected: boolean;
+  spin: number;
+  hue: number;
 };
 
 type Runtime = {
   elapsed: number;
   distance: number;
+  speed: number;
   score: number;
-  playerX: number;
-  playerY: number;
-  prevX: number;
-  prevY: number;
-  forwardSpeed: number;
-  perfectStreak: number;
-  perfectCount: number;
   gatesPassed: number;
-  missedConsecutive: number;
-  gateSerial: number;
-  targetAnchorIndex: number;
-  anchorCursorZ: number;
+  perfects: number;
+  pickupsCollected: number;
+  combo: number;
+  comboTimer: number;
+
+  anchorX: number;
+  anchorVel: number;
+  drifterX: number;
+  drifterVel: number;
+
+  tetherLen: number;
+  tetherTargetLen: number;
+  tension: number;
+  holdVisual: number;
+
+  serial: number;
+  waveSeed: number;
   gateCursorZ: number;
-  debrisCursorZ: number;
+  pickupCursorZ: number;
   hudCommit: number;
   shake: number;
-  tapHoldGrace: number;
-  tether: Tether | null;
-  anchors: Anchor[];
+
+  guideX: number;
+  guideZ: number;
+
   gates: Gate[];
-  debris: Debris[];
+  pickups: Pickup[];
 };
 
-type TetherStore = {
-  status: GameStatus;
-  score: number;
-  best: number;
-  gatesPassed: number;
-  perfectStreak: number;
-  missedConsecutive: number;
-  tethered: boolean;
-  startRun: () => void;
-  endRun: (score: number) => void;
-  resetToStart: () => void;
-  setTethered: (tethered: boolean) => void;
-  updateHud: (hud: {
-    score: number;
-    gatesPassed: number;
-    perfectStreak: number;
-    missedConsecutive: number;
-  }) => void;
-};
+const BEST_KEY = 'tether_drift_hyper_best_v2';
 
-const BEST_KEY = 'tether_drift_hyper_best_v1';
+const GATE_POOL = 44;
+const PICKUP_POOL = 34;
+const TETHER_POINT_COUNT = 14;
+const TRAIL_POINT_COUNT = 48;
 
-const ANCHOR_POOL = 88;
-const GATE_POOL = 58;
-const DEBRIS_POOL = 52;
-const TETHER_POINT_COUNT = 20;
-const TRAIL_POINT_COUNT = 36;
+const FIELD_HALF_X = 4.6;
+const GATE_HEIGHT = 2.7;
+const GATE_DEPTH = 0.42;
+const PLAYER_RADIUS = 0.24;
+const PICKUP_RADIUS = 0.2;
 
-const PLAYER_RADIUS = 0.2;
-const PLAY_X = 3.55;
-const PLAY_Y = 2.45;
+const ANCHOR_Y = 0.26;
+const ANCHOR_Z = 0.8;
+const PLAYER_Y = 0.2;
+const PLAYER_Z = 0;
 
-const ANCHOR_FORWARD_MIN = -12.5;
-const ANCHOR_FORWARD_MAX = -0.15;
-const ATTACH_MAX_DIST = 4.7;
-const ATTACH_CONE_COS = Math.cos((66 * Math.PI) / 180);
+const START_SPEED = 7.2;
+const MAX_SPEED = 16.2;
 
-const CYAN = new THREE.Color('#6bf0ff');
-const MINT = new THREE.Color('#3be3ba');
-const MAGENTA = new THREE.Color('#ff5be7');
-const HOT = new THREE.Color('#ff7d6f');
-const WARN = new THREE.Color('#ffc46b');
-const SKY = new THREE.Color('#b9ecff');
-const WATER = new THREE.Color('#67d3ff');
-const CORAL = new THREE.Color('#ff8d95');
-const WHITE = new THREE.Color('#f8fcff');
+const MINT = new THREE.Color('#57d6c9');
+const CORAL = new THREE.Color('#ff9d6c');
+const PEARL = new THREE.Color('#fff8ef');
+const SUN = new THREE.Color('#ffd9a8');
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 let audioContextRef: AudioContext | null = null;
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 const readBest = () => {
@@ -147,11 +120,12 @@ const maybeVibrate = (ms: number) => {
   if ('vibrate' in navigator) navigator.vibrate(ms);
 };
 
-const playTone = (frequency: number, duration = 0.05, volume = 0.035) => {
+const playTone = (frequency: number, duration = 0.05, volume = 0.03) => {
   if (typeof window === 'undefined') return;
   const Context =
     window.AudioContext ||
-    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    (window as Window & { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
   if (!Context) return;
 
   if (!audioContextRef) {
@@ -169,8 +143,10 @@ const playTone = (frequency: number, duration = 0.05, volume = 0.035) => {
   osc.type = 'sine';
   osc.frequency.value = frequency;
   gain.gain.value = volume;
+
   osc.connect(gain);
   gain.connect(ctx.destination);
+
   const t0 = ctx.currentTime;
   gain.gain.setValueAtTime(volume, t0);
   gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
@@ -178,247 +154,275 @@ const playTone = (frequency: number, duration = 0.05, volume = 0.035) => {
   osc.stop(t0 + duration);
 };
 
-const useTetherStore = create<TetherStore>((set) => ({
-  status: 'START',
-  score: 0,
-  best: readBest(),
-  gatesPassed: 0,
-  perfectStreak: 0,
-  missedConsecutive: 0,
-  tethered: false,
-  startRun: () =>
-    set({
-      status: 'PLAYING',
-      score: 0,
-      gatesPassed: 0,
-      perfectStreak: 0,
-      missedConsecutive: 0,
-      tethered: false,
-    }),
-  endRun: (score) =>
-    set((state) => {
-      const nextBest = Math.max(state.best, Math.floor(score));
-      if (nextBest !== state.best) writeBest(nextBest);
-      return {
-        status: 'GAMEOVER',
-        score: Math.floor(score),
-        tethered: false,
-        best: nextBest,
-      };
-    }),
-  resetToStart: () =>
-    set({
-      status: 'START',
-      score: 0,
-      gatesPassed: 0,
-      perfectStreak: 0,
-      missedConsecutive: 0,
-      tethered: false,
-    }),
-  setTethered: (tethered) => set({ tethered }),
-  updateHud: (hud) =>
-    set({
-      score: Math.floor(hud.score),
-      gatesPassed: hud.gatesPassed,
-      perfectStreak: hud.perfectStreak,
-      missedConsecutive: hud.missedConsecutive,
-    }),
-}));
-
-const createAnchor = (): Anchor => ({
-  z: -10,
-  baseX: 0,
-  baseY: 0,
-  swayAmp: 0.2,
-  swayFreq: 1,
-  swayPhase: 0,
-  broken: false,
-});
-
 const createGate = (): Gate => ({
   z: -10,
-  x: 0,
-  y: 0,
-  radius: 1.2,
-  thickness: 0.12,
-  resolved: false,
-  shock: 0,
+  gapX: 0,
+  gapW: 2.8,
+  hue: 0,
+  passed: false,
+  pulse: 0,
+  flash: 0,
 });
 
-const createDebris = (): Debris => ({
+const createPickup = (): Pickup => ({
   z: -10,
   x: 0,
-  y: 0,
-  size: 0.2,
-  spin: 0,
   active: true,
+  collected: false,
+  spin: 0,
+  hue: 0,
 });
 
 const createRuntime = (): Runtime => ({
   elapsed: 0,
   distance: 0,
+  speed: START_SPEED,
   score: 0,
-  playerX: 0,
-  playerY: 0,
-  prevX: 0,
-  prevY: 0,
-  forwardSpeed: 8.6,
-  perfectStreak: 0,
-  perfectCount: 0,
   gatesPassed: 0,
-  missedConsecutive: 0,
-  gateSerial: 0,
-  targetAnchorIndex: -1,
-  anchorCursorZ: -15,
-  gateCursorZ: -18,
-  debrisCursorZ: -14,
+  perfects: 0,
+  pickupsCollected: 0,
+  combo: 0,
+  comboTimer: 0,
+
+  anchorX: 0,
+  anchorVel: 0,
+  drifterX: 0,
+  drifterVel: 0,
+
+  tetherLen: 1.8,
+  tetherTargetLen: 1.8,
+  tension: 0,
+  holdVisual: 0,
+
+  serial: 0,
+  waveSeed: Math.random() * Math.PI * 2,
+  gateCursorZ: -10,
+  pickupCursorZ: -8,
   hudCommit: 0,
   shake: 0,
-  tapHoldGrace: 0,
-  tether: null,
-  anchors: Array.from({ length: ANCHOR_POOL }, createAnchor),
+
+  guideX: 0,
+  guideZ: -6,
+
   gates: Array.from({ length: GATE_POOL }, createGate),
-  debris: Array.from({ length: DEBRIS_POOL }, createDebris),
+  pickups: Array.from({ length: PICKUP_POOL }, createPickup),
 });
 
 const difficultyAt = (runtime: Runtime) =>
-  clamp(runtime.elapsed / 78 + runtime.gatesPassed / 130, 0, 1);
-
-const anchorPosition = (anchor: Anchor, time: number) => ({
-  x: anchor.baseX + Math.sin(time * anchor.swayFreq + anchor.swayPhase) * anchor.swayAmp,
-  y:
-    anchor.baseY +
-    Math.cos(time * (anchor.swayFreq * 0.82) + anchor.swayPhase * 1.3) * (anchor.swayAmp * 0.78),
-});
-
-const seedAnchor = (anchor: Anchor, runtime: Runtime, z: number) => {
-  const d = difficultyAt(runtime);
-  anchor.z = z;
-  anchor.baseX = (Math.random() * 2 - 1) * lerp(1.4, 2.85, d);
-  anchor.baseY = (Math.random() * 2 - 1) * lerp(1.0, 1.95, d);
-  anchor.swayAmp = lerp(0.12, 0.5, d);
-  anchor.swayFreq = lerp(0.72, 1.7, d) + Math.random() * 0.3;
-  anchor.swayPhase = Math.random() * Math.PI * 2;
-  const brokenChance = d < 0.45 ? 0 : lerp(0, 0.27, (d - 0.45) / 0.55);
-  anchor.broken = Math.random() < brokenChance;
-};
+  clamp(runtime.distance / 260 + runtime.gatesPassed / 150, 0, 1);
 
 const seedGate = (gate: Gate, runtime: Runtime, z: number) => {
   const d = difficultyAt(runtime);
-  runtime.gateSerial += 1;
-  const phase = runtime.gateSerial * 0.64;
+  runtime.serial += 1;
+  const curve =
+    Math.sin(runtime.serial * 0.62 + runtime.waveSeed) * lerp(0.8, 3.1, d);
+  const jitter = (Math.random() * 2 - 1) * lerp(0.2, 0.85, d);
+
   gate.z = z;
-  gate.x = Math.sin(phase * 0.9 + Math.random() * 0.6) * lerp(0.85, 2.25, d);
-  gate.y = Math.cos(phase * 0.72 + 0.35) * lerp(0.65, 1.8, d);
-  gate.radius = clamp(lerp(1.26, 0.72, d) + (Math.random() * 2 - 1) * 0.12, 0.62, 1.4);
-  gate.thickness = clamp(lerp(0.14, 0.085, d), 0.08, 0.16);
-  gate.resolved = false;
-  gate.shock = 0;
+  gate.gapX = clamp(curve + jitter, -FIELD_HALF_X + 0.95, FIELD_HALF_X - 0.95);
+  gate.gapW = clamp(
+    lerp(3.2, 1.35, d) + (Math.random() * 2 - 1) * 0.3,
+    1.15,
+    3.35
+  );
+  gate.hue = Math.random();
+  gate.passed = false;
+  gate.pulse = Math.random() * Math.PI * 2;
+  gate.flash = 0;
 };
 
-const seedDebris = (debris: Debris, runtime: Runtime, z: number) => {
+const seedPickup = (pickup: Pickup, runtime: Runtime, z: number) => {
   const d = difficultyAt(runtime);
-  debris.z = z;
-  debris.active = Math.random() < lerp(0.24, 0.68, d);
-  debris.x = (Math.random() * 2 - 1) * lerp(1.8, 3.2, d);
-  debris.y = (Math.random() * 2 - 1) * lerp(1.4, 2.25, d);
-  debris.size = clamp(lerp(0.14, 0.34, d) + Math.random() * 0.08, 0.12, 0.42);
-  debris.spin = (Math.random() * 2 - 1) * lerp(0.6, 2.2, d);
+  pickup.z = z;
+  pickup.active = Math.random() < lerp(0.45, 0.78, d);
+  pickup.collected = false;
+  pickup.spin = (Math.random() * 2 - 1) * lerp(1.2, 3.2, d);
+  pickup.hue = Math.random();
+
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const base = Math.sin((runtime.serial + Math.random()) * 0.68 + runtime.waveSeed);
+  const bias = base * lerp(0.9, 2.6, d) + side * lerp(0.2, 0.95, d);
+  pickup.x = clamp(bias, -FIELD_HALF_X + 0.35, FIELD_HALF_X - 0.35);
 };
 
 const resetRuntime = (runtime: Runtime) => {
   runtime.elapsed = 0;
   runtime.distance = 0;
+  runtime.speed = START_SPEED;
   runtime.score = 0;
-  runtime.playerX = 0;
-  runtime.playerY = 0;
-  runtime.prevX = 0;
-  runtime.prevY = 0;
-  runtime.forwardSpeed = 8.6;
-  runtime.perfectStreak = 0;
-  runtime.perfectCount = 0;
   runtime.gatesPassed = 0;
-  runtime.missedConsecutive = 0;
-  runtime.gateSerial = 0;
-  runtime.targetAnchorIndex = -1;
-  runtime.anchorCursorZ = -13;
-  runtime.gateCursorZ = -16;
-  runtime.debrisCursorZ = -12;
+  runtime.perfects = 0;
+  runtime.pickupsCollected = 0;
+  runtime.combo = 0;
+  runtime.comboTimer = 0;
+
+  runtime.anchorX = 0;
+  runtime.anchorVel = 0;
+  runtime.drifterX = 0;
+  runtime.drifterVel = 0;
+
+  runtime.tetherLen = 1.8;
+  runtime.tetherTargetLen = 1.8;
+  runtime.tension = 0;
+  runtime.holdVisual = 0;
+
+  runtime.serial = 0;
+  runtime.waveSeed = Math.random() * Math.PI * 2;
+  runtime.gateCursorZ = -9;
+  runtime.pickupCursorZ = -7;
   runtime.hudCommit = 0;
   runtime.shake = 0;
-  runtime.tapHoldGrace = 0;
-  runtime.tether = null;
+  runtime.guideX = 0;
+  runtime.guideZ = -6;
 
-  for (const anchor of runtime.anchors) {
-    seedAnchor(anchor, runtime, runtime.anchorCursorZ);
-    runtime.anchorCursorZ -= 1.45 + Math.random() * 1.05;
-  }
   for (const gate of runtime.gates) {
     seedGate(gate, runtime, runtime.gateCursorZ);
-    runtime.gateCursorZ -= 2.7 + Math.random() * 1.6;
+    runtime.gateCursorZ -= 4.4 + Math.random() * 1.5;
   }
-  for (const debris of runtime.debris) {
-    seedDebris(debris, runtime, runtime.debrisCursorZ);
-    runtime.debrisCursorZ -= 1.95 + Math.random() * 1.6;
+
+  for (const pickup of runtime.pickups) {
+    seedPickup(pickup, runtime, runtime.pickupCursorZ);
+    runtime.pickupCursorZ -= 3.6 + Math.random() * 1.7;
   }
 };
 
+const findLeadGate = (runtime: Runtime): Gate | null => {
+  let lead: Gate | null = null;
+  let leadZ = -Infinity;
+  for (const gate of runtime.gates) {
+    if (gate.z >= -0.45 || gate.z < -22) continue;
+    if (gate.z > leadZ) {
+      lead = gate;
+      leadZ = gate.z;
+    }
+  }
+  return lead;
+};
+
+const syncHud = (runtime: Runtime, holding: boolean) => {
+  const stability = clamp(
+    100 - Math.abs(runtime.drifterX) * 11 - runtime.tension * 34,
+    15,
+    100
+  );
+  tetherDriftState.phase = 'playing';
+  tetherDriftState.score = Math.floor(runtime.score);
+  tetherDriftState.health = Math.round(stability);
+  tetherDriftState.gameOver = false;
+  tetherDriftState.chain = runtime.combo;
+  tetherDriftState.chainTime = runtime.comboTimer;
+  tetherDriftState.heat = Math.round(runtime.tension * 100);
+  tetherDriftState.speed = runtime.speed;
+  tetherDriftState.reeling = holding;
+  tetherDriftState.perfects = runtime.perfects;
+  tetherDriftState.constellationsCleared = runtime.gatesPassed;
+  tetherDriftState.elapsed = runtime.elapsed;
+};
+
+const beginRun = (runtime: Runtime) => {
+  resetRuntime(runtime);
+  tetherDriftState.phase = 'playing';
+  tetherDriftState.score = 0;
+  tetherDriftState.health = 100;
+  tetherDriftState.gameOver = false;
+  tetherDriftState.chain = 0;
+  tetherDriftState.chainTime = 0;
+  tetherDriftState.heat = 0;
+  tetherDriftState.speed = START_SPEED;
+  tetherDriftState.reeling = false;
+  tetherDriftState.perfectFlash = 0;
+  tetherDriftState.perfects = 0;
+  tetherDriftState.constellationsCleared = 0;
+  tetherDriftState.toastText = '';
+  tetherDriftState.toastTime = 0;
+  tetherDriftState.slowMoTime = 0;
+  tetherDriftState.elapsed = 0;
+};
+
+const endRun = (runtime: Runtime) => {
+  const finalScore = Math.max(0, Math.floor(runtime.score));
+  const nextBest = Math.max(tetherDriftState.bestScore, finalScore);
+  if (nextBest !== tetherDriftState.bestScore) {
+    tetherDriftState.bestScore = nextBest;
+    writeBest(nextBest);
+  }
+
+  tetherDriftState.phase = 'gameover';
+  tetherDriftState.score = finalScore;
+  tetherDriftState.health = 0;
+  tetherDriftState.gameOver = true;
+  tetherDriftState.reeling = false;
+  tetherDriftState.speed = runtime.speed;
+  tetherDriftState.chainTime = 0;
+  tetherDriftState.toastText = '';
+  tetherDriftState.toastTime = 0;
+};
+
 function TetherDriftOverlay() {
-  const status = useTetherStore((state) => state.status);
-  const score = useTetherStore((state) => state.score);
-  const best = useTetherStore((state) => state.best);
-  const gatesPassed = useTetherStore((state) => state.gatesPassed);
-  const perfectStreak = useTetherStore((state) => state.perfectStreak);
-  const missedConsecutive = useTetherStore((state) => state.missedConsecutive);
-  const tethered = useTetherStore((state) => state.tethered);
+  const snap = useSnapshot(tetherDriftState);
+  const flash = clamp(snap.perfectFlash * 2.2, 0, 1);
 
   return (
     <div className="absolute inset-0 pointer-events-none select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/14 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
-        <div className="text-xs uppercase tracking-[0.24em] text-cyan-100/80">Tether Drift</div>
-        <div className="text-[11px] text-cyan-50/80">Hold or tap to latch nearest blue anchor. Release to drift.</div>
+      <div className="absolute left-4 top-4 rounded-md border border-amber-100/50 bg-gradient-to-br from-emerald-500/24 via-cyan-500/18 to-orange-500/24 px-3 py-2 backdrop-blur-[2px]">
+        <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">Tether Drift</div>
+        <div className="text-[11px] text-cyan-50/85">Hold to reel the tether. Release to drift wide.</div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-violet-100/55 bg-gradient-to-br from-violet-500/24 via-fuchsia-500/16 to-cyan-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
-        <div className="text-2xl font-black tabular-nums">{score}</div>
-        <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {best}</div>
+      <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/60 via-cyan-800/40 to-orange-700/35 px-3 py-2 text-right backdrop-blur-[2px]">
+        <div className="text-2xl font-black tabular-nums">{snap.score}</div>
+        <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {snap.bestScore}</div>
       </div>
 
-      {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-cyan-900/30 to-violet-900/26 px-3 py-2 text-xs text-white/90">
+      {snap.phase === 'playing' && (
+        <div
+          className="absolute left-4 top-[92px] rounded-md border border-white/30 bg-black/35 px-3 py-2 text-xs text-white/90"
+          style={{ boxShadow: `0 0 ${18 * flash}px rgba(255, 230, 180, ${0.55 * flash})` }}
+        >
           <div>
-            Gates <span className="font-semibold text-cyan-200">{gatesPassed}</span>
+            Gates <span className="font-semibold text-cyan-100">{snap.constellationsCleared}</span>
           </div>
           <div>
-            Perfect Streak <span className="font-semibold text-fuchsia-200">{perfectStreak}</span>
+            Combo <span className="font-semibold text-emerald-100">x{Math.max(1, snap.chain)}</span>
           </div>
           <div>
-            Misses <span className="font-semibold text-orange-200">{missedConsecutive}/3</span>
+            Speed <span className="font-semibold text-amber-100">{snap.speed.toFixed(1)}</span>
           </div>
           <div>
-            Tether <span className="font-semibold">{tethered ? 'LOCKED' : 'DRIFT'}</span>
+            Tension <span className="font-semibold text-orange-100">{Math.round(snap.heat)}%</span>
+          </div>
+          <div>
+            Mode <span className="font-semibold">{snap.reeling ? 'REEL' : 'DRIFT'}</span>
           </div>
         </div>
       )}
 
-      {status === 'START' && (
+      {snap.toastTime > 0 && snap.toastText && (
+        <div className="absolute inset-x-0 top-20 flex justify-center">
+          <div className="rounded-md border border-amber-100/50 bg-black/45 px-4 py-1 text-sm font-semibold tracking-[0.12em] text-amber-100">
+            {snap.toastText}
+          </div>
+        </div>
+      )}
+
+      {snap.phase === 'menu' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/82 via-cyan-950/46 to-violet-950/36 px-6 py-5 text-center backdrop-blur-md">
+          <div className="rounded-xl border border-amber-100/45 bg-gradient-to-br from-slate-900/78 via-cyan-900/45 to-amber-800/28 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">TETHER DRIFT</div>
-            <div className="mt-2 text-sm text-white/85">Tap to begin. Hold to tether, release to slingshot.</div>
-            <div className="mt-1 text-sm text-white/85">Fly through ring centers. Avoid ring rims and debris.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Miss 3 gates in a row and you crash.</div>
+            <div className="mt-2 text-sm text-white/85">The lead drone drifts forward. Your orb follows on an elastic line.</div>
+            <div className="mt-1 text-sm text-white/85">Thread every slit gate with the trailing orb. Hold to tighten. Release to swing out.</div>
+            <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
           </div>
         </div>
       )}
 
-      {status === 'GAMEOVER' && (
+      {snap.phase === 'gameover' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/44 to-violet-950/32 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black text-fuchsia-200">Drift Lost</div>
-            <div className="mt-2 text-sm text-white/80">Score {score}</div>
-            <div className="mt-1 text-sm text-white/75">Best {best}</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+          <div className="rounded-xl border border-orange-100/45 bg-gradient-to-br from-black/84 via-orange-900/44 to-cyan-900/32 px-6 py-5 text-center backdrop-blur-md">
+            <div className="text-2xl font-black text-amber-100">Tension Snapped</div>
+            <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
+            <div className="mt-1 text-sm text-white/75">Best {snap.bestScore}</div>
+            <div className="mt-3 text-sm text-cyan-100/90">Tap to run again.</div>
           </div>
         </div>
       )}
@@ -428,21 +432,22 @@ function TetherDriftOverlay() {
 
 function TetherDriftScene() {
   const resetVersion = useSnapshot(tetherDriftState).resetVersion;
+  const phase = useSnapshot(tetherDriftState).phase;
+
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
   });
 
   const runtimeRef = useRef<Runtime>(createRuntime());
+  const fixedStepRef = useRef(createFixedStepState());
 
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
-  const anchorMeshRef = useRef<THREE.InstancedMesh>(null);
-  const gateMeshRef = useRef<THREE.InstancedMesh>(null);
-  const gateCoreRef = useRef<THREE.InstancedMesh>(null);
-  const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
-  const shockMeshRef = useRef<THREE.InstancedMesh>(null);
+  const gateLeftRef = useRef<THREE.InstancedMesh>(null);
+  const gateRightRef = useRef<THREE.InstancedMesh>(null);
+  const gateWindowRef = useRef<THREE.InstancedMesh>(null);
+  const pickupRef = useRef<THREE.InstancedMesh>(null);
+  const anchorRef = useRef<THREE.Mesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
-  const targetAnchorRef = useRef<THREE.Mesh>(null);
-  const fixedStepRef = useRef(createFixedStepState());
   const tetherLineRef = useRef<any>(null);
   const guideLineRef = useRef<any>(null);
 
@@ -450,11 +455,16 @@ function TetherDriftScene() {
   const colorScratch = useMemo(() => new THREE.Color(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
+
   const tetherPoints = useMemo(
-    () => Array.from({ length: TETHER_POINT_COUNT }, () => new THREE.Vector3(0, 0.25, 0)),
+    () => Array.from({ length: TETHER_POINT_COUNT }, () => new THREE.Vector3()),
     []
   );
-  const tetherFlat = useMemo(() => new Float32Array(TETHER_POINT_COUNT * 3), []);
+  const tetherFlat = useMemo(
+    () => new Float32Array(TETHER_POINT_COUNT * 3),
+    []
+  );
+
   const guidePoints = useMemo(
     () => [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)],
     []
@@ -473,31 +483,29 @@ function TetherDriftScene() {
 
   const { camera } = useThree();
 
+  const primeTrail = (x: number) => {
+    for (let i = 0; i < TRAIL_POINT_COUNT; i += 1) {
+      const ptr = i * 3;
+      trailAttr.array[ptr] = x;
+      trailAttr.array[ptr + 1] = PLAYER_Y;
+      trailAttr.array[ptr + 2] = -i * 0.12;
+    }
+    trailAttr.needsUpdate = true;
+  };
+
   useEffect(() => {
+    const best = readBest();
+    tetherDriftState.bestScore = Math.max(tetherDriftState.bestScore, best);
     resetRuntime(runtimeRef.current);
-    useTetherStore.getState().resetToStart();
+    primeTrail(0);
   }, []);
 
   useEffect(() => {
+    const best = readBest();
+    tetherDriftState.bestScore = Math.max(tetherDriftState.bestScore, best);
     resetRuntime(runtimeRef.current);
-    useTetherStore.getState().resetToStart();
+    primeTrail(0);
   }, [resetVersion]);
-
-  useEffect(() => {
-    const snap = useTetherStore.getState();
-    tetherDriftState.score = snap.score;
-    tetherDriftState.bestScore = snap.best;
-    tetherDriftState.gameOver = snap.status === 'GAMEOVER';
-
-    const unsubscribe = useTetherStore.subscribe((storeState) => {
-      tetherDriftState.score = storeState.score;
-      tetherDriftState.bestScore = storeState.best;
-      tetherDriftState.gameOver = storeState.status === 'GAMEOVER';
-      tetherDriftState.chain = storeState.perfectStreak;
-      tetherDriftState.health = clamp(100 - storeState.missedConsecutive * 50, 0, 100);
-    });
-    return () => unsubscribe();
-  }, []);
 
   useEffect(
     () => () => {
@@ -507,368 +515,357 @@ function TetherDriftScene() {
     [trailAttr, trailGeometry]
   );
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
-    if (step.steps <= 0) {
-      return;
-    }
+    if (step.steps <= 0) return;
+
     const dt = step.dt;
     const runtime = runtimeRef.current;
-    const game = useTetherStore.getState();
     const input = inputRef.current;
 
-    runtime.tapHoldGrace = Math.max(0, runtime.tapHoldGrace - dt);
-    const holdDown =
-      input.pointerDown ||
-      input.keysDown.has(' ') ||
-      runtime.tapHoldGrace > 0;
+    tetherDriftState.toastTime = Math.max(0, tetherDriftState.toastTime - dt);
+    tetherDriftState.perfectFlash = Math.max(0, tetherDriftState.perfectFlash - dt * 2.8);
+
     const tap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
-    const released = runtime.tether && !holdDown;
+    const restart = input.justPressed.has('r');
 
-    if (tap && game.status !== 'PLAYING') {
-      resetRuntime(runtime);
-      useTetherStore.getState().startRun();
-      for (let i = 0; i < TRAIL_POINT_COUNT; i += 1) {
-        const ptr = i * 3;
-        trailAttr.array[ptr] = runtime.playerX;
-        trailAttr.array[ptr + 1] = runtime.playerY + 0.2;
-        trailAttr.array[ptr + 2] = 0;
-      }
-      trailAttr.needsUpdate = true;
-    } else if (tap && game.status === 'PLAYING') {
-      // Small grace makes single taps feel responsive on touch devices.
-      runtime.tapHoldGrace = 0.2;
+    if ((tap || restart) && tetherDriftState.phase !== 'playing') {
+      beginRun(runtime);
+      primeTrail(runtime.drifterX);
+      maybeVibrate(12);
+      playTone(560, 0.06, 0.028);
+    } else if (restart && tetherDriftState.phase === 'playing') {
+      beginRun(runtime);
+      primeTrail(runtime.drifterX);
     }
 
-    if (game.status === 'PLAYING') {
+    const holding =
+      tetherDriftState.phase === 'playing' &&
+      (input.pointerDown ||
+        input.keysDown.has(' ') ||
+        input.keysDown.has('space') ||
+        input.keysDown.has('enter'));
+
+    if (tetherDriftState.phase === 'playing') {
       runtime.elapsed += dt;
+      runtime.comboTimer = Math.max(0, runtime.comboTimer - dt);
+      if (runtime.comboTimer <= 0) runtime.combo = 0;
+
       const d = difficultyAt(runtime);
-      runtime.forwardSpeed = lerp(8.6, 14.2, d);
+      runtime.speed = lerp(START_SPEED, MAX_SPEED, d);
       runtime.hudCommit += dt;
 
-      for (const anchor of runtime.anchors) {
-        anchor.z += runtime.forwardSpeed * dt;
-        if (anchor.z > 8.6) {
-          seedAnchor(anchor, runtime, runtime.anchorCursorZ);
-          runtime.anchorCursorZ -= lerp(1.95, 1.2, d) + Math.random() * 0.85;
-        }
-      }
       for (const gate of runtime.gates) {
-        gate.z += runtime.forwardSpeed * dt;
-        gate.shock = Math.max(0, gate.shock - dt * 2.9);
-        if (gate.z > 8.8) {
+        gate.z += runtime.speed * dt;
+        gate.flash = Math.max(0, gate.flash - dt * 3.4);
+
+        if (gate.z > 9) {
           seedGate(gate, runtime, runtime.gateCursorZ);
-          runtime.gateCursorZ -= lerp(3.8, 2.2, d) + Math.random() * 1.4;
-        }
-      }
-      for (const debris of runtime.debris) {
-        debris.z += runtime.forwardSpeed * dt;
-        if (debris.z > 8.2) {
-          seedDebris(debris, runtime, runtime.debrisCursorZ);
-          runtime.debrisCursorZ -= lerp(2.8, 1.4, d) + Math.random() * 1.2;
+          runtime.gateCursorZ -= lerp(5.9, 3.7, d) + Math.random() * 1.5;
         }
       }
 
-      let bestIndex = -1;
-      let bestDist3 = 999;
-      for (let i = 0; i < runtime.anchors.length; i += 1) {
-        const anchor = runtime.anchors[i];
-        if (anchor.z < ANCHOR_FORWARD_MIN || anchor.z > ANCHOR_FORWARD_MAX) continue;
-
-        const world = anchorPosition(anchor, runtime.elapsed);
-        const dx = world.x - runtime.playerX;
-        const dy = world.y - runtime.playerY;
-        const planar = Math.hypot(dx, dy);
-        if (planar > ATTACH_MAX_DIST) continue;
-
-        const len3 = Math.hypot(dx, dy, anchor.z);
-        if (len3 <= 0.0001) continue;
-        const forwardCos = -anchor.z / len3;
-        if (forwardCos < ATTACH_CONE_COS) continue;
-        if (len3 < bestDist3) {
-          bestDist3 = len3;
-          bestIndex = i;
-        }
-      }
-      runtime.targetAnchorIndex = bestIndex;
-
-      if (holdDown && !runtime.tether && bestIndex >= 0) {
-        const anchor = runtime.anchors[bestIndex];
-        const world = anchorPosition(anchor, runtime.elapsed);
-        const length = Math.hypot(world.x - runtime.playerX, world.y - runtime.playerY);
-        runtime.tether = {
-          anchorIndex: bestIndex,
-          len: clamp(length, 0.65, 3.95),
-          holdTime: 0,
-          broken: anchor.broken,
-        };
-        useTetherStore.getState().setTethered(true);
-        maybeVibrate(10);
-        playTone(840, 0.04, 0.03);
-        runtime.shake = Math.min(1.2, runtime.shake + 0.42);
-      }
-
-      const oldX = runtime.playerX;
-      const oldY = runtime.playerY;
-      const drag = Math.exp(-lerp(0.9, 1.45, d) * dt);
-      const vx = (runtime.playerX - runtime.prevX) * drag;
-      const vy = (runtime.playerY - runtime.prevY) * drag;
-      const accelX = -runtime.playerX * 0.16 + Math.sin(runtime.elapsed * 0.82) * 0.04;
-      const accelY = -runtime.playerY * 0.14 + Math.cos(runtime.elapsed * 0.63) * 0.03;
-
-      runtime.playerX += vx + accelX * dt * dt * 46;
-      runtime.playerY += vy + accelY * dt * dt * 46;
-      runtime.prevX = oldX;
-      runtime.prevY = oldY;
-
-      if (runtime.tether) {
-        const anchor = runtime.anchors[runtime.tether.anchorIndex];
-        const world = anchorPosition(anchor, runtime.elapsed);
-        runtime.tether.holdTime += dt;
-        runtime.tether.len = Math.max(0.44, runtime.tether.len - lerp(1.9, 3.9, d) * dt);
-
-        const dx = runtime.playerX - world.x;
-        const dy = runtime.playerY - world.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > runtime.tether.len && dist > 0.0001) {
-          const inv = runtime.tether.len / dist;
-          runtime.playerX = world.x + dx * inv;
-          runtime.playerY = world.y + dy * inv;
-        }
-
-        if (runtime.tether.broken && runtime.tether.holdTime > 0.5) {
-          runtime.tether = null;
-          useTetherStore.getState().setTethered(false);
-          maybeVibrate(8);
-          playTone(260, 0.05, 0.035);
-          runtime.shake = Math.min(1.2, runtime.shake + 0.32);
+      for (const pickup of runtime.pickups) {
+        pickup.z += runtime.speed * dt;
+        if (pickup.z > 8.5) {
+          seedPickup(pickup, runtime, runtime.pickupCursorZ);
+          runtime.pickupCursorZ -= lerp(4.8, 2.8, d) + Math.random() * 1.8;
         }
       }
 
-      if (released) {
-        runtime.tether = null;
-        useTetherStore.getState().setTethered(false);
+      const leadGate = findLeadGate(runtime);
+      runtime.guideX = leadGate ? leadGate.gapX : runtime.anchorX;
+      runtime.guideZ = leadGate ? leadGate.z : -6;
+
+      const driftWave =
+        Math.sin(runtime.elapsed * 0.9 + runtime.waveSeed) * 1.1 +
+        Math.sin(runtime.elapsed * 0.43 + 1.7) * 0.65;
+      const leadBias = leadGate ? leadGate.gapX * 0.66 : 0;
+      const anchorTarget = clamp(
+        driftWave * 0.55 + leadBias,
+        -FIELD_HALF_X * 0.82,
+        FIELD_HALF_X * 0.82
+      );
+
+      runtime.anchorVel += (anchorTarget - runtime.anchorX) * (7.4 + d * 3.7) * dt;
+      runtime.anchorVel *= Math.exp(-(4.8 + d * 1.6) * dt);
+      runtime.anchorX += runtime.anchorVel * dt;
+
+      runtime.tetherTargetLen = holding
+        ? lerp(0.48, 0.35, d)
+        : lerp(2.15, 2.75, d * 0.7);
+      runtime.tetherLen = lerp(
+        runtime.tetherLen,
+        runtime.tetherTargetLen,
+        1 - Math.exp(-8.8 * dt)
+      );
+      runtime.holdVisual = lerp(
+        runtime.holdVisual,
+        holding ? 1 : 0,
+        1 - Math.exp(-12 * dt)
+      );
+
+      const dx = runtime.drifterX - runtime.anchorX;
+      const dist = Math.abs(dx);
+      const dir = dx >= 0 ? 1 : -1;
+      const stretch = Math.max(0, dist - runtime.tetherLen);
+      const ropeForce = -dir * stretch * (86 + d * 58);
+      const centerForce = -runtime.drifterX * (0.62 + d * 0.42);
+      const carryForce = runtime.anchorVel * 0.28;
+
+      runtime.drifterVel += (ropeForce + centerForce + carryForce) * dt;
+      runtime.drifterVel *= Math.exp(-(2.8 + runtime.holdVisual * 1.6) * dt);
+      runtime.drifterX += runtime.drifterVel * dt;
+
+      const postDx = runtime.drifterX - runtime.anchorX;
+      const maxDist = runtime.tetherLen * 1.05;
+      if (Math.abs(postDx) > maxDist) {
+        const side = postDx >= 0 ? 1 : -1;
+        runtime.drifterX = runtime.anchorX + side * maxDist;
+        const outwardVel = runtime.drifterVel * side;
+        if (outwardVel > 0) {
+          runtime.drifterVel -= outwardVel * 0.88 * side;
+        }
       }
 
-      const velX = runtime.playerX - runtime.prevX;
-      const velY = runtime.playerY - runtime.prevY;
-      const velMag = Math.hypot(velX, velY);
-      const maxVel = lerp(0.24, 0.45, d);
-      if (velMag > maxVel && velMag > 0.0001) {
-        const scale = maxVel / velMag;
-        runtime.prevX = runtime.playerX - velX * scale;
-        runtime.prevY = runtime.playerY - velY * scale;
-      }
+      runtime.tension = clamp(
+        Math.abs(runtime.drifterX - runtime.anchorX) /
+          Math.max(0.0001, runtime.tetherLen),
+        0,
+        1
+      );
 
-      let gameOver = false;
-      if (Math.abs(runtime.playerX) > PLAY_X + PLAYER_RADIUS || Math.abs(runtime.playerY) > PLAY_Y + PLAYER_RADIUS) {
-        gameOver = true;
+      let crashed = false;
+
+      if (Math.abs(runtime.drifterX) > FIELD_HALF_X - PLAYER_RADIUS * 0.44) {
+        crashed = true;
       }
 
       for (const gate of runtime.gates) {
-        if (gameOver) break;
-        if (Math.abs(gate.z) < gate.thickness + 0.26) {
-          const dx = runtime.playerX - gate.x;
-          const dy = runtime.playerY - gate.y;
-          const radialDist = Math.hypot(dx, dy);
-          if (Math.abs(radialDist - gate.radius) < (gate.thickness + PLAYER_RADIUS * 0.36) * 0.9) {
-            gameOver = true;
+        if (crashed) break;
+        if (!gate.passed && gate.z > PLAYER_Z + GATE_DEPTH * 0.5) {
+          gate.passed = true;
+
+          const safeHalf = Math.max(0.09, gate.gapW * 0.5 - PLAYER_RADIUS * 0.84);
+          const offset = Math.abs(runtime.drifterX - gate.gapX);
+
+          if (offset > safeHalf) {
+            crashed = true;
             break;
           }
-        }
 
-        if (!gate.resolved && gate.z > 0.2) {
-          gate.resolved = true;
-          const dx = runtime.playerX - gate.x;
-          const dy = runtime.playerY - gate.y;
-          const radialDist = Math.hypot(dx, dy);
-          const passThreshold = gate.radius - gate.thickness * 1.15;
-          if (radialDist < passThreshold) {
-            const perfect = radialDist < Math.min(0.22, gate.radius * 0.2);
-            runtime.gatesPassed += 1;
-            runtime.missedConsecutive = 0;
-            if (perfect) {
-              runtime.perfectStreak += 1;
-              runtime.perfectCount += 1;
-              runtime.score += 40 + runtime.perfectStreak * 10;
-              gate.shock = 1;
-              runtime.shake = Math.min(1.2, runtime.shake + 0.28);
-              playTone(980, 0.06, 0.035);
-            } else {
-              runtime.perfectStreak = 0;
-              runtime.score += 18;
+          runtime.gatesPassed += 1;
+          const perfectWindow = Math.max(0.1, gate.gapW * 0.14);
+          const perfect = offset < perfectWindow;
+
+          if (perfect) {
+            runtime.combo = Math.min(runtime.combo + 1, 24);
+            runtime.comboTimer = 2.2;
+            runtime.perfects += 1;
+            runtime.score += 28 + runtime.combo * 7;
+            runtime.shake = Math.min(1.3, runtime.shake + 0.2);
+            gate.flash = 1;
+            tetherDriftState.perfectFlash = 0.26;
+            if (runtime.combo >= 2) {
+              tetherDriftState.toastText = `FLOW x${runtime.combo}`;
+              tetherDriftState.toastTime = 0.42;
             }
-            runtime.score += 8 + Math.floor(runtime.forwardSpeed * 1.3);
+            maybeVibrate(5);
+            playTone(900 + runtime.combo * 8, 0.06, 0.032);
           } else {
-            runtime.missedConsecutive += 1;
-            runtime.perfectStreak = 0;
-            if (runtime.missedConsecutive >= 3) {
-              gameOver = true;
-              break;
-            }
+            runtime.comboTimer = Math.max(runtime.comboTimer, 0.95);
+            runtime.score += 16 + Math.floor(runtime.speed * 0.8);
+            gate.flash = 0.55;
+            playTone(640, 0.035, 0.022);
           }
         }
       }
 
-      for (const debris of runtime.debris) {
-        if (gameOver) break;
-        if (!debris.active) continue;
-        if (Math.abs(debris.z) > 0.58) continue;
-        const dx = runtime.playerX - debris.x;
-        const dy = runtime.playerY - debris.y;
-        if (Math.hypot(dx, dy) < debris.size + PLAYER_RADIUS * 0.8) {
-          gameOver = true;
-          break;
+      for (const pickup of runtime.pickups) {
+        if (crashed) break;
+        if (!pickup.active || pickup.collected) continue;
+        if (Math.abs(pickup.z - PLAYER_Z) > 0.52) continue;
+
+        if (Math.abs(pickup.x - runtime.drifterX) < PICKUP_RADIUS + PLAYER_RADIUS * 0.8) {
+          pickup.collected = true;
+          runtime.pickupsCollected += 1;
+          runtime.score += 24 + runtime.combo * 4;
+          runtime.shake = Math.min(1.3, runtime.shake + 0.12);
+          playTone(1040, 0.05, 0.03);
         }
       }
 
-      if (gameOver) {
-        runtime.score += Math.floor(runtime.distance);
-        useTetherStore.getState().endRun(runtime.score);
-        useTetherStore.getState().setTethered(false);
+      if (crashed) {
+        runtime.shake = 1.2;
+        maybeVibrate(20);
+        playTone(200, 0.12, 0.055);
+        endRun(runtime);
       } else {
-        runtime.distance += runtime.forwardSpeed * dt * 0.24;
-        runtime.score = Math.max(runtime.score, Math.floor(runtime.distance) + runtime.gatesPassed * 6);
+        runtime.distance += runtime.speed * dt;
+        const paceScore = runtime.distance * 0.72;
+        const progression =
+          runtime.gatesPassed * 18 + runtime.perfects * 8 + runtime.pickupsCollected * 6;
+        runtime.score = Math.max(runtime.score, Math.floor(paceScore + progression));
+
         if (runtime.hudCommit >= 0.08) {
           runtime.hudCommit = 0;
-          useTetherStore.getState().updateHud({
-            score: runtime.score,
-            gatesPassed: runtime.gatesPassed,
-            perfectStreak: runtime.perfectStreak,
-            missedConsecutive: runtime.missedConsecutive,
-          });
+          syncHud(runtime, holding);
         }
       }
+    } else {
+      runtime.elapsed += dt * 0.55;
+      runtime.anchorX = Math.sin(runtime.elapsed * 0.82 + runtime.waveSeed) * 0.6;
+      runtime.drifterX = lerp(
+        runtime.drifterX,
+        runtime.anchorX + Math.sin(runtime.elapsed * 1.35) * 0.55,
+        1 - Math.exp(-2.3 * dt)
+      );
+      runtime.drifterVel *= Math.exp(-3.4 * dt);
+      runtime.tetherLen = lerp(runtime.tetherLen, 1.8, 1 - Math.exp(-2.8 * dt));
+      runtime.holdVisual = lerp(runtime.holdVisual, 0, 1 - Math.exp(-4.2 * dt));
+      runtime.tension = clamp(
+        Math.abs(runtime.drifterX - runtime.anchorX) /
+          Math.max(0.0001, runtime.tetherLen),
+        0,
+        1
+      );
+      runtime.guideX = runtime.anchorX;
+      runtime.guideZ = -6;
     }
 
-    runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
-    const shakeAmp = runtime.shake * 0.06;
-    const shakeTime = runtime.elapsed * 21;
-    const jitterX = shakeNoiseSigned(shakeTime, 2.2) * shakeAmp;
-    const jitterY = shakeNoiseSigned(shakeTime, 7.7) * shakeAmp * 0.4;
-    const jitterZ = shakeNoiseSigned(shakeTime, 13.9) * shakeAmp * 0.42;
-    camTarget.set(runtime.playerX * 0.44 + jitterX, 4.45 + runtime.playerY * 0.22 + jitterY, 7.45 + jitterZ);
-    lookTarget.set(runtime.playerX * 0.33, runtime.playerY * 0.45, -3.35);
-    camera.position.lerp(camTarget, 1 - Math.exp(-6.5 * step.renderDt));
+    runtime.shake = Math.max(0, runtime.shake - dt * 4.7);
+    const shakeAmp = runtime.shake * 0.07;
+    const shakeTime = runtime.elapsed * 19;
+    const jitterX = shakeNoiseSigned(shakeTime, 1.1) * shakeAmp;
+    const jitterY = shakeNoiseSigned(shakeTime, 4.7) * shakeAmp * 0.35;
+    const jitterZ = shakeNoiseSigned(shakeTime, 8.9) * shakeAmp * 0.5;
+
+    camTarget.set(runtime.drifterX * 0.35 + jitterX, 3.05 + jitterY, 7.2 + jitterZ);
+    lookTarget.set(runtime.drifterX * 0.24, 0.18, -2.8);
+    camera.position.lerp(camTarget, 1 - Math.exp(-6.6 * step.renderDt));
     camera.lookAt(lookTarget);
 
-    if (playerRef.current) {
-      playerRef.current.position.set(runtime.playerX, runtime.playerY + 0.22, 0);
-    }
     if (bgMatRef.current) {
       bgMatRef.current.uniforms.uTime.value += dt;
     }
 
-    if (targetAnchorRef.current) {
-      if (game.status === 'PLAYING' && !runtime.tether && runtime.targetAnchorIndex >= 0) {
-        const anchor = runtime.anchors[runtime.targetAnchorIndex];
-        const world = anchorPosition(anchor, runtime.elapsed);
-        const pulse = 1 + Math.sin(runtime.elapsed * 8.6) * 0.16;
-        targetAnchorRef.current.visible = true;
-        targetAnchorRef.current.position.set(world.x, world.y + 0.24, anchor.z + 0.02);
-        targetAnchorRef.current.scale.setScalar(1.18 * pulse);
-      } else {
-        targetAnchorRef.current.visible = false;
-      }
+    if (anchorRef.current) {
+      anchorRef.current.position.set(runtime.anchorX, ANCHOR_Y, ANCHOR_Z);
+      const pulse = 1 + Math.sin(runtime.elapsed * 8.2) * 0.05;
+      anchorRef.current.scale.setScalar(pulse + runtime.holdVisual * 0.12);
     }
 
-    if (anchorMeshRef.current) {
-      for (let i = 0; i < runtime.anchors.length; i += 1) {
-        const anchor = runtime.anchors[i];
-        const world = anchorPosition(anchor, runtime.elapsed);
-        dummy.position.set(world.x, world.y + 0.24, anchor.z);
-        dummy.rotation.set(0, runtime.elapsed * 0.35, 0);
-        dummy.scale.set(anchor.broken ? 0.16 : 0.18, anchor.broken ? 0.16 : 0.18, 0.16);
-        dummy.updateMatrix();
-        anchorMeshRef.current.setMatrixAt(i, dummy.matrix);
-        const anchorPulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 3.8 + i * 0.42);
-        const anchorColor = colorScratch
-          .copy(anchor.broken ? CORAL : CYAN)
-          .lerp(anchor.broken ? WARN : SKY, 0.36 + anchorPulse * 0.24);
-        anchorMeshRef.current.setColorAt(i, anchorColor);
-      }
-      anchorMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (anchorMeshRef.current.instanceColor) anchorMeshRef.current.instanceColor.needsUpdate = true;
+    if (playerRef.current) {
+      playerRef.current.position.set(runtime.drifterX, PLAYER_Y, PLAYER_Z);
+      const pulse = 1 + runtime.tension * 0.14 + Math.sin(runtime.elapsed * 6.8) * 0.03;
+      playerRef.current.scale.set(pulse, 1 - runtime.tension * 0.08, pulse);
     }
 
-    if (gateMeshRef.current && shockMeshRef.current && gateCoreRef.current) {
+    if (gateLeftRef.current && gateRightRef.current && gateWindowRef.current) {
       for (let i = 0; i < runtime.gates.length; i += 1) {
         const gate = runtime.gates[i];
-        const radius = gate.radius;
-        const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 4.1 + i * 0.4);
-        dummy.position.set(gate.x, gate.y + 0.23, gate.z);
-        dummy.rotation.set(0, 0, 0);
-        dummy.scale.set(radius, radius, 1);
-        dummy.updateMatrix();
-        gateMeshRef.current.setMatrixAt(i, dummy.matrix);
-        const gateColor = colorScratch
-          .copy(MINT)
-          .lerp(CYAN, 0.3 + pulse * 0.22)
-          .lerp(WHITE, gate.shock * 0.42);
-        gateMeshRef.current.setColorAt(i, gateColor);
+        const halfGap = gate.gapW * 0.5;
+        const gapLeft = gate.gapX - halfGap;
+        const gapRight = gate.gapX + halfGap;
 
-        dummy.position.set(gate.x, gate.y + 0.23, gate.z + 0.03);
-        dummy.rotation.set(0, 0, 0);
-        const coreScale = 0.085 + pulse * 0.02;
-        dummy.scale.setScalar(coreScale);
-        dummy.updateMatrix();
-        gateCoreRef.current.setMatrixAt(i, dummy.matrix);
-        gateCoreRef.current.setColorAt(i, WHITE);
+        const leftWidth = Math.max(0, gapLeft + FIELD_HALF_X);
+        const rightWidth = Math.max(0, FIELD_HALF_X - gapRight);
 
-        if (gate.shock > 0) {
-          const s = 1 + (1 - gate.shock) * 1.9;
-          dummy.position.set(gate.x, gate.y + 0.23, gate.z + 0.02);
+        const phasePulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 3.7 + gate.pulse);
+
+        if (leftWidth > 0.02) {
+          dummy.position.set(-FIELD_HALF_X + leftWidth * 0.5, 0.2, gate.z);
           dummy.rotation.set(0, 0, 0);
-          dummy.scale.set(radius * s, radius * s, 1);
+          dummy.scale.set(leftWidth, GATE_HEIGHT, GATE_DEPTH);
           dummy.updateMatrix();
-          shockMeshRef.current.setMatrixAt(i, dummy.matrix);
-          shockMeshRef.current.setColorAt(i, MAGENTA);
+          gateLeftRef.current.setMatrixAt(i, dummy.matrix);
+          const gateColor = colorScratch
+            .setHSL(0.48 + gate.hue * 0.12, 0.78, 0.42 + phasePulse * 0.12)
+            .lerp(SUN, gate.flash * 0.35);
+          gateLeftRef.current.setColorAt(i, gateColor);
         } else {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
-          shockMeshRef.current.setMatrixAt(i, dummy.matrix);
-          shockMeshRef.current.setColorAt(i, MAGENTA);
+          gateLeftRef.current.setMatrixAt(i, dummy.matrix);
+          gateLeftRef.current.setColorAt(i, MINT);
         }
+
+        if (rightWidth > 0.02) {
+          dummy.position.set(gapRight + rightWidth * 0.5, 0.2, gate.z);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.set(rightWidth, GATE_HEIGHT, GATE_DEPTH);
+          dummy.updateMatrix();
+          gateRightRef.current.setMatrixAt(i, dummy.matrix);
+          const gateColor = colorScratch
+            .setHSL(0.46 + gate.hue * 0.1, 0.75, 0.42 + phasePulse * 0.14)
+            .lerp(CORAL, gate.flash * 0.28);
+          gateRightRef.current.setColorAt(i, gateColor);
+        } else {
+          dummy.position.copy(OFFSCREEN_POS);
+          dummy.scale.copy(TINY_SCALE);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          gateRightRef.current.setMatrixAt(i, dummy.matrix);
+          gateRightRef.current.setColorAt(i, MINT);
+        }
+
+        dummy.position.set(gate.gapX, 0.2, gate.z + 0.01);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.set(gate.gapW, 0.7, 1);
+        dummy.updateMatrix();
+        gateWindowRef.current.setMatrixAt(i, dummy.matrix);
+        const windowColor = colorScratch
+          .copy(MINT)
+          .lerp(PEARL, 0.28 + phasePulse * 0.26 + gate.flash * 0.35);
+        gateWindowRef.current.setColorAt(i, windowColor);
       }
-      gateMeshRef.current.instanceMatrix.needsUpdate = true;
-      shockMeshRef.current.instanceMatrix.needsUpdate = true;
-      gateCoreRef.current.instanceMatrix.needsUpdate = true;
-      if (gateMeshRef.current.instanceColor) gateMeshRef.current.instanceColor.needsUpdate = true;
-      if (shockMeshRef.current.instanceColor) shockMeshRef.current.instanceColor.needsUpdate = true;
-      if (gateCoreRef.current.instanceColor) gateCoreRef.current.instanceColor.needsUpdate = true;
+
+      gateLeftRef.current.instanceMatrix.needsUpdate = true;
+      gateRightRef.current.instanceMatrix.needsUpdate = true;
+      gateWindowRef.current.instanceMatrix.needsUpdate = true;
+      if (gateLeftRef.current.instanceColor) gateLeftRef.current.instanceColor.needsUpdate = true;
+      if (gateRightRef.current.instanceColor) gateRightRef.current.instanceColor.needsUpdate = true;
+      if (gateWindowRef.current.instanceColor) gateWindowRef.current.instanceColor.needsUpdate = true;
     }
 
-    if (debrisMeshRef.current) {
-      for (let i = 0; i < runtime.debris.length; i += 1) {
-        const debris = runtime.debris[i];
-        if (debris.active) {
-          dummy.position.set(debris.x, debris.y + 0.24, debris.z);
-          dummy.rotation.set(runtime.elapsed * debris.spin * 0.6, runtime.elapsed * debris.spin, 0);
-          dummy.scale.set(debris.size, debris.size, debris.size);
+    if (pickupRef.current) {
+      for (let i = 0; i < runtime.pickups.length; i += 1) {
+        const pickup = runtime.pickups[i];
+        if (pickup.active && !pickup.collected) {
+          dummy.position.set(
+            pickup.x,
+            PLAYER_Y + 0.14 + Math.sin(runtime.elapsed * 4 + i * 0.7) * 0.05,
+            pickup.z
+          );
+          dummy.rotation.set(
+            runtime.elapsed * pickup.spin * 0.7,
+            runtime.elapsed * pickup.spin,
+            0
+          );
+          dummy.scale.setScalar(0.16);
           dummy.updateMatrix();
-          debrisMeshRef.current.setMatrixAt(i, dummy.matrix);
-          const debrisColor = colorScratch
-            .copy(HOT)
-            .lerp(MAGENTA, clamp(0.2 + debris.size * 0.9, 0, 0.55))
-            .lerp(WARN, clamp(Math.abs(Math.sin(runtime.elapsed * 1.7 + i * 0.2)) * 0.24, 0, 0.24));
-          debrisMeshRef.current.setColorAt(i, debrisColor);
+          pickupRef.current.setMatrixAt(i, dummy.matrix);
+          const pickupColor = colorScratch
+            .setHSL(0.08 + pickup.hue * 0.11, 0.7, 0.56)
+            .lerp(PEARL, 0.28);
+          pickupRef.current.setColorAt(i, pickupColor);
         } else {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
-          debrisMeshRef.current.setMatrixAt(i, dummy.matrix);
-          debrisMeshRef.current.setColorAt(i, HOT);
+          pickupRef.current.setMatrixAt(i, dummy.matrix);
+          pickupRef.current.setColorAt(i, SUN);
         }
       }
-      debrisMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (debrisMeshRef.current.instanceColor) debrisMeshRef.current.instanceColor.needsUpdate = true;
+      pickupRef.current.instanceMatrix.needsUpdate = true;
+      if (pickupRef.current.instanceColor) pickupRef.current.instanceColor.needsUpdate = true;
     }
 
     for (let i = TRAIL_POINT_COUNT - 1; i > 0; i -= 1) {
@@ -876,103 +873,70 @@ function TetherDriftScene() {
       const prev = (i - 1) * 3;
       trailAttr.array[ptr] = trailAttr.array[prev];
       trailAttr.array[ptr + 1] = trailAttr.array[prev + 1];
-      trailAttr.array[ptr + 2] = trailAttr.array[prev + 2];
+      trailAttr.array[ptr + 2] = -i * 0.12;
     }
-    trailAttr.array[0] = runtime.playerX;
-    trailAttr.array[1] = runtime.playerY + 0.22;
+    trailAttr.array[0] = runtime.drifterX;
+    trailAttr.array[1] = PLAYER_Y;
     trailAttr.array[2] = 0;
     trailAttr.needsUpdate = true;
 
-    if (runtime.tether) {
-      const anchor = runtime.anchors[runtime.tether.anchorIndex];
-      const world = anchorPosition(anchor, runtime.elapsed);
-      const ax = world.x;
-      const ay = world.y + 0.24;
-      const az = anchor.z;
-      const px = runtime.playerX;
-      const py = runtime.playerY + 0.22;
-      const pz = 0;
-      const dx = ax - px;
-      const dy = ay - py;
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len;
-      const ny = dx / len;
-      for (let i = 0; i < TETHER_POINT_COUNT; i += 1) {
-        const t = i / (TETHER_POINT_COUNT - 1);
-        const centerBias = 1 - Math.abs(t * 2 - 1);
-        const hum = Math.sin(runtime.elapsed * 15 + i * 0.75) * (0.11 * centerBias);
-        const sx = lerp(px, ax, t) + nx * hum;
-        const sy = lerp(py, ay, t) + ny * hum;
-        const sz = lerp(pz, az, t);
-        tetherPoints[i].set(sx, sy, sz);
+    const ax = runtime.anchorX;
+    const ay = ANCHOR_Y;
+    const az = ANCHOR_Z;
+    const px = runtime.drifterX;
+    const py = PLAYER_Y;
+    const pz = PLAYER_Z;
 
-        const ptr = i * 3;
-        tetherFlat[ptr] = sx;
-        tetherFlat[ptr + 1] = sy;
-        tetherFlat[ptr + 2] = sz;
-      }
-      const geom: any = tetherLineRef.current?.geometry;
-      if (geom?.setFromPoints) geom.setFromPoints(tetherPoints);
-      else if (geom?.setPositions) geom.setPositions(tetherFlat);
-    } else {
-      const px = runtime.playerX;
-      const py = runtime.playerY + 0.22;
-      for (let i = 0; i < TETHER_POINT_COUNT; i += 1) {
-        tetherPoints[i].set(px, py, 0);
-        const ptr = i * 3;
-        tetherFlat[ptr] = px;
-        tetherFlat[ptr + 1] = py;
-        tetherFlat[ptr + 2] = 0;
-      }
-      const geom: any = tetherLineRef.current?.geometry;
-      if (geom?.setFromPoints) geom.setFromPoints(tetherPoints);
-      else if (geom?.setPositions) geom.setPositions(tetherFlat);
-    }
+    for (let i = 0; i < TETHER_POINT_COUNT; i += 1) {
+      const t = i / (TETHER_POINT_COUNT - 1);
+      const sag =
+        Math.sin(Math.PI * t) *
+        (0.16 * (1 - runtime.holdVisual * 0.55) + runtime.tension * 0.06);
+      const tx = lerp(px, ax, t);
+      const ty = lerp(py, ay, t) - sag;
+      const tz = lerp(pz, az, t);
+      tetherPoints[i].set(tx, ty, tz);
 
-    if (guideLineRef.current) {
-      const px = runtime.playerX;
-      const py = runtime.playerY + 0.22;
-      if (game.status === 'PLAYING' && !runtime.tether && runtime.targetAnchorIndex >= 0) {
-        const anchor = runtime.anchors[runtime.targetAnchorIndex];
-        const world = anchorPosition(anchor, runtime.elapsed);
-        guidePoints[0].set(px, py, 0);
-        guidePoints[1].set(world.x, world.y + 0.24, anchor.z);
-      } else {
-        guidePoints[0].set(px, py, 0);
-        guidePoints[1].set(px, py, 0);
-      }
-      guideFlat[0] = guidePoints[0].x;
-      guideFlat[1] = guidePoints[0].y;
-      guideFlat[2] = guidePoints[0].z;
-      guideFlat[3] = guidePoints[1].x;
-      guideFlat[4] = guidePoints[1].y;
-      guideFlat[5] = guidePoints[1].z;
-      const guideGeom: any = guideLineRef.current.geometry;
-      if (guideGeom?.setFromPoints) guideGeom.setFromPoints(guidePoints);
-      else if (guideGeom?.setPositions) guideGeom.setPositions(guideFlat);
+      const ptr = i * 3;
+      tetherFlat[ptr] = tx;
+      tetherFlat[ptr + 1] = ty;
+      tetherFlat[ptr + 2] = tz;
     }
+    const tetherGeom: any = tetherLineRef.current?.geometry;
+    if (tetherGeom?.setFromPoints) tetherGeom.setFromPoints(tetherPoints);
+    else if (tetherGeom?.setPositions) tetherGeom.setPositions(tetherFlat);
+
+    guidePoints[0].set(px, py, pz);
+    guidePoints[1].set(runtime.guideX, PLAYER_Y, runtime.guideZ);
+    guideFlat[0] = guidePoints[0].x;
+    guideFlat[1] = guidePoints[0].y;
+    guideFlat[2] = guidePoints[0].z;
+    guideFlat[3] = guidePoints[1].x;
+    guideFlat[4] = guidePoints[1].y;
+    guideFlat[5] = guidePoints[1].z;
+    const guideGeom: any = guideLineRef.current?.geometry;
+    if (guideGeom?.setFromPoints) guideGeom.setFromPoints(guidePoints);
+    else if (guideGeom?.setPositions) guideGeom.setPositions(guideFlat);
 
     clearFrameInput(inputRef);
   });
 
-  const status = useTetherStore((state) => state.status);
-
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 4.2, 7.35]} fov={43} />
-      <color attach="background" args={['#2d6aa6']} />
-      <fog attach="fog" args={['#2d6aa6', 12, 46]} />
+      <PerspectiveCamera makeDefault position={[0, 3.0, 7.2]} fov={44} />
+      <color attach="background" args={['#f4d8b8']} />
+      <fog attach="fog" args={['#f4d8b8', 10, 44]} />
 
-      <Stars radius={95} depth={56} count={1200} factor={2.5} saturation={0.55} fade speed={0.4} />
+      <Stars radius={92} depth={54} count={950} factor={2.2} saturation={0.35} fade speed={0.2} />
 
       <ambientLight intensity={0.82} />
-      <hemisphereLight args={['#d2fbff', '#415798', 0.42]} />
-      <pointLight position={[0, 3.1, 2.2]} intensity={0.68} color="#9deeff" />
-      <pointLight position={[-2.2, -0.5, -8]} intensity={0.38} color="#c39dff" />
-      <pointLight position={[2.2, -0.3, -7]} intensity={0.3} color="#ffb6a0" />
+      <hemisphereLight args={['#effffe', '#8ec5c2', 0.56]} />
+      <directionalLight position={[2.5, 5.2, 3.8]} intensity={0.8} color="#fff7e6" />
+      <pointLight position={[-3.4, 2.4, -7]} intensity={0.45} color="#69d8cc" />
+      <pointLight position={[2.8, 1.8, -9]} intensity={0.3} color="#ffb176" />
 
       <mesh position={[0, 0.2, -10]}>
-        <planeGeometry args={[18, 14]} />
+        <planeGeometry args={[22, 14]} />
         <shaderMaterial
           ref={bgMatRef}
           uniforms={{ uTime: { value: 0 } }}
@@ -987,13 +951,17 @@ function TetherDriftScene() {
             uniform float uTime;
             varying vec2 vUv;
             void main() {
-              vec3 sky = vec3(0.18, 0.52, 0.85);
-              vec3 mint = vec3(0.38, 0.95, 0.88);
-              vec3 violet = vec3(0.56, 0.42, 0.95);
+              vec3 dawn = vec3(0.99, 0.84, 0.66);
+              vec3 sea = vec3(0.34, 0.83, 0.77);
+              vec3 mist = vec3(0.87, 0.98, 1.0);
+
               float grad = smoothstep(0.0, 1.0, vUv.y);
-              float wave = 0.5 + 0.5 * sin((vUv.x * 2.4 + uTime * 0.14) * 6.2831853);
-              vec3 col = mix(sky, mint, grad * 0.65);
-              col = mix(col, violet, (1.0 - grad) * 0.22 + wave * 0.1);
+              float ribbon = 0.5 + 0.5 * sin((vUv.x * 1.8 + uTime * 0.11) * 6.2831853);
+              float haze = 0.5 + 0.5 * sin((vUv.y * 3.2 + uTime * 0.08) * 6.2831853);
+
+              vec3 col = mix(dawn, sea, grad * 0.78);
+              col = mix(col, mist, (1.0 - grad) * 0.24 + ribbon * 0.08 + haze * 0.06);
+
               gl_FragColor = vec4(col, 1.0);
             }
           `}
@@ -1001,74 +969,96 @@ function TetherDriftScene() {
         />
       </mesh>
 
-      <instancedMesh ref={anchorMeshRef} args={[undefined, undefined, ANCHOR_POOL]}>
-        <icosahedronGeometry args={[0.16, 0]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
-      </instancedMesh>
-
-      <instancedMesh ref={gateMeshRef} args={[undefined, undefined, GATE_POOL]}>
-        <torusGeometry args={[1, 0.07, 10, 48]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
-      </instancedMesh>
-
-      <instancedMesh ref={gateCoreRef} args={[undefined, undefined, GATE_POOL]}>
-        <sphereGeometry args={[1, 10, 10]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
-      </instancedMesh>
-
-      <instancedMesh ref={shockMeshRef} args={[undefined, undefined, GATE_POOL]}>
-        <torusGeometry args={[1, 0.035, 8, 36]} />
-        <meshBasicMaterial vertexColors transparent opacity={0.6} toneMapped={false} />
-      </instancedMesh>
-
-      <instancedMesh ref={debrisMeshRef} args={[undefined, undefined, DEBRIS_POOL]}>
-        <dodecahedronGeometry args={[0.2, 0]} />
-        <meshStandardMaterial vertexColors emissive="#4f1f2b" emissiveIntensity={0.35} roughness={0.4} />
-      </instancedMesh>
-
-      <mesh ref={playerRef} position={[0, 0.22, 0]}>
-        <capsuleGeometry args={[0.14, 0.34, 6, 12]} />
-        <meshStandardMaterial color="#f2fdff" emissive="#7ff8ff" emissiveIntensity={0.44} roughness={0.22} />
+      <mesh position={[-FIELD_HALF_X - 0.05, 0.2, -7.8]}>
+        <boxGeometry args={[0.12, 2.9, 28]} />
+        <meshStandardMaterial color="#98e9df" emissive="#4bb6ab" emissiveIntensity={0.45} />
+      </mesh>
+      <mesh position={[FIELD_HALF_X + 0.05, 0.2, -7.8]}>
+        <boxGeometry args={[0.12, 2.9, 28]} />
+        <meshStandardMaterial color="#ffc28e" emissive="#d67a46" emissiveIntensity={0.32} />
       </mesh>
 
-      <mesh ref={targetAnchorRef} visible={false}>
-        <torusGeometry args={[0.24, 0.035, 10, 42]} />
+      <instancedMesh ref={gateLeftRef} args={[undefined, undefined, GATE_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.24}
+          metalness={0.18}
+          emissive="#3a6963"
+          emissiveIntensity={0.42}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={gateRightRef} args={[undefined, undefined, GATE_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.24}
+          metalness={0.18}
+          emissive="#70462d"
+          emissiveIntensity={0.36}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={gateWindowRef} args={[undefined, undefined, GATE_POOL]}>
+        <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
-          color="#8ff8ff"
+          vertexColors
           transparent
-          opacity={0.9}
+          opacity={0.34}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
         />
+      </instancedMesh>
+
+      <instancedMesh ref={pickupRef} args={[undefined, undefined, PICKUP_POOL]}>
+        <octahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.25}
+          metalness={0.3}
+          emissive="#8e5a35"
+          emissiveIntensity={0.38}
+        />
+      </instancedMesh>
+
+      <mesh ref={anchorRef} position={[0, ANCHOR_Y, ANCHOR_Z]}>
+        <icosahedronGeometry args={[0.2, 0]} />
+        <meshStandardMaterial color="#e2fffb" emissive="#6dd6ca" emissiveIntensity={0.5} roughness={0.18} />
+      </mesh>
+
+      <mesh ref={playerRef} position={[0, PLAYER_Y, PLAYER_Z]}>
+        <sphereGeometry args={[0.23, 24, 24]} />
+        <meshStandardMaterial color="#fff9ef" emissive="#ffb279" emissiveIntensity={0.44} roughness={0.15} metalness={0.2} />
       </mesh>
 
       <Line
         ref={tetherLineRef}
         points={tetherPoints}
-        color="#8cf7ff"
-        lineWidth={2.1}
+        color="#f7fff4"
+        lineWidth={2.6}
         transparent
-        opacity={status === 'PLAYING' ? 0.95 : 0}
+        opacity={phase === 'playing' ? 0.96 : 0.78}
       />
 
       <Line
         ref={guideLineRef}
         points={guidePoints}
-        color="#d8ffff"
+        color="#bafaf2"
         lineWidth={1.2}
         transparent
-        opacity={status === 'PLAYING' ? 0.45 : 0}
+        opacity={phase === 'playing' ? 0.45 : 0.2}
       />
 
       <points geometry={trailGeometry}>
-        <pointsMaterial color="#d8feff" size={0.055} sizeAttenuation transparent opacity={0.55} />
+        <pointsMaterial color="#fff4dd" size={0.06} sizeAttenuation transparent opacity={0.62} />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.62} luminanceThreshold={0.5} luminanceSmoothing={0.24} mipmapBlur />
-        <Vignette eskil={false} offset={0.1} darkness={0.34} />
-        <Noise premultiply opacity={0.012} />
+        <Bloom intensity={0.55} luminanceThreshold={0.48} luminanceSmoothing={0.26} mipmapBlur />
+        <Vignette eskil={false} offset={0.09} darkness={0.28} />
+        <Noise premultiply opacity={0.01} />
       </EffectComposer>
 
       <Html fullscreen>

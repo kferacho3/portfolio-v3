@@ -1,28 +1,29 @@
 import { proxy } from 'valtio';
 
+export type TetherDriftPhase = 'menu' | 'playing' | 'gameover';
+
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 
 export const tetherDriftState = proxy({
+  phase: 'menu' as TetherDriftPhase,
   score: 0,
   bestScore: 0,
   health: 100,
   gameOver: false,
   resetVersion: 0,
 
-  // Gate chaining
+  // Combo + pacing telemetry used by HUD
   chain: 0,
-  chainTime: 0, // seconds remaining
+  chainTime: 0,
+  heat: 0,
+  speed: 0,
+  reeling: false,
 
-  // Heat builds with speed; cools while tethered
-  heat: 0, // 0..100
-
-  // Micro flash on perfect release
-  perfectFlash: 0, // seconds remaining
-
+  // Momentary feedback
+  perfectFlash: 0,
   perfects: 0,
   constellationsCleared: 0,
-
   toastText: '',
   toastTime: 0,
   slowMoTime: 0,
@@ -31,12 +32,15 @@ export const tetherDriftState = proxy({
 
   reset() {
     this.resetVersion += 1;
+    this.phase = 'menu';
     this.score = 0;
     this.health = 100;
     this.gameOver = false;
     this.chain = 0;
     this.chainTime = 0;
     this.heat = 0;
+    this.speed = 0;
+    this.reeling = false;
     this.perfectFlash = 0;
     this.perfects = 0;
     this.constellationsCleared = 0;
@@ -47,7 +51,7 @@ export const tetherDriftState = proxy({
   },
 
   tick(dt: number) {
-    if (this.gameOver) return;
+    if (this.phase !== 'playing') return;
     this.elapsed += dt;
     this.chainTime = Math.max(0, this.chainTime - dt);
     if (this.chainTime <= 0) this.chain = 0;
@@ -62,55 +66,17 @@ export const tetherDriftState = proxy({
     if (this.score > this.bestScore) this.bestScore = this.score;
   },
 
-  setToast(text: string, time = 1.1, slowMo = 0.12) {
+  setToast(text: string, time = 1, slowMo = 0) {
     this.toastText = text;
     this.toastTime = Math.max(this.toastTime, time);
     this.slowMoTime = Math.max(this.slowMoTime, slowMo);
   },
 
-  damage(amount: number) {
-    if (this.gameOver) return;
-    this.health = clamp(this.health - amount, 0, 100);
-    this.chain = 0;
-    this.chainTime = 0;
-    if (this.health <= 0) this.gameOver = true;
-  },
-
-  breakChain() {
-    this.chain = 0;
-    this.chainTime = 0;
-  },
-
-  onGatePassed(opts: { perfect?: boolean; constellationDone?: boolean }) {
-    if (this.gameOver) return;
-    this.chain += 1;
-    this.chainTime = clamp(this.chainTime + 0.55, 0, 3.0);
-
-    const chainMult = 1 + clamp(this.chain, 0, 18) * 0.08;
-    const base = 25 + this.chain * 6;
-    const perfectBonus = opts.perfect ? 35 : 0;
-    const constellationBonus = opts.constellationDone ? 140 : 0;
-    const heatMult = 1 + (this.heat / 100) * 0.75;
-    this.addScore(
-      (base + perfectBonus + constellationBonus) * chainMult * heatMult
-    );
-    if (opts.perfect) {
-      this.perfectFlash = 0.2;
-      this.perfects += 1;
-      this.setToast('PERFECT RELEASE!', 1.1, 0.2);
+  setHealth(next: number) {
+    this.health = clamp(next, 0, 100);
+    if (this.health <= 0) {
+      this.phase = 'gameover';
+      this.gameOver = true;
     }
-    if (opts.constellationDone) {
-      this.constellationsCleared += 1;
-      this.setToast('CONSTELLATION!', 1.2, 0.22);
-      this.heal(6);
-    }
-  },
-
-  setHeat(next: number) {
-    this.heat = clamp(next, 0, 100);
-  },
-
-  heal(amount: number) {
-    this.health = clamp(this.health + amount, 0, 100);
   },
 });

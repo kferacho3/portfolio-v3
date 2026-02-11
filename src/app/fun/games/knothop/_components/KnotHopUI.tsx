@@ -1,372 +1,73 @@
 'use client';
 
 import { Html } from '@react-three/drei';
-import type { CSSProperties } from 'react';
-import { useMemo } from 'react';
 import { useSnapshot } from 'valtio';
 
-import { BALL_SKINS, KNOT_HOP_TITLE, PLATFORM_THEMES } from '../constants';
 import { knotHopState } from '../state';
-
-const font = `'system-ui', -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
-
-function diamondStyle(size = 12): CSSProperties {
-  return {
-    width: size,
-    height: size,
-    transform: 'rotate(45deg)',
-    display: 'inline-block',
-    borderRadius: 2,
-    background:
-      'linear-gradient(135deg, #FB7185 0%, #A78BFA 50%, #38BDF8 100%)',
-    boxShadow:
-      '0 0 14px rgba(167,139,250,0.4), inset 0 1px 0 rgba(255,255,255,0.4)',
-  };
-}
-
-function buttonStyle(primary = false): CSSProperties {
-  return {
-    padding: '10px 14px',
-    borderRadius: 12,
-    border: primary ? 'none' : '1px solid rgba(147,197,253,0.3)',
-    background: primary
-      ? 'linear-gradient(165deg, #3B82F6 0%, #2563EB 100%)'
-      : 'rgba(255,255,255,0.85)',
-    color: primary ? 'white' : 'rgba(30,58,138,0.9)',
-    fontFamily: font,
-    fontWeight: 900,
-    letterSpacing: 0.3,
-    cursor: 'pointer',
-    boxShadow: primary
-      ? '0 4px 14px rgba(59,130,246,0.35)'
-      : '0 1px 3px rgba(0,0,0,0.04)',
-  };
-}
 
 export function KnotHopUI() {
   const snap = useSnapshot(knotHopState);
 
-  const ballDef = useMemo(
-    () => BALL_SKINS.find((b) => b.id === snap.selectedBall) ?? BALL_SKINS[0],
-    [snap.selectedBall]
-  );
-
-  const themeDef = useMemo(
-    () =>
-      PLATFORM_THEMES.find((t) => t.id === snap.selectedTheme) ??
-      PLATFORM_THEMES[0],
-    [snap.selectedTheme]
-  );
-
-  const unlockedBalls = snap.unlockedBalls;
-  const unlockedThemes = snap.unlockedThemes;
-
-  const ballIdx = Math.max(0, unlockedBalls.indexOf(snap.selectedBall));
-  const prevBall =
-    unlockedBalls[(ballIdx - 1 + unlockedBalls.length) % unlockedBalls.length];
-  const nextBall = unlockedBalls[(ballIdx + 1) % unlockedBalls.length];
-
-  const themeIdx = Math.max(0, unlockedThemes.indexOf(snap.selectedTheme));
-  const prevTheme =
-    unlockedThemes[
-      (themeIdx - 1 + unlockedThemes.length) % unlockedThemes.length
-    ];
-  const nextTheme = unlockedThemes[(themeIdx + 1) % unlockedThemes.length];
-
-  const displayGems = snap.totalGems + snap.runGems;
-  const toastVisible = snap.toast && Date.now() < snap.toastUntil;
-
   return (
     <Html fullscreen>
-      <style>{`
-        @keyframes knothop-pop {
-          0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
-          100% { transform: translate3d(0, -28px, 0) scale(1.05); opacity: 0; }
-        }
-      `}</style>
-
-      {/* HUD */}
-      {snap.phase === 'playing' && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            fontFamily: font,
-            color: 'white',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: 26,
-              left: 0,
-              right: 0,
-              textAlign: 'center',
-              fontSize: 64,
-              fontWeight: 900,
-              letterSpacing: 0.8,
-              color: 'rgba(30,58,138,0.92)',
-              textShadow:
-                '0 2px 0 rgba(255,255,255,0.9), 0 12px 32px rgba(59,130,246,0.2), 0 0 40px rgba(147,197,253,0.15)',
-            }}
-          >
-            {snap.score}
-          </div>
-
-          <div
-            style={{
-              position: 'absolute',
-              top: 24,
-              right: 22,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              fontSize: 16,
-              fontWeight: 900,
-              color: 'rgba(0,0,0,0.8)',
-            }}
-          >
-            <span>{displayGems}</span>
-            <span style={diamondStyle(12)} />
-          </div>
-
-          {toastVisible && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 24,
-                left: 0,
-                right: 0,
-                textAlign: 'center',
-              }}
-            >
-              <span
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 999,
-                  background: 'rgba(255,255,255,0.75)',
-                  border: '1px solid rgba(0,0,0,0.12)',
-                  color: 'rgba(0,0,0,0.85)',
-                  fontSize: 12,
-                  fontWeight: 900,
-                }}
-              >
-                {snap.toast}
-              </span>
-            </div>
-          )}
+      <div className="absolute inset-0 pointer-events-none select-none text-white">
+        <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/28 via-cyan-500/20 to-sky-500/24 px-3 py-2 backdrop-blur-[2px]">
+          <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">Knot Hop</div>
+          <div className="text-[11px] text-cyan-50/85">Tap to hop around the rope before each knot arrives.</div>
         </div>
-      )}
 
-      {/* Menu / Game Over */}
-      {snap.phase !== 'playing' && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'grid',
-            placeItems: 'center',
-            fontFamily: font,
-            color: 'rgba(0,0,0,0.85)',
-          }}
-        >
-          <div
-            style={{
-              width: 420,
-              maxWidth: '92vw',
-              padding: '20px 20px 18px',
-              borderRadius: 20,
-              background:
-                'linear-gradient(145deg, rgba(255,255,255,0.95) 0%, rgba(248,250,255,0.9) 100%)',
-              border: '1px solid rgba(147,197,253,0.35)',
-              boxShadow:
-                '0 25px 60px rgba(59,130,246,0.08), 0 8px 24px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                gap: 12,
-              }}
-            >
-              <div
-                style={{ fontSize: 26, fontWeight: 1000, letterSpacing: 0.6 }}
-              >
-                {KNOT_HOP_TITLE}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>
-                Tap/Space to hop · A/D or arrows set twist direction
-              </div>
+        <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/62 via-cyan-800/40 to-emerald-700/30 px-3 py-2 text-right backdrop-blur-[2px]">
+          <div className="text-2xl font-black tabular-nums">{snap.score}</div>
+          <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">Best {snap.best}</div>
+        </div>
+
+        {snap.phase === 'playing' && (
+          <div className="absolute left-4 top-[92px] rounded-md border border-white/30 bg-black/35 px-3 py-2 text-xs text-white/90">
+            <div>
+              Knots <span className="font-semibold text-cyan-100">{snap.knotsPassed}</span>
             </div>
-
-            <div
-              style={{
-                marginTop: 10,
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 10,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ fontSize: 14 }}>
-                Best: <span style={{ fontWeight: 1000 }}>{snap.best}</span>
-              </div>
-              <div
-                style={{
-                  fontSize: 14,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                Gems: <span style={{ fontWeight: 1000 }}>{displayGems}</span>
-                <span style={diamondStyle(11)} />
-              </div>
-              <div style={{ fontSize: 14 }}>
-                Unlocked:{' '}
-                <span style={{ fontWeight: 1000 }}>{unlockedBalls.length}</span>
-                /{BALL_SKINS.length}
-              </div>
+            <div>
+              Combo <span className="font-semibold text-emerald-100">x{Math.max(1, snap.combo)}</span>
             </div>
-
-            {snap.phase === 'gameover' && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: '10px 12px',
-                  borderRadius: 14,
-                  background: 'rgba(0,0,0,0.05)',
-                }}
-              >
-                <div style={{ fontSize: 12, opacity: 0.7 }}>Run score</div>
-                <div style={{ fontSize: 34, fontWeight: 1000 }}>
-                  {snap.score}
-                </div>
-              </div>
-            )}
-
-            <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
-              <div style={{ display: 'grid', gap: 8 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>Ball</div>
-                    <div style={{ fontSize: 18, fontWeight: 1000 }}>
-                      {ballDef.name}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      style={buttonStyle(false)}
-                      onClick={() => knotHopState.setBall(prevBall)}
-                    >
-                      ◀
-                    </button>
-                    <button
-                      style={buttonStyle(false)}
-                      onClick={() => knotHopState.setBall(nextBall)}
-                    >
-                      ▶
-                    </button>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 10,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>Platform</div>
-                    <div style={{ fontSize: 18, fontWeight: 1000 }}>
-                      {themeDef.name}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      style={buttonStyle(false)}
-                      onClick={() => knotHopState.setTheme(prevTheme)}
-                    >
-                      ◀
-                    </button>
-                    <button
-                      style={buttonStyle(false)}
-                      onClick={() => knotHopState.setTheme(nextTheme)}
-                    >
-                      ▶
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button
-                  style={{ ...buttonStyle(true), flex: 1, minWidth: 140 }}
-                  onClick={() => knotHopState.start()}
-                >
-                  {snap.phase === 'gameover' ? 'Try Again' : 'Play'}
-                </button>
-
-                <button
-                  style={{
-                    ...buttonStyle(false),
-                    flex: 1,
-                    minWidth: 140,
-                    opacity: snap.totalGems >= 60 ? 1 : 0.5,
-                  }}
-                  onClick={() => knotHopState.unlockRandomBall()}
-                >
-                  Unlock Ball (60)
-                </button>
-
-                <button
-                  style={{
-                    ...buttonStyle(false),
-                    flex: 1,
-                    minWidth: 140,
-                    opacity: snap.totalGems >= 80 ? 1 : 0.5,
-                  }}
-                  onClick={() => knotHopState.unlockRandomTheme()}
-                >
-                  Unlock Platform (80)
-                </button>
-              </div>
-
-              <div style={{ fontSize: 12, lineHeight: 1.4, opacity: 0.72 }}>
-                Tap or press Space to hop. Use left/right (or A/D) to control
-                platform twist, then land cleanly, collect gems, and chain
-                perfect hops.
-              </div>
-
-              {toastVisible && (
-                <div style={{ fontSize: 12, opacity: 0.95 }}>
-                  <span
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 999,
-                      background: 'rgba(0,0,0,0.06)',
-                    }}
-                  >
-                    {snap.toast}
-                  </span>
-                </div>
-              )}
+            <div>
+              Perfect <span className="font-semibold text-sky-100">{snap.perfects}</span>
+            </div>
+            <div>
+              Speed <span className="font-semibold text-amber-100">{snap.speed.toFixed(1)}</span>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {snap.phase === 'menu' && (
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="rounded-xl border border-emerald-100/45 bg-gradient-to-br from-slate-900/80 via-cyan-900/44 to-emerald-800/30 px-6 py-5 text-center backdrop-blur-md">
+              <div className="text-2xl font-black tracking-wide">KNOT HOP</div>
+              <div className="mt-2 text-sm text-white/85">A bead rides an endless rope. Each knot leaves one safe side.</div>
+              <div className="mt-1 text-sm text-white/85">Tap to hop clockwise around the rope and line up with the safe pocket.</div>
+              <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
+            </div>
+          </div>
+        )}
+
+        {snap.phase === 'gameover' && (
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-900/40 to-cyan-900/30 px-6 py-5 text-center backdrop-blur-md">
+              <div className="text-2xl font-black text-cyan-100">Knot Hit</div>
+              <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
+              <div className="mt-1 text-sm text-white/75">Best {snap.best}</div>
+              <div className="mt-3 text-sm text-cyan-100/90">Tap to run again.</div>
+            </div>
+          </div>
+        )}
+
+        {snap.toastTime > 0 && snap.toastText && (
+          <div className="absolute inset-x-0 top-20 flex justify-center">
+            <div className="rounded-md border border-cyan-100/55 bg-black/42 px-4 py-1 text-sm font-semibold tracking-[0.11em] text-cyan-100">
+              {snap.toastText}
+            </div>
+          </div>
+        )}
+      </div>
     </Html>
   );
 }
