@@ -707,22 +707,22 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Time your bounces carefully. Collect squares to unlock new ball skins. Try different palettes for variety.',
   },
   prismjump: {
-    controls: 'Tap/Space/Click to jump • R to restart',
+    controls: 'Tap/Space/Click to jump • A/D or ←/→ to move • R to restart',
     objective:
-      'One-tap jump across CONSTANTLY MOVING platforms in an interstellar world. Each row alternates direction (→ ← → ←). Collect cubes to unlock one of 33 unique characters (100 cubes lottery).',
-    tips: "Platforms NEVER STOP moving! Time your jumps carefully. If you stay on a platform too long you'll be carried off-screen. Avoid red spikes. Speed and obstacles increase with score!",
+      'Jump across continuously moving rows, strafe left/right to line up landings, and survive widening platform gaps as you progress. Collect cubes to unlock one of 33 unique characters (100 cubes lottery).',
+    tips: 'Rows alternate direction and never stop. Early rows are forgiving, but deep rows have wider gaps and tighter platform windows. A new platform color palette loads every run.',
   },
   octasurge: {
-    controls: 'Tap/Space/Click to rotate • R to restart',
+    controls: 'Hold A/D or ←/→ to steer • Hold touch left/right side on mobile • Enter/Space to start • R to restart',
     objective:
-      'Navigate through octagonal obstacles. Time your rotations to pass through gates.',
-    tips: 'Time your movements perfectly. Watch the gate angles.',
+      'Pilot your orb through a rotating octagonal tunnel, threading open segments while speed climbs steadily.',
+    tips: 'Steer early and commit to clean lines. Tiny overcorrections are safer than late hard turns.',
   },
   knothop: {
     controls: 'Tap/Click/Space to reverse spiral direction • R to restart',
     objective:
-      'Guide your prism through an endless spiral lane. Dodge hazards, collect shards, and survive as speed and spin ramp.',
-    tips: 'Flip direction early to line up angles. Staying calm and reading two beats ahead is safer than panic reversals.',
+      'Guide your prism through a high-speed spiral tunnel packed with crusher spikes, void anomalies, and razor shards while collecting prism gems.',
+    tips: 'Reverse earlier than you think. Near misses are rewarded, but late panic flips usually collide with heavy hazards.',
   },
   oscillate: {
     controls: 'Tap/Space/Enter to switch walls • R to restart',

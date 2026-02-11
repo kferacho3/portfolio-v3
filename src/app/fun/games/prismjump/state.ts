@@ -123,6 +123,7 @@ export const prismJumpState = proxy({
   },
 
   start: () => {
+    prismJumpState.worldSeed = (prismJumpState.worldSeed + 1) % 1_000_000_000;
     prismJumpState.score = 0;
     prismJumpState.combo = 0;
     prismJumpState.multiplier = 1;

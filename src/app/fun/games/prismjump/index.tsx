@@ -9,7 +9,7 @@ import { useSnapshot } from 'valtio';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { useGameUIState } from '../../store/selectors';
 import { SeededRandom } from '../../utils/seededRandom';
-import { GAME, PLATFORM_TOP_COLORS } from './constants';
+import { GAME, PRISM_PALETTES } from './constants';
 import { PrismCharacter } from './_components/PrismCharacter';
 import { PrismJumpUI } from './_components/PrismJumpUI';
 import { prismJumpState } from './state';
@@ -54,9 +54,24 @@ const hashRowSeed = (seed: number, rowIndex: number) => {
 const difficultyFromRow = (rowIndex: number) =>
   clamp(Math.max(0, rowIndex - 8) / 420, 0, 1);
 
-function makeRow(seed: number, rowIndex: number): RowData {
+const pickPaletteIndex = (seed: number, prevIndex: number) => {
+  if (PRISM_PALETTES.length <= 1) return 0;
+  const rng = new SeededRandom((seed ^ 0xa2f9_31b7) >>> 0);
+  let next = rng.int(0, PRISM_PALETTES.length - 1);
+  if (next === prevIndex) {
+    next = (next + 1 + rng.int(0, PRISM_PALETTES.length - 2)) % PRISM_PALETTES.length;
+  }
+  return next;
+};
+
+function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData {
   const rng = new SeededRandom(hashRowSeed(seed, rowIndex));
   const difficulty = difficultyFromRow(rowIndex);
+  const palette =
+    PRISM_PALETTES[paletteIndex] ??
+    PRISM_PALETTES[paletteIndex % PRISM_PALETTES.length] ??
+    PRISM_PALETTES[0];
+  const topColors = palette.platformTopColors;
 
   const dir = rowDirection(rowIndex);
   const speedMul = rng.float(
@@ -64,41 +79,109 @@ function makeRow(seed: number, rowIndex: number): RowData {
     1 + GAME.rowSpeedVariance
   );
 
-  const keepChance = clamp(0.94 - difficulty * 0.24, 0.64, 0.94);
-  const active: boolean[] = [];
-  for (let i = 0; i < GAME.platformsPerRow; i += 1) {
-    active.push(rng.bool(keepChance));
+  const minLen = lerp(GAME.platformLengthNearMin, GAME.platformLengthFarMin, difficulty);
+  const maxLen = lerp(GAME.platformLengthNearMax, GAME.platformLengthFarMax, difficulty);
+  const minGap = lerp(GAME.gapNearMin, GAME.gapFarMin, difficulty);
+  const maxGap = lerp(GAME.gapNearMax, GAME.gapFarMax, difficulty);
+
+  let targetCount = Math.round(
+    lerp(GAME.maxPlatformsPerRow, GAME.minPlatformsPerRow + 1, difficulty) +
+      rng.float(-0.42, 0.42)
+  );
+  targetCount = clamp(
+    targetCount,
+    GAME.minPlatformsPerRow,
+    GAME.maxPlatformsPerRow
+  );
+
+  const leftBound = -GAME.spawnHalfWidth;
+  const rightBound = GAME.spawnHalfWidth;
+  const normals: PlatformData[] = [];
+
+  // Greedy one-pass layout: guarantees strictly increasing non-overlapping platform bounds.
+  while (targetCount >= GAME.minPlatformsPerRow) {
+    normals.length = 0;
+    let cursor = leftBound + rng.float(0.06, Math.max(0.08, minGap * 0.9));
+    let fits = true;
+
+    for (let i = 0; i < targetCount; i += 1) {
+      const remainingAfter = targetCount - i - 1;
+      const minRequiredAfterThisLength = remainingAfter * (minLen + minGap);
+      const maxLenAllowed = Math.min(
+        maxLen,
+        rightBound - cursor - minRequiredAfterThisLength
+      );
+      if (maxLenAllowed < minLen * 0.85) {
+        fits = false;
+        break;
+      }
+
+      const lenMinAllowed = Math.min(minLen, maxLenAllowed);
+      const length = rng.float(lenMinAllowed, maxLenAllowed);
+      const baseOffsetX = cursor + length * 0.5;
+      const cubeChance = clamp(GAME.coinChance - difficulty * 0.08, 0.12, 0.26);
+      const cubeValue = rng.bool(cubeChance) ? 1 : 0;
+      normals.push({
+        x: baseOffsetX,
+        z: rowZ(rowIndex),
+        baseOffsetX,
+        length,
+        depth: GAME.platformDepth,
+        type: 'normal',
+        cubeValue,
+        color: topColors[(rowIndex + i) % topColors.length],
+      });
+
+      cursor += length;
+      if (remainingAfter > 0) {
+        const minRequiredAfterGap =
+          remainingAfter * minLen + Math.max(0, remainingAfter - 1) * minGap;
+        const maxGapAllowed = Math.min(
+          maxGap,
+          rightBound - cursor - minRequiredAfterGap
+        );
+        const gap = rng.float(minGap, Math.max(minGap, maxGapAllowed));
+        cursor += gap;
+      }
+    }
+
+    if (fits && normals.length >= GAME.minPlatformsPerRow) break;
+    targetCount -= 1;
   }
 
-  let activeCount = active.filter(Boolean).length;
-  while (activeCount < 2) {
-    const idx = rng.int(0, GAME.platformsPerRow - 1);
-    if (!active[idx]) {
-      active[idx] = true;
-      activeCount += 1;
+  if (normals.length < GAME.minPlatformsPerRow) {
+    const fallbackCount = GAME.minPlatformsPerRow;
+    const fallbackLen = Math.max(minLen, 1.2);
+    const totalLen = fallbackLen * fallbackCount;
+    const gap = (rightBound - leftBound - totalLen) / Math.max(1, fallbackCount - 1);
+    let cursor = leftBound;
+    for (let i = 0; i < fallbackCount; i += 1) {
+      const baseOffsetX = cursor + fallbackLen * 0.5;
+      normals.push({
+        x: baseOffsetX,
+        z: rowZ(rowIndex),
+        baseOffsetX,
+        length: fallbackLen,
+        depth: GAME.platformDepth,
+        type: 'normal',
+        cubeValue: rng.bool(0.18) ? 1 : 0,
+        color: topColors[(rowIndex + i) % topColors.length],
+      });
+      cursor += fallbackLen + gap;
     }
   }
 
-  const half = (GAME.platformsPerRow - 1) / 2;
-  const platforms: PlatformData[] = [];
-  for (let i = 0; i < GAME.platformsPerRow; i += 1) {
-    const laneX = (i - half) * GAME.laneSpacing;
-    const jitter = rng.float(-0.42, 0.42);
-    const baseOffsetX = laneX + jitter;
-
-    const type: PlatformData['type'] = active[i] ? 'normal' : 'danger';
-    const cubeChance = clamp(GAME.coinChance - difficulty * 0.08, 0.12, 0.26);
-    const cubeValue = type === 'normal' && rng.bool(cubeChance) ? 1 : 0;
-
+  const platforms: PlatformData[] = [...normals];
+  while (platforms.length < GAME.platformsPerRow) {
     platforms.push({
-      x: baseOffsetX,
+      x: 0,
       z: rowZ(rowIndex),
-      baseOffsetX,
-      length: rng.float(1.65, 2.35),
+      baseOffsetX: 0,
+      length: 1.1,
       depth: GAME.platformDepth,
-      type,
-      cubeValue,
-      color: PLATFORM_TOP_COLORS[i % PLATFORM_TOP_COLORS.length],
+      type: 'danger',
+      cubeValue: 0,
+      color: topColors[platforms.length % topColors.length],
     });
   }
 
@@ -110,8 +193,8 @@ function makeRow(seed: number, rowIndex: number): RowData {
   };
 }
 
-const buildRows = (seed: number) =>
-  Array.from({ length: GAME.visibleRows }, (_, i) => makeRow(seed, i));
+const buildRows = (seed: number, paletteIndex: number) =>
+  Array.from({ length: GAME.visibleRows }, (_, i) => makeRow(seed, i, paletteIndex));
 
 function computePlatformX(
   platform: PlatformData,
@@ -150,7 +233,18 @@ export default function PrismJump() {
   const ui = useGameUIState();
 
   const inputRef = useInputRef({
-    preventDefault: [' ', 'space', 'spacebar', 'enter', 'arrowup', 'w'],
+    preventDefault: [
+      ' ',
+      'space',
+      'spacebar',
+      'enter',
+      'arrowup',
+      'arrowleft',
+      'arrowright',
+      'w',
+      'a',
+      'd',
+    ],
   });
 
   const { camera, gl, scene } = useThree();
@@ -161,10 +255,13 @@ export default function PrismJump() {
   const playerRef = useRef<THREE.Group>(null);
 
   const [popups, setPopups] = useState<PopupRender[]>([]);
+  const [paletteIndex, setPaletteIndex] = useState(0);
+  const palette = PRISM_PALETTES[paletteIndex] ?? PRISM_PALETTES[0];
 
   const world = useRef({
     seed: 1,
-    rows: buildRows(1) as RowData[],
+    paletteIndex: 0,
+    rows: buildRows(1, 0) as RowData[],
     baseRowIndex: 0,
 
     elapsed: 0,
@@ -182,6 +279,7 @@ export default function PrismJump() {
 
     cameraZ: 0,
     minimapTimer: 0,
+    moveInputX: 0,
 
     popupId: 1,
     dummy: new THREE.Object3D(),
@@ -228,7 +326,7 @@ export default function PrismJump() {
       const recycleSlot = w.baseRowIndex % GAME.visibleRows;
       w.baseRowIndex += 1;
       const newRowIndex = w.baseRowIndex + GAME.visibleRows - 1;
-      w.rows[recycleSlot] = makeRow(w.seed, newRowIndex);
+      w.rows[recycleSlot] = makeRow(w.seed, newRowIndex, w.paletteIndex);
     }
   }, []);
 
@@ -249,9 +347,12 @@ export default function PrismJump() {
   const initRun = useCallback(
     (seed: number) => {
       const w = world.current;
+      const nextPaletteIndex = pickPaletteIndex(seed, w.paletteIndex);
       w.seed = seed;
+      w.paletteIndex = nextPaletteIndex;
+      setPaletteIndex(nextPaletteIndex);
       w.baseRowIndex = 0;
-      w.rows = buildRows(seed);
+      w.rows = buildRows(seed, nextPaletteIndex);
 
       w.elapsed = 0;
       w.speed = GAME.baseSpeed;
@@ -266,6 +367,7 @@ export default function PrismJump() {
       w.vel.set(0, 0, 0);
       w.popupId = 1;
       w.minimapTimer = 0;
+      w.moveInputX = 0;
 
       updateDynamicRows(0, GAME.baseSpeed);
 
@@ -331,16 +433,16 @@ export default function PrismJump() {
   }, []);
 
   useEffect(() => {
-    scene.background = new THREE.Color('#050510');
-    scene.fog = new THREE.Fog('#090914', 18, 74);
+    scene.background = new THREE.Color(palette.background);
+    scene.fog = new THREE.Fog(palette.fog, 18, 74);
 
-    gl.setClearColor('#050510', 1);
+    gl.setClearColor(palette.background, 1);
     gl.domElement.style.touchAction = 'none';
 
     return () => {
       gl.domElement.style.touchAction = 'auto';
     };
-  }, [gl, scene]);
+  }, [gl, palette.background, palette.fog, scene]);
 
   useEffect(() => {
     if (snap.phase !== 'playing') return;
@@ -383,6 +485,18 @@ export default function PrismJump() {
       input.justPressed.has('enter') ||
       input.justPressed.has('arrowup') ||
       input.justPressed.has('w');
+    const leftHeld =
+      input.keysDown.has('arrowleft') || input.keysDown.has('a');
+    const rightHeld =
+      input.keysDown.has('arrowright') || input.keysDown.has('d');
+
+    let moveInputX = (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0);
+    if (moveInputX === 0 && input.pointerDown) {
+      const pointerAxis = clamp(input.pointerX * 1.35, -1, 1);
+      moveInputX =
+        Math.abs(pointerAxis) >= GAME.pointerLateralDeadZone ? pointerAxis : 0;
+    }
+    w.moveInputX = moveInputX;
 
     if (prismJumpState.phase !== 'playing') {
       if (wantsJump) {
@@ -420,28 +534,31 @@ export default function PrismJump() {
         w.mode = 'falling';
       } else {
         const currentPlatform = row.platforms[w.platformSlot];
-        const stillOnCurrent =
-          currentPlatform &&
-          currentPlatform.type === 'normal' &&
-          Math.abs(w.pos.x - currentPlatform.x) <=
-            currentPlatform.length * 0.52;
+        if (currentPlatform?.type === 'normal') {
+          w.localOffsetX += w.moveInputX * GAME.lateralGroundSpeed * d;
+          const intendedX = currentPlatform.x + w.localOffsetX;
+          const stillOnCurrent =
+            Math.abs(intendedX - currentPlatform.x) <= currentPlatform.length * 0.52;
 
-        if (stillOnCurrent && currentPlatform) {
-          w.pos.x = currentPlatform.x + w.localOffsetX;
-          w.pos.y = playerStandY;
-          w.pos.z = rowZ(w.rowIndex);
-        } else {
-          const landing = findLandingPlatform(row, w.pos.x);
-          if (landing) {
-            w.platformSlot = landing.slot;
-            w.localOffsetX = w.pos.x - landing.platform.x;
-            w.pos.x = landing.platform.x + w.localOffsetX;
+          if (stillOnCurrent) {
+            w.pos.x = intendedX;
             w.pos.y = playerStandY;
             w.pos.z = rowZ(w.rowIndex);
           } else {
-            w.mode = 'falling';
-            w.vel.set(0, GAME.jumpImpulseY * 0.1, GAME.jumpImpulseZ * 0.72);
+            const landing = findLandingPlatform(row, intendedX);
+            if (landing) {
+              w.platformSlot = landing.slot;
+              w.localOffsetX = intendedX - landing.platform.x;
+              w.pos.x = landing.platform.x + w.localOffsetX;
+              w.pos.y = playerStandY;
+              w.pos.z = rowZ(w.rowIndex);
+            } else {
+              w.mode = 'falling';
+              w.vel.set(0, GAME.jumpImpulseY * 0.1, GAME.jumpImpulseZ * 0.72);
+            }
           }
+        } else {
+          w.mode = 'falling';
         }
 
         const edgeSafe = clamp(
@@ -459,6 +576,7 @@ export default function PrismJump() {
     }
 
     if (w.mode === 'air' || w.mode === 'falling') {
+      w.pos.x += w.moveInputX * GAME.lateralAirSpeed * d;
       w.pos.z += w.vel.z * d;
       w.pos.y += w.vel.y * d;
       w.vel.y += GAME.gravityY * d;
@@ -637,7 +755,7 @@ export default function PrismJump() {
               dummy.rotation.set(0, state.clock.elapsedTime * 2.2, 0);
               dummy.updateMatrix();
               cubeMesh.setMatrixAt(idx, dummy.matrix);
-              cubeMesh.setColorAt(idx, c.set('#67E8F9'));
+              cubeMesh.setColorAt(idx, c.set(palette.cubeColor));
             } else {
               dummy.position.set(-9999, -9999, -9999);
               dummy.scale.set(0.001, 0.001, 0.001);
@@ -663,44 +781,44 @@ export default function PrismJump() {
 
   const baseMaterialProps = useMemo(
     () => ({
-      color: '#171238',
+      color: palette.platformBase,
       roughness: 0.92,
       metalness: 0.04,
     }),
-    []
+    [palette.platformBase]
   );
 
   const cubeMaterialProps = useMemo(
     () => ({
       roughness: 0.18,
       metalness: 0.3,
-      emissive: '#22D3EE',
+      emissive: palette.cubeEmissive,
       emissiveIntensity: 0.52,
       vertexColors: true,
       toneMapped: false,
     }),
-    []
+    [palette.cubeEmissive]
   );
 
   return (
     <group>
-      <ambientLight intensity={0.45} color="#64748b" />
+      <ambientLight intensity={0.45} color={palette.ambientLight} />
       <directionalLight
         position={[10, 15, 8]}
         intensity={0.9}
-        color="#ffffff"
+        color={palette.keyLight}
         castShadow
       />
       <pointLight
         position={[0, 8, 5]}
         intensity={0.45}
-        color="#22D3EE"
+        color={palette.fillLightA}
         distance={35}
       />
       <pointLight
         position={[-8, 6, 10]}
         intensity={0.28}
-        color="#A78BFA"
+        color={palette.fillLightB}
         distance={30}
       />
 
@@ -732,7 +850,7 @@ export default function PrismJump() {
             vertexColors
             roughness={0.34}
             metalness={0.12}
-            emissive="#ffffff"
+            emissive={palette.keyLight}
             emissiveIntensity={0.34}
             toneMapped={false}
           />
@@ -760,7 +878,7 @@ export default function PrismJump() {
             pointerEvents: 'none',
             fontSize: 20,
             fontWeight: 900,
-            color: '#67E8F9',
+            color: palette.cubeColor,
             textShadow: '0 3px 12px rgba(0,0,0,0.65)',
             animation: 'prismjump-popup 0.78s ease-out forwards',
           }}

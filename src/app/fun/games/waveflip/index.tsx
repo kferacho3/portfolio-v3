@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Html, OrthographicCamera } from '@react-three/drei';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
@@ -138,17 +138,176 @@ const TAP_DRIFT_MAX = 0.12;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
-const WAVE_NEON = new THREE.Color('#8df2ff');
-const WAVE_EDGE = new THREE.Color('#9fc8ff');
-const SPIKE_TOP = new THREE.Color('#ff5d8b');
-const SPIKE_BOTTOM = new THREE.Color('#6f8eff');
-const OBSTACLE_ORANGE = new THREE.Color('#ffb05a');
-const OBSTACLE_GREEN = new THREE.Color('#58ffd8');
-const SAFE_MARKER = new THREE.Color('#8ffff2');
-const COLLECTIBLE_A = new THREE.Color('#ffe66f');
-const COLLECTIBLE_B = new THREE.Color('#ff8df5');
-const WHITE = new THREE.Color('#f8fbff');
-const BG_BOTTOM = new THREE.Color('#1f4e86');
+
+type WaveFlipPalette = {
+  id: string;
+  waveNeon: string;
+  waveEdge: string;
+  spikeTop: string;
+  spikeBottom: string;
+  obstacleOrange: string;
+  obstacleGreen: string;
+  safeMarker: string;
+  collectibleA: string;
+  collectibleB: string;
+  white: string;
+  bgBottom: string;
+  bgDeep: string;
+  bgMid: string;
+  bgGlow: string;
+  orbColor: string;
+  orbEmissive: string;
+  hemiSky: string;
+  hemiGround: string;
+  dirLight: string;
+  topLight: string;
+  bottomLight: string;
+  obstacleEmissive: string;
+  collectibleEmissive: string;
+};
+
+const WAVEFLIP_PALETTES: WaveFlipPalette[] = [
+  {
+    id: 'aurora-circuit',
+    waveNeon: '#8df2ff',
+    waveEdge: '#9fc8ff',
+    spikeTop: '#ff5d8b',
+    spikeBottom: '#6f8eff',
+    obstacleOrange: '#ffb05a',
+    obstacleGreen: '#58ffd8',
+    safeMarker: '#8ffff2',
+    collectibleA: '#ffe66f',
+    collectibleB: '#ff8df5',
+    white: '#f8fbff',
+    bgBottom: '#1f4e86',
+    bgDeep: '#0d2a4d',
+    bgMid: '#3f4299',
+    bgGlow: '#8db4f4',
+    orbColor: '#f7fbff',
+    orbEmissive: '#8ce8ff',
+    hemiSky: '#9fd9ff',
+    hemiGround: '#2f3f8f',
+    dirLight: '#dff5ff',
+    topLight: '#86e5ff',
+    bottomLight: '#8fb0ff',
+    obstacleEmissive: '#7db8ff',
+    collectibleEmissive: '#ffe9a9',
+  },
+  {
+    id: 'sunset-oxide',
+    waveNeon: '#ffd08a',
+    waveEdge: '#ffad68',
+    spikeTop: '#ff5a4d',
+    spikeBottom: '#2ab7ff',
+    obstacleOrange: '#ff8e42',
+    obstacleGreen: '#59ffd4',
+    safeMarker: '#9bffcc',
+    collectibleA: '#ffea74',
+    collectibleB: '#7edbff',
+    white: '#fff8ee',
+    bgBottom: '#3d4f91',
+    bgDeep: '#23162f',
+    bgMid: '#71386a',
+    bgGlow: '#f2a56b',
+    orbColor: '#fff7ed',
+    orbEmissive: '#ffbf66',
+    hemiSky: '#ffd6a8',
+    hemiGround: '#423279',
+    dirLight: '#ffe8cd',
+    topLight: '#ffb36b',
+    bottomLight: '#64c1ff',
+    obstacleEmissive: '#ff9e74',
+    collectibleEmissive: '#ffe3a6',
+  },
+  {
+    id: 'mint-voltage',
+    waveNeon: '#84ffe4',
+    waveEdge: '#6ed7ff',
+    spikeTop: '#ff5f71',
+    spikeBottom: '#62a9ff',
+    obstacleOrange: '#ffb871',
+    obstacleGreen: '#5dffd8',
+    safeMarker: '#a8ffe8',
+    collectibleA: '#fff078',
+    collectibleB: '#9df6ff',
+    white: '#f3fffd',
+    bgBottom: '#274d80',
+    bgDeep: '#0a2739',
+    bgMid: '#1d5b76',
+    bgGlow: '#65d3c3',
+    orbColor: '#f0fffa',
+    orbEmissive: '#84ffdd',
+    hemiSky: '#b4ffe9',
+    hemiGround: '#1f5f74',
+    dirLight: '#d6fff4',
+    topLight: '#7dffd7',
+    bottomLight: '#7ea4ff',
+    obstacleEmissive: '#74cde6',
+    collectibleEmissive: '#d4fff4',
+  },
+  {
+    id: 'lava-signal',
+    waveNeon: '#ff9d73',
+    waveEdge: '#ff6d7f',
+    spikeTop: '#ff445a',
+    spikeBottom: '#5f88ff',
+    obstacleOrange: '#ff9355',
+    obstacleGreen: '#6ff9d1',
+    safeMarker: '#9dffd4',
+    collectibleA: '#ffd45e',
+    collectibleB: '#ff92d8',
+    white: '#fff4ef',
+    bgBottom: '#423b84',
+    bgDeep: '#2b1022',
+    bgMid: '#6b2c42',
+    bgGlow: '#ff9066',
+    orbColor: '#fff0ea',
+    orbEmissive: '#ff9b76',
+    hemiSky: '#ffc7ae',
+    hemiGround: '#452a5f',
+    dirLight: '#ffe0d3',
+    topLight: '#ff8d68',
+    bottomLight: '#7f95ff',
+    obstacleEmissive: '#ff9c8d',
+    collectibleEmissive: '#ffe3b4',
+  },
+  {
+    id: 'glacier-drift',
+    waveNeon: '#9fe7ff',
+    waveEdge: '#7fb7ff',
+    spikeTop: '#ff6f94',
+    spikeBottom: '#6f9eff',
+    obstacleOrange: '#ffbe7f',
+    obstacleGreen: '#83ffe1',
+    safeMarker: '#b8fff4',
+    collectibleA: '#fff1a5',
+    collectibleB: '#bad7ff',
+    white: '#f8fdff',
+    bgBottom: '#355b95',
+    bgDeep: '#14263a',
+    bgMid: '#35598d',
+    bgGlow: '#93bfff',
+    orbColor: '#f3fbff',
+    orbEmissive: '#92dfff',
+    hemiSky: '#bfe8ff',
+    hemiGround: '#284e75',
+    dirLight: '#e8f6ff',
+    topLight: '#90deff',
+    bottomLight: '#87acff',
+    obstacleEmissive: '#83beff',
+    collectibleEmissive: '#f4efc4',
+  },
+];
+
+const randomPaletteIndex = () => Math.floor(Math.random() * WAVEFLIP_PALETTES.length);
+const nextPaletteIndex = (current: number) => {
+  if (WAVEFLIP_PALETTES.length <= 1) return current;
+  let next = current;
+  while (next === current) {
+    next = randomPaletteIndex();
+  }
+  return next;
+};
 
 let audioContextRef: AudioContext | null = null;
 
@@ -240,11 +399,11 @@ const chooseChunk = (runtime: Runtime) => {
 
 const spawnInterval = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
-  const tutorialSlow = runtime.elapsed < 16 ? 0.32 : runtime.elapsed < 28 ? 0.14 : 0;
+  const tutorialSlow = runtime.elapsed < 10 ? 0.22 : runtime.elapsed < 22 ? 0.08 : 0;
   return clamp(
-    lerp(0.86, 0.44, d) + (3 - tier) * 0.04 + tutorialSlow + Math.random() * 0.1,
-    0.22,
-    1.1
+    lerp(0.72, 0.32, d) + (3 - tier) * 0.03 + tutorialSlow + Math.random() * 0.08,
+    0.2,
+    0.98
   );
 };
 
@@ -286,9 +445,9 @@ const spawnObstacleSet = (runtime: Runtime) => {
   const doubleChance =
     runtime.elapsed < 9
       ? 0
-      : clamp(0.16 + Math.max(0, tier - 1) * 0.11 + d * 0.24, 0, 0.76);
+      : clamp(0.24 + Math.max(0, tier - 1) * 0.14 + d * 0.28, 0, 0.88);
   const tripleChance =
-    runtime.elapsed < 18 ? 0 : clamp(0.07 + d * 0.12 + Math.max(0, tier - 2) * 0.06, 0, 0.34);
+    runtime.elapsed < 16 ? 0 : clamp(0.12 + d * 0.16 + Math.max(0, tier - 2) * 0.08, 0, 0.48);
   const count = Math.random() < tripleChance ? 3 : Math.random() < doubleChance ? 2 : 1;
 
   const oppositeSign = runtime.playerTargetSign === 1 ? -1 : 1;
@@ -298,19 +457,51 @@ const spawnObstacleSet = (runtime: Runtime) => {
   runtime.setRemaining.set(setId, count);
 
   const baseX = VIEW_MAX_X + 1.2;
-  const spacing = 0.94 + Math.random() * 0.24;
+  const laneSwitchChance =
+    count <= 1
+      ? 0
+      : clamp(
+          (count === 2 ? 0.12 : 0.22) + d * 0.2 + Math.max(0, tier - 1) * 0.06,
+          0,
+          count === 2 ? 0.34 : 0.56
+        );
+
+  const requiredSigns: WaveSign[] = [baseRequired];
+  let switchedLane = false;
+  for (let i = 1; i < count; i += 1) {
+    const shouldSwitchLane: boolean =
+      runtime.elapsed > 12 && !switchedLane && Math.random() < laneSwitchChance;
+    const nextSign = shouldSwitchLane
+      ? ((requiredSigns[i - 1] === 1 ? -1 : 1) as WaveSign)
+      : requiredSigns[i - 1];
+    requiredSigns.push(nextSign);
+    switchedLane = switchedLane || shouldSwitchLane;
+  }
+
+  const spacingBase = 0.74 + Math.random() * 0.2;
+  const laneSwitchGap = 1.24 + d * 0.38 + tier * 0.06;
+  const xPositions = new Array<number>(count);
+  xPositions[0] = baseX;
+  for (let i = 1; i < count; i += 1) {
+    const signChanged = requiredSigns[i] !== requiredSigns[i - 1];
+    const jitter = Math.random() * 0.16;
+    xPositions[i] =
+      xPositions[i - 1] +
+      spacingBase +
+      jitter +
+      (signChanged ? laneSwitchGap : 0.18 + Math.random() * 0.12);
+  }
 
   for (let i = 0; i < count; i += 1) {
     const obstacle = acquireObstacle(runtime);
-    const requiredSign = (
-      count >= 2 && i % 2 === 1
-        ? (baseRequired === 1 ? -1 : 1)
-        : baseRequired
-    ) as WaveSign;
+    const requiredSign = requiredSigns[i] as WaveSign;
+    const hasLaneSwitchNeighbor =
+      (i > 0 && requiredSigns[i - 1] !== requiredSign) ||
+      (i < count - 1 && requiredSigns[i + 1] !== requiredSign);
 
-    const sample = waveSampleForSign(baseX + i * spacing, requiredSign, runtime);
+    const sample = waveSampleForSign(xPositions[i], requiredSign, runtime);
     obstacle.active = true;
-    obstacle.x = baseX + i * spacing;
+    obstacle.x = xPositions[i];
     obstacle.kind =
       runtime.elapsed > 20 && Math.random() < 0.22
         ? 2
@@ -325,9 +516,14 @@ const spawnObstacleSet = (runtime: Runtime) => {
       obstacle.kind === 0
         ? clamp(lerp(0.86, 1.3, d) + tier * 0.04, 0.8, 1.42)
         : clamp(lerp(0.64, 1.12, d) + tier * 0.04, 0.62, 1.24);
+    if (hasLaneSwitchNeighbor) {
+      obstacle.w *= 0.86;
+      obstacle.h *= 0.8;
+    }
     obstacle.yOffset =
       (requiredSign === 1 ? 1 : -1) *
-      (obstacle.kind === 0 ? 0.13 : obstacle.kind === 1 ? 0.08 : 0.04);
+      (obstacle.kind === 0 ? 0.2 : obstacle.kind === 1 ? 0.13 : 0.08);
+    obstacle.yOffset += (Math.random() * 2 - 1) * lerp(0.04, 0.16, d);
     obstacle.y = clamp(
       sample.yCenter + obstacle.yOffset,
       -runtime.viewYLimit + obstacle.h * 0.55,
@@ -351,7 +547,8 @@ const spawnObstacleSet = (runtime: Runtime) => {
     const collectible = acquireCollectible(runtime);
     collectible.active = true;
     collectible.sign = (baseRequired === 1 ? -1 : 1) as WaveSign;
-    collectible.x = baseX + (count - 1) * spacing * 0.45 + 0.15 + Math.random() * 0.32;
+    const setSpan = xPositions[count - 1] - xPositions[0];
+    collectible.x = baseX + setSpan * 0.48 + 0.15 + Math.random() * 0.32;
     collectible.r = 0.13 + Math.random() * 0.04;
     collectible.spin = Math.random() * Math.PI * 2;
     collectible.value = count >= 3 ? 4 : count === 2 ? 3 : 2;
@@ -410,12 +607,12 @@ const createRuntime = (): Runtime => ({
   flipGrace: 0,
   phaseScroll: 0,
   waveFreq: 1.52,
-  waveAmp: 0.54,
-  waveBase: 1.68,
+  waveAmp: 0.58,
+  waveBase: 2.2,
   waveHalfThickness: WAVE_HALF_THICKNESS_BASE,
   waveNormalOffset: WAVE_NORMAL_OFFSET_BASE,
   viewYLimit: 4.8,
-  playerY: 1.32,
+  playerY: 1.9,
   playerNormalY: 1,
   lastFlipAt: -99,
   hudCommit: 0,
@@ -450,12 +647,12 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.flipGrace = 0;
   runtime.phaseScroll = 0;
   runtime.waveFreq = 1.52;
-  runtime.waveAmp = 0.54;
-  runtime.waveBase = 1.68;
+  runtime.waveAmp = 0.58;
+  runtime.waveBase = 2.2;
   runtime.waveHalfThickness = WAVE_HALF_THICKNESS_BASE;
   runtime.waveNormalOffset = WAVE_NORMAL_OFFSET_BASE;
   runtime.viewYLimit = 4.8;
-  runtime.playerY = 1.32;
+  runtime.playerY = 1.9;
   runtime.playerNormalY = 1;
   runtime.lastFlipAt = -99;
   runtime.hudCommit = 0;
@@ -666,6 +863,9 @@ function WaveFlipOverlay() {
 }
 
 function WaveFlipScene() {
+  const [paletteIndex, setPaletteIndex] = useState(() => randomPaletteIndex());
+  const palette = WAVEFLIP_PALETTES[paletteIndex];
+
   const inputRef = useInputRef({
     preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'ArrowUp', 'ArrowDown', 'arrowup', 'arrowdown', 'w', 's'],
   });
@@ -689,6 +889,25 @@ function WaveFlipScene() {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
+  const paletteColors = useMemo(
+    () => ({
+      waveNeon: new THREE.Color(),
+      waveEdge: new THREE.Color(),
+      spikeTop: new THREE.Color(),
+      spikeBottom: new THREE.Color(),
+      obstacleOrange: new THREE.Color(),
+      obstacleGreen: new THREE.Color(),
+      safeMarker: new THREE.Color(),
+      collectibleA: new THREE.Color(),
+      collectibleB: new THREE.Color(),
+      white: new THREE.Color(),
+      bgBottom: new THREE.Color(),
+      bgDeep: new THREE.Color(),
+      bgMid: new THREE.Color(),
+      bgGlow: new THREE.Color(),
+    }),
+    []
+  );
 
   const ribbonPositions = useMemo(() => new Float32Array(WAVE_POINTS * 2 * 3), []);
   const centerPositions = useMemo(() => new Float32Array(WAVE_POINTS * 3), []);
@@ -720,7 +939,13 @@ function WaveFlipScene() {
     return geo;
   }, [centerPositions]);
   const centerLineMaterial = useMemo(
-    () => new THREE.LineBasicMaterial({ color: WAVE_EDGE, transparent: true, opacity: 0.72, toneMapped: false }),
+    () =>
+      new THREE.LineBasicMaterial({
+        color: '#9fc8ff',
+        transparent: true,
+        opacity: 0.72,
+        toneMapped: false,
+      }),
     []
   );
   const centerLineObject = useMemo(
@@ -729,6 +954,32 @@ function WaveFlipScene() {
   );
 
   const { camera, viewport } = useThree();
+
+  useEffect(() => {
+    paletteColors.waveNeon.set(palette.waveNeon);
+    paletteColors.waveEdge.set(palette.waveEdge);
+    paletteColors.spikeTop.set(palette.spikeTop);
+    paletteColors.spikeBottom.set(palette.spikeBottom);
+    paletteColors.obstacleOrange.set(palette.obstacleOrange);
+    paletteColors.obstacleGreen.set(palette.obstacleGreen);
+    paletteColors.safeMarker.set(palette.safeMarker);
+    paletteColors.collectibleA.set(palette.collectibleA);
+    paletteColors.collectibleB.set(palette.collectibleB);
+    paletteColors.white.set(palette.white);
+    paletteColors.bgBottom.set(palette.bgBottom);
+    paletteColors.bgDeep.set(palette.bgDeep);
+    paletteColors.bgMid.set(palette.bgMid);
+    paletteColors.bgGlow.set(palette.bgGlow);
+
+    centerLineMaterial.color.copy(paletteColors.waveEdge);
+    centerLineMaterial.needsUpdate = true;
+
+    if (bgMaterialRef.current) {
+      bgMaterialRef.current.uniforms.uDeep.value.copy(paletteColors.bgDeep);
+      bgMaterialRef.current.uniforms.uMid.value.copy(paletteColors.bgMid);
+      bgMaterialRef.current.uniforms.uGlow.value.copy(paletteColors.bgGlow);
+    }
+  }, [centerLineMaterial, palette, paletteColors]);
 
   useEffect(() => {
     resetRuntime(runtimeRef.current);
@@ -831,6 +1082,7 @@ function WaveFlipScene() {
 
     if (store.status !== 'PLAYING') {
       if (desiredSign !== null || toggleSign || hasPointerAction) {
+        setPaletteIndex((current) => nextPaletteIndex(current));
         resetRuntime(runtime);
         if (desiredSign !== null) {
           runtime.waveSign = desiredSign;
@@ -859,11 +1111,11 @@ function WaveFlipScene() {
       const intensity = clamp(d * 0.64 + pressure * 0.36, 0, 1);
       const worldHalfHeight = Math.max(2.8, viewport.height * 0.5);
       const desiredFreq = lerp(1.48, 2.95, intensity);
-      const desiredAmp = lerp(0.54, 0.9, intensity);
-      const desiredBase = lerp(1.68, 2.35, intensity);
+      const desiredAmp = lerp(0.58, 0.98, intensity);
+      const desiredBase = lerp(2.2, 3.05, intensity);
       const desiredNormalOffset = lerp(WAVE_NORMAL_OFFSET_BASE, 0.24, intensity);
       const desiredHalfThickness = lerp(WAVE_HALF_THICKNESS_BASE, 0.25, intensity);
-      const obstacleHeadroom = 1.55;
+      const obstacleHeadroom = 1.4;
       const maxCenterPeak = Math.max(1.4, worldHalfHeight - obstacleHeadroom - desiredNormalOffset);
 
       let nextBase = desiredBase;
@@ -1077,14 +1329,20 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           obstacleRef.current.setMatrixAt(i, dummy.matrix);
-          obstacleRef.current.setColorAt(i, WHITE);
+          obstacleRef.current.setColorAt(i, paletteColors.white);
           bladeRef.current.setMatrixAt(i, dummy.matrix);
-          bladeRef.current.setColorAt(i, WHITE);
+          bladeRef.current.setColorAt(i, paletteColors.white);
           continue;
         }
 
-        const phaseColor = obstacle.requiredSign === 1 ? SPIKE_TOP : SPIKE_BOTTOM;
-        const baseColor = obstacle.kind === 0 ? phaseColor : obstacle.kind === 1 ? OBSTACLE_ORANGE : OBSTACLE_GREEN;
+        const phaseColor =
+          obstacle.requiredSign === 1 ? paletteColors.spikeTop : paletteColors.spikeBottom;
+        const baseColor =
+          obstacle.kind === 0
+            ? phaseColor
+            : obstacle.kind === 1
+              ? paletteColors.obstacleOrange
+              : paletteColors.obstacleGreen;
 
         if (obstacle.kind === 2) {
           dummy.position.set(obstacle.x, obstacle.y, 0.08);
@@ -1092,7 +1350,9 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, -obstacle.rot * 0.45);
           dummy.updateMatrix();
           obstacleRef.current.setMatrixAt(i, dummy.matrix);
-          colorScratch.copy(baseColor).lerp(WHITE, clamp(0.24 + obstacle.glow * 0.56, 0, 0.9));
+          colorScratch
+            .copy(baseColor)
+            .lerp(paletteColors.white, clamp(0.24 + obstacle.glow * 0.56, 0, 0.9));
           obstacleRef.current.setColorAt(i, colorScratch);
 
           dummy.position.set(obstacle.x, obstacle.y, 0.2);
@@ -1100,7 +1360,9 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, obstacle.rot);
           dummy.updateMatrix();
           bladeRef.current.setMatrixAt(i, dummy.matrix);
-          colorScratch.copy(baseColor).lerp(WHITE, clamp(0.34 + obstacle.glow * 0.52, 0, 0.95));
+          colorScratch
+            .copy(baseColor)
+            .lerp(paletteColors.white, clamp(0.34 + obstacle.glow * 0.52, 0, 0.95));
           bladeRef.current.setColorAt(i, colorScratch);
         } else if (obstacle.kind === 1) {
           dummy.position.set(obstacle.x, obstacle.y, 0.08);
@@ -1108,7 +1370,10 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, obstacle.rot * 0.65);
           dummy.updateMatrix();
           obstacleRef.current.setMatrixAt(i, dummy.matrix);
-          colorScratch.copy(baseColor).lerp(phaseColor, 0.22).lerp(WHITE, clamp(0.22 + obstacle.glow * 0.52, 0, 0.84));
+          colorScratch
+            .copy(baseColor)
+            .lerp(phaseColor, 0.22)
+            .lerp(paletteColors.white, clamp(0.22 + obstacle.glow * 0.52, 0, 0.84));
           obstacleRef.current.setColorAt(i, colorScratch);
 
           dummy.position.set(obstacle.x, obstacle.y, 0.18);
@@ -1116,7 +1381,9 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, -obstacle.rot * 1.25);
           dummy.updateMatrix();
           bladeRef.current.setMatrixAt(i, dummy.matrix);
-          colorScratch.copy(phaseColor).lerp(WHITE, clamp(0.28 + obstacle.glow * 0.45, 0, 0.86));
+          colorScratch
+            .copy(phaseColor)
+            .lerp(paletteColors.white, clamp(0.28 + obstacle.glow * 0.45, 0, 0.86));
           bladeRef.current.setColorAt(i, colorScratch);
         } else {
           dummy.position.set(obstacle.x, obstacle.y, 0.08);
@@ -1124,7 +1391,9 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, obstacle.rot * 0.42);
           dummy.updateMatrix();
           obstacleRef.current.setMatrixAt(i, dummy.matrix);
-          colorScratch.copy(baseColor).lerp(WHITE, clamp(0.24 + obstacle.glow * 0.52, 0, 0.86));
+          colorScratch
+            .copy(baseColor)
+            .lerp(paletteColors.white, clamp(0.24 + obstacle.glow * 0.52, 0, 0.86));
           obstacleRef.current.setColorAt(i, colorScratch);
 
           dummy.position.set(obstacle.x, obstacle.y, 0.18);
@@ -1132,7 +1401,9 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, obstacle.rot * 1.4 + obstacle.phase);
           dummy.updateMatrix();
           bladeRef.current.setMatrixAt(i, dummy.matrix);
-          colorScratch.copy(phaseColor).lerp(WHITE, clamp(0.28 + obstacle.glow * 0.5, 0, 0.9));
+          colorScratch
+            .copy(phaseColor)
+            .lerp(paletteColors.white, clamp(0.28 + obstacle.glow * 0.5, 0, 0.9));
           bladeRef.current.setColorAt(i, colorScratch);
         }
       }
@@ -1151,7 +1422,7 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           markerRef.current.setMatrixAt(i, dummy.matrix);
-          markerRef.current.setColorAt(i, WHITE);
+          markerRef.current.setColorAt(i, paletteColors.white);
           continue;
         }
 
@@ -1169,7 +1440,9 @@ function WaveFlipScene() {
         dummy.updateMatrix();
         markerRef.current.setMatrixAt(i, dummy.matrix);
 
-        colorScratch.copy(SAFE_MARKER).lerp(WHITE, clamp(obstacle.glow * 0.5, 0, 0.45));
+        colorScratch
+          .copy(paletteColors.safeMarker)
+          .lerp(paletteColors.white, clamp(obstacle.glow * 0.5, 0, 0.45));
         markerRef.current.setColorAt(i, colorScratch);
       }
       markerRef.current.instanceMatrix.needsUpdate = true;
@@ -1185,7 +1458,7 @@ function WaveFlipScene() {
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           collectibleRef.current.setMatrixAt(i, dummy.matrix);
-          collectibleRef.current.setColorAt(i, WHITE);
+          collectibleRef.current.setColorAt(i, paletteColors.white);
           continue;
         }
 
@@ -1195,8 +1468,8 @@ function WaveFlipScene() {
         dummy.updateMatrix();
         collectibleRef.current.setMatrixAt(i, dummy.matrix);
         colorScratch
-          .copy(collectible.sign === 1 ? COLLECTIBLE_A : COLLECTIBLE_B)
-          .lerp(WHITE, 0.36 + Math.sin(runtime.elapsed * 8 + i) * 0.12);
+          .copy(collectible.sign === 1 ? paletteColors.collectibleA : paletteColors.collectibleB)
+          .lerp(paletteColors.white, 0.36 + Math.sin(runtime.elapsed * 8 + i) * 0.12);
         collectibleRef.current.setColorAt(i, colorScratch);
       }
       collectibleRef.current.instanceMatrix.needsUpdate = true;
@@ -1209,20 +1482,25 @@ function WaveFlipScene() {
   return (
     <>
       <OrthographicCamera makeDefault position={[0, 0, 9.8]} zoom={52} near={0.1} far={44} />
-      <color attach="background" args={[BG_BOTTOM]} />
-      <fog attach="fog" args={[BG_BOTTOM, 10, 34]} />
+      <color attach="background" args={[palette.bgBottom]} />
+      <fog attach="fog" args={[palette.bgBottom, 10, 34]} />
 
       <ambientLight intensity={0.48} />
-      <hemisphereLight args={['#9fd9ff', '#2f3f8f', 0.36]} />
-      <directionalLight position={[2.8, 2.6, 6]} intensity={0.42} color="#dff5ff" />
-      <pointLight position={[0, 3.1, 4]} intensity={0.42} color="#86e5ff" />
-      <pointLight position={[0, -2.8, 4]} intensity={0.3} color="#8fb0ff" />
+      <hemisphereLight args={[palette.hemiSky, palette.hemiGround, 0.36]} />
+      <directionalLight position={[2.8, 2.6, 6]} intensity={0.42} color={palette.dirLight} />
+      <pointLight position={[0, 3.1, 4]} intensity={0.42} color={palette.topLight} />
+      <pointLight position={[0, -2.8, 4]} intensity={0.3} color={palette.bottomLight} />
 
       <mesh position={[0, 0, -2.2]}>
         <planeGeometry args={[34, 21]} />
         <shaderMaterial
           ref={bgMaterialRef}
-          uniforms={{ uTime: { value: 0 } }}
+          uniforms={{
+            uTime: { value: 0 },
+            uDeep: { value: new THREE.Color(palette.bgDeep) },
+            uMid: { value: new THREE.Color(palette.bgMid) },
+            uGlow: { value: new THREE.Color(palette.bgGlow) },
+          }}
           vertexShader={`
             varying vec2 vUv;
             void main() {
@@ -1232,6 +1510,9 @@ function WaveFlipScene() {
           `}
           fragmentShader={`
             uniform float uTime;
+            uniform vec3 uDeep;
+            uniform vec3 uMid;
+            uniform vec3 uGlow;
             varying vec2 vUv;
             float hash21(vec2 p) {
               return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -1257,17 +1538,14 @@ function WaveFlipScene() {
               return v;
             }
             void main() {
-              vec3 deep = vec3(0.08, 0.24, 0.46);
-              vec3 purple = vec3(0.34, 0.30, 0.70);
-              vec3 glow = vec3(0.56, 0.73, 0.94);
               float grad = smoothstep(0.0, 1.0, vUv.y);
               vec2 uv = vUv * vec2(3.2, 8.4);
               float drift = uTime * 0.12;
               float cloud = fbm2(uv + vec2(0.0, drift));
               float ribbons = fbm2(uv * vec2(0.8, 1.7) - vec2(drift, 0.0));
               float grain = hash21(vUv * (uTime + 1.9));
-              vec3 col = mix(deep, purple, grad);
-              col = mix(col, glow, smoothstep(0.54, 0.94, cloud + ribbons * 0.35) * 0.11);
+              vec3 col = mix(uDeep, uMid, grad);
+              col = mix(col, uGlow, smoothstep(0.54, 0.94, cloud + ribbons * 0.35) * 0.11);
               col += (grain - 0.5) * 0.018;
               col += vec3(0.014, 0.028, 0.042);
               gl_FragColor = vec4(col, 1.0);
@@ -1279,7 +1557,7 @@ function WaveFlipScene() {
 
       <mesh geometry={ribbonGeometry}>
         <meshBasicMaterial
-          color={WAVE_NEON}
+          color={palette.waveNeon}
           transparent
           opacity={0.9}
           side={THREE.DoubleSide}
@@ -1295,7 +1573,7 @@ function WaveFlipScene() {
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           vertexColors
-          emissive="#7db8ff"
+          emissive={palette.obstacleEmissive}
           emissiveIntensity={0.28}
           roughness={0.24}
           metalness={0.16}
@@ -1331,7 +1609,7 @@ function WaveFlipScene() {
         <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
           vertexColors
-          emissive="#ffe9a9"
+          emissive={palette.collectibleEmissive}
           emissiveIntensity={0.34}
           roughness={0.18}
           metalness={0.2}
@@ -1346,8 +1624,8 @@ function WaveFlipScene() {
       <mesh ref={orbRef} position={[PLAYER_X, 1, 0.15]}>
         <sphereGeometry args={[PLAYER_R, 18, 18]} />
         <meshStandardMaterial
-          color="#f7fbff"
-          emissive="#8ce8ff"
+          color={palette.orbColor}
+          emissive={palette.orbEmissive}
           emissiveIntensity={0.45}
           roughness={0.18}
           metalness={0.04}

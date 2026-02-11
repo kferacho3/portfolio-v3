@@ -11,19 +11,6 @@ import type { OctaFxLevel, OctaSurgeMode } from '../types';
 const font =
   "'Avenir Next', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
 
-const buttonBase: CSSProperties = {
-  borderRadius: 12,
-  padding: '10px 14px',
-  border: '1px solid rgba(255,255,255,0.22)',
-  color: 'white',
-  fontFamily: font,
-  fontSize: 13,
-  fontWeight: 800,
-  letterSpacing: 0.3,
-  cursor: 'pointer',
-  transition: 'all 120ms ease-out',
-};
-
 const modeLabel: Record<OctaSurgeMode, string> = {
   classic: 'Classic',
   endless: 'Endless',
@@ -36,6 +23,28 @@ const fxLabel: Record<OctaFxLevel, string> = {
   low: 'FX Low',
 };
 
+const chipStyle: CSSProperties = {
+  borderRadius: 999,
+  border: '1px solid rgba(255,255,255,0.22)',
+  background: 'rgba(255,255,255,0.08)',
+  color: 'white',
+  fontSize: 12,
+  fontWeight: 700,
+  padding: '6px 10px',
+};
+
+const buttonBase: CSSProperties = {
+  borderRadius: 12,
+  padding: '10px 14px',
+  border: '1px solid rgba(255,255,255,0.24)',
+  color: 'white',
+  fontFamily: font,
+  fontSize: 13,
+  fontWeight: 800,
+  letterSpacing: 0.25,
+  cursor: 'pointer',
+};
+
 export function OctaSurgeUI({
   onStart,
   onSelectMode,
@@ -46,6 +55,14 @@ export function OctaSurgeUI({
   onCycleFxLevel: () => void;
 }) {
   const snap = useSnapshot(octaSurgeState);
+  const runCompleted =
+    snap.phase === 'gameover' &&
+    snap.crashReason.toLowerCase().includes('run complete');
+
+  const isTimed = snap.mode !== 'endless';
+  const runSeconds =
+    snap.mode === 'daily' ? GAME.dailyRunSeconds : GAME.classicRunSeconds;
+  const secondsLeft = Math.max(0, runSeconds - snap.time);
 
   return (
     <Html fullscreen>
@@ -57,9 +74,31 @@ export function OctaSurgeUI({
             pointerEvents: 'none',
             fontFamily: font,
             color: 'rgba(245, 248, 255, 0.98)',
-            textShadow: '0 10px 26px rgba(2,6,23,0.6)',
+            textShadow: '0 8px 22px rgba(2,6,23,0.65)',
           }}
         >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 6,
+              background: 'rgba(255,255,255,0.15)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${Math.max(0, Math.min(100, snap.progress * 100))}%`,
+                background:
+                  'linear-gradient(90deg, #67e8f9 0%, #60a5fa 55%, #a78bfa 100%)',
+                transition: 'width 0.18s ease',
+              }}
+            />
+          </div>
+
           <div
             style={{
               position: 'absolute',
@@ -72,14 +111,11 @@ export function OctaSurgeUI({
             <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 800 }}>
               {OCTA_SURGE_TITLE.toUpperCase()} · {modeLabel[snap.mode]}
             </div>
-            <div style={{ fontSize: 38, fontWeight: 900, lineHeight: 1 }}>
+            <div style={{ fontSize: 46, fontWeight: 900, lineHeight: 1 }}>
               {Math.floor(snap.score)}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.94 }}>
-              Combo x{Math.max(1, snap.combo)}
-            </div>
-            <div style={{ fontSize: 12, opacity: 0.86 }}>
-              Speed {snap.speed.toFixed(1)}
+            <div style={{ fontSize: 13, opacity: 0.9, fontWeight: 700 }}>
+              Best {Math.floor(snap.bestScore)}
             </div>
           </div>
 
@@ -89,65 +125,36 @@ export function OctaSurgeUI({
               top: 18,
               right: 18,
               display: 'grid',
-              gap: 6,
-              textAlign: 'right',
-              fontWeight: 700,
-              fontSize: 12,
+              gap: 7,
+              justifyItems: 'end',
             }}
           >
-            <div>Gems +{snap.runGems}</div>
-            <div>Boost +{snap.runBoost}</div>
-            <div>Shield +{snap.runShield}</div>
-            <div>Near Miss +{snap.runNearMisses}</div>
-            <div style={{ marginTop: 4, opacity: 0.92 }}>
-              {snap.boostActive ? 'BOOST LIVE' : 'BOOST OFF'}
-            </div>
-            <div style={{ opacity: 0.9 }}>
-              {snap.prismActive ? 'PRISM x2' : snap.magnetActive ? 'MAGNET' : snap.phaseActive ? 'PHASE' : 'POWER READY'}
-            </div>
+            <div style={chipStyle}>Combo x{Math.max(1, snap.combo)}</div>
+            <div style={chipStyle}>Speed {snap.speed.toFixed(1)}</div>
+            {isTimed ? (
+              <div style={chipStyle}>Time {secondsLeft.toFixed(1)}s</div>
+            ) : (
+              <div style={chipStyle}>Distance Run</div>
+            )}
           </div>
 
-          <div
-            style={{
-              position: 'absolute',
-              left: 18,
-              right: 18,
-              bottom: 18,
-              maxWidth: 520,
-              pointerEvents: 'none',
-            }}
-          >
+          {snap.time < 9 && (
             <div
               style={{
-                marginBottom: 6,
-                fontSize: 12,
-                fontWeight: 800,
-                display: 'flex',
-                justifyContent: 'space-between',
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: 22,
+                textAlign: 'center',
+                fontSize: 13,
+                color: 'rgba(255,255,255,0.82)',
+                padding: '0 20px',
               }}
             >
-              <span>Surge {Math.round(snap.surgeMeter)}%</span>
-              <span>{Math.round(snap.progress * 100)}%</span>
+              Hold A/D or Left/Right to steer around the ring. Touch: hold left
+              or right side.
             </div>
-            <div
-              style={{
-                height: 11,
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.24)',
-                background: 'rgba(255,255,255,0.14)',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  width: `${Math.max(0, Math.min(100, snap.surgeMeter))}%`,
-                  height: '100%',
-                  background:
-                    'linear-gradient(90deg, #67e8f9 0%, #60a5fa 42%, #a78bfa 100%)',
-                }}
-              />
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -161,17 +168,17 @@ export function OctaSurgeUI({
             pointerEvents: 'auto',
             fontFamily: font,
             background:
-              'radial-gradient(circle at 12% 18%, rgba(45,212,191,0.16), transparent 45%), radial-gradient(circle at 82% 82%, rgba(192,132,252,0.2), transparent 50%)',
+              'radial-gradient(circle at 15% 14%, rgba(96,165,250,0.16), transparent 44%), radial-gradient(circle at 84% 84%, rgba(167,139,250,0.2), transparent 46%)',
           }}
         >
           <div
             style={{
-              width: 560,
+              width: 540,
               maxWidth: '94vw',
               borderRadius: 18,
               border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(2, 6, 23, 0.76)',
-              boxShadow: '0 30px 72px rgba(2,6,23,0.62)',
+              background: 'rgba(3, 8, 24, 0.8)',
+              boxShadow: '0 30px 72px rgba(2,6,23,0.64)',
               color: 'white',
               padding: '20px 20px 18px',
             }}
@@ -184,11 +191,9 @@ export function OctaSurgeUI({
                 gap: 10,
               }}
             >
-              <div style={{ fontSize: 31, fontWeight: 900 }}>
-                {OCTA_SURGE_TITLE}
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 700 }}>
-                8-Lane Hyper Tunnel
+              <div style={{ fontSize: 32, fontWeight: 900 }}>{OCTA_SURGE_TITLE}</div>
+              <div style={{ fontSize: 12, opacity: 0.76, fontWeight: 700 }}>
+                Space Tunnel Runner
               </div>
             </div>
 
@@ -196,14 +201,13 @@ export function OctaSurgeUI({
               style={{
                 marginTop: 10,
                 fontSize: 13,
-                lineHeight: 1.46,
+                lineHeight: 1.48,
                 opacity: 0.92,
               }}
             >
-              Snap lanes with <strong>Left / Right</strong>, flip with{' '}
-              <strong>Up</strong>, hold <strong>Space</strong> for surge
-              slow-time. Hit speed pads, chain near misses, and stack power-ups
-              for huge score spikes.
+              Professional lane collision has been rebuilt around ring-plane
+              sweeps. Steer the orb into open segments and maintain flow as the
+              tunnel accelerates.
             </div>
 
             <div
@@ -223,11 +227,8 @@ export function OctaSurgeUI({
                     style={{
                       ...buttonBase,
                       background: active
-                        ? 'linear-gradient(135deg, rgba(45,212,191,0.38), rgba(168,85,247,0.38))'
+                        ? 'linear-gradient(135deg, rgba(45,212,191,0.36), rgba(96,165,250,0.38))'
                         : 'rgba(255,255,255,0.06)',
-                      boxShadow: active
-                        ? '0 0 0 1px rgba(255,255,255,0.33) inset'
-                        : 'none',
                     }}
                   >
                     {modeLabel[mode]}
@@ -239,7 +240,6 @@ export function OctaSurgeUI({
                 style={{
                   ...buttonBase,
                   background: 'rgba(255,255,255,0.08)',
-                  borderColor: 'rgba(255,255,255,0.28)',
                 }}
               >
                 {fxLabel[snap.fxLevel]}
@@ -260,10 +260,6 @@ export function OctaSurgeUI({
               <div>Best Combo: x{Math.max(1, snap.bestCombo)}</div>
               <div>Best Classic: {Math.floor(snap.bestClassic)}</div>
               <div>Best Daily: {Math.floor(snap.bestDaily)}</div>
-              <div>Total Gems: {snap.totalGems}</div>
-              <div>Total Boost: {snap.totalBoost}</div>
-              <div>Total Magnet: {snap.totalMagnet}</div>
-              <div>Total Prism: {snap.totalPrism}</div>
             </div>
 
             {snap.phase === 'gameover' && (
@@ -272,14 +268,24 @@ export function OctaSurgeUI({
                   marginTop: 14,
                   padding: '10px 12px',
                   borderRadius: 12,
-                  background: 'rgba(255,255,255,0.06)',
+                  border: runCompleted
+                    ? '1px solid rgba(34,197,94,0.42)'
+                    : '1px solid rgba(248,113,113,0.42)',
+                  background: runCompleted
+                    ? 'rgba(34,197,94,0.12)'
+                    : 'rgba(248,113,113,0.12)',
                   fontSize: 13,
-                  lineHeight: 1.54,
+                  lineHeight: 1.52,
                 }}
               >
-                Run Ended · Score <strong>{Math.floor(snap.score)}</strong> ·
-                Near Miss +{snap.runNearMisses} · Powerups +{snap.runBoost + snap.runShield + snap.runMagnet + snap.runPrism + snap.runPhase} · Progress{' '}
-                {Math.round(snap.progress * 100)}%
+                <strong>{runCompleted ? 'Run Complete' : 'Run Failed'}</strong>
+                <div style={{ marginTop: 4, opacity: 0.94 }}>
+                  {snap.crashReason || 'You hit a closed tunnel segment.'}
+                </div>
+                <div style={{ marginTop: 6, opacity: 0.9 }}>
+                  Score {Math.floor(snap.score)} · Combo x{Math.max(1, snap.combo)}
+                  {' · '}Progress {Math.round(snap.progress * 100)}%
+                </div>
               </div>
             )}
 
@@ -291,17 +297,17 @@ export function OctaSurgeUI({
                 width: '100%',
                 padding: '12px 16px',
                 background:
-                  'linear-gradient(135deg, rgba(45,212,191,0.42), rgba(168,85,247,0.4))',
+                  'linear-gradient(135deg, rgba(45,212,191,0.42), rgba(167,139,250,0.4))',
                 borderColor: 'rgba(255,255,255,0.32)',
                 fontSize: 14,
               }}
             >
-              {snap.phase === 'menu' ? 'Launch Run' : 'Restart Run'}
+              {snap.phase === 'menu' ? 'Start Run' : 'Restart Run'}
             </button>
 
             <div style={{ marginTop: 10, fontSize: 11, opacity: 0.68 }}>
-              Classic and Daily are {GAME.classicRunSeconds}s sprints. Endless
-              runs until collision.
+              Classic and Daily are {GAME.classicRunSeconds}s runs. Endless lasts
+              until collision.
             </div>
           </div>
         </div>

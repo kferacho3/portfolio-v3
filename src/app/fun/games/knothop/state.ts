@@ -24,6 +24,7 @@ export const knotHopState = proxy({
   phase: 'menu' as KnotHopPhase,
   score: 0,
   best: 0,
+  crashReason: '',
 
   streak: 0,
   dodged: 0,
@@ -45,6 +46,7 @@ export const knotHopState = proxy({
     this.resetVersion += 1;
     this.phase = 'menu';
     this.score = 0;
+    this.crashReason = '';
     this.streak = 0;
     this.dodged = 0;
     this.collected = 0;
@@ -58,6 +60,7 @@ export const knotHopState = proxy({
   start() {
     this.phase = 'playing';
     this.score = 0;
+    this.crashReason = '';
     this.streak = 0;
     this.dodged = 0;
     this.collected = 0;
@@ -95,10 +98,11 @@ export const knotHopState = proxy({
     this.direction = hud.direction;
   },
 
-  end(finalScore: number) {
+  end(finalScore: number, reason = '') {
     const score = Math.max(0, Math.floor(finalScore));
     this.phase = 'gameover';
     this.score = score;
+    this.crashReason = reason;
     this.gameOver = true;
 
     const nextBest = Math.max(this.best, score);

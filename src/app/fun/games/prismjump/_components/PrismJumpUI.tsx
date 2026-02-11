@@ -316,8 +316,8 @@ export function PrismJumpUI() {
                 padding: '0 20px',
               }}
             >
-              Tap / Space / W / ↑ to jump. Time each leap onto the moving
-              platform and stay inside the lane.
+              Tap / Space / W / ↑ to jump. Use A/D or ←/→ to move left/right on
+              each row and line up safer landings.
             </div>
           )}
         </div>
@@ -372,7 +372,8 @@ export function PrismJumpUI() {
                 >
                   Cube Jump style flow: tap to jump forward across moving rows.
                   Land near center for Perfect bonuses, collect cubes, and
-                  survive the speed ramp.
+                  survive the speed ramp. A fresh color palette is loaded each
+                  new run.
                 </div>
               </div>
 
@@ -491,9 +492,10 @@ export function PrismJumpUI() {
                 }}
               >
                 <strong>How to play:</strong> Tap (or press Space / W / ↑) to
-                jump to the next row. Rows alternate left/right motion, so wait
-                for alignment and chain clean landings. Perfect center landings
-                build combo and multiplier.
+                jump to the next row. Use A/D or ←/→ to move across each row.
+                Rows alternate left/right motion, so time alignment and chain
+                clean landings. Perfect center landings build combo and
+                multiplier.
               </div>
             </div>
 

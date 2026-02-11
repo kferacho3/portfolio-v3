@@ -14,7 +14,7 @@ export const GAME = {
   rowSpacing: 2.0,
   xLimit: 7.5, // player dies if carried beyond this
   xWrap: 15, // platforms wrap beyond this; keep lanes clear
-  laneSpacing: 3.0,
+  spawnHalfWidth: 6.8,
 
   // Platform sizing - single prism per platform (bright colored block on thin dark base)
   platformDepth: 1.05,
@@ -27,15 +27,28 @@ export const GAME = {
 
   // Spawn - fixed ring buffer (no memory growth)
   visibleRows: 24,
-  platformsPerRow: 5,
+  platformsPerRow: 5, // capacity per row (some rows intentionally contain fewer)
+  minPlatformsPerRow: 2,
+  maxPlatformsPerRow: 5,
   rowRecycleLookahead: 8,
   minimapRows: 14,
+  platformLengthNearMin: 1.25,
+  platformLengthNearMax: 2.9,
+  platformLengthFarMin: 0.95,
+  platformLengthFarMax: 2.2,
+  gapNearMin: 0.34,
+  gapNearMax: 1.1,
+  gapFarMin: 1.0,
+  gapFarMax: 2.7,
 
   // Movement / difficulty - PLATFORMS ALWAYS MOVE!
   baseSpeed: 1.8,
   speedIncreasePerRow: 0.018,
   maxSpeed: 5.5,
   rowSpeedVariance: 0.16,
+  lateralGroundSpeed: 4.1,
+  lateralAirSpeed: 2.5,
+  pointerLateralDeadZone: 0.2,
 
   // Jump
   gravityY: -18,
@@ -63,11 +76,106 @@ export const GAME = {
   cameraDamping: 0.18,
 };
 
-export const PLATFORM_TOP_COLORS = [
-  '#00E5FF', // cyan
-  '#FF4FD8', // pink
-  '#B56BFF', // purple
-  '#3FA0FF', // blue
+export type PrismPalette = {
+  id: string;
+  name: string;
+  background: string;
+  fog: string;
+  platformBase: string;
+  platformTopColors: string[];
+  cubeColor: string;
+  cubeEmissive: string;
+  ambientLight: string;
+  keyLight: string;
+  fillLightA: string;
+  fillLightB: string;
+};
+
+export const PRISM_PALETTES: PrismPalette[] = [
+  {
+    id: 'aurora-pop',
+    name: 'Aurora Pop',
+    background: '#060b1d',
+    fog: '#0d1330',
+    platformBase: '#1b1d35',
+    platformTopColors: ['#2AF6FF', '#FF4D8B', '#8B7BFF', '#45B3FF', '#FFD166'],
+    cubeColor: '#7AF8FF',
+    cubeEmissive: '#12c7d6',
+    ambientLight: '#6d89b8',
+    keyLight: '#ffffff',
+    fillLightA: '#39e2ff',
+    fillLightB: '#ad8dff',
+  },
+  {
+    id: 'solar-punch',
+    name: 'Solar Punch',
+    background: '#1a0f08',
+    fog: '#2c1b10',
+    platformBase: '#3a1f15',
+    platformTopColors: ['#FF7A18', '#FFE066', '#FF4D6D', '#FF9EAA', '#FFC857'],
+    cubeColor: '#fff08f',
+    cubeEmissive: '#ffba3a',
+    ambientLight: '#a37a5d',
+    keyLight: '#fff4d6',
+    fillLightA: '#ff8d3a',
+    fillLightB: '#ff5d8f',
+  },
+  {
+    id: 'mint-wave',
+    name: 'Mint Wave',
+    background: '#041917',
+    fog: '#0b2a27',
+    platformBase: '#173633',
+    platformTopColors: ['#0EF6C5', '#34D399', '#7BE0AD', '#6EE7F9', '#A7F3D0'],
+    cubeColor: '#8fffe8',
+    cubeEmissive: '#2bcfba',
+    ambientLight: '#5f9f98',
+    keyLight: '#f5fff8',
+    fillLightA: '#18d2b0',
+    fillLightB: '#53d8ff',
+  },
+  {
+    id: 'retro-candy',
+    name: 'Retro Candy',
+    background: '#13091d',
+    fog: '#231237',
+    platformBase: '#2e1b4a',
+    platformTopColors: ['#FF6AD5', '#9B7BFF', '#57B7FF', '#6BF0D4', '#F9A826'],
+    cubeColor: '#a8e7ff',
+    cubeEmissive: '#58beff',
+    ambientLight: '#846ba8',
+    keyLight: '#fff8ff',
+    fillLightA: '#5ac8ff',
+    fillLightB: '#dd7cff',
+  },
+  {
+    id: 'voltage-lime',
+    name: 'Voltage Lime',
+    background: '#0b1203',
+    fog: '#16240a',
+    platformBase: '#253a14',
+    platformTopColors: ['#D7FF2A', '#A3FF12', '#58E064', '#2DD4BF', '#FDE047'],
+    cubeColor: '#cfff7d',
+    cubeEmissive: '#82d81f',
+    ambientLight: '#779662',
+    keyLight: '#f8ffe1',
+    fillLightA: '#7eff31',
+    fillLightB: '#4ad9b2',
+  },
+  {
+    id: 'ocean-noir',
+    name: 'Ocean Noir',
+    background: '#040d1f',
+    fog: '#0a1730',
+    platformBase: '#122645',
+    platformTopColors: ['#4CC9F0', '#4895EF', '#4361EE', '#3A86FF', '#56CFE1'],
+    cubeColor: '#84ebff',
+    cubeEmissive: '#25b8df',
+    ambientLight: '#5c7ca8',
+    keyLight: '#e8f4ff',
+    fillLightA: '#3eb9ff',
+    fillLightB: '#7ea7ff',
+  },
 ];
 
 export const DEFAULT_CHARACTER_ID = 'classic';

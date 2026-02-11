@@ -34,6 +34,7 @@ const dailySeedFromDate = () => {
 export const octaSurgeState = proxy({
   phase: 'menu' as OctaSurgePhase,
   mode: 'classic' as OctaSurgeMode,
+  crashReason: '',
 
   score: 0,
   bestScore: 0,
@@ -83,6 +84,7 @@ export const octaSurgeState = proxy({
 
   start() {
     this.phase = 'playing';
+    this.crashReason = '';
     this.score = 0;
     this.combo = 0;
     this.progress = 0;
@@ -113,6 +115,7 @@ export const octaSurgeState = proxy({
 
   end() {
     this.phase = 'gameover';
+    if (!this.crashReason) this.crashReason = 'Collision detected';
     if (this.score > this.bestScore) this.bestScore = this.score;
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
 
@@ -149,6 +152,10 @@ export const octaSurgeState = proxy({
 
   addNearMiss() {
     this.runNearMisses += 1;
+  },
+
+  setCrashReason(reason: string) {
+    this.crashReason = reason;
   },
 
   load() {

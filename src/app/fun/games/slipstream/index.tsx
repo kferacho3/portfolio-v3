@@ -253,10 +253,15 @@ const applyFractalObstacleShader = (
         `
       )
       .replace(
-        '#include <worldpos_vertex>',
+        '#include <begin_vertex>',
         `
-          #include <worldpos_vertex>
-          vWorldPos = worldPosition.xyz;
+          #include <begin_vertex>
+          vec4 worldPos = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            worldPos = instanceMatrix * worldPos;
+          #endif
+          worldPos = modelMatrix * worldPos;
+          vWorldPos = worldPos.xyz;
         `
       );
 
