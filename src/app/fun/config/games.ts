@@ -606,10 +606,11 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Treat every gate like a rhythm cue. One clean flip beats panic tapping.',
   },
   tetherdrift: {
-    controls: 'Hold/Space to reel in • Release to drift out • R to restart',
+    controls:
+      'A/D or Arrow Keys steer • Hold/Space to reel in • F to shoot blockers • R to restart',
     objective:
-      'Drive a drift car through an endless obstacle corridor using tether tension for lane control.',
-    tips: 'Tighten early to snap into the safe gap, then release for a wide slide. Chain boost pads to keep momentum.',
+      'Drive a tethered drift car through an endless obstacle corridor, collect crystals/power cells, and blast through pressure lanes.',
+    tips: 'Steer constantly, not just when reeling. Crystals feed score and ammo economy, blaster cells load shots, and each run shifts into a new crystal palette.',
   },
   trace: {
     controls: 'Tap/Space/Click to turn clockwise • R to restart',

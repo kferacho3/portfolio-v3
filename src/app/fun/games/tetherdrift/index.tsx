@@ -1215,6 +1215,7 @@ function TetherDriftScene() {
 
       if (crashed) {
         runtime.shake = 1.3;
+        spawnShatterBurst(runtime, runtime.carX, CAR_Z - 0.1, 0.02 + runtime.elapsed * 0.01, 2);
         maybeVibrate(18);
         playTone(200, 0.11, 0.055);
         endRun(runtime);
@@ -1332,10 +1333,10 @@ function TetherDriftScene() {
       carGroupRef.current.rotation.set(0, runtime.carYaw, runtime.carRoll);
     }
 
-    const tetherMaterial = tetherLineRef.current?.material as THREE.LineBasicMaterial | undefined;
-    if (tetherMaterial?.color) tetherMaterial.color.set(activePalette.tether);
-    const guideMaterial = guideLineRef.current?.material as THREE.LineBasicMaterial | undefined;
-    if (guideMaterial?.color) guideMaterial.color.set(activePalette.guide);
+    const tetherMaterial: any = tetherLineRef.current?.material;
+    if (tetherMaterial?.color?.set) tetherMaterial.color.set(activePalette.tether);
+    const guideMaterial: any = guideLineRef.current?.material;
+    if (guideMaterial?.color?.set) guideMaterial.color.set(activePalette.guide);
 
     if (barrierRef.current && gapMarkerRef.current) {
       let index = 0;
@@ -1571,7 +1572,12 @@ function TetherDriftScene() {
         <planeGeometry args={[24, 16]} />
         <shaderMaterial
           ref={bgMatRef}
-          uniforms={{ uTime: { value: 0 } }}
+          uniforms={{
+            uTime: { value: 0 },
+            uSea: { value: new THREE.Color(PALETTES[0].bgSea) },
+            uSky: { value: new THREE.Color(PALETTES[0].bgSky) },
+            uMist: { value: new THREE.Color(PALETTES[0].bgMist) },
+          }}
           vertexShader={`
             varying vec2 vUv;
             void main() {
@@ -1581,11 +1587,14 @@ function TetherDriftScene() {
           `}
           fragmentShader={`
             uniform float uTime;
+            uniform vec3 uSea;
+            uniform vec3 uSky;
+            uniform vec3 uMist;
             varying vec2 vUv;
             void main() {
-              vec3 sea = vec3(0.22, 0.72, 0.66);
-              vec3 sky = vec3(0.38, 0.84, 0.94);
-              vec3 mist = vec3(0.86, 0.99, 0.97);
+              vec3 sea = uSea;
+              vec3 sky = uSky;
+              vec3 mist = uMist;
 
               float grad = smoothstep(0.0, 1.0, vUv.y);
               float flow = 0.5 + 0.5 * sin((vUv.x * 2.0 + uTime * 0.12) * 6.2831853);
@@ -1604,7 +1613,14 @@ function TetherDriftScene() {
         <planeGeometry args={[ROAD_HALF_WIDTH * 2, 60]} />
         <shaderMaterial
           ref={roadMatRef}
-          uniforms={{ uTime: { value: 0 }, uBoost: { value: 0 } }}
+          uniforms={{
+            uTime: { value: 0 },
+            uBoost: { value: 0 },
+            uBaseA: { value: new THREE.Color(PALETTES[0].roadBaseA) },
+            uBaseB: { value: new THREE.Color(PALETTES[0].roadBaseB) },
+            uStripeA: { value: new THREE.Color(PALETTES[0].roadStripeA) },
+            uStripeB: { value: new THREE.Color(PALETTES[0].roadStripeB) },
+          }}
           vertexShader={`
             varying vec2 vUv;
             void main() {
@@ -1615,6 +1631,10 @@ function TetherDriftScene() {
           fragmentShader={`
             uniform float uTime;
             uniform float uBoost;
+            uniform vec3 uBaseA;
+            uniform vec3 uBaseB;
+            uniform vec3 uStripeA;
+            uniform vec3 uStripeB;
             varying vec2 vUv;
 
             void main() {
@@ -1622,8 +1642,8 @@ function TetherDriftScene() {
               float lane = sin((vUv.y * 30.0 - uTime * (18.0 + uBoost * 14.0)) * 6.2831853);
               float laneGlow = smoothstep(0.92, 1.0, lane);
               float center = exp(-pow((vUv.x - 0.5) * 4.0, 2.0));
-              vec3 base = mix(vec3(0.05, 0.18, 0.16), vec3(0.08, 0.28, 0.24), center);
-              vec3 stripe = mix(vec3(0.33, 0.95, 0.85), vec3(0.92, 1.0, 0.95), uBoost * 0.7);
+              vec3 base = mix(uBaseA, uBaseB, center);
+              vec3 stripe = mix(uStripeA, uStripeB, uBoost * 0.7);
               vec3 col = base + stripe * laneGlow * edge * (0.32 + uBoost * 0.35);
               gl_FragColor = vec4(col, 1.0);
             }
@@ -1634,11 +1654,23 @@ function TetherDriftScene() {
 
       <mesh position={[-ROAD_HALF_WIDTH, 0.24, -12]}>
         <boxGeometry args={[0.18, 0.5, 60]} />
-        <meshStandardMaterial color="#7cf0de" emissive="#35b7a6" emissiveIntensity={0.46} roughness={0.25} />
+        <meshStandardMaterial
+          ref={leftRailMatRef}
+          color={PALETTES[0].railA}
+          emissive={PALETTES[0].railA}
+          emissiveIntensity={0.46}
+          roughness={0.25}
+        />
       </mesh>
       <mesh position={[ROAD_HALF_WIDTH, 0.24, -12]}>
         <boxGeometry args={[0.18, 0.5, 60]} />
-        <meshStandardMaterial color="#7fdffc" emissive="#3f9ec4" emissiveIntensity={0.42} roughness={0.25} />
+        <meshStandardMaterial
+          ref={rightRailMatRef}
+          color={PALETTES[0].railB}
+          emissive={PALETTES[0].railB}
+          emissiveIntensity={0.42}
+          roughness={0.25}
+        />
       </mesh>
 
       <instancedMesh ref={barrierRef} args={[undefined, undefined, BARRIER_INSTANCES]}>
@@ -1664,7 +1696,7 @@ function TetherDriftScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={boostRef} args={[undefined, undefined, BOOST_POOL]}>
+      <instancedMesh ref={pickupRef} args={[undefined, undefined, PICKUP_POOL]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           vertexColors
@@ -1675,37 +1707,82 @@ function TetherDriftScene() {
         />
       </instancedMesh>
 
+      <instancedMesh ref={breakShardRef} args={[undefined, undefined, BREAK_SHARD_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.2}
+          metalness={0.36}
+          emissive={PALETTES[0].collectible}
+          emissiveIntensity={0.56}
+        />
+      </instancedMesh>
+
       <mesh ref={anchorRef} position={[0, ANCHOR_Y, ANCHOR_Z]}>
         <icosahedronGeometry args={[0.16, 0]} />
-        <meshStandardMaterial color="#d7fff7" emissive="#63e6ce" emissiveIntensity={0.6} roughness={0.16} />
+        <meshStandardMaterial
+          ref={anchorMatRef}
+          color={PALETTES[0].anchor}
+          emissive={PALETTES[0].anchor}
+          emissiveIntensity={0.6}
+          roughness={0.16}
+        />
       </mesh>
 
       <group ref={carGroupRef} position={[0, CAR_Y, CAR_Z]}>
         <mesh position={[0, 0.1, 0]} castShadow>
           <boxGeometry args={[0.72, 0.22, 1.3]} />
-          <meshStandardMaterial color="#fffef8" emissive="#52ddc3" emissiveIntensity={0.34} roughness={0.14} metalness={0.26} />
+          <meshStandardMaterial
+            ref={carBodyMatRef}
+            color={PALETTES[0].carBody}
+            emissive={PALETTES[0].carCockpit}
+            emissiveIntensity={0.34}
+            roughness={0.14}
+            metalness={0.26}
+          />
         </mesh>
 
         <mesh position={[0, 0.24, -0.08]} castShadow>
           <boxGeometry args={[0.5, 0.2, 0.48]} />
-          <meshStandardMaterial color="#d2fdf5" emissive="#3bc3ad" emissiveIntensity={0.22} roughness={0.2} metalness={0.22} />
+          <meshStandardMaterial
+            ref={carCockpitMatRef}
+            color={PALETTES[0].carCockpit}
+            emissive={PALETTES[0].carFront}
+            emissiveIntensity={0.22}
+            roughness={0.2}
+            metalness={0.22}
+          />
         </mesh>
 
         <mesh position={[0, 0.03, -0.52]}>
           <boxGeometry args={[0.58, 0.08, 0.22]} />
-          <meshStandardMaterial color="#86ffe5" emissive="#86ffe5" emissiveIntensity={0.92} roughness={0.1} metalness={0.3} />
+          <meshStandardMaterial
+            ref={carFrontMatRef}
+            color={PALETTES[0].carFront}
+            emissive={PALETTES[0].carFront}
+            emissiveIntensity={0.92}
+            roughness={0.1}
+            metalness={0.3}
+          />
         </mesh>
 
         <mesh position={[0, 0.03, 0.56]}>
           <boxGeometry args={[0.58, 0.08, 0.2]} />
-          <meshStandardMaterial color="#9fd8ff" emissive="#9fd8ff" emissiveIntensity={0.72} roughness={0.1} metalness={0.3} />
+          <meshStandardMaterial
+            ref={carRearMatRef}
+            color={PALETTES[0].carRear}
+            emissive={PALETTES[0].carRear}
+            emissiveIntensity={0.72}
+            roughness={0.1}
+            metalness={0.3}
+          />
         </mesh>
       </group>
 
       <Line
         ref={tetherLineRef}
         points={tetherPoints}
-        color="#e5fff9"
+        color={PALETTES[0].tether}
         lineWidth={2.6}
         transparent
         opacity={snap.phase === 'playing' ? 0.95 : 0.72}
@@ -1714,14 +1791,21 @@ function TetherDriftScene() {
       <Line
         ref={guideLineRef}
         points={guidePoints}
-        color="#95ffdf"
+        color={PALETTES[0].guide}
         lineWidth={1.2}
         transparent
         opacity={snap.phase === 'playing' ? 0.38 : 0.2}
       />
 
       <points geometry={trailGeometry}>
-        <pointsMaterial color="#f0fffd" size={0.055} sizeAttenuation transparent opacity={0.62} />
+        <pointsMaterial
+          ref={trailMatRef}
+          color={PALETTES[0].tether}
+          size={0.055}
+          sizeAttenuation
+          transparent
+          opacity={0.62}
+        />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
