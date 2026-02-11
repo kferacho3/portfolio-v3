@@ -65,6 +65,19 @@ type ParticleBurstOptions = {
   vzMax?: number;
 };
 
+type ImpactWave = {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  life: number;
+  maxLife: number;
+  startRadius: number;
+  endRadius: number;
+  thickness: number;
+  color: string;
+};
+
 const Weave: React.FC<{ soundsOn?: boolean }> = ({
   soundsOn: _soundsOn = true,
 }) => {
@@ -75,6 +88,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
   const [arms, setArms] = useState<LaserArmType[]>([]);
   const [orbs, setOrbs] = useState<Orb[]>([]);
   const [particles, setParticles] = useState<Particle[]>([]);
+  const [impactWaves, setImpactWaves] = useState<ImpactWave[]>([]);
   const [isHit, setIsHit] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
   const [corePulse, setCorePulse] = useState(0);
@@ -181,11 +195,43 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
     []
   );
 
+  const spawnImpactWave = useCallback(
+    (
+      x: number,
+      y: number,
+      color: string,
+      options: {
+        life?: number;
+        startRadius?: number;
+        endRadius?: number;
+        thickness?: number;
+        z?: number;
+      } = {}
+    ) => {
+      const life = options.life ?? 0.45;
+      const wave: ImpactWave = {
+        id: `wave-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        x,
+        y,
+        z: options.z ?? 0.05,
+        life,
+        maxLife: life,
+        startRadius: options.startRadius ?? 0.1,
+        endRadius: options.endRadius ?? 0.9,
+        thickness: options.thickness ?? 0.12,
+        color,
+      };
+      setImpactWaves((prev) => [...prev, wave]);
+    },
+    []
+  );
+
   const resetRun = useCallback(() => {
     weaveState.reset();
     setPlayerAngle(Math.PI / 2);
     setOrbs([]);
     setParticles([]);
+    setImpactWaves([]);
     setLaserCount(1);
     rotationDirectionRef.current = Math.random() > 0.5 ? 1 : -1;
     setArms(generateArms(1, 1, 0));
@@ -455,6 +501,13 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
           vzMax: 0.9,
         });
         cameraShake.current = Math.min(1, cameraShake.current + 0.95);
+        spawnImpactWave(px, py, '#ff4f7e', {
+          life: 0.58,
+          startRadius: 0.15,
+          endRadius: 1.45,
+          thickness: 0.18,
+          z: 0.12,
+        });
         setDamageFlash(1);
 
         if (weaveState.lives <= 0) {
@@ -551,6 +604,13 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
             1,
             cameraShake.current + (orb.isBonus ? 0.22 : 0.09)
           );
+          spawnImpactWave(ox, oy, orb.isBonus ? BONUS_ORB_COLOR : ORB_COLOR, {
+            life: orb.isBonus ? 0.5 : 0.34,
+            startRadius: 0.08,
+            endRadius: orb.isBonus ? 1.2 : 0.78,
+            thickness: orb.isBonus ? 0.14 : 0.1,
+            z: 0.06,
+          });
           setCorePulse(1);
           setTimeout(() => setCorePulse(0), 150);
 
@@ -590,6 +650,15 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
           life: p.life - delta * (1.5 + p.size * 1.2),
         }))
         .filter((p) => p.life > 0)
+    );
+
+    setImpactWaves((prev) =>
+      prev
+        .map((wave) => ({
+          ...wave,
+          life: wave.life - delta,
+        }))
+        .filter((wave) => wave.life > 0)
     );
 
     if (damageFlash > 0) {
@@ -636,6 +705,27 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
       ))}
 
       <ParticleEffect particles={particles} />
+
+      {impactWaves.map((wave) => {
+        const progress = 1 - wave.life / wave.maxLife;
+        const radius = THREE.MathUtils.lerp(
+          wave.startRadius,
+          wave.endRadius,
+          progress
+        );
+        return (
+          <mesh key={wave.id} position={[wave.x, wave.y, wave.z]}>
+            <ringGeometry args={[radius, radius + wave.thickness, 56]} />
+            <meshBasicMaterial
+              color={wave.color}
+              transparent
+              opacity={wave.life / wave.maxLife * 0.42}
+              depthWrite={false}
+              depthTest={false}
+            />
+          </mesh>
+        );
+      })}
 
       <Player
         angle={playerAngle}

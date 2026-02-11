@@ -38,6 +38,8 @@ const Orb: React.FC<{
     0,
     1
   );
+  const tetherAngle = Math.atan2(playerY - y, playerX - x);
+  const tetherLength = Math.max(0.001, distToPlayer);
   const color = orb.isBonus ? BONUS_ORB_COLOR : ORB_COLOR;
   const glow = orb.isBonus ? BONUS_ORB_COLOR : ORB_GLOW;
 
@@ -89,6 +91,7 @@ const Orb: React.FC<{
           opacity={opacity * (0.18 + proximity * 0.22)}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
+          depthTest={false}
         />
       </mesh>
       <mesh scale={[1.95, 1.95, 1.95]}>
@@ -99,6 +102,7 @@ const Orb: React.FC<{
           opacity={opacity * (0.18 + proximity * 0.12)}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
+          depthTest={false}
         />
       </mesh>
       <mesh>
@@ -114,8 +118,29 @@ const Orb: React.FC<{
           transparent
           opacity={opacity * (0.06 + proximity * 0.24)}
           depthWrite={false}
+          depthTest={false}
         />
       </mesh>
+      {proximity > 0.2 && (
+        <mesh
+          position={[
+            Math.cos(tetherAngle) * tetherLength * 0.5,
+            Math.sin(tetherAngle) * tetherLength * 0.5,
+            0.03,
+          ]}
+          rotation={[0, 0, tetherAngle]}
+        >
+          <planeGeometry args={[tetherLength, ORB_SIZE * 0.28]} />
+          <meshBasicMaterial
+            color={glow}
+            transparent
+            opacity={opacity * proximity * 0.35}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            depthTest={false}
+          />
+        </mesh>
+      )}
       <group ref={satellitesRef}>
         <mesh position={[ORB_SIZE * 1.45, 0, 0.01]}>
           <sphereGeometry args={[ORB_SIZE * 0.22, 8, 8]} />
@@ -125,6 +150,7 @@ const Orb: React.FC<{
             opacity={opacity * 0.8}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
+            depthTest={false}
           />
         </mesh>
         <mesh position={[-ORB_SIZE * 1.45, 0, 0.01]}>
@@ -135,6 +161,7 @@ const Orb: React.FC<{
             opacity={opacity * 0.62}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
+            depthTest={false}
           />
         </mesh>
       </group>

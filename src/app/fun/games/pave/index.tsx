@@ -37,6 +37,41 @@ interface Entity {
   lane: number;
 }
 
+interface FXParticle {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  spin: number;
+  color: string;
+}
+
+interface ShockRing {
+  id: number;
+  x: number;
+  y: number;
+  z: number;
+  life: number;
+  maxLife: number;
+  startRadius: number;
+  endRadius: number;
+  thickness: number;
+  color: string;
+}
+
+interface HUDCallout {
+  text: string;
+  color: string;
+  life: number;
+  maxLife: number;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -47,6 +82,9 @@ export const paveState = proxy({
   lives: 3,
   combo: 0,
   maxCombo: 0,
+  streakTier: 0,
+  maxStreakTier: 0,
+  rhythmMeter: 0,
   shapesCollected: 0,
   gameOver: false,
   currentShape: 'triangle' as ShapeType,
@@ -68,6 +106,9 @@ export const paveState = proxy({
     this.lives = 3;
     this.combo = 0;
     this.maxCombo = 0;
+    this.streakTier = 0;
+    this.maxStreakTier = 0;
+    this.rhythmMeter = 0;
     this.shapesCollected = 0;
     this.gameOver = false;
     this.currentShape = 'triangle';
@@ -97,6 +138,8 @@ export const paveState = proxy({
     }
     this.lives -= 1;
     this.combo = 0;
+    this.streakTier = 0;
+    this.rhythmMeter = Math.max(0, this.rhythmMeter - 45);
     if (this.lives <= 0) {
       this.gameOver = true;
       if (this.score > this.highScore) {
@@ -111,13 +154,27 @@ export const paveState = proxy({
     return this.lives <= 0;
   },
 
-  collectShape(isMatch: boolean) {
+  collectShape(isMatch: boolean, quality: 'normal' | 'perfect' = 'normal') {
     if (isMatch) {
       const basePoints = 10;
-      const comboMultiplier = 1 + this.combo * 0.1;
+      const comboMultiplier = 1 + this.combo * 0.12;
+      const qualityMultiplier = quality === 'perfect' ? 1.45 : 1;
       const doubleMultiplier = this.hasDoublePoints ? 2 : 1;
-      this.score += Math.floor(basePoints * comboMultiplier * doubleMultiplier);
+      this.streakTier = Math.min(5, Math.floor((this.combo + 1) / 6));
+      this.maxStreakTier = Math.max(this.maxStreakTier, this.streakTier);
+      const streakMultiplier = 1 + this.streakTier * 0.22;
+      this.score += Math.floor(
+        basePoints *
+          comboMultiplier *
+          qualityMultiplier *
+          doubleMultiplier *
+          streakMultiplier
+      );
       this.combo += 1;
+      this.rhythmMeter = Math.min(
+        100,
+        this.rhythmMeter + (quality === 'perfect' ? 18 : 12)
+      );
       if (this.combo > this.maxCombo) this.maxCombo = this.combo;
       this.shapesCollected += 1;
     } else {
@@ -167,6 +224,8 @@ const SHAPES: ShapeType[] = ['triangle', 'square', 'pentagon', 'hexagon'];
 const LANES = [-3, 0, 3]; // Three lanes
 const SPAWN_DISTANCE = 50;
 const COLLECTION_DISTANCE = 2.5;
+const HIT_WINDOW_Z = 1.2;
+const PERFECT_WINDOW_Z = 0.42;
 const BASE_SPEED = 12;
 const MAX_SPEED = 25;
 
@@ -327,12 +386,16 @@ const CollectibleEntity: React.FC<{
   hasMagnet: boolean;
 }> = ({ entity, playerLane, playerShape, hasMagnet }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const startZ = useRef(entity.position.z);
+  const haloRef = useRef<THREE.Mesh>(null);
+  const beamRef = useRef<THREE.Mesh>(null);
+  const isTargetShape =
+    entity.type === 'shape' && entity.shape === playerShape;
 
   useFrame((state, delta) => {
     if (!groupRef.current || entity.collected) return;
 
     groupRef.current.rotation.y += delta * 2;
+    groupRef.current.rotation.z += delta * 0.6;
 
     // Magnet effect for matching shapes
     if (hasMagnet && entity.type === 'shape' && entity.shape === playerShape) {
@@ -347,6 +410,28 @@ const CollectibleEntity: React.FC<{
     // Bobbing animation
     const bob = Math.sin(state.clock.elapsedTime * 3 + entity.id) * 0.2;
     groupRef.current.position.y = 1 + bob;
+
+    if (haloRef.current) {
+      const pulse = 1 + Math.sin(state.clock.elapsedTime * 8 + entity.id) * 0.12;
+      haloRef.current.scale.set(pulse, pulse, 1);
+    }
+
+    if (beamRef.current) {
+      const px = LANES[playerLane];
+      const ex = groupRef.current.position.x;
+      const ez = groupRef.current.position.z;
+      const dx = px - ex;
+      const dz = -ez;
+      const len = Math.hypot(dx, dz);
+      if (len > 0.001 && (hasMagnet || isTargetShape)) {
+        beamRef.current.visible = true;
+        beamRef.current.position.set(dx * 0.5, 0, dz * 0.5);
+        beamRef.current.rotation.set(0, Math.atan2(dx, dz), 0);
+        beamRef.current.scale.set(1, 1, len);
+      } else {
+        beamRef.current.visible = false;
+      }
+    }
   });
 
   if (entity.collected) return null;
@@ -356,7 +441,32 @@ const CollectibleEntity: React.FC<{
 
   if (entity.type === 'shape' && entity.shape) {
     color = SHAPE_COLORS[entity.shape];
-    content = <ShapeMesh shape={entity.shape} color={color} />;
+    content = (
+      <>
+        <ShapeMesh shape={entity.shape} color={color} />
+        {(isTargetShape || hasMagnet) && (
+          <>
+            <mesh ref={haloRef} position={[0, 0, 0]}>
+              <torusGeometry args={[1.1, 0.08, 8, 32]} />
+              <meshBasicMaterial
+                color={color}
+                transparent
+                opacity={isTargetShape ? 0.65 : 0.42}
+              />
+            </mesh>
+            <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.35, 0]}>
+              <ringGeometry args={[1.15, 1.45, 32]} />
+              <meshBasicMaterial
+                color={color}
+                transparent
+                opacity={isTargetShape ? 0.28 : 0.15}
+              />
+            </mesh>
+            <pointLight color={color} intensity={isTargetShape ? 1.6 : 0.9} distance={4.8} />
+          </>
+        )}
+      </>
+    );
   } else if (entity.type === 'obstacle') {
     color = '#ff0000';
     content = (
@@ -395,6 +505,10 @@ const CollectibleEntity: React.FC<{
 
   return (
     <group ref={groupRef} position={[entity.position.x, 1, entity.position.z]}>
+      <mesh ref={beamRef} visible={false} position={[0, 0, 0]}>
+        <planeGeometry args={[0.12, 0.12]} />
+        <meshBasicMaterial color={color} transparent opacity={0.22} />
+      </mesh>
       {content}
     </group>
   );
@@ -421,9 +535,23 @@ const Ground: React.FC<{ color: string; accentColor: string }> = ({
       </mesh>
       {/* Lane markers */}
       {LANES.map((x, i) => (
-        <mesh key={i} position={[x, -0.4, -25]} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[0.1, 100]} />
-          <meshBasicMaterial color={accentColor} transparent opacity={0.3} />
+        <group key={i} position={[x, -0.4, -25]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh>
+            <planeGeometry args={[0.12, 100]} />
+            <meshBasicMaterial color={accentColor} transparent opacity={0.35} />
+          </mesh>
+          <mesh position={[0, 0, 0.01]}>
+            <planeGeometry args={[0.45, 100]} />
+            <meshBasicMaterial color={accentColor} transparent opacity={0.1} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Side glow rails */}
+      {[-5.5, 5.5].map((x) => (
+        <mesh key={x} position={[x, 0.05, -25]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[100, 1.8]} />
+          <meshBasicMaterial color={accentColor} transparent opacity={0.08} />
         </mesh>
       ))}
     </>
@@ -507,10 +635,27 @@ const GameHUD: React.FC = () => {
               Distance: {Math.floor(snap.distance)}m
             </div>
             {snap.combo > 0 && (
-              <div className="text-cyan-400 text-sm">
+              <div className="text-cyan-300 text-sm font-semibold">
                 Combo: x{snap.combo + 1}
               </div>
             )}
+            <div className="text-white/50 text-xs mt-1">
+              Streak Tier: {snap.streakTier}
+            </div>
+            <div className="mt-1.5 w-32 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-[width] duration-150"
+                style={{
+                  width: `${snap.rhythmMeter}%`,
+                  background:
+                    snap.rhythmMeter > 75
+                      ? '#67e8f9'
+                      : snap.rhythmMeter > 40
+                        ? '#a78bfa'
+                        : '#f472b6',
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -578,6 +723,15 @@ const GameHUD: React.FC = () => {
           )}
         </div>
 
+        {/* Streak grade */}
+        {snap.streakTier >= 2 && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2">
+            <div className="px-4 py-2 rounded-xl bg-black/55 border border-cyan-300/25 text-cyan-200 text-sm tracking-wide">
+              STREAK {snap.streakTier} • RHYTHM LOCKED
+            </div>
+          </div>
+        )}
+
         {/* Controls hint */}
         <div className="absolute bottom-4 left-4 text-white/30 text-xs">
           <div>←/→ or A/D : Move lanes</div>
@@ -610,13 +764,99 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
   const [playerLane, setPlayerLane] = useState(1); // 0, 1, 2 for left, center, right
   const [entities, setEntities] = useState<Entity[]>([]);
+  const [fxParticles, setFxParticles] = useState<FXParticle[]>([]);
+  const [shockRings, setShockRings] = useState<ShockRing[]>([]);
+  const [hudCallout, setHudCallout] = useState<HUDCallout | null>(null);
 
   const rngRef = useRef(new SeededRandom(Date.now()));
   const entityIdRef = useRef(0);
+  const fxIdRef = useRef(0);
   const nextSpawnTime = useRef(0); // Time until next spawn
   const gameSpeedRef = useRef(BASE_SPEED);
+  const cameraShakeRef = useRef(0);
+  const hitFlashRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const world = WORLDS[snap.world % WORLDS.length];
+
+  const pushCallout = useCallback((text: string, color: string, life = 0.9) => {
+    setHudCallout({ text, color, life, maxLife: life });
+  }, []);
+
+  const spawnBurst = useCallback(
+    (
+      x: number,
+      y: number,
+      z: number,
+      color: string,
+      count: number,
+      options?: {
+        speedMin?: number;
+        speedMax?: number;
+        sizeMin?: number;
+        sizeMax?: number;
+      }
+    ) => {
+      const speedMin = options?.speedMin ?? 2.2;
+      const speedMax = options?.speedMax ?? 4.8;
+      const sizeMin = options?.sizeMin ?? 0.06;
+      const sizeMax = options?.sizeMax ?? 0.13;
+
+      const next: FXParticle[] = [];
+      for (let i = 0; i < count; i += 1) {
+        const theta = Math.random() * Math.PI * 2;
+        const speed = speedMin + Math.random() * (speedMax - speedMin);
+        next.push({
+          id: fxIdRef.current++,
+          x,
+          y,
+          z,
+          vx: Math.cos(theta) * speed * (0.7 + Math.random() * 0.5),
+          vy: (Math.random() - 0.2) * speed * 0.8,
+          vz: (Math.random() - 0.5) * speed * 1.2,
+          life: 1,
+          maxLife: 1,
+          size: sizeMin + Math.random() * (sizeMax - sizeMin),
+          spin: (Math.random() - 0.5) * 8,
+          color,
+        });
+      }
+      setFxParticles((prev) => [...prev, ...next]);
+    },
+    []
+  );
+
+  const spawnShockRing = useCallback(
+    (
+      x: number,
+      y: number,
+      z: number,
+      color: string,
+      options?: {
+        life?: number;
+        startRadius?: number;
+        endRadius?: number;
+        thickness?: number;
+      }
+    ) => {
+      const life = options?.life ?? 0.55;
+      setShockRings((prev) => [
+        ...prev,
+        {
+          id: fxIdRef.current++,
+          x,
+          y,
+          z,
+          life,
+          maxLife: life,
+          startRadius: options?.startRadius ?? 0.18,
+          endRadius: options?.endRadius ?? 2.05,
+          thickness: options?.thickness ?? 0.15,
+          color,
+        },
+      ]);
+    },
+    []
+  );
 
   // Camera setup
   useEffect(() => {
@@ -655,9 +895,13 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           e.preventDefault();
           paveState.reset();
           setEntities([]);
+          setFxParticles([]);
+          setShockRings([]);
+          setHudCallout(null);
           setPlayerLane(1);
           nextSpawnTime.current = 0;
           gameSpeedRef.current = BASE_SPEED;
+          cameraShakeRef.current = 0;
           rngRef.current = new SeededRandom(Date.now());
         }
         return;
@@ -746,31 +990,181 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     const playerX = LANES[playerLane];
     const playerZ = 0;
 
+    const collisionEvents: Array<{
+      type: 'match' | 'mismatch' | 'obstacle' | 'powerup';
+      x: number;
+      y: number;
+      z: number;
+      color: string;
+      perfect?: boolean;
+      powerUp?: PowerUpType;
+    }> = [];
+    const previousTier = paveState.streakTier;
+    const previousCombo = paveState.combo;
+
     setEntities((prev) => {
       return prev.map((entity) => {
         if (entity.collected) return entity;
 
-        const dist = Math.sqrt(
-          (entity.position.x - playerX) ** 2 +
-            (entity.position.z - playerZ) ** 2
-        );
+        const laneDist = Math.abs(entity.position.x - playerX);
+        const zDist = Math.abs(entity.position.z - playerZ);
+        const inHitWindow =
+          laneDist < COLLECTION_DISTANCE * 0.45 && zDist < HIT_WINDOW_Z;
 
-        if (dist < COLLECTION_DISTANCE) {
+        if (inHitWindow) {
           if (entity.type === 'shape') {
             const isMatch = entity.shape === paveState.currentShape;
-            paveState.collectShape(isMatch);
+            const perfect = zDist < PERFECT_WINDOW_Z;
+            paveState.collectShape(isMatch, perfect ? 'perfect' : 'normal');
+            if (isMatch) {
+              collisionEvents.push({
+                type: 'match',
+                x: entity.position.x,
+                y: 1,
+                z: entity.position.z,
+                color: SHAPE_COLORS[entity.shape!],
+                perfect,
+              });
+            } else {
+              collisionEvents.push({
+                type: 'mismatch',
+                x: entity.position.x,
+                y: 1,
+                z: entity.position.z,
+                color: '#ff3b6f',
+              });
+            }
             return { ...entity, collected: true };
           } else if (entity.type === 'obstacle') {
             paveState.loseLife();
+            collisionEvents.push({
+              type: 'obstacle',
+              x: entity.position.x,
+              y: 1,
+              z: entity.position.z,
+              color: '#ff4d4d',
+            });
             return { ...entity, collected: true };
           } else if (entity.type === 'powerup' && entity.powerUp) {
             paveState.activatePowerUp(entity.powerUp);
+            collisionEvents.push({
+              type: 'powerup',
+              x: entity.position.x,
+              y: 1,
+              z: entity.position.z,
+              color: POWERUP_COLORS[entity.powerUp],
+              powerUp: entity.powerUp,
+            });
             return { ...entity, collected: true };
           }
         }
         return entity;
       });
     });
+
+    if (collisionEvents.length > 0) {
+      for (const event of collisionEvents) {
+        if (event.type === 'match') {
+          spawnBurst(
+            event.x,
+            event.y,
+            event.z,
+            event.color,
+            event.perfect ? 22 : 14,
+            event.perfect
+              ? { speedMin: 3.6, speedMax: 6.2, sizeMin: 0.07, sizeMax: 0.15 }
+              : undefined
+          );
+          spawnShockRing(
+            event.x,
+            event.y,
+            event.z,
+            event.color,
+            event.perfect
+              ? {
+                  life: 0.62,
+                  startRadius: 0.24,
+                  endRadius: 2.6,
+                  thickness: 0.2,
+                }
+              : {
+                  life: 0.45,
+                  startRadius: 0.16,
+                  endRadius: 1.6,
+                  thickness: 0.14,
+                }
+          );
+          cameraShakeRef.current = Math.min(
+            1,
+            cameraShakeRef.current + (event.perfect ? 0.24 : 0.08)
+          );
+          if (event.perfect) {
+            pushCallout('PERFECT HIT', '#67e8f9', 0.52);
+          }
+        } else if (event.type === 'powerup') {
+          spawnBurst(event.x, event.y, event.z, event.color, 18);
+          spawnShockRing(event.x, event.y, event.z, event.color, {
+            life: 0.7,
+            startRadius: 0.25,
+            endRadius: 3.0,
+            thickness: 0.18,
+          });
+          pushCallout(
+            event.powerUp === 'extraLife'
+              ? 'EXTRA LIFE'
+              : `${event.powerUp?.toUpperCase()} ON`,
+            event.color,
+            0.72
+          );
+          cameraShakeRef.current = Math.min(1, cameraShakeRef.current + 0.12);
+        } else {
+          spawnBurst(event.x, event.y, event.z, event.color, 28, {
+            speedMin: 3.2,
+            speedMax: 7.2,
+            sizeMin: 0.08,
+            sizeMax: 0.18,
+          });
+          spawnShockRing(event.x, event.y, event.z, event.color, {
+            life: 0.78,
+            startRadius: 0.28,
+            endRadius: 3.6,
+            thickness: 0.24,
+          });
+          pushCallout('MISS', '#ff6b9a', 0.65);
+          cameraShakeRef.current = Math.min(1, cameraShakeRef.current + 0.9);
+        }
+      }
+    }
+
+    if (paveState.combo >= 5 && paveState.combo !== previousCombo && paveState.combo % 5 === 0) {
+      const bonus = 20 + paveState.streakTier * 12;
+      paveState.score += bonus * (paveState.hasDoublePoints ? 2 : 1);
+      pushCallout(`COMBO x${paveState.combo + 1} +${bonus}`, '#f0abfc', 0.78);
+      spawnShockRing(playerX, 1, 0, '#f0abfc', {
+        life: 0.66,
+        startRadius: 0.22,
+        endRadius: 3.2,
+        thickness: 0.2,
+      });
+      cameraShakeRef.current = Math.min(1, cameraShakeRef.current + 0.16);
+    }
+
+    if (paveState.streakTier > previousTier) {
+      pushCallout(`STREAK TIER ${paveState.streakTier}`, '#a5f3fc', 0.85);
+      spawnBurst(playerX, 1, -0.4, '#a5f3fc', 26, {
+        speedMin: 2.4,
+        speedMax: 5.4,
+        sizeMin: 0.07,
+        sizeMax: 0.16,
+      });
+      spawnShockRing(playerX, 1, -0.4, '#67e8f9', {
+        life: 0.72,
+        startRadius: 0.3,
+        endRadius: 3.8,
+        thickness: 0.22,
+      });
+      cameraShakeRef.current = Math.min(1, cameraShakeRef.current + 0.22);
+    }
 
     // Spawn new entities continuously
     nextSpawnTime.current -= delta;
@@ -835,11 +1229,62 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       setEntities((prev) => [...prev, newEntity]);
     }
 
+    setFxParticles((prev) =>
+      prev
+        .map((p) => ({
+          ...p,
+          x: p.x + p.vx * delta,
+          y: p.y + p.vy * delta,
+          z: p.z + p.vz * delta,
+          vx: p.vx * Math.pow(0.9, delta * 60),
+          vy: p.vy * Math.pow(0.9, delta * 60),
+          vz: p.vz * Math.pow(0.9, delta * 60),
+          life: p.life - delta * 1.7,
+          spin: p.spin + delta * 3.2,
+        }))
+        .filter((p) => p.life > 0)
+    );
+
+    setShockRings((prev) =>
+      prev
+        .map((r) => ({
+          ...r,
+          life: r.life - delta,
+        }))
+        .filter((r) => r.life > 0)
+    );
+
+    setHudCallout((prev) => {
+      if (!prev) return null;
+      const nextLife = prev.life - delta;
+      if (nextLife <= 0) return null;
+      return { ...prev, life: nextLife };
+    });
+
+    cameraShakeRef.current = Math.max(0, cameraShakeRef.current - delta * 2.1);
+    const shake = cameraShakeRef.current * cameraShakeRef.current;
+    const t = state.clock.elapsedTime;
+    if (hitFlashRef.current) {
+      hitFlashRef.current.opacity = shake * 0.18;
+    }
+
     // Camera position
+    const laneTargetX =
+      LANES[playerLane] * 0.3 + Math.sin(t * 34.2 + 0.7) * shake * 0.22;
     camera.position.x = THREE.MathUtils.lerp(
       camera.position.x,
-      LANES[playerLane] * 0.3,
-      delta * 3
+      laneTargetX,
+      delta * 4.2
+    );
+    camera.position.y = THREE.MathUtils.lerp(
+      camera.position.y,
+      6 + Math.cos(t * 28.5 + 1.6) * shake * 0.16,
+      delta * 4
+    );
+    camera.position.z = THREE.MathUtils.lerp(
+      camera.position.z,
+      8 + shake * 0.22,
+      delta * 4
     );
   });
 
@@ -874,8 +1319,83 @@ const Pave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         />
       ))}
 
+      {/* FX particles */}
+      {fxParticles.map((p) => (
+        <group key={p.id} position={[p.x, p.y, p.z]}>
+          <mesh rotation={[p.spin, p.spin * 0.5, p.spin * 0.2]}>
+            <octahedronGeometry args={[p.size * (0.45 + p.life * 0.8)]} />
+            <meshBasicMaterial
+              color={p.color}
+              transparent
+              opacity={p.life * 0.85}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[p.size * (0.8 + p.life), 10, 10]} />
+            <meshBasicMaterial
+              color={p.color}
+              transparent
+              opacity={p.life * 0.22}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
+      ))}
+
+      {/* Shock rings */}
+      {shockRings.map((ring) => {
+        const t = 1 - ring.life / ring.maxLife;
+        const radius = THREE.MathUtils.lerp(ring.startRadius, ring.endRadius, t);
+        return (
+          <mesh key={ring.id} position={[ring.x, ring.y - 0.2, ring.z]} rotation={[Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[radius, radius + ring.thickness, 48]} />
+            <meshBasicMaterial
+              color={ring.color}
+              transparent
+              opacity={ring.life / ring.maxLife * 0.45}
+              depthWrite={false}
+            />
+          </mesh>
+        );
+      })}
+
+      {/* Hit flash */}
+      <mesh position={[0, 3.2, -6]} renderOrder={120}>
+        <planeGeometry args={[26, 16]} />
+        <meshBasicMaterial
+          ref={hitFlashRef}
+          color="#ff2b61"
+          transparent
+          opacity={0}
+          depthWrite={false}
+        />
+      </mesh>
+
       {/* HUD */}
       <GameHUD />
+
+      {/* Dynamic callout */}
+      {hudCallout && (
+        <Html
+          center
+          position={[0, 4.2, -4]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div
+            className="px-4 py-1.5 rounded-xl border text-sm font-semibold tracking-wider backdrop-blur-sm"
+            style={{
+              color: hudCallout.color,
+              borderColor: `${hudCallout.color}66`,
+              background: 'rgba(0,0,0,0.45)',
+              opacity: hudCallout.life / hudCallout.maxLife,
+              transform: `translateY(${(1 - hudCallout.life / hudCallout.maxLife) * -8}px)`,
+            }}
+          >
+            {hudCallout.text}
+          </div>
+        </Html>
+      )}
     </>
   );
 };

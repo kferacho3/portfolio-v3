@@ -575,10 +575,11 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Build combos for slow-motion highlights. Complete patterns to level up!',
   },
   pave: {
-    controls: '←/→ or A/D to move lanes • Space to change shape',
+    controls:
+      '←/→ or A/D to move lanes • Space/↓ to next shape • ↑ to previous shape',
     objective:
-      'Match your shape to collect oncoming shapes. Avoid obstacles. Collect power-ups!',
-    tips: 'Shield blocks one hit. Magnet attracts matching shapes. Build combos for bonus points!',
+      'Ride the three-lane neon track, hit matching shape notes in the timing window, and chain streak tiers while avoiding blockers.',
+    tips: 'Match near center for PERFECT hits and bigger bursts. Every 5-hit combo cashes a bonus. Shield blocks one hit; magnet pulls matching notes.',
   },
   museum: {
     controls: 'Scroll to browse',
