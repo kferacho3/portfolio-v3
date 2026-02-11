@@ -250,7 +250,7 @@ const Overlay: React.FC<{
   const difficultyText = `${level.difficulty.tag} ${level.difficulty.rating}/5`;
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none text-white">
+    <div className="pointer-events-auto absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/35 bg-black/45 px-3 py-2 backdrop-blur-sm">
         <div className="text-[11px] uppercase tracking-[0.25em] text-cyan-200/90">
           Portal Punch L{level.id}/{PORTAL_PUNCH_LEVELS.length}
@@ -289,7 +289,7 @@ const Overlay: React.FC<{
       </div>
 
       {runtime.status === 'START' && (
-        <div className="absolute inset-0 grid place-items-center">
+        <div className="pointer-events-auto absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-cyan-100/45 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black">PORTAL PUNCH</div>
             <div className="mt-2 text-sm text-white/85">Recursive portal laser puzzle simulation</div>
@@ -298,7 +298,14 @@ const Overlay: React.FC<{
               Randomized difficulty tags per level, handcrafted chamber logic.
             </div>
             <button
-              onClick={onStart}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onStart();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onStart();
+              }}
               className="pointer-events-auto mt-4 rounded-md border border-cyan-200/60 px-4 py-1.5 text-sm text-cyan-100 hover:bg-cyan-400/15"
             >
               Start Level
@@ -308,7 +315,7 @@ const Overlay: React.FC<{
       )}
 
       {runtime.status === 'SOLVED' && (
-        <div className="absolute inset-0 grid place-items-center">
+        <div className="pointer-events-auto absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-emerald-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-emerald-200">Chamber Solved</div>
             <div className="mt-2 text-sm text-white/85">{level.name}</div>
@@ -318,13 +325,27 @@ const Overlay: React.FC<{
             <div className="text-sm text-white/75">Score {runtime.score}</div>
             <div className="mt-4 flex items-center justify-center gap-3">
               <button
-                onClick={onRestart}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  onRestart();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRestart();
+                }}
                 className="pointer-events-auto rounded-md border border-white/30 px-3 py-1.5 text-xs text-white hover:bg-white/10"
               >
                 Replay
               </button>
               <button
-                onClick={onNext}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  onNext();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onNext();
+                }}
                 className="pointer-events-auto rounded-md border border-emerald-200/70 px-3 py-1.5 text-xs text-emerald-100 hover:bg-emerald-400/20"
               >
                 Next Level
@@ -335,12 +356,19 @@ const Overlay: React.FC<{
       )}
 
       {runtime.status === 'GAMEOVER' && (
-        <div className="absolute inset-0 grid place-items-center">
+        <div className="pointer-events-auto absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-rose-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Simulation Failed</div>
             <div className="mt-2 text-sm text-white/75">{runtime.failReason}</div>
             <button
-              onClick={onRestart}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onRestart();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRestart();
+              }}
               className="pointer-events-auto mt-4 rounded-md border border-rose-200/60 px-4 py-1.5 text-sm text-rose-100 hover:bg-rose-400/20"
             >
               Retry
@@ -574,7 +602,8 @@ function PortalPunchScene() {
   const [frameVersion, setFrameVersion] = useState(0);
   const runtimeRef = useRef<Runtime>(createRuntime(0));
   const chromaOffset = useMemo(() => new THREE.Vector2(0, 0), []);
-  const { camera } = useThree();
+  const camTarget = useMemo(() => new THREE.Vector3(0, 10, EPS), []);
+  const { camera, size } = useThree();
 
   const boot = useCallback((hardReset: boolean) => {
     const best = readBest();
@@ -697,12 +726,19 @@ function PortalPunchScene() {
     const style = level.style;
     chromaOffset.set(style?.chroma ?? 0.0009, (style?.chroma ?? 0.0009) * 0.8);
 
-    const camHeight = level.camera?.height ?? 10;
-    const camDist = level.camera?.distance ?? 14;
-    const lookZ = level.camera?.lookZ ?? 0;
-    const orbit = runtime.elapsed * 0.08;
-    camera.position.set(Math.sin(orbit) * 1.8, camHeight, camDist);
-    camera.lookAt(0, 0, lookZ);
+    const perspective = camera as THREE.PerspectiveCamera;
+    const fov = THREE.MathUtils.degToRad(perspective.fov || 46);
+    const aspect = Math.max(0.6, size.width / Math.max(size.height, 1));
+    const spanX = level.grid.w + 2.2;
+    const spanZ = level.grid.h + 2.2;
+    const fitYForZ = spanZ / (2 * Math.tan(fov / 2));
+    const fitYForX = spanX / (2 * Math.tan(fov / 2) * aspect);
+    const topDownY = Math.max(fitYForX, fitYForZ) + 2.2;
+
+    camTarget.set(0, topDownY, EPS);
+    camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
+    camera.up.set(0, 0, -1);
+    camera.lookAt(0, 0, 0);
 
     portalPunchState.score = runtime.score;
     portalPunchState.bestScore = runtime.best;
@@ -745,7 +781,7 @@ function PortalPunchScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, level.camera?.height ?? 10, level.camera?.distance ?? 14]} fov={46} />
+      <PerspectiveCamera makeDefault position={[0, 12, EPS]} fov={46} near={0.1} far={400} />
       <color attach="background" args={[style?.fog ?? '#101622']} />
       <fog attach="fog" args={[style?.fog ?? '#101622', 8, 36]} />
 

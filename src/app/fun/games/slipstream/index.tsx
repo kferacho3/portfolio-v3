@@ -769,6 +769,7 @@ function SlipStreamOverlay() {
   const slipRatio = useSlipStreamStore((state) => state.slipRatio);
   const failMessage = useSlipStreamStore((state) => state.failMessage);
   const pulseNonce = useSlipStreamStore((state) => state.pulseNonce);
+  const startRun = useSlipStreamStore((state) => state.startRun);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
@@ -802,7 +803,17 @@ function SlipStreamOverlay() {
             <div className="text-2xl font-black tracking-wide">SLIP STREAM</div>
             <div className="mt-2 text-sm text-white/85">Mobile: tap to jump, swipe left or right to change lanes.</div>
             <div className="mt-1 text-sm text-white/80">Desktop: click or Space to jump, Arrow keys or A/D to switch lanes.</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 rounded-md border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
+              onClick={(event) => {
+                event.stopPropagation();
+                startRun();
+              }}
+            >
+              Start Run
+            </button>
+            <div className="mt-2 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
       )}
@@ -814,7 +825,17 @@ function SlipStreamOverlay() {
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+            <button
+              type="button"
+              className="pointer-events-auto mt-3 rounded-md border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
+              onClick={(event) => {
+                event.stopPropagation();
+                startRun();
+              }}
+            >
+              Retry
+            </button>
+            <div className="mt-2 text-sm text-cyan-200/90">Tap instantly to retry.</div>
           </div>
         </div>
       )}
@@ -903,6 +924,7 @@ function SlipStreamScene() {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
+  const status = useSlipStreamStore((state) => state.status);
 
   const { camera } = useThree();
 
@@ -941,6 +963,19 @@ function SlipStreamScene() {
       applyFractalObstacleShader(relicMatRef.current, '#42ffd2', '#b2fff0', 1.36, 0.31, 0.3);
     }
   }, []);
+
+  useEffect(() => {
+    if (status !== 'PLAYING') return;
+    const runtime = runtimeRef.current;
+    resetRuntime(runtime);
+    chooseChunk(runtime);
+    spawnComet(runtime);
+    spawnComet(runtime);
+    spawnRelic(runtime);
+    runtime.cometSpawnTimer = Math.min(runtime.cometSpawnTimer, 0.5);
+    runtime.gustSpawnTimer = Math.min(runtime.gustSpawnTimer, 1.0);
+    runtime.relicSpawnTimer = Math.min(runtime.relicSpawnTimer, 1.2);
+  }, [status]);
 
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
@@ -1605,7 +1640,7 @@ function SlipStreamScene() {
         />
       </mesh>
 
-      <instancedMesh ref={tunnelRef} args={[undefined, undefined, TUNNEL_INSTANCE_COUNT]}>
+      <instancedMesh ref={tunnelRef} args={[undefined, undefined, TUNNEL_INSTANCE_COUNT]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           color={TRACK_MAIN}
@@ -1618,7 +1653,7 @@ function SlipStreamScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={streakRef} args={[undefined, undefined, STREAK_POOL]}>
+      <instancedMesh ref={streakRef} args={[undefined, undefined, STREAK_POOL]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
           vertexColors
@@ -1630,7 +1665,7 @@ function SlipStreamScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={coneRef} args={[undefined, undefined, COMET_POOL]}>
+      <instancedMesh ref={coneRef} args={[undefined, undefined, COMET_POOL]} frustumCulled={false}>
         <coneGeometry args={[1, 1, 12, 1, true]} />
         <meshBasicMaterial
           vertexColors
@@ -1643,7 +1678,7 @@ function SlipStreamScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={cometRef} args={[undefined, undefined, COMET_POOL]}>
+      <instancedMesh ref={cometRef} args={[undefined, undefined, COMET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
         <meshStandardMaterial
           ref={cometMatRef}
@@ -1657,7 +1692,7 @@ function SlipStreamScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={gustRef} args={[undefined, undefined, GUST_POOL]}>
+      <instancedMesh ref={gustRef} args={[undefined, undefined, GUST_POOL]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           ref={gustMatRef}
@@ -1671,7 +1706,7 @@ function SlipStreamScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={relicRef} args={[undefined, undefined, RELIC_POOL]}>
+      <instancedMesh ref={relicRef} args={[undefined, undefined, RELIC_POOL]} frustumCulled={false}>
         <dodecahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
           ref={relicMatRef}

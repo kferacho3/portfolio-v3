@@ -73,6 +73,9 @@ type Runtime = {
   waveFreq: number;
   waveAmp: number;
   waveBase: number;
+  waveHalfThickness: number;
+  waveNormalOffset: number;
+  viewYLimit: number;
   playerY: number;
   playerNormalY: number;
   lastFlipAt: number;
@@ -123,8 +126,8 @@ const PLAYER_X = -4.6;
 const PLAYER_R = 0.22;
 
 const WAVE_POINTS = 280;
-const WAVE_HALF_THICKNESS = 0.16;
-const WAVE_NORMAL_OFFSET = 0.12;
+const WAVE_HALF_THICKNESS_BASE = 0.2;
+const WAVE_NORMAL_OFFSET_BASE = 0.18;
 
 const OBSTACLE_POOL = 72;
 const COLLECTIBLE_POOL = 40;
@@ -213,7 +216,7 @@ const waveSampleForSign = (x: number, sign: number, runtime: Runtime) => {
     yCenter,
     dyDx,
     normalY,
-    yRider: yCenter + normalY * WAVE_NORMAL_OFFSET,
+    yRider: yCenter + normalY * runtime.waveNormalOffset,
   };
 };
 
@@ -325,7 +328,11 @@ const spawnObstacleSet = (runtime: Runtime) => {
     obstacle.yOffset =
       (requiredSign === 1 ? 1 : -1) *
       (obstacle.kind === 0 ? 0.13 : obstacle.kind === 1 ? 0.08 : 0.04);
-    obstacle.y = sample.yCenter + obstacle.yOffset;
+    obstacle.y = clamp(
+      sample.yCenter + obstacle.yOffset,
+      -runtime.viewYLimit + obstacle.h * 0.55,
+      runtime.viewYLimit - obstacle.h * 0.55
+    );
     obstacle.requiredSign = requiredSign;
     obstacle.speedFactor = clamp(0.98 + d * 0.18 + tier * 0.04 + (Math.random() * 2 - 1) * 0.05, 0.9, 1.32);
     obstacle.trackAmount = obstacle.kind === 2 ? 0.95 : obstacle.kind === 1 ? 0.42 : 0.18;
@@ -349,7 +356,11 @@ const spawnObstacleSet = (runtime: Runtime) => {
     collectible.spin = Math.random() * Math.PI * 2;
     collectible.value = count >= 3 ? 4 : count === 2 ? 3 : 2;
     const ySample = waveSampleForSign(collectible.x, collectible.sign, runtime);
-    collectible.y = ySample.yRider;
+    collectible.y = clamp(
+      ySample.yRider,
+      -runtime.viewYLimit + collectible.r + 0.08,
+      runtime.viewYLimit - collectible.r - 0.08
+    );
   }
 };
 
@@ -399,8 +410,11 @@ const createRuntime = (): Runtime => ({
   flipGrace: 0,
   phaseScroll: 0,
   waveFreq: 1.52,
-  waveAmp: 0.42,
-  waveBase: 1.26,
+  waveAmp: 0.54,
+  waveBase: 1.68,
+  waveHalfThickness: WAVE_HALF_THICKNESS_BASE,
+  waveNormalOffset: WAVE_NORMAL_OFFSET_BASE,
+  viewYLimit: 4.8,
   playerY: 1.32,
   playerNormalY: 1,
   lastFlipAt: -99,
@@ -436,8 +450,11 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.flipGrace = 0;
   runtime.phaseScroll = 0;
   runtime.waveFreq = 1.52;
-  runtime.waveAmp = 0.42;
-  runtime.waveBase = 1.26;
+  runtime.waveAmp = 0.54;
+  runtime.waveBase = 1.68;
+  runtime.waveHalfThickness = WAVE_HALF_THICKNESS_BASE;
+  runtime.waveNormalOffset = WAVE_NORMAL_OFFSET_BASE;
+  runtime.viewYLimit = 4.8;
   runtime.playerY = 1.32;
   runtime.playerNormalY = 1;
   runtime.lastFlipAt = -99;
@@ -711,7 +728,7 @@ function WaveFlipScene() {
     [centerGeometry, centerLineMaterial]
   );
 
-  const { camera } = useThree();
+  const { camera, viewport } = useThree();
 
   useEffect(() => {
     resetRuntime(runtimeRef.current);
@@ -840,9 +857,30 @@ function WaveFlipScene() {
       const speed = runtime.difficulty.speed * (1.22 + pressure * 0.52);
       const d = clamp((runtime.difficulty.speed - 4) / 3, 0, 1);
       const intensity = clamp(d * 0.64 + pressure * 0.36, 0, 1);
-      runtime.waveFreq = lerp(1.48, 2.95, intensity);
-      runtime.waveAmp = lerp(0.42, 0.68, intensity);
-      runtime.waveBase = lerp(1.26, 1.62, intensity);
+      const worldHalfHeight = Math.max(2.8, viewport.height * 0.5);
+      const desiredFreq = lerp(1.48, 2.95, intensity);
+      const desiredAmp = lerp(0.54, 0.9, intensity);
+      const desiredBase = lerp(1.68, 2.35, intensity);
+      const desiredNormalOffset = lerp(WAVE_NORMAL_OFFSET_BASE, 0.24, intensity);
+      const desiredHalfThickness = lerp(WAVE_HALF_THICKNESS_BASE, 0.25, intensity);
+      const obstacleHeadroom = 1.55;
+      const maxCenterPeak = Math.max(1.4, worldHalfHeight - obstacleHeadroom - desiredNormalOffset);
+
+      let nextBase = desiredBase;
+      let nextAmp = desiredAmp;
+      const peak = nextBase + nextAmp;
+      if (peak > maxCenterPeak) {
+        const scale = clamp(maxCenterPeak / peak, 0.62, 1);
+        nextBase *= scale;
+        nextAmp *= scale;
+      }
+
+      runtime.waveFreq = desiredFreq;
+      runtime.waveAmp = nextAmp;
+      runtime.waveBase = nextBase;
+      runtime.waveNormalOffset = clamp(desiredNormalOffset, 0.14, 0.28);
+      runtime.waveHalfThickness = clamp(desiredHalfThickness, 0.16, 0.28);
+      runtime.viewYLimit = Math.max(2.0, worldHalfHeight - 0.24);
       runtime.displaySign = lerp(runtime.displaySign, runtime.waveSign, 1 - Math.exp(-(runtime.flipGrace > 0 ? 22 : 13) * dt));
       runtime.flipGrace = Math.max(0, runtime.flipGrace - dt);
 
@@ -851,7 +889,11 @@ function WaveFlipScene() {
 
       const playerSample = waveSampleForSign(PLAYER_X, runtime.playerTargetSign, runtime);
       const playerResponse = runtime.flipGrace > 0 ? 24 : 17;
-      runtime.playerY = lerp(runtime.playerY, playerSample.yRider, 1 - Math.exp(-playerResponse * dt));
+      runtime.playerY = clamp(
+        lerp(runtime.playerY, playerSample.yRider, 1 - Math.exp(-playerResponse * dt)),
+        -runtime.viewYLimit + PLAYER_R + 0.12,
+        runtime.viewYLimit - PLAYER_R - 0.12
+      );
       runtime.playerNormalY = lerp(
         runtime.playerNormalY,
         playerSample.normalY,
@@ -876,7 +918,11 @@ function WaveFlipScene() {
         const playerInfluence = clamp((runtime.playerY - laneSample.yCenter) * 0.36, -0.3, 0.3);
         const wobble = Math.sin(runtime.elapsed * (2.3 + obstacle.trackAmount) + obstacle.phase) * 0.1;
         const targetY = laneSample.yCenter + obstacle.yOffset + wobble + playerInfluence * obstacle.trackAmount;
-        obstacle.y = lerp(obstacle.y, targetY, 1 - Math.exp(-(8 + obstacle.trackAmount * 7) * dt));
+        obstacle.y = clamp(
+          lerp(obstacle.y, targetY, 1 - Math.exp(-(8 + obstacle.trackAmount * 7) * dt)),
+          -runtime.viewYLimit + obstacle.h * 0.55,
+          runtime.viewYLimit - obstacle.h * 0.55
+        );
 
         const laneBlocked = runtime.playerTargetSign === obstacle.requiredSign;
         if (
@@ -938,7 +984,11 @@ function WaveFlipScene() {
         if (!collectible.active) continue;
         collectible.x -= speed * dt;
         collectible.spin += dt * 3.5;
-        collectible.y = waveSampleForSign(collectible.x, collectible.sign, runtime).yRider;
+        collectible.y = clamp(
+          waveSampleForSign(collectible.x, collectible.sign, runtime).yRider,
+          -runtime.viewYLimit + collectible.r + 0.08,
+          runtime.viewYLimit - collectible.r - 0.08
+        );
         if (Math.hypot(collectible.x - PLAYER_X, collectible.y - runtime.playerY) < collectible.r + PLAYER_R) {
           collectible.active = false;
           runtime.score += collectible.value;
@@ -990,10 +1040,10 @@ function WaveFlipScene() {
       const nx = -dy * invLen;
       const ny = invLen;
 
-      const topX = x + nx * WAVE_HALF_THICKNESS;
-      const topY = sample.yCenter + ny * WAVE_HALF_THICKNESS;
-      const botX = x - nx * WAVE_HALF_THICKNESS;
-      const botY = sample.yCenter - ny * WAVE_HALF_THICKNESS;
+      const topX = x + nx * runtime.waveHalfThickness;
+      const topY = sample.yCenter + ny * runtime.waveHalfThickness;
+      const botX = x - nx * runtime.waveHalfThickness;
+      const botY = sample.yCenter - ny * runtime.waveHalfThickness;
 
       const ribbonPtr = i * 6;
       ribbonPositions[ribbonPtr] = topX;
@@ -1107,7 +1157,11 @@ function WaveFlipScene() {
 
         const safeSign = (obstacle.requiredSign === 1 ? -1 : 1) as WaveSign;
         const safeSample = waveSampleForSign(obstacle.x, safeSign, runtime);
-        const safeY = safeSample.yRider + safeSign * 0.2;
+        const safeY = clamp(
+          safeSample.yRider + safeSign * 0.2,
+          -runtime.viewYLimit + 0.22,
+          runtime.viewYLimit - 0.22
+        );
         dummy.position.set(obstacle.x - 0.06, safeY, 0.2);
         const pulseScale = 0.22 + Math.sin(runtime.elapsed * 8 + i * 0.37) * 0.03;
         dummy.scale.setScalar(pulseScale);
