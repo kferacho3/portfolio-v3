@@ -351,12 +351,12 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'onepath',
-    title: 'One Path',
+    title: 'Oscillate',
     description:
       'The Walls-inspired corridor runner. Bounce between two walls and tap at the perfect alignment to take each perpendicular path.',
     accent: '#6b4cff',
     poster:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Oscillate.webp',
     hotkey: '',
   },
   {
@@ -410,9 +410,9 @@ export const GAME_CARDS: GameCard[] = [
   },
   {
     id: 'oscillate',
-    title: 'One Path (Alias)',
+    title: 'One Path',
     description:
-      'Compatibility route for One Path. Same The Walls-style gameplay.',
+      'Compatibility route name for Oscillate. Same The Walls-style gameplay.',
     accent: '#6b4cff',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OnePath.webp',
