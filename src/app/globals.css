@@ -54,7 +54,7 @@ body {
 
 /* Arcade-wide vibrance pass for all /fun game canvases */
 .fun-vibrant canvas {
-  filter: saturate(1.18) contrast(1.07) brightness(1.03);
+  filter: saturate(1.22) contrast(1.09) brightness(1.12);
 }
 
 main {

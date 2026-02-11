@@ -114,6 +114,7 @@ const tinyScale = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const round2 = (value: number) => Math.round(value * 100) / 100;
+const sideSignForCharge = (polarity: PolaritySign): PolaritySign => (polarity === 1 ? -1 : 1);
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -338,7 +339,7 @@ function PolarityOverlay() {
     <div className="absolute inset-0 pointer-events-none select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/24 via-sky-500/16 to-indigo-500/24 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/80">Polarity</div>
-        <div className="text-[11px] text-cyan-50/75">Tap to flip charge and drift lanes.</div>
+        <div className="text-[11px] text-cyan-50/75">Blue pulls left. Pink pulls right. Tap to flip.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/24 via-violet-500/16 to-cyan-500/16 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -355,7 +356,10 @@ function PolarityOverlay() {
             Near-Miss Streak <span className="font-semibold text-fuchsia-200">{nearMissStreak}</span>
           </div>
           <div>
-            Charge <span className="font-semibold">{playerPolarity === 1 ? '+' : '-'}</span>
+            Charge{' '}
+            <span className="font-semibold">
+              {playerPolarity === 1 ? 'Blue (Left Pull)' : 'Pink (Right Pull)'}
+            </span>
           </div>
         </div>
       )}
@@ -365,7 +369,7 @@ function PolarityOverlay() {
           <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/80 via-cyan-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">POLARITY</div>
             <div className="mt-2 text-sm text-white/80">Tap to toggle charge.</div>
-            <div className="mt-1 text-sm text-white/80">Attract opposite pylons, repel matching pylons.</div>
+            <div className="mt-1 text-sm text-white/80">Blue lanes magnetize left. Pink lanes magnetize right.</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -489,6 +493,8 @@ function PolarityScene() {
         activePolarity = activePolarity === 1 ? -1 : 1;
         runtime.shakeTime = Math.min(1.2, runtime.shakeTime + 0.7);
         runtime.chargeSwitchBoost = 1;
+        const switchedSide = sideSignForCharge(activePolarity);
+        const sideKick = switchedSide * (1.65 + Math.min(Math.abs(runtime.playerVelX), 2.6) * 0.24);
         let immediateForce = 0;
         let closest: Segment | null = null;
         let closestAbs = Infinity;
@@ -513,8 +519,8 @@ function PolarityScene() {
           pullFromPylon(closest.leftX, closest.leftPolarity);
           pullFromPylon(closest.rightX, closest.rightPolarity);
         }
-        const switchKick = clamp(immediateForce * 0.18, -3.6, 3.6);
-        runtime.playerVelX += switchKick;
+        const pylonKick = clamp(immediateForce * 0.08, -1.2, 1.2);
+        runtime.playerVelX = runtime.playerVelX * 0.35 + sideKick + pylonKick;
       }
     }
     if (!tap) {
@@ -584,17 +590,37 @@ function PolarityScene() {
       runtime.nearbyPylons.sort((a, b) => b.intensity - a.intensity);
       runtime.nearbyPylons.length = Math.min(runtime.nearbyPylons.length, 4);
 
-      const switchBoostScale = 1 + runtime.chargeSwitchBoost * 0.88;
       const boundedForce = clamp(netForceX, -5.4, 5.4);
-      const targetVel = boundedForce * (0.22 + difficulty * 0.16) * switchBoostScale;
-      const velResponse = 9.6 + difficulty * 3.2;
-      runtime.playerVelX = lerp(
-        runtime.playerVelX,
-        targetVel,
-        1 - Math.exp(-velResponse * dt)
-      );
-      runtime.playerVelX *= Math.exp(-(4.8 + difficulty * 1.6) * dt);
-      runtime.playerVelX = clamp(runtime.playerVelX, -5.8, 5.8);
+      const sideSign = sideSignForCharge(activePolarity);
+      const sideAnchorX = sideSign * (LANE_HALF_WIDTH * 0.68);
+      const sideDelta = sideAnchorX - runtime.playerX;
+      const sideDistNorm = clamp(Math.abs(sideDelta) / (LANE_HALF_WIDTH * 1.05), 0, 1);
+      const towardSide = Math.sign(sideDelta) || sideSign;
+
+      // Charge-controlled lane magnet: blue charge pulls left, pink pulls right.
+      const sideMagneticPull = towardSide * lerp(8.8, 14.6, difficulty) * Math.pow(sideDistNorm, 0.72);
+      const sideWell = towardSide * lerp(1.7, 3.8, difficulty) * sideDistNorm * sideDistNorm;
+      const centerRecovery = -runtime.playerX * lerp(0.34, 0.56, difficulty);
+
+      // Kinetic precession gives magnetic motion character without randomness.
+      const precession =
+        Math.sin(runtime.elapsed * (5.4 + difficulty * 2.6) + runtime.playerX * 2.1) *
+        (0.48 + sideDistNorm * 0.9) *
+        sideSign;
+
+      // Pylon field still influences movement, but as turbulence over the lane magnet.
+      const pylonTurbulence = boundedForce * (0.88 + difficulty * 0.34) * 0.38;
+      const switchPulse = runtime.chargeSwitchBoost * (5.4 + difficulty * 2.6) * sideSign;
+      const magneticAccel =
+        sideMagneticPull + sideWell + centerRecovery + precession + pylonTurbulence + switchPulse;
+
+      const linearDamping = lerp(3.8, 5.5, difficulty) + sideDistNorm * 1.8;
+      const quadDrag = (0.12 + sideDistNorm * 0.2) * runtime.playerVelX * Math.abs(runtime.playerVelX);
+      const accelX = magneticAccel - runtime.playerVelX * linearDamping - quadDrag;
+
+      runtime.playerVelX += accelX * dt;
+      const velLimit = lerp(6.4, 9.2, difficulty) + runtime.chargeSwitchBoost * 1.5;
+      runtime.playerVelX = velLimit * Math.tanh(runtime.playerVelX / velLimit);
       runtime.playerX += runtime.playerVelX * dt;
 
       let gameOver = false;

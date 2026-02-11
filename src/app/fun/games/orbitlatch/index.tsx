@@ -737,6 +737,54 @@ const ensureForwardTargets = (runtime: Runtime) => {
   }
 };
 
+const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) => {
+  const px = runtime.playerX;
+  const py = runtime.playerY;
+  const lookTime = runtime.mode === 'scattered' ? 0.72 : 0.84;
+  const predictX = px + runtime.velX * lookTime;
+  const predictY = py + runtime.velY * lookTime;
+  const reachDelta = runtime.mode === 'scattered' ? 0.92 : 0.78;
+
+  let reachable = false;
+  for (const planet of runtime.planets) {
+    if (planet.slot === fromPlanet.slot) continue;
+    const dy = planet.y - py;
+    if (dy < 0.25 || dy > 4.8) continue;
+    const d = Math.hypot(predictX - planet.x, predictY - planet.y);
+    if (Math.abs(d - planet.orbitRadius) <= reachDelta) {
+      reachable = true;
+      break;
+    }
+  }
+  if (reachable) return;
+
+  const recycle = runtime.planets
+    .filter((planet) => planet.slot !== fromPlanet.slot)
+    .sort((a, b) => a.y - b.y)[0];
+  if (!recycle) return;
+
+  recycle.x = clamp(predictX + (Math.random() * 2 - 1) * 0.48, -FIELD_HALF_X + 0.7, FIELD_HALF_X - 0.7);
+  recycle.y = Math.max(py + 1.35, predictY + 0.85 + Math.random() * 0.75);
+  recycle.radius = clamp(
+    recycle.radius + (Math.random() * 2 - 1) * 0.03,
+    runtime.mode === 'scattered' ? 0.42 : 0.48,
+    runtime.mode === 'scattered' ? 0.76 : 0.88
+  );
+  recycle.orbitRadius = clamp(
+    recycle.radius + (runtime.mode === 'scattered' ? 0.74 : 0.86) + Math.random() * 0.22,
+    recycle.radius + 0.5,
+    recycle.radius + 1.22
+  );
+  const dir = runtime.velX >= 0 ? 1 : -1;
+  recycle.orbitAngularVel = dir * (1.5 + Math.random() * 1.2);
+  recycle.colorIndex = Math.floor(Math.random() * PLANET_COLORS.length);
+  recycle.glow = 0.45;
+  recycle.pulse = Math.random() * Math.PI * 2;
+  runtime.spawnCursorY = Math.max(runtime.spawnCursorY, recycle.y + 0.24);
+  runtime.lastSpawnX = recycle.x;
+  runtime.lastSpawnY = recycle.y;
+};
+
 const acquireShard = (runtime: Runtime) => {
   for (const shard of runtime.shards) {
     if (!shard.active) return shard;
@@ -1139,14 +1187,18 @@ function OrbitLatchScene() {
             const len = Math.hypot(ax, ay) || 1;
             const firstRelease = runtime.releaseCount === 1;
             runtime.velX += (ax / len) * (firstRelease ? 0.46 : 0.26);
-            runtime.velY += Math.max(0, ay / len) * (firstRelease ? 0.68 : 0.42);
+          runtime.velY += Math.max(0, ay / len) * (firstRelease ? 0.68 : 0.42);
           }
           if (runtime.releaseCount === 1) {
             runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.86 : 0.94);
             runtime.velX *= 0.95;
+            runtime.velX = clamp(runtime.velX, -2.2, 2.2);
           }
           runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.52 : 0.42);
 
+          if (runtime.releaseCount === 1) {
+            ensureImmediateLatchOpportunity(runtime, planet);
+          }
           runtime.latched = false;
           runtime.driftTimer = runtime.releaseCount === 1 ? -0.18 : 0;
           runtime.coreGlow = Math.min(1.2, runtime.coreGlow + 0.15);
@@ -1346,6 +1398,23 @@ function OrbitLatchScene() {
         runtime.velY *= 1 - dt * 0.035;
         runtime.playerX += runtime.velX * dt;
         runtime.playerY += runtime.velY * dt;
+
+        if (
+          !Number.isFinite(runtime.playerX) ||
+          !Number.isFinite(runtime.playerY) ||
+          !Number.isFinite(runtime.velX) ||
+          !Number.isFinite(runtime.velY)
+        ) {
+          failRun('Signal solver destabilized.', DANGER);
+          runtime.playerX = 0;
+          runtime.playerY = 0;
+          runtime.velX = 0;
+          runtime.velY = 0;
+        }
+
+        if (runtime.releaseCount === 1 && runtime.latches === 0 && runtime.driftTimer > 0.35) {
+          ensureImmediateLatchOpportunity(runtime, runtime.planets.find((p) => p.slot === runtime.latchedPlanet) ?? runtime.planets[0]);
+        }
 
         if (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS)) {
           failRun('Satellite impacted a planet core.');
