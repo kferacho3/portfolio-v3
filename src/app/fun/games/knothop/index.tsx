@@ -71,7 +71,6 @@ const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const MINT = new THREE.Color('#5edfc7');
-const CYAN = new THREE.Color('#72dcf7');
 const PEARL = new THREE.Color('#f6fffc');
 const CORAL = new THREE.Color('#ff8b7b');
 const SEA = new THREE.Color('#9ce9da');
@@ -94,20 +93,6 @@ const shortestAngleDiff = (target: number, from: number) =>
   normalizeAngle(target - from);
 
 const angleForSlot = (slot: number) => Math.PI / 2 - slot * (Math.PI / 2);
-
-const slotFromAngle = (angle: number) => {
-  const normalized = normalizeAngle(angle);
-  let bestSlot = 0;
-  let best = Infinity;
-  for (let slot = 0; slot < 4; slot += 1) {
-    const diff = Math.abs(shortestAngleDiff(angleForSlot(slot), normalized));
-    if (diff < best) {
-      best = diff;
-      bestSlot = slot;
-    }
-  }
-  return bestSlot;
-};
 
 const maybeVibrate = (ms: number) => {
   if (typeof navigator === 'undefined') return;
