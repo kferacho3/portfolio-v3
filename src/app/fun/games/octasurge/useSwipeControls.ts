@@ -6,11 +6,15 @@ export function useSwipeControls({
   enabled,
   onLeft,
   onRight,
+  onUp,
+  onDown,
   threshold = 36,
 }: {
   enabled: boolean;
   onLeft: () => void;
   onRight: () => void;
+  onUp?: () => void;
+  onDown?: () => void;
   threshold?: number;
 }) {
   const startX = useRef<number | null>(null);
@@ -34,11 +38,20 @@ export function useSwipeControls({
       startX.current = null;
       startY.current = null;
 
-      if (Math.abs(dx) < threshold) return;
-      if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (absX < threshold && absY < threshold) return;
 
-      if (dx < 0) onLeft();
-      else onRight();
+      if (absX >= absY * 1.2) {
+        if (dx < 0) onLeft();
+        else onRight();
+        return;
+      }
+
+      if (absY >= absX * 1.1) {
+        if (dy < 0) onUp?.();
+        else onDown?.();
+      }
     };
 
     window.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -48,5 +61,5 @@ export function useSwipeControls({
       window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchend', onTouchEnd);
     };
-  }, [enabled, onLeft, onRight, threshold]);
+  }, [enabled, onDown, onLeft, onRight, onUp, threshold]);
 }

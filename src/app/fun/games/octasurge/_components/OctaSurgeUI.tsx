@@ -6,7 +6,7 @@ import { useSnapshot } from 'valtio';
 
 import { GAME, OCTA_SURGE_TITLE } from '../constants';
 import { octaSurgeState } from '../state';
-import type { OctaSurgeMode } from '../types';
+import type { OctaFxLevel, OctaSurgeMode } from '../types';
 
 const font =
   "'Avenir Next', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
@@ -30,12 +30,20 @@ const modeLabel: Record<OctaSurgeMode, string> = {
   daily: 'Daily',
 };
 
+const fxLabel: Record<OctaFxLevel, string> = {
+  full: 'FX Full',
+  medium: 'FX Medium',
+  low: 'FX Low',
+};
+
 export function OctaSurgeUI({
   onStart,
   onSelectMode,
+  onCycleFxLevel,
 }: {
   onStart: () => void;
   onSelectMode: (mode: OctaSurgeMode) => void;
+  onCycleFxLevel: () => void;
 }) {
   const snap = useSnapshot(octaSurgeState);
 
@@ -49,7 +57,7 @@ export function OctaSurgeUI({
             pointerEvents: 'none',
             fontFamily: font,
             color: 'rgba(245, 248, 255, 0.98)',
-            textShadow: '0 10px 26px rgba(2,6,23,0.55)',
+            textShadow: '0 10px 26px rgba(2,6,23,0.6)',
           }}
         >
           <div
@@ -58,19 +66,19 @@ export function OctaSurgeUI({
               top: 18,
               left: 18,
               display: 'grid',
-              gap: 4,
+              gap: 5,
             }}
           >
-            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 700 }}>
+            <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 800 }}>
               {OCTA_SURGE_TITLE.toUpperCase()} · {modeLabel[snap.mode]}
             </div>
-            <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1 }}>
+            <div style={{ fontSize: 38, fontWeight: 900, lineHeight: 1 }}>
               {Math.floor(snap.score)}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, opacity: 0.94 }}>
               Combo x{Math.max(1, snap.combo)}
             </div>
-            <div style={{ fontSize: 12, opacity: 0.82 }}>
+            <div style={{ fontSize: 12, opacity: 0.86 }}>
               Speed {snap.speed.toFixed(1)}
             </div>
           </div>
@@ -91,6 +99,12 @@ export function OctaSurgeUI({
             <div>Boost +{snap.runBoost}</div>
             <div>Shield +{snap.runShield}</div>
             <div>Near Miss +{snap.runNearMisses}</div>
+            <div style={{ marginTop: 4, opacity: 0.92 }}>
+              {snap.boostActive ? 'BOOST LIVE' : 'BOOST OFF'}
+            </div>
+            <div style={{ opacity: 0.9 }}>
+              {snap.prismActive ? 'PRISM x2' : snap.magnetActive ? 'MAGNET' : snap.phaseActive ? 'PHASE' : 'POWER READY'}
+            </div>
           </div>
 
           <div
@@ -99,17 +113,27 @@ export function OctaSurgeUI({
               left: 18,
               right: 18,
               bottom: 18,
-              maxWidth: 440,
+              maxWidth: 520,
+              pointerEvents: 'none',
             }}
           >
-            <div style={{ marginBottom: 6, fontSize: 12, fontWeight: 700 }}>
-              Surge {Math.round(snap.surgeMeter)}%
+            <div
+              style={{
+                marginBottom: 6,
+                fontSize: 12,
+                fontWeight: 800,
+                display: 'flex',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span>Surge {Math.round(snap.surgeMeter)}%</span>
+              <span>{Math.round(snap.progress * 100)}%</span>
             </div>
             <div
               style={{
-                height: 10,
+                height: 11,
                 borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.2)',
+                border: '1px solid rgba(255,255,255,0.24)',
                 background: 'rgba(255,255,255,0.14)',
                 overflow: 'hidden',
               }}
@@ -119,7 +143,7 @@ export function OctaSurgeUI({
                   width: `${Math.max(0, Math.min(100, snap.surgeMeter))}%`,
                   height: '100%',
                   background:
-                    'linear-gradient(90deg, #67e8f9 0%, #60a5fa 40%, #a78bfa 100%)',
+                    'linear-gradient(90deg, #67e8f9 0%, #60a5fa 42%, #a78bfa 100%)',
                 }}
               />
             </div>
@@ -137,17 +161,17 @@ export function OctaSurgeUI({
             pointerEvents: 'auto',
             fontFamily: font,
             background:
-              'radial-gradient(circle at 15% 20%, rgba(56,189,248,0.18), transparent 45%), radial-gradient(circle at 88% 84%, rgba(192,132,252,0.18), transparent 50%)',
+              'radial-gradient(circle at 12% 18%, rgba(45,212,191,0.16), transparent 45%), radial-gradient(circle at 82% 82%, rgba(192,132,252,0.2), transparent 50%)',
           }}
         >
           <div
             style={{
-              width: 540,
+              width: 560,
               maxWidth: '94vw',
               borderRadius: 18,
               border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(2, 6, 23, 0.72)',
-              boxShadow: '0 28px 70px rgba(2,6,23,0.6)',
+              background: 'rgba(2, 6, 23, 0.76)',
+              boxShadow: '0 30px 72px rgba(2,6,23,0.62)',
               color: 'white',
               padding: '20px 20px 18px',
             }}
@@ -160,7 +184,7 @@ export function OctaSurgeUI({
                 gap: 10,
               }}
             >
-              <div style={{ fontSize: 30, fontWeight: 900 }}>
+              <div style={{ fontSize: 31, fontWeight: 900 }}>
                 {OCTA_SURGE_TITLE}
               </div>
               <div style={{ fontSize: 12, opacity: 0.78, fontWeight: 700 }}>
@@ -172,13 +196,14 @@ export function OctaSurgeUI({
               style={{
                 marginTop: 10,
                 fontSize: 13,
-                lineHeight: 1.45,
-                opacity: 0.9,
+                lineHeight: 1.46,
+                opacity: 0.92,
               }}
             >
               Snap lanes with <strong>Left / Right</strong>, flip with{' '}
-              <strong>Up</strong>. Hold <strong>Space</strong> for surge
-              slow-time.
+              <strong>Up</strong>, hold <strong>Space</strong> for surge
+              slow-time. Hit speed pads, chain near misses, and stack power-ups
+              for huge score spikes.
             </div>
 
             <div
@@ -198,10 +223,10 @@ export function OctaSurgeUI({
                     style={{
                       ...buttonBase,
                       background: active
-                        ? 'linear-gradient(135deg, rgba(56,189,248,0.36), rgba(168,85,247,0.36))'
+                        ? 'linear-gradient(135deg, rgba(45,212,191,0.38), rgba(168,85,247,0.38))'
                         : 'rgba(255,255,255,0.06)',
                       boxShadow: active
-                        ? '0 0 0 1px rgba(255,255,255,0.32) inset'
+                        ? '0 0 0 1px rgba(255,255,255,0.33) inset'
                         : 'none',
                     }}
                   >
@@ -209,6 +234,16 @@ export function OctaSurgeUI({
                   </button>
                 );
               })}
+              <button
+                onClick={onCycleFxLevel}
+                style={{
+                  ...buttonBase,
+                  background: 'rgba(255,255,255,0.08)',
+                  borderColor: 'rgba(255,255,255,0.28)',
+                }}
+              >
+                {fxLabel[snap.fxLevel]}
+              </button>
             </div>
 
             <div
@@ -218,7 +253,7 @@ export function OctaSurgeUI({
                 gridTemplateColumns: 'repeat(2, minmax(0,1fr))',
                 gap: 8,
                 fontSize: 12,
-                opacity: 0.9,
+                opacity: 0.92,
               }}
             >
               <div>Best Score: {Math.floor(snap.bestScore)}</div>
@@ -227,6 +262,8 @@ export function OctaSurgeUI({
               <div>Best Daily: {Math.floor(snap.bestDaily)}</div>
               <div>Total Gems: {snap.totalGems}</div>
               <div>Total Boost: {snap.totalBoost}</div>
+              <div>Total Magnet: {snap.totalMagnet}</div>
+              <div>Total Prism: {snap.totalPrism}</div>
             </div>
 
             {snap.phase === 'gameover' && (
@@ -237,11 +274,11 @@ export function OctaSurgeUI({
                   borderRadius: 12,
                   background: 'rgba(255,255,255,0.06)',
                   fontSize: 13,
-                  lineHeight: 1.5,
+                  lineHeight: 1.54,
                 }}
               >
                 Run Ended · Score <strong>{Math.floor(snap.score)}</strong> ·
-                Near Miss +{snap.runNearMisses} · Progress{' '}
+                Near Miss +{snap.runNearMisses} · Powerups +{snap.runBoost + snap.runShield + snap.runMagnet + snap.runPrism + snap.runPhase} · Progress{' '}
                 {Math.round(snap.progress * 100)}%
               </div>
             )}
@@ -254,20 +291,17 @@ export function OctaSurgeUI({
                 width: '100%',
                 padding: '12px 16px',
                 background:
-                  'linear-gradient(135deg, rgba(14,165,233,0.4), rgba(168,85,247,0.4))',
-                borderColor: 'rgba(255,255,255,0.3)',
+                  'linear-gradient(135deg, rgba(45,212,191,0.42), rgba(168,85,247,0.4))',
+                borderColor: 'rgba(255,255,255,0.32)',
                 fontSize: 14,
               }}
             >
-              {snap.phase === 'menu' ? 'Start Run' : 'Restart Run'}
+              {snap.phase === 'menu' ? 'Launch Run' : 'Restart Run'}
             </button>
 
-            <div style={{ marginTop: 10, fontSize: 11, opacity: 0.66 }}>
-              Classic and Daily last{' '}
-              {snap.mode === 'daily'
-                ? GAME.dailyRunSeconds
-                : GAME.classicRunSeconds}
-              s. Endless runs until collision.
+            <div style={{ marginTop: 10, fontSize: 11, opacity: 0.68 }}>
+              Classic and Daily are {GAME.classicRunSeconds}s sprints. Endless
+              runs until collision.
             </div>
           </div>
         </div>

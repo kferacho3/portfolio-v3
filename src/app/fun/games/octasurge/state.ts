@@ -1,11 +1,21 @@
 import { proxy } from 'valtio';
 
 import { GAME, STORAGE_KEYS } from './constants';
-import type { CollectibleType, OctaSurgeMode, OctaSurgePhase } from './types';
+import type {
+  CollectibleType,
+  OctaFxLevel,
+  OctaSurgeMode,
+  OctaSurgePhase,
+} from './types';
 
 const safeNum = (raw: string | null, fallback = 0) => {
   const n = raw ? Number(raw) : NaN;
   return Number.isFinite(n) ? n : fallback;
+};
+
+const safeFxLevel = (raw: string | null): OctaFxLevel => {
+  if (raw === 'full' || raw === 'medium' || raw === 'low') return raw;
+  return 'full';
 };
 
 const dailySeedFromDate = () => {
@@ -36,6 +46,11 @@ export const octaSurgeState = proxy({
   shieldCharges: 0,
   surgeMeter: 100,
   boostActive: false,
+  magnetActive: false,
+  prismActive: false,
+  phaseActive: false,
+  speedPadActive: false,
+  dangerPulse: 0,
 
   bestClassic: 0,
   bestDaily: 0,
@@ -43,16 +58,27 @@ export const octaSurgeState = proxy({
   runGems: 0,
   runBoost: 0,
   runShield: 0,
+  runMagnet: 0,
+  runPrism: 0,
+  runPhase: 0,
   runNearMisses: 0,
 
   totalGems: 0,
   totalBoost: 0,
   totalShield: 0,
+  totalMagnet: 0,
+  totalPrism: 0,
+  totalPhase: 0,
 
   worldSeed: Math.floor(Math.random() * 1_000_000_000),
+  fxLevel: 'full' as OctaFxLevel,
 
   setMode(mode: OctaSurgeMode) {
     this.mode = mode;
+  },
+
+  setFxLevel(level: OctaFxLevel) {
+    this.fxLevel = level;
   },
 
   start() {
@@ -65,10 +91,18 @@ export const octaSurgeState = proxy({
     this.shieldCharges = 0;
     this.surgeMeter = 100;
     this.boostActive = false;
+    this.magnetActive = false;
+    this.prismActive = false;
+    this.phaseActive = false;
+    this.speedPadActive = false;
+    this.dangerPulse = 0;
 
     this.runGems = 0;
     this.runBoost = 0;
     this.runShield = 0;
+    this.runMagnet = 0;
+    this.runPrism = 0;
+    this.runPhase = 0;
     this.runNearMisses = 0;
 
     this.worldSeed =
@@ -92,7 +126,14 @@ export const octaSurgeState = proxy({
     this.totalGems += this.runGems;
     this.totalBoost += this.runBoost;
     this.totalShield += this.runShield;
+    this.totalMagnet += this.runMagnet;
+    this.totalPrism += this.runPrism;
+    this.totalPhase += this.runPhase;
     this.boostActive = false;
+    this.magnetActive = false;
+    this.prismActive = false;
+    this.phaseActive = false;
+    this.speedPadActive = false;
 
     this.save();
   },
@@ -101,6 +142,9 @@ export const octaSurgeState = proxy({
     if (type === 'gem') this.runGems += 1;
     if (type === 'boost') this.runBoost += 1;
     if (type === 'shield') this.runShield += 1;
+    if (type === 'magnet') this.runMagnet += 1;
+    if (type === 'prism') this.runPrism += 1;
+    if (type === 'phase') this.runPhase += 1;
   },
 
   addNearMiss() {
@@ -121,6 +165,13 @@ export const octaSurgeState = proxy({
       localStorage.getItem(STORAGE_KEYS.totalShield),
       0
     );
+    this.totalMagnet = safeNum(
+      localStorage.getItem(STORAGE_KEYS.totalMagnet),
+      0
+    );
+    this.totalPrism = safeNum(localStorage.getItem(STORAGE_KEYS.totalPrism), 0);
+    this.totalPhase = safeNum(localStorage.getItem(STORAGE_KEYS.totalPhase), 0);
+    this.fxLevel = safeFxLevel(localStorage.getItem(STORAGE_KEYS.fxLevel));
   },
 
   save() {
@@ -131,5 +182,9 @@ export const octaSurgeState = proxy({
     localStorage.setItem(STORAGE_KEYS.totalGems, String(this.totalGems));
     localStorage.setItem(STORAGE_KEYS.totalBoost, String(this.totalBoost));
     localStorage.setItem(STORAGE_KEYS.totalShield, String(this.totalShield));
+    localStorage.setItem(STORAGE_KEYS.totalMagnet, String(this.totalMagnet));
+    localStorage.setItem(STORAGE_KEYS.totalPrism, String(this.totalPrism));
+    localStorage.setItem(STORAGE_KEYS.totalPhase, String(this.totalPhase));
+    localStorage.setItem(STORAGE_KEYS.fxLevel, this.fxLevel);
   },
 });
