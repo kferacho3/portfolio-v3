@@ -4,7 +4,7 @@ import { Html } from '@react-three/drei';
 import type { CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
 
-import { CAMERA_MODE_LABEL, OCTA_SURGE_TITLE } from '../constants';
+import { CAMERA_MODE_LABEL, GAME, OCTA_SURGE_TITLE } from '../constants';
 import { octaSurgeState } from '../state';
 import type {
   OctaCameraMode,
@@ -14,7 +14,6 @@ import type {
 
 const uiFont =
   "'Avenir Next Condensed', 'Futura', 'Trebuchet MS', 'Segoe UI', sans-serif";
-
 const monoFont =
   "'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace";
 
@@ -35,7 +34,8 @@ const buttonBase: CSSProperties = {
   border: '1px solid rgba(255,255,255,0.22)',
   borderRadius: 12,
   color: 'rgba(248,251,255,0.98)',
-  background: 'linear-gradient(140deg, rgba(20,29,44,0.86), rgba(7,10,16,0.72))',
+  background:
+    'linear-gradient(140deg, rgba(18,27,42,0.9), rgba(5,8,14,0.84))',
   fontFamily: uiFont,
   fontWeight: 700,
   letterSpacing: 0.5,
@@ -43,15 +43,6 @@ const buttonBase: CSSProperties = {
   textTransform: 'uppercase',
   padding: '10px 14px',
   cursor: 'pointer',
-};
-
-const metricCard: CSSProperties = {
-  border: '1px solid rgba(255,255,255,0.18)',
-  borderRadius: 14,
-  backdropFilter: 'blur(16px)',
-  background: 'linear-gradient(130deg, rgba(26,38,57,0.6), rgba(7,10,15,0.45))',
-  boxShadow: '0 18px 34px rgba(1,4,10,0.55)',
-  padding: '12px 14px',
 };
 
 export function OctaSurgeUI({
@@ -70,287 +61,214 @@ export function OctaSurgeUI({
   const snap = useSnapshot(octaSurgeState);
 
   const runIsTimed = snap.mode !== 'endless';
-  const runGoal = snap.mode === 'daily' ? 14000 : 18000;
+  const runGoal =
+    snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
 
   return (
     <Html fullscreen>
       <div
         style={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
+          width: '100vw',
+          height: '100vh',
+          overflow: 'hidden',
+          zIndex: 1400,
           pointerEvents: 'none',
           fontFamily: uiFont,
           color: 'rgba(246,250,255,0.98)',
-          background:
-            'radial-gradient(circle at 12% 14%, rgba(72,208,255,0.09), transparent 32%), radial-gradient(circle at 84% 80%, rgba(255,170,92,0.11), transparent 34%)',
         }}
       >
         {snap.phase === 'playing' && (
           <>
             <div
               style={{
-                position: 'absolute',
-                top: 16,
-                left: 16,
-                display: 'grid',
-                gap: 10,
-                minWidth: 210,
-              }}
-            >
-              <div style={metricCard}>
-                <div style={{ fontSize: 10, opacity: 0.72, letterSpacing: 1.8 }}>
-                  DATA PACKET VELOCITY
-                </div>
-                <div
-                  style={{
-                    marginTop: 4,
-                    fontSize: 42,
-                    lineHeight: 1,
-                    fontWeight: 900,
-                    letterSpacing: 0.6,
-                  }}
-                >
-                  {(snap.speed * 2.4).toFixed(0)}
-                  <span style={{ fontSize: 15, marginLeft: 4, opacity: 0.82 }}>
-                    km/h
-                  </span>
-                </div>
-                <div
-                  style={{
-                    marginTop: 4,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: 8,
-                    fontFamily: monoFont,
-                    fontSize: 11,
-                    opacity: 0.84,
-                  }}
-                >
-                  <span>Combo x{Math.max(1, snap.combo)}</span>
-                  <span>{snap.multiplier.toFixed(1)}x</span>
-                </div>
-              </div>
-
-              <div style={metricCard}>
-                <div style={{ fontSize: 10, opacity: 0.72, letterSpacing: 1.8 }}>
-                  STAGE / TOPOLOGY
-                </div>
-                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 800 }}>
-                  {snap.stageLabel}
-                </div>
-                <div
-                  style={{
-                    marginTop: 5,
-                    fontFamily: monoFont,
-                    fontSize: 11,
-                    opacity: 0.85,
-                  }}
-                >
-                  Sides: {snap.sides} | Camera: {CAMERA_MODE_LABEL[snap.cameraMode]}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                display: 'grid',
-                gap: 10,
-                width: 220,
-              }}
-            >
-              <div style={metricCard}>
-                <div style={{ fontSize: 10, opacity: 0.72, letterSpacing: 1.8 }}>
-                  RUN STATUS
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: 13,
-                    fontWeight: 700,
-                  }}
-                >
-                  <span>Score</span>
-                  <span style={{ fontFamily: monoFont }}>{Math.floor(snap.score)}</span>
-                </div>
-                <div
-                  style={{
-                    marginTop: 3,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: 13,
-                    fontWeight: 700,
-                  }}
-                >
-                  <span>Distance</span>
-                  <span style={{ fontFamily: monoFont }}>{Math.floor(snap.distance)}m</span>
-                </div>
-                <div
-                  style={{
-                    marginTop: 3,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: 13,
-                    fontWeight: 700,
-                  }}
-                >
-                  <span>{runIsTimed ? 'Goal' : 'Time'}</span>
-                  <span style={{ fontFamily: monoFont }}>
-                    {runIsTimed ? `${Math.floor(runGoal)} pts` : `${snap.time.toFixed(1)}s`}
-                  </span>
-                </div>
-              </div>
-
-              <div style={metricCard}>
-                <div style={{ fontSize: 10, opacity: 0.72, letterSpacing: 1.8 }}>
-                  SHARD CHARGE
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    height: 8,
-                    borderRadius: 999,
-                    background: 'rgba(255,255,255,0.14)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.max(0, Math.min(100, snap.slowMoMeter))}%`,
-                      height: '100%',
-                      background:
-                        'linear-gradient(90deg, rgba(101,239,255,0.96), rgba(255,168,96,0.96))',
-                      transition: 'width 90ms linear',
-                    }}
-                  />
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontFamily: monoFont,
-                    fontSize: 11,
-                    opacity: 0.84,
-                  }}
-                >
-                  Shards {snap.shardCount} | Audio {Math.floor(snap.audioReactive * 100)}%
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                position: 'absolute',
-                left: '50%',
-                bottom: 34,
-                transform: 'translateX(-50%)',
-                textAlign: 'center',
+                position: 'fixed',
+                top: 10,
+                left: 10,
+                minWidth: 180,
+                padding: '8px 10px',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: 10,
+                backdropFilter: 'blur(8px)',
+                background: 'rgba(8,13,20,0.58)',
+                boxShadow: '0 8px 16px rgba(1,4,10,0.36)',
               }}
             >
               <div
                 style={{
-                  fontSize: 10,
-                  letterSpacing: 7,
-                  opacity: 0.62,
+                  fontSize: 9,
+                  letterSpacing: 1.4,
+                  opacity: 0.66,
                 }}
               >
-                CORRUPTED FIBER LINK
+                SCORE
               </div>
               <div
                 style={{
-                  marginTop: 4,
+                  marginTop: 2,
                   fontFamily: monoFont,
-                  fontSize: 72,
-                  lineHeight: 0.9,
+                  fontSize: 26,
+                  lineHeight: 1,
                   fontWeight: 800,
-                  letterSpacing: -1.8,
-                  textShadow: '0 16px 34px rgba(5,10,20,0.65)',
                 }}
               >
                 {Math.floor(snap.score).toString().padStart(6, '0')}
               </div>
               <div
                 style={{
-                  marginTop: 8,
-                  fontSize: 11,
-                  opacity: 0.75,
-                  letterSpacing: 1.8,
+                  marginTop: 5,
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  fontFamily: monoFont,
+                  fontSize: 10,
+                  opacity: 0.82,
                 }}
               >
-                A / D OR ARROWS TO STEP | SPACE / W TO FLIP | C TO VIEW
+                <span>{snap.multiplier.toFixed(1)}x</span>
+                <span>Combo {Math.max(1, snap.combo)}</span>
+                <span>{Math.floor(snap.distance)}m</span>
               </div>
             </div>
 
             <div
               style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: 72,
-                height: 72,
-                borderRadius: '50%',
-                border: `2px solid ${snap.hudPulse > 0.55 ? 'rgba(255,90,79,0.8)' : 'rgba(101,239,255,0.55)'}`,
-                boxShadow:
-                  snap.hudPulse > 0.55
-                    ? '0 0 30px rgba(255,90,79,0.5)'
-                    : '0 0 26px rgba(101,239,255,0.36)',
+                position: 'fixed',
+                top: 10,
+                right: 10,
+                minWidth: 188,
+                padding: '8px 10px',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: 10,
+                backdropFilter: 'blur(8px)',
+                background: 'rgba(8,13,20,0.58)',
+                boxShadow: '0 8px 16px rgba(1,4,10,0.36)',
               }}
             >
               <div
                 style={{
-                  position: 'absolute',
-                  left: '50%',
-                  top: '50%',
-                  transform: `translate(-50%, -50%) rotate(${snap.hudPulse > 0.2 ? 180 : 0}deg)`,
-                  color: snap.hudPulse > 0.2 ? 'rgba(255,168,96,0.95)' : 'rgba(101,239,255,0.95)',
-                  fontSize: 19,
-                  fontWeight: 900,
-                  transition: 'transform 220ms ease, color 220ms ease',
+                  fontSize: 9,
+                  letterSpacing: 1.4,
+                  opacity: 0.66,
                 }}
               >
-                ↓
+                STAGE
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  fontSize: 13,
+                  fontWeight: 800,
+                }}
+              >
+                {snap.stageLabel}
+              </div>
+              <div
+                style={{
+                  marginTop: 3,
+                  fontFamily: monoFont,
+                  fontSize: 10,
+                  opacity: 0.84,
+                }}
+              >
+                Sides {snap.sides} | Camera {CAMERA_MODE_LABEL[snap.cameraMode]}
+              </div>
+              <div
+                style={{
+                  marginTop: 5,
+                  fontFamily: monoFont,
+                  fontSize: 10,
+                  opacity: 0.8,
+                }}
+              >
+                {runIsTimed
+                  ? `Goal ${Math.floor(runGoal)} pts`
+                  : `Time ${snap.time.toFixed(1)}s`} | {Math.floor(snap.speed * 2)} km/h
               </div>
             </div>
+
+            {runIsTimed && (
+              <div
+                style={{
+                  position: 'fixed',
+                  left: '50%',
+                  bottom: 12,
+                  transform: 'translateX(-50%)',
+                  width: 'min(280px, 56vw)',
+                  borderRadius: 999,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: 'rgba(9,14,23,0.48)',
+                  padding: 4,
+                }}
+              >
+                <div
+                  style={{
+                    height: 5,
+                    borderRadius: 999,
+                    width: `${Math.max(0, Math.min(100, snap.progress * 100))}%`,
+                    background:
+                      'linear-gradient(90deg, rgba(101,239,255,0.96), rgba(255,168,96,0.96))',
+                    transition: 'width 100ms linear',
+                  }}
+                />
+              </div>
+            )}
+
+            {snap.time < 9 && (
+              <div
+                style={{
+                  position: 'fixed',
+                  left: 12,
+                  bottom: 12,
+                  maxWidth: 300,
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(7,12,19,0.58)',
+                  padding: '6px 8px',
+                  fontSize: 10,
+                  letterSpacing: 0.8,
+                  opacity: 0.78,
+                }}
+              >
+                A / D rotate lanes. Space / W flips. Shift triggers slow-mo.
+              </div>
+            )}
           </>
         )}
 
-        {snap.stageFlash > 0.04 && snap.phase === 'playing' && (
+        {snap.stageFlash > 0.06 && snap.phase === 'playing' && (
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              opacity: Math.max(0, Math.min(1, snap.stageFlash)),
+              position: 'fixed',
+              top: 10,
+              left: '50%',
+              transform: 'translateX(-50%)',
               pointerEvents: 'none',
+              opacity: Math.max(0, Math.min(1, snap.stageFlash)),
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(8,14,22,0.58)',
+              fontSize: 11,
+              letterSpacing: 2.4,
+              textTransform: 'uppercase',
             }}
           >
-            <div
-              style={{
-                fontSize: 'min(18vw, 190px)',
-                letterSpacing: 6,
-                fontWeight: 900,
-                color: 'rgba(255,255,255,0.08)',
-                textTransform: 'uppercase',
-              }}
-            >
-              {snap.stageLabel}
-            </div>
+            {snap.stageLabel}
           </div>
         )}
 
         {snap.phase !== 'playing' && (
           <div
             style={{
-              position: 'absolute',
+              position: 'fixed',
               inset: 0,
               display: 'grid',
               placeItems: 'center',
               pointerEvents: 'auto',
+              background:
+                'radial-gradient(circle at 15% 14%, rgba(72,208,255,0.08), transparent 38%), radial-gradient(circle at 85% 84%, rgba(255,170,92,0.1), transparent 40%)',
             }}
           >
             <div
@@ -496,12 +414,12 @@ export function OctaSurgeUI({
                       fontSize: 12,
                       lineHeight: 1.5,
                       opacity: 0.86,
-                      maxWidth: 460,
+                      maxWidth: 500,
                     }}
                   >
-                    Rotate the prism tunnel by lane steps. Flip gravity to the
-                    opposite lane, collect cores mid-flip, and survive stage morphs
-                    from 6 to 12 sides.
+                    OctaSurge is tuned for readable lanes and progressive difficulty.
+                    Start in ST-01, rotate early, and use flips only when the forward
+                    line forces a ceiling swap.
                   </div>
 
                   <button
@@ -517,7 +435,9 @@ export function OctaSurgeUI({
                       textShadow: 'none',
                     }}
                   >
-                    {snap.phase === 'gameover' ? 'Re-Initialize Link' : 'Initialize Link'}
+                    {snap.phase === 'gameover'
+                      ? 'Re-Initialize Link'
+                      : 'Initialize Link'}
                   </button>
                 </div>
               </div>

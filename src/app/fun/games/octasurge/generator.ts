@@ -20,6 +20,16 @@ export const normalizeLane = (lane: number, sides: number) => {
 export const laneBit = (lane: number, sides: number) =>
   1 << normalizeLane(lane, sides);
 
+const bitCount = (mask: number) => {
+  let count = 0;
+  let value = mask >>> 0;
+  while (value !== 0) {
+    value &= value - 1;
+    count += 1;
+  }
+  return count;
+};
+
 const stageByScore = (scoreHint: number) => {
   let stage = STAGE_PROFILES[0];
   for (const candidate of STAGE_PROFILES) {
@@ -84,7 +94,10 @@ const carveHoles = (
       Math.abs(lane - safeLane),
       sides - Math.abs(lane - safeLane)
     );
-    if (distance <= 1 && rand() < 0.55) continue;
+    const adjacentGuard =
+      stage.id <= 2 ? 0.9 : stage.id === 3 ? 0.78 : 0.64;
+    if (distance <= 1 && rand() < adjacentGuard) continue;
+    if (distance === 2 && stage.id <= 2 && rand() < 0.62) continue;
 
     const bit = laneBit(lane, sides);
     if ((solidMask & bit) === 0) continue;
@@ -94,6 +107,20 @@ const carveHoles = (
   }
 
   solidMask |= laneBit(safeLane, sides);
+  const minSolid =
+    stage.id <= 2
+      ? Math.ceil(sides * 0.58)
+      : stage.id === 3
+        ? Math.ceil(sides * 0.48)
+        : Math.ceil(sides * 0.4);
+
+  let safetyGuard = 0;
+  while (bitCount(solidMask) < minSolid && safetyGuard < sides * 4) {
+    safetyGuard += 1;
+    const lane = Math.floor(rand() * sides);
+    solidMask |= laneBit(lane, sides);
+  }
+
   return solidMask;
 };
 
@@ -106,14 +133,29 @@ const buildObstacleMask = (
   mode: OctaSurgeMode
 ) => {
   const densityBoost = mode === 'daily' ? 0.06 : 0;
-  const density = clamp(stage.obstacleDensity + densityBoost, 0.05, 0.86);
+  const density = clamp(stage.obstacleDensity + densityBoost, 0.04, 0.78);
 
   let obstacleMask = 0;
+  let obstacleCount = 0;
+  const maxObstacles = Math.max(1, Math.floor(sides * density));
+  const guardRadius = stage.id <= 2 ? 1 : 0;
+
   for (let lane = 0; lane < sides; lane += 1) {
     const bit = laneBit(lane, sides);
     if ((solidMask & bit) === 0) continue;
     if (lane === safeLane) continue;
-    if (rand() < density) obstacleMask |= bit;
+
+    const distance = Math.min(
+      Math.abs(lane - safeLane),
+      sides - Math.abs(lane - safeLane)
+    );
+    if (distance <= guardRadius) continue;
+    if (obstacleCount >= maxObstacles) continue;
+
+    if (rand() < density) {
+      obstacleMask |= bit;
+      obstacleCount += 1;
+    }
   }
 
   return obstacleMask;
@@ -180,18 +222,12 @@ export const createLevelGenerator = (
     const stage = stageByScore(scoreHint);
     const sides = stage.sides;
 
-    const driftChoices = [-2, -1, 0, 1, 2, Math.floor(sides / 2)];
-    const driftWeights = [0.08, 0.24, 0.34, 0.24, 0.08, stage.id > 2 ? 0.12 : 0.03];
-
-    let roll = random() * driftWeights.reduce((sum, weight) => sum + weight, 0);
+    const driftRoll = random();
     let drift = 0;
-    for (let i = 0; i < driftChoices.length; i += 1) {
-      roll -= driftWeights[i];
-      if (roll <= 0) {
-        drift = driftChoices[i];
-        break;
-      }
-    }
+    if (driftRoll < 0.24) drift = -1;
+    else if (driftRoll < 0.48) drift = 1;
+    else if (stage.id >= 3 && driftRoll < 0.56) drift = -2;
+    else if (stage.id >= 3 && driftRoll < 0.64) drift = 2;
 
     const safeLane = normalizeLane(previousSafeLane + drift, sides);
     const solidMask = carveHoles(random, stage, sides, safeLane, mode);
