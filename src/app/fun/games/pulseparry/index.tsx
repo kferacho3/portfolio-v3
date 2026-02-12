@@ -141,9 +141,11 @@ const PULSE_POOL = 84;
 const SHARD_POOL = 96;
 const SPARK_POOL = 14;
 
-const SPAWN_RADIUS_BASE = 5.35;
+const SPAWN_RADIUS_BASE = 0.24;
 const CORE_FAIL_RADIUS = 0.22;
-const PARRY_RADIUS_BASE = 1.12;
+const PARRY_RADIUS_BASE = 3.08;
+const MISS_RADIUS = 4.48;
+const SWIPE_THRESHOLD = 0.16;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -153,7 +155,8 @@ const MAGENTA = new THREE.Color('#ff6fd8');
 const ACID = new THREE.Color('#b4f766');
 const DANGER = new THREE.Color('#ff607e');
 const PULSE_COLORS = [CYAN, MAGENTA, ACID] as const;
-const LANE_SHAPE_NAMES = ['Orb', 'Block', 'Spike', 'Diamond'] as const;
+const LANE_SHAPE_NAMES = ['Right: Orb', 'Up: Block', 'Left: Spike', 'Down: Diamond'] as const;
+const LANE_INPUT_NAMES = ['Right', 'Up', 'Left', 'Down'] as const;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -161,8 +164,8 @@ const TAU = Math.PI * 2;
 const CARDINAL_ANGLES = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5] as const;
 const laneBit = (lane: number) => 1 << lane;
 const PHASE_LANE_MASKS = [
-  laneBit(0) | laneBit(2),
-  laneBit(0) | laneBit(1) | laneBit(2),
+  laneBit(0) | laneBit(1) | laneBit(2) | laneBit(3),
+  laneBit(0) | laneBit(1) | laneBit(2) | laneBit(3),
   laneBit(0) | laneBit(1) | laneBit(2) | laneBit(3),
 ] as const;
 const PHASE_THRESHOLDS = [0, 10, 28] as const;
@@ -249,7 +252,7 @@ const createRuntime = (): Runtime => ({
   parries: 0,
   tapMisses: 0,
   phase: 1,
-  targetLanes: 2,
+  targetLanes: 4,
   laneMask: PHASE_LANE_MASKS[0],
   perfectCombo: 0,
   multiplier: 1,
@@ -300,7 +303,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.parries = 0;
   runtime.tapMisses = 0;
   runtime.phase = 1;
-  runtime.targetLanes = 2;
+  runtime.targetLanes = 4;
   runtime.laneMask = PHASE_LANE_MASKS[0];
   runtime.perfectCombo = 0;
   runtime.multiplier = 1;
@@ -364,7 +367,7 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
   lives: 3,
   parries: 0,
   phase: 1,
-  targetLanes: 2,
+  targetLanes: 4,
   tapMisses: 0,
   combo: 0,
   multiplier: 1,
@@ -378,7 +381,7 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       lives: 3,
       parries: 0,
       phase: 1,
-      targetLanes: 2,
+      targetLanes: 4,
       tapMisses: 0,
       combo: 0,
       multiplier: 1,
@@ -391,7 +394,7 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       lives: 3,
       parries: 0,
       phase: 1,
-      targetLanes: 2,
+      targetLanes: 4,
       tapMisses: 0,
       combo: 0,
       multiplier: 1,
@@ -459,7 +462,7 @@ const syncPhaseProgression = (runtime: Runtime) => {
     runtime.coreGlow = Math.min(1.6, runtime.coreGlow + 0.25);
     runtime.shake = Math.min(1.2, runtime.shake + 0.18);
   }
-  runtime.targetLanes = nextPhase === 1 ? 2 : nextPhase === 2 ? 3 : 4;
+  runtime.targetLanes = 4;
   runtime.laneMask = PHASE_LANE_MASKS[nextPhase - 1];
 };
 
@@ -472,6 +475,20 @@ const activeLanes = (runtime: Runtime) => {
     if (laneIsActive(runtime, lane)) lanes.push(lane);
   }
   return lanes;
+};
+
+const laneForDirectionalKey = (keys: Set<string>): number | null => {
+  if (keys.has('arrowup') || keys.has('w')) return 1;
+  if (keys.has('arrowleft') || keys.has('a')) return 2;
+  if (keys.has('arrowdown') || keys.has('s')) return 3;
+  if (keys.has('arrowright') || keys.has('d')) return 0;
+  return null;
+};
+
+const laneForSwipe = (dx: number, dy: number): number | null => {
+  if (Math.abs(dx) < SWIPE_THRESHOLD && Math.abs(dy) < SWIPE_THRESHOLD) return null;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx > 0 ? 0 : 2;
+  return dy > 0 ? 1 : 3;
 };
 
 type OverlapCandidate = {
@@ -494,10 +511,29 @@ const findOverlapCandidate = (runtime: Runtime, slack = 1): OverlapCandidate | n
   return best;
 };
 
+const findLaneOverlapCandidate = (
+  runtime: Runtime,
+  lane: number,
+  slack = 1
+): OverlapCandidate | null => {
+  let best: OverlapCandidate | null = null;
+  for (const pulse of runtime.pulses) {
+    if (!pulse.active || pulse.parried || pulse.lane !== lane) continue;
+    if (!laneIsActive(runtime, pulse.lane)) continue;
+    const diff = Math.abs(pulse.radius - runtime.parryRadius);
+    const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
+    if (diff > hitWindow * slack) continue;
+    if (!best || diff < best.diff) {
+      best = { pulse, diff, hitWindow };
+    }
+  }
+  return best;
+};
+
 const spawnInterval = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
   const tutorialSlow = runtime.elapsed < 10 ? 0.26 : runtime.elapsed < 20 ? 0.12 : 0;
-  const lanePressure = Math.max(0, runtime.targetLanes - 2) * 0.15;
+  const lanePressure = Math.max(0, runtime.phase - 1) * 0.12;
   const streakPressure = Math.min(0.18, runtime.perfectCombo * 0.01);
   return clamp(
     lerp(1.04, 0.34, d) + (3 - tier) * 0.05 + tutorialSlow - lanePressure - streakPressure + Math.random() * 0.09,
@@ -540,8 +576,8 @@ const spawnPulseSet = (runtime: Runtime) => {
   if (lanes.length === 0) return;
   count = Math.min(count, lanes.length);
 
-  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.34;
-  const spacing = 0.58 + Math.random() * 0.32;
+  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.1;
+  const spacing = 0.34 + Math.random() * 0.22;
   for (let i = lanes.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
@@ -674,9 +710,11 @@ function PulseParryOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
         <div className="text-[11px] text-cyan-50/85">
-          Pulse only on direct overlap with a fixed target shape.
+          Shot shapes from center to targets. Press matching direction on overlap.
         </div>
-        <div className="text-[10px] text-cyan-100/70">Tap/Click/Space/Enter • R restart</div>
+        <div className="text-[10px] text-cyan-100/70">
+          W/↑ Top • A/← Left • S/↓ Bottom • D/→ Right • Swipe on mobile
+        </div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -705,7 +743,7 @@ function PulseParryOverlay() {
             Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
           </div>
           <div>
-            Mistimed Tap Chain <span className="font-semibold text-rose-200">{tapMisses}/4</span>
+            Input Miss Chain <span className="font-semibold text-rose-200">{tapMisses}/4</span>
           </div>
         </div>
       )}
@@ -715,10 +753,10 @@ function PulseParryOverlay() {
           <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/80 via-emerald-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PULSE PARRY</div>
             <div className="mt-2 text-sm text-white/85">
-              Align incoming shapes to the fixed targets, then pulse exactly on overlap.
+              Shapes launch from the center. Hit the matching direction exactly on overlap.
             </div>
             <div className="mt-1 text-sm text-white/80">
-              Speed climbs over time and more target lanes activate as phases rise.
+              Keyboard: W/A/S/D or arrows. Mobile: swipe Up/Left/Down/Right.
             </div>
             <div className="mt-1 text-xs text-white/70">
               Target order: {LANE_SHAPE_NAMES.join(' • ')}
@@ -802,6 +840,14 @@ function PulseParryScene() {
       'arrowdown',
       'arrowleft',
       'arrowright',
+      'w',
+      'a',
+      's',
+      'd',
+      'W',
+      'A',
+      'S',
+      'D',
       'r',
       'R',
     ],
@@ -822,6 +868,7 @@ function PulseParryScene() {
   const laneBeamRefs = useRef<Array<THREE.Mesh | null>>([]);
   const bloomRef = useRef<any>(null);
   const fixedStepRef = useRef(createFixedStepState());
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
@@ -883,11 +930,25 @@ function PulseParryScene() {
     const input = inputRef.current;
     const store = usePulseParryStore.getState();
 
-    const tap =
+    const startTap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
+    const keyLane = laneForDirectionalKey(input.justPressed);
+
+    if (input.pointerJustDown) {
+      swipeStartRef.current = { x: input.pointerX, y: input.pointerY };
+    }
+    let swipeLane: number | null = null;
+    if (input.pointerJustUp) {
+      const swipeStart = swipeStartRef.current;
+      if (swipeStart) {
+        swipeLane = laneForSwipe(input.pointerX - swipeStart.x, input.pointerY - swipeStart.y);
+      }
+      swipeStartRef.current = null;
+    }
+    const laneInput = keyLane ?? swipeLane;
     const restart = input.justPressed.has('r');
 
     if (restart) {
@@ -895,7 +956,7 @@ function PulseParryScene() {
       usePulseParryStore.getState().startRun();
     }
 
-    if (tap && !restart && store.status !== 'PLAYING') {
+    if (startTap && !restart && store.status !== 'PLAYING') {
       resetRuntime(runtime);
       usePulseParryStore.getState().startRun();
     }
@@ -906,7 +967,6 @@ function PulseParryScene() {
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
       syncPhaseProgression(runtime);
-      runtime.runeSpin += dt * 0.5;
       runtime.parryWindowLeft = Math.max(0, runtime.parryWindowLeft - dt);
 
       const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
@@ -924,7 +984,7 @@ function PulseParryScene() {
           ? CARDINAL_ANGLES[runtime.overlapLane]
           : normalizeAngle(runtime.cursorAngle + dt * (1.2 + runtime.phase * 0.35));
 
-      if (tap && runtime.tapCooldown <= 0) {
+      if (laneInput !== null && runtime.tapCooldown <= 0) {
         runtime.tapCooldown = 0.08;
         runtime.shockActive = true;
         runtime.shockRadius = runtime.parryRadius;
@@ -932,7 +992,7 @@ function PulseParryScene() {
         runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
         usePulseParryStore.getState().onTapFx();
 
-        const hit = findOverlapCandidate(runtime, 1);
+        const hit = findLaneOverlapCandidate(runtime, laneInput, 1);
         if (hit) {
           const pulse = hit.pulse;
           const perfect = hit.diff <= runtime.perfectThreshold;
@@ -985,7 +1045,7 @@ function PulseParryScene() {
             spawnBurst(runtime, runtime.parryRadius, DANGER, 10, 2.1);
             usePulseParryStore.getState().setLives(runtime.lives);
             if (runtime.lives <= 0) {
-              runtime.failMessage = 'Too many mistimed pulses.';
+              runtime.failMessage = `Wrong direction or mistimed input on ${LANE_INPUT_NAMES[laneInput]}.`;
               usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
               failed = true;
             }
@@ -1014,14 +1074,15 @@ function PulseParryScene() {
         if (failed) break;
         if (!pulse.active) continue;
         pulse.flash = Math.max(0, pulse.flash - dt * 4.5);
+        pulse.life += dt;
 
-        pulse.radius -= pulse.speed * dt;
+        pulse.radius += pulse.speed * dt * (0.9 + Math.min(0.45, pulse.life * 0.3));
 
-        if (pulse.radius <= CORE_FAIL_RADIUS + pulse.thickness * 0.42) {
+        if (pulse.radius >= MISS_RADIUS + pulse.thickness * 0.45) {
           runtime.resonance = Math.max(0, runtime.resonance - 0.8);
           runtime.shake = Math.min(1.5, runtime.shake + 0.72);
           runtime.perfectFlash = 1;
-          spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
+          spawnBurst(runtime, runtime.parryRadius + 0.14, DANGER, 14, 2.4);
           runtime.lives -= 1;
           runtime.tapMisses = 0;
           runtime.perfectCombo = 0;
@@ -1164,9 +1225,9 @@ function PulseParryScene() {
       const rune = runeRefs.current[i];
       if (rune) {
         rune.visible = laneActive;
-        const targetAngle = runtime.runeSpin + angle;
+        const targetAngle = angle;
         rune.position.set(Math.cos(targetAngle) * 3.48, 0.05, Math.sin(targetAngle) * 3.48);
-        rune.rotation.set(Math.PI * 0.5, targetAngle, 0);
+        rune.rotation.set(Math.PI * 0.5, runtime.elapsed * 0.7 + i, targetAngle);
         const mat = rune.material as THREE.MeshBasicMaterial;
         mat.opacity = 0.32 + runtime.resonance * 0.02 + (isHot ? 0.1 : 0);
       }
