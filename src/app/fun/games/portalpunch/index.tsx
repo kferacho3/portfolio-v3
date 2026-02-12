@@ -55,6 +55,14 @@ type Runtime = PortalPunchRuntime & {
   renderClock: number;
 };
 
+type VisualMotion = {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  lookYaw: number;
+  bobClock: number;
+  initialized: boolean;
+};
+
 const emptySolve = (): LaserSolveResult => ({
   traces: [],
   hits: [],
@@ -90,6 +98,39 @@ const setMessage = (runtime: Runtime, message: string, ttl = 2.4) => {
   runtime.message = message;
   runtime.messageTtl = ttl;
   portalPunchState.setToast(message, Math.min(2.2, ttl));
+};
+
+type LevelSelectorTheme = {
+  name: string;
+  accent: string;
+  accentSoft: string;
+  border: string;
+  glow: string;
+  text: string;
+  tooltipBg: string;
+};
+
+const LEVEL_DECADE_THEMES: LevelSelectorTheme[] = [
+  { name: 'Cyan Dawn', accent: '#52f6ff', accentSoft: '#17495c', border: '#66e9ff', glow: 'rgba(82,246,255,0.3)', text: '#d7fbff', tooltipBg: 'rgba(8, 34, 43, 0.96)' },
+  { name: 'Solar Ember', accent: '#ffbf6a', accentSoft: '#56331b', border: '#ffcf85', glow: 'rgba(255,191,106,0.28)', text: '#fff2dc', tooltipBg: 'rgba(44, 24, 11, 0.96)' },
+  { name: 'Verdant Pulse', accent: '#7ef8b7', accentSoft: '#1f4f3c', border: '#9efec9', glow: 'rgba(126,248,183,0.27)', text: '#e9fff4', tooltipBg: 'rgba(12, 38, 29, 0.96)' },
+  { name: 'Violet Flux', accent: '#b794ff', accentSoft: '#352558', border: '#c9afff', glow: 'rgba(183,148,255,0.28)', text: '#f2ebff', tooltipBg: 'rgba(26, 16, 44, 0.96)' },
+  { name: 'Rose Signal', accent: '#ff8fb9', accentSoft: '#5a2038', border: '#ffb3d0', glow: 'rgba(255,143,185,0.27)', text: '#ffeef6', tooltipBg: 'rgba(44, 13, 26, 0.96)' },
+  { name: 'Abyss Blue', accent: '#88b8ff', accentSoft: '#1f3256', border: '#a6cbff', glow: 'rgba(136,184,255,0.28)', text: '#edf4ff', tooltipBg: 'rgba(11, 22, 44, 0.96)' },
+  { name: 'Copper Grid', accent: '#f7a27c', accentSoft: '#5a3222', border: '#fbbd9f', glow: 'rgba(247,162,124,0.28)', text: '#fff2ea', tooltipBg: 'rgba(42, 22, 15, 0.96)' },
+  { name: 'Lime Arc', accent: '#b9f970', accentSoft: '#3d5420', border: '#cbff93', glow: 'rgba(185,249,112,0.29)', text: '#f8ffe8', tooltipBg: 'rgba(28, 40, 14, 0.96)' },
+  { name: 'Polar Ice', accent: '#84e2ff', accentSoft: '#1e4759', border: '#9ceaff', glow: 'rgba(132,226,255,0.27)', text: '#ebfaff', tooltipBg: 'rgba(11, 31, 41, 0.96)' },
+  { name: 'Crimson Core', accent: '#ff7a7a', accentSoft: '#562020', border: '#ff9a9a', glow: 'rgba(255,122,122,0.27)', text: '#ffecec', tooltipBg: 'rgba(42, 11, 11, 0.96)' },
+  { name: 'Aurora Mint', accent: '#6bf7de', accentSoft: '#19534a', border: '#90ffea', glow: 'rgba(107,247,222,0.28)', text: '#e7fff9', tooltipBg: 'rgba(10, 39, 34, 0.96)' },
+  { name: 'Magenta Wire', accent: '#ff86e6', accentSoft: '#59224f', border: '#ffacef', glow: 'rgba(255,134,230,0.28)', text: '#fff0fb', tooltipBg: 'rgba(42, 12, 37, 0.96)' },
+  { name: 'Gold Circuit', accent: '#ffd36e', accentSoft: '#5a431c', border: '#ffe08f', glow: 'rgba(255,211,110,0.27)', text: '#fff7e6', tooltipBg: 'rgba(45, 34, 11, 0.96)' },
+  { name: 'Storm Indigo', accent: '#8f9fff', accentSoft: '#2a3160', border: '#aab5ff', glow: 'rgba(143,159,255,0.28)', text: '#eef0ff', tooltipBg: 'rgba(16, 21, 48, 0.96)' },
+  { name: 'Teal Prism', accent: '#5df2cc', accentSoft: '#1a5547', border: '#80fbdc', glow: 'rgba(93,242,204,0.28)', text: '#e7fff8', tooltipBg: 'rgba(9, 39, 31, 0.96)' },
+];
+
+const getSelectorThemeByLevel = (levelId: number) => {
+  const decadeIndex = Math.floor((Math.max(1, levelId) - 1) / 10);
+  return LEVEL_DECADE_THEMES[decadeIndex % LEVEL_DECADE_THEMES.length];
 };
 
 const initLevel = (
@@ -274,10 +315,14 @@ const Overlay: React.FC<{
   onStart: () => void;
   onRestart: () => void;
   onNext: () => void;
-}> = ({ runtime, level, onStart, onRestart, onNext }) => {
+  onSelectLevel: (levelIndex: number) => void;
+}> = ({ runtime, level, onStart, onRestart, onNext, onSelectLevel }) => {
   const solvedCount = runtime.lastSolve.solvedTargets.size;
   const objectiveCount = level.objective.targetIds.length;
   const difficultyText = `${level.difficulty.tag} ${level.difficulty.rating}/5`;
+  const activeTheme = getSelectorThemeByLevel(level.id);
+  const activeDecade = Math.floor((level.id - 1) / 10);
+  const decadeCount = Math.ceil(PORTAL_PUNCH_LEVELS.length / 10);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
@@ -319,27 +364,153 @@ const Overlay: React.FC<{
       </div>
 
       {runtime.status === 'START' && (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto rounded-xl border border-cyan-100/45 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-2xl font-black">PORTAL PUNCH</div>
-            <div className="mt-2 text-sm text-white/85">Recursive portal laser puzzle simulation</div>
-            <div className="mt-1 text-sm text-white/75">Use mirrors, prisms, filters, gates, and phase switching.</div>
-            <div className="mt-1 text-xs text-amber-200/85">
-              Randomized difficulty tags per level, handcrafted chamber logic.
+        <div className="pointer-events-none absolute inset-0 grid place-items-center p-4">
+          <div
+            className="pointer-events-auto relative h-[min(82vh,760px)] w-[min(1220px,97vw)] overflow-hidden rounded-2xl border bg-black/70 backdrop-blur-xl"
+            style={{
+              borderColor: `${activeTheme.border}88`,
+              boxShadow: `0 24px 84px ${activeTheme.glow}`,
+            }}
+          >
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: `radial-gradient(circle at 20% 12%, ${activeTheme.accentSoft}, rgba(8,10,20,0.9) 56%), radial-gradient(circle at 84% 12%, ${activeTheme.glow}, transparent 45%)`,
+              }}
+            />
+
+            <div className="relative flex h-full flex-col">
+              <div
+                className="border-b px-5 py-4 md:px-6"
+                style={{ borderColor: `${activeTheme.border}4d` }}
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <div className="text-3xl font-black tracking-wide">PORTAL PUNCH</div>
+                    <div className="mt-1 text-sm text-white/90">
+                      Select any chamber and launch a deterministic laser simulation run.
+                    </div>
+                    <div className="mt-1 text-xs text-white/70">
+                      Selected: L{level.id} {level.name} • {difficultyText}
+                    </div>
+                  </div>
+                  <button
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      onStart();
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onStart();
+                    }}
+                    className="rounded-md border px-4 py-2 text-sm font-semibold transition-transform hover:-translate-y-0.5"
+                    style={{
+                      borderColor: activeTheme.border,
+                      color: activeTheme.text,
+                      background: `linear-gradient(135deg, ${activeTheme.accentSoft}, rgba(6,10,20,0.88))`,
+                      boxShadow: `0 0 18px ${activeTheme.glow}`,
+                    }}
+                  >
+                    Start Level {level.id}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className="border-b px-5 py-3 md:px-6"
+                style={{ borderColor: `${activeTheme.border}40` }}
+              >
+                <div className="mb-2 text-[10px] uppercase tracking-[0.24em] text-white/65">
+                  Decade Themes (Every 10 Levels)
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {Array.from({ length: decadeCount }, (_, decadeIndex) => {
+                    const theme = LEVEL_DECADE_THEMES[decadeIndex % LEVEL_DECADE_THEMES.length];
+                    const start = decadeIndex * 10 + 1;
+                    const end = Math.min(start + 9, PORTAL_PUNCH_LEVELS.length);
+                    const isActive = decadeIndex === activeDecade;
+                    return (
+                      <button
+                        key={`decade_${start}`}
+                        className="rounded-md border px-2.5 py-1 text-[10px] font-semibold tracking-[0.14em] transition-transform hover:-translate-y-0.5"
+                        style={{
+                          borderColor: isActive ? theme.border : `${theme.border}80`,
+                          color: isActive ? theme.text : 'rgba(255,255,255,0.82)',
+                          background: isActive
+                            ? `linear-gradient(135deg, ${theme.accentSoft}, rgba(8,12,20,0.92))`
+                            : `linear-gradient(135deg, rgba(6,8,14,0.95), rgba(8,10,20,0.85))`,
+                          boxShadow: isActive ? `0 0 14px ${theme.glow}` : 'none',
+                        }}
+                        onPointerDown={(event) => {
+                          event.stopPropagation();
+                          onSelectLevel(start - 1);
+                        }}
+                        title={`${theme.name} • Levels ${start}-${end}`}
+                      >
+                        {start}-{end}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 p-4 md:p-5">
+                <div className="h-full overflow-y-auto pr-1">
+                  <div className="grid grid-cols-8 gap-2 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-[repeat(15,minmax(0,1fr))]">
+                    {PORTAL_PUNCH_LEVELS.map((entry, index) => {
+                      const theme = getSelectorThemeByLevel(entry.id);
+                      const isSelected = index === runtime.levelIndex;
+                      const rangeStart = Math.floor((entry.id - 1) / 10) * 10 + 1;
+                      const rangeEnd = Math.min(rangeStart + 9, PORTAL_PUNCH_LEVELS.length);
+                      const tooltip = `L${entry.id}: ${entry.name} • ${entry.difficulty.tag} ${entry.difficulty.rating}/5 • ${theme.name} (${rangeStart}-${rangeEnd})`;
+                      return (
+                        <button
+                          key={`selector_${entry.id}`}
+                          title={tooltip}
+                          className="group relative aspect-square rounded-md border text-[11px] font-semibold tabular-nums transition-transform hover:-translate-y-0.5"
+                          style={{
+                            borderColor: isSelected ? theme.border : `${theme.border}70`,
+                            color: theme.text,
+                            background: isSelected
+                              ? `linear-gradient(140deg, ${theme.accentSoft}, ${theme.accent})`
+                              : `linear-gradient(140deg, ${theme.accentSoft}c0, rgba(8,10,18,0.95))`,
+                            boxShadow: isSelected
+                              ? `0 0 0 1px ${theme.accent}, 0 0 18px ${theme.glow}`
+                              : 'none',
+                          }}
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                            onSelectLevel(index);
+                          }}
+                        >
+                          {entry.id}
+                          {isSelected && (
+                            <span
+                              className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border"
+                              style={{
+                                borderColor: `${theme.border}cc`,
+                                background: theme.accent,
+                                boxShadow: `0 0 10px ${theme.glow}`,
+                              }}
+                            />
+                          )}
+                          <span
+                            className="pointer-events-none absolute -top-1 left-1/2 z-20 hidden w-max -translate-x-1/2 -translate-y-full rounded-md border px-2 py-1 text-[10px] text-white group-hover:block group-focus-visible:block"
+                            style={{
+                              borderColor: `${theme.border}b3`,
+                              background: theme.tooltipBg,
+                              boxShadow: `0 12px 28px ${theme.glow}`,
+                            }}
+                          >
+                            L{entry.id}: {entry.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
-            <button
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                onStart();
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                onStart();
-              }}
-              className="pointer-events-auto mt-4 rounded-md border border-cyan-200/60 px-4 py-1.5 text-sm text-cyan-100 hover:bg-cyan-400/15"
-            >
-              Start Level
-            </button>
           </div>
         </div>
       )}
@@ -631,8 +802,20 @@ function PortalPunchScene() {
 
   const [frameVersion, setFrameVersion] = useState(0);
   const runtimeRef = useRef<Runtime>(createRuntime(0));
+  const playerGroupRef = useRef<THREE.Group>(null);
+  const playerHeadMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const chromaOffset = useMemo(() => new THREE.Vector2(0, 0), []);
   const camTarget = useMemo(() => new THREE.Vector3(0, 10, EPS), []);
+  const lookTarget = useMemo(() => new THREE.Vector3(), []);
+  const playerTarget = useMemo(() => new THREE.Vector3(), []);
+  const playerDelta = useMemo(() => new THREE.Vector3(), []);
+  const playerVisualRef = useRef<VisualMotion>({
+    pos: new THREE.Vector3(0, 0.5, 0),
+    vel: new THREE.Vector3(),
+    lookYaw: 0,
+    bobClock: 0,
+    initialized: false,
+  });
   const pointerNdc = useMemo(() => new THREE.Vector2(), []);
   const pointerHit = useMemo(() => new THREE.Vector3(), []);
   const pointerRay = useMemo(() => new THREE.Raycaster(), []);
@@ -659,9 +842,22 @@ function PortalPunchScene() {
     portalPunchState.punchTime = 0;
     portalPunchState.elapsed = runtime.elapsed;
     portalPunchState.slowMoTime = 0;
-    initLevel(runtime, 0, !hardReset, 'START');
+    const level = initLevel(runtime, 0, !hardReset, 'START');
     portalPunchState.bestScore = best;
     portalPunchState.score = runtime.score;
+
+    const spawn = gridToWorld(level, runtime.player, 0.5);
+    const visual = playerVisualRef.current;
+    visual.pos.copy(spawn);
+    visual.vel.set(0, 0, 0);
+    visual.lookYaw = 0;
+    visual.bobClock = 0;
+    visual.initialized = true;
+
+    if (playerGroupRef.current) {
+      playerGroupRef.current.position.copy(spawn);
+      playerGroupRef.current.rotation.set(0, 0, 0);
+    }
   }, []);
 
   useEffect(() => {
@@ -682,13 +878,40 @@ function PortalPunchScene() {
 
   const restartLevel = useCallback(() => {
     const runtime = runtimeRef.current;
-    initLevel(runtime, runtime.levelIndex, true, 'PLAYING');
+    const level = initLevel(runtime, runtime.levelIndex, true, 'PLAYING');
+    const spawn = gridToWorld(level, runtime.player, 0.5);
+    const visual = playerVisualRef.current;
+    visual.pos.copy(spawn);
+    visual.vel.set(0, 0, 0);
+    visual.lookYaw = 0;
+    visual.bobClock = 0;
+    visual.initialized = true;
     setFrameVersion((v) => v + 1);
   }, []);
 
   const nextLevel = useCallback(() => {
     const runtime = runtimeRef.current;
-    initLevel(runtime, runtime.levelIndex + 1, true, 'PLAYING');
+    const level = initLevel(runtime, runtime.levelIndex + 1, true, 'PLAYING');
+    const spawn = gridToWorld(level, runtime.player, 0.5);
+    const visual = playerVisualRef.current;
+    visual.pos.copy(spawn);
+    visual.vel.set(0, 0, 0);
+    visual.lookYaw = 0;
+    visual.bobClock = 0;
+    visual.initialized = true;
+    setFrameVersion((v) => v + 1);
+  }, []);
+
+  const selectLevelFromMenu = useCallback((levelIndex: number) => {
+    const runtime = runtimeRef.current;
+    const level = initLevel(runtime, levelIndex, false, 'START');
+    const spawn = gridToWorld(level, runtime.player, 0.5);
+    const visual = playerVisualRef.current;
+    visual.pos.copy(spawn);
+    visual.vel.set(0, 0, 0);
+    visual.lookYaw = 0;
+    visual.bobClock = 0;
+    visual.initialized = true;
     setFrameVersion((v) => v + 1);
   }, []);
 
@@ -764,10 +987,18 @@ function PortalPunchScene() {
         writeBest(runtime.best);
       }
     } else {
-      if (input.pointerJustDown || input.justPressed.has('enter') || input.justPressed.has(' ')) {
-        if (runtime.status === 'START') {
+      const continuePressed =
+        input.justPressed.has('enter') ||
+        input.justPressed.has(' ') ||
+        input.justPressed.has('space');
+      const pointerAdvance = input.pointerJustDown;
+
+      if (runtime.status === 'START') {
+        if (continuePressed) {
           startLevel();
-        } else if (runtime.status === 'SOLVED') {
+        }
+      } else if (pointerAdvance || continuePressed) {
+        if (runtime.status === 'SOLVED') {
           nextLevel();
         } else if (runtime.status === 'GAMEOVER') {
           restartLevel();
@@ -788,6 +1019,53 @@ function PortalPunchScene() {
     const style = level.style;
     chromaOffset.set(style?.chroma ?? 0.0009, (style?.chroma ?? 0.0009) * 0.8);
 
+    const visual = playerVisualRef.current;
+    playerTarget.copy(gridToWorld(level, runtime.player, 0.5));
+    if (!visual.initialized) {
+      visual.pos.copy(playerTarget);
+      visual.vel.set(0, 0, 0);
+      visual.lookYaw = 0;
+      visual.bobClock = 0;
+      visual.initialized = true;
+    }
+
+    playerDelta.copy(playerTarget).sub(visual.pos);
+    const spring = runtime.status === 'PLAYING' ? 76 : 52;
+    const drag = runtime.status === 'PLAYING' ? 12 : 15;
+    visual.vel.addScaledVector(playerDelta, spring * dt);
+    visual.vel.multiplyScalar(Math.exp(-drag * dt));
+    visual.pos.addScaledVector(visual.vel, dt);
+
+    if (playerDelta.lengthSq() <= 1e-5 && visual.vel.lengthSq() <= 1e-6) {
+      visual.pos.copy(playerTarget);
+      visual.vel.set(0, 0, 0);
+    }
+
+    const speed = visual.vel.length();
+    visual.bobClock += dt * (runtime.status === 'PLAYING' ? 5 + Math.min(8, speed * 7) : 3.2);
+    const bob = runtime.status === 'PLAYING' ? Math.sin(visual.bobClock) * 0.024 : 0;
+    const desiredYaw = speed > 0.01 ? Math.atan2(visual.vel.x, visual.vel.z) : visual.lookYaw;
+    visual.lookYaw = THREE.MathUtils.lerp(
+      visual.lookYaw,
+      desiredYaw,
+      1 - Math.exp(-10 * dt)
+    );
+
+    if (playerGroupRef.current) {
+      const tiltX = clamp(visual.vel.z * 0.24, -0.2, 0.2);
+      const tiltZ = clamp(-visual.vel.x * 0.24, -0.2, 0.2);
+      playerGroupRef.current.position.set(visual.pos.x, visual.pos.y + bob, visual.pos.z);
+      playerGroupRef.current.rotation.set(tiltX, visual.lookYaw, tiltZ);
+    }
+
+    if (playerHeadMatRef.current) {
+      playerHeadMatRef.current.emissiveIntensity = clamp(
+        0.42 + Math.sin(runtime.elapsed * 6.2 + speed * 2.4) * 0.1 + Math.min(0.2, speed * 0.14),
+        0.28,
+        0.82
+      );
+    }
+
     const perspective = camera as THREE.PerspectiveCamera;
     const fov = THREE.MathUtils.degToRad(perspective.fov || 46);
     const aspect = Math.max(0.6, size.width / Math.max(size.height, 1));
@@ -797,10 +1075,13 @@ function PortalPunchScene() {
     const fitYForX = spanX / (2 * Math.tan(fov / 2) * aspect);
     const topDownY = Math.max(fitYForX, fitYForZ) + 2.2;
 
-    camTarget.set(0, topDownY, EPS);
-    camera.position.lerp(camTarget, 1 - Math.exp(-8 * dt));
+    const leadX = clamp(visual.vel.x * 0.18, -0.7, 0.7);
+    const leadZ = clamp(visual.vel.z * 0.18, -0.7, 0.7);
+    camTarget.set(leadX, topDownY + Math.min(0.42, speed * 0.12), EPS + leadZ);
+    camera.position.lerp(camTarget, 1 - Math.exp(-8.8 * dt));
     camera.up.set(0, 0, -1);
-    camera.lookAt(0, 0, 0);
+    lookTarget.set(visual.pos.x * 0.05, 0, visual.pos.z * 0.05);
+    camera.lookAt(lookTarget);
 
     portalPunchState.score = runtime.score;
     portalPunchState.bestScore = runtime.best;
@@ -810,7 +1091,8 @@ function PortalPunchScene() {
     portalPunchState.gameOver = runtime.status === 'GAMEOVER';
 
     runtime.renderClock += dt;
-    if (runtime.renderClock >= 1 / 30) {
+    const targetRenderFps = runtime.status === 'PLAYING' ? 45 : 18;
+    if (runtime.renderClock >= 1 / targetRenderFps) {
       runtime.renderClock = 0;
       setFrameVersion((v) => (v + 1) % 100000);
     }
@@ -838,8 +1120,7 @@ function PortalPunchScene() {
   }, [level]);
 
   const traces = runtime.lastSolve.traces;
-
-  const playerWorld = gridToWorld(level, runtime.player, 0.5);
+  const initialPlayerWorld = gridToWorld(level, runtime.player, 0.5);
 
   return (
     <>
@@ -890,14 +1171,19 @@ function PortalPunchScene() {
 
       <EntityVisuals level={level} runtime={runtime} entities={resolvedEntities} />
 
-      <group position={[playerWorld.x, 0.5, playerWorld.z]}>
+      <group ref={playerGroupRef} position={[initialPlayerWorld.x, 0.5, initialPlayerWorld.z]}>
         <mesh castShadow>
           <boxGeometry args={[0.42, 0.42, 0.42]} />
           <meshStandardMaterial color="#f1f7ff" emissive="#70d7ff" emissiveIntensity={0.25} />
         </mesh>
         <mesh position={[0, 0.3, 0]}>
           <sphereGeometry args={[0.14, 16, 16]} />
-          <meshStandardMaterial color="#70d7ff" emissive="#70d7ff" emissiveIntensity={0.5} />
+          <meshStandardMaterial
+            ref={playerHeadMatRef}
+            color="#70d7ff"
+            emissive="#70d7ff"
+            emissiveIntensity={0.5}
+          />
         </mesh>
       </group>
 
@@ -940,6 +1226,7 @@ function PortalPunchScene() {
           onStart={startLevel}
           onRestart={restartLevel}
           onNext={nextLevel}
+          onSelectLevel={selectLevelFromMenu}
         />
       </Html>
     </>

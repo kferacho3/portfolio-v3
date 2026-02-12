@@ -2,9 +2,13 @@ import type {
   Entity,
   LevelDifficultyTag,
   LaserColor,
+  PhaseId,
   PortalPunchLevel,
+  PortalPunchRuntime,
   TargetEntity,
 } from './types';
+import { solveLaser } from './engine';
+import levelSheetData from './levelSheet.json';
 
 type LevelStyle = NonNullable<PortalPunchLevel['style']>;
 type LevelDifficulty = PortalPunchLevel['difficulty'];
@@ -12,7 +16,20 @@ type DraftLevel = Omit<PortalPunchLevel, 'difficulty'> & {
   difficulty?: LevelDifficulty;
 };
 
-const TOTAL_LEVELS = 100;
+type SheetLevelSolution = {
+  phase?: PhaseId;
+  mirrors?: Record<string, number>;
+  prisms?: Record<string, number>;
+};
+
+type LevelSheetEntry = Omit<DraftLevel, 'id' | 'difficulty'> & {
+  difficultyRating?: 1 | 2 | 3 | 4 | 5;
+  solution: SheetLevelSolution;
+};
+
+const CORE_LEVELS = 100;
+const SHEET_EXPANSION_LEVELS = 50;
+const TOTAL_LEVELS = CORE_LEVELS + SHEET_EXPANSION_LEVELS;
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
@@ -1084,26 +1101,138 @@ const remixLevel = (base: DraftLevel, id: number): DraftLevel => {
 };
 
 const REMIX_LEVELS: DraftLevel[] = [];
-for (let id = BASE_LEVELS.length + 1; id <= TOTAL_LEVELS; id += 1) {
+for (let id = BASE_LEVELS.length + 1; id <= CORE_LEVELS; id += 1) {
   const rng = mulberry32(hashSeed(id * 131, 0x1f3d));
   const base = BASE_LEVELS[Math.floor(rng() * BASE_LEVELS.length)];
   REMIX_LEVELS.push(remixLevel(base, id));
 }
 
-export const PORTAL_PUNCH_LEVELS: PortalPunchLevel[] = BASE_LEVELS.map(
-  (level, idx) => ({
-    ...level,
-    style: level.style ?? palette(idx),
-    difficulty: level.difficulty ?? assignDifficulty(level.id, idx + 7),
-  })
-).concat(
-  REMIX_LEVELS.map((level, idx) => ({
-    ...level,
-    style: level.style ?? palette(idx + BASE_LEVELS.length),
-    difficulty:
-      level.difficulty ?? assignDifficulty(level.id, idx + BASE_LEVELS.length + 29),
-  }))
-);
+const normalizeMirrorOrientation = (value: number) => {
+  const v = Math.floor(Math.abs(value));
+  return v % 2;
+};
+
+const normalizePrismOrientation = (value: number) => {
+  const v = Math.floor(value);
+  return ((v % 4) + 4) % 4;
+};
+
+const createValidationRuntime = (
+  level: PortalPunchLevel,
+  solution?: SheetLevelSolution
+): PortalPunchRuntime => {
+  const runtime: PortalPunchRuntime = {
+    status: 'PLAYING',
+    levelIndex: 0,
+    phase: solution?.phase ?? 'A',
+    player: { ...level.playerStart },
+    moves: 0,
+    elapsed: 0,
+    levelStart: 0,
+    mirrors: {},
+    prisms: {},
+    gateTimers: {},
+    collected: new Set(),
+    awardedTargets: new Set(),
+    solved: false,
+    failReason: '',
+    score: 0,
+    best: 0,
+  };
+
+  for (const entity of level.entities) {
+    if (entity.type === 'MIRROR') runtime.mirrors[entity.id] = entity.orientation;
+    if (entity.type === 'PRISM') runtime.prisms[entity.id] = entity.orientation ?? 0;
+    if (entity.type === 'GATE') runtime.gateTimers[entity.id] = entity.openByDefault ? 999 : 0;
+  }
+
+  for (const [id, orientation] of Object.entries(solution?.mirrors ?? {})) {
+    runtime.mirrors[id] = normalizeMirrorOrientation(orientation);
+  }
+  for (const [id, orientation] of Object.entries(solution?.prisms ?? {})) {
+    runtime.prisms[id] = normalizePrismOrientation(orientation);
+  }
+
+  return runtime;
+};
+
+const objectiveSolved = (level: PortalPunchLevel, runtime: PortalPunchRuntime) => {
+  const result = solveLaser(level, runtime);
+  return level.objective.targetIds.every((targetId) => result.solvedTargets.has(targetId));
+};
+
+const levelSheet = (levelSheetData as unknown as LevelSheetEntry[]).slice(0, SHEET_EXPANSION_LEVELS);
+
+const buildSheetLevelPack = () => {
+  return levelSheet.map((entry, idx) => {
+    const levelId = CORE_LEVELS + idx + 1;
+    const difficultyRating = entry.difficultyRating;
+    const difficulty =
+      difficultyRating == null
+        ? assignDifficulty(levelId, 67 + idx)
+        : {
+            rating: difficultyRating,
+            tag: DIFFICULTY_TAGS[difficultyRating],
+            seed: hashSeed(levelId * 887 + difficultyRating * 31, 0x611d),
+          };
+
+    const draft: DraftLevel = {
+      id: levelId,
+      key: entry.key || `level_${levelId}`,
+      name: entry.name,
+      subtitle: entry.subtitle,
+      grid: deepClone(entry.grid),
+      playerStart: deepClone(entry.playerStart),
+      source: deepClone(entry.source),
+      entities: deepClone(entry.entities),
+      objective: deepClone(entry.objective),
+      style: entry.style ? deepClone(entry.style) : undefined,
+      camera: entry.camera ? deepClone(entry.camera) : undefined,
+      difficulty,
+    };
+
+    return {
+      level: draft,
+      solution: entry.solution,
+    };
+  });
+};
+
+const validateSheetLevel = (draft: DraftLevel, solution: SheetLevelSolution) => {
+  const level: PortalPunchLevel = {
+    ...draft,
+    style: draft.style ?? palette(draft.id),
+    difficulty: draft.difficulty ?? assignDifficulty(draft.id, 113),
+  };
+
+  const solvedRuntime = createValidationRuntime(level, solution);
+  if (!objectiveSolved(level, solvedRuntime)) {
+    throw new Error(`Portal Punch level sheet validation failed: ${level.key} has no valid solved state`);
+  }
+
+  const baselineRuntime = createValidationRuntime(level);
+  if (objectiveSolved(level, baselineRuntime)) {
+    throw new Error(`Portal Punch level sheet validation failed: ${level.key} is already solved at default state`);
+  }
+};
+
+const SHEET_LEVEL_PACK = buildSheetLevelPack();
+for (const { level, solution } of SHEET_LEVEL_PACK) {
+  validateSheetLevel(level, solution);
+}
+
+const EXPANSION_LEVELS = SHEET_LEVEL_PACK.map((entry) => entry.level);
+const ALL_DRAFT_LEVELS = BASE_LEVELS.concat(REMIX_LEVELS, EXPANSION_LEVELS);
+
+if (ALL_DRAFT_LEVELS.length !== TOTAL_LEVELS) {
+  throw new Error(`Portal Punch expected ${TOTAL_LEVELS} levels, found ${ALL_DRAFT_LEVELS.length}`);
+}
+
+export const PORTAL_PUNCH_LEVELS: PortalPunchLevel[] = ALL_DRAFT_LEVELS.map((level, idx) => ({
+  ...level,
+  style: level.style ?? palette(idx),
+  difficulty: level.difficulty ?? assignDifficulty(level.id, idx + 7),
+}));
 
 export const PORTAL_PUNCH_LEVEL_BY_ID = new Map(
   PORTAL_PUNCH_LEVELS.map((level) => [level.id, level])

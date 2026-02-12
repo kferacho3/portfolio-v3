@@ -1,0 +1,6190 @@
+[
+  {
+    "key": "sheet_mirror_01",
+    "name": "Mirror Lab 1",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 11,
+      "h": 9
+    },
+    "playerStart": {
+      "x": 5,
+      "y": 7
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 6
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 105,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_0_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_0_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_0_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_0_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_0_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_0_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "score": 55
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_0_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.0007599999999999999
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_0_m1": 0,
+        "ml_0_m2": 0,
+        "ml_0_m3": 1,
+        "ml_0_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_02",
+    "name": "Mirror Lab 2",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 13,
+      "h": 9
+    },
+    "playerStart": {
+      "x": 6,
+      "y": 7
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 5
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 110,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_1_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_1_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_1_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_1_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_1_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_1_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 4,
+          "y": 4
+        },
+        "score": 65
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_1_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00094
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_1_m1": 0,
+        "ml_1_m2": 0,
+        "ml_1_m3": 1,
+        "ml_1_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_03",
+    "name": "Mirror Lab 3",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 15,
+      "h": 9
+    },
+    "playerStart": {
+      "x": 7,
+      "y": 7
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 6
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 115,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_2_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_2_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_2_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_2_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_2_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 6
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_2_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 5,
+          "y": 5
+        },
+        "score": 75
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_2_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.0008900000000000001
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_2_m1": 0,
+        "ml_2_m2": 0,
+        "ml_2_m3": 1,
+        "ml_2_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_04",
+    "name": "Mirror Lab 4",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 11,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 5,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 7
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 120,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_3_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 7
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_3_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_3_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_3_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_3_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 6
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_3_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "score": 85
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_3_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.0011
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_3_m1": 0,
+        "ml_3_m2": 0,
+        "ml_3_m3": 1,
+        "ml_3_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_05",
+    "name": "Mirror Lab 5",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 6,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 105,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_4_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_4_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_4_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_4_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_4_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_4_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 4,
+          "y": 6
+        },
+        "score": 95
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_4_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.00083
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_4_m1": 0,
+        "ml_4_m2": 0,
+        "ml_4_m3": 1,
+        "ml_4_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_06",
+    "name": "Mirror Lab 6",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 7,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 7
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 110,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_5_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 7
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_5_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_5_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_5_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_5_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 6
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_5_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 5,
+          "y": 5
+        },
+        "score": 55
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_5_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.00091
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_5_m1": 0,
+        "ml_5_m2": 0,
+        "ml_5_m3": 1,
+        "ml_5_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_07",
+    "name": "Mirror Lab 7",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 11,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 5,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 115,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_6_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_6_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_6_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_6_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 9
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_6_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_6_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "score": 65
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_6_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00109
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_6_m1": 0,
+        "ml_6_m2": 0,
+        "ml_6_m3": 1,
+        "ml_6_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_08",
+    "name": "Mirror Lab 8",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 6,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 120,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_7_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_7_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_7_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_7_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 8
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_7_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 8
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_7_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 4,
+          "y": 7
+        },
+        "score": 75
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_7_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00083
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_7_m1": 0,
+        "ml_7_m2": 0,
+        "ml_7_m3": 1,
+        "ml_7_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_09",
+    "name": "Mirror Lab 9",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 7,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 105,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_8_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_8_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_8_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_8_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 9
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_8_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_8_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "score": 85
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_8_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.0010400000000000001
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_8_m1": 0,
+        "ml_8_m2": 0,
+        "ml_8_m3": 1,
+        "ml_8_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_10",
+    "name": "Mirror Lab 10",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 11,
+      "h": 9
+    },
+    "playerStart": {
+      "x": 5,
+      "y": 7
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 5
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 110,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_9_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_9_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_9_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_9_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_9_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_9_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "score": 95
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_9_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.0007700000000000001
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_9_m1": 0,
+        "ml_9_m2": 0,
+        "ml_9_m3": 1,
+        "ml_9_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_11",
+    "name": "Mirror Lab 11",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 13,
+      "h": 9
+    },
+    "playerStart": {
+      "x": 6,
+      "y": 7
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 6
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 115,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_10_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_10_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_10_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_10_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_10_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_10_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 4,
+          "y": 4
+        },
+        "score": 55
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_10_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.00085
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_10_m1": 0,
+        "ml_10_m2": 0,
+        "ml_10_m3": 1,
+        "ml_10_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_12",
+    "name": "Mirror Lab 12",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 15,
+      "h": 9
+    },
+    "playerStart": {
+      "x": 7,
+      "y": 7
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 5
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 120,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_11_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_11_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_11_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_11_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_11_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 6
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_11_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 5,
+          "y": 5
+        },
+        "score": 65
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_11_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00103
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_11_m1": 0,
+        "ml_11_m2": 0,
+        "ml_11_m3": 1,
+        "ml_11_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_13",
+    "name": "Mirror Lab 13",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 11,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 5,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 105,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_12_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_12_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_12_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_12_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 7
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_12_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_12_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "score": 75
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_12_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00098
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_12_m1": 0,
+        "ml_12_m2": 0,
+        "ml_12_m3": 1,
+        "ml_12_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_14",
+    "name": "Mirror Lab 14",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 6,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 7
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 110,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_13_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 7
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_13_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_13_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_13_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_13_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 6
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_13_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 4,
+          "y": 5
+        },
+        "score": 85
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_13_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.00119
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_13_m1": 0,
+        "ml_13_m2": 0,
+        "ml_13_m3": 1,
+        "ml_13_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_15",
+    "name": "Mirror Lab 15",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 7,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 115,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_14_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_14_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_14_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_14_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_14_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_14_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 5,
+          "y": 6
+        },
+        "score": 95
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_14_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.00071
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_14_m1": 0,
+        "ml_14_m2": 0,
+        "ml_14_m3": 1,
+        "ml_14_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_16",
+    "name": "Mirror Lab 16",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 11,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 5,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 120,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_15_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_15_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_15_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_15_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 7,
+          "y": 8
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_15_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 8
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_15_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 3,
+          "y": 7
+        },
+        "score": 55
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_15_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.0007899999999999999
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_15_m1": 0,
+        "ml_15_m2": 0,
+        "ml_15_m3": 1,
+        "ml_15_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_17",
+    "name": "Mirror Lab 17",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 6,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 105,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_16_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_16_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_16_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_16_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 9
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_16_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_16_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 4,
+          "y": 8
+        },
+        "score": 65
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_16_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00097
+    },
+    "camera": {
+      "distance": 14,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 2,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_16_m1": 0,
+        "ml_16_m2": 0,
+        "ml_16_m3": 1,
+        "ml_16_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_mirror_18",
+    "name": "Mirror Lab 18",
+    "subtitle": "Four-reflection routing through a folded chamber spine.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 7,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 110,
+      "phase": 0,
+      "wavelength": 500,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ml_17_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_17_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "ml_17_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_17_m4",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 8
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "ml_17_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 8
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ml_17_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 5,
+          "y": 7
+        },
+        "score": 75
+      }
+    ],
+    "objective": {
+      "description": "Tune the mirror relay and fold the beam back into the target lane.",
+      "targetIds": [
+        "ml_17_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00092
+    },
+    "camera": {
+      "distance": 15,
+      "height": 10.2,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "ml_17_m1": 0,
+        "ml_17_m2": 0,
+        "ml_17_m3": 1,
+        "ml_17_m4": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_01",
+    "name": "Portal Relay 1",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 112,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_0_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_0_out"
+      },
+      {
+        "id": "pr_0_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 8,
+          "y": 2
+        },
+        "facing": "S",
+        "linkId": "pr_0_in"
+      },
+      {
+        "id": "pr_0_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 8,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_0_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_0_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_0_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_0_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 7,
+          "y": 5
+        },
+        "score": 70
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_0_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00092
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_0_m1": 0,
+        "pr_0_m2": 1,
+        "pr_0_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_02",
+    "name": "Portal Relay 2",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 119,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_1_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_1_out"
+      },
+      {
+        "id": "pr_1_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 10,
+          "y": 3
+        },
+        "facing": "S",
+        "linkId": "pr_1_in"
+      },
+      {
+        "id": "pr_1_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_1_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_1_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_1_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_1_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "score": 82
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_1_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.0011300000000000001
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_1_m1": 0,
+        "pr_1_m2": 1,
+        "pr_1_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_03",
+    "name": "Portal Relay 3",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 17,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 126,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_2_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_2_out"
+      },
+      {
+        "id": "pr_2_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 12,
+          "y": 4
+        },
+        "facing": "S",
+        "linkId": "pr_2_in"
+      },
+      {
+        "id": "pr_2_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 12,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_2_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_2_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_2_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 15,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_2_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "score": 94
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_2_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.0008600000000000001
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_2_m1": 0,
+        "pr_2_m2": 1,
+        "pr_2_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_04",
+    "name": "Portal Relay 4",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 112,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_3_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_3_out"
+      },
+      {
+        "id": "pr_3_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 8,
+          "y": 2
+        },
+        "facing": "S",
+        "linkId": "pr_3_in"
+      },
+      {
+        "id": "pr_3_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 8,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_3_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_3_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_3_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_3_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 7,
+          "y": 6
+        },
+        "score": 106
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_3_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.00094
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_3_m1": 0,
+        "pr_3_m2": 1,
+        "pr_3_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_05",
+    "name": "Portal Relay 5",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 119,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_4_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_4_out"
+      },
+      {
+        "id": "pr_4_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 10,
+          "y": 3
+        },
+        "facing": "S",
+        "linkId": "pr_4_in"
+      },
+      {
+        "id": "pr_4_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 10,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_4_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_4_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_4_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_4_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 9,
+          "y": 6
+        },
+        "score": 70
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_4_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00091
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_4_m1": 0,
+        "pr_4_m2": 1,
+        "pr_4_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_06",
+    "name": "Portal Relay 6",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 17,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 126,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_5_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_5_out"
+      },
+      {
+        "id": "pr_5_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 12,
+          "y": 4
+        },
+        "facing": "S",
+        "linkId": "pr_5_in"
+      },
+      {
+        "id": "pr_5_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 12,
+          "y": 7
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_5_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 7
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_5_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_5_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 15,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_5_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 11,
+          "y": 8
+        },
+        "score": 82
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_5_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00086
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_5_m1": 0,
+        "pr_5_m2": 1,
+        "pr_5_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_07",
+    "name": "Portal Relay 7",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 112,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_6_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_6_out"
+      },
+      {
+        "id": "pr_6_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 8,
+          "y": 2
+        },
+        "facing": "S",
+        "linkId": "pr_6_in"
+      },
+      {
+        "id": "pr_6_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 8,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_6_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_6_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_6_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_6_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 7,
+          "y": 5
+        },
+        "score": 94
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_6_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.00107
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_6_m1": 0,
+        "pr_6_m2": 1,
+        "pr_6_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_08",
+    "name": "Portal Relay 8",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 119,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_7_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_7_out"
+      },
+      {
+        "id": "pr_7_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 10,
+          "y": 3
+        },
+        "facing": "S",
+        "linkId": "pr_7_in"
+      },
+      {
+        "id": "pr_7_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_7_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_7_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_7_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_7_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "score": 106
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_7_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.0008
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_7_m1": 0,
+        "pr_7_m2": 1,
+        "pr_7_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_09",
+    "name": "Portal Relay 9",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 17,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 126,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_8_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_8_out"
+      },
+      {
+        "id": "pr_8_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 12,
+          "y": 4
+        },
+        "facing": "S",
+        "linkId": "pr_8_in"
+      },
+      {
+        "id": "pr_8_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 12,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_8_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_8_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_8_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 15,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_8_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "score": 70
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_8_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.0008799999999999999
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_8_m1": 0,
+        "pr_8_m2": 1,
+        "pr_8_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_10",
+    "name": "Portal Relay 10",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 112,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_9_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_9_out"
+      },
+      {
+        "id": "pr_9_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 8,
+          "y": 2
+        },
+        "facing": "S",
+        "linkId": "pr_9_in"
+      },
+      {
+        "id": "pr_9_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 8,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_9_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_9_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_9_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_9_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 7,
+          "y": 6
+        },
+        "score": 82
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_9_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00106
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_9_m1": 0,
+        "pr_9_m2": 1,
+        "pr_9_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_11",
+    "name": "Portal Relay 11",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 119,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_10_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_10_out"
+      },
+      {
+        "id": "pr_10_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 10,
+          "y": 3
+        },
+        "facing": "S",
+        "linkId": "pr_10_in"
+      },
+      {
+        "id": "pr_10_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 10,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_10_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_10_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_10_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_10_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 9,
+          "y": 6
+        },
+        "score": 94
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_10_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00101
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_10_m1": 0,
+        "pr_10_m2": 1,
+        "pr_10_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_12",
+    "name": "Portal Relay 12",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 17,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 126,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_11_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_11_out"
+      },
+      {
+        "id": "pr_11_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 12,
+          "y": 4
+        },
+        "facing": "S",
+        "linkId": "pr_11_in"
+      },
+      {
+        "id": "pr_11_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 12,
+          "y": 7
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_11_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 7
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_11_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_11_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 15,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_11_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 11,
+          "y": 8
+        },
+        "score": 106
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_11_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.00101
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_11_m1": 0,
+        "pr_11_m2": 1,
+        "pr_11_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_13",
+    "name": "Portal Relay 13",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 112,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_12_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_12_out"
+      },
+      {
+        "id": "pr_12_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 8,
+          "y": 2
+        },
+        "facing": "S",
+        "linkId": "pr_12_in"
+      },
+      {
+        "id": "pr_12_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 8,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_12_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_12_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_12_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_12_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 7,
+          "y": 5
+        },
+        "score": 70
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_12_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.00074
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_12_m1": 0,
+        "pr_12_m2": 1,
+        "pr_12_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_14",
+    "name": "Portal Relay 14",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 119,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_13_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_13_out"
+      },
+      {
+        "id": "pr_13_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 10,
+          "y": 3
+        },
+        "facing": "S",
+        "linkId": "pr_13_in"
+      },
+      {
+        "id": "pr_13_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_13_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_13_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_13_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_13_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "score": 82
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_13_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.00082
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_13_m1": 0,
+        "pr_13_m2": 1,
+        "pr_13_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_15",
+    "name": "Portal Relay 15",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 17,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 126,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_14_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_14_out"
+      },
+      {
+        "id": "pr_14_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 12,
+          "y": 4
+        },
+        "facing": "S",
+        "linkId": "pr_14_in"
+      },
+      {
+        "id": "pr_14_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 12,
+          "y": 6
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_14_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 6
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_14_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_14_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 15,
+          "y": 5
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_14_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "score": 94
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_14_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.001
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_14_m1": 0,
+        "pr_14_m2": 1,
+        "pr_14_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_16",
+    "name": "Portal Relay 16",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 9
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 112,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_15_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 9
+        },
+        "facing": "E",
+        "linkId": "pr_15_out"
+      },
+      {
+        "id": "pr_15_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 8,
+          "y": 2
+        },
+        "facing": "S",
+        "linkId": "pr_15_in"
+      },
+      {
+        "id": "pr_15_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 8,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_15_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_15_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 4,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_15_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_15_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 7,
+          "y": 6
+        },
+        "score": 106
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_15_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00095
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_15_m1": 0,
+        "pr_15_m2": 1,
+        "pr_15_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_portal_17",
+    "name": "Portal Relay 17",
+    "subtitle": "Transfer through a portal throat then reverse back across the board.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 119,
+      "phase": 0,
+      "wavelength": 495,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "pr_16_in",
+        "type": "PORTAL",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "facing": "E",
+        "linkId": "pr_16_out"
+      },
+      {
+        "id": "pr_16_out",
+        "type": "PORTAL",
+        "pos": {
+          "x": 10,
+          "y": 3
+        },
+        "facing": "S",
+        "linkId": "pr_16_in"
+      },
+      {
+        "id": "pr_16_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 10,
+          "y": 5
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_16_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 5
+        },
+        "orientation": 0,
+        "interactable": true
+      },
+      {
+        "id": "pr_16_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true
+      },
+      {
+        "id": "pr_16_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 13,
+          "y": 4
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "pr_16_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 9,
+          "y": 6
+        },
+        "score": 70
+      }
+    ],
+    "objective": {
+      "description": "Use the portal lane and reversal mirrors to loop back into the receptor line.",
+      "targetIds": [
+        "pr_16_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.00116
+    },
+    "camera": {
+      "distance": 15.3,
+      "height": 10.8,
+      "lookZ": 0
+    },
+    "difficultyRating": 3,
+    "solution": {
+      "phase": "A",
+      "mirrors": {
+        "pr_16_m1": 0,
+        "pr_16_m2": 1,
+        "pr_16_m3": 0
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_01",
+    "name": "Phase Latch 1",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 118,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_0_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_0_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_0_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_0_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_0_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_0_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_0_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_0_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 6
+        },
+        "score": 90
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_0_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.001
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 5,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_0_m1": 0,
+        "ph_0_m2": 0,
+        "ph_0_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_02",
+    "name": "Phase Latch 2",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 124,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_1_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_1_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_1_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_1_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_1_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_1_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_1_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_1_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "score": 100
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_1_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00095
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_1_m1": 0,
+        "ph_1_m2": 0,
+        "ph_1_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_03",
+    "name": "Phase Latch 3",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 130,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_2_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_2_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_2_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_2_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_2_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_2_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_2_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_2_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 8
+        },
+        "score": 110
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_2_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.00116
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_2_m1": 0,
+        "ph_2_m2": 0,
+        "ph_2_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_04",
+    "name": "Phase Latch 4",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 118,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_3_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_3_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_3_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_3_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_3_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_3_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_3_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_3_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 8
+        },
+        "score": 120
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_3_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.0008900000000000001
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_3_m1": 0,
+        "ph_3_m2": 0,
+        "ph_3_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_05",
+    "name": "Phase Latch 5",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 124,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_4_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_4_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_4_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_4_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_4_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_4_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_4_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_4_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 6
+        },
+        "score": 130
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_4_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.0007599999999999999
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 5,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_4_m1": 0,
+        "ph_4_m2": 0,
+        "ph_4_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_06",
+    "name": "Phase Latch 6",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 130,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_5_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_5_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_5_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_5_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_5_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_5_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_5_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_5_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "score": 90
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_5_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00094
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_5_m1": 0,
+        "ph_5_m2": 0,
+        "ph_5_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_07",
+    "name": "Phase Latch 7",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 118,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_6_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_6_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_6_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_6_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_6_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_6_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_6_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_6_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 8
+        },
+        "score": 100
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_6_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.0008900000000000001
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_6_m1": 0,
+        "ph_6_m2": 0,
+        "ph_6_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_08",
+    "name": "Phase Latch 8",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 124,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_7_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_7_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_7_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_7_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_7_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_7_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_7_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_7_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 8
+        },
+        "score": 110
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_7_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.0011
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_7_m1": 0,
+        "ph_7_m2": 0,
+        "ph_7_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_09",
+    "name": "Phase Latch 9",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 130,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_8_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_8_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_8_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_8_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_8_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_8_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_8_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_8_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 6
+        },
+        "score": 120
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_8_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.00083
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 5,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_8_m1": 0,
+        "ph_8_m2": 0,
+        "ph_8_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_10",
+    "name": "Phase Latch 10",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 118,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_9_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_9_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_9_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_9_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_9_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_9_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_9_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_9_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "score": 130
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_9_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.00091
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_9_m1": 0,
+        "ph_9_m2": 0,
+        "ph_9_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_11",
+    "name": "Phase Latch 11",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 124,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_10_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_10_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_10_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_10_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_10_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_10_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_10_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_10_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 8
+        },
+        "score": 90
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_10_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#09101a",
+      "floorB": "#1b2136",
+      "fog": "#0f1826",
+      "bloom": 0.62,
+      "chroma": 0.00109
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_10_m1": 0,
+        "ph_10_m2": 0,
+        "ph_10_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_12",
+    "name": "Phase Latch 12",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 130,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_11_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_11_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_11_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_11_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_11_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_11_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_11_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_11_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 8
+        },
+        "score": 100
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_11_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0f1017",
+      "floorB": "#1d2231",
+      "fog": "#141a25",
+      "bloom": 0.58,
+      "chroma": 0.00083
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_11_m1": 0,
+        "ph_11_m2": 0,
+        "ph_11_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_13",
+    "name": "Phase Latch 13",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 118,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_12_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_12_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_12_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 2
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_12_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 2
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_12_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_12_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_12_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_12_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 6
+        },
+        "score": 110
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_12_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0a0f16",
+      "floorB": "#202433",
+      "fog": "#121826",
+      "bloom": 0.64,
+      "chroma": 0.0010400000000000001
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 5,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_12_m1": 0,
+        "ph_12_m2": 0,
+        "ph_12_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_14",
+    "name": "Phase Latch 14",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 15,
+      "h": 11
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 9
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 8
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 124,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_13_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 9
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_13_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 8
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_13_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 3
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_13_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 11,
+          "y": 3
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_13_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 11,
+          "y": 7
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_13_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_13_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 8
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_13_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 10,
+          "y": 6
+        },
+        "score": 120
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_13_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0c0f13",
+      "floorB": "#1b2630",
+      "fog": "#131a24",
+      "bloom": 0.54,
+      "chroma": 0.0007700000000000001
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_13_m1": 0,
+        "ph_13_m2": 0,
+        "ph_13_m3": 1
+      }
+    }
+  },
+  {
+    "key": "sheet_phase_15",
+    "name": "Phase Latch 15",
+    "subtitle": "Switch to phase B to bring the optical chain online.",
+    "grid": {
+      "w": 13,
+      "h": 13
+    },
+    "playerStart": {
+      "x": 2,
+      "y": 11
+    },
+    "source": {
+      "pos": {
+        "x": 1,
+        "y": 10
+      },
+      "dir": "E",
+      "color": "CYAN",
+      "intensity": 130,
+      "phase": 0,
+      "wavelength": 490,
+      "width": 1,
+      "polarization": 0
+    },
+    "entities": [
+      {
+        "id": "ph_14_switch",
+        "type": "SWITCH",
+        "pos": {
+          "x": 2,
+          "y": 11
+        },
+        "mode": "TOGGLE_PHASE"
+      },
+      {
+        "id": "ph_14_m1",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 10
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_14_m2",
+        "type": "MIRROR",
+        "pos": {
+          "x": 3,
+          "y": 4
+        },
+        "orientation": 1,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_14_m3",
+        "type": "MIRROR",
+        "pos": {
+          "x": 9,
+          "y": 4
+        },
+        "orientation": 0,
+        "interactable": true,
+        "phase": "B"
+      },
+      {
+        "id": "ph_14_goal",
+        "type": "TARGET",
+        "pos": {
+          "x": 9,
+          "y": 9
+        },
+        "requiredHits": 1,
+        "absorb": true
+      },
+      {
+        "id": "ph_14_a_block",
+        "type": "WALL",
+        "pos": {
+          "x": 5,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_14_a_block_2",
+        "type": "WALL",
+        "pos": {
+          "x": 6,
+          "y": 10
+        },
+        "phase": "A"
+      },
+      {
+        "id": "ph_14_c",
+        "type": "COLLECTIBLE",
+        "pos": {
+          "x": 8,
+          "y": 8
+        },
+        "score": 130
+      }
+    ],
+    "objective": {
+      "description": "Flip phase, align the latent mirrors, and fire through the reactivated corridor.",
+      "targetIds": [
+        "ph_14_goal"
+      ]
+    },
+    "style": {
+      "floorA": "#0b1220",
+      "floorB": "#162643",
+      "fog": "#10192a",
+      "bloom": 0.56,
+      "chroma": 0.00085
+    },
+    "camera": {
+      "distance": 15.8,
+      "height": 11.1,
+      "lookZ": 0
+    },
+    "difficultyRating": 4,
+    "solution": {
+      "phase": "B",
+      "mirrors": {
+        "ph_14_m1": 0,
+        "ph_14_m2": 0,
+        "ph_14_m3": 1
+      }
+    }
+  }
+]

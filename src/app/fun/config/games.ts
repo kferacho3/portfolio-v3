@@ -253,7 +253,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'portalpunch',
     title: 'Portal Punch',
     description:
-      '100-level portal laser puzzler: route recursive beams through mirrors, prisms, filters, gates, and phase chambers.',
+      '150-level portal laser puzzler: route recursive beams through mirrors, prisms, filters, gates, and phase chambers.',
     accent: '#fb7185',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PortalPunch.webp',
