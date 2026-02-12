@@ -153,9 +153,13 @@ const LANE_X: readonly [number, number, number] = [-1.38, 0, 1.38];
 const ROW_SPACING = 1.12;
 const TILE_SIZE = 0.9;
 const TILE_HEIGHT = 0.18;
-const TILE_INSET_SIZE = TILE_SIZE * 0.58;
-const TILE_INSET_HEIGHT = TILE_HEIGHT * 0.32;
-const TILE_INSET_Y = TILE_HEIGHT * 0.42;
+const TILE_INSET_SIZE = TILE_SIZE * 0.8;
+const TILE_INSET_HEIGHT = TILE_HEIGHT * 0.22;
+const TILE_INSET_Y = TILE_HEIGHT * 0.48;
+const TILE_CORE_SIZE = TILE_SIZE * 0.46;
+const TILE_CORE_HEIGHT = TILE_HEIGHT * 0.16;
+const TILE_CORE_Y = TILE_HEIGHT * 0.58;
+const PREVIEW_MARKER_Y = TILE_HEIGHT * 1.25;
 const CUBE_SIZE = 0.72;
 
 const ROW_POOL = 280;
@@ -164,6 +168,7 @@ const SHARD_POOL = 108;
 const DRAW_AHEAD_ROWS = 34;
 const TILE_DRAW_CAP = 220;
 const GLYPH_DRAW_CAP = 220;
+const PREVIEW_DRAW_CAP = 9;
 
 const SHATTER_Y = TILE_HEIGHT * 0.62;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
@@ -174,6 +179,7 @@ const TILE_EDGE = new THREE.Color('#3b4560');
 const WHITE = new THREE.Color('#f8fbff');
 const DANGER = new THREE.Color('#ff657f');
 const LEGAL = new THREE.Color('#49f2bc');
+const GUIDE = new THREE.Color('#72d7ff');
 const WILD = new THREE.Color('#ffd56a');
 const RUNE_NAMES = ['Azure', 'Rose', 'Moss', 'Amber'] as const;
 const RUNE_COLORS = [
@@ -665,6 +671,24 @@ const buildMovePreviews = (runtime: Runtime): MovePreview[] => {
   });
 };
 
+const ensureLegalForwardOption = (runtime: Runtime, previews: MovePreview[]) => {
+  if (previews.some((preview) => preview.legal)) return previews;
+
+  const row = ensureRow(runtime, runtime.currentRow + 1);
+  const candidates = previews.filter((preview) => preview.lane !== null);
+  const fallback =
+    candidates.find((candidate) => candidate.available) ?? candidates.find((candidate) => candidate.lane !== null);
+
+  if (!fallback || fallback.lane === null) return previews;
+
+  const lane = fallback.lane;
+  row.mask |= bit(lane);
+  row.runes[lane] = fallback.targetRune;
+  row.wildMask &= ~bit(lane);
+
+  return buildMovePreviews(runtime);
+};
+
 const acquireShard = (runtime: Runtime) => {
   for (const shard of runtime.shards) {
     if (!shard.active) return shard;
@@ -985,6 +1009,8 @@ function RuneRollScene() {
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
   const tileRef = useRef<THREE.InstancedMesh>(null);
   const tileInsetRef = useRef<THREE.InstancedMesh>(null);
+  const tileCoreRef = useRef<THREE.InstancedMesh>(null);
+  const previewMarkerRef = useRef<THREE.InstancedMesh>(null);
   const runeRef0 = useRef<THREE.InstancedMesh>(null);
   const runeRef1 = useRef<THREE.InstancedMesh>(null);
   const runeRef2 = useRef<THREE.InstancedMesh>(null);
@@ -1162,21 +1188,7 @@ function RuneRollScene() {
       runtime.elapsed += dt * (runtime.stepActive ? 1 : 0.08);
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
-      let previews = buildMovePreviews(runtime);
-
-      if (!previews.some((preview) => preview.legal)) {
-        const row = ensureRow(runtime, runtime.currentRow + 1);
-        const fallback =
-          previews.find((preview) => preview.lane !== null && preview.available) ??
-          previews.find((preview) => preview.lane !== null);
-        if (fallback && fallback.lane !== null) {
-          const lane = fallback.lane;
-          row.mask |= bit(lane);
-          row.runes[lane] = fallback.targetRune;
-          row.wildMask &= ~bit(lane);
-          previews = buildMovePreviews(runtime);
-        }
-      }
+      let previews = ensureLegalForwardOption(runtime, buildMovePreviews(runtime));
 
       for (const row of runtime.rows) {
         if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 2.8);
@@ -1329,9 +1341,11 @@ function RuneRollScene() {
       } else {
         runtime.progressRow = runtime.currentRow;
         runtime.playerX = LANE_X[runtime.currentLane];
+        runtime.cubeRotX = normAngle(snapRightAngle(runtime.cubeRotX));
+        runtime.cubeRotZ = normAngle(snapRightAngle(runtime.cubeRotZ));
       }
 
-      previews = buildMovePreviews(runtime);
+      previews = ensureLegalForwardOption(runtime, buildMovePreviews(runtime));
       previewsForRender = previews;
       if (runtime.hudCommit >= 0.08) {
         runtime.hudCommit = 0;
@@ -1349,7 +1363,9 @@ function RuneRollScene() {
     } else {
       runtime.progressRow = runtime.currentRow;
       runtime.playerX = lerp(runtime.playerX, LANE_X[runtime.currentLane], 1 - Math.exp(-10 * dt));
-      previewsForRender = buildMovePreviews(runtime);
+      runtime.cubeRotX = normAngle(snapRightAngle(runtime.cubeRotX));
+      runtime.cubeRotZ = normAngle(snapRightAngle(runtime.cubeRotZ));
+      previewsForRender = ensureLegalForwardOption(runtime, buildMovePreviews(runtime));
       for (const row of runtime.rows) {
         if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 1.8);
       }
@@ -1400,10 +1416,16 @@ function RuneRollScene() {
       (mesh.material as THREE.MeshStandardMaterial).color.copy(RUNE_COLORS[rune]).lerp(WHITE, 0.16);
     }
 
-    if (tileRef.current) {
+    if (tileRef.current && tileInsetRef.current && tileCoreRef.current && previewMarkerRef.current) {
+      const tileMesh = tileRef.current;
+      const tileInsetMesh = tileInsetRef.current;
+      const tileCoreMesh = tileCoreRef.current;
+      const previewMarkerMesh = previewMarkerRef.current;
       const glyphCounts = [0, 0, 0, 0, 0];
       let tileCount = 0;
       let insetCount = 0;
+      let coreCount = 0;
+      let previewCount = 0;
       const startRow = Math.max(minVisibleRow(runtime), Math.floor(runtime.progressRow) - 1);
       const endRow = Math.floor(runtime.progressRow) + DRAW_AHEAD_ROWS;
       const nextRowIndex = runtime.currentRow + 1;
@@ -1427,47 +1449,72 @@ function RuneRollScene() {
           const laneIdx = lane as LaneIndex;
           const isWild = (row.wildMask & bit(lane)) !== 0;
           const rune = row.runes[lane];
+          const lanePreview = rowIndex === nextRowIndex ? previewByLane.get(laneIdx) : undefined;
+          const runeColor = isWild ? WILD : RUNE_COLORS[rune];
+          const isCurrent = rowIndex === runtime.currentRow && laneIdx === runtime.currentLane;
+          const isSelectable = rowIndex === nextRowIndex && selectableLanes.has(laneIdx);
+
           dummy.position.set(x, 0, z);
           dummy.scale.set(TILE_SIZE, TILE_HEIGHT, TILE_SIZE);
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
-          tileRef.current.setMatrixAt(tileCount, dummy.matrix);
+          tileMesh.setMatrixAt(tileCount, dummy.matrix);
 
-          colorScratch.copy(TILE_BASE).lerp(TILE_EDGE, 0.14);
-          const lanePreview = rowIndex === nextRowIndex ? previewByLane.get(laneIdx) : undefined;
+          colorScratch.copy(runeColor).lerp(TILE_BASE, isCurrent ? 0.44 : isSelectable ? 0.52 : 0.62);
+          colorScratch.lerp(TILE_EDGE, 0.08);
           if (lanePreview?.available) {
-            colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.18);
+            colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.24);
           }
-          if (rowIndex === runtime.currentRow && laneIdx === runtime.currentLane) {
-            colorScratch.lerp(WHITE, 0.28);
-          } else if (rowIndex === nextRowIndex && selectableLanes.has(laneIdx)) {
-            colorScratch.lerp(WHITE, 0.14);
-          }
+          if (isCurrent) colorScratch.lerp(WHITE, 0.3);
+          else if (isSelectable) colorScratch.lerp(GUIDE, 0.16);
           if (row.glowLane === lane && row.glow > 0) colorScratch.lerp(WHITE, clamp(row.glow, 0, 0.78));
-          tileRef.current.setColorAt(tileCount, colorScratch);
+          tileMesh.setColorAt(tileCount, colorScratch);
           tileCount += 1;
 
-          if (tileInsetRef.current && insetCount < TILE_DRAW_CAP) {
+          if (insetCount < TILE_DRAW_CAP) {
             dummy.position.set(x, TILE_INSET_Y, z);
             dummy.scale.set(TILE_INSET_SIZE, TILE_INSET_HEIGHT, TILE_INSET_SIZE);
             dummy.rotation.set(0, 0, 0);
             dummy.updateMatrix();
-            tileInsetRef.current.setMatrixAt(insetCount, dummy.matrix);
+            tileInsetMesh.setMatrixAt(insetCount, dummy.matrix);
 
-            if (isWild) colorScratch.copy(WILD).lerp(WHITE, 0.18);
-            else colorScratch.copy(RUNE_COLORS[rune]).lerp(WHITE, 0.08);
-
-            if (lanePreview?.available) {
-              colorScratch.lerp(lanePreview.legal ? WHITE : DANGER, lanePreview.legal ? 0.2 : 0.16);
-            }
-            if (rowIndex === runtime.currentRow && laneIdx === runtime.currentLane) {
-              colorScratch.lerp(WHITE, 0.24);
-            }
+            colorScratch.copy(runeColor).lerp(TILE_EDGE, 0.42).lerp(WHITE, 0.12);
+            if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.16);
+            if (isCurrent) colorScratch.lerp(WHITE, 0.24);
             if (row.glowLane === lane && row.glow > 0) {
               colorScratch.lerp(WHITE, clamp(row.glow * 0.9, 0, 0.9));
             }
-            tileInsetRef.current.setColorAt(insetCount, colorScratch);
+            tileInsetMesh.setColorAt(insetCount, colorScratch);
             insetCount += 1;
+          }
+
+          if (coreCount < TILE_DRAW_CAP) {
+            dummy.position.set(x, TILE_CORE_Y, z);
+            dummy.scale.set(TILE_CORE_SIZE, TILE_CORE_HEIGHT, TILE_CORE_SIZE);
+            dummy.rotation.set(0, runtime.elapsed * 0.55, 0);
+            dummy.updateMatrix();
+            tileCoreMesh.setMatrixAt(coreCount, dummy.matrix);
+
+            colorScratch.copy(runeColor).lerp(WHITE, 0.28);
+            if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.2);
+            if (isCurrent) colorScratch.lerp(WHITE, 0.24);
+            tileCoreMesh.setColorAt(coreCount, colorScratch);
+            coreCount += 1;
+          }
+
+          if (rowIndex === nextRowIndex && lanePreview && previewCount < PREVIEW_DRAW_CAP) {
+            dummy.position.set(x, PREVIEW_MARKER_Y, z);
+            dummy.scale.set(0.18, 0.18, 0.18);
+            dummy.rotation.set(runtime.elapsed * 0.8, runtime.elapsed * 1.15, 0);
+            dummy.updateMatrix();
+            previewMarkerMesh.setMatrixAt(previewCount, dummy.matrix);
+
+            colorScratch
+              .copy(RUNE_COLORS[lanePreview.targetRune])
+              .lerp(lanePreview.legal ? LEGAL : DANGER, 0.32)
+              .lerp(WHITE, 0.16);
+            previewMarkerMesh.setColorAt(previewCount, colorScratch);
+            previewCount += 1;
           }
 
           const glyphType = isWild ? 4 : rune;
@@ -1499,14 +1546,21 @@ function RuneRollScene() {
         }
       }
 
-      tileRef.current.count = tileCount;
-      tileRef.current.instanceMatrix.needsUpdate = true;
-      if (tileRef.current.instanceColor) tileRef.current.instanceColor.needsUpdate = true;
-      if (tileInsetRef.current) {
-        tileInsetRef.current.count = insetCount;
-        tileInsetRef.current.instanceMatrix.needsUpdate = true;
-        if (tileInsetRef.current.instanceColor) tileInsetRef.current.instanceColor.needsUpdate = true;
-      }
+      tileMesh.count = tileCount;
+      tileMesh.instanceMatrix.needsUpdate = true;
+      if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
+
+      tileInsetMesh.count = insetCount;
+      tileInsetMesh.instanceMatrix.needsUpdate = true;
+      if (tileInsetMesh.instanceColor) tileInsetMesh.instanceColor.needsUpdate = true;
+
+      tileCoreMesh.count = coreCount;
+      tileCoreMesh.instanceMatrix.needsUpdate = true;
+      if (tileCoreMesh.instanceColor) tileCoreMesh.instanceColor.needsUpdate = true;
+
+      previewMarkerMesh.count = previewCount;
+      previewMarkerMesh.instanceMatrix.needsUpdate = true;
+      if (previewMarkerMesh.instanceColor) previewMarkerMesh.instanceColor.needsUpdate = true;
 
       for (let i = 0; i < runeInstanceRefs.length; i += 1) {
         const mesh = runeInstanceRefs[i].current;
@@ -1594,6 +1648,14 @@ function RuneRollScene() {
       </instancedMesh>
       <instancedMesh ref={tileInsetRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={tileCoreRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial vertexColors roughness={0.24} metalness={0.2} emissive="#ffffff" emissiveIntensity={0.18} />
+      </instancedMesh>
+      <instancedMesh ref={previewMarkerRef} args={[undefined, undefined, PREVIEW_DRAW_CAP]}>
+        <octahedronGeometry args={[1, 0]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
