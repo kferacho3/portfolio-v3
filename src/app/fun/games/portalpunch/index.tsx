@@ -250,7 +250,7 @@ const Overlay: React.FC<{
   const difficultyText = `${level.difficulty.tag} ${level.difficulty.rating}/5`;
 
   return (
-    <div className="pointer-events-auto absolute inset-0 select-none text-white">
+    <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/35 bg-black/45 px-3 py-2 backdrop-blur-sm">
         <div className="text-[11px] uppercase tracking-[0.25em] text-cyan-200/90">
           Portal Punch L{level.id}/{PORTAL_PUNCH_LEVELS.length}
@@ -289,8 +289,8 @@ const Overlay: React.FC<{
       </div>
 
       {runtime.status === 'START' && (
-        <div className="pointer-events-auto absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-cyan-100/45 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div className="pointer-events-auto rounded-xl border border-cyan-100/45 bg-black/60 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black">PORTAL PUNCH</div>
             <div className="mt-2 text-sm text-white/85">Recursive portal laser puzzle simulation</div>
             <div className="mt-1 text-sm text-white/75">Use mirrors, prisms, filters, gates, and phase switching.</div>
@@ -315,8 +315,8 @@ const Overlay: React.FC<{
       )}
 
       {runtime.status === 'SOLVED' && (
-        <div className="pointer-events-auto absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-emerald-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div className="pointer-events-auto rounded-xl border border-emerald-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-emerald-200">Chamber Solved</div>
             <div className="mt-2 text-sm text-white/85">{level.name}</div>
             <div className="text-xs text-amber-200/80">
@@ -356,8 +356,8 @@ const Overlay: React.FC<{
       )}
 
       {runtime.status === 'GAMEOVER' && (
-        <div className="pointer-events-auto absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div className="pointer-events-auto rounded-xl border border-rose-200/45 bg-black/65 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Simulation Failed</div>
             <div className="mt-2 text-sm text-white/75">{runtime.failReason}</div>
             <button
@@ -611,8 +611,18 @@ function PortalPunchScene() {
     runtime.best = best;
     runtime.elapsed = 0;
     runtime.score = hardReset ? 0 : runtime.score;
+    portalPunchState.gameOver = false;
+    portalPunchState.chain = 0;
+    portalPunchState.chainTime = 0;
+    portalPunchState.integrity = 100;
+    portalPunchState.integrityDecay = 0;
+    portalPunchState.idleTime = 0;
+    portalPunchState.chargedTime = 0;
+    portalPunchState.dashPrimeTime = 0;
+    portalPunchState.punchTime = 0;
+    portalPunchState.elapsed = runtime.elapsed;
+    portalPunchState.slowMoTime = 0;
     initLevel(runtime, 0, !hardReset, 'START');
-    portalPunchState.reset();
     portalPunchState.bestScore = best;
     portalPunchState.score = runtime.score;
   }, []);
@@ -871,7 +881,7 @@ function PortalPunchScene() {
         <Noise premultiply opacity={0.02} />
       </EffectComposer>
 
-      <Html fullscreen>
+      <Html fullscreen style={{ pointerEvents: 'none' }}>
         <Overlay
           runtime={runtime}
           level={level}
