@@ -16,7 +16,7 @@ import { stepsState } from './state';
 export { stepsState } from './state';
 
 type Dir = 'x' | 'z';
-type HazardKind = 'none' | 'spike' | 'saw' | 'clamp';
+type HazardKind = 'none' | 'spike' | 'saw' | 'clamp' | 'swing';
 
 type Tile = {
   key: string;
@@ -87,6 +87,7 @@ const COLOR_BONUS = new THREE.Color('#ffef9b');
 const COLOR_SPIKE = new THREE.Color('#e74d4d');
 const COLOR_SAW = new THREE.Color('#f76c6c');
 const COLOR_CLAMP = new THREE.Color('#fb7185');
+const COLOR_SWING = new THREE.Color('#f59e0b');
 const COLOR_GEM = new THREE.Color('#22e3b3');
 const COLOR_GEM_BRIGHT = new THREE.Color('#7affde');
 const COLOR_WHITE = new THREE.Color('#ffffff');
@@ -151,9 +152,10 @@ function pickHazard(index: number, rng: SeededRandom, streak: number): HazardKin
   if (!rng.bool(hazardChance)) return 'none';
 
   const r = rng.random();
-  if (r < 0.36) return 'spike';
-  if (r < 0.69) return 'saw';
-  return 'clamp';
+  if (r < 0.3) return 'spike';
+  if (r < 0.56) return 'saw';
+  if (r < 0.8) return 'clamp';
+  return 'swing';
 }
 
 function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, sequence: number) {
@@ -169,14 +171,16 @@ function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, s
   const difficulty = clamp(index / 320, 0, 1);
   const baseCycle =
     kind === 'spike'
-      ? THREE.MathUtils.lerp(1.75, 1.25, difficulty)
+      ? THREE.MathUtils.lerp(1.95, 1.45, difficulty)
       : kind === 'saw'
-        ? THREE.MathUtils.lerp(1.9, 1.35, difficulty)
-        : THREE.MathUtils.lerp(2, 1.45, difficulty);
-  const cycle = clamp(baseCycle + rng.float(-0.08, 0.08), 1.1, 2.1);
+        ? THREE.MathUtils.lerp(2.1, 1.55, difficulty)
+        : kind === 'clamp'
+          ? THREE.MathUtils.lerp(2.2, 1.6, difficulty)
+          : THREE.MathUtils.lerp(2.35, 1.7, difficulty);
+  const cycle = clamp(baseCycle + rng.float(-0.1, 0.1), 1.25, 2.35);
 
-  const openRatio = kind === 'spike' ? 0.66 : kind === 'saw' ? 0.62 : 0.6;
-  const openWindow = clamp(cycle * openRatio, 0.72, cycle - 0.26);
+  const openRatio = kind === 'spike' ? 0.76 : kind === 'saw' ? 0.72 : kind === 'clamp' ? 0.7 : 0.72;
+  const openWindow = clamp(cycle * openRatio, 0.85, cycle - 0.28);
 
   const sequenceStep = sequence % HAZARD_SEQUENCE_STEPS;
   const stride = cycle / HAZARD_SEQUENCE_STEPS;
@@ -222,20 +226,14 @@ function hazardStateAt(tile: Tile, simTime: number) {
 
 function hazardIsDangerous(tile: Tile, simTime: number) {
   if (tile.hazard === 'none') return false;
-
-  const cycle = Math.max(0.8, tile.hazardCycle);
-  const local = positiveMod(simTime + tile.hazardOffset, cycle);
-  const margin = Math.min(tile.hazardOpenWindow * 0.16, 0.08);
-  const safeStart = positiveMod(tile.hazardWindowStart + margin, cycle);
-  const safeWidth = Math.max(0.2, tile.hazardOpenWindow - margin * 2);
-  const safeEnd = safeStart + safeWidth;
-  return !wrappedWindowContains(local, safeStart, safeEnd, cycle);
+  return !hazardStateAt(tile, simTime).open;
 }
 
 function failReasonForHazard(kind: HazardKind) {
   if (kind === 'spike') return 'Spike wave caught the cube.';
   if (kind === 'saw') return 'Saw timing was off.';
   if (kind === 'clamp') return 'Clamp snapped shut.';
+  if (kind === 'swing') return 'Swinging ball clipped the cube.';
   return 'Trap timing was off.';
 }
 
@@ -253,6 +251,7 @@ function Steps() {
   const spikeMeshRef = useRef<THREE.InstancedMesh>(null);
   const sawMeshRef = useRef<THREE.InstancedMesh>(null);
   const clampMeshRef = useRef<THREE.InstancedMesh>(null);
+  const swingMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
@@ -600,12 +599,21 @@ function Steps() {
       camera.updateProjectionMatrix();
     }
 
-    if (tileMeshRef.current && spikeMeshRef.current && sawMeshRef.current && clampMeshRef.current && gemMeshRef.current && debrisMeshRef.current) {
+    if (
+      tileMeshRef.current &&
+      spikeMeshRef.current &&
+      sawMeshRef.current &&
+      clampMeshRef.current &&
+      swingMeshRef.current &&
+      gemMeshRef.current &&
+      debrisMeshRef.current
+    ) {
       for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
         hideInstance(tileMeshRef.current, i);
         hideInstance(spikeMeshRef.current, i);
         hideInstance(sawMeshRef.current, i);
         hideInstance(clampMeshRef.current, i);
+        hideInstance(swingMeshRef.current, i);
         hideInstance(gemMeshRef.current, i);
       }
 
@@ -617,6 +625,7 @@ function Steps() {
       spikeMeshRef.current.instanceMatrix.needsUpdate = true;
       sawMeshRef.current.instanceMatrix.needsUpdate = true;
       clampMeshRef.current.instanceMatrix.needsUpdate = true;
+      swingMeshRef.current.instanceMatrix.needsUpdate = true;
       gemMeshRef.current.instanceMatrix.needsUpdate = true;
       debrisMeshRef.current.instanceMatrix.needsUpdate = true;
     }
@@ -640,7 +649,7 @@ function Steps() {
       w.cameraShake = Math.max(w.cameraShake, 0.2);
     }
 
-    if (tile.hazard !== 'none' && hazardIsDangerous(tile, w.simTime + 0.08)) {
+    if (tile.hazard !== 'none' && hazardIsDangerous(tile, w.simTime + 0.02)) {
       triggerDeath(failReasonForHazard(tile.hazard));
       return;
     }
@@ -814,12 +823,14 @@ function Steps() {
       spikeMeshRef.current &&
       sawMeshRef.current &&
       clampMeshRef.current &&
+      swingMeshRef.current &&
       gemMeshRef.current
     ) {
       const tileMesh = tileMeshRef.current;
       const spikeMesh = spikeMeshRef.current;
       const sawMesh = sawMeshRef.current;
       const clampMesh = clampMeshRef.current;
+      const swingMesh = swingMeshRef.current;
       const gemMesh = gemMeshRef.current;
 
       for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
@@ -829,6 +840,7 @@ function Steps() {
           hideInstance(spikeMesh, i);
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
+          hideInstance(swingMesh, i);
           hideInstance(gemMesh, i);
           continue;
         }
@@ -839,6 +851,7 @@ function Steps() {
           hideInstance(spikeMesh, i);
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
+          hideInstance(swingMesh, i);
           hideInstance(gemMesh, i);
           continue;
         }
@@ -871,44 +884,40 @@ function Steps() {
         }
         tileMesh.setColorAt(i, w.tempColorA);
 
-        if (tile.hazard === 'spike' && hazardState) {
-          const lift = THREE.MathUtils.lerp(0.02, 0.18, hazardState.closedBlend);
-          const spikeScaleY = THREE.MathUtils.lerp(0.22, 1, hazardState.closedBlend);
+        if (tile.hazard === 'spike' && hazardState && !hazardState.open) {
+          const lift = THREE.MathUtils.lerp(0.04, 0.2, hazardState.closedBlend);
+          const spikeScaleY = THREE.MathUtils.lerp(0.35, 1, hazardState.closedBlend);
           w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + lift, z);
-          w.dummy.rotation.set(0, tile.hazardPhase + w.simTime * 0.3, 0);
+          w.dummy.rotation.set(0, tile.hazardPhase + w.simTime * 0.2, 0);
           w.dummy.scale.set(1, spikeScaleY, 1);
           w.dummy.updateMatrix();
           spikeMesh.setMatrixAt(i, w.dummy.matrix);
 
-          w.tempColorB.copy(COLOR_SPIKE)
-            .lerp(COLOR_WHITE, hazardState.closedBlend * 0.2)
-            .lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.22);
+          w.tempColorB.copy(COLOR_SPIKE).lerp(COLOR_WHITE, hazardState.closedBlend * 0.2);
           spikeMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(spikeMesh, i);
         }
 
-        if (tile.hazard === 'saw' && hazardState) {
+        if (tile.hazard === 'saw' && hazardState && !hazardState.open) {
           const driftDirection = tile.index % 2 === 0 ? 1 : -1;
-          const retreat = driftDirection * hazardState.openBlend * 0.34;
-          const sweep = Math.sin((hazardState.phase01 + tile.hazardPhase * 0.1) * Math.PI * 2) * 0.05 * hazardState.closedBlend;
+          const sweep = Math.sin((hazardState.phase01 + tile.hazardPhase * 0.1) * Math.PI * 2) * 0.15;
+          const retreat = driftDirection * 0.14;
           const sawScale = 0.72 + hazardState.closedBlend * 0.34;
 
           w.dummy.position.set(x + retreat, y + TILE_HEIGHT * 0.52 + 0.08 + hazardState.closedBlend * 0.04, z + sweep);
-          w.dummy.rotation.set(0, w.simTime * 5.8, 0);
+          w.dummy.rotation.set(0, w.simTime * 4.2, 0);
           w.dummy.scale.set(sawScale, 0.34, sawScale);
           w.dummy.updateMatrix();
           sawMesh.setMatrixAt(i, w.dummy.matrix);
 
-          w.tempColorB.copy(COLOR_SAW)
-            .lerp(COLOR_WHITE, hazardState.closedBlend * 0.3 + 0.08)
-            .lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.2);
+          w.tempColorB.copy(COLOR_SAW).lerp(COLOR_WHITE, hazardState.closedBlend * 0.3 + 0.08);
           sawMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(sawMesh, i);
         }
 
-        if (tile.hazard === 'clamp' && hazardState) {
+        if (tile.hazard === 'clamp' && hazardState && !hazardState.open) {
           const close = hazardState.closedBlend;
           const jawScale = THREE.MathUtils.lerp(0.26, 1.08, close);
           const jawHeight = THREE.MathUtils.lerp(0.22, 0.52, close);
@@ -920,12 +929,30 @@ function Steps() {
           w.dummy.updateMatrix();
           clampMesh.setMatrixAt(i, w.dummy.matrix);
 
-          w.tempColorB.copy(COLOR_CLAMP)
-            .lerp(COLOR_WHITE, close * 0.36 + 0.06)
-            .lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.15);
+          w.tempColorB.copy(COLOR_CLAMP).lerp(COLOR_WHITE, close * 0.36 + 0.06);
           clampMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(clampMesh, i);
+        }
+
+        if (tile.hazard === 'swing' && hazardState && !hazardState.open) {
+          const swingDir = tile.index % 2 === 0 ? 1 : -1;
+          const angle = Math.sin((hazardState.phase01 + tile.hazardPhase * 0.17) * Math.PI * 2) * 0.95;
+          const radius = 0.42;
+          const offsetX = swingDir > 0 ? Math.sin(angle) * radius : 0;
+          const offsetZ = swingDir > 0 ? 0 : Math.sin(angle) * radius;
+          const dropY = Math.cos(angle) * 0.11;
+
+          w.dummy.position.set(x + offsetX, y + TILE_HEIGHT * 0.52 + 0.32 + dropY, z + offsetZ);
+          w.dummy.rotation.set(angle * 0.35, w.simTime * 1.8 + tile.hazardPhase, -angle * 0.35);
+          w.dummy.scale.set(1, 1, 1);
+          w.dummy.updateMatrix();
+          swingMesh.setMatrixAt(i, w.dummy.matrix);
+
+          w.tempColorB.copy(COLOR_SWING).lerp(COLOR_WHITE, 0.22 + hazardState.closedBlend * 0.28);
+          swingMesh.setColorAt(i, w.tempColorB);
+        } else {
+          hideInstance(swingMesh, i);
         }
 
         if (tile.hasGem && !tile.gemTaken && tile.drop < 1.1) {
@@ -949,12 +976,14 @@ function Steps() {
       spikeMesh.instanceMatrix.needsUpdate = true;
       sawMesh.instanceMatrix.needsUpdate = true;
       clampMesh.instanceMatrix.needsUpdate = true;
+      swingMesh.instanceMatrix.needsUpdate = true;
       gemMesh.instanceMatrix.needsUpdate = true;
 
       if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
       if (spikeMesh.instanceColor) spikeMesh.instanceColor.needsUpdate = true;
       if (sawMesh.instanceColor) sawMesh.instanceColor.needsUpdate = true;
       if (clampMesh.instanceColor) clampMesh.instanceColor.needsUpdate = true;
+      if (swingMesh.instanceColor) swingMesh.instanceColor.needsUpdate = true;
       if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
     }
 
@@ -1083,6 +1112,11 @@ function Steps() {
       <instancedMesh ref={clampMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
         <boxGeometry args={[0.74, 0.18, 0.74]} />
         <meshStandardMaterial vertexColors roughness={0.34} metalness={0.18} emissive="#fb7185" emissiveIntensity={0.08} />
+      </instancedMesh>
+
+      <instancedMesh ref={swingMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+        <sphereGeometry args={[0.18, 14, 14]} />
+        <meshStandardMaterial vertexColors roughness={0.22} metalness={0.2} emissive="#f59e0b" emissiveIntensity={0.12} />
       </instancedMesh>
 
       <instancedMesh ref={gemMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
@@ -1223,7 +1257,7 @@ function Steps() {
                 Tap to advance one step. Timed traps and collapsing tiles force clean rhythm.
               </div>
               <div style={{ marginTop: 7, fontSize: 12, opacity: 0.82 }}>
-                Hazards cycle in readable windows. Step on open beats, collect gems, and outrun collapsing tiles.
+                Spikes, saws, clamps, and swing balls fully disappear on safe beats. Time steps through open windows.
               </div>
 
               {snap.phase === 'gameover' && (
