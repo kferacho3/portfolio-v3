@@ -19,6 +19,7 @@ import {
   gridToWorld,
   resolveEntities,
   solveLaser,
+  worldToGrid,
 } from './engine';
 import { LASER_COLOR_HEX, PORTAL_PUNCH_LEVELS } from './levels';
 import { portalPunchState } from './state';
@@ -156,10 +157,39 @@ const runMove = (
   return true;
 };
 
-const runInteract = (runtime: Runtime, entities: ResolvedEntity[]) => {
-  const target = findInteractableNearPlayer(runtime, entities);
+const isEntityActiveInRuntimePhase = (entity: ResolvedEntity, runtime: Runtime) =>
+  !entity.phase || entity.phase === 'BOTH' || entity.phase === runtime.phase;
+
+const findInteractableAtCell = (
+  runtime: Runtime,
+  entities: ResolvedEntity[],
+  cell: { x: number; y: number }
+): ResolvedEntity | null => {
+  for (const entity of entities) {
+    if (!isEntityActiveInRuntimePhase(entity, runtime)) continue;
+    if (entity.resolvedPos.x !== cell.x || entity.resolvedPos.y !== cell.y) continue;
+    if (entity.type === 'MIRROR') {
+      if (entity.interactable) return entity;
+      continue;
+    }
+    if (entity.type === 'PRISM') {
+      if (entity.interactable) return entity;
+      continue;
+    }
+    if (entity.type === 'SWITCH') return entity;
+  }
+  return null;
+};
+
+const runInteract = (
+  runtime: Runtime,
+  target: ResolvedEntity | null,
+  showMissingMessage = true
+) => {
   if (!target) {
-    setMessage(runtime, 'No interactable nearby');
+    if (showMissingMessage) {
+      setMessage(runtime, 'No interactable nearby');
+    }
     return;
   }
 
@@ -284,7 +314,7 @@ const Overlay: React.FC<{
       )}
 
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md border border-white/20 bg-black/45 px-4 py-2 text-center text-[11px] text-white/75 backdrop-blur-sm">
-        <div>Move: WASD / Arrow Keys • Interact: E / Space / Tap • Toggle Phase: Q • Restart: R</div>
+        <div>Move: WASD / Arrow Keys • Interact: E / Space / Tap (or click mirror/prism) • Toggle Phase: Q • Restart: R</div>
         <div>Next Level: N or Enter (after solve)</div>
       </div>
 
@@ -603,6 +633,13 @@ function PortalPunchScene() {
   const runtimeRef = useRef<Runtime>(createRuntime(0));
   const chromaOffset = useMemo(() => new THREE.Vector2(0, 0), []);
   const camTarget = useMemo(() => new THREE.Vector3(0, 10, EPS), []);
+  const pointerNdc = useMemo(() => new THREE.Vector2(), []);
+  const pointerHit = useMemo(() => new THREE.Vector3(), []);
+  const pointerRay = useMemo(() => new THREE.Raycaster(), []);
+  const interactionPlane = useMemo(
+    () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    []
+  );
   const { camera, size } = useThree();
 
   const boot = useCallback((hardReset: boolean) => {
@@ -690,13 +727,28 @@ function PortalPunchScene() {
         setMessage(runtime, `Phase ${runtime.phase}`);
       }
 
-      const interact =
+      const keyboardInteract =
         input.justPressed.has('e') ||
         input.justPressed.has(' ') ||
-        input.justPressed.has('space') ||
-        input.pointerJustDown;
-      if (interact) {
-        runInteract(runtime, resolved);
+        input.justPressed.has('space');
+      const pointerInteract = input.pointerJustDown;
+
+      if (keyboardInteract || pointerInteract) {
+        const nearbyTarget = findInteractableNearPlayer(runtime, resolved);
+        if (keyboardInteract) {
+          runInteract(runtime, nearbyTarget, true);
+        }
+
+        if (pointerInteract) {
+          pointerNdc.set(input.pointerX, input.pointerY);
+          pointerRay.setFromCamera(pointerNdc, camera);
+          let pointerTarget: ResolvedEntity | null = null;
+          if (pointerRay.ray.intersectPlane(interactionPlane, pointerHit)) {
+            const cell = worldToGrid(level, pointerHit);
+            pointerTarget = findInteractableAtCell(runtime, resolved, cell);
+          }
+          runInteract(runtime, pointerTarget, false);
+        }
       }
 
       runtime.lastSolve = solveLaser(level, runtime);

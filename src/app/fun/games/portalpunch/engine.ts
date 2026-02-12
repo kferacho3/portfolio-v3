@@ -599,6 +599,8 @@ export const findInteractableNearPlayer = (
   let best: { entity: ResolvedEntity; dist: number } | null = null;
 
   for (const entity of entities) {
+    if (!entityActiveInPhase(entity, runtime.phase)) continue;
+
     if (entity.type !== 'MIRROR' && entity.type !== 'PRISM' && entity.type !== 'SWITCH') {
       continue;
     }
