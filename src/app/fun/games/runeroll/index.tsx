@@ -152,13 +152,13 @@ const BEST_KEY = 'runeroll_hyper_best_v3';
 const LANE_X: readonly [number, number, number] = [-1.38, 0, 1.38];
 const ROW_SPACING = 1.12;
 const TILE_SIZE = 0.9;
-const TILE_HEIGHT = 0.18;
+const TILE_HEIGHT = 0.22;
 const TILE_INSET_SIZE = TILE_SIZE * 0.8;
 const TILE_INSET_HEIGHT = TILE_HEIGHT * 0.22;
 const TILE_INSET_Y = TILE_HEIGHT * 0.48;
-const TILE_CORE_SIZE = TILE_SIZE * 0.74;
+const TILE_CORE_SIZE = TILE_SIZE * 0.82;
 const TILE_CORE_HEIGHT = TILE_HEIGHT * 0.24;
-const TILE_CORE_Y = TILE_HEIGHT * 0.62;
+const TILE_CORE_Y = TILE_HEIGHT * 0.66;
 const PREVIEW_MARKER_Y = TILE_HEIGHT * 1.25;
 const CUBE_SIZE = 0.72;
 
@@ -174,24 +174,24 @@ const SHATTER_Y = TILE_HEIGHT * 0.62;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
-const TILE_BASE = new THREE.Color('#1e2536');
-const TILE_EDGE = new THREE.Color('#3b4560');
+const TILE_BASE = new THREE.Color('#151d31');
+const TILE_EDGE = new THREE.Color('#4f5e80');
 const WHITE = new THREE.Color('#f8fbff');
 const DANGER = new THREE.Color('#ff657f');
 const LEGAL = new THREE.Color('#49f2bc');
 const GUIDE = new THREE.Color('#72d7ff');
 const WILD = new THREE.Color('#ffd56a');
 const RUNE_TILE_OUTER = [
-  new THREE.Color('#1e95cc'),
-  new THREE.Color('#c742a1'),
-  new THREE.Color('#63b93f'),
-  new THREE.Color('#d88a36'),
+  new THREE.Color('#2aaae8'),
+  new THREE.Color('#d14cae'),
+  new THREE.Color('#74c949'),
+  new THREE.Color('#e79a42'),
 ] as const;
 const RUNE_TILE_INSET = [
-  new THREE.Color('#32c8ff'),
-  new THREE.Color('#ff5bc2'),
-  new THREE.Color('#a6f06a'),
-  new THREE.Color('#ffb85a'),
+  new THREE.Color('#4ad5ff'),
+  new THREE.Color('#ff71ce'),
+  new THREE.Color('#b8f97e'),
+  new THREE.Color('#ffc875'),
 ] as const;
 const RUNE_NAMES = ['Azure', 'Rose', 'Moss', 'Amber'] as const;
 const RUNE_COLORS = [
@@ -1495,8 +1495,8 @@ function RuneRollScene() {
 
           colorScratch
             .copy(runeOuter)
-            .lerp(TILE_BASE, isCurrent ? 0.06 : isSelectable ? 0.1 : 0.14);
-          colorScratch.lerp(TILE_EDGE, 0.05);
+            .lerp(TILE_BASE, isCurrent ? 0.02 : isSelectable ? 0.04 : 0.08);
+          colorScratch.lerp(TILE_EDGE, 0.03);
           if (lanePreview?.available) {
             colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.12);
           }
@@ -1515,7 +1515,7 @@ function RuneRollScene() {
             dummy.updateMatrix();
             tileInsetMesh.setMatrixAt(insetCount, dummy.matrix);
 
-            colorScratch.copy(runeInset).lerp(TILE_EDGE, 0.08).lerp(WHITE, 0.16);
+            colorScratch.copy(runeInset).lerp(TILE_EDGE, 0.04).lerp(WHITE, 0.2);
             if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.1);
             if (isCurrent) colorScratch.lerp(WHITE, 0.26);
             if (row.glowLane === lane && row.glow > 0) {
@@ -1532,7 +1532,7 @@ function RuneRollScene() {
             dummy.updateMatrix();
             tileCoreMesh.setMatrixAt(coreCount, dummy.matrix);
 
-            colorScratch.copy(runeColor).lerp(WHITE, isWild ? 0.42 : 0.34);
+            colorScratch.copy(runeColor).lerp(WHITE, isWild ? 0.48 : 0.4);
             if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.16);
             if (isCurrent) colorScratch.lerp(WHITE, 0.24);
             if (row.glowLane === lane && row.glow > 0) {
@@ -1639,16 +1639,16 @@ function RuneRollScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[5.8, 6.3, 6.6]} fov={37} near={0.1} far={120} />
+      <PerspectiveCamera makeDefault position={[5.8, 6.3, 6.6]} fov={35} near={0.1} far={120} />
       <color attach="background" args={['#0f1324']} />
-      <fog attach="fog" args={['#11172a', 12, 66]} />
+      <fog attach="fog" args={['#11172a', 14, 78]} />
 
-      <ambientLight intensity={0.78} />
-      <hemisphereLight args={['#a7e4ff', '#1d2238', 0.46]} />
-      <directionalLight position={[5, 9, 6]} intensity={1.05} color="#ffe7cf" />
-      <pointLight position={[-2, 2.4, 2]} intensity={0.74} color="#7a66ff" />
-      <pointLight position={[2, 1.6, -1]} intensity={0.64} color="#ffb870" />
-      <pointLight position={[0, 1.5, -7]} intensity={0.42} color="#4fd7ff" />
+      <ambientLight intensity={0.92} />
+      <hemisphereLight args={['#b5edff', '#1d2238', 0.62]} />
+      <directionalLight position={[5, 9, 6]} intensity={1.24} color="#ffe7cf" />
+      <pointLight position={[-2, 2.4, 2]} intensity={0.86} color="#8a74ff" />
+      <pointLight position={[2, 1.6, -1]} intensity={0.76} color="#ffb870" />
+      <pointLight position={[0, 1.5, -7]} intensity={0.55} color="#4fd7ff" />
 
       <mesh position={[0, -0.7, -24]}>
         <planeGeometry args={[40, 24]} />
@@ -1685,16 +1685,22 @@ function RuneRollScene() {
 
       <instancedMesh ref={tileRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           vertexColors
-          toneMapped={false}
+          roughness={0.36}
+          metalness={0.12}
+          emissive="#2a3c63"
+          emissiveIntensity={0.82}
         />
       </instancedMesh>
       <instancedMesh ref={tileInsetRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           vertexColors
-          toneMapped={false}
+          roughness={0.28}
+          metalness={0.16}
+          emissive="#365287"
+          emissiveIntensity={0.72}
         />
       </instancedMesh>
       <instancedMesh ref={tileCoreRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
@@ -1713,23 +1719,23 @@ function RuneRollScene() {
 
       <instancedMesh ref={runeRef0} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.95} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.82} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
       <instancedMesh ref={runeRef1} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.95} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.82} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
       <instancedMesh ref={runeRef2} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
         <cylinderGeometry args={[1, 1, 1, 6]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.95} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.82} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
       <instancedMesh ref={runeRef3} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
         <tetrahedronGeometry args={[1, 0]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.95} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.82} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
       <instancedMesh ref={runeRefWild} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
         <icosahedronGeometry args={[1, 0]} />
-        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.95} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.84} blending={THREE.AdditiveBlending} depthWrite={false} />
       </instancedMesh>
 
       <mesh ref={cubeRef} position={[0, TILE_HEIGHT + CUBE_SIZE * 0.5, 0]} rotation={[0, 0, 0]}>
@@ -1818,7 +1824,7 @@ function RuneRollScene() {
 
       <ContactShadows
         position={[0, -0.01, 0]}
-        opacity={0.22}
+        opacity={0.16}
         scale={12}
         blur={2.6}
         far={18}

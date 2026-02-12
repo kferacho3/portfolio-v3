@@ -1131,6 +1131,7 @@ const createValidationRuntime = (
     levelStart: 0,
     mirrors: {},
     prisms: {},
+    entityPositions: {},
     gateTimers: {},
     collected: new Set(),
     awardedTargets: new Set(),
@@ -1141,8 +1142,18 @@ const createValidationRuntime = (
   };
 
   for (const entity of level.entities) {
-    if (entity.type === 'MIRROR') runtime.mirrors[entity.id] = entity.orientation;
-    if (entity.type === 'PRISM') runtime.prisms[entity.id] = entity.orientation ?? 0;
+    if (entity.type === 'MIRROR') {
+      runtime.mirrors[entity.id] = entity.orientation;
+      if (entity.interactable && !entity.moving) {
+        runtime.entityPositions[entity.id] = { ...entity.pos };
+      }
+    }
+    if (entity.type === 'PRISM') {
+      runtime.prisms[entity.id] = entity.orientation ?? 0;
+      if (entity.interactable && !entity.moving) {
+        runtime.entityPositions[entity.id] = { ...entity.pos };
+      }
+    }
     if (entity.type === 'GATE') runtime.gateTimers[entity.id] = entity.openByDefault ? 999 : 0;
   }
 

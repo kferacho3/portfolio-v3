@@ -84,13 +84,18 @@ export const worldToGrid = (level: PortalPunchLevel, world: THREE.Vector3): Grid
 export const inBounds = (level: PortalPunchLevel, pos: GridPos) =>
   pos.x >= 0 && pos.y >= 0 && pos.x < level.grid.w && pos.y < level.grid.h;
 
-const resolveMovingPos = (entity: Entity, elapsed: number): GridPos => {
-  if (!entity.moving) return { ...entity.pos };
+const resolveMovingPos = (
+  entity: Entity,
+  elapsed: number,
+  baseOverride?: GridPos
+): GridPos => {
+  const basePos = baseOverride ?? entity.pos;
+  if (!entity.moving) return { ...basePos };
   const offset = Math.sin(elapsed * entity.moving.speed + entity.moving.phase) * entity.moving.range;
   if (entity.moving.axis === 'x') {
-    return { x: Math.round(entity.pos.x + offset), y: entity.pos.y };
+    return { x: Math.round(basePos.x + offset), y: basePos.y };
   }
-  return { x: entity.pos.x, y: Math.round(entity.pos.y + offset) };
+  return { x: basePos.x, y: Math.round(basePos.y + offset) };
 };
 
 const entityActiveInPhase = (entity: Entity, phase: PhaseId) => {
@@ -130,7 +135,8 @@ export const resolveEntities = (
 ): ResolvedEntity[] => {
   return level.entities
     .map((entity) => {
-      const resolvedPos = resolveMovingPos(entity, runtime.elapsed);
+      const baseOverride = runtime.entityPositions[entity.id];
+      const resolvedPos = resolveMovingPos(entity, runtime.elapsed, baseOverride);
       if (!inBounds(level, resolvedPos)) return null;
 
       if (entity.type === 'MIRROR') {
@@ -608,13 +614,15 @@ export const findInteractableNearPlayer = (
     if (entity.type === 'MIRROR' && !entity.interactable) continue;
     if (entity.type === 'PRISM' && !entity.interactable) continue;
 
-    const d = Math.abs(entity.resolvedPos.x - runtime.player.x) +
-      Math.abs(entity.resolvedPos.y - runtime.player.y);
+    const dx = Math.abs(entity.resolvedPos.x - runtime.player.x);
+    const dy = Math.abs(entity.resolvedPos.y - runtime.player.y);
+    const manhattan = dx + dy;
+    const chebyshev = Math.max(dx, dy);
 
-    if (d > 1) continue;
+    if (manhattan > 2 && chebyshev > 1) continue;
 
-    if (!best || d < best.dist) {
-      best = { entity, dist: d };
+    if (!best || manhattan < best.dist) {
+      best = { entity, dist: manhattan };
     }
   }
 

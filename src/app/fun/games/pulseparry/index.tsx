@@ -144,9 +144,9 @@ const SPARK_POOL = 14;
 
 const SPAWN_RADIUS_BASE = 0.05;
 const CORE_FAIL_RADIUS = 0.22;
-const PARRY_RADIUS_BASE = 2.62;
-const MISS_RADIUS = 3.85;
-const CAMERA_BASE_Y = 9.4;
+const PARRY_RADIUS_BASE = 2.45;
+const MISS_RADIUS = 3.55;
+const CAMERA_BASE_Y = 9.8;
 const SWIPE_THRESHOLD = 0.16;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
@@ -580,8 +580,7 @@ const spawnPulseSet = (runtime: Runtime) => {
   if (lanes.length === 0) return;
   count = Math.min(count, lanes.length);
 
-  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.03;
-  const spacing = 0.1 + Math.random() * 0.05;
+  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.02;
   for (let i = lanes.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
@@ -594,7 +593,7 @@ const spawnPulseSet = (runtime: Runtime) => {
     const lane = lanes[i];
     pulse.lane = lane;
     pulse.angle = CARDINAL_ANGLES[lane];
-    pulse.radius = baseRadius + i * spacing;
+    pulse.radius = baseRadius;
     pulse.velocity = 0;
     pulse.speed = clamp(
       baseSpeed * (0.84 + Math.random() * 0.45 + i * 0.08 + tier * 0.05),
@@ -1605,12 +1604,8 @@ const PulseParry: React.FC<{ soundsOn?: boolean }> = () => {
     <Canvas
       dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
-      className="absolute"
+      className="absolute inset-x-4 bottom-4 top-20 sm:top-16"
       style={{
-        top: 10,
-        right: 10,
-        bottom: 10,
-        left: 10,
         touchAction: 'none',
         borderRadius: 14,
       }}

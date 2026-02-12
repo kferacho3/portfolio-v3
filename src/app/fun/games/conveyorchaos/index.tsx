@@ -118,6 +118,8 @@ const APPROACH_START_X = -2.2;
 const APPROACH_START_Z = 5.8;
 const APPROACH_LEN = Math.hypot(APPROACH_START_X - CENTER_X, APPROACH_START_Z - CENTER_Z);
 const EXIT_LEN = EXIT_DIST;
+const ARENA_HALF_X = EXIT_DIST + 1.35;
+const ARENA_HALF_Z = Math.max(APPROACH_START_Z, EXIT_DIST) + 1.35;
 
 const ROUTE_POINTS = [
   { x: 0, z: -EXIT_DIST }, // N
@@ -495,20 +497,20 @@ function ConveyorChaosOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-sky-100/55 bg-gradient-to-br from-sky-500/22 via-cyan-500/16 to-emerald-500/18 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-5 top-5 rounded-md border border-sky-100/55 bg-gradient-to-br from-sky-500/22 via-cyan-500/16 to-emerald-500/18 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Conveyor Chaos</div>
         <div className="text-[11px] text-cyan-50/85">
           Tap rotates switch. Arrow keys set a direction instantly.
         </div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/24 via-orange-500/18 to-sky-500/16 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-5 top-5 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/24 via-orange-500/18 to-sky-500/16 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-sky-100/35 bg-gradient-to-br from-slate-950/72 via-sky-900/30 to-amber-900/22 px-3 py-2 text-xs">
+        <div className="absolute left-5 top-[102px] rounded-md border border-sky-100/35 bg-gradient-to-br from-slate-950/72 via-sky-900/30 to-amber-900/22 px-3 py-2 text-xs">
           <div>
             Streak <span className="font-semibold text-cyan-200">{streak}</span>
           </div>
@@ -610,11 +612,13 @@ function ConveyorChaosScene() {
   const packageRef = useRef<THREE.InstancedMesh>(null);
   const symbolRef = useRef<THREE.InstancedMesh>(null);
   const markerRef = useRef<THREE.InstancedMesh>(null);
+  const orthoRef = useRef<THREE.OrthographicCamera>(null);
   const diverterGroupRef = useRef<THREE.Group>(null);
   const diverterMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const diverterTipMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const fixedStepRef = useRef(createFixedStepState());
 
-  const { camera } = useThree();
+  const { camera, size } = useThree();
 
   const beltUniforms = useMemo(
     () =>
@@ -822,9 +826,19 @@ function ConveyorChaosScene() {
     }
     if (diverterMatRef.current) {
       const neon = clamp(0.38 + runtime.streakGlow * 0.44, 0.38, 1.5);
-      colorScratch.copy(DIVERTER_BASE).lerp(DIVERTER_GLOW, clamp(runtime.streakGlow * 0.45, 0, 0.8));
+      colorScratch
+        .copy(EXIT_COLORS[runtime.diverterDir])
+        .lerp(DIVERTER_BASE, 0.3)
+        .lerp(DIVERTER_GLOW, clamp(runtime.streakGlow * 0.45, 0, 0.8));
+      diverterMatRef.current.color.copy(colorScratch).lerp(WHITE, 0.16);
       diverterMatRef.current.emissive.copy(colorScratch);
       diverterMatRef.current.emissiveIntensity = neon;
+    }
+    if (diverterTipMatRef.current) {
+      colorScratch.copy(EXIT_COLORS[runtime.diverterDir]).lerp(WHITE, 0.18);
+      diverterTipMatRef.current.color.copy(colorScratch);
+      diverterTipMatRef.current.emissive.copy(colorScratch);
+      diverterTipMatRef.current.emissiveIntensity = 0.54 + runtime.streakGlow * 0.28;
     }
 
     const shakeAmp = runtime.shake * 0.1;
@@ -836,6 +850,18 @@ function ConveyorChaosScene() {
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-7.4 * step.renderDt));
     camera.lookAt(0, 0, 0);
+
+    if (orthoRef.current) {
+      const fitZoomX = size.width / (ARENA_HALF_X * 2);
+      const fitZoomZ = size.height / (ARENA_HALF_Z * 2);
+      const targetZoom = clamp(Math.min(fitZoomX, fitZoomZ), 54, 96);
+      orthoRef.current.zoom = lerp(
+        orthoRef.current.zoom,
+        targetZoom,
+        1 - Math.exp(-6.8 * dt)
+      );
+      orthoRef.current.updateProjectionMatrix();
+    }
 
     for (const uniforms of beltUniforms) {
       uniforms.uTime.value = runtime.beltTime;
@@ -875,7 +901,8 @@ function ConveyorChaosScene() {
         dummy.rotation.set(0, angleForDir(pkg.targetExit), 0);
         dummy.updateMatrix();
         symbolRef.current.setMatrixAt(i, dummy.matrix);
-        symbolRef.current.setColorAt(i, WHITE);
+        colorScratch.copy(EXIT_COLORS[pkg.targetExit]).lerp(WHITE, 0.22);
+        symbolRef.current.setColorAt(i, colorScratch);
 
         if (pkg.dualTag || pkg.rushTag) {
           dummy.position.set(pkg.x, PACKAGE_Y + 0.26, pkg.z);
@@ -906,7 +933,14 @@ function ConveyorChaosScene() {
 
   return (
     <>
-      <OrthographicCamera makeDefault position={[0, 8.6, 0.001]} zoom={96} near={0.1} far={60} />
+      <OrthographicCamera
+        ref={orthoRef}
+        makeDefault
+        position={[0, 8.6, 0.001]}
+        zoom={74}
+        near={0.1}
+        far={60}
+      />
       <color attach="background" args={['#18243a']} />
       <fog attach="fog" args={['#18243a', 6, 28]} />
 
@@ -971,7 +1005,12 @@ function ConveyorChaosScene() {
         </mesh>
         <mesh position={[0, 0.08, -1.24]}>
           <coneGeometry args={[0.27, 0.35, 3]} />
-          <meshStandardMaterial color="#d7f6ff" emissive="#9be8ff" emissiveIntensity={0.42} />
+          <meshStandardMaterial
+            ref={diverterTipMatRef}
+            color="#d7f6ff"
+            emissive="#9be8ff"
+            emissiveIntensity={0.42}
+          />
         </mesh>
       </group>
 
@@ -992,16 +1031,16 @@ function ConveyorChaosScene() {
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           vertexColors
-          roughness={0.32}
-          metalness={0.06}
-          emissive="#1f2d44"
-          emissiveIntensity={0.22}
+          roughness={0.26}
+          metalness={0.12}
+          emissive="#2b3a57"
+          emissiveIntensity={0.36}
         />
       </instancedMesh>
 
       <instancedMesh ref={symbolRef} args={[undefined, undefined, PACKAGE_POOL]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
+        <meshBasicMaterial vertexColors toneMapped={false} transparent opacity={0.96} />
       </instancedMesh>
 
       <instancedMesh ref={markerRef} args={[undefined, undefined, PACKAGE_POOL]}>

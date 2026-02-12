@@ -17,6 +17,7 @@ import {
   canPlayerOccupy,
   findInteractableNearPlayer,
   gridToWorld,
+  inBounds,
   resolveEntities,
   solveLaser,
   worldToGrid,
@@ -78,6 +79,11 @@ type VisualMotion = {
   initialized: boolean;
 };
 
+type DragState = {
+  entityId: string;
+  moved: boolean;
+};
+
 const emptySolve = (): LaserSolveResult => ({
   traces: [],
   hits: [],
@@ -96,6 +102,7 @@ const createRuntime = (best: number): Runtime => ({
   levelStart: 0,
   mirrors: {},
   prisms: {},
+  entityPositions: {},
   gateTimers: {},
   collected: new Set(),
   awardedTargets: new Set(),
@@ -165,6 +172,7 @@ const initLevel = (
   runtime.levelStart = runtime.elapsed;
   runtime.mirrors = {};
   runtime.prisms = {};
+  runtime.entityPositions = {};
   runtime.gateTimers = {};
   runtime.collected = new Set();
   runtime.awardedTargets = new Set();
@@ -174,8 +182,18 @@ const initLevel = (
   runtime.lastSolve = emptySolve();
 
   for (const entity of level.entities) {
-    if (entity.type === 'MIRROR') runtime.mirrors[entity.id] = entity.orientation;
-    if (entity.type === 'PRISM') runtime.prisms[entity.id] = entity.orientation ?? 0;
+    if (entity.type === 'MIRROR') {
+      runtime.mirrors[entity.id] = entity.orientation;
+      if (entity.interactable && !entity.moving) {
+        runtime.entityPositions[entity.id] = { ...entity.pos };
+      }
+    }
+    if (entity.type === 'PRISM') {
+      runtime.prisms[entity.id] = entity.orientation ?? 0;
+      if (entity.interactable && !entity.moving) {
+        runtime.entityPositions[entity.id] = { ...entity.pos };
+      }
+    }
     if (entity.type === 'GATE') runtime.gateTimers[entity.id] = entity.openByDefault ? 999 : 0;
   }
 
@@ -236,6 +254,34 @@ const findInteractableAtCell = (
     if (entity.type === 'SWITCH') return entity;
   }
   return null;
+};
+
+const isDraggableDeflector = (entity: ResolvedEntity) => {
+  if (entity.type === 'MIRROR') return !!entity.interactable && !entity.moving;
+  if (entity.type === 'PRISM') return !!entity.interactable && !entity.moving;
+  return false;
+};
+
+const canPlaceDraggedEntity = (
+  level: PortalPunchLevel,
+  runtime: Runtime,
+  entities: ResolvedEntity[],
+  entityId: string,
+  cell: { x: number; y: number }
+) => {
+  if (!inBounds(level, cell)) return false;
+  if (cell.x === runtime.player.x && cell.y === runtime.player.y) return false;
+  if (level.source.pos.x === cell.x && level.source.pos.y === cell.y) return false;
+
+  for (const entity of entities) {
+    if (entity.id === entityId) continue;
+    if (!isEntityActiveInRuntimePhase(entity, runtime)) continue;
+    if (entity.resolvedPos.x !== cell.x || entity.resolvedPos.y !== cell.y) continue;
+    if (entity.type === 'COLLECTIBLE') continue;
+    return false;
+  }
+
+  return true;
 };
 
 const runInteract = (
@@ -845,6 +891,7 @@ function PortalPunchScene() {
   const pointerNdc = useMemo(() => new THREE.Vector2(), []);
   const pointerHit = useMemo(() => new THREE.Vector3(), []);
   const pointerRay = useMemo(() => new THREE.Raycaster(), []);
+  const dragRef = useRef<DragState | null>(null);
   const interactionPlane = useMemo(
     () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
     []

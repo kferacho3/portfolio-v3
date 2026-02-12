@@ -242,6 +242,7 @@ export type PortalPunchRuntime = {
   levelStart: number;
   mirrors: Record<string, number>;
   prisms: Record<string, number>;
+  entityPositions: Record<string, GridPos>;
   gateTimers: Record<string, number>;
   collected: Set<string>;
   awardedTargets: Set<string>;

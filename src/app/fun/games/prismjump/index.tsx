@@ -307,7 +307,11 @@ export default function PrismJump() {
         const row = getRow(ri);
         if (!row) continue;
 
-        row.dir = rowDirection(ri);
+        row.dir = rowDirection(row.rowIndex);
+        const prev = getRow(ri - 1);
+        if (prev && prev.dir === row.dir) {
+          row.dir = (prev.dir === 1 ? -1 : 1) as 1 | -1;
+        }
         const z = rowZ(ri);
         for (let i = 0; i < row.platforms.length; i += 1) {
           const p = row.platforms[i];
