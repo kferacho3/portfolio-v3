@@ -4,52 +4,35 @@ export type OctaSurgeMode = 'classic' | 'endless' | 'daily';
 
 export type OctaFxLevel = 'full' | 'medium' | 'low';
 
-export type CollectibleType =
-  | 'gem'
-  | 'boost'
-  | 'shield'
-  | 'magnet'
-  | 'prism'
-  | 'phase';
+export type OctaCameraMode = 'chase' | 'firstPerson' | 'topDown';
 
-export type RingMotif =
-  | 'single-hole'
-  | 'double-hole'
-  | 'alternating'
-  | 'bump-corridor'
-  | 'crusher-gate'
-  | 'flip-gate'
-  | 'speed-run'
-  | 'breather';
+export type CollectibleKind = 'shard' | 'core' | 'sync' | null;
 
-export type RingData = {
+export type StageProfile = {
+  id: number;
+  label: string;
+  sides: number;
+  scoreGate: number;
+  speedMultiplier: number;
+  holeDensity: number;
+  obstacleDensity: number;
+  warpAmplitude: number;
+  collectibleChance: number;
+};
+
+export type SegmentPattern = {
   slot: number;
   index: number;
   z: number;
+  prevZ: number;
+  sides: number;
   solidMask: number;
-  bumpMask: number;
-  crusherMask: number;
-  speedMask: number;
+  obstacleMask: number;
   safeLane: number;
-  collectibleLane: number | null;
-  collectibleType: CollectibleType | null;
+  collectibleLane: number;
+  collectibleType: CollectibleKind;
   collected: boolean;
-  crossed: boolean;
-  theme: number;
-  motif: RingMotif;
-};
-
-export type CollectionFx = {
-  id: number;
-  type:
-    | CollectibleType
-    | 'impact'
-    | 'near'
-    | 'pad'
-    | 'phase-burst'
-    | 'combo';
-  lane: number;
-  z: number;
-  age: number;
-  life: number;
+  warpSeed: number;
+  stageId: number;
+  checked: boolean;
 };

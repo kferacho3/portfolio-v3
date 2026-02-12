@@ -1,16 +1,21 @@
 import { proxy } from 'valtio';
 
-import { GAME, STORAGE_KEYS } from './constants';
+import {
+  CAMERA_MODE_LABEL,
+  GAME,
+  STORAGE_KEYS,
+  STAGE_PROFILES,
+} from './constants';
 import type {
-  CollectibleType,
+  OctaCameraMode,
   OctaFxLevel,
   OctaSurgeMode,
   OctaSurgePhase,
 } from './types';
 
 const safeNum = (raw: string | null, fallback = 0) => {
-  const n = raw ? Number(raw) : NaN;
-  return Number.isFinite(n) ? n : fallback;
+  const value = raw ? Number(raw) : NaN;
+  return Number.isFinite(value) ? value : fallback;
 };
 
 const safeFxLevel = (raw: string | null): OctaFxLevel => {
@@ -18,61 +23,56 @@ const safeFxLevel = (raw: string | null): OctaFxLevel => {
   return 'full';
 };
 
-const dailySeedFromDate = () => {
-  const d = new Date();
-  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate()
-  ).padStart(2, '0')}`;
-  let h = 2166136261;
-  for (let i = 0; i < key.length; i += 1) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h >>> 0);
+const safeCameraMode = (raw: string | null): OctaCameraMode => {
+  if (raw === 'chase' || raw === 'firstPerson' || raw === 'topDown') return raw;
+  return 'chase';
 };
+
+const dailySeedFromDate = () => {
+  const now = new Date();
+  const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate()
+  ).padStart(2, '0')}`;
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return Math.abs(hash >>> 0);
+};
+
+const randomSeed = () => Math.floor(Math.random() * 1_000_000_000);
 
 export const octaSurgeState = proxy({
   phase: 'menu' as OctaSurgePhase,
   mode: 'classic' as OctaSurgeMode,
-  crashReason: '',
+  fxLevel: 'full' as OctaFxLevel,
+  cameraMode: 'chase' as OctaCameraMode,
 
   score: 0,
   bestScore: 0,
-  combo: 0,
-  bestCombo: 0,
-  progress: 0,
-  time: 0,
-  speed: GAME.baseSpeed,
-
-  shieldCharges: 0,
-  surgeMeter: 100,
-  boostActive: false,
-  magnetActive: false,
-  prismActive: false,
-  phaseActive: false,
-  speedPadActive: false,
-  dangerPulse: 0,
-
   bestClassic: 0,
   bestDaily: 0,
 
-  runGems: 0,
-  runBoost: 0,
-  runShield: 0,
-  runMagnet: 0,
-  runPrism: 0,
-  runPhase: 0,
-  runNearMisses: 0,
+  combo: 0,
+  multiplier: 1,
+  speed: GAME.baseSpeed,
+  time: 0,
+  distance: 0,
+  progress: 0,
 
-  totalGems: 0,
-  totalBoost: 0,
-  totalShield: 0,
-  totalMagnet: 0,
-  totalPrism: 0,
-  totalPhase: 0,
+  sides: STAGE_PROFILES[0].sides,
+  stage: STAGE_PROFILES[0].id,
+  stageLabel: STAGE_PROFILES[0].label,
+  stageFlash: 0,
 
-  worldSeed: Math.floor(Math.random() * 1_000_000_000),
-  fxLevel: 'full' as OctaFxLevel,
+  slowMoMeter: 0,
+  shardCount: 0,
+  hudPulse: 0,
+  audioReactive: 0,
+
+  crashReason: '',
+  worldSeed: randomSeed(),
 
   setMode(mode: OctaSurgeMode) {
     this.mode = mode;
@@ -82,103 +82,76 @@ export const octaSurgeState = proxy({
     this.fxLevel = level;
   },
 
-  start() {
-    this.phase = 'playing';
-    this.crashReason = '';
-    this.score = 0;
-    this.combo = 0;
-    this.progress = 0;
-    this.time = 0;
-    this.speed = GAME.baseSpeed;
-    this.shieldCharges = 0;
-    this.surgeMeter = 100;
-    this.boostActive = false;
-    this.magnetActive = false;
-    this.prismActive = false;
-    this.phaseActive = false;
-    this.speedPadActive = false;
-    this.dangerPulse = 0;
-
-    this.runGems = 0;
-    this.runBoost = 0;
-    this.runShield = 0;
-    this.runMagnet = 0;
-    this.runPrism = 0;
-    this.runPhase = 0;
-    this.runNearMisses = 0;
-
-    this.worldSeed =
-      this.mode === 'daily'
-        ? dailySeedFromDate()
-        : Math.floor(Math.random() * 1_000_000_000);
+  cycleFxLevel() {
+    this.fxLevel =
+      this.fxLevel === 'full'
+        ? 'medium'
+        : this.fxLevel === 'medium'
+          ? 'low'
+          : 'full';
   },
 
-  end() {
-    this.phase = 'gameover';
-    if (!this.crashReason) this.crashReason = 'Collision detected';
-    if (this.score > this.bestScore) this.bestScore = this.score;
-    if (this.combo > this.bestCombo) this.bestCombo = this.combo;
-
-    if (this.mode === 'classic') {
-      if (this.score > this.bestClassic) this.bestClassic = this.score;
-    }
-    if (this.mode === 'daily') {
-      if (this.score > this.bestDaily) this.bestDaily = this.score;
-    }
-
-    this.totalGems += this.runGems;
-    this.totalBoost += this.runBoost;
-    this.totalShield += this.runShield;
-    this.totalMagnet += this.runMagnet;
-    this.totalPrism += this.runPrism;
-    this.totalPhase += this.runPhase;
-    this.boostActive = false;
-    this.magnetActive = false;
-    this.prismActive = false;
-    this.phaseActive = false;
-    this.speedPadActive = false;
-
+  setCameraMode(mode: OctaCameraMode) {
+    this.cameraMode = mode;
     this.save();
   },
 
-  addCollect(type: CollectibleType) {
-    if (type === 'gem') this.runGems += 1;
-    if (type === 'boost') this.runBoost += 1;
-    if (type === 'shield') this.runShield += 1;
-    if (type === 'magnet') this.runMagnet += 1;
-    if (type === 'prism') this.runPrism += 1;
-    if (type === 'phase') this.runPhase += 1;
-  },
-
-  addNearMiss() {
-    this.runNearMisses += 1;
+  cycleCameraMode() {
+    this.cameraMode =
+      this.cameraMode === 'chase'
+        ? 'firstPerson'
+        : this.cameraMode === 'firstPerson'
+          ? 'topDown'
+          : 'chase';
+    this.save();
   },
 
   setCrashReason(reason: string) {
     this.crashReason = reason;
   },
 
+  start() {
+    this.phase = 'playing';
+    this.crashReason = '';
+    this.score = 0;
+    this.combo = 0;
+    this.multiplier = 1;
+    this.speed = GAME.baseSpeed;
+    this.time = 0;
+    this.distance = 0;
+    this.progress = 0;
+    this.sides = STAGE_PROFILES[0].sides;
+    this.stage = STAGE_PROFILES[0].id;
+    this.stageLabel = STAGE_PROFILES[0].label;
+    this.stageFlash = 0;
+    this.slowMoMeter = 0;
+    this.shardCount = 0;
+    this.hudPulse = 0;
+    this.audioReactive = 0;
+    this.worldSeed = this.mode === 'daily' ? dailySeedFromDate() : randomSeed();
+  },
+
+  end() {
+    this.phase = 'gameover';
+    if (this.score > this.bestScore) this.bestScore = this.score;
+    if (this.mode === 'classic' && this.score > this.bestClassic) {
+      this.bestClassic = this.score;
+    }
+    if (this.mode === 'daily' && this.score > this.bestDaily) {
+      this.bestDaily = this.score;
+    }
+    this.save();
+  },
+
   load() {
     if (typeof localStorage === 'undefined') return;
     this.bestScore = safeNum(localStorage.getItem(STORAGE_KEYS.bestScore), 0);
-    this.bestClassic = safeNum(
-      localStorage.getItem(STORAGE_KEYS.bestClassic),
-      0
-    );
+    this.bestClassic = safeNum(localStorage.getItem(STORAGE_KEYS.bestClassic), 0);
     this.bestDaily = safeNum(localStorage.getItem(STORAGE_KEYS.bestDaily), 0);
-    this.totalGems = safeNum(localStorage.getItem(STORAGE_KEYS.totalGems), 0);
-    this.totalBoost = safeNum(localStorage.getItem(STORAGE_KEYS.totalBoost), 0);
-    this.totalShield = safeNum(
-      localStorage.getItem(STORAGE_KEYS.totalShield),
-      0
-    );
-    this.totalMagnet = safeNum(
-      localStorage.getItem(STORAGE_KEYS.totalMagnet),
-      0
-    );
-    this.totalPrism = safeNum(localStorage.getItem(STORAGE_KEYS.totalPrism), 0);
-    this.totalPhase = safeNum(localStorage.getItem(STORAGE_KEYS.totalPhase), 0);
     this.fxLevel = safeFxLevel(localStorage.getItem(STORAGE_KEYS.fxLevel));
+    this.cameraMode = safeCameraMode(
+      localStorage.getItem(STORAGE_KEYS.cameraMode)
+    );
   },
 
   save() {
@@ -186,12 +159,45 @@ export const octaSurgeState = proxy({
     localStorage.setItem(STORAGE_KEYS.bestScore, String(this.bestScore));
     localStorage.setItem(STORAGE_KEYS.bestClassic, String(this.bestClassic));
     localStorage.setItem(STORAGE_KEYS.bestDaily, String(this.bestDaily));
-    localStorage.setItem(STORAGE_KEYS.totalGems, String(this.totalGems));
-    localStorage.setItem(STORAGE_KEYS.totalBoost, String(this.totalBoost));
-    localStorage.setItem(STORAGE_KEYS.totalShield, String(this.totalShield));
-    localStorage.setItem(STORAGE_KEYS.totalMagnet, String(this.totalMagnet));
-    localStorage.setItem(STORAGE_KEYS.totalPrism, String(this.totalPrism));
-    localStorage.setItem(STORAGE_KEYS.totalPhase, String(this.totalPhase));
     localStorage.setItem(STORAGE_KEYS.fxLevel, this.fxLevel);
+    localStorage.setItem(STORAGE_KEYS.cameraMode, this.cameraMode);
+  },
+
+  syncFrame(payload: {
+    score: number;
+    combo: number;
+    multiplier: number;
+    speed: number;
+    time: number;
+    distance: number;
+    progress: number;
+    sides: number;
+    stage: number;
+    stageLabel: string;
+    stageFlash: number;
+    slowMoMeter: number;
+    shardCount: number;
+    hudPulse: number;
+    audioReactive: number;
+  }) {
+    this.score = payload.score;
+    this.combo = payload.combo;
+    this.multiplier = payload.multiplier;
+    this.speed = payload.speed;
+    this.time = payload.time;
+    this.distance = payload.distance;
+    this.progress = payload.progress;
+    this.sides = payload.sides;
+    this.stage = payload.stage;
+    this.stageLabel = payload.stageLabel;
+    this.stageFlash = payload.stageFlash;
+    this.slowMoMeter = payload.slowMoMeter;
+    this.shardCount = payload.shardCount;
+    this.hudPulse = payload.hudPulse;
+    this.audioReactive = payload.audioReactive;
+  },
+
+  getCameraLabel() {
+    return CAMERA_MODE_LABEL[this.cameraMode];
   },
 });

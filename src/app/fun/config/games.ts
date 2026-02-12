@@ -393,7 +393,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'octasurge',
     title: 'Octa Surge',
     description:
-      'Navigate through octagonal obstacles. Time your movements perfectly.',
+      'Data-packet tunnel runner with dynamic 6/8/10/12-sided stages, gravity flips, and reactive glass-wireframe visuals.',
     accent: '#ff6b6b',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/OctaSurge.webp',
@@ -716,10 +716,11 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Rows alternate direction and never stop. Early rows are forgiving, but deep rows have wider gaps and tighter platform windows. A new platform color palette loads every run.',
   },
   octasurge: {
-    controls: 'Hold A/D or ←/→ to steer • Hold touch left/right side on mobile • Enter/Space to start • R to restart',
+    controls:
+      'A/D or ←/→ to lane-step • Space/W/↑ to flip 180° • Shift to trigger slow-mo (with charge) • C/V to cycle camera • Enter/Space to start • R to restart',
     objective:
-      'Pilot your orb through a rotating octagonal tunnel, threading open segments while speed climbs steadily.',
-    tips: 'Steer early and commit to clean lines. Tiny overcorrections are safer than late hard turns.',
+      'Keep the data packet alive as the corridor morphs from hex to dodecagon, avoid void gaps and prism blades, and clear classic/daily score targets.',
+    tips: 'Flip for opposite-lane saves and core pickups, use Sync orbs to calm tunnel warp, and read one segment ahead before committing to turns.',
   },
   knothop: {
     controls: 'Tap/Click/Space to reverse spiral direction • R to restart',
