@@ -681,6 +681,7 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
   tile.pulse = 0;
   tile.colorSeed = runtime.serial % TILE_BASE_COLORS.length;
   tile.length = TILE_LENGTH;
+  tile.sizeRule = 'ANY';
 
   if (warmup) {
     tile.present = true;
@@ -710,6 +711,22 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
     tile.rule = 'ANY';
   }
   if (tile.rule !== 'ANY') runtime.lastRule = tile.rule;
+
+  if (runtime.sizeRuleCooldown > 0) {
+    runtime.sizeRuleCooldown -= 1;
+  }
+  const sizeRuleChance = lerp(0.08, 0.26, d);
+  if (tile.rule !== 'ANY' && runtime.sizeRuleCooldown <= 0 && Math.random() < sizeRuleChance) {
+    if (runtime.lastSizeRule === 'HALF') {
+      tile.sizeRule = Math.random() < 0.72 ? 'DOUBLE' : 'HALF';
+    } else if (runtime.lastSizeRule === 'DOUBLE') {
+      tile.sizeRule = Math.random() < 0.72 ? 'HALF' : 'DOUBLE';
+    } else {
+      tile.sizeRule = Math.random() < 0.5 ? 'HALF' : 'DOUBLE';
+    }
+    runtime.lastSizeRule = tile.sizeRule;
+    runtime.sizeRuleCooldown = 4 + Math.floor(Math.random() * 4);
+  }
 };
 
 const resetRuntime = (runtime: Runtime) => {
@@ -721,9 +738,13 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.orientation = 'UPRIGHT';
   runtime.targetOrientation = 'UPRIGHT';
   runtime.displayScale.copy(UPRIGHT_SIZE);
+  runtime.sizeTier = 0;
+  runtime.targetSizeTier = 0;
+  runtime.sizeScale = 1;
+  runtime.targetSizeScale = 1;
   runtime.rotX = 0;
   runtime.rotTargetX = 0;
-  runtime.playerY = orientationHalfHeight('UPRIGHT');
+  runtime.playerY = orientationHalfHeight('UPRIGHT', runtime.sizeScale);
   runtime.targetY = runtime.playerY;
   runtime.unsupportedTime = 0;
   runtime.flipTimer = 999;
@@ -731,12 +752,17 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.speed = 2.2;
   runtime.cameraKick = 0;
   runtime.crashFx = 0;
+  runtime.sizeShiftFx = 0;
+  runtime.sizeShiftMode = null;
 
   runtime.serial = 0;
   runtime.lastHeight = 0;
   runtime.gapRun = 0;
   runtime.lastRule = 'ANY';
   runtime.nextRuleHint = 'ANY';
+  runtime.lastSizeRule = 'ANY';
+  runtime.sizeRuleCooldown = 0;
+  runtime.nextSizeRuleHint = 'ANY';
 
   const farStartZ = -((TILE_POOL - 1) * TILE_SPACING) + 8;
   runtime.frontZ = farStartZ;
@@ -760,7 +786,11 @@ const findSupportTileAtZ = (runtime: Runtime, sampleZ: number) => {
   return null;
 };
 
-const evaluateSupport = (runtime: Runtime, bodyOption: PlayerBodyOption): SupportResult => {
+const evaluateSupport = (
+  runtime: Runtime,
+  bodyOption: PlayerBodyOption,
+  sizeScale: number
+): SupportResult => {
   if (runtime.orientation === 'UPRIGHT') {
     const tile = findSupportTileAtZ(runtime, 0);
     if (!tile) return { ok: false, reason: 'gap', baseY: runtime.playerY - 0.25 };
@@ -768,9 +798,9 @@ const evaluateSupport = (runtime: Runtime, bodyOption: PlayerBodyOption): Suppor
   }
 
   const supportOffset = clamp(
-    FLAT_SIZE.z * bodyOption.scale.z * 0.29,
+    FLAT_SIZE.z * bodyOption.scale.z * sizeScale * 0.29,
     TILE_SPACING * 0.34,
-    TILE_SPACING * 0.56
+    TILE_SPACING * 0.78
   );
   const a = findSupportTileAtZ(runtime, -supportOffset);
   const b = findSupportTileAtZ(runtime, supportOffset);
@@ -798,13 +828,19 @@ function FlipBoxOverlay() {
   const perfectStreak = useFlipBoxStore((state) => state.perfectStreak);
   const failMessage = useFlipBoxStore((state) => state.failMessage);
   const posture = useFlipBoxStore((state) => state.posture);
+  const sizeTier = useFlipBoxStore((state) => state.sizeTier);
   const nextRule = useFlipBoxStore((state) => state.nextRule);
+  const nextSizeRule = useFlipBoxStore((state) => state.nextSizeRule);
   const body = useFlipBoxStore((state) => state.body);
   const skin = useFlipBoxStore((state) => state.skin);
   const cycleBody = useFlipBoxStore((state) => state.cycleBody);
   const cycleSkin = useFlipBoxStore((state) => state.cycleSkin);
   const pulseNonce = useFlipBoxStore((state) => state.pulseNonce);
   const crashNonce = useFlipBoxStore((state) => state.crashNonce);
+  const passNonce = useFlipBoxStore((state) => state.passNonce);
+  const passLabel = useFlipBoxStore((state) => state.passLabel);
+  const sizeShiftNonce = useFlipBoxStore((state) => state.sizeShiftNonce);
+  const sizeShiftMode = useFlipBoxStore((state) => state.sizeShiftMode);
 
   const bodyLabel = findBody(body).name;
   const skinLabel = findSkin(skin).name;
@@ -817,12 +853,21 @@ function FlipBoxOverlay() {
       : nextRule === 'FLAT'
         ? 'text-fuchsia-200'
         : 'text-white/85';
+  const nextSizeLabel =
+    nextSizeRule === 'HALF' ? 'HALF' : nextSizeRule === 'DOUBLE' ? 'DOUBLE' : 'ANY';
+  const nextSizeClass =
+    nextSizeRule === 'HALF'
+      ? 'text-cyan-100'
+      : nextSizeRule === 'DOUBLE'
+        ? 'text-amber-200'
+        : 'text-white/85';
+  const sizeLabel = labelForSizeTier(sizeTier);
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/70 bg-gradient-to-br from-cyan-500/28 via-sky-500/18 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-50">Flip Box</div>
-        <div className="text-[11px] text-white/90">Tap to switch square/rectangle and fit gates.</div>
+        <div className="text-[11px] text-white/90">Tap to switch shape. Left grows, right slices.</div>
         <div className="pt-1 text-[10px] text-cyan-100/85">B body • C skin</div>
       </div>
 
@@ -849,6 +894,12 @@ function FlipBoxOverlay() {
             Next Glyph <span className={`font-semibold ${nextRuleClass}`}>{nextRuleLabel}</span>
           </div>
           <div>
+            Size <span className="font-semibold text-emerald-100">{sizeLabel}</span>
+          </div>
+          <div>
+            Next Size Gate <span className={`font-semibold ${nextSizeClass}`}>{nextSizeLabel}</span>
+          </div>
+          <div>
             Body <span className="font-semibold text-cyan-100">{bodyLabel}</span>
           </div>
           <div>
@@ -862,7 +913,7 @@ function FlipBoxOverlay() {
           <div className="pointer-events-auto rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">FLIP BOX</div>
             <div className="mt-2 text-sm text-white/90">Single gate = upright box. Wide slot = flat box.</div>
-            <div className="mt-1 text-sm text-white/85">Tap anytime to flip shape before each gate.</div>
+            <div className="mt-1 text-sm text-white/85">Tap flips shape. Left combines size, right slices size.</div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <button
                 className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
@@ -911,6 +962,36 @@ function FlipBoxOverlay() {
 
       {status === 'PLAYING' && (
         <div
+          key={passNonce}
+          className="absolute left-1/2 top-[58%] -translate-x-1/2 rounded-full border border-emerald-200/70 bg-emerald-500/22 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-emerald-100"
+          style={{
+            animation: 'flipbox-pass-text 300ms ease-out forwards',
+            opacity: 0,
+          }}
+        >
+          {passLabel || 'PASS'}
+        </div>
+      )}
+
+      {status === 'PLAYING' && sizeShiftMode && (
+        <div
+          key={sizeShiftNonce}
+          className={`absolute left-1/2 top-[42%] -translate-x-1/2 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-[0.14em] ${
+            sizeShiftMode === 'SLICE'
+              ? 'border-cyan-100/80 bg-cyan-500/20 text-cyan-100'
+              : 'border-amber-100/80 bg-amber-500/22 text-amber-100'
+          }`}
+          style={{
+            animation: 'flipbox-pass-text 360ms ease-out forwards',
+            opacity: 0,
+          }}
+        >
+          {sizeShiftMode === 'SLICE' ? 'SLICE x0.5' : 'COMBINE x2'}
+        </div>
+      )}
+
+      {status === 'PLAYING' && (
+        <div
           key={pulseNonce}
           className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/80"
           style={{
@@ -932,6 +1013,16 @@ function FlipBoxOverlay() {
       />
 
       <style jsx global>{`
+        @keyframes flipbox-pass-text {
+          0% {
+            transform: translate(-50%, 18%) scale(0.84);
+            opacity: 0.92;
+          }
+          100% {
+            transform: translate(-50%, -8%) scale(1.08);
+            opacity: 0;
+          }
+        }
         @keyframes flipbox-perfect-ring {
           0% {
             transform: translate(-50%, -50%) scale(0.6);
@@ -988,6 +1079,11 @@ function FlipBoxScene() {
   const skinId = useFlipBoxStore((state) => state.skin);
 
   const runtimeRef = useRef<Runtime>(createRuntime());
+  const swipeStartRef = useRef<{ x: number; y: number; active: boolean }>({
+    x: 0,
+    y: 0,
+    active: false,
+  });
   const skinTextures = useMemo(() => createSkinTextures(), []);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -1000,6 +1096,7 @@ function FlipBoxScene() {
   const playerRef = useRef<THREE.Mesh>(null);
   const playerOutlineRef = useRef<THREE.Mesh>(null);
   const crashRingRef = useRef<THREE.Mesh>(null);
+  const sizeRingRef = useRef<THREE.Mesh>(null);
 
   const { camera } = useThree();
   const bodyOption = useMemo(() => findBody(bodyId), [bodyId]);
