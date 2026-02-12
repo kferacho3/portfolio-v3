@@ -470,7 +470,9 @@ function SmashHit() {
   const { paused } = useGameUIState();
   const { soundsOn } = useAudioState();
 
-  const input = useInputRef();
+  const input = useInputRef({
+    preventDefault: [' ', 'Space', 'space', 'r', 'R'],
+  });
   const { camera, scene, gl } = useThree();
 
   const corridorRef = useRef<THREE.Mesh>(null);
@@ -1389,13 +1391,13 @@ function SmashHit() {
   const simulateFixed = (step: number) => {
     const w = world.current;
 
-    if (snap.phase !== 'playing') return;
+    if (smashHitState.phase !== 'playing') return;
 
     w.simTime += step;
 
     const speedRamp = Math.min(
       MAX_SPEED - BASE_SPEED,
-      snap.score * 0.0035 + w.distance * 0.0028
+      smashHitState.score * 0.0035 + w.distance * 0.0028
     );
     w.speed = BASE_SPEED + speedRamp;
 
@@ -1432,7 +1434,13 @@ function SmashHit() {
       shot.vel.multiplyScalar(
         Math.max(0, 1 - BALL_PHYSICS.linearDamping * step * 3.4)
       );
+      const prevX = shot.pos.x;
+      const prevY = shot.pos.y;
+      const prevZ = shot.pos.z;
       shot.pos.addScaledVector(shot.vel, step);
+      const segDx = shot.pos.x - prevX;
+      const segDy = shot.pos.y - prevY;
+      const segDz = shot.pos.z - prevZ;
 
       if (
         shot.pos.z < w.cameraZ - 170 ||
@@ -1448,36 +1456,48 @@ function SmashHit() {
         const barrier = w.barriers[slot];
         if (!barrier.active) continue;
 
-        if (
-          Math.abs(shot.pos.z - (barrier.z - 2.2)) < 0.7 &&
-          barrier.crystalActive
-        ) {
-          const dx = shot.pos.x - barrier.crystalX;
-          const dy = shot.pos.y - barrier.crystalY;
-          const dz = shot.pos.z - (barrier.z - 2.2);
-          if (
-            dx * dx + dy * dy + dz * dz <=
-            (SHOT_RADIUS + 0.23) * (SHOT_RADIUS + 0.23)
-          ) {
-            barrier.crystalActive = false;
-            emitEvent(w.eventBus, EVT.CRYSTAL_HIT, barrier.crystalValue, 0, 0);
-            spawnHitFx(
-              barrier.crystalX,
-              barrier.crystalY,
-              barrier.z - 2.2,
-              THEME_COLORS[barrier.themeIndex].bloom,
-              0.32
-            );
-            consumed = true;
-            break;
+        const crystalZ = barrier.z - 2.2;
+        if (barrier.crystalActive) {
+          const crystalNear = Math.abs(shot.pos.z - crystalZ) < 0.8;
+          const crystalT = Math.abs(segDz) > 1e-6 ? (crystalZ - prevZ) / segDz : -1;
+          const crossedCrystal = crystalT >= 0 && crystalT <= 1;
+          if (!crystalNear && !crossedCrystal) {
+            // Keep checking barrier blocks if crystal plane was not crossed.
+          } else {
+            const sampleX = crossedCrystal ? prevX + segDx * crystalT : shot.pos.x;
+            const sampleY = crossedCrystal ? prevY + segDy * crystalT : shot.pos.y;
+            const sampleZ = crossedCrystal ? crystalZ : shot.pos.z;
+            const dx = sampleX - barrier.crystalX;
+            const dy = sampleY - barrier.crystalY;
+            const dz = sampleZ - crystalZ;
+            if (
+              dx * dx + dy * dy + dz * dz <=
+              (SHOT_RADIUS + 0.23) * (SHOT_RADIUS + 0.23)
+            ) {
+              barrier.crystalActive = false;
+              emitEvent(w.eventBus, EVT.CRYSTAL_HIT, barrier.crystalValue, 0, 0);
+              spawnHitFx(
+                barrier.crystalX,
+                barrier.crystalY,
+                crystalZ,
+                THEME_COLORS[barrier.themeIndex].bloom,
+                0.32
+              );
+              consumed = true;
+              break;
+            }
           }
         }
 
-        if (
-          Math.abs(shot.pos.z - barrier.z) >
-          BLOCK_THICKNESS + SHOT_RADIUS + 0.05
-        )
-          continue;
+        const blockNear =
+          Math.abs(shot.pos.z - barrier.z) <=
+          BLOCK_THICKNESS + SHOT_RADIUS + 0.09;
+        const blockT = Math.abs(segDz) > 1e-6 ? (barrier.z - prevZ) / segDz : -1;
+        const crossedBlock = blockT >= 0 && blockT <= 1;
+        if (!blockNear && !crossedBlock) continue;
+
+        const sampleX = crossedBlock ? prevX + segDx * blockT : shot.pos.x;
+        const sampleY = crossedBlock ? prevY + segDy * blockT : shot.pos.y;
 
         const blockBase = slot * BLOCKS_PER_BARRIER;
         const half = BLOCK_SIZE * 0.5;
@@ -1489,12 +1509,12 @@ function SmashHit() {
           const stone = w.blockStone[idx];
           if (!alive && !stone) continue;
 
-          const dx = Math.abs(shot.pos.x - w.blockX[idx]);
-          const dy = Math.abs(shot.pos.y - w.blockY[idx]);
+          const dx = Math.abs(sampleX - w.blockX[idx]);
+          const dy = Math.abs(sampleY - w.blockY[idx]);
           if (dx > half + SHOT_RADIUS || dy > half + SHOT_RADIUS) continue;
 
           if (stone) {
-            emitEvent(w.eventBus, EVT.PENALTY_HIT, 0, 0, 0);
+            emitEvent(w.eventBus, EVT.PENALTY_HIT, 10, 0, 0);
             spawnHitFx(
               w.blockX[idx],
               w.blockY[idx],
@@ -1503,6 +1523,7 @@ function SmashHit() {
               0.26
             );
           } else if (alive) {
+            shot.pos.set(sampleX, sampleY, barrier.z);
             startCrack(idx, shot.pos, shot.vel);
           }
 
@@ -1576,22 +1597,49 @@ function SmashHit() {
 
       if (w.cameraZ < barrier.z + 0.44) {
         let cleared = true;
+        let requiredLeft = 0;
         const blockBase = slot * BLOCKS_PER_BARRIER;
         for (let b = 0; b < BLOCKS_PER_BARRIER; b += 1) {
           const idx = blockBase + b;
           if (w.blockRequired[idx] && w.blockAlive[idx]) {
             cleared = false;
-            break;
+            requiredLeft += 1;
           }
         }
 
         if (!cleared) {
-          emitEvent(w.eventBus, EVT.GAME_OVER, 0, 0, 0);
-          break;
+          const introPenaltyScale = barrier.roomIndex === 0 ? 0.55 : 1;
+          const penalty = Math.floor(
+            clamp(
+              (BREACH_AMMO_PENALTY_BASE +
+                requiredLeft * BREACH_AMMO_PENALTY_PER_BLOCK) *
+                introPenaltyScale,
+              4,
+              24
+            )
+          );
+          emitEvent(w.eventBus, EVT.PENALTY_HIT, penalty, requiredLeft, 0);
+          barrier.crystalActive = false;
+
+          for (let b = 0; b < BLOCKS_PER_BARRIER; b += 1) {
+            const idx = blockBase + b;
+            if (!w.blockRequired[idx] || !w.blockAlive[idx]) continue;
+            w.blockCrack[idx] = 1;
+            w.blockDelayFrames[idx] = 1;
+            w.blockHitX[idx] = w.blockX[idx];
+            w.blockHitY[idx] = w.blockY[idx];
+            w.blockHitZ[idx] = w.blockZ[idx];
+            w.blockHitVx[idx] = 0;
+            w.blockHitVy[idx] = 0;
+            w.blockHitVz[idx] = -w.speed * 0.55;
+          }
+          barrier.passed = true;
+          continue;
         }
 
         barrier.passed = true;
-        smashHitState.addScore(35 + Math.floor(snap.combo * 0.6));
+        barrier.crystalActive = false;
+        smashHitState.addScore(35 + Math.floor(smashHitState.combo * 0.6));
       }
     }
 
@@ -1669,15 +1717,37 @@ function SmashHit() {
     const spaceDown = inputState.keysDown.has(' ');
     const spaceJustDown = spaceDown && !w.spaceWasDown;
     w.spaceWasDown = spaceDown;
+    w.fireCooldown = Math.max(0, w.fireCooldown - dtRender);
 
     const firePressed = inputState.pointerJustDown || spaceJustDown;
+    const holdFire = inputState.pointerDown || spaceDown;
+    const restartPressed = inputState.justPressed.has('r');
 
-    if (firePressed) {
-      if (snap.phase === 'menu' || snap.phase === 'gameover') {
+    if (restartPressed) {
+      smashHitState.startGame();
+      resetWorld();
+      if (fireVolley()) {
+        w.fireCooldown = FIRE_INTERVAL_BASE;
+      }
+    } else if (firePressed) {
+      if (smashHitState.phase === 'menu' || smashHitState.phase === 'gameover') {
         smashHitState.startGame();
         resetWorld();
+        if (fireVolley()) {
+          w.fireCooldown = FIRE_INTERVAL_BASE;
+        }
       } else {
-        fireVolley();
+        if (fireVolley()) {
+          w.fireCooldown = FIRE_INTERVAL_BASE;
+        }
+      }
+    } else if (
+      holdFire &&
+      smashHitState.phase === 'playing' &&
+      w.fireCooldown <= 0
+    ) {
+      if (fireVolley()) {
+        w.fireCooldown = FIRE_INTERVAL_BASE;
       }
     }
 
