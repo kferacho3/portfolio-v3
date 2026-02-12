@@ -147,7 +147,7 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
     title: 'Pulse Parry',
     verb: 'Pulse on overlap',
     input: 'tap',
-    tutorial: 'Tap when a moving pulse overlaps a stationed target node.',
+    tutorial: 'Pulse when an incoming shape intersects its fixed target node.',
     failCondition: 'timing miss',
     chunkProfile: 'timing-defense',
     endlessFirst: true,

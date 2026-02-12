@@ -749,10 +749,11 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'There is always at least one legal forward move. Classic mode allows 3 illegal moves; Sudden Death ends the run on the first illegal move.',
   },
   pulseparry: {
-    controls: 'Tap/Click when a moving pulse overlaps a target node • R to restart',
+    controls: 'Tap/Click/Space/Enter on overlap windows • R to restart',
     objective:
-      'Pulse only on overlap windows to parry incoming shapes. Protect the core as pulse speed increases and more target nodes activate.',
-    tips: 'Do not spam tap. Mistimed taps build a strike chain; every 4 mistimed taps costs one core life.',
+      'Align incoming lane shapes with fixed target shapes and pulse on intersection to clear them before they reach the core.',
+    tips:
+      'Treat it like a rhythm lane game: pulse on exact overlap, avoid spam taps, and prepare for faster notes plus extra active lanes in later phases.',
   },
   orbitlatch: {
     controls: 'Tap/Click to latch or release • R to restart',
