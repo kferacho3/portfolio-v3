@@ -32,6 +32,7 @@ import type {
 } from './types';
 
 const BEST_KEY = 'portal_punch_puzzle_best_v1';
+const LATEST_LEVEL_KEY = 'portal_punch_latest_level_v1';
 const EPS = 0.001;
 
 const clamp = (v: number, min: number, max: number) =>
@@ -46,6 +47,20 @@ const readBest = () => {
 const writeBest = (score: number) => {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(BEST_KEY, String(Math.max(0, Math.floor(score))));
+};
+
+const readLatestLevelId = () => {
+  if (typeof window === 'undefined') return 1;
+  const n = Number(window.localStorage.getItem(LATEST_LEVEL_KEY) ?? 1);
+  return Number.isFinite(n) ? Math.max(1, Math.floor(n)) : 1;
+};
+
+const writeLatestLevelId = (levelId: number) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(
+    LATEST_LEVEL_KEY,
+    String(Math.max(1, Math.floor(levelId)))
+  );
 };
 
 type Runtime = PortalPunchRuntime & {
@@ -174,6 +189,7 @@ const initLevel = (
   portalPunchState.eventTime = 0;
   portalPunchState.eventDuration = 0;
   portalPunchState.nextEventAt = runtime.elapsed + 18;
+  writeLatestLevelId(level.id);
 
   setMessage(runtime, `Loaded ${level.name}`);
   return level;
@@ -316,7 +332,8 @@ const Overlay: React.FC<{
   onRestart: () => void;
   onNext: () => void;
   onSelectLevel: (levelIndex: number) => void;
-}> = ({ runtime, level, onStart, onRestart, onNext, onSelectLevel }) => {
+  onOpenLevelMenu: () => void;
+}> = ({ runtime, level, onStart, onRestart, onNext, onSelectLevel, onOpenLevelMenu }) => {
   const solvedCount = runtime.lastSolve.solvedTargets.size;
   const objectiveCount = level.objective.targetIds.length;
   const difficultyText = `${level.difficulty.tag} ${level.difficulty.rating}/5`;
@@ -334,6 +351,15 @@ const Overlay: React.FC<{
         <div className="text-xs text-cyan-50/80">{level.subtitle}</div>
         <div className="mt-1 text-[11px] text-white/70">Phase {runtime.phase}</div>
         <div className="text-[11px] text-amber-200/90">Difficulty {difficultyText}</div>
+        <button
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            onOpenLevelMenu();
+          }}
+          className="pointer-events-auto mt-2 rounded-md border border-cyan-200/50 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-cyan-100/90 transition-all hover:-translate-y-0.5 hover:bg-cyan-300/10"
+        >
+          Levels M
+        </button>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-indigo-100/35 bg-black/45 px-3 py-2 text-right backdrop-blur-sm">
@@ -360,13 +386,13 @@ const Overlay: React.FC<{
 
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md border border-white/20 bg-black/45 px-4 py-2 text-center text-[11px] text-white/75 backdrop-blur-sm">
         <div>Move: WASD / Arrow Keys • Interact: E / Space / Tap (or click mirror/prism) • Toggle Phase: Q • Restart: R</div>
-        <div>Next Level: N or Enter (after solve)</div>
+        <div>Next Level: N or Enter (after solve) • Level Menu: M</div>
       </div>
 
       {runtime.status === 'START' && (
-        <div className="pointer-events-none absolute inset-0 grid place-items-center p-4">
+        <div className="pointer-events-none absolute inset-0 grid place-items-center p-4 lg:pr-[320px]">
           <div
-            className="pointer-events-auto relative h-[min(82vh,760px)] w-[min(1220px,97vw)] overflow-hidden rounded-2xl border bg-black/70 backdrop-blur-xl"
+            className="pointer-events-auto relative h-[min(82vh,760px)] w-full max-w-[1220px] overflow-hidden rounded-2xl border bg-black/70 backdrop-blur-xl"
             style={{
               borderColor: `${activeTheme.border}88`,
               boxShadow: `0 24px 84px ${activeTheme.glow}`,
@@ -842,7 +868,12 @@ function PortalPunchScene() {
     portalPunchState.punchTime = 0;
     portalPunchState.elapsed = runtime.elapsed;
     portalPunchState.slowMoTime = 0;
-    const level = initLevel(runtime, 0, !hardReset, 'START');
+    const latestLevelId = readLatestLevelId();
+    const latestLevelIndex = PORTAL_PUNCH_LEVELS.findIndex(
+      (entry) => entry.id === latestLevelId
+    );
+    const startIndex = latestLevelIndex >= 0 ? latestLevelIndex : 0;
+    const level = initLevel(runtime, startIndex, !hardReset, 'START');
     portalPunchState.bestScore = best;
     portalPunchState.score = runtime.score;
 
@@ -912,6 +943,15 @@ function PortalPunchScene() {
     visual.lookYaw = 0;
     visual.bobClock = 0;
     visual.initialized = true;
+    setFrameVersion((v) => v + 1);
+  }, []);
+
+  const openLevelMenu = useCallback(() => {
+    const runtime = runtimeRef.current;
+    if (runtime.status === 'START') return;
+    runtime.status = 'START';
+    runtime.failReason = '';
+    setMessage(runtime, 'Level selector opened', 1.4);
     setFrameVersion((v) => v + 1);
   }, []);
 
@@ -1014,6 +1054,10 @@ function PortalPunchScene() {
 
     if (input.justPressed.has('n') && runtime.status === 'SOLVED') {
       nextLevel();
+    }
+
+    if (input.justPressed.has('m')) {
+      openLevelMenu();
     }
 
     const style = level.style;
@@ -1227,6 +1271,7 @@ function PortalPunchScene() {
           onRestart={restartLevel}
           onNext={nextLevel}
           onSelectLevel={selectLevelFromMenu}
+          onOpenLevelMenu={openLevelMenu}
         />
       </Html>
     </>
