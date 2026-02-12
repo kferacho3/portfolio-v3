@@ -1079,10 +1079,10 @@ const remixLevel = (base: DraftLevel, id: number): DraftLevel => {
   };
 
   for (const entity of clone.entities) {
-    if (entity.type === 'MIRROR' && entity.interactable && rng() < 0.55) {
+    if (entity.type === 'MIRROR' && entity.interactable !== false && rng() < 0.55) {
       entity.orientation = (entity.orientation + 1) % 2;
     }
-    if (entity.type === 'PRISM' && entity.interactable) {
+    if (entity.type === 'PRISM' && entity.interactable !== false) {
       entity.orientation = ((entity.orientation ?? 0) + Math.floor(rng() * 4)) % 4;
     }
     if (entity.type === 'MIRROR' && entity.moving) {
@@ -1144,13 +1144,13 @@ const createValidationRuntime = (
   for (const entity of level.entities) {
     if (entity.type === 'MIRROR') {
       runtime.mirrors[entity.id] = entity.orientation;
-      if (entity.interactable && !entity.moving) {
+      if (entity.interactable !== false && !entity.moving) {
         runtime.entityPositions[entity.id] = { ...entity.pos };
       }
     }
     if (entity.type === 'PRISM') {
       runtime.prisms[entity.id] = entity.orientation ?? 0;
-      if (entity.interactable && !entity.moving) {
+      if (entity.interactable !== false && !entity.moving) {
         runtime.entityPositions[entity.id] = { ...entity.pos };
       }
     }

@@ -184,13 +184,13 @@ const initLevel = (
   for (const entity of level.entities) {
     if (entity.type === 'MIRROR') {
       runtime.mirrors[entity.id] = entity.orientation;
-      if (entity.interactable && !entity.moving) {
+      if (entity.interactable !== false && !entity.moving) {
         runtime.entityPositions[entity.id] = { ...entity.pos };
       }
     }
     if (entity.type === 'PRISM') {
       runtime.prisms[entity.id] = entity.orientation ?? 0;
-      if (entity.interactable && !entity.moving) {
+      if (entity.interactable !== false && !entity.moving) {
         runtime.entityPositions[entity.id] = { ...entity.pos };
       }
     }
@@ -244,11 +244,11 @@ const findInteractableAtCell = (
     if (!isEntityActiveInRuntimePhase(entity, runtime)) continue;
     if (entity.resolvedPos.x !== cell.x || entity.resolvedPos.y !== cell.y) continue;
     if (entity.type === 'MIRROR') {
-      if (entity.interactable) return entity;
+      if (entity.interactable !== false) return entity;
       continue;
     }
     if (entity.type === 'PRISM') {
-      if (entity.interactable) return entity;
+      if (entity.interactable !== false) return entity;
       continue;
     }
     if (entity.type === 'SWITCH') return entity;
@@ -257,8 +257,8 @@ const findInteractableAtCell = (
 };
 
 const isDraggableDeflector = (entity: ResolvedEntity) => {
-  if (entity.type === 'MIRROR') return !!entity.interactable && !entity.moving;
-  if (entity.type === 'PRISM') return !!entity.interactable && !entity.moving;
+  if (entity.type === 'MIRROR') return entity.interactable !== false && !entity.moving;
+  if (entity.type === 'PRISM') return entity.interactable !== false && !entity.moving;
   return false;
 };
 
@@ -431,7 +431,7 @@ const Overlay: React.FC<{
       )}
 
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md border border-white/20 bg-black/45 px-4 py-2 text-center text-[11px] text-white/75 backdrop-blur-sm">
-        <div>Move: WASD / Arrow Keys • Interact: E / Space / Tap (or click mirror/prism) • Toggle Phase: Q • Restart: R</div>
+        <div>Move: WASD / Arrow Keys • Rotate: E / Space / Tap • Drag deflectors: hold + drag mirror/prism • Toggle Phase: Q • Restart: R</div>
         <div>Next Level: N or Enter (after solve) • Level Menu: M</div>
       </div>
 
@@ -697,16 +697,36 @@ const EntityVisuals: React.FC<{
 
         if (entity.type === 'MIRROR') {
           const rot = (entity.orientation % 2 === 0 ? Math.PI / 4 : -Math.PI / 4) + Math.PI / 2;
+          const isDraggable = entity.interactable !== false && !entity.moving;
+          const movedCell = runtime.entityPositions[entity.id];
+          const isMoved = movedCell &&
+            (movedCell.x !== entity.pos.x || movedCell.y !== entity.pos.y);
           return (
             <group key={entity.id} position={[p.x, 0.45, p.z]} rotation={[0, rot, 0]}>
               <mesh castShadow>
                 <boxGeometry args={[0.84, 0.76, 0.08]} />
-                <meshStandardMaterial color="#94d9ff" metalness={0.92} roughness={0.08} />
+                <meshStandardMaterial
+                  color={isDraggable ? (isMoved ? '#dffeff' : '#9fe4ff') : '#82b7d8'}
+                  emissive={isDraggable ? (isMoved ? '#b8ffff' : '#69dfff') : '#000000'}
+                  emissiveIntensity={isDraggable ? (isMoved ? 0.35 : 0.18) : 0}
+                  metalness={0.92}
+                  roughness={0.08}
+                />
               </mesh>
               <mesh position={[0, 0, 0.05]}>
                 <boxGeometry args={[0.74, 0.66, 0.02]} />
-                <meshBasicMaterial color="#b7f4ff" transparent opacity={0.24} />
+                <meshBasicMaterial
+                  color={isDraggable ? '#ccfcff' : '#b7f4ff'}
+                  transparent
+                  opacity={isDraggable ? 0.32 : 0.2}
+                />
               </mesh>
+              {isDraggable && (
+                <mesh position={[0, -0.37, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <ringGeometry args={[0.22, 0.28, 24]} />
+                  <meshBasicMaterial color={isMoved ? '#d9ffff' : '#7de0ff'} transparent opacity={0.55} />
+                </mesh>
+              )}
             </group>
           );
         }
@@ -728,10 +748,18 @@ const EntityVisuals: React.FC<{
 
         if (entity.type === 'PRISM') {
           const ori = ((entity.orientation ?? 0) % 4 + 4) % 4;
+          const isDraggable = entity.interactable !== false && !entity.moving;
+          const movedCell = runtime.entityPositions[entity.id];
+          const isMoved = movedCell &&
+            (movedCell.x !== entity.pos.x || movedCell.y !== entity.pos.y);
           return (
             <mesh key={entity.id} position={[p.x, 0.48, p.z]} rotation={[0, ori * (Math.PI / 2), 0]} castShadow>
               <coneGeometry args={[0.34, 0.75, 3]} />
-              <meshStandardMaterial color="#ffd27d" emissive="#ffbc62" emissiveIntensity={0.35} />
+              <meshStandardMaterial
+                color={isDraggable ? (isMoved ? '#ffeec9' : '#ffd27d') : '#ddb97a'}
+                emissive={isDraggable ? '#ffbc62' : '#000000'}
+                emissiveIntensity={isDraggable ? 0.35 : 0}
+              />
             </mesh>
           );
         }

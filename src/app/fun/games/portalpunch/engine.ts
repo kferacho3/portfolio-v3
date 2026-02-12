@@ -611,8 +611,8 @@ export const findInteractableNearPlayer = (
       continue;
     }
 
-    if (entity.type === 'MIRROR' && !entity.interactable) continue;
-    if (entity.type === 'PRISM' && !entity.interactable) continue;
+    if (entity.type === 'MIRROR' && entity.interactable === false) continue;
+    if (entity.type === 'PRISM' && entity.interactable === false) continue;
 
     const dx = Math.abs(entity.resolvedPos.x - runtime.player.x);
     const dy = Math.abs(entity.resolvedPos.y - runtime.player.y);
