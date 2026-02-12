@@ -135,9 +135,9 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
   runeroll: {
     id: 'runeroll',
     title: 'Rune Roll',
-    verb: 'Toggle step direction',
+    verb: 'Roll to color match',
     input: 'tap',
-    tutorial: 'Tap to toggle next step left or right.',
+    tutorial: 'Choose a direction and land your bottom face on the matching tile color.',
     failCondition: 'timing miss',
     chunkProfile: 'timing-defense',
     endlessFirst: true,
@@ -145,9 +145,9 @@ export const KETCHAPP_GAME_SPECS: Record<KetchappGameId, KetchappGameSpec> = {
   pulseparry: {
     id: 'pulseparry',
     title: 'Pulse Parry',
-    verb: 'Parry pulses',
+    verb: 'Pulse on overlap',
     input: 'tap',
-    tutorial: 'Tap to emit a parry shockwave.',
+    tutorial: 'Tap when a moving pulse overlaps a stationed target node.',
     failCondition: 'timing miss',
     chunkProfile: 'timing-defense',
     endlessFirst: true,

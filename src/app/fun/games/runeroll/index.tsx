@@ -153,6 +153,9 @@ const LANE_X: readonly [number, number, number] = [-1.38, 0, 1.38];
 const ROW_SPACING = 1.12;
 const TILE_SIZE = 0.9;
 const TILE_HEIGHT = 0.18;
+const TILE_INSET_SIZE = TILE_SIZE * 0.58;
+const TILE_INSET_HEIGHT = TILE_HEIGHT * 0.32;
+const TILE_INSET_Y = TILE_HEIGHT * 0.42;
 const CUBE_SIZE = 0.72;
 
 const ROW_POOL = 280;
@@ -166,15 +169,18 @@ const SHATTER_Y = TILE_HEIGHT * 0.62;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
-const STONE_EDGE = new THREE.Color('#4b556b');
+const TILE_BASE = new THREE.Color('#1e2536');
+const TILE_EDGE = new THREE.Color('#3b4560');
 const WHITE = new THREE.Color('#f8fbff');
 const DANGER = new THREE.Color('#ff657f');
+const LEGAL = new THREE.Color('#49f2bc');
 const WILD = new THREE.Color('#ffd56a');
+const RUNE_NAMES = ['Azure', 'Rose', 'Moss', 'Amber'] as const;
 const RUNE_COLORS = [
-  new THREE.Color('#59d9ff'),
-  new THREE.Color('#ff7ad2'),
-  new THREE.Color('#b7f06f'),
-  new THREE.Color('#ffb75e'),
+  new THREE.Color('#2fd8ff'),
+  new THREE.Color('#ff5eb8'),
+  new THREE.Color('#9cf159'),
+  new THREE.Color('#ffb04a'),
 ] as const;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -185,10 +191,14 @@ const normAngle = (v: number) => {
   const m = v % (Math.PI * 2);
   return m < 0 ? m + Math.PI * 2 : m;
 };
+const snapRightAngle = (v: number) => Math.round(v / (Math.PI * 0.5)) * (Math.PI * 0.5);
 
 const bit = (lane: number) => 1 << lane;
 const moveLabel = (move: MoveDir): 'L' | 'U' | 'R' | 'B' =>
   move === 'left' ? 'L' : move === 'right' ? 'R' : move === 'back' ? 'B' : 'U';
+const moveName = (move: ForwardMove) =>
+  move === 'left' ? 'Left' : move === 'right' ? 'Right' : 'Forward';
+const runeName = (rune: RuneId) => RUNE_NAMES[rune];
 const FORWARD_MOVES: ForwardMove[] = ['left', 'up', 'right'];
 
 const laneForForwardMove = (
@@ -721,7 +731,7 @@ function RuneRollOverlay() {
         ? 'Right'
         : direction === 'B'
           ? 'Back'
-          : 'Up';
+          : 'Forward';
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
@@ -749,14 +759,14 @@ function RuneRollOverlay() {
             Next <span className="font-semibold text-cyan-200">{nextLabel}</span>
           </div>
           <div>
-            Bottom Tile
+            Bottom Face
             <span
-              className="ml-2 inline-block h-2.5 w-2.5 rounded-full align-middle"
+              className="ml-2 inline-block h-3 w-3 rounded-sm align-middle"
               style={{ background: bottomColor, boxShadow: `0 0 12px ${bottomColor}` }}
             />
-            <span className="ml-1 font-semibold text-fuchsia-200">{bottomRune + 1}</span>
+            <span className="ml-1 font-semibold text-fuchsia-200">{runeName(bottomRune)}</span>
           </div>
-          <div className="mt-1 grid grid-cols-3 gap-1">
+          <div className="mt-1 grid grid-cols-3 gap-1.5">
             {previews.map((preview) => {
               const targetColor = RUNE_COLORS[preview.targetRune].getStyle();
               const tileColor = preview.tileWild
@@ -764,52 +774,75 @@ function RuneRollOverlay() {
                 : preview.tileRune !== null
                   ? RUNE_COLORS[preview.tileRune].getStyle()
                   : '#475569';
-              const label = preview.move === 'left' ? 'L' : preview.move === 'right' ? 'R' : 'U';
+              const directionLabel = moveName(preview.move);
+              const shortLabel = preview.move === 'left' ? 'L' : preview.move === 'right' ? 'R' : 'F';
+              const targetLabel = runeName(preview.targetRune);
+              const tileLabel = preview.tileWild
+                ? 'Wild'
+                : preview.tileRune !== null
+                  ? runeName(preview.tileRune)
+                  : 'Blocked';
               const legalityText = preview.available
                 ? preview.legal
-                  ? 'OK'
-                  : 'X'
-                : '--';
+                  ? 'Legal'
+                  : 'Illegal'
+                : 'Blocked';
               const legalityClass = preview.available
                 ? preview.legal
                   ? 'text-emerald-200'
                   : 'text-rose-200'
                 : 'text-slate-300';
+              const frameClass = preview.available
+                ? preview.legal
+                  ? 'border-emerald-200/45'
+                  : 'border-rose-200/45'
+                : 'border-slate-200/20';
 
               return (
                 <div
                   key={preview.move}
-                  className="rounded border border-white/20 bg-black/28 px-1.5 py-1"
+                  className={`rounded border bg-black/35 px-1.5 py-1 ${frameClass}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-cyan-100">{label}</span>
+                  <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.14em]">
+                    <span className="font-semibold text-cyan-100">
+                      {shortLabel} {directionLabel}
+                    </span>
                     <span className={`font-semibold ${legalityClass}`}>{legalityText}</span>
                   </div>
-                  <div className="mt-1 flex items-center gap-1">
-                    <span
-                      className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ background: targetColor, boxShadow: `0 0 8px ${targetColor}` }}
-                      title="Bottom face after move"
-                    />
-                    <span className="text-[10px] text-white/70">vs</span>
-                    <span
-                      className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ background: tileColor, boxShadow: `0 0 8px ${tileColor}` }}
-                      title="Tile color in that lane"
-                    />
+                  <div className="mt-1 grid grid-cols-[auto,1fr] items-center gap-x-2 gap-y-0.5 text-[10px]">
+                    <span className="text-white/60">Face</span>
+                    <span className="flex items-center gap-1">
+                      <span
+                        className="inline-block h-3 w-3 rounded-sm"
+                        style={{ background: targetColor, boxShadow: `0 0 8px ${targetColor}` }}
+                        title="Bottom face after move"
+                      />
+                      <span className="text-white/85">{targetLabel}</span>
+                    </span>
+                    <span className="text-white/60">Tile</span>
+                    <span className="flex items-center gap-1">
+                      <span
+                        className="inline-block h-3 w-3 rounded-sm"
+                        style={{ background: tileColor, boxShadow: `0 0 8px ${tileColor}` }}
+                        title="Tile color in that lane"
+                      />
+                      <span className="text-white/85">{tileLabel}</span>
+                    </span>
                   </div>
                 </div>
               );
             })}
           </div>
-          <div className="mt-1 flex items-center gap-1">
+          <div className="mt-1 flex items-center gap-2 text-[10px] text-white/70">
             {RUNE_COLORS.map((color, idx) => (
-              <span
-                key={idx}
-                className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ background: color.getStyle(), boxShadow: `0 0 8px ${color.getStyle()}` }}
-                title={`Rune ${idx + 1}`}
-              />
+              <span key={idx} className="inline-flex items-center gap-1">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-sm"
+                  style={{ background: color.getStyle(), boxShadow: `0 0 8px ${color.getStyle()}` }}
+                  title={runeName(idx as RuneId)}
+                />
+                <span>{runeName(idx as RuneId)}</span>
+              </span>
             ))}
           </div>
           <div>
@@ -831,11 +864,11 @@ function RuneRollOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-violet-100/42 bg-gradient-to-br from-slate-950/80 via-violet-950/46 to-amber-950/32 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">RUNE ROLL</div>
-            <div className="mt-2 text-sm text-white/85">Controls: Left, Up, Right. Down = back one tile.</div>
+            <div className="mt-2 text-sm text-white/85">Controls: Left, Forward, Right. Down = back one tile.</div>
             <div className="mt-1 text-sm text-white/80">Desktop: A/Left, W/Up/Space, D/Right, S/Down.</div>
             <div className="mt-1 text-sm text-white/80">Mobile: tap left/center/right zones. Tap lower center to back.</div>
-            <div className="mt-1 text-sm text-white/80">Pick a lane where your predicted bottom color matches the tile color.</div>
-            <div className="mt-1 text-sm text-cyan-200/85">The direction map shows legal choices. You lose after 3 illegal moves.</div>
+            <div className="mt-1 text-sm text-white/80">Every tile now has an embedded color core. Land only on matching colors.</div>
+            <div className="mt-1 text-sm text-cyan-200/85">Direction cards show Face Color vs Tile Color. Classic loses after 3 illegal moves.</div>
             <button
               type="button"
               className="pointer-events-auto mt-3 rounded-md border border-amber-100/55 bg-amber-300/16 px-4 py-1.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-300/28"
@@ -951,6 +984,7 @@ function RuneRollScene() {
 
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
   const tileRef = useRef<THREE.InstancedMesh>(null);
+  const tileInsetRef = useRef<THREE.InstancedMesh>(null);
   const runeRef0 = useRef<THREE.InstancedMesh>(null);
   const runeRef1 = useRef<THREE.InstancedMesh>(null);
   const runeRef2 = useRef<THREE.InstancedMesh>(null);
@@ -1122,6 +1156,8 @@ function RuneRollScene() {
       }
     }
 
+    let previewsForRender = store.previews;
+
     if (store.status === 'PLAYING') {
       runtime.elapsed += dt * (runtime.stepActive ? 1 : 0.08);
       runtime.hudCommit += dt;
@@ -1225,8 +1261,8 @@ function RuneRollScene() {
           runtime.progressRow = runtime.currentRow;
           runtime.playerX = LANE_X[runtime.currentLane];
           runtime.faces = runtime.targetFaces;
-          runtime.cubeRotX = normAngle(runtime.toRotX);
-          runtime.cubeRotZ = normAngle(runtime.toRotZ);
+          runtime.cubeRotX = normAngle(snapRightAngle(runtime.toRotX));
+          runtime.cubeRotZ = normAngle(snapRightAngle(runtime.toRotZ));
 
           if (runtime.stepMove !== 'back') {
             runtime.maxReachedRow = Math.max(runtime.maxReachedRow, runtime.currentRow);
@@ -1295,6 +1331,8 @@ function RuneRollScene() {
         runtime.playerX = LANE_X[runtime.currentLane];
       }
 
+      previews = buildMovePreviews(runtime);
+      previewsForRender = previews;
       if (runtime.hudCommit >= 0.08) {
         runtime.hudCommit = 0;
         useRuneRollStore.getState().updateHud(
@@ -1311,6 +1349,7 @@ function RuneRollScene() {
     } else {
       runtime.progressRow = runtime.currentRow;
       runtime.playerX = lerp(runtime.playerX, LANE_X[runtime.currentLane], 1 - Math.exp(-10 * dt));
+      previewsForRender = buildMovePreviews(runtime);
       for (const row of runtime.rows) {
         if (row.glow > 0) row.glow = Math.max(0, row.glow - dt * 1.8);
       }
@@ -1347,7 +1386,7 @@ function RuneRollScene() {
 
     if (cubeRef.current) {
       cubeRef.current.position.set(runtime.playerX, TILE_HEIGHT + CUBE_SIZE * 0.5, 0);
-      cubeRef.current.rotation.set(runtime.cubeRotX, Math.PI * 0.25, runtime.cubeRotZ);
+      cubeRef.current.rotation.set(runtime.cubeRotX, 0, runtime.cubeRotZ);
       const scale = 1 + runtime.shake * 0.03;
       cubeRef.current.scale.setScalar(scale);
     }
@@ -1364,10 +1403,15 @@ function RuneRollScene() {
     if (tileRef.current) {
       const glyphCounts = [0, 0, 0, 0, 0];
       let tileCount = 0;
+      let insetCount = 0;
       const startRow = Math.max(minVisibleRow(runtime), Math.floor(runtime.progressRow) - 1);
       const endRow = Math.floor(runtime.progressRow) + DRAW_AHEAD_ROWS;
       const nextRowIndex = runtime.currentRow + 1;
       const selectableLanes = new Set(forwardCandidates(runtime).map((candidate) => candidate.lane));
+      const previewByLane = new Map<number, MovePreview>();
+      for (const preview of previewsForRender) {
+        if (preview.lane !== null) previewByLane.set(preview.lane, preview);
+      }
 
       for (let rowIndex = startRow; rowIndex <= endRow; rowIndex += 1) {
         if (rowIndex < minVisibleRow(runtime)) continue;
@@ -1385,12 +1429,15 @@ function RuneRollScene() {
           const rune = row.runes[lane];
           dummy.position.set(x, 0, z);
           dummy.scale.set(TILE_SIZE, TILE_HEIGHT, TILE_SIZE);
-          dummy.rotation.set(0, Math.PI * 0.25, 0);
+          dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           tileRef.current.setMatrixAt(tileCount, dummy.matrix);
 
-          if (isWild) colorScratch.copy(WILD).lerp(WHITE, 0.16);
-          else colorScratch.copy(RUNE_COLORS[rune]).lerp(STONE_EDGE, 0.14);
+          colorScratch.copy(TILE_BASE).lerp(TILE_EDGE, 0.14);
+          const lanePreview = rowIndex === nextRowIndex ? previewByLane.get(laneIdx) : undefined;
+          if (lanePreview?.available) {
+            colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.18);
+          }
           if (rowIndex === runtime.currentRow && laneIdx === runtime.currentLane) {
             colorScratch.lerp(WHITE, 0.28);
           } else if (rowIndex === nextRowIndex && selectableLanes.has(laneIdx)) {
@@ -1399,6 +1446,29 @@ function RuneRollScene() {
           if (row.glowLane === lane && row.glow > 0) colorScratch.lerp(WHITE, clamp(row.glow, 0, 0.78));
           tileRef.current.setColorAt(tileCount, colorScratch);
           tileCount += 1;
+
+          if (tileInsetRef.current && insetCount < TILE_DRAW_CAP) {
+            dummy.position.set(x, TILE_INSET_Y, z);
+            dummy.scale.set(TILE_INSET_SIZE, TILE_INSET_HEIGHT, TILE_INSET_SIZE);
+            dummy.rotation.set(0, 0, 0);
+            dummy.updateMatrix();
+            tileInsetRef.current.setMatrixAt(insetCount, dummy.matrix);
+
+            if (isWild) colorScratch.copy(WILD).lerp(WHITE, 0.18);
+            else colorScratch.copy(RUNE_COLORS[rune]).lerp(WHITE, 0.08);
+
+            if (lanePreview?.available) {
+              colorScratch.lerp(lanePreview.legal ? WHITE : DANGER, lanePreview.legal ? 0.2 : 0.16);
+            }
+            if (rowIndex === runtime.currentRow && laneIdx === runtime.currentLane) {
+              colorScratch.lerp(WHITE, 0.24);
+            }
+            if (row.glowLane === lane && row.glow > 0) {
+              colorScratch.lerp(WHITE, clamp(row.glow * 0.9, 0, 0.9));
+            }
+            tileInsetRef.current.setColorAt(insetCount, colorScratch);
+            insetCount += 1;
+          }
 
           const glyphType = isWild ? 4 : rune;
           const glyphMeshRef = runeInstanceRefs[glyphType];
@@ -1432,6 +1502,11 @@ function RuneRollScene() {
       tileRef.current.count = tileCount;
       tileRef.current.instanceMatrix.needsUpdate = true;
       if (tileRef.current.instanceColor) tileRef.current.instanceColor.needsUpdate = true;
+      if (tileInsetRef.current) {
+        tileInsetRef.current.count = insetCount;
+        tileInsetRef.current.instanceMatrix.needsUpdate = true;
+        if (tileInsetRef.current.instanceColor) tileInsetRef.current.instanceColor.needsUpdate = true;
+      }
 
       for (let i = 0; i < runeInstanceRefs.length; i += 1) {
         const mesh = runeInstanceRefs[i].current;
@@ -1515,7 +1590,11 @@ function RuneRollScene() {
 
       <instancedMesh ref={tileRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial vertexColors roughness={0.72} metalness={0.05} />
+        <meshStandardMaterial vertexColors roughness={0.84} metalness={0.08} />
+      </instancedMesh>
+      <instancedMesh ref={tileInsetRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
       <instancedMesh ref={runeRef0} args={[undefined, undefined, GLYPH_DRAW_CAP]}>
@@ -1539,7 +1618,7 @@ function RuneRollScene() {
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
-      <mesh ref={cubeRef} position={[0, TILE_HEIGHT + CUBE_SIZE * 0.5, 0]} rotation={[0, Math.PI * 0.25, 0]}>
+      <mesh ref={cubeRef} position={[0, TILE_HEIGHT + CUBE_SIZE * 0.5, 0]} rotation={[0, 0, 0]}>
         <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
         <meshStandardMaterial
           color="#181227"

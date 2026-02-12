@@ -443,7 +443,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'runeroll',
     title: 'RuneRoll',
     description:
-      'Tap to toggle left/right stepping and land the die with a matching bottom rune.',
+      'Roll left, forward, or right and match your cube\'s landing-face color to each tile\'s embedded core.',
     accent: '#a78bfa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RuneRoll.webp',
@@ -453,7 +453,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'pulseparry',
     title: 'PulseParry',
     description:
-      'Tap to emit a shockwave ring and parry incoming pulses before they breach the core.',
+      'Tap when moving pulses overlap stationed target nodes. Survive escalating speed and rising target count.',
     accent: '#22d3ee',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PulseParry.webp',
@@ -749,10 +749,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'There is always at least one legal forward move. Classic mode allows 3 illegal moves; Sudden Death ends the run on the first illegal move.',
   },
   pulseparry: {
-    controls: 'Tap/Click to emit parry shockwave • R to restart',
+    controls: 'Tap/Click when a moving pulse overlaps a target node • R to restart',
     objective:
-      'Time shockwaves to intersect inbound pulses before they collapse into center.',
-    tips: 'Perfect-timed parries stack multiplier. Tap rhythm beats panic tapping.',
+      'Pulse only on overlap windows to parry incoming shapes. Protect the core as pulse speed increases and more target nodes activate.',
+    tips: 'Do not spam tap. Mistimed taps build a strike chain; every 4 mistimed taps costs one core life.',
   },
   orbitlatch: {
     controls: 'Tap/Click to latch or release • R to restart',

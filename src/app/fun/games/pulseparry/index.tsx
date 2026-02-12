@@ -18,7 +18,6 @@ import {
   consumeFixedStep,
   createFixedStepState,
   shakeNoiseSigned,
-  withinGraceWindow,
 } from '../_shared/hyperUpgradeKit';
 import { pulseParryState } from './state';
 
@@ -28,6 +27,7 @@ type Pulse = {
   slot: number;
   active: boolean;
   parried: boolean;
+  lane: number;
   angle: number;
   radius: number;
   speed: number;
@@ -57,6 +57,10 @@ type Runtime = {
   score: number;
   lives: number;
   parries: number;
+  tapMisses: number;
+  phase: number;
+  targetLanes: number;
+  laneMask: number;
   perfectCombo: number;
   multiplier: number;
   failMessage: string;
@@ -87,7 +91,8 @@ type Runtime = {
 
   hitThreshold: number;
   perfectThreshold: number;
-  lastTapAt: number;
+  overlapLane: number;
+  overlapStrength: number;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -104,6 +109,9 @@ type PulseParryStore = {
   best: number;
   lives: number;
   parries: number;
+  phase: number;
+  targetLanes: number;
+  tapMisses: number;
   combo: number;
   multiplier: number;
   failMessage: string;
@@ -116,7 +124,11 @@ type PulseParryStore = {
   onPerfectFx: () => void;
   updateHud: (
     score: number,
+    lives: number,
     parries: number,
+    phase: number,
+    targetLanes: number,
+    tapMisses: number,
     combo: number,
     multiplier: number
   ) => void;
@@ -146,6 +158,13 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const TAU = Math.PI * 2;
 const CARDINAL_ANGLES = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5] as const;
+const laneBit = (lane: number) => 1 << lane;
+const PHASE_LANE_MASKS = [
+  laneBit(0) | laneBit(2),
+  laneBit(0) | laneBit(1) | laneBit(2),
+  laneBit(0) | laneBit(1) | laneBit(2) | laneBit(3),
+] as const;
+const PHASE_THRESHOLDS = [0, 10, 28] as const;
 const normalizeAngle = (angle: number) => {
   const m = angle % TAU;
   return m < 0 ? m + TAU : m;
@@ -153,18 +172,6 @@ const normalizeAngle = (angle: number) => {
 const angleDiff = (a: number, b: number) => {
   const d = Math.abs(normalizeAngle(a) - normalizeAngle(b));
   return Math.min(d, TAU - d);
-};
-const quantizeCardinal = (angle: number) => {
-  let best: number = CARDINAL_ANGLES[0];
-  let bestD = angleDiff(angle, best);
-  for (let i = 1; i < CARDINAL_ANGLES.length; i += 1) {
-    const d = angleDiff(angle, CARDINAL_ANGLES[i]);
-    if (d < bestD) {
-      bestD = d;
-      best = CARDINAL_ANGLES[i];
-    }
-  }
-  return best;
 };
 
 let audioCtx: AudioContext | null = null;
@@ -209,6 +216,7 @@ const createPulse = (slot: number): Pulse => ({
   slot,
   active: false,
   parried: false,
+  lane: 0,
   angle: 0,
   radius: SPAWN_RADIUS_BASE,
   speed: 1.3,
@@ -238,6 +246,10 @@ const createRuntime = (): Runtime => ({
   score: 0,
   lives: 3,
   parries: 0,
+  tapMisses: 0,
+  phase: 1,
+  targetLanes: 2,
+  laneMask: PHASE_LANE_MASKS[0],
   perfectCombo: 0,
   multiplier: 1,
   failMessage: '',
@@ -268,7 +280,8 @@ const createRuntime = (): Runtime => ({
 
   hitThreshold: 0.14,
   perfectThreshold: 0.06,
-  lastTapAt: -99,
+  overlapLane: -1,
+  overlapStrength: 0,
 
   difficulty: sampleDifficulty('timing-defense', 0),
   chunkLibrary: buildPatternLibraryTemplate('pulseparry'),
@@ -284,6 +297,10 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.score = 0;
   runtime.lives = 3;
   runtime.parries = 0;
+  runtime.tapMisses = 0;
+  runtime.phase = 1;
+  runtime.targetLanes = 2;
+  runtime.laneMask = PHASE_LANE_MASKS[0];
   runtime.perfectCombo = 0;
   runtime.multiplier = 1;
   runtime.failMessage = '';
@@ -313,7 +330,8 @@ const resetRuntime = (runtime: Runtime) => {
 
   runtime.hitThreshold = 0.14;
   runtime.perfectThreshold = 0.06;
-  runtime.lastTapAt = -99;
+  runtime.overlapLane = -1;
+  runtime.overlapStrength = 0;
 
   runtime.difficulty = sampleDifficulty('timing-defense', 0);
   runtime.currentChunk = null;
@@ -322,6 +340,7 @@ const resetRuntime = (runtime: Runtime) => {
   for (const pulse of runtime.pulses) {
     pulse.active = false;
     pulse.parried = false;
+    pulse.lane = 0;
     pulse.angle = 0;
     pulse.radius = SPAWN_RADIUS_BASE;
     pulse.speed = 1.3;
@@ -343,6 +362,9 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
   best: readBest(),
   lives: 3,
   parries: 0,
+  phase: 1,
+  targetLanes: 2,
+  tapMisses: 0,
   combo: 0,
   multiplier: 1,
   failMessage: '',
@@ -354,6 +376,9 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       score: 0,
       lives: 3,
       parries: 0,
+      phase: 1,
+      targetLanes: 2,
+      tapMisses: 0,
       combo: 0,
       multiplier: 1,
       failMessage: '',
@@ -364,6 +389,9 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       score: 0,
       lives: 3,
       parries: 0,
+      phase: 1,
+      targetLanes: 2,
+      tapMisses: 0,
       combo: 0,
       multiplier: 1,
       failMessage: '',
@@ -371,10 +399,14 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
   setLives: (lives) => set({ lives }),
   onTapFx: () => set((state) => ({ tapNonce: state.tapNonce + 1 })),
   onPerfectFx: () => set((state) => ({ perfectNonce: state.perfectNonce + 1 })),
-  updateHud: (score, parries, combo, multiplier) =>
+  updateHud: (score, lives, parries, phase, targetLanes, tapMisses, combo, multiplier) =>
     set({
       score: Math.floor(score),
+      lives,
       parries,
+      phase,
+      targetLanes,
+      tapMisses,
       combo,
       multiplier,
     }),
@@ -388,6 +420,9 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
         lives: 0,
         best: nextBest,
         parries: state.parries,
+        phase: state.phase,
+        targetLanes: state.targetLanes,
+        tapMisses: state.tapMisses,
         combo: 0,
         multiplier: 1,
         failMessage: reason,
@@ -410,12 +445,61 @@ const chooseChunk = (runtime: Runtime) => {
   );
 };
 
+const phaseForParries = (parries: number) => {
+  if (parries >= PHASE_THRESHOLDS[2]) return 3;
+  if (parries >= PHASE_THRESHOLDS[1]) return 2;
+  return 1;
+};
+
+const syncPhaseProgression = (runtime: Runtime) => {
+  const nextPhase = phaseForParries(runtime.parries);
+  if (nextPhase !== runtime.phase) {
+    runtime.phase = nextPhase;
+    runtime.coreGlow = Math.min(1.6, runtime.coreGlow + 0.25);
+    runtime.shake = Math.min(1.2, runtime.shake + 0.18);
+  }
+  runtime.targetLanes = nextPhase === 1 ? 2 : nextPhase === 2 ? 3 : 4;
+  runtime.laneMask = PHASE_LANE_MASKS[nextPhase - 1];
+};
+
+const laneIsActive = (runtime: Runtime, lane: number) =>
+  (runtime.laneMask & laneBit(lane)) !== 0;
+
+const activeLanes = (runtime: Runtime) => {
+  const lanes: number[] = [];
+  for (let lane = 0; lane < CARDINAL_ANGLES.length; lane += 1) {
+    if (laneIsActive(runtime, lane)) lanes.push(lane);
+  }
+  return lanes;
+};
+
+type OverlapCandidate = {
+  pulse: Pulse;
+  diff: number;
+  hitWindow: number;
+};
+
+const findOverlapCandidate = (runtime: Runtime, slack = 1): OverlapCandidate | null => {
+  let best: OverlapCandidate | null = null;
+  for (const pulse of runtime.pulses) {
+    if (!pulse.active || pulse.parried || !laneIsActive(runtime, pulse.lane)) continue;
+    const diff = Math.abs(pulse.radius - runtime.parryRadius);
+    const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
+    if (diff > hitWindow * slack) continue;
+    if (!best || diff < best.diff) {
+      best = { pulse, diff, hitWindow };
+    }
+  }
+  return best;
+};
+
 const spawnInterval = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
   const tutorialSlow = runtime.elapsed < 12 ? 0.32 : runtime.elapsed < 22 ? 0.16 : 0;
+  const lanePressure = Math.max(0, runtime.targetLanes - 2) * 0.12;
   return clamp(
-    lerp(1.18, 0.36, d) + (3 - tier) * 0.06 + tutorialSlow + Math.random() * 0.12,
-    0.22,
+    lerp(1.2, 0.38, d) + (3 - tier) * 0.06 + tutorialSlow - lanePressure + Math.random() * 0.12,
+    0.2,
     1.35
   );
 };
@@ -435,33 +519,44 @@ const acquirePulse = (runtime: Runtime) => {
 };
 
 const spawnPulseSet = (runtime: Runtime) => {
+  syncPhaseProgression(runtime);
   if (!runtime.currentChunk || runtime.chunkPulsesLeft <= 0) chooseChunk(runtime);
   runtime.chunkPulsesLeft -= 1;
   const tier = runtime.currentChunk?.tier ?? 0;
 
   const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
-  const baseSpeed = lerp(1.08, 2.55, d);
-  const doubleChance =
-    runtime.elapsed < 16
-      ? 0
-      : clamp(0.05 + Math.max(0, tier - 1) * 0.08 + d * 0.15, 0, 0.52);
-  const count = Math.random() < doubleChance ? 2 : 1;
+  const phaseSpeedBoost = 1 + (runtime.phase - 1) * 0.22;
+  const baseSpeed = lerp(1.0, 2.35, d) * phaseSpeedBoost + runtime.parries * 0.006;
+  let count = 1;
+  if (runtime.phase >= 2 && Math.random() < clamp(0.36 + d * 0.28 + tier * 0.06, 0.2, 0.78)) {
+    count += 1;
+  }
+  if (runtime.phase >= 3 && Math.random() < clamp(0.12 + d * 0.2 + tier * 0.05, 0.08, 0.5)) {
+    count += 1;
+  }
+  const lanes = activeLanes(runtime);
+  if (lanes.length === 0) return;
+  count = Math.min(count, lanes.length);
 
   const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.34;
   const spacing = 0.45 + Math.random() * 0.28;
-  const baseLane = Math.floor(Math.random() * CARDINAL_ANGLES.length);
+  for (let i = lanes.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+  }
 
   for (let i = 0; i < count; i += 1) {
     const pulse = acquirePulse(runtime);
     pulse.active = true;
     pulse.parried = false;
-    const lane = (baseLane + i) % CARDINAL_ANGLES.length;
+    const lane = lanes[i];
+    pulse.lane = lane;
     pulse.angle = CARDINAL_ANGLES[lane];
     pulse.radius = baseRadius + i * spacing;
     pulse.speed = clamp(
-      baseSpeed * (0.8 + Math.random() * 0.55 + i * 0.05 + tier * 0.03),
-      0.9,
-      3.25
+      baseSpeed * (0.8 + Math.random() * 0.5 + i * 0.07 + tier * 0.04),
+      0.85,
+      4.15
     );
     pulse.thickness = clamp(lerp(0.12, 0.24, d) + tier * 0.01 + Math.random() * 0.04, 0.11, 0.3);
     pulse.colorIndex = runtime.nextColor;
@@ -511,6 +606,9 @@ function PulseParryOverlay() {
   const best = usePulseParryStore((state) => state.best);
   const lives = usePulseParryStore((state) => state.lives);
   const parries = usePulseParryStore((state) => state.parries);
+  const phase = usePulseParryStore((state) => state.phase);
+  const targetLanes = usePulseParryStore((state) => state.targetLanes);
+  const tapMisses = usePulseParryStore((state) => state.tapMisses);
   const combo = usePulseParryStore((state) => state.combo);
   const multiplier = usePulseParryStore((state) => state.multiplier);
   const failMessage = usePulseParryStore((state) => state.failMessage);
@@ -522,7 +620,7 @@ function PulseParryOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
         <div className="text-[11px] text-cyan-50/85">
-          Read the lane, tap once, and protect the core.
+          Tap when moving pulses overlap the stationed target nodes.
         </div>
       </div>
 
@@ -533,6 +631,12 @@ function PulseParryOverlay() {
 
       {status === 'PLAYING' && (
         <div className="absolute left-4 top-[92px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
+          <div>
+            Phase <span className="font-semibold text-cyan-200">{phase}</span>
+          </div>
+          <div>
+            Targets <span className="font-semibold text-emerald-200">{targetLanes}</span>
+          </div>
           <div>
             Parries <span className="font-semibold text-cyan-200">{parries}</span>
           </div>
@@ -545,6 +649,9 @@ function PulseParryOverlay() {
           <div>
             Multiplier <span className="font-semibold text-amber-200">x{multiplier.toFixed(2)}</span>
           </div>
+          <div>
+            Mistimed Tap Chain <span className="font-semibold text-rose-200">{tapMisses}/4</span>
+          </div>
         </div>
       )}
 
@@ -553,10 +660,10 @@ function PulseParryOverlay() {
           <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/80 via-emerald-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PULSE PARRY</div>
             <div className="mt-2 text-sm text-white/85">
-              Time the rotating cursor to the incoming lane.
+              Wait for the moving pulse to overlap a stationed target node.
             </div>
             <div className="mt-1 text-sm text-white/80">
-              Tap on the guide ring to reflect, protect 3 core lives, and build combo.
+              Tap at overlap to parry. Later phases speed up pulses and activate more targets.
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
@@ -722,28 +829,17 @@ function PulseParryScene() {
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
 
-    if (tap) {
-      if (store.status !== 'PLAYING') {
-        resetRuntime(runtime);
-        usePulseParryStore.getState().startRun();
-      } else if (runtime.tapCooldown <= 0) {
-        runtime.parryAngle = quantizeCardinal(runtime.cursorAngle);
-        runtime.parryWindowLeft = runtime.parryWindow;
-        runtime.shockActive = true;
-        runtime.shockRadius = runtime.parryRadius;
-        runtime.shockLife = runtime.shockDuration;
-        runtime.tapCooldown = 0.03;
-        runtime.lastTapAt = runtime.elapsed;
-        runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
-        usePulseParryStore.getState().onTapFx();
-      }
+    if (tap && store.status !== 'PLAYING') {
+      resetRuntime(runtime);
+      usePulseParryStore.getState().startRun();
     }
 
     if (store.status === 'PLAYING') {
+      let failed = false;
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('timing-defense', runtime.elapsed);
-      runtime.cursorAngle = normalizeAngle(runtime.cursorAngle + dt * lerp(1.8, 2.8, clamp(runtime.elapsed / 90, 0, 1)));
+      syncPhaseProgression(runtime);
       runtime.runeSpin += dt * 0.5;
       runtime.parryWindowLeft = Math.max(0, runtime.parryWindowLeft - dt);
 
@@ -752,12 +848,91 @@ function PulseParryScene() {
       runtime.perfectThreshold = runtime.hitThreshold * 0.46;
       runtime.parryRadius = lerp(1.02, 1.36, d);
       runtime.tapCooldown = Math.max(0, runtime.tapCooldown - dt);
+      const overlapCandidate = findOverlapCandidate(runtime, 1.35);
+      runtime.overlapLane = overlapCandidate?.pulse.lane ?? -1;
+      runtime.overlapStrength = overlapCandidate
+        ? clamp(1 - overlapCandidate.diff / (overlapCandidate.hitWindow * 1.35), 0, 1)
+        : 0;
+      runtime.cursorAngle =
+        runtime.overlapLane >= 0
+          ? CARDINAL_ANGLES[runtime.overlapLane]
+          : normalizeAngle(runtime.cursorAngle + dt * (1.2 + runtime.phase * 0.35));
 
-      runtime.spawnTimer -= dt;
-      if (runtime.spawnTimer <= 0) {
-        spawnPulseSet(runtime);
-        const tier = runtime.currentChunk?.tier ?? 0;
-        runtime.spawnTimer += spawnInterval(runtime, tier);
+      if (tap && runtime.tapCooldown <= 0) {
+        runtime.tapCooldown = 0.08;
+        runtime.shockActive = true;
+        runtime.shockRadius = runtime.parryRadius;
+        runtime.shockLife = runtime.shockDuration;
+        runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
+        usePulseParryStore.getState().onTapFx();
+
+        const hit = findOverlapCandidate(runtime, 1);
+        if (hit) {
+          const pulse = hit.pulse;
+          const perfect = hit.diff <= runtime.perfectThreshold;
+          pulse.parried = true;
+          pulse.life = 0.22;
+          pulse.flash = 1;
+          runtime.parryAngle = pulse.angle;
+          runtime.parryWindowLeft = runtime.parryWindow;
+          runtime.parries += 1;
+          runtime.tapMisses = 0;
+          runtime.perfectCombo = perfect ? runtime.perfectCombo + 1 : 0;
+          runtime.resonance = clamp(runtime.resonance + (perfect ? 1.15 : 0.5), 0, 18);
+          syncPhaseProgression(runtime);
+
+          const laneBonus = Math.max(0, runtime.targetLanes - 2) * 0.18;
+          runtime.multiplier =
+            1 +
+            Math.min(runtime.perfectCombo, 16) * 0.1 +
+            runtime.resonance * 0.03 +
+            laneBonus;
+          runtime.score += runtime.multiplier * (perfect ? 1.55 : 1);
+          runtime.coreGlow = Math.min(1.7, runtime.coreGlow + (perfect ? 0.34 : 0.2));
+          runtime.shake = Math.min(1.2, runtime.shake + (perfect ? 0.26 : 0.15));
+
+          spawnBurst(
+            runtime,
+            pulse.radius,
+            perfect ? WHITE : PULSE_COLORS[pulse.colorIndex],
+            perfect ? 9 : 6,
+            perfect ? 2.5 : 1.8
+          );
+          playClick(perfect);
+          if (perfect) {
+            runtime.perfectFlash = 1;
+            usePulseParryStore.getState().onPerfectFx();
+          }
+        } else {
+          runtime.tapMisses += 1;
+          runtime.perfectCombo = 0;
+          runtime.resonance = Math.max(0, runtime.resonance - 1.05);
+          runtime.multiplier = Math.max(1, runtime.multiplier * 0.82);
+          runtime.shake = Math.min(1.4, runtime.shake + 0.25);
+          runtime.coreGlow = Math.min(1.3, runtime.coreGlow + 0.1);
+
+          if (runtime.tapMisses >= 4) {
+            runtime.tapMisses = 0;
+            runtime.lives -= 1;
+            runtime.perfectFlash = 1;
+            spawnBurst(runtime, runtime.parryRadius, DANGER, 10, 2.1);
+            usePulseParryStore.getState().setLives(runtime.lives);
+            if (runtime.lives <= 0) {
+              runtime.failMessage = 'Too many mistimed pulses.';
+              usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
+              failed = true;
+            }
+          }
+        }
+      }
+
+      if (!failed) {
+        runtime.spawnTimer -= dt;
+        if (runtime.spawnTimer <= 0) {
+          spawnPulseSet(runtime);
+          const tier = runtime.currentChunk?.tier ?? 0;
+          runtime.spawnTimer += spawnInterval(runtime, tier);
+        }
       }
 
       if (runtime.shockActive) {
@@ -768,106 +943,33 @@ function PulseParryScene() {
         }
       }
 
-      let failed = false;
-
       for (const pulse of runtime.pulses) {
+        if (failed) break;
         if (!pulse.active) continue;
         pulse.flash = Math.max(0, pulse.flash - dt * 4.5);
 
         if (!pulse.parried) {
           pulse.radius -= pulse.speed * dt;
 
-          if (runtime.shockActive) {
-            const diff = Math.abs(pulse.radius - runtime.parryRadius);
-            const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
-            const laneWindow = 0.42;
-            const laneAligned = angleDiff(pulse.angle, runtime.parryAngle) <= laneWindow;
-            if (diff <= hitWindow && runtime.parryWindowLeft > 0 && laneAligned) {
-              pulse.parried = true;
-              pulse.life = 0.22;
-              pulse.flash = 1;
-              runtime.shockActive = false;
-              runtime.shockLife = 0;
-              runtime.parryWindowLeft = 0;
-
-              const perfect = diff <= runtime.perfectThreshold;
-              runtime.parries += 1;
-              runtime.perfectCombo = perfect ? runtime.perfectCombo + 1 : 0;
-              runtime.resonance = clamp(
-                runtime.resonance + (perfect ? 1.2 : 0.5),
-                0,
-                18
-              );
-              runtime.multiplier =
-                1 + Math.min(runtime.perfectCombo, 16) * 0.12 + runtime.resonance * 0.03;
-              runtime.score += runtime.multiplier + (perfect ? 0.3 : 0);
-              if (perfect) {
-                const targetAngle = normalizeAngle(runtime.runeSpin + runtime.parryAngle);
-                const runeHit = CARDINAL_ANGLES.some(
-                  (base) => angleDiff(targetAngle, base) < 0.24
-                );
-                if (runeHit) {
-                  runtime.score += 2.5;
-                  runtime.coreGlow = Math.min(1.8, runtime.coreGlow + 0.16);
-                }
-              }
-              runtime.coreGlow = Math.min(1.6, runtime.coreGlow + (perfect ? 0.34 : 0.2));
-              runtime.shake = Math.min(1.2, runtime.shake + (perfect ? 0.26 : 0.15));
-
-              spawnBurst(
-                runtime,
-                pulse.radius,
-                perfect ? WHITE : PULSE_COLORS[pulse.colorIndex],
-                perfect ? 9 : 6,
-                perfect ? 2.5 : 1.8
-              );
-
-              playClick(perfect);
-              if (perfect) {
-                runtime.perfectFlash = 1;
-                usePulseParryStore.getState().onPerfectFx();
-              }
-              continue;
-            }
-          }
-
           if (pulse.radius <= CORE_FAIL_RADIUS + pulse.thickness * 0.42) {
-            const laneAligned = angleDiff(pulse.angle, runtime.parryAngle) <= 0.42;
-            if (
-              withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1) &&
-              laneAligned
-            ) {
-              pulse.parried = true;
-              pulse.life = 0.16;
-              pulse.flash = 0.7;
-              runtime.score += 0.15;
-              runtime.shockActive = false;
-              runtime.shockLife = 0;
-              runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.14);
-            } else {
-              runtime.resonance = Math.max(0, runtime.resonance - 0.8);
-              runtime.shake = Math.min(1.5, runtime.shake + 0.72);
-              runtime.perfectFlash = 1;
-              spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
-              if (runtime.lives > 1) {
-                runtime.lives -= 1;
-                runtime.perfectCombo = 0;
-                runtime.multiplier = Math.max(1, runtime.multiplier * 0.72);
-                runtime.coreGlow = Math.min(1.35, runtime.coreGlow + 0.25);
-                runtime.parryWindowLeft = 0;
-                runtime.shockActive = false;
-                runtime.shockLife = 0;
-                pulse.active = false;
-                usePulseParryStore.getState().setLives(runtime.lives);
-                usePulseParryStore
-                  .getState()
-                  .updateHud(runtime.score, runtime.parries, runtime.perfectCombo, runtime.multiplier);
-              } else {
-                runtime.failMessage = 'Core integrity depleted.';
-                usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
-                failed = true;
-                break;
-              }
+            runtime.resonance = Math.max(0, runtime.resonance - 0.8);
+            runtime.shake = Math.min(1.5, runtime.shake + 0.72);
+            runtime.perfectFlash = 1;
+            spawnBurst(runtime, CORE_FAIL_RADIUS + 0.08, DANGER, 14, 2.4);
+            runtime.lives -= 1;
+            runtime.tapMisses = 0;
+            runtime.perfectCombo = 0;
+            runtime.multiplier = Math.max(1, runtime.multiplier * 0.74);
+            runtime.coreGlow = Math.min(1.35, runtime.coreGlow + 0.25);
+            runtime.parryWindowLeft = 0;
+            runtime.shockActive = false;
+            runtime.shockLife = 0;
+            pulse.active = false;
+            usePulseParryStore.getState().setLives(runtime.lives);
+            if (runtime.lives <= 0) {
+              runtime.failMessage = 'Core integrity depleted.';
+              usePulseParryStore.getState().endRun(runtime.score, runtime.failMessage);
+              failed = true;
             }
           }
         } else {
@@ -883,7 +985,16 @@ function PulseParryScene() {
         runtime.hudCommit = 0;
         usePulseParryStore
           .getState()
-          .updateHud(runtime.score, runtime.parries, runtime.perfectCombo, runtime.multiplier);
+          .updateHud(
+            runtime.score,
+            runtime.lives,
+            runtime.parries,
+            runtime.phase,
+            runtime.targetLanes,
+            runtime.tapMisses,
+            runtime.perfectCombo,
+            runtime.multiplier
+          );
       }
     }
 
@@ -954,6 +1065,8 @@ function PulseParryScene() {
     }
 
     if (cursorRef.current) {
+      const hasOverlap = runtime.overlapLane >= 0;
+      cursorRef.current.visible = hasOverlap;
       cursorRef.current.position.set(
         Math.cos(runtime.cursorAngle) * runtime.parryRadius,
         0.02,
@@ -961,44 +1074,51 @@ function PulseParryScene() {
       );
       cursorRef.current.rotation.set(Math.PI * 0.5, runtime.cursorAngle, 0);
       const mat = cursorRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = clamp(0.66 + runtime.coreGlow * 0.18, 0.55, 0.95);
+      mat.opacity = clamp(0.56 + runtime.overlapStrength * 0.34 + runtime.coreGlow * 0.12, 0.4, 0.95);
     }
 
     for (let i = 0; i < CARDINAL_ANGLES.length; i += 1) {
       const angle = CARDINAL_ANGLES[i];
+      const laneActive = laneIsActive(runtime, i);
+      const isHot = runtime.overlapLane === i;
       const isLocked = angleDiff(runtime.parryAngle, angle) < 0.08 && runtime.parryWindowLeft > 0;
       const pulse = 0.5 + 0.5 * Math.sin(runtime.elapsed * 5 + i);
 
       const petal = parryPetalRefs.current[i];
       if (petal) {
+        petal.visible = laneActive;
         petal.position.set(
           Math.cos(angle) * (runtime.parryRadius + 0.15),
           0.015,
           Math.sin(angle) * (runtime.parryRadius + 0.15)
         );
         petal.rotation.set(-Math.PI * 0.5, 0, angle);
-        petal.scale.setScalar(isLocked ? 1.22 : 1 + pulse * 0.08);
+        petal.scale.setScalar(
+          isLocked ? 1.22 : isHot ? 1.08 + runtime.overlapStrength * 0.2 : 1 + pulse * 0.08
+        );
         const mat = petal.material as THREE.MeshBasicMaterial;
-        mat.color.copy(isLocked ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
-        mat.opacity = isLocked ? 0.9 : 0.46;
+        mat.color.copy(isLocked || isHot ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
+        mat.opacity = isLocked ? 0.9 : isHot ? clamp(0.5 + runtime.overlapStrength * 0.36, 0.5, 0.9) : 0.42;
       }
 
       const rune = runeRefs.current[i];
       if (rune) {
+        rune.visible = laneActive;
         const targetAngle = runtime.runeSpin + angle;
         rune.position.set(Math.cos(targetAngle) * 3.48, 0.05, Math.sin(targetAngle) * 3.48);
         rune.rotation.set(Math.PI * 0.5, targetAngle, 0);
         const mat = rune.material as THREE.MeshBasicMaterial;
-        mat.opacity = 0.35 + runtime.resonance * 0.02;
+        mat.opacity = 0.32 + runtime.resonance * 0.02 + (isHot ? 0.1 : 0);
       }
 
       const laneBeam = laneBeamRefs.current[i];
       if (laneBeam) {
+        laneBeam.visible = laneActive;
         const lanePulse = 0.2 + Math.max(0, Math.sin(runtime.elapsed * 3 + i) * 0.1);
         laneBeam.position.set(Math.cos(angle) * 2.1, 0.005, Math.sin(angle) * 2.1);
         laneBeam.rotation.set(-Math.PI * 0.5, 0, angle);
         const mat = laneBeam.material as THREE.MeshBasicMaterial;
-        mat.opacity = lanePulse + (isLocked ? 0.26 : 0);
+        mat.opacity = lanePulse + (isLocked ? 0.26 : 0) + (isHot ? runtime.overlapStrength * 0.25 : 0);
       }
     }
 
