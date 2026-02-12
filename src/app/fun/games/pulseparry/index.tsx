@@ -837,13 +837,21 @@ function PulseParryScene() {
       'enter',
       'Enter',
       'arrowup',
+      'ArrowUp',
       'arrowdown',
+      'ArrowDown',
       'arrowleft',
+      'ArrowLeft',
       'arrowright',
+      'ArrowRight',
       'w',
+      'KeyW',
       'a',
+      'KeyA',
       's',
+      'KeyS',
       'd',
+      'KeyD',
       'W',
       'A',
       'S',
@@ -1560,6 +1568,7 @@ const PulseParry: React.FC<{ soundsOn?: boolean }> = () => {
       dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
       className="absolute inset-0 h-full w-full"
+      style={{ touchAction: 'none' }}
       onContextMenu={(event) => event.preventDefault()}
     >
       <PulseParryScene />
