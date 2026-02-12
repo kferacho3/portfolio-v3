@@ -56,6 +56,7 @@ const SHOT_TTL = 3.2;
 
 const BASE_SPEED = 12;
 const MAX_SPEED = 24;
+const FIRE_INTERVAL_BASE = 0.13;
 
 const FIXED_STEP = 1 / 120;
 const MAX_SIM_STEPS = 8;
@@ -65,6 +66,10 @@ const HIT_FX_TTL = 0.22;
 
 const SPACING_MIN = 6.6;
 const SPACING_MAX = 9.4;
+const INTRO_SPAWN_BUFFER = 12;
+
+const BREACH_AMMO_PENALTY_BASE = 6;
+const BREACH_AMMO_PENALTY_PER_BLOCK = 2;
 
 const GLASS_PHYSICS = {
   restitution: 0.8,
@@ -604,6 +609,7 @@ function SmashHit() {
     beatInterval: 60 / THEMES[0].bpm,
 
     spaceWasDown: false,
+    fireCooldown: 0,
 
     smoothedFps: 60,
     lowFpsTime: 0,
@@ -1024,16 +1030,28 @@ function SmashHit() {
       .copy(THEME_COLORS[themeIndex].corridor)
       .lerp(COLOR_WHITE, 0.15);
 
-    barrier.crystalActive = rng.bool(0.36);
+    const crystalChance = roomIndex === 0 ? 0.65 : roomIndex === 1 ? 0.52 : 0.36;
+    barrier.crystalActive = rng.bool(crystalChance);
     barrier.crystalX = rng.float(-2.3, 2.3);
     barrier.crystalY = rng.float(-1.2, 1.2);
     barrier.crystalValue = pickCrystalValue(rng);
 
     const required = requiredPattern(difficulty, rng);
 
-    const holeChance = clamp(0.13 + difficulty * 0.03, 0.13, 0.42);
-    const stoneChance = clamp(0.08 + difficulty * 0.035, 0.08, 0.35);
-    const heroChance = clamp(0.08 + difficulty * 0.02, 0.08, 0.22);
+    const holeChance =
+      roomIndex === 0
+        ? 0.72
+        : roomIndex === 1
+          ? 0.5
+          : clamp(0.13 + difficulty * 0.03, 0.13, 0.42);
+    const stoneChance =
+      roomIndex <= 1
+        ? 0
+        : clamp(0.08 + difficulty * 0.035, 0.08, 0.35);
+    const heroChance =
+      roomIndex <= 1
+        ? 0.24
+        : clamp(0.08 + difficulty * 0.02, 0.08, 0.22);
 
     const blockBase = slot * BLOCKS_PER_BARRIER;
     for (let b = 0; b < BLOCKS_PER_BARRIER; b += 1) {
@@ -1064,16 +1082,19 @@ function SmashHit() {
     const rng = new SeededRandom(seed);
 
     const themeIndex = themeIndexForRoom(w.seed, roomIndex);
-    const roomStartZ = START_SPAWN_Z - roomIndex * ROOM_LENGTH;
+    const roomStartZ =
+      START_SPAWN_Z - roomIndex * ROOM_LENGTH - (roomIndex === 0 ? INTRO_SPAWN_BUFFER : 0);
 
     const difficulty = Math.floor(roomIndex / 3);
-    const barrierCount = clamp(
-      3 + rng.int(0, 2) + Math.floor(difficulty * 0.35),
-      3,
-      6
-    );
+    const barrierCount =
+      roomIndex === 0
+        ? 2 + rng.int(0, 1)
+        : clamp(3 + rng.int(0, 2) + Math.floor(difficulty * 0.35), 3, 6);
 
-    let cursorZ = roomStartZ - rng.float(4.5, 7.5);
+    let cursorZ =
+      roomIndex === 0
+        ? roomStartZ - rng.float(8.5, 11.5)
+        : roomStartZ - rng.float(4.5, 7.5);
 
     for (let i = 0; i < barrierCount; i += 1) {
       spawnBarrier(roomIndex, cursorZ, themeIndex, rng, difficulty);
@@ -1177,6 +1198,7 @@ function SmashHit() {
     w.beatInterval = 60 / THEMES[t0].bpm;
 
     w.spaceWasDown = false;
+    w.fireCooldown = 0;
 
     camera.position.set(0, 0, START_Z);
     camera.lookAt(0, 0, START_Z - 12);
@@ -1259,11 +1281,11 @@ function SmashHit() {
   };
 
   const fireVolley = () => {
-    if (snap.phase !== 'playing') return;
-    if (!smashHitState.useBall(1)) return;
+    if (smashHitState.phase !== 'playing') return false;
+    if (!smashHitState.useBall(1)) return false;
 
     ensureAudio();
-    const comboBoost = comboIntensity(snap.combo);
+    const comboBoost = comboIntensity(smashHitState.combo);
     playTone(
       220 + comboBoost * 90 + Math.random() * 30,
       0.09,
@@ -1272,7 +1294,11 @@ function SmashHit() {
     );
 
     const w = world.current;
-    const count = clamp(snap.multiball, 1, getMultiBallCount(snap.combo));
+    const count = clamp(
+      smashHitState.multiball,
+      1,
+      getMultiBallCount(smashHitState.combo)
+    );
 
     const spreadCenter = (count - 1) * 0.5;
     for (let i = 0; i < count; i += 1) {
@@ -1287,6 +1313,8 @@ function SmashHit() {
         -w.speed * 0.22
       );
     }
+
+    return true;
   };
 
   const processEvents = () => {
@@ -1315,11 +1343,17 @@ function SmashHit() {
         const toneLift = comboIntensity(smashHitState.combo);
         playTone(720 + toneLift * 120 + Math.random() * 40, 0.12, 'sine', 0.08);
       } else if (type === EVT.PENALTY_HIT) {
-        smashHitState.applyPenalty();
+        const penalty = Math.max(1, Math.floor(a || 10));
+        smashHitState.combo = 0;
+        smashHitState.multiball = 1;
+        smashHitState.addAmmo(-penalty);
         w.cameraShake = Math.max(w.cameraShake, 0.45);
         w.bloomPunch = Math.max(w.bloomPunch, 0.18);
         w.flashAlpha = Math.max(w.flashAlpha, 0.2);
         playTone(120, 0.18, 'sawtooth', 0.07 + STONE_PHYSICS.friction * 0.035);
+        if (smashHitState.ammo <= 0) {
+          emitEvent(w.eventBus, EVT.GAME_OVER, 0, 0, 0);
+        }
       } else if (type === EVT.GAME_OVER) {
         smashHitState.endGame();
         w.cameraShake = Math.max(w.cameraShake, 0.7);
