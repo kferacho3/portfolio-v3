@@ -11,7 +11,7 @@ import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { SeededRandom } from '../../utils/seededRandom';
 
-import { stepsState } from './state';
+import { stepsState, type StepsTrailStyle } from './state';
 
 export { stepsState } from './state';
 
@@ -33,6 +33,7 @@ type Tile = {
   hazardOpenWindow: number;
   hazardWindowStart: number;
   hazardOffset: number;
+  hazardMotion: number;
   fallStart: number;
   drop: number;
   spawnPulse: number;
@@ -59,6 +60,8 @@ const MAX_RENDER_TILES = 520;
 const PATH_AHEAD = 320;
 const KEEP_BEHIND = 120;
 const HAZARD_SEQUENCE_STEPS = 6;
+const TRAIL_DETAIL_SLOTS = 3;
+const MAX_TRAIL_DETAIL = MAX_RENDER_TILES * TRAIL_DETAIL_SLOTS;
 
 const INITIAL_PATH_TILES = 280;
 const CHUNK_MIN = 4;
@@ -93,11 +96,19 @@ const COLOR_GEM_BRIGHT = new THREE.Color('#7affde');
 const COLOR_WHITE = new THREE.Color('#ffffff');
 const COLOR_HAZARD_SAFE = new THREE.Color('#6af0cf');
 const COLOR_HAZARD_DANGER = new THREE.Color('#ff1f4d');
+const COLOR_WARNING = new THREE.Color('#ff1744');
 
 const HIDDEN_POS = new THREE.Vector3(0, -9999, 0);
 const HIDDEN_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const TRAIL_STYLES: StepsTrailStyle[] = ['classic', 'voxel', 'carved'];
+
+function trailStyleLabel(style: StepsTrailStyle) {
+  if (style === 'classic') return 'Classic';
+  if (style === 'voxel') return 'Voxel';
+  return 'Carved';
+}
 
 function keyFor(ix: number, iz: number) {
   return `${ix}|${iz}`;
@@ -224,12 +235,11 @@ function hazardStateAt(tile: Tile, simTime: number) {
   };
 }
 
-function hazardIsDangerous(tile: Tile, simTime: number) {
+function hazardIsDangerous(tile: Tile) {
   if (tile.hazard === 'none') return false;
-  const state = hazardStateAt(tile, simTime);
   const threshold =
     tile.hazard === 'spike' ? 0.44 : tile.hazard === 'saw' ? 0.5 : tile.hazard === 'clamp' ? 0.48 : 0.5;
-  return state.closedBlend > threshold;
+  return tile.hazardMotion > threshold;
 }
 
 function failReasonForHazard(kind: HazardKind) {
@@ -251,10 +261,12 @@ function Steps() {
   const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
 
   const tileMeshRef = useRef<THREE.InstancedMesh>(null);
+  const trailDetailMeshRef = useRef<THREE.InstancedMesh>(null);
   const spikeMeshRef = useRef<THREE.InstancedMesh>(null);
   const sawMeshRef = useRef<THREE.InstancedMesh>(null);
   const clampMeshRef = useRef<THREE.InstancedMesh>(null);
   const swingMeshRef = useRef<THREE.InstancedMesh>(null);
+  const warningMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
@@ -338,6 +350,13 @@ function Steps() {
     mesh.setMatrixAt(index, w.dummy.matrix);
   };
 
+  const hideTrailDetails = (mesh: THREE.InstancedMesh, tileSlot: number) => {
+    const base = tileSlot * TRAIL_DETAIL_SLOTS;
+    for (let i = 0; i < TRAIL_DETAIL_SLOTS; i += 1) {
+      hideInstance(mesh, base + i);
+    }
+  };
+
   const removeTile = (tile: Tile | null | undefined) => {
     if (!tile) return;
     const w = world.current;
@@ -419,6 +438,7 @@ function Steps() {
       hazardOpenWindow: hazardTiming.openWindow,
       hazardWindowStart: hazardTiming.windowStart,
       hazardOffset: hazardTiming.offset,
+      hazardMotion: 0,
       fallStart: Number.POSITIVE_INFINITY,
       drop: 0,
       spawnPulse: 1,
@@ -604,19 +624,23 @@ function Steps() {
 
     if (
       tileMeshRef.current &&
+      trailDetailMeshRef.current &&
       spikeMeshRef.current &&
       sawMeshRef.current &&
       clampMeshRef.current &&
       swingMeshRef.current &&
+      warningMeshRef.current &&
       gemMeshRef.current &&
       debrisMeshRef.current
     ) {
       for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
         hideInstance(tileMeshRef.current, i);
+        hideTrailDetails(trailDetailMeshRef.current, i);
         hideInstance(spikeMeshRef.current, i);
         hideInstance(sawMeshRef.current, i);
         hideInstance(clampMeshRef.current, i);
         hideInstance(swingMeshRef.current, i);
+        hideInstance(warningMeshRef.current, i);
         hideInstance(gemMeshRef.current, i);
       }
 
@@ -625,10 +649,12 @@ function Steps() {
       }
 
       tileMeshRef.current.instanceMatrix.needsUpdate = true;
+      trailDetailMeshRef.current.instanceMatrix.needsUpdate = true;
       spikeMeshRef.current.instanceMatrix.needsUpdate = true;
       sawMeshRef.current.instanceMatrix.needsUpdate = true;
       clampMeshRef.current.instanceMatrix.needsUpdate = true;
       swingMeshRef.current.instanceMatrix.needsUpdate = true;
+      warningMeshRef.current.instanceMatrix.needsUpdate = true;
       gemMeshRef.current.instanceMatrix.needsUpdate = true;
       debrisMeshRef.current.instanceMatrix.needsUpdate = true;
     }
@@ -652,7 +678,7 @@ function Steps() {
       w.cameraShake = Math.max(w.cameraShake, 0.2);
     }
 
-    if (tile.hazard !== 'none' && hazardIsDangerous(tile, w.simTime + 0.02)) {
+    if (tile.hazard !== 'none' && hazardIsDangerous(tile)) {
       triggerDeath(failReasonForHazard(tile.hazard));
       return;
     }
@@ -684,6 +710,13 @@ function Steps() {
         if (age > 0) {
           tile.drop = Math.min(FALL_HIDE_Y + 0.6, age * age * 4.6);
         }
+      }
+
+      if (tile.hazard === 'none') {
+        tile.hazardMotion = easingLerp(tile.hazardMotion, 0, dt, 9);
+      } else {
+        const motionTarget = hazardStateAt(tile, w.simTime).closedBlend;
+        tile.hazardMotion = easingLerp(tile.hazardMotion, motionTarget, dt, 8);
       }
     }
 
@@ -738,7 +771,7 @@ function Steps() {
           }
 
           if (standingTile.hazard !== 'none') {
-            if (hazardIsDangerous(standingTile, w.simTime) && w.idleOnTile > 0.12) {
+            if (hazardIsDangerous(standingTile) && w.idleOnTile > 0.12) {
               triggerDeath(failReasonForHazard(standingTile.hazard));
             }
           }
@@ -823,27 +856,33 @@ function Steps() {
 
     if (
       tileMeshRef.current &&
+      trailDetailMeshRef.current &&
       spikeMeshRef.current &&
       sawMeshRef.current &&
       clampMeshRef.current &&
       swingMeshRef.current &&
+      warningMeshRef.current &&
       gemMeshRef.current
     ) {
       const tileMesh = tileMeshRef.current;
+      const trailDetailMesh = trailDetailMeshRef.current;
       const spikeMesh = spikeMeshRef.current;
       const sawMesh = sawMeshRef.current;
       const clampMesh = clampMeshRef.current;
       const swingMesh = swingMeshRef.current;
+      const warningMesh = warningMeshRef.current;
       const gemMesh = gemMeshRef.current;
 
       for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
         const tile = w.instanceToTile[i];
         if (!tile) {
           hideInstance(tileMesh, i);
+          hideTrailDetails(trailDetailMesh, i);
           hideInstance(spikeMesh, i);
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
           hideInstance(swingMesh, i);
+          hideInstance(warningMesh, i);
           hideInstance(gemMesh, i);
           continue;
         }
@@ -851,10 +890,12 @@ function Steps() {
         if (tile.drop > FALL_HIDE_Y && tile.index < w.currentTileIndex - 8) {
           removeTile(tile);
           hideInstance(tileMesh, i);
+          hideTrailDetails(trailDetailMesh, i);
           hideInstance(spikeMesh, i);
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
           hideInstance(swingMesh, i);
+          hideInstance(warningMesh, i);
           hideInstance(gemMesh, i);
           continue;
         }
@@ -864,14 +905,19 @@ function Steps() {
         const wobble = Math.sin(w.simTime * 6 + tile.index * 0.41) * tile.spawnPulse * 0.03;
         const y = TILE_HEIGHT * 0.5 - tile.drop + wobble;
         const hazardState = tile.hazard === 'none' ? null : hazardStateAt(tile, w.simTime);
-        const hazardThreat = hazardState ? smoothStep01(hazardState.closedBlend) : 0;
+        const hazardThreat = tile.hazard === 'none' ? 0 : smoothStep01(tile.hazardMotion);
         const dangerPulse = hazardState
           ? (0.5 + 0.5 * Math.sin(w.simTime * 8 + tile.hazardPhase * 2.2)) * hazardThreat
           : 0;
+        const isVoxelTrail = snap.trailStyle === 'voxel';
+        const isCarvedTrail = snap.trailStyle === 'carved';
+        const tileScaleX = isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : 1;
+        const tileScaleY = isVoxelTrail ? 1.06 : isCarvedTrail ? 0.96 : 1;
+        const tileScaleZ = isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : 1;
 
         w.dummy.position.set(x, y, z);
         w.dummy.rotation.set(0, 0, 0);
-        w.dummy.scale.set(1, 1, 1);
+        w.dummy.scale.set(tileScaleX, tileScaleY, tileScaleZ);
         w.dummy.updateMatrix();
         tileMesh.setMatrixAt(i, w.dummy.matrix);
 
@@ -891,14 +937,72 @@ function Steps() {
         }
         tileMesh.setColorAt(i, w.tempColorA);
 
-        if (tile.hazard === 'spike' && hazardState && hazardThreat > 0.015) {
-          const bob = Math.sin(w.simTime * 7 + tile.hazardPhase) * 0.012 * hazardThreat;
-          const yLift = -0.28 * (1 - hazardThreat) + 0.04 + bob;
-          const scaleXZ = THREE.MathUtils.lerp(0.54, 1, hazardThreat);
-          const scaleY = THREE.MathUtils.lerp(0.18, 1.05, hazardThreat);
+        const detailBase = i * TRAIL_DETAIL_SLOTS;
+        if (isVoxelTrail) {
+          const liftA = 0.06 + Math.sin(tile.index * 0.77 + w.simTime * 1.5) * 0.018;
+          const liftB = 0.04 + Math.cos(tile.index * 0.59 + w.simTime * 1.8) * 0.015;
+          const liftC = 0.03 + Math.sin(tile.index * 0.33 + w.simTime * 1.2) * 0.012;
+          const side = tile.index % 2 === 0 ? 1 : -1;
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + liftA, z);
+          w.dummy.rotation.set(0, 0, 0);
+          w.dummy.scale.set(0.48, 0.16, 0.48);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
+          w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.1);
+          trailDetailMesh.setColorAt(detailBase, w.tempColorC);
+
+          w.dummy.position.set(x + 0.24 * side, y + TILE_HEIGHT * 0.5 + liftB, z - 0.24 * side);
+          w.dummy.scale.set(0.24, 0.12, 0.24);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
+          w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.05);
+          trailDetailMesh.setColorAt(detailBase + 1, w.tempColorC);
+
+          w.dummy.position.set(x - 0.24 * side, y + TILE_HEIGHT * 0.5 + liftC, z + 0.24 * side);
+          w.dummy.scale.set(0.24, 0.1, 0.24);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
+          w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.12);
+          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
+        } else if (isCarvedTrail) {
+          const axisX = tile.index % 2 === 0;
+          const carveLift = 0.01;
+          const carveColor = w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.45);
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift, z);
+          w.dummy.rotation.set(0, axisX ? 0 : Math.PI * 0.5, 0);
+          w.dummy.scale.set(0.72, 0.03, 0.12);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
+          trailDetailMesh.setColorAt(detailBase, carveColor);
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift, z);
+          w.dummy.rotation.set(0, axisX ? Math.PI * 0.5 : 0, 0);
+          w.dummy.scale.set(0.42, 0.03, 0.1);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
+          trailDetailMesh.setColorAt(detailBase + 1, carveColor);
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift + 0.004, z);
+          w.dummy.rotation.set(0, tile.index * 0.2, 0);
+          w.dummy.scale.set(0.12, 0.02, 0.12);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
+          w.tempColorC.copy(carveColor).lerp(COLOR_WHITE, 0.08);
+          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
+        } else {
+          hideTrailDetails(trailDetailMesh, i);
+        }
+
+        if (tile.hazard === 'spike' && hazardState) {
+          const bob = Math.sin(w.simTime * (2.2 + hazardThreat * 2.1) + tile.hazardPhase) * 0.01 * hazardThreat;
+          const yLift = -0.26 * (1 - hazardThreat) + 0.05 + bob;
+          const scaleXZ = THREE.MathUtils.lerp(0.3, 1, hazardThreat);
+          const scaleY = THREE.MathUtils.lerp(0.08, 1.02, hazardThreat);
 
           w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + yLift, z);
-          w.dummy.rotation.set(0, tile.hazardPhase + w.simTime * (0.28 + hazardThreat * 0.65), 0);
+          w.dummy.rotation.set(0, tile.hazardPhase + w.simTime * (0.16 + hazardThreat * 0.48), 0);
           w.dummy.scale.set(scaleXZ, scaleY, scaleXZ);
           w.dummy.updateMatrix();
           spikeMesh.setMatrixAt(i, w.dummy.matrix);
@@ -906,22 +1010,22 @@ function Steps() {
           w.tempColorB
             .copy(COLOR_SPIKE)
             .lerp(COLOR_HAZARD_DANGER, 0.45 + hazardThreat * 0.35)
-            .lerp(COLOR_WHITE, 0.05 + dangerPulse * 0.22);
+            .lerp(COLOR_WHITE, 0.05 + dangerPulse * 0.16);
           spikeMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(spikeMesh, i);
         }
 
-        if (tile.hazard === 'saw' && hazardState && hazardThreat > 0.015) {
+        if (tile.hazard === 'saw' && hazardState) {
           const driftDirection = tile.index % 2 === 0 ? 1 : -1;
           const approach = 1 - hazardThreat;
-          const sideOffset = driftDirection * (0.92 * approach + 0.08);
-          const sweep = Math.sin((hazardState.phase01 * 2 + tile.hazardPhase) * Math.PI * 2) * (0.06 + hazardThreat * 0.12);
-          const yLift = -0.16 * approach + 0.08 + hazardThreat * 0.06;
-          const sawScale = THREE.MathUtils.lerp(0.24, 1.05, hazardThreat);
+          const sideOffset = driftDirection * (1.04 * approach + 0.08);
+          const sweep = Math.sin(w.simTime * (1.4 + hazardThreat * 2.8) + tile.hazardPhase) * (0.04 + hazardThreat * 0.12);
+          const yLift = -0.18 * approach + 0.08 + hazardThreat * 0.06;
+          const sawScale = THREE.MathUtils.lerp(0.2, 1.02, hazardThreat);
 
           w.dummy.position.set(x + sideOffset, y + TILE_HEIGHT * 0.52 + yLift, z + sweep);
-          w.dummy.rotation.set(0, w.simTime * (1.8 + hazardThreat * 6.2), 0);
+          w.dummy.rotation.set(0, w.simTime * (1.2 + hazardThreat * 5.6), 0);
           w.dummy.scale.set(sawScale, 0.2 + hazardThreat * 0.16, sawScale);
           w.dummy.updateMatrix();
           sawMesh.setMatrixAt(i, w.dummy.matrix);
@@ -929,13 +1033,13 @@ function Steps() {
           w.tempColorB
             .copy(COLOR_SAW)
             .lerp(COLOR_HAZARD_DANGER, 0.5 + hazardThreat * 0.28)
-            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.2);
+            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.15);
           sawMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(sawMesh, i);
         }
 
-        if (tile.hazard === 'clamp' && hazardState && hazardThreat > 0.015) {
+        if (tile.hazard === 'clamp' && hazardState) {
           const close = hazardThreat;
           const approach = 1 - close;
           const axisX = tile.index % 2 === 0;
@@ -958,13 +1062,13 @@ function Steps() {
           w.tempColorB
             .copy(COLOR_CLAMP)
             .lerp(COLOR_HAZARD_DANGER, 0.46 + close * 0.32)
-            .lerp(COLOR_WHITE, 0.06 + dangerPulse * 0.2);
+            .lerp(COLOR_WHITE, 0.06 + dangerPulse * 0.14);
           clampMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(clampMesh, i);
         }
 
-        if (tile.hazard === 'swing' && hazardState && hazardThreat > 0.015) {
+        if (tile.hazard === 'swing' && hazardState) {
           const swingDir = tile.index % 2 === 0 ? 1 : -1;
           const anchorOnX = tile.index % 3 !== 0;
           const approach = 1 - hazardThreat;
@@ -986,10 +1090,25 @@ function Steps() {
           w.tempColorB
             .copy(COLOR_SWING)
             .lerp(COLOR_HAZARD_DANGER, 0.38 + hazardThreat * 0.34)
-            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.16);
+            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.12);
           swingMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(swingMesh, i);
+        }
+
+        if (tile.hazard !== 'none') {
+          const beaconPulse = 0.5 + 0.5 * Math.sin(w.simTime * 5.2 + tile.hazardPhase * 1.7);
+          const beaconScale = 0.16 + hazardThreat * 0.2 + beaconPulse * 0.08;
+          const beaconY = y + TILE_HEIGHT * 0.52 + 0.3 + beaconPulse * 0.08;
+          w.dummy.position.set(x, beaconY, z);
+          w.dummy.rotation.set(0, w.simTime * 0.8 + tile.hazardPhase, 0);
+          w.dummy.scale.set(beaconScale, beaconScale, beaconScale);
+          w.dummy.updateMatrix();
+          warningMesh.setMatrixAt(i, w.dummy.matrix);
+          w.tempColorB.copy(COLOR_WARNING).lerp(COLOR_WHITE, 0.08 + beaconPulse * 0.2 + hazardThreat * 0.18);
+          warningMesh.setColorAt(i, w.tempColorB);
+        } else {
+          hideInstance(warningMesh, i);
         }
 
         if (tile.hasGem && !tile.gemTaken && tile.drop < 1.1) {
@@ -1010,17 +1129,21 @@ function Steps() {
       }
 
       tileMesh.instanceMatrix.needsUpdate = true;
+      trailDetailMesh.instanceMatrix.needsUpdate = true;
       spikeMesh.instanceMatrix.needsUpdate = true;
       sawMesh.instanceMatrix.needsUpdate = true;
       clampMesh.instanceMatrix.needsUpdate = true;
       swingMesh.instanceMatrix.needsUpdate = true;
+      warningMesh.instanceMatrix.needsUpdate = true;
       gemMesh.instanceMatrix.needsUpdate = true;
 
       if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
+      if (trailDetailMesh.instanceColor) trailDetailMesh.instanceColor.needsUpdate = true;
       if (spikeMesh.instanceColor) spikeMesh.instanceColor.needsUpdate = true;
       if (sawMesh.instanceColor) sawMesh.instanceColor.needsUpdate = true;
       if (clampMesh.instanceColor) clampMesh.instanceColor.needsUpdate = true;
       if (swingMesh.instanceColor) swingMesh.instanceColor.needsUpdate = true;
+      if (warningMesh.instanceColor) warningMesh.instanceColor.needsUpdate = true;
       if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
     }
 
@@ -1136,6 +1259,11 @@ function Steps() {
         <meshStandardMaterial vertexColors roughness={0.48} metalness={0.05} />
       </instancedMesh>
 
+      <instancedMesh ref={trailDetailMeshRef} args={[undefined, undefined, MAX_TRAIL_DETAIL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial vertexColors roughness={0.42} metalness={0.12} />
+      </instancedMesh>
+
       <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
         <coneGeometry args={[0.16, 0.34, 12]} />
         <meshStandardMaterial vertexColors roughness={0.34} metalness={0.14} emissive="#ff2d55" emissiveIntensity={0.12} />
@@ -1154,6 +1282,11 @@ function Steps() {
       <instancedMesh ref={swingMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
         <sphereGeometry args={[0.18, 14, 14]} />
         <meshStandardMaterial vertexColors roughness={0.2} metalness={0.24} emissive="#ff8a00" emissiveIntensity={0.2} />
+      </instancedMesh>
+
+      <instancedMesh ref={warningMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+        <octahedronGeometry args={[0.14, 0]} />
+        <meshStandardMaterial vertexColors roughness={0.22} metalness={0.18} emissive="#ff1744" emissiveIntensity={0.24} />
       </instancedMesh>
 
       <instancedMesh ref={gemMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
@@ -1202,6 +1335,51 @@ function Steps() {
             Gems +{snap.runGems} (Bank {snap.gems})
           </div>
           <div style={{ fontSize: 11, opacity: 0.68 }}>Best: {snap.best}</div>
+        </div>
+
+        <div
+          style={{
+            position: 'absolute',
+            top: 14,
+            right: 14,
+            pointerEvents: 'auto',
+            background: 'rgba(10, 18, 38, 0.56)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 12,
+            padding: '8px 10px',
+            backdropFilter: 'blur(6px)',
+            color: 'white',
+            width: 210,
+            zIndex: 40,
+          }}
+        >
+          <div style={{ fontSize: 11, letterSpacing: 0.8, opacity: 0.84, marginBottom: 7 }}>TRAIL LAYOUT</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {TRAIL_STYLES.map((style) => (
+              <button
+                key={style}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={() => stepsState.setTrailStyle(style)}
+                style={{
+                  cursor: 'pointer',
+                  borderRadius: 999,
+                  border:
+                    snap.trailStyle === style ? '1px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.25)',
+                  background:
+                    snap.trailStyle === style ? 'linear-gradient(180deg, rgba(255,94,158,0.55), rgba(255,50,94,0.38))' : 'rgba(255,255,255,0.08)',
+                  color: 'white',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '5px 9px',
+                }}
+              >
+                {trailStyleLabel(style)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {snap.phase === 'playing' && (
@@ -1295,6 +1473,9 @@ function Steps() {
               </div>
               <div style={{ marginTop: 7, fontSize: 12, opacity: 0.82 }}>
                 Spikes, saws, clamps, and swing balls fully disappear on safe beats. Time steps through open windows.
+              </div>
+              <div style={{ marginTop: 5, fontSize: 11, opacity: 0.74 }}>
+                Warning beacons mark danger at distance. Active Trail: {trailStyleLabel(snap.trailStyle)}
               </div>
 
               {snap.phase === 'gameover' && (
