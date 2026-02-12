@@ -13,7 +13,8 @@ import { flipBoxState } from './state';
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
 type OrientationState = 'UPRIGHT' | 'FLAT';
 type TileRule = 'ANY' | 'UPRIGHT' | 'FLAT';
-type FailReason = 'gap' | 'rule' | 'height';
+type TileSizeRule = 'ANY' | 'HALF' | 'DOUBLE';
+type FailReason = 'gap' | 'rule' | 'height' | 'size';
 type PlayerBodyId = 'compact' | 'classic' | 'bloxorz' | 'tower';
 type PlayerSkinId =
   | 'glacier'
@@ -30,6 +31,7 @@ type TileRecord = {
   length: number;
   heightLevel: number;
   rule: TileRule;
+  sizeRule: TileSizeRule;
   checked: boolean;
   pulse: number;
   colorSeed: number;
@@ -74,6 +76,10 @@ type Runtime = {
   orientation: OrientationState;
   targetOrientation: OrientationState;
   displayScale: THREE.Vector3;
+  sizeTier: number;
+  targetSizeTier: number;
+  sizeScale: number;
+  targetSizeScale: number;
   rotX: number;
   rotTargetX: number;
   playerY: number;
@@ -84,6 +90,8 @@ type Runtime = {
   speed: number;
   cameraKick: number;
   crashFx: number;
+  sizeShiftFx: number;
+  sizeShiftMode: 'SLICE' | 'COMBINE' | null;
 
   tiles: TileRecord[];
   frontZ: number;
@@ -92,6 +100,9 @@ type Runtime = {
   gapRun: number;
   lastRule: TileRule;
   nextRuleHint: TileRule;
+  lastSizeRule: TileSizeRule;
+  sizeRuleCooldown: number;
+  nextSizeRuleHint: TileSizeRule;
 };
 
 type FlipBoxStore = {
@@ -102,15 +113,25 @@ type FlipBoxStore = {
   perfectStreak: number;
   failMessage: string;
   posture: OrientationState;
+  sizeTier: number;
   nextRule: TileRule;
+  nextSizeRule: TileSizeRule;
   body: PlayerBodyId;
   skin: PlayerSkinId;
   pulseNonce: number;
   crashNonce: number;
+  passNonce: number;
+  passLabel: string;
+  sizeShiftNonce: number;
+  sizeShiftMode: 'SLICE' | 'COMBINE' | null;
   startRun: () => void;
   resetToStart: () => void;
   setPosture: (value: OrientationState) => void;
+  setSizeTier: (value: number) => void;
   setNextRule: (value: TileRule) => void;
+  setNextSizeRule: (value: TileSizeRule) => void;
+  triggerPass: (label: string, perfect: boolean) => void;
+  triggerSizeShift: (mode: 'SLICE' | 'COMBINE') => void;
   cycleBody: () => void;
   cycleSkin: () => void;
   setBody: (value: PlayerBodyId) => void;
@@ -250,13 +271,28 @@ const TILE_BASE_COLORS = [
 ];
 const TILE_UPRIGHT = new THREE.Color('#95e6ff');
 const TILE_FLAT = new THREE.Color('#ff9ed7');
+const TILE_HALF = new THREE.Color('#7bf6ff');
+const TILE_DOUBLE = new THREE.Color('#ffd06f');
 const TILE_EDGE = new THREE.Color('#ffffff');
 const GLYPH_UPRIGHT = new THREE.Color('#00b8ff');
 const GLYPH_FLAT = new THREE.Color('#ff2da4');
+const GLYPH_HALF = new THREE.Color('#36f0ff');
+const GLYPH_DOUBLE = new THREE.Color('#ffb347');
 const PULSE = new THREE.Color('#ffffff');
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clampSizeTier = (tier: number) => clamp(Math.round(tier), -1, 1);
+const scaleForSizeTier = (tier: number) => {
+  if (tier <= -1) return 0.5;
+  if (tier >= 1) return 2;
+  return 1;
+};
+const labelForSizeTier = (tier: number) => {
+  if (tier <= -1) return 'HALF';
+  if (tier >= 1) return 'DOUBLE';
+  return 'NORMAL';
+};
 
 const readBest = () => {
   if (typeof window === 'undefined') return 0;
@@ -455,8 +491,8 @@ const createSkinTextures = (): Record<PlayerTextureKey, THREE.Texture> => {
   return { glacier, sunset, bloxorz, signal, violet };
 };
 
-const orientationHalfHeight = (orientation: OrientationState) =>
-  orientation === 'UPRIGHT' ? UPRIGHT_SIZE.y * 0.5 : FLAT_SIZE.y * 0.5;
+const orientationHalfHeight = (orientation: OrientationState, sizeScale = 1) =>
+  (orientation === 'UPRIGHT' ? UPRIGHT_SIZE.y * 0.5 : FLAT_SIZE.y * 0.5) * sizeScale;
 
 const sizeForOrientation = (orientation: OrientationState) =>
   orientation === 'UPRIGHT' ? UPRIGHT_SIZE : FLAT_SIZE;
@@ -465,6 +501,7 @@ const worldYForHeight = (heightLevel: number) => heightLevel * TILE_HEIGHT_STEP;
 
 const failReasonLabel = (reason: FailReason) => {
   if (reason === 'rule') return 'Wrong shape for the gate.';
+  if (reason === 'size') return 'Wrong size for the gate.';
   if (reason === 'height') return 'Bad fit on a split gate.';
   return 'You missed the lane support.';
 };
@@ -476,6 +513,7 @@ const createTile = (id: number): TileRecord => ({
   length: TILE_LENGTH,
   heightLevel: 0,
   rule: 'ANY',
+  sizeRule: 'ANY',
   checked: false,
   pulse: 0,
   colorSeed: 0,
@@ -491,11 +529,17 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
   perfectStreak: 0,
   failMessage: '',
   posture: 'UPRIGHT',
+  sizeTier: 0,
   nextRule: 'ANY',
+  nextSizeRule: 'ANY',
   body: initialPrefs.body,
   skin: initialPrefs.skin,
   pulseNonce: 0,
   crashNonce: 0,
+  passNonce: 0,
+  passLabel: '',
+  sizeShiftNonce: 0,
+  sizeShiftMode: null,
   startRun: () =>
     set({
       status: 'PLAYING',
@@ -504,7 +548,11 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
       perfectStreak: 0,
       failMessage: '',
       posture: 'UPRIGHT',
+      sizeTier: 0,
       nextRule: 'ANY',
+      nextSizeRule: 'ANY',
+      passLabel: '',
+      sizeShiftMode: null,
     }),
   resetToStart: () =>
     set({
@@ -514,10 +562,27 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
       perfectStreak: 0,
       failMessage: '',
       posture: 'UPRIGHT',
+      sizeTier: 0,
       nextRule: 'ANY',
+      nextSizeRule: 'ANY',
+      passLabel: '',
+      sizeShiftMode: null,
     }),
   setPosture: (value) => set({ posture: value }),
+  setSizeTier: (value) => set({ sizeTier: clampSizeTier(value) }),
   setNextRule: (value) => set({ nextRule: value }),
+  setNextSizeRule: (value) => set({ nextSizeRule: value }),
+  triggerPass: (label, perfect) =>
+    set((state) => ({
+      passNonce: state.passNonce + 1,
+      passLabel: label,
+      pulseNonce: perfect ? state.pulseNonce + 1 : state.pulseNonce,
+    })),
+  triggerSizeShift: (mode) =>
+    set((state) => ({
+      sizeShiftNonce: state.sizeShiftNonce + 1,
+      sizeShiftMode: mode,
+    })),
   cycleBody: () =>
     set((state) => {
       const next = nextBodyId(state.body);
@@ -575,16 +640,22 @@ const createRuntime = (): Runtime => ({
   orientation: 'UPRIGHT',
   targetOrientation: 'UPRIGHT',
   displayScale: UPRIGHT_SIZE.clone(),
+  sizeTier: 0,
+  targetSizeTier: 0,
+  sizeScale: 1,
+  targetSizeScale: 1,
   rotX: 0,
   rotTargetX: 0,
-  playerY: orientationHalfHeight('UPRIGHT'),
-  targetY: orientationHalfHeight('UPRIGHT'),
+  playerY: orientationHalfHeight('UPRIGHT', 1),
+  targetY: orientationHalfHeight('UPRIGHT', 1),
   unsupportedTime: 0,
   flipTimer: 999,
 
   speed: 2.2,
   cameraKick: 0,
   crashFx: 0,
+  sizeShiftFx: 0,
+  sizeShiftMode: null,
 
   tiles: Array.from({ length: TILE_POOL }, (_, idx) => createTile(idx)),
   frontZ: 0,
@@ -593,6 +664,9 @@ const createRuntime = (): Runtime => ({
   gapRun: 0,
   lastRule: 'ANY',
   nextRuleHint: 'ANY',
+  lastSizeRule: 'ANY',
+  sizeRuleCooldown: 0,
+  nextSizeRuleHint: 'ANY',
 });
 
 const scoreDifficulty = (runtime: Runtime) =>
