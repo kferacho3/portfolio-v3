@@ -29,6 +29,11 @@ type Tile = {
   gemTaken: boolean;
   hazard: HazardKind;
   hazardPhase: number;
+  hazardCount: number;
+  hazardCycle: number;
+  hazardOpenWindow: number;
+  hazardWindowStart: number;
+  hazardOffset: number;
   fallStart: number;
   drop: number;
   spawnPulse: number;
@@ -54,6 +59,9 @@ const PLAYER_BASE_Y = TILE_HEIGHT / 2 + PLAYER_SIZE[1] / 2;
 const MAX_RENDER_TILES = 520;
 const PATH_AHEAD = 320;
 const KEEP_BEHIND = 120;
+const SPIKE_LAYER_MAX = 4;
+const MAX_SPIKE_INSTANCES = MAX_RENDER_TILES * SPIKE_LAYER_MAX;
+const HAZARD_SEQUENCE_STEPS = 4;
 
 const INITIAL_PATH_TILES = 280;
 const CHUNK_MIN = 4;
@@ -85,6 +93,8 @@ const COLOR_CLAMP = new THREE.Color('#fb7185');
 const COLOR_GEM = new THREE.Color('#22e3b3');
 const COLOR_GEM_BRIGHT = new THREE.Color('#7affde');
 const COLOR_WHITE = new THREE.Color('#ffffff');
+const COLOR_HAZARD_SAFE = new THREE.Color('#6af0cf');
+const COLOR_HAZARD_DANGER = new THREE.Color('#ff5f7d');
 
 const HIDDEN_POS = new THREE.Vector3(0, -9999, 0);
 const HIDDEN_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -117,34 +127,121 @@ function stepDurationForScore(score: number) {
   return clamp(STEP_DURATION_BASE - score * 0.00065, STEP_DURATION_MIN, STEP_DURATION_BASE);
 }
 
-function hazardFrequency(kind: HazardKind) {
-  if (kind === 'saw') return 6.4;
-  if (kind === 'clamp') return 5.2;
-  return 0;
+function positiveMod(v: number, mod: number) {
+  if (mod <= 0) return 0;
+  return ((v % mod) + mod) % mod;
 }
 
-function hazardIsDangerous(kind: HazardKind, phase: number) {
-  if (kind === 'none') return false;
-  if (kind === 'spike') return true;
-  if (kind === 'saw') {
-    const wave = 0.5 + 0.5 * Math.sin(phase);
-    return wave > 0.35;
-  }
-  const wave = 0.5 + 0.5 * Math.cos(phase);
-  return wave > 0.56;
+function wrappedWindowContains(value: number, start: number, end: number, size: number) {
+  if (size <= 0) return true;
+  const s = positiveMod(start, size);
+  const e = positiveMod(end, size);
+  if (s <= e) return value >= s && value <= e;
+  return value >= s || value <= e;
 }
 
-function pickHazard(index: number, rng: SeededRandom): HazardKind {
+function wrappedDistance(a: number, b: number, size: number) {
+  const raw = Math.abs(a - b);
+  return Math.min(raw, Math.max(0, size - raw));
+}
+
+function pickHazard(index: number, rng: SeededRandom, streak: number): HazardKind {
   if (index < 10) return 'none';
+  if (streak >= 2) return 'none';
 
   const difficulty = Math.floor(index / 28);
-  const hazardChance = clamp(0.14 + difficulty * 0.03, 0.14, 0.46);
+  let hazardChance = clamp(0.14 + difficulty * 0.03, 0.14, 0.46);
+  if (streak === 1) hazardChance *= 0.64;
   if (!rng.bool(hazardChance)) return 'none';
 
   const r = rng.random();
-  if (r < 0.44) return 'spike';
-  if (r < 0.74) return 'saw';
+  if (r < 0.46) return 'spike';
+  if (r < 0.76) return 'saw';
   return 'clamp';
+}
+
+function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, sequence: number) {
+  if (kind === 'none') {
+    return {
+      count: 0,
+      cycle: 0.6,
+      openWindow: 0.3,
+      windowStart: 0,
+      offset: 0,
+    };
+  }
+
+  const difficulty = clamp(index / 260, 0, 1);
+  let cycle = THREE.MathUtils.lerp(0.76, 0.5, difficulty) + rng.float(-0.03, 0.03);
+  if (kind === 'saw') cycle *= 0.94;
+  if (kind === 'clamp') cycle *= 1.05;
+  cycle = clamp(cycle, 0.42, 0.84);
+
+  const openRatio = kind === 'spike' ? 0.54 : kind === 'saw' ? 0.47 : 0.44;
+  const openWindow = clamp(cycle * openRatio, 0.2, cycle - 0.15);
+
+  const sequenceStep = sequence % HAZARD_SEQUENCE_STEPS;
+  const stride = cycle / HAZARD_SEQUENCE_STEPS;
+  const windowStart = positiveMod(sequenceStep * stride + rng.float(-0.04, 0.04), cycle);
+
+  return {
+    count: kind === 'spike' ? rng.int(2, SPIKE_LAYER_MAX) : rng.int(2, 3),
+    cycle,
+    openWindow,
+    windowStart,
+    offset: rng.float(-0.08, 0.08),
+  };
+}
+
+function hazardStateAt(tile: Tile, simTime: number) {
+  if (tile.hazard === 'none') {
+    return {
+      open: true,
+      openBlend: 1,
+      closedBlend: 0,
+      phase01: 0,
+      sequenceIndex: 0,
+    };
+  }
+
+  const cycle = Math.max(0.28, tile.hazardCycle);
+  const local = positiveMod(simTime + tile.hazardOffset, cycle);
+  const openStart = positiveMod(tile.hazardWindowStart, cycle);
+  const openEnd = openStart + tile.hazardOpenWindow;
+  const open = wrappedWindowContains(local, openStart, openEnd, cycle);
+
+  const center = positiveMod(openStart + tile.hazardOpenWindow * 0.5, cycle);
+  const dist = wrappedDistance(local, center, cycle);
+  const radius = tile.hazardOpenWindow * 0.5;
+  const feather = Math.max(0.05, cycle * 0.12);
+  const openBlend = clamp(1 - (dist - radius) / feather, 0, 1);
+
+  return {
+    open,
+    openBlend,
+    closedBlend: 1 - openBlend,
+    phase01: local / cycle,
+    sequenceIndex: Math.floor((local / cycle) * Math.max(2, tile.hazardCount)),
+  };
+}
+
+function hazardIsDangerous(tile: Tile, simTime: number) {
+  if (tile.hazard === 'none') return false;
+
+  const cycle = Math.max(0.28, tile.hazardCycle);
+  const local = positiveMod(simTime + tile.hazardOffset, cycle);
+  const margin = Math.min(tile.hazardOpenWindow * 0.24, 0.055);
+  const safeStart = positiveMod(tile.hazardWindowStart + margin, cycle);
+  const safeWidth = Math.max(0.06, tile.hazardOpenWindow - margin * 2);
+  const safeEnd = safeStart + safeWidth;
+  return !wrappedWindowContains(local, safeStart, safeEnd, cycle);
+}
+
+function failReasonForHazard(kind: HazardKind) {
+  if (kind === 'spike') return 'Spike wave caught the cube.';
+  if (kind === 'saw') return 'Saw timing was off.';
+  if (kind === 'clamp') return 'Clamp snapped shut.';
+  return 'Trap timing was off.';
 }
 
 function Steps() {
@@ -177,6 +274,8 @@ function Steps() {
     chunkTilesLeft: 0,
     bonusTilesLeft: 0,
     nextIndex: 0,
+    hazardStreak: 0,
+    hazardSequence: 0,
 
     tilesByKey: new Map<string, Tile>(),
     tilesByIndex: new Map<number, Tile>(),
@@ -242,6 +341,12 @@ function Steps() {
     mesh.setMatrixAt(index, w.dummy.matrix);
   };
 
+  const hideSpikeGroup = (mesh: THREE.InstancedMesh, tileSlot: number) => {
+    for (let layer = 0; layer < SPIKE_LAYER_MAX; layer += 1) {
+      hideInstance(mesh, tileSlot * SPIKE_LAYER_MAX + layer);
+    }
+  };
+
   const removeTile = (tile: Tile | null | undefined) => {
     if (!tile) return;
     const w = world.current;
@@ -295,7 +400,15 @@ function Steps() {
     const inBonus = w.bonusTilesLeft > 0;
     if (inBonus) w.bonusTilesLeft -= 1;
 
-    const hazard = inBonus ? 'none' : pickHazard(index, w.rng);
+    const hazard = inBonus ? 'none' : pickHazard(index, w.rng, w.hazardStreak);
+    if (hazard === 'none') {
+      w.hazardStreak = 0;
+    } else {
+      w.hazardStreak += 1;
+    }
+    const hazardTiming = buildHazardTiming(hazard, index, w.rng, w.hazardSequence);
+    if (hazard !== 'none') w.hazardSequence += 1;
+
     const difficulty = Math.floor(index / 20);
     const gemChanceBase = clamp(0.16 + difficulty * 0.01, 0.16, 0.35);
     const gemChance = inBonus ? 0.95 : hazard === 'none' ? gemChanceBase : gemChanceBase * 0.52;
@@ -311,6 +424,11 @@ function Steps() {
       gemTaken: false,
       hazard,
       hazardPhase: w.rng.float(0, Math.PI * 2),
+      hazardCount: hazardTiming.count,
+      hazardCycle: hazardTiming.cycle,
+      hazardOpenWindow: hazardTiming.openWindow,
+      hazardWindowStart: hazardTiming.windowStart,
+      hazardOffset: hazardTiming.offset,
       fallStart: Number.POSITIVE_INFINITY,
       drop: 0,
       spawnPulse: 1,
@@ -426,6 +544,8 @@ function Steps() {
     w.chunkTilesLeft = 0;
     w.bonusTilesLeft = 0;
     w.nextIndex = 0;
+    w.hazardStreak = 0;
+    w.hazardSequence = 0;
 
     w.tilesByKey.clear();
     w.tilesByIndex.clear();
@@ -495,7 +615,7 @@ function Steps() {
     if (tileMeshRef.current && spikeMeshRef.current && sawMeshRef.current && clampMeshRef.current && gemMeshRef.current && debrisMeshRef.current) {
       for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
         hideInstance(tileMeshRef.current, i);
-        hideInstance(spikeMeshRef.current, i);
+        hideSpikeGroup(spikeMeshRef.current, i);
         hideInstance(sawMeshRef.current, i);
         hideInstance(clampMeshRef.current, i);
         hideInstance(gemMeshRef.current, i);
@@ -532,18 +652,9 @@ function Steps() {
       w.cameraShake = Math.max(w.cameraShake, 0.2);
     }
 
-    if (tile.hazard === 'spike') {
-      triggerDeath('Spikes got you.');
+    if (tile.hazard !== 'none' && hazardIsDangerous(tile, w.simTime)) {
+      triggerDeath(failReasonForHazard(tile.hazard));
       return;
-    }
-
-    if (tile.hazard !== 'none') {
-      const phase = w.simTime * hazardFrequency(tile.hazard) + tile.hazardPhase;
-      if (hazardIsDangerous(tile.hazard, phase)) {
-        if (tile.hazard === 'saw') triggerDeath('Saw timing was off.');
-        else triggerDeath('Clamp crushed the cube.');
-        return;
-      }
     }
 
     ensurePathAhead(w.currentTileIndex);
@@ -626,11 +737,9 @@ function Steps() {
             triggerDeath('Path collapsed under you.');
           }
 
-          if (standingTile.hazard !== 'none' && standingTile.hazard !== 'spike') {
-            const phase = w.simTime * hazardFrequency(standingTile.hazard) + standingTile.hazardPhase;
-            if (hazardIsDangerous(standingTile.hazard, phase) && w.idleOnTile > 0.08) {
-              if (standingTile.hazard === 'saw') triggerDeath('Saw timing was off.');
-              else triggerDeath('Clamp crushed the cube.');
+          if (standingTile.hazard !== 'none') {
+            if (hazardIsDangerous(standingTile, w.simTime) && w.idleOnTile > 0.06) {
+              triggerDeath(failReasonForHazard(standingTile.hazard));
             }
           }
         }
@@ -729,7 +838,7 @@ function Steps() {
         const tile = w.instanceToTile[i];
         if (!tile) {
           hideInstance(tileMesh, i);
-          hideInstance(spikeMesh, i);
+          hideSpikeGroup(spikeMesh, i);
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
           hideInstance(gemMesh, i);
@@ -739,7 +848,7 @@ function Steps() {
         if (tile.drop > FALL_HIDE_Y && tile.index < w.currentTileIndex - 8) {
           removeTile(tile);
           hideInstance(tileMesh, i);
-          hideInstance(spikeMesh, i);
+          hideSpikeGroup(spikeMesh, i);
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
           hideInstance(gemMesh, i);
@@ -750,6 +859,7 @@ function Steps() {
         const z = tile.iz * TILE_SIZE;
         const wobble = Math.sin(w.simTime * 6 + tile.index * 0.41) * tile.spawnPulse * 0.03;
         const y = TILE_HEIGHT * 0.5 - tile.drop + wobble;
+        const hazardState = tile.hazard === 'none' ? null : hazardStateAt(tile, w.simTime);
 
         w.dummy.position.set(x, y, z);
         w.dummy.rotation.set(0, 0, 0);
@@ -767,53 +877,94 @@ function Steps() {
         if (tile.drop > 0) {
           w.tempColorA.lerp(COLOR_FALL, clamp(tile.drop / 2.5, 0, 1));
         }
+        if (hazardState && !tile.bonus) {
+          w.tempColorA.lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.12);
+          w.tempColorA.lerp(COLOR_HAZARD_DANGER, hazardState.closedBlend * 0.19);
+        }
         tileMesh.setColorAt(i, w.tempColorA);
 
-        if (tile.hazard === 'spike') {
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + 0.09, z);
-          w.dummy.rotation.set(0, 0, 0);
-          w.dummy.scale.set(1, 1, 1);
-          w.dummy.updateMatrix();
-          spikeMesh.setMatrixAt(i, w.dummy.matrix);
+        if (tile.hazard === 'spike' && hazardState) {
+          const spikeCount = Math.max(2, Math.min(SPIKE_LAYER_MAX, tile.hazardCount));
+          const prevTile = w.tilesByIndex.get(tile.index - 1);
+          const spreadAlongX = !prevTile || prevTile.ix === tile.ix;
 
-          w.tempColorB.copy(COLOR_SPIKE);
-          if (tile.index === w.currentTileIndex) w.tempColorB.lerp(COLOR_WHITE, 0.24);
-          spikeMesh.setColorAt(i, w.tempColorB);
+          const cycleProgress = hazardState.phase01 * spikeCount;
+          const gapBase = Math.floor(cycleProgress);
+          const gapBlend = cycleProgress - gapBase;
+          const gapIndex = ((gapBase % spikeCount) + spikeCount) % spikeCount;
+          const nextGap = (gapIndex + 1) % spikeCount;
+
+          for (let layer = 0; layer < SPIKE_LAYER_MAX; layer += 1) {
+            const spikeIndex = i * SPIKE_LAYER_MAX + layer;
+            if (layer >= spikeCount) {
+              hideInstance(spikeMesh, spikeIndex);
+              continue;
+            }
+
+            let sequentialDown = 0;
+            if (layer === gapIndex) sequentialDown = 1 - gapBlend;
+            else if (layer === nextGap) sequentialDown = gapBlend;
+
+            const downMix = Math.max(sequentialDown * (1 - hazardState.openBlend), hazardState.openBlend);
+            const spikeLift = THREE.MathUtils.lerp(0.03, 0.19, 1 - downMix);
+            const spikeScaleY = THREE.MathUtils.lerp(0.28, 1, 1 - downMix);
+
+            const spreadDenom = Math.max(1, spikeCount - 1);
+            const spread = ((layer - spreadDenom * 0.5) / spreadDenom) * 0.52;
+            const offsetX = spreadAlongX ? spread : 0;
+            const offsetZ = spreadAlongX ? 0 : spread;
+
+            w.dummy.position.set(x + offsetX, y + TILE_HEIGHT * 0.52 + spikeLift, z + offsetZ);
+            w.dummy.rotation.set(0, tile.hazardPhase + layer * 0.4, 0);
+            w.dummy.scale.set(1, spikeScaleY, 1);
+            w.dummy.updateMatrix();
+            spikeMesh.setMatrixAt(spikeIndex, w.dummy.matrix);
+
+            w.tempColorB.copy(COLOR_SPIKE).lerp(COLOR_WHITE, hazardState.closedBlend * 0.22);
+            if (hazardState.openBlend > 0.4) {
+              w.tempColorB.lerp(COLOR_HAZARD_SAFE, (hazardState.openBlend - 0.4) * 0.35);
+            }
+            spikeMesh.setColorAt(spikeIndex, w.tempColorB);
+          }
         } else {
-          hideInstance(spikeMesh, i);
+          hideSpikeGroup(spikeMesh, i);
         }
 
-        if (tile.hazard === 'saw') {
-          const phase = w.simTime * hazardFrequency('saw') + tile.hazardPhase;
-          const wave = 0.5 + 0.5 * Math.sin(phase);
-          const active = hazardIsDangerous('saw', phase);
+        if (tile.hazard === 'saw' && hazardState) {
+          const driftDirection = tile.index % 2 === 0 ? 1 : -1;
+          const retreat = driftDirection * hazardState.openBlend * 0.46;
+          const sweep = Math.sin((hazardState.phase01 + tile.hazardPhase * 0.12) * Math.PI * 2) * 0.08 * hazardState.closedBlend;
+          const sawScale = 0.72 + hazardState.closedBlend * 0.34;
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + 0.08 + wave * 0.02, z);
-          w.dummy.rotation.set(0, phase * 1.8, 0);
-          const sawScale = 0.82 + wave * 0.24;
-          w.dummy.scale.set(sawScale, 0.36, sawScale);
+          w.dummy.position.set(x + retreat, y + TILE_HEIGHT * 0.52 + 0.08 + hazardState.closedBlend * 0.04, z + sweep);
+          w.dummy.rotation.set(0, w.simTime * (10 + tile.hazardCount * 0.7), 0);
+          w.dummy.scale.set(sawScale, 0.34, sawScale);
           w.dummy.updateMatrix();
           sawMesh.setMatrixAt(i, w.dummy.matrix);
 
-          w.tempColorB.copy(COLOR_SAW).lerp(COLOR_WHITE, active ? 0.28 : 0.08);
+          w.tempColorB.copy(COLOR_SAW)
+            .lerp(COLOR_WHITE, hazardState.closedBlend * 0.3 + 0.08)
+            .lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.2);
           sawMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(sawMesh, i);
         }
 
-        if (tile.hazard === 'clamp') {
-          const phase = w.simTime * hazardFrequency('clamp') + tile.hazardPhase;
-          const closeWave = 0.5 + 0.5 * Math.cos(phase);
-          const active = hazardIsDangerous('clamp', phase);
+        if (tile.hazard === 'clamp' && hazardState) {
+          const close = hazardState.closedBlend;
+          const jawScale = THREE.MathUtils.lerp(0.3, 1.18, close);
+          const jawHeight = THREE.MathUtils.lerp(0.22, 0.56, close);
+          const sway = Math.sin((hazardState.phase01 * tile.hazardCount + tile.hazardPhase) * Math.PI * 2) * 0.04;
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + 0.07, z);
-          w.dummy.rotation.set(0, phase * 0.25, 0);
-          const jawScale = 0.22 + closeWave * 1.02;
-          w.dummy.scale.set(jawScale, 0.48, jawScale);
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + 0.05 + close * 0.08, z);
+          w.dummy.rotation.set(0, tile.hazardPhase * 0.32 + sway, 0);
+          w.dummy.scale.set(jawScale, jawHeight, jawScale);
           w.dummy.updateMatrix();
           clampMesh.setMatrixAt(i, w.dummy.matrix);
 
-          w.tempColorB.copy(COLOR_CLAMP).lerp(COLOR_WHITE, active ? 0.32 : 0.1);
+          w.tempColorB.copy(COLOR_CLAMP)
+            .lerp(COLOR_WHITE, close * 0.36 + 0.06)
+            .lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.15);
           clampMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(clampMesh, i);
@@ -961,7 +1112,7 @@ function Steps() {
         <meshStandardMaterial vertexColors roughness={0.48} metalness={0.05} />
       </instancedMesh>
 
-      <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+      <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, MAX_SPIKE_INSTANCES]}>
         <coneGeometry args={[0.16, 0.34, 12]} />
         <meshStandardMaterial vertexColors roughness={0.36} metalness={0.12} />
       </instancedMesh>
@@ -1114,7 +1265,7 @@ function Steps() {
                 Tap to advance one step. Timed traps and collapsing tiles force clean rhythm.
               </div>
               <div style={{ marginTop: 7, fontSize: 12, opacity: 0.82 }}>
-                Hazards: spikes, saws, clamps. Collect gems and keep moving before the floor drops.
+                Hazards cycle in readable windows. Step on open beats, collect gems, and outrun collapsing tiles.
               </div>
 
               {snap.phase === 'gameover' && (
