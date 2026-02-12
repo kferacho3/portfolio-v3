@@ -303,7 +303,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'steps',
     title: 'Steps',
     description:
-      'Paint the path as you race forward. Tap to turn, avoid spikes, and keep your streak alive.',
+      'Tap to advance one tile at a time through timed traps while the path collapses behind you.',
     accent: '#22c55e',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Steps.webp',
@@ -658,9 +658,11 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Branches grow in real time. Low branches are jumpable, tall branches force a rotate. Always scan at least one segment ahead.',
   },
   steps: {
-    controls: 'Tap/Space/Click to turn • R to restart',
-    objective: 'Stay on the tiles and paint the path as far as you can.',
-    tips: "Don't panic-tap. One early turn is worse than a late one.",
+    controls: 'Tap/Space/Click to step forward • Enter starts • R to restart',
+    objective:
+      'Advance one step per tap, survive spikes/saws/clamps, and keep pace before your current path segment collapses.',
+    tips:
+      'Treat it like rhythm: commit to clean timing windows, grab gems when safe, and avoid stalling because pressure ramps into tile collapse.',
   },
   smashhit: {
     controls: 'Hold Click/Tap/Space to fire • Move mouse/touch to aim • R to restart',
