@@ -54,7 +54,7 @@ const SHOT_RADIUS = 0.15;
 const SHOT_SPEED = 42;
 const SHOT_TTL = 3.2;
 
-const BASE_SPEED = 12;
+const BASE_SPEED = 10.5;
 const MAX_SPEED = 24;
 const FIRE_INTERVAL_BASE = 0.13;
 
@@ -64,8 +64,8 @@ const MAX_SIM_STEPS = 8;
 const SHARD_TTL = 2.0;
 const HIT_FX_TTL = 0.22;
 
-const SPACING_MIN = 6.6;
-const SPACING_MAX = 9.4;
+const SPACING_MIN = 7.4;
+const SPACING_MAX = 10.8;
 const INTRO_SPAWN_BUFFER = 12;
 
 const BREACH_AMMO_PENALTY_BASE = 6;
@@ -1461,9 +1461,7 @@ function SmashHit() {
           const crystalNear = Math.abs(shot.pos.z - crystalZ) < 0.8;
           const crystalT = Math.abs(segDz) > 1e-6 ? (crystalZ - prevZ) / segDz : -1;
           const crossedCrystal = crystalT >= 0 && crystalT <= 1;
-          if (!crystalNear && !crossedCrystal) {
-            // Keep checking barrier blocks if crystal plane was not crossed.
-          } else {
+          if (crystalNear || crossedCrystal) {
             const sampleX = crossedCrystal ? prevX + segDx * crystalT : shot.pos.x;
             const sampleY = crossedCrystal ? prevY + segDy * crystalT : shot.pos.y;
             const sampleZ = crossedCrystal ? crystalZ : shot.pos.z;
@@ -2299,7 +2297,7 @@ function SmashHit() {
           }}
         >
           <div style={{ fontSize: 13, opacity: 0.85, letterSpacing: 1.3 }}>
-            OCTA SURGE: SMASH RAIL
+            SMASH HIT // PRISM RUSH
           </div>
           <div style={{ fontSize: 34, fontWeight: 900 }}>{snap.score}</div>
           <div style={{ fontSize: 12, opacity: 0.9 }}>
@@ -2335,18 +2333,19 @@ function SmashHit() {
               }}
             >
               <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: 2 }}>
-                SMASH RAIL
+                SMASH HIT
               </div>
               <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
-                Fixed-step rail shooter. Break glass, chain crystals, keep ammo
-                up.
+                Break incoming glass, chain crystal pickups, and survive by
+                managing ammo.
               </div>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
                 Crystal grants: +3 / +5 / +10 • Stone hit = -10 ammo + combo
                 reset.
               </div>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
-                Multiball grows with crystal streak: x1 → x5.
+                Missed barriers now cost ammo instead of instant death.
+                Multiball grows with streak: x1 → x5.
               </div>
 
               {snap.phase === 'gameover' && (
@@ -2357,8 +2356,8 @@ function SmashHit() {
               )}
 
               <div style={{ marginTop: 14, fontSize: 12, opacity: 0.62 }}>
-                Click / Tap / Space to fire • F2 toggles dev overlay • Current
-                tier: {snap.qualityTier}
+                Hold Click / Tap / Space to fire • R restarts run • F2 toggles
+                dev overlay • Tier: {snap.qualityTier}
               </div>
             </div>
           </div>

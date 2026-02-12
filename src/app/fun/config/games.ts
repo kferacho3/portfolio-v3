@@ -313,7 +313,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'smashhit',
     title: 'Smash Hit',
     description:
-      'Shatter glass obstacles with precision throws. Don’t run out of balls—or the next pane ends you.',
+      'Shatter glass corridors with rhythm shooting, crystal pickups, and escalating speed while keeping ammo alive.',
     accent: '#60a5fa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SmashHit.webp',
@@ -663,10 +663,11 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: "Don't panic-tap. One early turn is worse than a late one.",
   },
   smashhit: {
-    controls: 'Click/Space to throw • Move mouse/touch to aim • R to restart',
+    controls: 'Hold Click/Tap/Space to fire • Move mouse/touch to aim • R to restart',
     objective:
-      'Smash glass blocks before you reach them. Manage your ball count to survive longer.',
-    tips: "Hit the crystal for bonus balls. Clear the glowing required blocks or you'll crash.",
+      'Break required glass lanes before impact, collect crystals for ammo, and ride a faster-and-denser endless corridor.',
+    tips:
+      "Stone blocks still punish hard. Missed barriers now drain ammo instead of instant run death, so recover quickly with crystal chains.",
   },
   shades: {
     controls:
