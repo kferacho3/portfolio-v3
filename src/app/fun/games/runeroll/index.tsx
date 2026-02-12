@@ -1849,7 +1849,7 @@ const RuneRoll: React.FC<{ soundsOn?: boolean }> = () => {
   return (
     <Canvas
       dpr={[1, 1.45]}
-      gl={{ antialias: false, powerPreference: 'high-performance' }}
+      gl={{ antialias: true, powerPreference: 'high-performance' }}
       className="absolute inset-0 h-full w-full"
       onContextMenu={(event) => event.preventDefault()}
     >
