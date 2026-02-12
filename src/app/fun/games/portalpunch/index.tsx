@@ -1236,9 +1236,9 @@ function PortalPunchScene() {
         <meshStandardMaterial color="#8be9ff" emissive="#8be9ff" emissiveIntensity={0.48} />
       </mesh>
 
-      {traces.map((trace) => (
+      {traces.map((trace, index) => (
         <Line
-          key={trace.id}
+          key={`${trace.id}_${index}`}
           points={trace.points.map((point) => [point[0], point[1], point[2]] as [number, number, number])}
           color={LASER_COLOR_HEX[trace.color]}
           lineWidth={clamp(1.4 + trace.intensity * 0.006 + trace.width * 0.45, 1.4, 5)}

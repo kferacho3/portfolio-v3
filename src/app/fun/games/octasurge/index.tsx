@@ -297,6 +297,7 @@ export default function OctaSurge() {
     flash: 0,
     pulse: 0,
   });
+  const initRunRef = useRef<(seed: number) => void>(() => {});
 
   const hideInstance = useCallback(
     (mesh: THREE.InstancedMesh | null, id: number) => {
@@ -455,6 +456,10 @@ export default function OctaSurge() {
   );
 
   useEffect(() => {
+    initRunRef.current = initRun;
+  }, [initRun]);
+
+  useEffect(() => {
     octaSurgeState.load();
   }, []);
 
@@ -478,8 +483,8 @@ export default function OctaSurge() {
 
   useEffect(() => {
     if (snap.phase !== 'playing') return;
-    initRun(snap.worldSeed);
-  }, [initRun, snap.phase, snap.worldSeed]);
+    initRunRef.current(snap.worldSeed);
+  }, [snap.phase, snap.worldSeed]);
 
   useEffect(() => {
     if (obstacleRef.current) {
