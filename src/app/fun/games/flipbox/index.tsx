@@ -605,12 +605,11 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
       writePrefs({ body: state.body, skin: value });
       return { skin: value };
     }),
-  updateHud: (score, multiplier, perfectStreak, perfect) =>
-    set((state) => ({
+  updateHud: (score, multiplier, perfectStreak, _perfect) =>
+    set(() => ({
       score: Math.floor(score),
       multiplier,
       perfectStreak,
-      pulseNonce: perfect ? state.pulseNonce + 1 : state.pulseNonce,
     })),
   endRun: (score, reason) =>
     set((state) => {
@@ -867,7 +866,7 @@ function FlipBoxOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/70 bg-gradient-to-br from-cyan-500/28 via-sky-500/18 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-50">Flip Box</div>
-        <div className="text-[11px] text-white/90">Tap to switch shape. Left grows, right slices.</div>
+        <div className="text-[11px] text-white/90">Tap to switch shape. Swipe/Left grows, Swipe/Right slices.</div>
         <div className="pt-1 text-[10px] text-cyan-100/85">B body • C skin</div>
       </div>
 
@@ -913,7 +912,7 @@ function FlipBoxOverlay() {
           <div className="pointer-events-auto rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">FLIP BOX</div>
             <div className="mt-2 text-sm text-white/90">Single gate = upright box. Wide slot = flat box.</div>
-            <div className="mt-1 text-sm text-white/85">Tap flips shape. Left combines size, right slices size.</div>
+            <div className="mt-1 text-sm text-white/85">Tap flips shape. Swipe/Arrow Left combines, Swipe/Arrow Right slices.</div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <button
                 className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
@@ -1092,6 +1091,7 @@ function FlipBoxScene() {
 
   const tileRef = useRef<THREE.InstancedMesh>(null);
   const glyphRef = useRef<THREE.InstancedMesh>(null);
+  const sizeGlyphRef = useRef<THREE.InstancedMesh>(null);
   const pulseRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
   const playerOutlineRef = useRef<THREE.Mesh>(null);
@@ -1147,21 +1147,44 @@ function FlipBoxScene() {
     const runtime = runtimeRef.current;
     const store = useFlipBoxStore.getState();
 
+    if (input.pointerJustDown) {
+      swipeStartRef.current.x = input.pointerX;
+      swipeStartRef.current.y = input.pointerY;
+      swipeStartRef.current.active = true;
+    }
+
+    let pointerTap = false;
+    let swipeLeft = false;
+    let swipeRight = false;
+    if (input.pointerJustUp && swipeStartRef.current.active) {
+      const dx = input.pointerX - swipeStartRef.current.x;
+      const dy = input.pointerY - swipeStartRef.current.y;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (absX > 0.14 && absX > absY * 1.12) {
+        if (dx > 0) swipeRight = true;
+        else swipeLeft = true;
+      } else if (absX < 0.08 && absY < 0.08) {
+        pointerTap = true;
+      }
+      swipeStartRef.current.active = false;
+    }
+
     const tap =
-      input.pointerJustDown ||
+      pointerTap ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
-    const forceFlat =
-      input.justPressed.has('arrowleft') ||
-      input.justPressed.has('arrowdown') ||
-      input.justPressed.has('a') ||
-      input.justPressed.has('s');
-    const forceUpright =
+    const forceFlat = input.justPressed.has('arrowdown') || input.justPressed.has('s');
+    const forceUpright = input.justPressed.has('arrowup') || input.justPressed.has('w');
+    const slice =
+      swipeRight ||
       input.justPressed.has('arrowright') ||
-      input.justPressed.has('arrowup') ||
-      input.justPressed.has('d') ||
-      input.justPressed.has('w');
+      input.justPressed.has('d');
+    const combine =
+      swipeLeft ||
+      input.justPressed.has('arrowleft') ||
+      input.justPressed.has('a');
     const cycleBody = input.justPressed.has('b');
     const cycleSkin = input.justPressed.has('c');
 
@@ -1172,17 +1195,52 @@ function FlipBoxScene() {
       resetRuntime(runtime);
       useFlipBoxStore.getState().startRun();
       useFlipBoxStore.getState().setPosture('UPRIGHT');
+      useFlipBoxStore.getState().setSizeTier(0);
       useFlipBoxStore.getState().setNextRule('ANY');
-    } else if (store.status === 'PLAYING' && (tap || forceFlat || forceUpright)) {
+      useFlipBoxStore.getState().setNextSizeRule('ANY');
+    } else if (store.status === 'PLAYING') {
       if (forceFlat) runtime.targetOrientation = 'FLAT';
       else if (forceUpright) runtime.targetOrientation = 'UPRIGHT';
-      else runtime.targetOrientation = runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
+      else if (tap) runtime.targetOrientation = runtime.orientation === 'UPRIGHT' ? 'FLAT' : 'UPRIGHT';
       if (runtime.targetOrientation !== runtime.orientation) {
         runtime.orientation = runtime.targetOrientation;
         runtime.rotTargetX -= Math.PI * 0.5;
         runtime.flipTimer = 0;
         runtime.cameraKick = Math.min(1, runtime.cameraKick + 0.38);
         useFlipBoxStore.getState().setPosture(runtime.orientation);
+      }
+
+      let sizeChanged = false;
+      if (slice) {
+        const nextTier = clampSizeTier(runtime.targetSizeTier - 1);
+        if (nextTier !== runtime.targetSizeTier) {
+          runtime.sizeTier = nextTier;
+          runtime.targetSizeTier = nextTier;
+          runtime.targetSizeScale = scaleForSizeTier(nextTier);
+          runtime.sizeShiftFx = 1;
+          runtime.sizeShiftMode = 'SLICE';
+          runtime.cameraKick = Math.min(1.1, runtime.cameraKick + 0.26);
+          useFlipBoxStore.getState().setSizeTier(nextTier);
+          useFlipBoxStore.getState().triggerSizeShift('SLICE');
+          sizeChanged = true;
+        }
+      }
+      if (combine) {
+        const nextTier = clampSizeTier(runtime.targetSizeTier + 1);
+        if (nextTier !== runtime.targetSizeTier) {
+          runtime.sizeTier = nextTier;
+          runtime.targetSizeTier = nextTier;
+          runtime.targetSizeScale = scaleForSizeTier(nextTier);
+          runtime.sizeShiftFx = 1;
+          runtime.sizeShiftMode = 'COMBINE';
+          runtime.cameraKick = Math.min(1.1, runtime.cameraKick + 0.3);
+          useFlipBoxStore.getState().setSizeTier(nextTier);
+          useFlipBoxStore.getState().triggerSizeShift('COMBINE');
+          sizeChanged = true;
+        }
+      }
+      if (sizeChanged) {
+        runtime.flipTimer = Math.min(runtime.flipTimer, 0.2);
       }
     }
 
@@ -1208,17 +1266,39 @@ function FlipBoxScene() {
             useFlipBoxStore.getState().endRun(runtime.score, failReasonLabel('rule'));
             break;
           }
+          if (
+            (tile.sizeRule === 'HALF' && runtime.targetSizeTier !== -1) ||
+            (tile.sizeRule === 'DOUBLE' && runtime.targetSizeTier !== 1)
+          ) {
+            runtime.crashFx = 1;
+            useFlipBoxStore.getState().flashCrash();
+            useFlipBoxStore.getState().endRun(runtime.score, failReasonLabel('size'));
+            break;
+          }
 
           let perfect = false;
-          runtime.score += 1;
+          const shapeBonus = tile.rule === 'ANY' ? 1 : 3;
+          const sizeBonus = tile.sizeRule === 'ANY' ? 0 : 3;
+          const basePoints = (shapeBonus + sizeBonus) * runtime.multiplier;
+          runtime.score += Math.max(1, Math.round(basePoints));
+          tile.pulse = Math.max(tile.pulse, 0.45);
+          if (tile.rule !== 'ANY' || tile.sizeRule !== 'ANY') {
+            useFlipBoxStore
+              .getState()
+              .triggerPass(
+                tile.sizeRule === 'ANY' ? `MATCH ${tile.rule}` : `${tile.sizeRule} GATE`,
+                false
+              );
+          }
 
           if (tile.rule !== 'ANY' && runtime.flipTimer < 0.16) {
             perfect = true;
             runtime.perfectStreak += 1;
             runtime.multiplier = clamp(1 + runtime.perfectStreak * 0.24, 1, 5);
-            runtime.score += 1;
+            runtime.score += Math.max(1, Math.round(2 * runtime.multiplier));
             tile.pulse = 1;
             runtime.cameraKick = Math.min(1.2, runtime.cameraKick + 0.5);
+            useFlipBoxStore.getState().triggerPass('PERFECT MATCH', true);
           } else {
             runtime.perfectStreak = 0;
             runtime.multiplier = Math.max(1, runtime.multiplier * 0.92);
@@ -1230,7 +1310,7 @@ function FlipBoxScene() {
         }
       }
 
-      const support = evaluateSupport(runtime, bodyOption);
+      const support = evaluateSupport(runtime, bodyOption, runtime.sizeScale);
       if (!support.ok) {
         runtime.unsupportedTime += dt;
         runtime.targetY = runtime.playerY - dt * 2.8;
@@ -1242,7 +1322,7 @@ function FlipBoxScene() {
         }
       } else {
         runtime.unsupportedTime = 0;
-        runtime.targetY = support.baseY + orientationHalfHeight(runtime.orientation);
+        runtime.targetY = support.baseY + orientationHalfHeight(runtime.orientation, runtime.sizeScale);
       }
 
       for (let i = 0; i < runtime.tiles.length; i += 1) {
@@ -1271,23 +1351,40 @@ function FlipBoxScene() {
         useFlipBoxStore.getState().setNextRule(nextRule);
       }
 
+      let nextSizeRule: TileSizeRule = 'ANY';
+      let sizeBestZ = -999;
+      for (let i = 0; i < runtime.tiles.length; i += 1) {
+        const tile = runtime.tiles[i];
+        if (!tile.present || tile.sizeRule === 'ANY') continue;
+        if (tile.z < -0.18 && tile.z > -11.5 && tile.z > sizeBestZ) {
+          sizeBestZ = tile.z;
+          nextSizeRule = tile.sizeRule;
+        }
+      }
+      if (nextSizeRule !== runtime.nextSizeRuleHint) {
+        runtime.nextSizeRuleHint = nextSizeRule;
+        useFlipBoxStore.getState().setNextSizeRule(nextSizeRule);
+      }
+
       flipBoxState.elapsed = runtime.elapsed;
       flipBoxState.chain = runtime.perfectStreak;
     }
 
     runtime.cameraKick = Math.max(0, runtime.cameraKick - dt * 4.8);
     runtime.crashFx = Math.max(0, runtime.crashFx - dt * 2.7);
+    runtime.sizeShiftFx = Math.max(0, runtime.sizeShiftFx - dt * 3.4);
 
     const targetScale = sizeForOrientation(runtime.orientation);
+    runtime.sizeScale = lerp(runtime.sizeScale, runtime.targetSizeScale, 1 - Math.exp(-11 * dt));
     runtime.displayScale.lerp(targetScale, 1 - Math.exp(-13 * dt));
     runtime.rotX = lerp(runtime.rotX, runtime.rotTargetX, 1 - Math.exp(-15 * dt));
     runtime.playerY = lerp(runtime.playerY, runtime.targetY, 1 - Math.exp(-14 * dt));
 
-    const visualScaleX = runtime.displayScale.x * bodyOption.scale.x;
-    const visualScaleY = runtime.displayScale.y * bodyOption.scale.y;
-    const visualScaleZ = runtime.displayScale.z * bodyOption.scale.z;
+    const visualScaleX = runtime.displayScale.x * bodyOption.scale.x * runtime.sizeScale;
+    const visualScaleY = runtime.displayScale.y * bodyOption.scale.y * runtime.sizeScale;
+    const visualScaleZ = runtime.displayScale.z * bodyOption.scale.z * runtime.sizeScale;
     const visualHalfY = visualScaleY * 0.5;
-    const physicalHalfY = runtime.displayScale.y * 0.5;
+    const physicalHalfY = runtime.displayScale.y * runtime.sizeScale * 0.5;
     const playerVisualY = runtime.playerY + (visualHalfY - physicalHalfY);
 
     if (playerRef.current && playerOutlineRef.current) {
@@ -1311,6 +1408,16 @@ function FlipBoxScene() {
       mat.opacity = runtime.crashFx * 0.8;
     }
 
+    if (sizeRingRef.current) {
+      const sizeFx = runtime.sizeShiftFx;
+      sizeRingRef.current.visible = sizeFx > 0.001 && runtime.sizeShiftMode !== null;
+      sizeRingRef.current.position.set(0, playerVisualY - 0.28, 0.01);
+      sizeRingRef.current.scale.setScalar(0.86 + (1 - sizeFx) * 0.7);
+      const mat = sizeRingRef.current.material as THREE.MeshBasicMaterial;
+      mat.color.set(runtime.sizeShiftMode === 'SLICE' ? '#78f4ff' : '#ffc56d');
+      mat.opacity = sizeFx * 0.72;
+    }
+
     if (skinOption.id === 'signal-lost') {
       skinTexture.offset.x = (Math.sin(runtime.elapsed * 8.5) * 0.02 + 1) % 1;
       skinTexture.offset.y = (runtime.elapsed * 0.42) % 1;
@@ -1327,7 +1434,7 @@ function FlipBoxScene() {
     camera.position.lerp(camTarget, 1 - Math.exp(-6.4 * dt));
     camera.lookAt(0, 0.48, -7.2);
 
-    if (tileRef.current && glyphRef.current && pulseRef.current) {
+    if (tileRef.current && glyphRef.current && sizeGlyphRef.current && pulseRef.current) {
       for (let i = 0; i < runtime.tiles.length; i += 1) {
         const tile = runtime.tiles[i];
 
@@ -1340,6 +1447,8 @@ function FlipBoxScene() {
           tileRef.current.setColorAt(i, TILE_BASE_COLORS[0]);
           glyphRef.current.setMatrixAt(i, dummy.matrix);
           glyphRef.current.setColorAt(i, GLYPH_UPRIGHT);
+          sizeGlyphRef.current.setMatrixAt(i, dummy.matrix);
+          sizeGlyphRef.current.setColorAt(i, GLYPH_HALF);
           pulseRef.current.setMatrixAt(i, dummy.matrix);
           pulseRef.current.setColorAt(i, PULSE);
           continue;
@@ -1355,6 +1464,8 @@ function FlipBoxScene() {
 
         const base = tile.rule === 'UPRIGHT' ? TILE_UPRIGHT : tile.rule === 'FLAT' ? TILE_FLAT : TILE_BASE_COLORS[tile.colorSeed];
         colorScratch.copy(base).lerp(TILE_EDGE, 0.1);
+        if (tile.sizeRule === 'HALF') colorScratch.lerp(TILE_HALF, 0.34);
+        if (tile.sizeRule === 'DOUBLE') colorScratch.lerp(TILE_DOUBLE, 0.34);
         if (tile.checked) colorScratch.lerp(TILE_EDGE, 0.13);
         if (tile.pulse > 0) colorScratch.lerp(TILE_EDGE, clamp(tile.pulse * 0.7, 0, 0.8));
         tileRef.current.setColorAt(i, colorScratch);
@@ -1381,6 +1492,29 @@ function FlipBoxScene() {
           glyphRef.current.setColorAt(i, tile.rule === 'UPRIGHT' ? GLYPH_UPRIGHT : GLYPH_FLAT);
         }
 
+        if (tile.sizeRule === 'ANY') {
+          dummy.position.copy(OFFSCREEN_POS);
+          dummy.scale.copy(TINY_SCALE);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          sizeGlyphRef.current.setMatrixAt(i, dummy.matrix);
+          sizeGlyphRef.current.setColorAt(i, GLYPH_HALF);
+        } else {
+          const glyphY = tileY + TILE_THICKNESS * 0.66;
+          if (tile.sizeRule === 'HALF') {
+            dummy.position.set(TILE_WIDTH * 0.24, glyphY, tile.z);
+            dummy.scale.set(0.2, 0.04, 0.1);
+            sizeGlyphRef.current.setColorAt(i, GLYPH_HALF);
+          } else {
+            dummy.position.set(-TILE_WIDTH * 0.24, glyphY, tile.z);
+            dummy.scale.set(0.3, 0.04, 0.18);
+            sizeGlyphRef.current.setColorAt(i, GLYPH_DOUBLE);
+          }
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          sizeGlyphRef.current.setMatrixAt(i, dummy.matrix);
+        }
+
         if (tile.pulse > 0) {
           const s = 1 + (1 - tile.pulse) * 0.72;
           dummy.position.set(0, tileY + TILE_THICKNESS * 0.74, tile.z);
@@ -1401,9 +1535,11 @@ function FlipBoxScene() {
 
       tileRef.current.instanceMatrix.needsUpdate = true;
       glyphRef.current.instanceMatrix.needsUpdate = true;
+      sizeGlyphRef.current.instanceMatrix.needsUpdate = true;
       pulseRef.current.instanceMatrix.needsUpdate = true;
       if (tileRef.current.instanceColor) tileRef.current.instanceColor.needsUpdate = true;
       if (glyphRef.current.instanceColor) glyphRef.current.instanceColor.needsUpdate = true;
+      if (sizeGlyphRef.current.instanceColor) sizeGlyphRef.current.instanceColor.needsUpdate = true;
       if (pulseRef.current.instanceColor) pulseRef.current.instanceColor.needsUpdate = true;
     }
 
@@ -1452,6 +1588,11 @@ function FlipBoxScene() {
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
+      <instancedMesh ref={sizeGlyphRef} args={[undefined, undefined, TILE_POOL]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial vertexColors toneMapped={false} />
+      </instancedMesh>
+
       <instancedMesh ref={pulseRef} args={[undefined, undefined, TILE_POOL]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
@@ -1485,6 +1626,17 @@ function FlipBoxScene() {
         <ringGeometry args={[0.65, 0.8, 42]} />
         <meshBasicMaterial
           color="#ff7aa9"
+          transparent
+          opacity={0}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+
+      <mesh ref={sizeRingRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <ringGeometry args={[0.52, 0.65, 42]} />
+        <meshBasicMaterial
+          color="#78f4ff"
           transparent
           opacity={0}
           toneMapped={false}

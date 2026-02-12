@@ -98,7 +98,7 @@ const DIRS: Array<{ x: number; z: number }> = [
 ];
 const DIR_YAWS: number[] = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
 
-const MIN_GRID = 6;
+const MIN_GRID = 5;
 const MAX_GRID = 22;
 const BOARD_WORLD_SIZE = 8.8;
 
@@ -109,7 +109,7 @@ const COLLECTIBLE_CAP = 24;
 const SPARK_CAP = 120;
 
 const HEAD_RADIUS = 0.17;
-const TRAIL_THICKNESS = 0.12;
+const TRAIL_THICKNESS = 0.14;
 const COLLECTIBLE_RADIUS = 0.2;
 
 const clamp = (v: number, min: number, max: number) =>
@@ -117,7 +117,7 @@ const clamp = (v: number, min: number, max: number) =>
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 const gridSizeForLevel = (level: number) =>
-  clamp(6 + Math.floor((level - 1) * 0.8), MIN_GRID, MAX_GRID);
+  clamp(5 + Math.floor((level - 1) * 0.8), MIN_GRID, MAX_GRID);
 
 const stepIntervalForLevel = (level: number) =>
   clamp(0.37 - (level - 1) * 0.0115, 0.13, 0.37);
@@ -773,18 +773,23 @@ function TraceScene() {
         const iz = Math.floor(cell / runtime.gridSize);
         const pos = worldOfCell(ix, iz, runtime.gridSize, runtime.cellSize);
 
-        dummy.position.set(pos.x, 0.08, pos.z);
+        dummy.position.set(pos.x, 0.09, pos.z);
         dummy.rotation.set(0, 0, 0);
         dummy.scale.set(
-          runtime.cellSize * 0.82,
-          TRAIL_THICKNESS * 0.76,
-          runtime.cellSize * 0.82
+          runtime.cellSize * 0.92,
+          TRAIL_THICKNESS * 0.92,
+          runtime.cellSize * 0.92
         );
         dummy.updateMatrix();
         trailCellMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
         const t = clamp(visit / Math.max(1, runtime.visitSerial), 0, 1);
-        colorScratch.copy(trailColorA).lerp(trailColorB, t * 0.9 + 0.1);
+        const age = runtime.visitSerial - visit;
+        const freshness = clamp(1 - age / Math.max(1, runtime.totalCells), 0.55, 1);
+        colorScratch
+          .copy(trailColorA)
+          .lerp(trailColorB, t * 0.78 + 0.22)
+          .multiplyScalar(0.86 + freshness * 0.24);
         trailCellMeshRef.current.setColorAt(idx, colorScratch);
         idx += 1;
       }
@@ -815,9 +820,9 @@ function TraceScene() {
         const len = Math.hypot(dx, dz);
         if (len < 0.0001) continue;
 
-        dummy.position.set((seg.ax + seg.bx) * 0.5, 0.11, (seg.az + seg.bz) * 0.5);
+        dummy.position.set((seg.ax + seg.bx) * 0.5, 0.115, (seg.az + seg.bz) * 0.5);
         dummy.rotation.set(0, Math.atan2(dx, dz), 0);
-        dummy.scale.set(runtime.cellSize * 0.24, TRAIL_THICKNESS * 0.84, len + 0.03);
+        dummy.scale.set(runtime.cellSize * 0.38, TRAIL_THICKNESS, len + 0.04);
         dummy.updateMatrix();
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
@@ -839,14 +844,14 @@ function TraceScene() {
         if (activeLen > 0.0001) {
           dummy.position.set(
             (runtime.renderFromX + drawX) * 0.5,
-            0.11,
+            0.115,
             (runtime.renderFromZ + drawZ) * 0.5
           );
           dummy.rotation.set(0, Math.atan2(activeDx, activeDz), 0);
           dummy.scale.set(
-            runtime.cellSize * 0.24,
-            TRAIL_THICKNESS * 0.84,
-            activeLen + 0.02
+            runtime.cellSize * 0.38,
+            TRAIL_THICKNESS,
+            activeLen + 0.03
           );
           dummy.updateMatrix();
           trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
@@ -962,7 +967,7 @@ function TraceScene() {
       9,
       shakeNoiseSigned(runtime.elapsed * 14, 3.2) * jitter
     );
-    lookTarget.set(drawX * 0.1, 0, drawZ * 0.1);
+    lookTarget.set(0, 0, 0);
 
     camera.position.lerp(camTarget, 1 - Math.exp(-5 * dt));
     camera.lookAt(lookTarget);
@@ -1001,7 +1006,11 @@ function TraceScene() {
         </mesh>
       ))}
 
-      <instancedMesh ref={cellMeshRef} args={[undefined, undefined, CELL_INSTANCE_CAP]}>
+      <instancedMesh
+        ref={cellMeshRef}
+        args={[undefined, undefined, CELL_INSTANCE_CAP]}
+        frustumCulled={false}
+      >
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
@@ -1009,17 +1018,26 @@ function TraceScene() {
       <instancedMesh
         ref={trailCellMeshRef}
         args={[undefined, undefined, TRAIL_CELL_INSTANCE_CAP]}
+        frustumCulled={false}
       >
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
-      <instancedMesh ref={trailMeshRef} args={[undefined, undefined, TRAIL_INSTANCE_CAP]}>
+      <instancedMesh
+        ref={trailMeshRef}
+        args={[undefined, undefined, TRAIL_INSTANCE_CAP]}
+        frustumCulled={false}
+      >
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial vertexColors toneMapped={false} />
       </instancedMesh>
 
-      <instancedMesh ref={collectibleMeshRef} args={[undefined, undefined, COLLECTIBLE_CAP]}>
+      <instancedMesh
+        ref={collectibleMeshRef}
+        args={[undefined, undefined, COLLECTIBLE_CAP]}
+        frustumCulled={false}
+      >
         <octahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
           vertexColors

@@ -170,7 +170,7 @@ export const traceState = proxy({
   resetVersion: 0,
 
   level: 1,
-  gridSize: 6,
+  gridSize: 5,
   completion: 0,
   currentMedal: 'none' as TraceMedal,
 
@@ -182,7 +182,7 @@ export const traceState = proxy({
   collectibles: 0,
 
   paletteIndex: 0,
-  autoPalette: true,
+  autoPalette: false,
   headStyle: 'orb' as TraceHeadStyle,
 
   toastText: '',
@@ -213,7 +213,7 @@ export const traceState = proxy({
     this.score = 0;
     this.gameOver = false;
     this.level = 1;
-    this.gridSize = 6;
+    this.gridSize = 5;
     this.completion = 0;
     this.currentMedal = 'none';
     this.bronze = 0;
@@ -231,7 +231,7 @@ export const traceState = proxy({
     this.score = 0;
     this.gameOver = false;
     this.level = 1;
-    this.gridSize = 6;
+    this.gridSize = 5;
     this.completion = 0;
     this.currentMedal = 'none';
     this.bronze = 0;

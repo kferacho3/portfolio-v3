@@ -148,6 +148,8 @@ export function useInput(options: UseInputOptions = {}): InputState {
 
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button === 0) {
+        stateRef.current.pointerX = (e.clientX / window.innerWidth) * 2 - 1;
+        stateRef.current.pointerY = -(e.clientY / window.innerHeight) * 2 + 1;
         stateRef.current.pointerDown = true;
         stateRef.current.pointerJustDown = true;
       }
@@ -155,6 +157,8 @@ export function useInput(options: UseInputOptions = {}): InputState {
 
     const handlePointerUp = (e: PointerEvent) => {
       if (e.button === 0) {
+        stateRef.current.pointerX = (e.clientX / window.innerWidth) * 2 - 1;
+        stateRef.current.pointerY = -(e.clientY / window.innerHeight) * 2 + 1;
         stateRef.current.pointerDown = false;
         stateRef.current.pointerJustUp = true;
       }
@@ -276,6 +280,8 @@ export function useInputRef(
 
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button === 0) {
+        stateRef.current.pointerX = (e.clientX / window.innerWidth) * 2 - 1;
+        stateRef.current.pointerY = -(e.clientY / window.innerHeight) * 2 + 1;
         stateRef.current.pointerDown = true;
         stateRef.current.pointerJustDown = true;
       }
@@ -283,6 +289,8 @@ export function useInputRef(
 
     const handlePointerUp = (e: PointerEvent) => {
       if (e.button === 0) {
+        stateRef.current.pointerX = (e.clientX / window.innerWidth) * 2 - 1;
+        stateRef.current.pointerY = -(e.clientY / window.innerHeight) * 2 + 1;
         stateRef.current.pointerDown = false;
         stateRef.current.pointerJustUp = true;
       }
