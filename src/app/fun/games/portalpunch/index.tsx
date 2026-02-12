@@ -936,6 +936,8 @@ function PortalPunchScene() {
       playerGroupRef.current.position.copy(spawn);
       playerGroupRef.current.rotation.set(0, 0, 0);
     }
+
+    dragRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -964,6 +966,7 @@ function PortalPunchScene() {
     visual.lookYaw = 0;
     visual.bobClock = 0;
     visual.initialized = true;
+    dragRef.current = null;
     setFrameVersion((v) => v + 1);
   }, []);
 
@@ -977,6 +980,7 @@ function PortalPunchScene() {
     visual.lookYaw = 0;
     visual.bobClock = 0;
     visual.initialized = true;
+    dragRef.current = null;
     setFrameVersion((v) => v + 1);
   }, []);
 
@@ -990,6 +994,7 @@ function PortalPunchScene() {
     visual.lookYaw = 0;
     visual.bobClock = 0;
     visual.initialized = true;
+    dragRef.current = null;
     setFrameVersion((v) => v + 1);
   }, []);
 
@@ -998,6 +1003,7 @@ function PortalPunchScene() {
     if (runtime.status === 'START') return;
     runtime.status = 'START';
     runtime.failReason = '';
+    dragRef.current = null;
     setMessage(runtime, 'Level selector opened', 1.4);
     setFrameVersion((v) => v + 1);
   }, []);
@@ -1020,7 +1026,7 @@ function PortalPunchScene() {
         runtime.gateTimers[gateId] = Math.max(0, runtime.gateTimers[gateId] - dt);
       }
 
-      const resolved = resolveEntities(level, runtime);
+      let resolved = resolveEntities(level, runtime);
 
       const moveUp = input.justPressed.has('arrowup') || input.justPressed.has('w');
       const moveDown = input.justPressed.has('arrowdown') || input.justPressed.has('s');
@@ -1041,30 +1047,71 @@ function PortalPunchScene() {
         input.justPressed.has('e') ||
         input.justPressed.has(' ') ||
         input.justPressed.has('space');
-      const pointerInteract = input.pointerJustDown;
-
-      if (keyboardInteract || pointerInteract) {
+      if (keyboardInteract) {
         const nearbyTarget = findInteractableNearPlayer(runtime, resolved);
-        if (keyboardInteract) {
-          runInteract(runtime, nearbyTarget, true);
-        }
+        runInteract(runtime, nearbyTarget, true);
+        resolved = resolveEntities(level, runtime);
+      }
 
-        if (pointerInteract) {
-          pointerNdc.set(input.pointerX, input.pointerY);
-          pointerRay.setFromCamera(pointerNdc, camera);
-          let pointerTarget: ResolvedEntity | null = null;
-          if (pointerRay.ray.intersectPlane(interactionPlane, pointerHit)) {
-            const cell = worldToGrid(level, pointerHit);
-            pointerTarget = findInteractableAtCell(runtime, resolved, cell);
-          }
-          runInteract(runtime, pointerTarget, false);
+      const pointerActive = input.pointerDown || input.pointerJustDown || input.pointerJustUp;
+      let pointerCell: { x: number; y: number } | null = null;
+      if (pointerActive) {
+        pointerNdc.set(input.pointerX, input.pointerY);
+        pointerRay.setFromCamera(pointerNdc, camera);
+        if (pointerRay.ray.intersectPlane(interactionPlane, pointerHit)) {
+          pointerCell = worldToGrid(level, pointerHit);
         }
+      }
+
+      if (input.pointerJustDown && pointerCell) {
+        const pointerTarget = findInteractableAtCell(runtime, resolved, pointerCell);
+        if (pointerTarget && isDraggableDeflector(pointerTarget)) {
+          dragRef.current = { entityId: pointerTarget.id, moved: false };
+        } else {
+          dragRef.current = null;
+          runInteract(runtime, pointerTarget, false);
+          resolved = resolveEntities(level, runtime);
+        }
+      }
+
+      if (input.pointerDown && pointerCell && dragRef.current) {
+        const dragging = dragRef.current;
+        const currentPos = runtime.entityPositions[dragging.entityId];
+        const sameCell = currentPos &&
+          currentPos.x === pointerCell.x &&
+          currentPos.y === pointerCell.y;
+        if (!sameCell &&
+          canPlaceDraggedEntity(level, runtime, resolved, dragging.entityId, pointerCell)) {
+          runtime.entityPositions[dragging.entityId] = { ...pointerCell };
+          dragging.moved = true;
+          resolved = resolveEntities(level, runtime);
+        }
+      }
+
+      if (input.pointerJustUp && dragRef.current) {
+        const dragging = dragRef.current;
+        if (!dragging.moved) {
+          const tapResolved = resolveEntities(level, runtime);
+          const tapTarget = tapResolved.find((entity) => entity.id === dragging.entityId) ?? null;
+          if (tapTarget) {
+            runInteract(runtime, tapTarget, false);
+          }
+        } else {
+          setMessage(runtime, 'Deflector repositioned');
+          runtime.moves += 1;
+          runtime.score += 1;
+        }
+        dragRef.current = null;
+      }
+
+      if (input.pointerJustDown && !pointerCell) {
+        dragRef.current = null;
       }
 
       runtime.lastSolve = solveLaser(level, runtime);
       applySolveResult(runtime, level);
 
-      if (runtime.moves > level.grid.w * level.grid.h * 3 && !runtime.solved) {
+      if (runtime.moves > level.grid.w * level.grid.h * 10 && !runtime.solved) {
         runtime.status = 'GAMEOVER';
         runtime.failReason = 'Move budget exhausted';
       }
@@ -1074,6 +1121,7 @@ function PortalPunchScene() {
         writeBest(runtime.best);
       }
     } else {
+      dragRef.current = null;
       const continuePressed =
         input.justPressed.has('enter') ||
         input.justPressed.has(' ') ||
