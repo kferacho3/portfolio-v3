@@ -56,7 +56,7 @@ export const octaSurgeState = proxy({
 
   combo: 0,
   multiplier: 1,
-  speed: GAME.baseSpeed,
+  speed: GAME.baseSpeed as number,
   time: 0,
   distance: 0,
   progress: 0,

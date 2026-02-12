@@ -95,7 +95,7 @@ const carveHoles = (
       sides - Math.abs(lane - safeLane)
     );
     const adjacentGuard =
-      stage.id <= 2 ? 0.9 : stage.id === 3 ? 0.78 : 0.64;
+      stage.id <= 2 ? 0.94 : stage.id === 3 ? 0.82 : 0.68;
     if (distance <= 1 && rand() < adjacentGuard) continue;
     if (distance === 2 && stage.id <= 2 && rand() < 0.62) continue;
 
@@ -109,10 +109,10 @@ const carveHoles = (
   solidMask |= laneBit(safeLane, sides);
   const minSolid =
     stage.id <= 2
-      ? Math.ceil(sides * 0.58)
+      ? Math.ceil(sides * 0.62)
       : stage.id === 3
-        ? Math.ceil(sides * 0.48)
-        : Math.ceil(sides * 0.4);
+        ? Math.ceil(sides * 0.5)
+        : Math.ceil(sides * 0.42);
 
   let safetyGuard = 0;
   while (bitCount(solidMask) < minSolid && safetyGuard < sides * 4) {
@@ -138,7 +138,7 @@ const buildObstacleMask = (
   let obstacleMask = 0;
   let obstacleCount = 0;
   const maxObstacles = Math.max(1, Math.floor(sides * density));
-  const guardRadius = stage.id <= 2 ? 1 : 0;
+  const guardRadius = stage.id <= 3 ? 1 : 0;
 
   for (let lane = 0; lane < sides; lane += 1) {
     const bit = laneBit(lane, sides);
@@ -226,8 +226,8 @@ export const createLevelGenerator = (
     let drift = 0;
     if (driftRoll < 0.24) drift = -1;
     else if (driftRoll < 0.48) drift = 1;
-    else if (stage.id >= 3 && driftRoll < 0.56) drift = -2;
-    else if (stage.id >= 3 && driftRoll < 0.64) drift = 2;
+    else if (stage.id >= 3 && driftRoll < 0.53) drift = -2;
+    else if (stage.id >= 3 && driftRoll < 0.58) drift = 2;
 
     const safeLane = normalizeLane(previousSafeLane + drift, sides);
     const solidMask = carveHoles(random, stage, sides, safeLane, mode);

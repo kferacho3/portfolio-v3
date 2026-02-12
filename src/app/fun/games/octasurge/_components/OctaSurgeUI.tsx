@@ -84,15 +84,15 @@ export function OctaSurgeUI({
             <div
               style={{
                 position: 'fixed',
-                top: 10,
-                left: 10,
-                minWidth: 180,
-                padding: '8px 10px',
-                border: '1px solid rgba(255,255,255,0.14)',
+                top: 8,
+                left: 8,
+                minWidth: 164,
+                padding: '7px 9px',
+                border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 10,
                 backdropFilter: 'blur(8px)',
-                background: 'rgba(8,13,20,0.58)',
-                boxShadow: '0 8px 16px rgba(1,4,10,0.36)',
+                background: 'rgba(8,13,20,0.42)',
+                boxShadow: '0 6px 12px rgba(1,4,10,0.26)',
               }}
             >
               <div
@@ -108,7 +108,7 @@ export function OctaSurgeUI({
                 style={{
                   marginTop: 2,
                   fontFamily: monoFont,
-                  fontSize: 26,
+                  fontSize: 24,
                   lineHeight: 1,
                   fontWeight: 800,
                 }}
@@ -135,15 +135,15 @@ export function OctaSurgeUI({
             <div
               style={{
                 position: 'fixed',
-                top: 10,
-                right: 10,
-                minWidth: 188,
-                padding: '8px 10px',
-                border: '1px solid rgba(255,255,255,0.14)',
+                top: 8,
+                right: 8,
+                minWidth: 168,
+                padding: '7px 9px',
+                border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 10,
                 backdropFilter: 'blur(8px)',
-                background: 'rgba(8,13,20,0.58)',
-                boxShadow: '0 8px 16px rgba(1,4,10,0.36)',
+                background: 'rgba(8,13,20,0.42)',
+                boxShadow: '0 6px 12px rgba(1,4,10,0.26)',
               }}
             >
               <div
@@ -193,18 +193,18 @@ export function OctaSurgeUI({
                 style={{
                   position: 'fixed',
                   left: '50%',
-                  bottom: 12,
+                  bottom: 8,
                   transform: 'translateX(-50%)',
-                  width: 'min(280px, 56vw)',
+                  width: 'min(220px, 46vw)',
                   borderRadius: 999,
-                  border: '1px solid rgba(255,255,255,0.14)',
-                  background: 'rgba(9,14,23,0.48)',
-                  padding: 4,
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  background: 'rgba(9,14,23,0.4)',
+                  padding: 3,
                 }}
               >
                 <div
                   style={{
-                    height: 5,
+                    height: 4,
                     borderRadius: 999,
                     width: `${Math.max(0, Math.min(100, snap.progress * 100))}%`,
                     background:
@@ -215,20 +215,20 @@ export function OctaSurgeUI({
               </div>
             )}
 
-            {snap.time < 9 && (
+            {snap.time < 6 && (
               <div
                 style={{
                   position: 'fixed',
-                  left: 12,
-                  bottom: 12,
-                  maxWidth: 300,
+                  left: 8,
+                  bottom: 8,
+                  maxWidth: 250,
                   borderRadius: 8,
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  background: 'rgba(7,12,19,0.58)',
-                  padding: '6px 8px',
-                  fontSize: 10,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(7,12,19,0.42)',
+                  padding: '5px 7px',
+                  fontSize: 9,
                   letterSpacing: 0.8,
-                  opacity: 0.78,
+                  opacity: 0.72,
                 }}
               >
                 A / D rotate lanes. Space / W flips. Shift triggers slow-mo.

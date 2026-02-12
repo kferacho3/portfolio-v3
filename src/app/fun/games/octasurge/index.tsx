@@ -166,10 +166,10 @@ export default function OctaSurge() {
       lane: new THREE.BoxGeometry(1, 0.16, GAME.segmentLength * 0.98),
       obstacle: new THREE.BoxGeometry(1, 0.42, 0.9),
       collectible: new THREE.IcosahedronGeometry(0.34, 0),
-      player8: new THREE.CylinderGeometry(0.35, 0.35, 0.2, 8, 1),
-      player10: new THREE.CylinderGeometry(0.38, 0.3, 0.2, 10, 1),
-      player12: new THREE.CylinderGeometry(0.3, 0.4, 0.2, 12, 1),
-      playerRing: new THREE.TorusGeometry(0.48, 0.045, 10, 48),
+      player8: new THREE.CylinderGeometry(0.42, 0.42, 0.24, 8, 1),
+      player10: new THREE.CylinderGeometry(0.44, 0.36, 0.24, 10, 1),
+      player12: new THREE.CylinderGeometry(0.36, 0.46, 0.24, 12, 1),
+      playerRing: new THREE.TorusGeometry(0.56, 0.05, 10, 56),
       shell: new THREE.CylinderGeometry(
         GAME.tunnelShellRadius,
         GAME.tunnelShellRadius,
@@ -863,7 +863,7 @@ export default function OctaSurge() {
       GAME.maxSpeed
     );
 
-    speed = THREE.MathUtils.lerp(speed, targetSpeed, 1 - Math.exp(-delta * 2.2));
+    speed = THREE.MathUtils.lerp(speed, targetSpeed, 1 - Math.exp(-delta * 2));
     if (slowMoTime > 0) speed *= 0.58;
 
     distance += speed * delta;
@@ -1070,7 +1070,7 @@ export default function OctaSurge() {
 
     if (worldRef.current) {
       worldRef.current.rotation.z =
-        rotation + Math.sin(runTime * 0.42) * 0.012 * (syncTimer > 0 ? 0.35 : 1);
+        rotation + Math.sin(runTime * 0.42) * 0.008 * (syncTimer > 0 ? 0.35 : 1);
     }
 
     if (playerRef.current) {
@@ -1086,7 +1086,7 @@ export default function OctaSurge() {
 
     const cam = camera as THREE.PerspectiveCamera;
     const speedRatio = clamp(speed / GAME.maxSpeed, 0, 1);
-    const shake = dangerPulse * 0.045 + audioReactive * 0.012;
+    const shake = dangerPulse * 0.03 + audioReactive * 0.009;
 
     if (cameraMode === 'firstPerson') {
       cam.position.x = THREE.MathUtils.lerp(
@@ -1111,7 +1111,7 @@ export default function OctaSurge() {
         -34 - speedRatio * 5.5
       );
       const fovTarget =
-        78 + speedRatio * 4.2 + flipPulse * (GAME.flipFovBoost * 0.3);
+        76 + speedRatio * 3.6 + flipPulse * (GAME.flipFovBoost * 0.24);
       cam.fov = THREE.MathUtils.lerp(
         cam.fov,
         fovTarget,
@@ -1134,7 +1134,7 @@ export default function OctaSurge() {
         1 - Math.exp(-delta * 6)
       );
       cam.lookAt(0, 0, -36);
-      const fovTarget = 52 + speedRatio * 2.8 + flipPulse * 1.2;
+      const fovTarget = 51 + speedRatio * 2.3 + flipPulse * 1;
       cam.fov = THREE.MathUtils.lerp(
         cam.fov,
         fovTarget,
@@ -1160,7 +1160,7 @@ export default function OctaSurge() {
       );
       cam.lookAt(0, 0, -34 - speedRatio * 6.2);
       const fovTarget =
-        60 + speedRatio * 4 + flipPulse * (GAME.flipFovBoost * 0.28);
+        58 + speedRatio * 3.5 + flipPulse * (GAME.flipFovBoost * 0.22);
       cam.fov = THREE.MathUtils.lerp(
         cam.fov,
         fovTarget,
