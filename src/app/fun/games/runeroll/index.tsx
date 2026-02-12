@@ -156,9 +156,9 @@ const TILE_HEIGHT = 0.18;
 const TILE_INSET_SIZE = TILE_SIZE * 0.8;
 const TILE_INSET_HEIGHT = TILE_HEIGHT * 0.22;
 const TILE_INSET_Y = TILE_HEIGHT * 0.48;
-const TILE_CORE_SIZE = TILE_SIZE * 0.6;
-const TILE_CORE_HEIGHT = TILE_HEIGHT * 0.2;
-const TILE_CORE_Y = TILE_HEIGHT * 0.58;
+const TILE_CORE_SIZE = TILE_SIZE * 0.74;
+const TILE_CORE_HEIGHT = TILE_HEIGHT * 0.24;
+const TILE_CORE_Y = TILE_HEIGHT * 0.62;
 const PREVIEW_MARKER_Y = TILE_HEIGHT * 1.25;
 const CUBE_SIZE = 0.72;
 
@@ -182,16 +182,16 @@ const LEGAL = new THREE.Color('#49f2bc');
 const GUIDE = new THREE.Color('#72d7ff');
 const WILD = new THREE.Color('#ffd56a');
 const RUNE_TILE_OUTER = [
-  new THREE.Color('#0f3f6b'),
-  new THREE.Color('#6b1f56'),
-  new THREE.Color('#315d1a'),
-  new THREE.Color('#7a4b14'),
+  new THREE.Color('#1e95cc'),
+  new THREE.Color('#c742a1'),
+  new THREE.Color('#63b93f'),
+  new THREE.Color('#d88a36'),
 ] as const;
 const RUNE_TILE_INSET = [
-  new THREE.Color('#1f88c4'),
-  new THREE.Color('#c63b97'),
-  new THREE.Color('#69be32'),
-  new THREE.Color('#d98828'),
+  new THREE.Color('#32c8ff'),
+  new THREE.Color('#ff5bc2'),
+  new THREE.Color('#a6f06a'),
+  new THREE.Color('#ffb85a'),
 ] as const;
 const RUNE_NAMES = ['Azure', 'Rose', 'Moss', 'Amber'] as const;
 const RUNE_COLORS = [
@@ -1495,13 +1495,13 @@ function RuneRollScene() {
 
           colorScratch
             .copy(runeOuter)
-            .lerp(TILE_BASE, isCurrent ? 0.12 : isSelectable ? 0.2 : 0.28);
+            .lerp(TILE_BASE, isCurrent ? 0.06 : isSelectable ? 0.1 : 0.14);
           colorScratch.lerp(TILE_EDGE, 0.05);
           if (lanePreview?.available) {
-            colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.16);
+            colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.12);
           }
-          if (isCurrent) colorScratch.lerp(WHITE, 0.2);
-          else if (isSelectable) colorScratch.lerp(GUIDE, 0.1);
+          if (isCurrent) colorScratch.lerp(WHITE, 0.24);
+          else if (isSelectable) colorScratch.lerp(GUIDE, 0.12);
           if (row.glowLane === lane && row.glow > 0) {
             colorScratch.lerp(WHITE, clamp(row.glow * 0.7, 0, 0.62));
           }
@@ -1515,9 +1515,9 @@ function RuneRollScene() {
             dummy.updateMatrix();
             tileInsetMesh.setMatrixAt(insetCount, dummy.matrix);
 
-            colorScratch.copy(runeInset).lerp(TILE_EDGE, 0.18).lerp(WHITE, 0.1);
-            if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.12);
-            if (isCurrent) colorScratch.lerp(WHITE, 0.2);
+            colorScratch.copy(runeInset).lerp(TILE_EDGE, 0.08).lerp(WHITE, 0.16);
+            if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.1);
+            if (isCurrent) colorScratch.lerp(WHITE, 0.26);
             if (row.glowLane === lane && row.glow > 0) {
               colorScratch.lerp(WHITE, clamp(row.glow * 0.8, 0, 0.8));
             }
@@ -1532,9 +1532,9 @@ function RuneRollScene() {
             dummy.updateMatrix();
             tileCoreMesh.setMatrixAt(coreCount, dummy.matrix);
 
-            colorScratch.copy(runeColor).lerp(WHITE, isWild ? 0.28 : 0.18);
-            if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.18);
-            if (isCurrent) colorScratch.lerp(WHITE, 0.2);
+            colorScratch.copy(runeColor).lerp(WHITE, isWild ? 0.42 : 0.34);
+            if (lanePreview?.available) colorScratch.lerp(lanePreview.legal ? LEGAL : DANGER, 0.16);
+            if (isCurrent) colorScratch.lerp(WHITE, 0.24);
             if (row.glowLane === lane && row.glow > 0) {
               colorScratch.lerp(WHITE, clamp(row.glow * 0.9, 0, 0.86));
             }
@@ -1565,21 +1565,21 @@ function RuneRollScene() {
           if (cursor >= GLYPH_DRAW_CAP) continue;
 
           dummy.position.set(x, TILE_HEIGHT * 0.72, z);
-          if (glyphType === 0) dummy.scale.set(0.56, 0.055, 0.14);
-          else if (glyphType === 1) dummy.scale.set(0.14, 0.055, 0.56);
-          else if (glyphType === 2) dummy.scale.set(0.27, 0.08, 0.27);
-          else if (glyphType === 3) dummy.scale.set(0.24, 0.08, 0.24);
-          else dummy.scale.set(0.25, 0.09, 0.25);
+          if (glyphType === 0) dummy.scale.set(0.46, 0.042, 0.12);
+          else if (glyphType === 1) dummy.scale.set(0.12, 0.042, 0.46);
+          else if (glyphType === 2) dummy.scale.set(0.22, 0.06, 0.22);
+          else if (glyphType === 3) dummy.scale.set(0.2, 0.06, 0.2);
+          else dummy.scale.set(0.22, 0.07, 0.22);
           dummy.rotation.set(0, runtime.elapsed * (glyphType === 4 ? 1.2 : 0.35), 0);
           dummy.updateMatrix();
           glyphMesh.setMatrixAt(cursor, dummy.matrix);
 
           if (glyphType === 4) {
-            colorScratch.copy(WILD).lerp(WHITE, clamp(row.glow * 0.7, 0, 0.7));
+            colorScratch.copy(WILD).lerp(WHITE, 0.34 + clamp(row.glow * 0.35, 0, 0.28));
           } else {
             colorScratch
               .copy(RUNE_COLORS[glyphType as RuneId])
-              .lerp(WHITE, clamp(row.glow * 0.5, 0, 0.65));
+              .lerp(WHITE, 0.26 + clamp(row.glow * 0.24, 0, 0.34));
           }
           glyphMesh.setColorAt(cursor, colorScratch);
           glyphCounts[glyphType] = cursor + 1;
@@ -1685,22 +1685,16 @@ function RuneRollScene() {
 
       <instancedMesh ref={tileRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial
+        <meshBasicMaterial
           vertexColors
-          roughness={0.42}
-          metalness={0.14}
-          emissive="#18253f"
-          emissiveIntensity={0.58}
+          toneMapped={false}
         />
       </instancedMesh>
       <instancedMesh ref={tileInsetRef} args={[undefined, undefined, TILE_DRAW_CAP]}>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial
+        <meshBasicMaterial
           vertexColors
-          roughness={0.22}
-          metalness={0.26}
-          emissive="#233761"
-          emissiveIntensity={0.5}
+          toneMapped={false}
         />
       </instancedMesh>
       <instancedMesh ref={tileCoreRef} args={[undefined, undefined, TILE_DRAW_CAP]}>

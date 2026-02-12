@@ -30,6 +30,7 @@ type Pulse = {
   lane: number;
   angle: number;
   radius: number;
+  velocity: number;
   speed: number;
   thickness: number;
   colorIndex: number;
@@ -141,10 +142,11 @@ const PULSE_POOL = 84;
 const SHARD_POOL = 96;
 const SPARK_POOL = 14;
 
-const SPAWN_RADIUS_BASE = 0.24;
+const SPAWN_RADIUS_BASE = 0.05;
 const CORE_FAIL_RADIUS = 0.22;
-const PARRY_RADIUS_BASE = 3.08;
-const MISS_RADIUS = 4.48;
+const PARRY_RADIUS_BASE = 2.62;
+const MISS_RADIUS = 3.85;
+const CAMERA_BASE_Y = 9.4;
 const SWIPE_THRESHOLD = 0.16;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
@@ -223,6 +225,7 @@ const createPulse = (slot: number): Pulse => ({
   lane: 0,
   angle: 0,
   radius: SPAWN_RADIUS_BASE,
+  velocity: 0,
   speed: 1.3,
   thickness: 0.18,
   colorIndex: 0,
@@ -274,7 +277,7 @@ const createRuntime = (): Runtime => ({
   shockRadius: PARRY_RADIUS_BASE,
   shockLife: 0,
   shockDuration: 0.11,
-  shockMaxRadius: 6.35,
+  shockMaxRadius: 5.25,
   parryRadius: PARRY_RADIUS_BASE,
   tapCooldown: 0,
 
@@ -324,7 +327,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.shockRadius = PARRY_RADIUS_BASE;
   runtime.shockLife = 0;
   runtime.shockDuration = 0.11;
-  runtime.shockMaxRadius = 6.35;
+  runtime.shockMaxRadius = 5.25;
   runtime.parryRadius = PARRY_RADIUS_BASE;
   runtime.tapCooldown = 0;
 
@@ -347,6 +350,7 @@ const resetRuntime = (runtime: Runtime) => {
     pulse.lane = 0;
     pulse.angle = 0;
     pulse.radius = SPAWN_RADIUS_BASE;
+    pulse.velocity = 0;
     pulse.speed = 1.3;
     pulse.thickness = 0.18;
     pulse.colorIndex = 0;
@@ -563,8 +567,8 @@ const spawnPulseSet = (runtime: Runtime) => {
   const tier = runtime.currentChunk?.tier ?? 0;
 
   const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
-  const phaseSpeedBoost = 1 + (runtime.phase - 1) * 0.3;
-  const baseSpeed = lerp(1.05, 2.8, d) * phaseSpeedBoost + runtime.parries * 0.012;
+  const phaseSpeedBoost = 1 + (runtime.phase - 1) * 0.22;
+  const baseSpeed = lerp(0.86, 2.15, d) * phaseSpeedBoost + runtime.parries * 0.009;
   let count = 1;
   if (runtime.phase >= 2 && Math.random() < clamp(0.44 + d * 0.28 + tier * 0.07, 0.22, 0.82)) {
     count += 1;
@@ -576,8 +580,8 @@ const spawnPulseSet = (runtime: Runtime) => {
   if (lanes.length === 0) return;
   count = Math.min(count, lanes.length);
 
-  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.1;
-  const spacing = 0.34 + Math.random() * 0.22;
+  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.03;
+  const spacing = 0.1 + Math.random() * 0.05;
   for (let i = lanes.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
@@ -591,10 +595,11 @@ const spawnPulseSet = (runtime: Runtime) => {
     pulse.lane = lane;
     pulse.angle = CARDINAL_ANGLES[lane];
     pulse.radius = baseRadius + i * spacing;
+    pulse.velocity = 0;
     pulse.speed = clamp(
       baseSpeed * (0.84 + Math.random() * 0.45 + i * 0.08 + tier * 0.05),
-      0.95,
-      5.2
+      0.75,
+      4.2
     );
     pulse.thickness = clamp(lerp(0.14, 0.27, d) + tier * 0.01 + Math.random() * 0.05, 0.12, 0.34);
     pulse.colorIndex = runtime.nextColor;
@@ -675,14 +680,24 @@ const syncPulseLaneMesh = (
       continue;
     }
 
-    dummy.position.set(Math.cos(pulse.angle) * pulse.radius, 0.02, Math.sin(pulse.angle) * pulse.radius);
-    const s = Math.max(0.001, pulse.thickness * 0.35);
-    dummy.scale.setScalar(s * 1.18);
-    dummy.rotation.set(runtime.elapsed * 0.28, runtime.elapsed * 0.7, runtime.elapsed * 0.36);
+    const appear = clamp(pulse.life / 0.18, 0, 1);
+    const organic = 0.82 + 0.18 * Math.sin((runtime.elapsed + pulse.slot * 0.037) * 6.4);
+    dummy.position.set(
+      Math.cos(pulse.angle) * pulse.radius,
+      0.02 + (1 - appear) * 0.03 + Math.sin((pulse.life + pulse.slot) * 7) * 0.004,
+      Math.sin(pulse.angle) * pulse.radius
+    );
+    const s = Math.max(0.001, pulse.thickness * (0.16 + 0.84 * appear) * organic);
+    dummy.scale.setScalar(s * 1.2);
+    dummy.rotation.set(
+      pulse.life * 3.4 + lane * 0.3,
+      runtime.elapsed * 0.55 + pulse.slot * 0.1,
+      pulse.life * 2.8
+    );
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
 
-    colorScratch.copy(PULSE_COLORS[pulse.colorIndex]);
+    colorScratch.copy(PULSE_COLORS[pulse.colorIndex]).lerp(WHITE, (1 - appear) * 0.45);
     if (pulse.flash > 0) colorScratch.lerp(WHITE, clamp(pulse.flash, 0, 0.8));
     mesh.setColorAt(i, colorScratch);
   }
@@ -707,7 +722,7 @@ function PulseParryOverlay() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-5 top-5 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
         <div className="text-[11px] text-cyan-50/85">
           Shot shapes from center to targets. Press matching direction on overlap.
@@ -717,13 +732,13 @@ function PulseParryOverlay() {
         </div>
       </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-5 top-5 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
+        <div className="absolute left-5 top-[102px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
           <div>
             Phase <span className="font-semibold text-cyan-200">{phase}</span>
           </div>
@@ -1083,8 +1098,11 @@ function PulseParryScene() {
         if (!pulse.active) continue;
         pulse.flash = Math.max(0, pulse.flash - dt * 4.5);
         pulse.life += dt;
-
-        pulse.radius += pulse.speed * dt * (0.9 + Math.min(0.45, pulse.life * 0.3));
+        const targetVelocity = pulse.speed * (0.55 + Math.min(0.7, pulse.life * 0.9));
+        const accel = (targetVelocity - pulse.velocity) * (5.4 - Math.min(2.5, pulse.life * 1.4));
+        pulse.velocity += accel * dt;
+        pulse.velocity *= Math.exp(-0.2 * dt);
+        pulse.radius += pulse.velocity * dt;
 
         if (pulse.radius >= MISS_RADIUS + pulse.thickness * 0.45) {
           runtime.resonance = Math.max(0, runtime.resonance - 0.8);
@@ -1148,7 +1166,7 @@ function PulseParryScene() {
     const shakeTime = runtime.elapsed * 24;
     camTarget.set(
       shakeNoiseSigned(shakeTime, 1.7) * shakeAmp,
-      7.25 + shakeNoiseSigned(shakeTime, 9.3) * shakeAmp * 0.2,
+      CAMERA_BASE_Y + shakeNoiseSigned(shakeTime, 9.3) * shakeAmp * 0.2,
       0.002 + shakeNoiseSigned(shakeTime, 17.9) * shakeAmp
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
@@ -1234,20 +1252,40 @@ function PulseParryScene() {
       if (rune) {
         rune.visible = laneActive;
         const targetAngle = angle;
-        rune.position.set(Math.cos(targetAngle) * 3.48, 0.05, Math.sin(targetAngle) * 3.48);
-        rune.rotation.set(Math.PI * 0.5, runtime.elapsed * 0.7 + i, targetAngle);
+        const targetRadius = runtime.parryRadius + 0.02;
+        rune.position.set(
+          Math.cos(targetAngle) * targetRadius,
+          0.05,
+          Math.sin(targetAngle) * targetRadius
+        );
+        rune.rotation.set(
+          runtime.elapsed * 0.65 + i,
+          runtime.elapsed * 0.72 + i * 0.4,
+          runtime.elapsed * 0.53
+        );
+        const runeScale = isLocked
+          ? 0.225
+          : isHot
+            ? 0.2 + runtime.overlapStrength * 0.04
+            : 0.17 + pulse * 0.012;
+        rune.scale.setScalar(runeScale);
         const mat = rune.material as THREE.MeshBasicMaterial;
-        mat.opacity = 0.32 + runtime.resonance * 0.02 + (isHot ? 0.1 : 0);
+        mat.color.copy(isLocked ? WHITE : isHot ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
+        mat.opacity = isLocked
+          ? 0.97
+          : isHot
+            ? clamp(0.74 + runtime.overlapStrength * 0.2, 0.74, 0.95)
+            : 0.62 + runtime.resonance * 0.02;
       }
 
       const laneBeam = laneBeamRefs.current[i];
       if (laneBeam) {
         laneBeam.visible = laneActive;
         const lanePulse = 0.2 + Math.max(0, Math.sin(runtime.elapsed * 3 + i) * 0.1);
-        laneBeam.position.set(Math.cos(angle) * 2.1, 0.005, Math.sin(angle) * 2.1);
+        laneBeam.position.set(Math.cos(angle) * 1.65, 0.005, Math.sin(angle) * 1.65);
         laneBeam.rotation.set(-Math.PI * 0.5, 0, angle);
         const mat = laneBeam.material as THREE.MeshBasicMaterial;
-        mat.opacity = lanePulse + (isLocked ? 0.26 : 0) + (isHot ? runtime.overlapStrength * 0.25 : 0);
+        mat.opacity = (lanePulse + (isLocked ? 0.26 : 0) + (isHot ? runtime.overlapStrength * 0.25 : 0)) * 0.62;
       }
     }
 
@@ -1323,7 +1361,7 @@ function PulseParryScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 7.25, 0.002]} fov={36} near={0.1} far={50} />
+      <PerspectiveCamera makeDefault position={[0, CAMERA_BASE_Y, 0.002]} fov={34} near={0.1} far={50} />
       <color attach="background" args={['#0c1b2b']} />
       <fog attach="fog" args={['#0c1b2b', 8, 24]} />
 
@@ -1409,11 +1447,11 @@ function PulseParryScene() {
           position={[0, 0.005, 0]}
           rotation={[-Math.PI * 0.5, 0, 0]}
         >
-          <planeGeometry args={[0.28, 4.4]} />
+          <planeGeometry args={[0.22, 3.1]} />
           <meshBasicMaterial
             color={PULSE_COLORS[idx % PULSE_COLORS.length]}
             transparent
-            opacity={0.22}
+            opacity={0.16}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
@@ -1489,11 +1527,11 @@ function PulseParryScene() {
           position={[0, 0.05, 0]}
           rotation={[Math.PI * 0.5, 0, 0]}
         >
-          <torusGeometry args={[0.16, 0.03, 10, 24]} />
+          <LaneShapeGeometry lane={idx} />
           <meshBasicMaterial
-            color="#ffd39f"
+            color={PULSE_COLORS[idx % PULSE_COLORS.length]}
             transparent
-            opacity={0.5}
+            opacity={0.7}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
@@ -1567,8 +1605,15 @@ const PulseParry: React.FC<{ soundsOn?: boolean }> = () => {
     <Canvas
       dpr={[1, 1.45]}
       gl={{ antialias: false, powerPreference: 'high-performance' }}
-      className="absolute inset-0 h-full w-full"
-      style={{ touchAction: 'none' }}
+      className="absolute"
+      style={{
+        top: 10,
+        right: 10,
+        bottom: 10,
+        left: 10,
+        touchAction: 'none',
+        borderRadius: 14,
+      }}
       onContextMenu={(event) => event.preventDefault()}
     >
       <PulseParryScene />
