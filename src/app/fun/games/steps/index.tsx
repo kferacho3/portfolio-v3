@@ -32,6 +32,17 @@ type Tile = {
   fallStart: number;
   drop: number;
   spawnPulse: number;
+  bonus: boolean;
+};
+
+type Debris = {
+  active: boolean;
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  rot: THREE.Vector3;
+  spin: THREE.Vector3;
+  life: number;
+  size: number;
 };
 
 const TILE_SIZE = 1;
@@ -61,11 +72,13 @@ const IDLE_LIMIT_MIN = 0.4;
 const FALL_DELAY_BASE = 1.25;
 const FALL_DELAY_MIN = 0.28;
 const FALL_HIDE_Y = 7.5;
+const DEBRIS_POOL = 120;
 
 const COLOR_SKY_A = new THREE.Color('#58c8ff');
 const COLOR_PATH = new THREE.Color('#f7d66f');
 const COLOR_TRAIL = new THREE.Color('#ef57be');
 const COLOR_FALL = new THREE.Color('#ae4a9d');
+const COLOR_BONUS = new THREE.Color('#ffef9b');
 const COLOR_SPIKE = new THREE.Color('#e74d4d');
 const COLOR_SAW = new THREE.Color('#f76c6c');
 const COLOR_CLAMP = new THREE.Color('#fb7185');
@@ -149,6 +162,7 @@ function Steps() {
   const sawMeshRef = useRef<THREE.InstancedMesh>(null);
   const clampMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
+  const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
 
   const world = useRef({
@@ -161,6 +175,7 @@ function Steps() {
     genIz: 0,
     genDir: 'x' as Dir,
     chunkTilesLeft: 0,
+    bonusTilesLeft: 0,
     nextIndex: 0,
 
     tilesByKey: new Map<string, Tile>(),
@@ -182,6 +197,7 @@ function Steps() {
     moveTargetIndex: 0,
     moveT: 0,
     moveDuration: STEP_DURATION_BASE,
+    stepQueued: false,
 
     falling: false,
     vy: 0,
@@ -195,6 +211,20 @@ function Steps() {
     pressure: 0,
 
     spaceWasDown: false,
+
+    debris: Array.from(
+      { length: DEBRIS_POOL },
+      (): Debris => ({
+        active: false,
+        pos: new THREE.Vector3(),
+        vel: new THREE.Vector3(),
+        rot: new THREE.Vector3(),
+        spin: new THREE.Vector3(),
+        life: 0,
+        size: 0.08,
+      })
+    ),
+    debrisCursor: 0,
 
     dummy: new THREE.Object3D(),
     tempColorA: new THREE.Color(),
@@ -249,6 +279,10 @@ function Steps() {
       w.chunkTilesLeft -= 1;
     }
 
+    if (w.bonusTilesLeft <= 0 && w.nextIndex > 28 && w.nextIndex % 70 === 0 && w.rng.bool(0.5)) {
+      w.bonusTilesLeft = w.rng.int(10, 16);
+    }
+
     const ix = w.genIx;
     const iz = w.genIz;
     const index = w.nextIndex;
@@ -258,10 +292,13 @@ function Steps() {
     const old = w.instanceToTile[instanceId];
     if (old) removeTile(old);
 
-    const hazard = pickHazard(index, w.rng);
+    const inBonus = w.bonusTilesLeft > 0;
+    if (inBonus) w.bonusTilesLeft -= 1;
+
+    const hazard = inBonus ? 'none' : pickHazard(index, w.rng);
     const difficulty = Math.floor(index / 20);
     const gemChanceBase = clamp(0.16 + difficulty * 0.01, 0.16, 0.35);
-    const gemChance = hazard === 'none' ? gemChanceBase : gemChanceBase * 0.52;
+    const gemChance = inBonus ? 0.95 : hazard === 'none' ? gemChanceBase : gemChanceBase * 0.52;
 
     const tile: Tile = {
       key,
@@ -277,6 +314,7 @@ function Steps() {
       fallStart: Number.POSITIVE_INFINITY,
       drop: 0,
       spawnPulse: 1,
+      bonus: inBonus,
     };
 
     w.tilesByKey.set(tile.key, tile);
@@ -297,6 +335,21 @@ function Steps() {
     tile.painted = true;
   };
 
+  const spawnDebrisBurst = (x: number, y: number, z: number, count = 28) => {
+    const w = world.current;
+    for (let i = 0; i < count; i += 1) {
+      const d = w.debris[w.debrisCursor % DEBRIS_POOL];
+      w.debrisCursor += 1;
+      d.active = true;
+      d.life = 0.42 + w.rng.random() * 0.42;
+      d.pos.set(x, y, z);
+      d.vel.set(w.rng.float(-4.5, 4.5), w.rng.float(2.2, 7.2), w.rng.float(-4.5, 4.5));
+      d.rot.set(w.rng.float(0, Math.PI), w.rng.float(0, Math.PI), w.rng.float(0, Math.PI));
+      d.spin.set(w.rng.float(-10, 10), w.rng.float(-10, 10), w.rng.float(-10, 10));
+      d.size = 0.045 + w.rng.random() * 0.08;
+    }
+  };
+
   const triggerDeath = (reason: string) => {
     const w = world.current;
     if (stepsState.phase === 'gameover') return;
@@ -304,9 +357,11 @@ function Steps() {
     stepsState.endGame(reason);
     w.falling = true;
     w.moving = false;
+    w.stepQueued = false;
     w.vy = -2.2;
     w.deathSpin = (w.rng.bool(0.5) ? 1 : -1) * 7.8;
     w.cameraShake = Math.max(w.cameraShake, 0.38);
+    spawnDebrisBurst(w.px, w.py, w.pz, 36);
     stepsState.setPressure(0);
   };
 
@@ -314,6 +369,7 @@ function Steps() {
     const w = world.current;
     if (stepsState.phase !== 'playing') return;
     if (w.moving || w.falling) return;
+    w.stepQueued = false;
 
     const current = w.tilesByIndex.get(w.currentTileIndex);
     const next = w.tilesByIndex.get(w.currentTileIndex + 1);
@@ -368,6 +424,7 @@ function Steps() {
     w.genIz = 0;
     w.genDir = 'x';
     w.chunkTilesLeft = 0;
+    w.bonusTilesLeft = 0;
     w.nextIndex = 0;
 
     w.tilesByKey.clear();
@@ -389,6 +446,7 @@ function Steps() {
     w.moveTargetIndex = 0;
     w.moveT = 0;
     w.moveDuration = STEP_DURATION_BASE;
+    w.stepQueued = false;
 
     w.falling = false;
     w.vy = 0;
@@ -401,6 +459,18 @@ function Steps() {
     w.pressure = 0;
 
     w.spaceWasDown = false;
+
+    w.debrisCursor = 0;
+    for (let i = 0; i < DEBRIS_POOL; i += 1) {
+      const d = w.debris[i];
+      d.active = false;
+      d.pos.set(0, 0, 0);
+      d.vel.set(0, 0, 0);
+      d.rot.set(0, 0, 0);
+      d.spin.set(0, 0, 0);
+      d.life = 0;
+      d.size = 0.08;
+    }
 
     for (let i = 0; i < INITIAL_PATH_TILES; i += 1) addNextTile();
 
@@ -417,10 +487,12 @@ function Steps() {
 
     camera.position.set(6.8, 7.4, 6.8);
     camera.lookAt(0, 0.25, 0);
-    camera.fov = 36;
-    camera.updateProjectionMatrix();
+    if ('fov' in camera) {
+      (camera as THREE.PerspectiveCamera).fov = 36;
+      camera.updateProjectionMatrix();
+    }
 
-    if (tileMeshRef.current && spikeMeshRef.current && sawMeshRef.current && clampMeshRef.current && gemMeshRef.current) {
+    if (tileMeshRef.current && spikeMeshRef.current && sawMeshRef.current && clampMeshRef.current && gemMeshRef.current && debrisMeshRef.current) {
       for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
         hideInstance(tileMeshRef.current, i);
         hideInstance(spikeMeshRef.current, i);
@@ -429,11 +501,16 @@ function Steps() {
         hideInstance(gemMeshRef.current, i);
       }
 
+      for (let i = 0; i < DEBRIS_POOL; i += 1) {
+        hideInstance(debrisMeshRef.current, i);
+      }
+
       tileMeshRef.current.instanceMatrix.needsUpdate = true;
       spikeMeshRef.current.instanceMatrix.needsUpdate = true;
       sawMeshRef.current.instanceMatrix.needsUpdate = true;
       clampMeshRef.current.instanceMatrix.needsUpdate = true;
       gemMeshRef.current.instanceMatrix.needsUpdate = true;
+      debrisMeshRef.current.instanceMatrix.needsUpdate = true;
     }
 
     stepsState.setPressure(0);
@@ -520,6 +597,10 @@ function Steps() {
             triggerDeath('Missed the next step.');
           } else {
             onLandOnTile(landedTile);
+            if (w.stepQueued && stepsState.phase === 'playing' && !w.falling) {
+              w.stepQueued = false;
+              tryStepForward();
+            }
           }
         }
       } else if (w.falling) {
@@ -562,6 +643,23 @@ function Steps() {
       }
     }
 
+    for (let i = 0; i < DEBRIS_POOL; i += 1) {
+      const d = w.debris[i];
+      if (!d.active) continue;
+      d.life -= dt;
+      if (d.life <= 0) {
+        d.active = false;
+        continue;
+      }
+      d.vel.y += -18 * dt;
+      d.vel.multiplyScalar(Math.max(0, 1 - dt * 2.6));
+      d.pos.addScaledVector(d.vel, dt);
+      d.rot.x += d.spin.x * dt;
+      d.rot.y += d.spin.y * dt;
+      d.rot.z += d.spin.z * dt;
+      if (d.pos.y < -8) d.active = false;
+    }
+
     w.hudCommit += dt;
     if (w.hudCommit >= 0.04) {
       w.hudCommit = 0;
@@ -590,7 +688,11 @@ function Steps() {
         stepsState.startGame();
         resetWorld();
       } else if (stepsState.phase === 'playing') {
-        tryStepForward();
+        if (w.moving) {
+          w.stepQueued = true;
+        } else {
+          tryStepForward();
+        }
       }
     }
 
@@ -655,7 +757,10 @@ function Steps() {
         w.dummy.updateMatrix();
         tileMesh.setMatrixAt(i, w.dummy.matrix);
 
-        w.tempColorA.copy(COLOR_PATH).lerp(COLOR_TRAIL, tile.painted ? 1 : 0);
+        w.tempColorA.copy(tile.bonus ? COLOR_BONUS : COLOR_PATH).lerp(COLOR_TRAIL, tile.painted ? (tile.bonus ? 0.72 : 1) : 0);
+        if (tile.bonus && !tile.painted) {
+          w.tempColorA.lerp(COLOR_WHITE, 0.12 + Math.sin(w.simTime * 5 + tile.index * 0.3) * 0.06);
+        }
         if (tile.index === w.currentTileIndex && stepsState.phase === 'playing') {
           w.tempColorA.lerp(COLOR_WHITE, 0.22 + snap.pressure * 0.2);
         }
@@ -744,6 +849,24 @@ function Steps() {
       if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
     }
 
+    if (debrisMeshRef.current) {
+      const debrisMesh = debrisMeshRef.current;
+      for (let i = 0; i < DEBRIS_POOL; i += 1) {
+        const d = w.debris[i];
+        if (!d.active) {
+          hideInstance(debrisMesh, i);
+          continue;
+        }
+
+        w.dummy.position.copy(d.pos);
+        w.dummy.rotation.set(d.rot.x, d.rot.y, d.rot.z);
+        w.dummy.scale.set(d.size, d.size, d.size);
+        w.dummy.updateMatrix();
+        debrisMesh.setMatrixAt(i, w.dummy.matrix);
+      }
+      debrisMesh.instanceMatrix.needsUpdate = true;
+    }
+
     if (playerRef.current) {
       const player = playerRef.current;
       player.position.set(w.px, w.py, w.pz);
@@ -780,12 +903,16 @@ function Steps() {
     camera.position.z = easingLerp(camera.position.z, w.camTarget.z + shakeZ, dtRender, 5.2);
 
     const targetFov = 35 + snap.pressure * 4 + (w.falling ? 2 : 0);
-    camera.fov = easingLerp(camera.fov, targetFov, dtRender, 4.4);
-    camera.updateProjectionMatrix();
+    if ('fov' in camera) {
+      const perspective = camera as THREE.PerspectiveCamera;
+      perspective.fov = easingLerp(perspective.fov, targetFov, dtRender, 4.4);
+      perspective.updateProjectionMatrix();
+    }
     camera.lookAt(focusX, 0.25, focusZ);
   });
 
   const collapsePct = Math.round(clamp(snap.pressure, 0, 1) * 100);
+  const bonusActive = Boolean(world.current.tilesByIndex.get(world.current.currentTileIndex)?.bonus);
 
   return (
     <group>
@@ -861,6 +988,11 @@ function Steps() {
         />
       </instancedMesh>
 
+      <instancedMesh ref={debrisMeshRef} args={[undefined, undefined, DEBRIS_POOL]}>
+        <boxGeometry args={[0.08, 0.08, 0.08]} />
+        <meshStandardMaterial color={'#ffd9f1'} roughness={0.26} metalness={0.08} />
+      </instancedMesh>
+
       <mesh ref={playerRef} castShadow>
         <boxGeometry args={PLAYER_SIZE} />
         <meshStandardMaterial color={'#f85db6'} roughness={0.34} metalness={0.1} emissive="#ff94d4" emissiveIntensity={0.12} />
@@ -902,7 +1034,21 @@ function Steps() {
               width: 260,
               pointerEvents: 'none',
             }}
-          >
+            >
+            {bonusActive && (
+              <div
+                style={{
+                  marginBottom: 6,
+                  textAlign: 'center',
+                  fontSize: 12,
+                  letterSpacing: 1.6,
+                  fontWeight: 800,
+                  color: '#fff4a3',
+                }}
+              >
+                BONUS STAGE
+              </div>
+            )}
             <div
               style={{
                 height: 9,
