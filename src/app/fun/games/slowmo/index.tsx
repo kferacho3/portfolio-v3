@@ -488,6 +488,77 @@ function SlowMoScene() {
     }
   }
 
+  function updateImpactVisuals(dt: number) {
+    const w = world.current;
+    const wallGlowZ = w.runnerDistance + SEG_LEN * 2.2;
+    if (wallGlowLeftRef.current) wallGlowLeftRef.current.position.z = wallGlowZ;
+    if (wallGlowRightRef.current) wallGlowRightRef.current.position.z = wallGlowZ;
+
+    if (wallGlowLeftMaterialRef.current) {
+      const leftOpacity = 0.08 + w.slowStrength * 0.05 + w.wallPulseL * 0.45;
+      wallGlowLeftMaterialRef.current.opacity = leftOpacity;
+      impactColorScratchRef.current
+        .set(THEME.rails)
+        .lerp(whiteColorRef.current, 0.1 + w.wallPulseL * 0.35);
+      wallGlowLeftMaterialRef.current.color.copy(impactColorScratchRef.current);
+    }
+
+    if (wallGlowRightMaterialRef.current) {
+      const rightOpacity = 0.08 + w.slowStrength * 0.05 + w.wallPulseR * 0.45;
+      wallGlowRightMaterialRef.current.opacity = rightOpacity;
+      impactColorScratchRef.current
+        .set(THEME.rails)
+        .lerp(whiteColorRef.current, 0.1 + w.wallPulseR * 0.35);
+      wallGlowRightMaterialRef.current.color.copy(impactColorScratchRef.current);
+    }
+
+    for (let i = 0; i < w.impacts.length; i += 1) {
+      const fx = w.impacts[i];
+      const group = impactGroupRefs.current[i];
+      const coreMaterial = impactCoreMaterialRefs.current[i];
+      const ringMaterial = impactRingMaterialRefs.current[i];
+      if (!fx.active || !group || !coreMaterial || !ringMaterial) {
+        if (group) group.visible = false;
+        continue;
+      }
+
+      fx.life -= dt;
+      if (fx.life <= 0) {
+        fx.active = false;
+        group.visible = false;
+        continue;
+      }
+
+      const age = 1 - fx.life / Math.max(0.001, fx.maxLife);
+      fx.vx *= Math.exp(-2.2 * dt);
+      fx.vy = fx.vy * Math.exp(-2.6 * dt) - 0.8 * dt;
+      fx.vz *= Math.exp(-2.2 * dt);
+      fx.x += fx.vx * dt;
+      fx.y += fx.vy * dt;
+      fx.z += fx.vz * dt;
+
+      group.visible = true;
+      group.position.set(fx.x, fx.y, fx.z);
+      group.rotation.z += fx.spin * dt;
+
+      const scaleCore = fx.size * (1 + age * 1.1);
+      const scaleRing = fx.size * (1 + age * 2.2);
+      const coreMesh = group.children[0] as THREE.Mesh | undefined;
+      const ringMesh = group.children[1] as THREE.Mesh | undefined;
+      if (coreMesh) coreMesh.scale.setScalar(scaleCore);
+      if (ringMesh) ringMesh.scale.setScalar(scaleRing);
+
+      const alpha = Math.max(0, 1 - age);
+      coreMaterial.color.copy(fx.color);
+      coreMaterial.opacity =
+        alpha * (fx.kind === 'pickup' ? 0.85 : fx.kind === 'wall' ? 0.74 : 0.78);
+
+      impactColorScratchRef.current.copy(fx.color).lerp(whiteColorRef.current, 0.28);
+      ringMaterial.color.copy(impactColorScratchRef.current);
+      ringMaterial.opacity = alpha * 0.68;
+    }
+  }
+
   function syncObstacleVisual(i: number) {
     const o = obstacles[i];
     const group = obstacleGroupRefs.current[i];
@@ -677,6 +748,9 @@ function SlowMoScene() {
         lz + GAME_TUNING.camera.offsetZ
       );
       cam.lookAt(w.x, 0, lz);
+      w.wallPulseL = expDamp(w.wallPulseL, 0, 10.5, delta);
+      w.wallPulseR = expDamp(w.wallPulseR, 0, 10.5, delta);
+      updateImpactVisuals(delta);
       return;
     }
 
@@ -784,75 +858,7 @@ function SlowMoScene() {
     w.ringPulse += delta * (w.isSlow ? 8 : 4);
     w.wallPulseL = expDamp(w.wallPulseL, 0, 10.5, delta);
     w.wallPulseR = expDamp(w.wallPulseR, 0, 10.5, delta);
-
-    const wallGlowZ = w.runnerDistance + SEG_LEN * 2.2;
-    if (wallGlowLeftRef.current) wallGlowLeftRef.current.position.z = wallGlowZ;
-    if (wallGlowRightRef.current) wallGlowRightRef.current.position.z = wallGlowZ;
-
-    if (wallGlowLeftMaterialRef.current) {
-      const leftOpacity = 0.08 + w.slowStrength * 0.05 + w.wallPulseL * 0.45;
-      wallGlowLeftMaterialRef.current.opacity = leftOpacity;
-      impactColorScratchRef.current
-        .set(THEME.rails)
-        .lerp(whiteColorRef.current, 0.1 + w.wallPulseL * 0.35);
-      wallGlowLeftMaterialRef.current.color.copy(impactColorScratchRef.current);
-    }
-
-    if (wallGlowRightMaterialRef.current) {
-      const rightOpacity = 0.08 + w.slowStrength * 0.05 + w.wallPulseR * 0.45;
-      wallGlowRightMaterialRef.current.opacity = rightOpacity;
-      impactColorScratchRef.current
-        .set(THEME.rails)
-        .lerp(whiteColorRef.current, 0.1 + w.wallPulseR * 0.35);
-      wallGlowRightMaterialRef.current.color.copy(impactColorScratchRef.current);
-    }
-
-    for (let i = 0; i < w.impacts.length; i += 1) {
-      const fx = w.impacts[i];
-      const group = impactGroupRefs.current[i];
-      const coreMaterial = impactCoreMaterialRefs.current[i];
-      const ringMaterial = impactRingMaterialRefs.current[i];
-      if (!fx.active || !group || !coreMaterial || !ringMaterial) {
-        if (group) group.visible = false;
-        continue;
-      }
-
-      fx.life -= delta;
-      if (fx.life <= 0) {
-        fx.active = false;
-        group.visible = false;
-        continue;
-      }
-
-      const age = 1 - fx.life / Math.max(0.001, fx.maxLife);
-      fx.vx *= Math.exp(-2.2 * delta);
-      fx.vy = fx.vy * Math.exp(-2.6 * delta) - 0.8 * delta;
-      fx.vz *= Math.exp(-2.2 * delta);
-      fx.x += fx.vx * delta;
-      fx.y += fx.vy * delta;
-      fx.z += fx.vz * delta;
-
-      group.visible = true;
-      group.position.set(fx.x, fx.y, fx.z);
-      group.rotation.z += fx.spin * delta;
-
-      const scaleCore = fx.size * (1 + age * 1.1);
-      const scaleRing = fx.size * (1 + age * 2.2);
-      group.scale.set(1, 1, 1);
-      const coreMesh = group.children[0] as THREE.Mesh | undefined;
-      const ringMesh = group.children[1] as THREE.Mesh | undefined;
-      if (coreMesh) coreMesh.scale.setScalar(scaleCore);
-      if (ringMesh) ringMesh.scale.setScalar(scaleRing);
-
-      const alpha = Math.max(0, 1 - age);
-      coreMaterial.color.copy(fx.color);
-      coreMaterial.opacity =
-        alpha * (fx.kind === 'pickup' ? 0.85 : fx.kind === 'wall' ? 0.74 : 0.78);
-
-      impactColorScratchRef.current.copy(fx.color).lerp(whiteColorRef.current, 0.28);
-      ringMaterial.color.copy(impactColorScratchRef.current);
-      ringMaterial.opacity = alpha * 0.68;
-    }
+    updateImpactVisuals(delta);
 
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
@@ -1113,7 +1119,7 @@ function SlowMoScene() {
       />
 
       <color attach="background" args={[THEME.background]} />
-      <fog attach="fog" args={[THEME.fog, 9, 34]} />
+      <fog attach="fog" args={[THEME.fog, 10, 44]} />
 
       <ambientLight intensity={0.55} />
       <directionalLight
@@ -1132,6 +1138,18 @@ function SlowMoScene() {
         intensity={1.6}
         distance={20}
         color="#7ea4ff"
+      />
+      <pointLight
+        position={[-TRACK_WIDTH * 0.72, 1.2, 5]}
+        intensity={0.9}
+        distance={20}
+        color="#7effe1"
+      />
+      <pointLight
+        position={[TRACK_WIDTH * 0.72, 1.2, 5]}
+        intensity={0.9}
+        distance={20}
+        color="#7effe1"
       />
 
       {segments.map((seg, i) => (
@@ -1304,6 +1322,44 @@ function SlowMoScene() {
               emissiveIntensity={0.25}
               roughness={0.22}
               metalness={0.1}
+            />
+          </mesh>
+        </group>
+      ))}
+
+      {impactSlots.map((slot) => (
+        <group
+          key={`impact-${slot}`}
+          ref={(el) => {
+            impactGroupRefs.current[slot] = el;
+          }}
+          visible={false}
+          position={[0, BALL_RADIUS, 0]}
+        >
+          <mesh>
+            <sphereGeometry args={[1, 12, 12]} />
+            <meshBasicMaterial
+              ref={(el) => {
+                impactCoreMaterialRefs.current[slot] = el;
+              }}
+              color="#ffffff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[1, 0.16, 10, 28]} />
+            <meshBasicMaterial
+              ref={(el) => {
+                impactRingMaterialRefs.current[slot] = el;
+              }}
+              color="#ffffff"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
             />
           </mesh>
         </group>
