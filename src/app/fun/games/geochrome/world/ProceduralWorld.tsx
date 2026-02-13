@@ -8,6 +8,7 @@ import {
   WORLD_SHAPE_LABELS,
   WORLD_TIER_NAMES,
   WORLD_TUNING,
+  type GeoChromePalette,
 } from '../engine/constants';
 import type { WorldBodyRef, WorldRuntimeData } from '../engine/types';
 import { createSupershapeMaterial } from '../shaders/SupershapeMaterial';
@@ -16,6 +17,7 @@ interface ProceduralWorldProps {
   seed: number;
   lowPerf: boolean;
   liteMode: boolean;
+  palette: GeoChromePalette;
   worldMeshRef: React.MutableRefObject<THREE.InstancedMesh | null>;
   worldBodiesRef: WorldBodyRef;
   onWorldReady: (data: WorldRuntimeData) => void;
@@ -57,7 +59,11 @@ function pickSize(rand: () => number) {
   };
 }
 
-function makeWorldData(seed: number, count: number): WorldRuntimeData {
+function makeWorldData(
+  seed: number,
+  count: number,
+  palette: GeoChromePalette
+): WorldRuntimeData {
   const rand = seededRng(seed + WORLD_TUNING.seedBase);
 
   const instances: WorldRuntimeData['instances'] = new Array(count);
@@ -135,16 +141,20 @@ function makeWorldData(seed: number, count: number): WorldRuntimeData {
 
     const hueBase =
       tier === WORLD_TIER_NAMES[0]
-        ? 0.55
+        ? palette.worldHueBase[0]
         : tier === WORLD_TIER_NAMES[1]
-          ? 0.48
+          ? palette.worldHueBase[1]
           : tier === WORLD_TIER_NAMES[2]
-            ? 0.62
-            : 0.08;
+            ? palette.worldHueBase[2]
+            : palette.worldHueBase[3];
+    const satMin = palette.worldSatRange[0];
+    const satMax = palette.worldSatRange[1];
+    const lightMin = palette.worldLightRange[0];
+    const lightMax = palette.worldLightRange[1];
     color.setHSL(
       (hueBase + rand() * 0.12) % 1,
-      0.72 + rand() * 0.15,
-      0.48 + rand() * 0.19
+      satMin + rand() * (satMax - satMin),
+      lightMin + rand() * (lightMax - lightMin)
     );
     colors[i * 3 + 0] = color.r;
     colors[i * 3 + 1] = color.g;
@@ -196,6 +206,7 @@ export default function ProceduralWorld({
   seed,
   lowPerf,
   liteMode,
+  palette,
   worldMeshRef,
   worldBodiesRef,
   onWorldReady,
@@ -205,8 +216,8 @@ export default function ProceduralWorld({
     : WORLD_TUNING.itemCount;
 
   const worldData = useMemo(
-    () => makeWorldData(seed, worldCount),
-    [seed, worldCount]
+    () => makeWorldData(seed, worldCount, palette),
+    [seed, worldCount, palette]
   );
 
   const geometry = useMemo(() => {
@@ -271,8 +282,8 @@ export default function ProceduralWorld({
       collisionGroups={interactionGroups(COLLISION_GROUPS.WORLD, [
         COLLISION_GROUPS.PLAYER,
       ])}
-      friction={0.95}
-      restitution={0.1}
+      friction={0.82}
+      restitution={0.14}
     >
       <instancedMesh
         ref={worldMeshRef}

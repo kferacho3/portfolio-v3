@@ -82,14 +82,19 @@ export function useInput(enabled: boolean) {
       pointerStartX = event.clientX;
       pointerStartY = event.clientY;
       pointerRef.current.active = true;
+      pointerRef.current.forward = 0;
+      pointerRef.current.right = 0;
     };
 
     const onPointerMove = (event: PointerEvent) => {
       if (!enabled || !pointerRef.current.active) return;
-      const dx = (event.clientX - pointerStartX) / 110;
-      const dy = (event.clientY - pointerStartY) / 110;
-      pointerRef.current.right = Math.max(-1, Math.min(1, dx));
-      pointerRef.current.forward = Math.max(-1, Math.min(1, -dy));
+      const dx = (event.clientX - pointerStartX) / 140;
+      const dy = (event.clientY - pointerStartY) / 140;
+      const rawRight = Math.max(-1, Math.min(1, dx));
+      const rawForward = Math.max(-1, Math.min(1, -dy));
+      pointerRef.current.right = pointerRef.current.right * 0.55 + rawRight * 0.45;
+      pointerRef.current.forward =
+        pointerRef.current.forward * 0.55 + rawForward * 0.45;
       recompute();
     };
 

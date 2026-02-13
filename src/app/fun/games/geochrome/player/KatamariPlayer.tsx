@@ -5,7 +5,7 @@ import {
   type CollisionEnterPayload,
 } from '@react-three/rapier';
 import { useFrame } from '@react-three/fiber';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import {
   COLLISION_GROUPS,
@@ -90,6 +90,8 @@ export default function KatamariPlayer({
   const desiredVelocity = useMemo(() => new THREE.Vector3(), []);
   const torqueAxis = useMemo(() => new THREE.Vector3(), []);
   const torque = useMemo(() => new THREE.Vector3(), []);
+  const smoothedInput = useRef(new THREE.Vector2(0, 0));
+  const targetInput = useMemo(() => new THREE.Vector2(0, 0), []);
 
   useEffect(() => {
     onStuckBuffersReady({
@@ -129,6 +131,14 @@ export default function KatamariPlayer({
     }
 
     const input = inputRef.current;
+    targetInput.set(input.right, input.forward);
+    const inputLength = targetInput.length();
+    if (inputLength > 1) targetInput.multiplyScalar(1 / inputLength);
+    const inputBlend = 1 - Math.exp(-(input.boost ? 13 : 9) * delta);
+    smoothedInput.current.lerp(targetInput, inputBlend);
+    if (smoothedInput.current.lengthSq() < 0.0006) {
+      smoothedInput.current.set(0, 0);
+    }
 
     cameraForward.copy(state.camera.getWorldDirection(cameraForward));
     cameraForward.y = 0;
@@ -142,8 +152,8 @@ export default function KatamariPlayer({
 
     moveDirection
       .copy(cameraForward)
-      .multiplyScalar(input.forward)
-      .addScaledVector(cameraRight, input.right);
+      .multiplyScalar(smoothedInput.current.y)
+      .addScaledVector(cameraRight, smoothedInput.current.x);
 
     if (moveDirection.lengthSq() > 1) {
       moveDirection.normalize();
