@@ -16,9 +16,9 @@ export default function Lava() {
       new THREE.MeshStandardMaterial({
         color: palette.lava,
         emissive: new THREE.Color(palette.lava),
-        emissiveIntensity: 2.0,
+        emissiveIntensity: 1.1,
         transparent: true,
-        opacity: 0.85,
+        opacity: 0.72,
         roughness: 0.1,
         metalness: 0.15,
       }),

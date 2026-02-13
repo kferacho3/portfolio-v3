@@ -15,6 +15,7 @@ type OrientationState = 'UPRIGHT' | 'FLAT';
 type TileRule = 'ANY' | 'UPRIGHT' | 'FLAT';
 type TileSizeRule = 'ANY' | 'HALF' | 'DOUBLE';
 type FailReason = 'gap' | 'rule' | 'height' | 'size';
+type GuideUrgency = 'LOW' | 'MID' | 'HIGH';
 type PlayerBodyId = 'compact' | 'classic' | 'bloxorz' | 'tower';
 type PlayerSkinId =
   | 'glacier'
@@ -100,6 +101,7 @@ type Runtime = {
   gapRun: number;
   lastRule: TileRule;
   nextRuleHint: TileRule;
+  ruleCooldown: number;
   lastSizeRule: TileSizeRule;
   sizeRuleCooldown: number;
   nextSizeRuleHint: TileSizeRule;
@@ -116,6 +118,8 @@ type FlipBoxStore = {
   sizeTier: number;
   nextRule: TileRule;
   nextSizeRule: TileSizeRule;
+  guideText: string;
+  guideUrgency: GuideUrgency;
   body: PlayerBodyId;
   skin: PlayerSkinId;
   pulseNonce: number;
@@ -130,6 +134,7 @@ type FlipBoxStore = {
   setSizeTier: (value: number) => void;
   setNextRule: (value: TileRule) => void;
   setNextSizeRule: (value: TileSizeRule) => void;
+  setGuide: (text: string, urgency: GuideUrgency) => void;
   triggerPass: (label: string, perfect: boolean) => void;
   triggerSizeShift: (mode: 'SLICE' | 'COMBINE') => void;
   cycleBody: () => void;
@@ -164,7 +169,7 @@ const RECYCLE_Z = 9;
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
-const BG = '#f4f7ff';
+const BG = '#e8eef9';
 
 const PLAYER_BODIES: PlayerBodyOption[] = [
   {
@@ -269,13 +274,13 @@ const TILE_BASE_COLORS = [
   new THREE.Color('#c6ffe4'),
   new THREE.Color('#fff0c3'),
 ];
-const TILE_UPRIGHT = new THREE.Color('#95e6ff');
-const TILE_FLAT = new THREE.Color('#ff9ed7');
+const TILE_UPRIGHT = new THREE.Color('#ffd08a');
+const TILE_FLAT = new THREE.Color('#9defff');
 const TILE_HALF = new THREE.Color('#7bf6ff');
 const TILE_DOUBLE = new THREE.Color('#ffd06f');
 const TILE_EDGE = new THREE.Color('#ffffff');
-const GLYPH_UPRIGHT = new THREE.Color('#00b8ff');
-const GLYPH_FLAT = new THREE.Color('#ff2da4');
+const GLYPH_UPRIGHT = new THREE.Color('#ffba4d');
+const GLYPH_FLAT = new THREE.Color('#34ddff');
 const GLYPH_HALF = new THREE.Color('#36f0ff');
 const GLYPH_DOUBLE = new THREE.Color('#ffb347');
 const PULSE = new THREE.Color('#ffffff');
@@ -284,14 +289,27 @@ const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(ma
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clampSizeTier = (tier: number) => clamp(Math.round(tier), -1, 1);
 const scaleForSizeTier = (tier: number) => {
-  if (tier <= -1) return 0.5;
-  if (tier >= 1) return 2;
+  // Keep physics readable: split = compact cube-ish, regrow = controlled tower-ish.
+  if (tier <= -1) return 0.72;
+  if (tier >= 1) return 1.34;
   return 1;
 };
 const labelForSizeTier = (tier: number) => {
-  if (tier <= -1) return 'HALF';
-  if (tier >= 1) return 'DOUBLE';
+  if (tier <= -1) return 'CUBE';
+  if (tier >= 1) return 'TOWER';
   return 'NORMAL';
+};
+
+const sizeGateLabel = (rule: TileSizeRule) => {
+  if (rule === 'HALF') return 'CUBE';
+  if (rule === 'DOUBLE') return 'TOWER';
+  return 'ANY';
+};
+
+const postureLabel = (rule: TileRule) => {
+  if (rule === 'FLAT') return 'SHORT';
+  if (rule === 'UPRIGHT') return 'TALL';
+  return 'ANY';
 };
 
 const readBest = () => {
@@ -497,11 +515,27 @@ const orientationHalfHeight = (orientation: OrientationState, sizeScale = 1) =>
 const sizeForOrientation = (orientation: OrientationState) =>
   orientation === 'UPRIGHT' ? UPRIGHT_SIZE : FLAT_SIZE;
 
+const sizeMorphMultiplier = (orientation: OrientationState, tier: number): [number, number, number] => {
+  if (tier <= -1) {
+    // Split form: compact cube visual.
+    return orientation === 'UPRIGHT'
+      ? [1.08, 0.46, 1.08]
+      : [1.08, 1.08, 0.46];
+  }
+  if (tier >= 1) {
+    // Regrow form: tower visual.
+    return orientation === 'UPRIGHT'
+      ? [0.86, 1.19, 0.86]
+      : [0.86, 2.7, 0.36];
+  }
+  return [1, 1, 1];
+};
+
 const worldYForHeight = (heightLevel: number) => heightLevel * TILE_HEIGHT_STEP;
 
 const failReasonLabel = (reason: FailReason) => {
-  if (reason === 'rule') return 'Wrong shape for the gate.';
-  if (reason === 'size') return 'Wrong size for the gate.';
+  if (reason === 'rule') return 'Wrong posture for this gate.';
+  if (reason === 'size') return 'Wrong form. Split to CUBE or regrow to TOWER.';
   if (reason === 'height') return 'Bad fit on a split gate.';
   return 'You missed the lane support.';
 };
@@ -532,6 +566,8 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
   sizeTier: 0,
   nextRule: 'ANY',
   nextSizeRule: 'ANY',
+  guideText: 'Tap to start',
+  guideUrgency: 'LOW',
   body: initialPrefs.body,
   skin: initialPrefs.skin,
   pulseNonce: 0,
@@ -551,6 +587,8 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
       sizeTier: 0,
       nextRule: 'ANY',
       nextSizeRule: 'ANY',
+      guideText: 'Read the next gate',
+      guideUrgency: 'LOW',
       passLabel: '',
       sizeShiftMode: null,
     }),
@@ -565,6 +603,8 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
       sizeTier: 0,
       nextRule: 'ANY',
       nextSizeRule: 'ANY',
+      guideText: 'Tap to start',
+      guideUrgency: 'LOW',
       passLabel: '',
       sizeShiftMode: null,
     }),
@@ -572,6 +612,7 @@ const useFlipBoxStore = create<FlipBoxStore>((set, get) => ({
   setSizeTier: (value) => set({ sizeTier: clampSizeTier(value) }),
   setNextRule: (value) => set({ nextRule: value }),
   setNextSizeRule: (value) => set({ nextSizeRule: value }),
+  setGuide: (text, urgency) => set({ guideText: text, guideUrgency: urgency }),
   triggerPass: (label, perfect) =>
     set((state) => ({
       passNonce: state.passNonce + 1,
@@ -663,6 +704,7 @@ const createRuntime = (): Runtime => ({
   gapRun: 0,
   lastRule: 'ANY',
   nextRuleHint: 'ANY',
+  ruleCooldown: 0,
   lastSizeRule: 'ANY',
   sizeRuleCooldown: 0,
   nextSizeRuleHint: 'ANY',
@@ -693,38 +735,45 @@ const seedTile = (runtime: Runtime, tile: TileRecord, z: number, warmup: boolean
 
   // Keep the track continuous and readable; challenge comes from posture-fit rules.
   tile.present = true;
-  tile.heightLevel = 0;
   runtime.gapRun = 0;
-  runtime.lastHeight = 0;
+  tile.heightLevel = runtime.lastHeight;
 
-  const elevatedRuleChance = lerp(0.48, 0.86, d);
-  if (Math.random() < elevatedRuleChance) {
+  if (runtime.ruleCooldown > 0) runtime.ruleCooldown -= 1;
+
+  const elevatedRuleChance = lerp(0.42, 0.8, d);
+  if (runtime.ruleCooldown <= 0 && Math.random() < elevatedRuleChance) {
     if (runtime.lastRule === 'UPRIGHT') {
-      tile.rule = Math.random() < 0.65 ? 'FLAT' : 'UPRIGHT';
+      tile.rule = Math.random() < 0.72 ? 'FLAT' : 'UPRIGHT';
     } else if (runtime.lastRule === 'FLAT') {
-      tile.rule = Math.random() < 0.65 ? 'UPRIGHT' : 'FLAT';
+      tile.rule = Math.random() < 0.72 ? 'UPRIGHT' : 'FLAT';
     } else {
       tile.rule = Math.random() < 0.5 ? 'UPRIGHT' : 'FLAT';
     }
+    runtime.ruleCooldown = 1 + Math.floor(Math.random() * 2);
   } else {
     tile.rule = 'ANY';
   }
   if (tile.rule !== 'ANY') runtime.lastRule = tile.rule;
 
+  const stepChance = lerp(0.08, 0.24, d);
+  if (tile.rule !== 'FLAT' && Math.random() < stepChance) {
+    const delta = Math.random() < 0.5 ? -1 : 1;
+    tile.heightLevel = clamp(runtime.lastHeight + delta, 0, 2);
+  }
+  runtime.lastHeight = tile.heightLevel;
+
   if (runtime.sizeRuleCooldown > 0) {
     runtime.sizeRuleCooldown -= 1;
   }
-  const sizeRuleChance = lerp(0.08, 0.26, d);
+  const sizeRuleChance = lerp(0.11, 0.34, d);
   if (tile.rule !== 'ANY' && runtime.sizeRuleCooldown <= 0 && Math.random() < sizeRuleChance) {
-    if (runtime.lastSizeRule === 'HALF') {
-      tile.sizeRule = Math.random() < 0.72 ? 'DOUBLE' : 'HALF';
-    } else if (runtime.lastSizeRule === 'DOUBLE') {
-      tile.sizeRule = Math.random() < 0.72 ? 'HALF' : 'DOUBLE';
+    if (tile.rule === 'FLAT') {
+      tile.sizeRule = runtime.lastSizeRule === 'HALF' ? (Math.random() < 0.2 ? 'DOUBLE' : 'HALF') : (Math.random() < 0.82 ? 'HALF' : 'DOUBLE');
     } else {
-      tile.sizeRule = Math.random() < 0.5 ? 'HALF' : 'DOUBLE';
+      tile.sizeRule = runtime.lastSizeRule === 'DOUBLE' ? (Math.random() < 0.2 ? 'HALF' : 'DOUBLE') : (Math.random() < 0.82 ? 'DOUBLE' : 'HALF');
     }
     runtime.lastSizeRule = tile.sizeRule;
-    runtime.sizeRuleCooldown = 4 + Math.floor(Math.random() * 4);
+    runtime.sizeRuleCooldown = 3 + Math.floor(Math.random() * 3);
   }
 };
 
@@ -759,6 +808,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.gapRun = 0;
   runtime.lastRule = 'ANY';
   runtime.nextRuleHint = 'ANY';
+  runtime.ruleCooldown = 0;
   runtime.lastSizeRule = 'ANY';
   runtime.sizeRuleCooldown = 0;
   runtime.nextSizeRuleHint = 'ANY';
@@ -830,6 +880,8 @@ function FlipBoxOverlay() {
   const sizeTier = useFlipBoxStore((state) => state.sizeTier);
   const nextRule = useFlipBoxStore((state) => state.nextRule);
   const nextSizeRule = useFlipBoxStore((state) => state.nextSizeRule);
+  const guideText = useFlipBoxStore((state) => state.guideText);
+  const guideUrgency = useFlipBoxStore((state) => state.guideUrgency);
   const body = useFlipBoxStore((state) => state.body);
   const skin = useFlipBoxStore((state) => state.skin);
   const cycleBody = useFlipBoxStore((state) => state.cycleBody);
@@ -844,16 +896,14 @@ function FlipBoxOverlay() {
   const bodyLabel = findBody(body).name;
   const skinLabel = findSkin(skin).name;
 
-  const nextRuleLabel =
-    nextRule === 'UPRIGHT' ? 'UPRIGHT' : nextRule === 'FLAT' ? 'FLAT' : 'ANY';
+  const nextRuleLabel = postureLabel(nextRule);
   const nextRuleClass =
     nextRule === 'UPRIGHT'
-      ? 'text-cyan-200'
+      ? 'text-amber-200'
       : nextRule === 'FLAT'
-        ? 'text-fuchsia-200'
+        ? 'text-cyan-200'
         : 'text-white/85';
-  const nextSizeLabel =
-    nextSizeRule === 'HALF' ? 'HALF' : nextSizeRule === 'DOUBLE' ? 'DOUBLE' : 'ANY';
+  const nextSizeLabel = sizeGateLabel(nextSizeRule);
   const nextSizeClass =
     nextSizeRule === 'HALF'
       ? 'text-cyan-100'
@@ -861,12 +911,18 @@ function FlipBoxOverlay() {
         ? 'text-amber-200'
         : 'text-white/85';
   const sizeLabel = labelForSizeTier(sizeTier);
+  const guideClass =
+    guideUrgency === 'HIGH'
+      ? 'border-rose-100/80 bg-rose-500/28 text-rose-50'
+      : guideUrgency === 'MID'
+        ? 'border-amber-100/75 bg-amber-500/24 text-amber-50'
+        : 'border-cyan-100/70 bg-cyan-500/18 text-cyan-50';
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-xl border border-cyan-100/70 bg-gradient-to-br from-cyan-500/28 via-sky-500/18 to-violet-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-50">Flip Box</div>
-        <div className="text-[11px] text-white/90">Tap to switch shape. Swipe/Left grows, Swipe/Right slices.</div>
+        <div className="text-[11px] text-white/90">Tap to flip short/tall. Swipe/Right splits to cube, Swipe/Left regrows to tower.</div>
         <div className="pt-1 text-[10px] text-cyan-100/85">B body • C skin</div>
       </div>
 
@@ -880,7 +936,7 @@ function FlipBoxOverlay() {
           <div>
             Posture{' '}
             <span className="font-semibold text-cyan-100">
-              {posture === 'UPRIGHT' ? 'UPRIGHT' : 'FLAT'}
+              {posture === 'UPRIGHT' ? 'TALL' : 'SHORT'}
             </span>
           </div>
           <div>
@@ -907,12 +963,20 @@ function FlipBoxOverlay() {
         </div>
       )}
 
+      {status === 'PLAYING' && (
+        <div
+          className={`absolute left-1/2 top-4 -translate-x-1/2 rounded-xl border px-3 py-2 text-xs font-semibold tracking-[0.1em] backdrop-blur-[2px] ${guideClass}`}
+        >
+          {guideText}
+        </div>
+      )}
+
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
           <div className="pointer-events-auto rounded-2xl border border-cyan-100/60 bg-gradient-to-br from-sky-900/58 via-indigo-900/42 to-fuchsia-900/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">FLIP BOX</div>
-            <div className="mt-2 text-sm text-white/90">Single gate = upright box. Wide slot = flat box.</div>
-            <div className="mt-1 text-sm text-white/85">Tap flips shape. Swipe/Arrow Left combines, Swipe/Arrow Right slices.</div>
+            <div className="mt-2 text-sm text-white/90">Small square gate = SHORT posture. Long gate = TALL posture.</div>
+            <div className="mt-1 text-sm text-white/85">Swipe/Arrow Right splits into CUBE. Swipe/Arrow Left regrows to TOWER.</div>
             <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
               <button
                 className="rounded-md border border-white/35 bg-white/12 px-3 py-2 text-white hover:bg-white/20"
@@ -985,7 +1049,7 @@ function FlipBoxOverlay() {
             opacity: 0,
           }}
         >
-          {sizeShiftMode === 'SLICE' ? 'SLICE x0.5' : 'COMBINE x2'}
+          {sizeShiftMode === 'SLICE' ? 'SPLIT -> CUBE' : 'REGROW -> TOWER'}
         </div>
       )}
 
@@ -1286,12 +1350,14 @@ function FlipBoxScene() {
             useFlipBoxStore
               .getState()
               .triggerPass(
-                tile.sizeRule === 'ANY' ? `MATCH ${tile.rule}` : `${tile.sizeRule} GATE`,
+                tile.sizeRule === 'ANY'
+                  ? `MATCH ${postureLabel(tile.rule)}`
+                  : `${sizeGateLabel(tile.sizeRule)} GATE`,
                 false
               );
           }
 
-          if (tile.rule !== 'ANY' && runtime.flipTimer < 0.16) {
+          if (tile.rule !== 'ANY' && runtime.flipTimer < 0.22) {
             perfect = true;
             runtime.perfectStreak += 1;
             runtime.multiplier = clamp(1 + runtime.perfectStreak * 0.24, 1, 5);
@@ -1338,12 +1404,14 @@ function FlipBoxScene() {
 
       let nextRule: TileRule = 'ANY';
       let bestZ = -999;
+      let nextRuleTile: TileRecord | null = null;
       for (let i = 0; i < runtime.tiles.length; i += 1) {
         const tile = runtime.tiles[i];
         if (!tile.present || tile.rule === 'ANY') continue;
-        if (tile.z < -0.18 && tile.z > -11.5 && tile.z > bestZ) {
+        if (tile.z < -0.18 && tile.z > -15.5 && tile.z > bestZ) {
           bestZ = tile.z;
           nextRule = tile.rule;
+          nextRuleTile = tile;
         }
       }
       if (nextRule !== runtime.nextRuleHint) {
@@ -1353,18 +1421,75 @@ function FlipBoxScene() {
 
       let nextSizeRule: TileSizeRule = 'ANY';
       let sizeBestZ = -999;
+      let nextSizeTile: TileRecord | null = null;
       for (let i = 0; i < runtime.tiles.length; i += 1) {
         const tile = runtime.tiles[i];
         if (!tile.present || tile.sizeRule === 'ANY') continue;
-        if (tile.z < -0.18 && tile.z > -11.5 && tile.z > sizeBestZ) {
+        if (tile.z < -0.18 && tile.z > -15.5 && tile.z > sizeBestZ) {
           sizeBestZ = tile.z;
           nextSizeRule = tile.sizeRule;
+          nextSizeTile = tile;
         }
       }
       if (nextSizeRule !== runtime.nextSizeRuleHint) {
         runtime.nextSizeRuleHint = nextSizeRule;
         useFlipBoxStore.getState().setNextSizeRule(nextSizeRule);
       }
+
+      if (nextRuleTile) {
+        const urgencyPulse = clamp((-nextRuleTile.z - 0.4) / 8.5, 0, 1);
+        nextRuleTile.pulse = Math.max(nextRuleTile.pulse, 0.18 + urgencyPulse * 0.42);
+      }
+      if (nextSizeTile) {
+        const urgencyPulse = clamp((-nextSizeTile.z - 0.4) / 8.5, 0, 1);
+        nextSizeTile.pulse = Math.max(nextSizeTile.pulse, 0.18 + urgencyPulse * 0.4);
+      }
+
+      const mismatchRule = nextRule !== 'ANY' && runtime.orientation !== nextRule;
+      const mismatchSize =
+        (nextSizeRule === 'HALF' && runtime.targetSizeTier !== -1) ||
+        (nextSizeRule === 'DOUBLE' && runtime.targetSizeTier !== 1);
+      const ruleEta =
+        nextRule === 'ANY' ? Number.POSITIVE_INFINITY : Math.max(0, (-bestZ + 0.02) / Math.max(runtime.speed, 0.01));
+      const sizeEta =
+        nextSizeRule === 'ANY'
+          ? Number.POSITIVE_INFINITY
+          : Math.max(0, (-sizeBestZ + 0.02) / Math.max(runtime.speed, 0.01));
+
+      let guideText = 'HOLD LINE';
+      let guideUrgency: GuideUrgency = 'LOW';
+      if (mismatchSize) {
+        const action = nextSizeRule === 'HALF' ? 'SPLIT -> CUBE' : 'REGROW -> TOWER';
+        if (sizeEta < 0.34) {
+          guideText = `${action} NOW`;
+          guideUrgency = 'HIGH';
+        } else if (sizeEta < 0.8) {
+          guideText = `${action} (${sizeEta.toFixed(1)}s)`;
+          guideUrgency = 'MID';
+        } else {
+          guideText = `PREP ${action}`;
+          guideUrgency = 'LOW';
+        }
+      } else if (mismatchRule) {
+        const action = nextRule === 'FLAT' ? 'FLIP TO SHORT' : 'FLIP TO TALL';
+        if (ruleEta < 0.34) {
+          guideText = `${action} NOW`;
+          guideUrgency = 'HIGH';
+        } else if (ruleEta < 0.8) {
+          guideText = `${action} (${ruleEta.toFixed(1)}s)`;
+          guideUrgency = 'MID';
+        } else {
+          guideText = `PREP ${action}`;
+          guideUrgency = 'LOW';
+        }
+      } else if (nextRule !== 'ANY') {
+        guideText = `HOLD ${postureLabel(nextRule)}`;
+        guideUrgency = 'LOW';
+      } else if (nextSizeRule !== 'ANY') {
+        guideText = `HOLD ${sizeGateLabel(nextSizeRule)}`;
+        guideUrgency = 'LOW';
+      }
+      useFlipBoxStore.getState().setGuide(guideText, guideUrgency);
 
       flipBoxState.elapsed = runtime.elapsed;
       flipBoxState.chain = runtime.perfectStreak;
@@ -1380,9 +1505,13 @@ function FlipBoxScene() {
     runtime.rotX = lerp(runtime.rotX, runtime.rotTargetX, 1 - Math.exp(-15 * dt));
     runtime.playerY = lerp(runtime.playerY, runtime.targetY, 1 - Math.exp(-14 * dt));
 
-    const visualScaleX = runtime.displayScale.x * bodyOption.scale.x * runtime.sizeScale;
-    const visualScaleY = runtime.displayScale.y * bodyOption.scale.y * runtime.sizeScale;
-    const visualScaleZ = runtime.displayScale.z * bodyOption.scale.z * runtime.sizeScale;
+    const [morphX, morphY, morphZ] = sizeMorphMultiplier(runtime.orientation, runtime.sizeTier);
+    const visualScaleX =
+      runtime.displayScale.x * bodyOption.scale.x * runtime.sizeScale * morphX;
+    const visualScaleY =
+      runtime.displayScale.y * bodyOption.scale.y * runtime.sizeScale * morphY;
+    const visualScaleZ =
+      runtime.displayScale.z * bodyOption.scale.z * runtime.sizeScale * morphZ;
     const visualHalfY = visualScaleY * 0.5;
     const physicalHalfY = runtime.displayScale.y * runtime.sizeScale * 0.5;
     const playerVisualY = runtime.playerY + (visualHalfY - physicalHalfY);
@@ -1478,13 +1607,15 @@ function FlipBoxScene() {
           glyphRef.current.setMatrixAt(i, dummy.matrix);
           glyphRef.current.setColorAt(i, GLYPH_UPRIGHT);
         } else {
-          const glyphY = tileY + TILE_THICKNESS * 0.64;
+          const glyphY = tileY + TILE_THICKNESS * 0.68;
           if (tile.rule === 'UPRIGHT') {
             dummy.position.set(0, glyphY, tile.z);
-            dummy.scale.set(0.22, 0.04, 0.22);
+            // Long + taller mark = tall posture gate.
+            dummy.scale.set(0.48, 0.08, 0.2);
           } else {
             dummy.position.set(0, glyphY, tile.z);
-            dummy.scale.set(0.42, 0.04, 0.22);
+            // Small + short mark = short posture gate.
+            dummy.scale.set(0.24, 0.03, 0.24);
           }
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
@@ -1500,14 +1631,14 @@ function FlipBoxScene() {
           sizeGlyphRef.current.setMatrixAt(i, dummy.matrix);
           sizeGlyphRef.current.setColorAt(i, GLYPH_HALF);
         } else {
-          const glyphY = tileY + TILE_THICKNESS * 0.66;
+          const glyphY = tileY + TILE_THICKNESS * 0.69;
           if (tile.sizeRule === 'HALF') {
             dummy.position.set(TILE_WIDTH * 0.24, glyphY, tile.z);
-            dummy.scale.set(0.2, 0.04, 0.1);
+            dummy.scale.set(0.16, 0.08, 0.16);
             sizeGlyphRef.current.setColorAt(i, GLYPH_HALF);
           } else {
             dummy.position.set(-TILE_WIDTH * 0.24, glyphY, tile.z);
-            dummy.scale.set(0.3, 0.04, 0.18);
+            dummy.scale.set(0.12, 0.16, 0.12);
             sizeGlyphRef.current.setColorAt(i, GLYPH_DOUBLE);
           }
           dummy.rotation.set(0, 0, 0);
@@ -1560,7 +1691,12 @@ function FlipBoxScene() {
 
       <mesh position={[0, -0.18, -10]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[45, 96]} />
-        <meshStandardMaterial color="#f8fbff" roughness={0.95} metalness={0.03} />
+        <meshStandardMaterial color="#edf1fb" roughness={0.94} metalness={0.03} />
+      </mesh>
+
+      <mesh position={[0, -0.02, -8]}>
+        <boxGeometry args={[1.5, 0.08, 78]} />
+        <meshStandardMaterial color="#3f4652" emissive="#2a313a" emissiveIntensity={0.3} roughness={0.42} />
       </mesh>
 
       <mesh position={[-1.45, 0.02, -8]}>

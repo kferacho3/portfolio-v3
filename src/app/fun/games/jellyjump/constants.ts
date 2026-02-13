@@ -32,11 +32,12 @@ export const LATERAL_DRAG = 0.88;
 
 // Lava
 export const LAVA_START_Y = -10;
-export const LAVA_BASE_SPEED = 1.0; // units per second (slower)
-export const LAVA_SPEED_PER_LEVEL = 0.015; // adds difficulty as you climb (slower increase)
+export const LAVA_BASE_SPEED = 1.1; // units per second
+export const LAVA_SPEED_PER_LEVEL = 0.018; // adds pressure as you climb
 
 // Platform animations (ported from your pseudo code)
-export const PLATFORM_ANIM_DURATION = 1.0; // Faster platform movement (lower = faster)
+export const PLATFORM_ANIM_DURATION = 0.95; // base closing speed
+export const PLATFORM_ANIM_MIN_DURATION = 0.68; // cap so late game stays fair
 export const PLATFORM_OPEN_SLIDE_X = 4.5; // open position centers
 export const PLATFORM_CLOSED_PIECE_X = 1.5; // closed piece centers are -1.5 / +1.5
 export const PLATFORM_ROTATE_PIVOT_X = 3.0; // pivot points at -3 / +3
@@ -65,10 +66,10 @@ export const OBSTACLE_DRIFT_SPEED_MAX = 1.8;
 export const OBSTACLE_Z_WOBBLE = 0.4;
 
 // Spawn rates (probability per row after level 5)
-export const OBSTACLE_SPAWN_RATE = 0.15; // 15% chance
+export const OBSTACLE_SPAWN_RATE = 0.17; // 17% chance
 export const LEVER_SPAWN_RATE = 0.12; // 12% chance
-export const BOOSTER_SPAWN_RATE = 0.08; // 8% chance
-export const GEM_SPAWN_RATE = 0.25; // 25% chance
+export const BOOSTER_SPAWN_RATE = 0.07; // 7% chance
+export const GEM_SPAWN_RATE = 0.22; // 22% chance
 
 // Rendering window
 export const PLATFORM_VISIBLE_BELOW = 10; // rows rendered below player
@@ -88,8 +89,8 @@ export const CORRIDOR_BOX_Y_OFFSET = 35;
 export const PALETTES: JellyPalette[] = [
   {
     name: 'Porcelain',
-    bg: '#f6f7fb',
-    fog: '#d9dde6',
+    bg: '#dde3ef',
+    fog: '#b9c2d1',
     accent: '#ff8a00',
     platformSlide: '#8b5cf6',
     platformRotate: '#fb923c',
@@ -99,8 +100,8 @@ export const PALETTES: JellyPalette[] = [
   },
   {
     name: 'Mint',
-    bg: '#f2fbf7',
-    fog: '#cfe8dd',
+    bg: '#d8ebe2',
+    fog: '#b6d3c8',
     accent: '#10b981',
     platformSlide: '#7c3aed',
     platformRotate: '#f59e0b',
@@ -110,8 +111,8 @@ export const PALETTES: JellyPalette[] = [
   },
   {
     name: 'Sky',
-    bg: '#f3f8ff',
-    fog: '#d5e6ff',
+    bg: '#d8e5f8',
+    fog: '#b4c7e5',
     accent: '#3b82f6',
     platformSlide: '#a855f7',
     platformRotate: '#f97316',
@@ -121,8 +122,8 @@ export const PALETTES: JellyPalette[] = [
   },
   {
     name: 'Lavender',
-    bg: '#f7f4ff',
-    fog: '#e3dcff',
+    bg: '#e2dbf4',
+    fog: '#c4b9e4',
     accent: '#8b5cf6',
     platformSlide: '#6366f1',
     platformRotate: '#fb7185',
@@ -132,8 +133,8 @@ export const PALETTES: JellyPalette[] = [
   },
   {
     name: 'Warm Paper',
-    bg: '#fffaf3',
-    fog: '#f0e2cf',
+    bg: '#efe3cf',
+    fog: '#d7c0a2',
     accent: '#f59e0b',
     platformSlide: '#7c3aed',
     platformRotate: '#fb923c',

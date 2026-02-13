@@ -13,8 +13,6 @@ import {
   LATERAL_DRAG,
   LATERAL_ENABLED,
   LATERAL_MAX_SPEED,
-  PLAYER_HALF,
-  PLAYER_SIZE,
   PLATFORM_DEPTH,
   PLATFORM_PIECE_LENGTH,
   PLATFORM_SPACING,
@@ -157,9 +155,13 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     // Collisions (platforms)
     // ─────────────────────────────────────────────────────────────────────
     const row = Math.floor(py / PLATFORM_SPACING);
+    const prevBottom = prevY - playerHalf;
+    const prevTop = prevY + playerHalf;
+    let collisionResolved = false;
 
     // Check a few rows around the player (fast and deterministic)
     for (let i = row - 1; i <= row + 1; i += 1) {
+      if (collisionResolved) break;
       if (i < 0) continue;
 
       // Check if this row requires lever activation
@@ -176,58 +178,119 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
         }
       }
 
-      const { pieces } = getPlatformPieces(i, timeS, pattern);
+      const { kind, progress, pieces } = getPlatformPieces(i, timeS, pattern);
+      const halfDepth = PLATFORM_DEPTH / 2;
+      const colliders: Array<{
+        x: number;
+        y: number;
+        z: number;
+        halfLen: number;
+        blockOnlyWhileClosing?: boolean;
+      }> = [];
 
       for (let k = 0; k < 2; k += 1) {
         const p = pieces[k];
         if (!p.solid) continue;
+        colliders.push({
+          x: p.x,
+          y: p.y,
+          z: p.z,
+          halfLen: PLATFORM_PIECE_LENGTH / 2,
+        });
+      }
 
-        const halfLen = PLATFORM_PIECE_LENGTH / 2;
-        const halfDepth = PLATFORM_DEPTH / 2;
-        const topY = p.y + PLATFORM_THICKNESS / 2;
+      // While purple slide platforms are still converging, block the center gap.
+      if (kind === 'slide' && progress < 0.92) {
+        const pieceHalf = PLATFORM_PIECE_LENGTH / 2;
+        const gapLeft = pieces[0].x + pieceHalf;
+        const gapRight = pieces[1].x - pieceHalf;
+        const gapWidth = gapRight - gapLeft;
+        if (gapWidth > 0.18) {
+          colliders.push({
+            x: gapLeft + gapWidth / 2,
+            y: pieces[0].y,
+            z: 0,
+            halfLen: gapWidth / 2,
+            blockOnlyWhileClosing: true,
+          });
+        }
+      }
 
-        // AABB overlap (approx; rotations are only solid when almost horizontal)
+      for (const collider of colliders) {
         const overlapX =
-          px >= p.x - halfLen - playerHalf && px <= p.x + halfLen + playerHalf;
+          px >= collider.x - collider.halfLen - playerHalf &&
+          px <= collider.x + collider.halfLen + playerHalf;
         const overlapZ =
-          pz >= p.z - halfDepth - playerHalf &&
-          pz <= p.z + halfDepth + playerHalf;
+          pz >= collider.z - halfDepth - playerHalf &&
+          pz <= collider.z + halfDepth + playerHalf;
 
         if (!overlapX || !overlapZ) continue;
 
-        // Check if player is on or above the platform
-        const playerBottom = py - playerHalf;
-        const platformTop = topY;
-        const platformBottom = p.y - PLATFORM_THICKNESS / 2;
+        const nextBottom = py - playerHalf;
+        const nextTop = py + playerHalf;
+        const platformTop = collider.y + PLATFORM_THICKNESS / 2;
+        const platformBottom = collider.y - PLATFORM_THICKNESS / 2;
 
-        // More lenient collision: check if player is within landing range
-        // This handles both landing from above and being on the platform
-        const prevBottom = prevY - playerHalf;
-        const nextBottom = playerBottom;
-
-        // Landing: moving downward through the top plane
         const isLanding =
-          vy <= 0 && prevBottom > platformTop && nextBottom <= platformTop;
-
-        // Already on platform: player bottom is at or slightly above platform top
+          vy <= 0 && prevBottom >= platformTop - 0.03 && nextBottom <= platformTop;
         const isOnPlatform =
-          nextBottom <= platformTop + 0.15 &&
-          nextBottom >= platformBottom - 0.3 &&
+          nextBottom <= platformTop + 0.12 &&
+          nextBottom >= platformBottom - 0.26 &&
           vy <= 1.0;
-
-        // Starting position: if very close to initial platform, snap to it
         const isStarting =
           timeS < 0.2 &&
           i === 0 &&
           nextBottom <= platformTop + 0.5 &&
           nextBottom >= platformBottom - 0.5;
+        const isHeadHit =
+          vy > 0 && prevTop <= platformBottom + 0.03 && nextTop >= platformBottom;
+        const isEmbedded = nextBottom < platformTop && nextTop > platformBottom;
+
+        if (collider.blockOnlyWhileClosing) {
+          if (isHeadHit || (isEmbedded && vy > 0)) {
+            py = platformBottom - playerHalf - 0.01;
+            vy = Math.min(-1.8, -Math.abs(vy) * 0.35);
+            squashRef.current.value = -0.5;
+            collisionResolved = true;
+            break;
+          }
+          continue;
+        }
 
         if (isLanding || isOnPlatform || isStarting) {
           py = platformTop + playerHalf;
-          vy = Math.max(0, vy); // Stop downward velocity
+          vy = Math.max(0, vy);
           mutation.isGrounded = true;
           mutation.lastGroundedMs = nowMs;
-          squashRef.current.value = 1; // squish on land
+          squashRef.current.value = 1;
+          collisionResolved = true;
+          break;
+        }
+
+        if (isHeadHit) {
+          py = platformBottom - playerHalf - 0.01;
+          vy = Math.min(-1.6, -Math.abs(vy) * 0.3);
+          squashRef.current.value = -0.45;
+          collisionResolved = true;
+          break;
+        }
+
+        if (isEmbedded) {
+          const distToTop = Math.abs(platformTop - nextBottom);
+          const distToBottom = Math.abs(nextTop - platformBottom);
+          if (distToTop <= distToBottom) {
+            py = platformTop + playerHalf;
+            vy = Math.max(0, vy);
+            mutation.isGrounded = true;
+            mutation.lastGroundedMs = nowMs;
+            squashRef.current.value = 0.85;
+          } else {
+            py = platformBottom - playerHalf - 0.01;
+            vy = Math.min(-1.2, -Math.abs(vy) * 0.25);
+            squashRef.current.value = -0.35;
+          }
+          collisionResolved = true;
+          break;
         }
       }
     }

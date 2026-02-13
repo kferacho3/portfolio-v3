@@ -38,7 +38,13 @@ const GAME_TUNING = {
     scoreRamp: 0.045,
   },
   side: {
-    speed: 2.65,
+    baseSpeed: 3.15,
+    maxSpeed: 4.3,
+    responseLambda: 12.5,
+    dragBase: 2.1,
+    dragSlow: 5.9,
+    wallRestitution: 0.46,
+    wallSpring: 0.2,
   },
   slow: {
     factor: 0.2,
@@ -120,6 +126,7 @@ type WorldRuntime = {
   runnerDistance: number;
   nextSpawnAt: number;
   x: number;
+  xVel: number;
   sideDir: -1 | 1;
   timeScale: number;
   targetScale: number;
@@ -144,6 +151,7 @@ const run = proxy({
   score: 0,
   slow: false,
   speed: Number(GAME_TUNING.forward.baseSpeed),
+  lateralVel: 0,
   starsThisRun: 0,
   timeScale: 1,
   targetScale: 1,
@@ -314,6 +322,7 @@ function SlowMoScene() {
     runnerDistance: 0,
     nextSpawnAt: GAME_TUNING.spawn.initialSpawnZ,
     x: -(LANE_HALF - BALL_RADIUS),
+    xVel: 0,
     sideDir: 1,
     timeScale: 1,
     targetScale: 1,
@@ -455,6 +464,7 @@ function SlowMoScene() {
 
     run.slow = w.isSlow;
     run.speed = forwardSpeed;
+    run.lateralVel = w.xVel;
     run.timeScale = w.timeScale;
     run.targetScale = w.targetScale;
     run.slowEnergy = w.slowEnergy;
@@ -479,6 +489,7 @@ function SlowMoScene() {
     run.score = 0;
     run.slow = false;
     run.speed = GAME_TUNING.forward.baseSpeed;
+    run.lateralVel = 0;
     run.starsThisRun = 0;
     run.timeScale = 1;
     run.targetScale = 1;
@@ -495,6 +506,7 @@ function SlowMoScene() {
     world.current.runnerDistance = 0;
     world.current.nextSpawnAt = GAME_TUNING.spawn.initialSpawnZ;
     world.current.x = startX;
+    world.current.xVel = 0;
     world.current.sideDir = 1;
     world.current.timeScale = 1;
     world.current.targetScale = 1;
@@ -580,8 +592,10 @@ function SlowMoScene() {
         : GAME_TUNING.slow.lambdaOut;
     w.timeScale = expDamp(w.timeScale, w.targetScale, rampLambda, delta);
 
-    const gameDt = delta * w.timeScale;
-    w.gameTime += gameDt;
+    // Forward world progression is invariant; only lateral dynamics are time-dilated.
+    const lateralScale = Math.pow(w.timeScale, 1.35);
+    const lateralDt = delta * lateralScale;
+    w.gameTime += delta;
 
     w.slowStrength = THREE.MathUtils.clamp(
       (1 - w.timeScale) / (1 - GAME_TUNING.slow.factor),
@@ -592,16 +606,39 @@ function SlowMoScene() {
 
     const forwardSpeed =
       GAME_TUNING.forward.baseSpeed + run.score * GAME_TUNING.forward.scoreRamp;
-    w.runnerDistance += forwardSpeed * gameDt;
+    w.runnerDistance += forwardSpeed * delta;
 
-    w.x += w.sideDir * GAME_TUNING.side.speed * delta;
+    const targetXVel = w.sideDir * GAME_TUNING.side.baseSpeed;
+    const response = GAME_TUNING.side.responseLambda * (0.72 + 0.28 * w.timeScale);
+    const drag = THREE.MathUtils.lerp(
+      GAME_TUNING.side.dragSlow,
+      GAME_TUNING.side.dragBase,
+      w.timeScale
+    );
+    const accel = (targetXVel - w.xVel) * response - drag * w.xVel;
+    w.xVel += accel * lateralDt;
+    w.xVel = THREE.MathUtils.clamp(
+      w.xVel,
+      -GAME_TUNING.side.maxSpeed,
+      GAME_TUNING.side.maxSpeed
+    );
+    w.x += w.xVel * lateralDt;
+
     const bound = LANE_HALF - BALL_RADIUS;
     if (w.x > bound) {
-      w.x = bound;
+      const penetration = w.x - bound;
+      w.x = bound - penetration * GAME_TUNING.side.wallSpring;
+      if (w.xVel > 0) {
+        w.xVel = -w.xVel * GAME_TUNING.side.wallRestitution;
+      }
       w.sideDir = -1;
       w.bouncePulse = 1;
     } else if (w.x < -bound) {
-      w.x = -bound;
+      const penetration = -bound - w.x;
+      w.x = -bound + penetration * GAME_TUNING.side.wallSpring;
+      if (w.xVel < 0) {
+        w.xVel = -w.xVel * GAME_TUNING.side.wallRestitution;
+      }
       w.sideDir = 1;
       w.bouncePulse = 1;
     }
@@ -1206,7 +1243,7 @@ function SlowMoOverlay() {
             </div>
             {r.slow && (
               <div className="px-3 py-2 rounded-full bg-cyan-200/20 text-cyan-50 font-semibold border border-cyan-100/30">
-                SLOW x{r.timeScale.toFixed(2)}
+                LATERAL x{r.timeScale.toFixed(2)}
               </div>
             )}
           </div>
@@ -1235,6 +1272,7 @@ function SlowMoOverlay() {
               <div>timeScale: {r.timeScale.toFixed(3)}</div>
               <div>targetScale: {r.targetScale.toFixed(2)}</div>
               <div>forwardSpeed: {r.speed.toFixed(2)}</div>
+              <div>lateralVel: {r.lateralVel.toFixed(2)}</div>
               <div>slowEnergy: {r.slowEnergy.toFixed(2)}</div>
               <div>distance: {r.distance.toFixed(1)}</div>
             </div>
@@ -1263,11 +1301,12 @@ function SlowMoOverlay() {
               SlowMo
             </div>
             <div className="text-cyan-50/95 text-lg">
-              Bend time to survive. Lateral rhythm stays alive while forward
-              motion slows.
+              Bend time to survive. Forward velocity stays constant while
+              lateral oscillation slows.
             </div>
             <div className="text-white/80 text-sm">
-              Hold anywhere to slow. Release to surge.
+              Hold anywhere to damp side drift. Release to snap oscillation
+              back to speed.
             </div>
             <div className="text-white/70 text-xs">
               Collect stars and gifts to unlock skins and refill slow energy.
@@ -1353,7 +1392,8 @@ function SlowMoOverlay() {
           </div>
 
           <div className="text-white/65 text-xs mt-4 text-center max-w-xs">
-            Time your holds early, then release through clean lanes.
+            Lock your lane with slow, then release for aggressive side
+            repositioning.
           </div>
         </div>
       )}

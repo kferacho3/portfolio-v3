@@ -23,8 +23,8 @@ export default function Environment() {
   // Update scene background + fog when palette changes
   useEffect(() => {
     scene.background = new THREE.Color(palette.bg);
-    // Minimal fog for maximum visibility: start very far, end very far
-    scene.fog = new THREE.Fog(palette.fog, 60, 200);
+    // Keep depth cues without washing out gameplay readability.
+    scene.fog = new THREE.Fog(palette.fog, 120, 340);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [palette.bg, palette.fog]);
 
@@ -45,27 +45,27 @@ export default function Environment() {
   );
   const material = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({
-      color: '#f4f5f7',
+      color: '#d6dbe4',
       metalness: 0.0,
-      roughness: 0.95,
+      roughness: 0.88,
       side: THREE.BackSide,
     });
     return mat;
   }, []);
 
-  // Lightly tint corridor material toward current palette - almost white for maximum visibility
+  // Keep corridor readable but avoid over-bright haze.
   useEffect(() => {
     _bg.set(palette.bg);
-    material.color.copy(_bg.lerp(_white, 0.95));
+    material.color.copy(_bg.lerp(_white, 0.45));
   }, [material, palette.bg]);
 
   return (
     <group>
-      <ambientLight intensity={2.0} />
-      <directionalLight position={[6, 12, 8]} intensity={2.8} />
-      <directionalLight position={[-6, 8, -6]} intensity={1.8} />
-      <pointLight position={[0, 25, 0]} intensity={1.5} distance={80} />
-      <pointLight position={[0, 10, 0]} intensity={0.8} distance={40} />
+      <ambientLight intensity={0.95} />
+      <directionalLight position={[6, 12, 8]} intensity={1.35} />
+      <directionalLight position={[-6, 8, -6]} intensity={0.8} />
+      <pointLight position={[0, 25, 0]} intensity={0.45} distance={70} />
+      <pointLight position={[0, 10, 0]} intensity={0.28} distance={36} />
 
       <mesh
         ref={corridorRef}
@@ -80,7 +80,7 @@ export default function Environment() {
         <meshStandardMaterial
           color={palette.accent}
           transparent
-          opacity={0.08}
+          opacity={0.035}
         />
       </mesh>
     </group>

@@ -22,6 +22,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
   const slideRef = useRef<THREE.InstancedMesh>(null);
   const rotateRef = useRef<THREE.InstancedMesh>(null);
   const ghostRef = useRef<THREE.InstancedMesh>(null);
+  const gateRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
 
   const slideMat = useMemo(
@@ -33,7 +34,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
         roughness: 0.15,
         metalness: 0.3,
         emissive: new THREE.Color(palette.platformSlide),
-        emissiveIntensity: 0.35,
+        emissiveIntensity: 0.22,
       }),
     // NOTE: palette color changes are handled via a separate effect below
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -49,7 +50,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
         roughness: 0.15,
         metalness: 0.3,
         emissive: new THREE.Color(palette.platformRotate),
-        emissiveIntensity: 0.35,
+        emissiveIntensity: 0.22,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
@@ -60,11 +61,27 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
       new THREE.MeshStandardMaterial({
         color: palette.accent,
         transparent: true,
-        opacity: 0.35,
+        opacity: 0.24,
         roughness: 0.2,
         metalness: 0.1,
         emissive: new THREE.Color(palette.accent),
-        emissiveIntensity: 0.7,
+        emissiveIntensity: 0.45,
+        depthWrite: false,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const gateMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: palette.platformSlide,
+        transparent: true,
+        opacity: 0.22,
+        roughness: 0.1,
+        metalness: 0.2,
+        emissive: new THREE.Color(palette.platformSlide),
+        emissiveIntensity: 0.55,
         depthWrite: false,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,6 +96,8 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     rotateMat.emissive.set(palette.platformRotate);
     ghostMat.color.set(palette.accent);
     ghostMat.emissive.set(palette.accent);
+    gateMat.color.set(palette.platformSlide);
+    gateMat.emissive.set(palette.platformSlide);
   }, [
     palette.platformSlide,
     palette.platformRotate,
@@ -86,6 +105,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     slideMat,
     rotateMat,
     ghostMat,
+    gateMat,
   ]);
 
   // Geometry reused across both instanced meshes
@@ -100,7 +120,14 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
   );
 
   useFrame(() => {
-    if (!slideRef.current || !rotateRef.current || !ghostRef.current) return;
+    if (
+      !slideRef.current ||
+      !rotateRef.current ||
+      !ghostRef.current ||
+      !gateRef.current
+    ) {
+      return;
+    }
 
     // Time in seconds since run start
     const timeS =
@@ -115,6 +142,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     let slideCount = 0;
     let rotateCount = 0;
     let ghostCount = 0;
+    let gateCount = 0;
 
     for (let row = startRow; row <= endRow; row += 1) {
       // Check if this row requires a lever to be activated (levers unlock their target row)
@@ -132,7 +160,23 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
       }
 
       const kind = getPlatformKind(row, pattern);
-      const { pieces } = getPlatformPieces(row, timeS, pattern);
+      const { pieces, progress } = getPlatformPieces(row, timeS, pattern);
+
+      if (!isLocked && kind === 'slide' && progress < 0.92) {
+        const pieceHalf = PLATFORM_PIECE_LENGTH / 2;
+        const gapLeft = pieces[0].x + pieceHalf;
+        const gapRight = pieces[1].x - pieceHalf;
+        const gapWidth = gapRight - gapLeft;
+        if (gapWidth > 0.18) {
+          const pulse = 1 + Math.sin(timeS * 10 + row * 0.35) * 0.04;
+          dummy.position.set(gapLeft + gapWidth / 2, pieces[0].y, 0);
+          dummy.rotation.set(0, 0, 0);
+          dummy.scale.set((gapWidth / PLATFORM_PIECE_LENGTH) * pulse, pulse, 1);
+          dummy.updateMatrix();
+          gateRef.current.setMatrixAt(gateCount, dummy.matrix);
+          gateCount += 1;
+        }
+      }
 
       // Two pieces per row (left/right)
       for (let i = 0; i < 2; i += 1) {
@@ -161,15 +205,18 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     slideRef.current.count = slideCount;
     rotateRef.current.count = rotateCount;
     ghostRef.current.count = ghostCount;
+    gateRef.current.count = gateCount;
 
     slideRef.current.instanceMatrix.needsUpdate = true;
     rotateRef.current.instanceMatrix.needsUpdate = true;
     ghostRef.current.instanceMatrix.needsUpdate = true;
+    gateRef.current.instanceMatrix.needsUpdate = true;
   });
 
   // Allocate enough instances for the worst case
   const maxRows = PLATFORM_VISIBLE_BELOW + PLATFORM_VISIBLE_ABOVE + 8;
   const maxInstances = maxRows * 2;
+  const maxGateInstances = maxRows;
 
   return (
     <group>
@@ -186,6 +233,11 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
       <instancedMesh
         ref={ghostRef}
         args={[geometry, ghostMat, maxInstances]}
+        frustumCulled={false}
+      />
+      <instancedMesh
+        ref={gateRef}
+        args={[geometry, gateMat, maxGateInstances]}
         frustumCulled={false}
       />
     </group>

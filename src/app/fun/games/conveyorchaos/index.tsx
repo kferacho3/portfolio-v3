@@ -107,7 +107,7 @@ type ConveyorStore = {
 const BEST_KEY = 'conveyor_chaos_hyper_best_v2';
 
 const PACKAGE_POOL = 72;
-const PACKAGE_SIZE = 0.44;
+const PACKAGE_SIZE = 0.52;
 const PACKAGE_HALF = PACKAGE_SIZE * 0.5;
 const PACKAGE_Y = 0.28;
 
@@ -708,7 +708,6 @@ function ConveyorChaosScene() {
         runtime.diverterDir = nextDir;
         runtime.diverterTargetAngle = angleForDir(nextDir);
         runtime.lastRotateAt = runtime.elapsed;
-        runtime.shake = Math.min(1.15, runtime.shake + 0.18);
       }
     }
 
@@ -844,9 +843,9 @@ function ConveyorChaosScene() {
     const shakeAmp = runtime.shake * 0.1;
     const shakeTime = runtime.elapsed * 22;
     camTarget.set(
-      shakeNoiseSigned(shakeTime, 2.7) * shakeAmp,
-      8.6 + shakeNoiseSigned(shakeTime, 8.2) * shakeAmp * 0.55,
-      shakeNoiseSigned(shakeTime, 13.9) * shakeAmp * 0.35
+      0,
+      8.6 + shakeNoiseSigned(shakeTime, 8.2) * shakeAmp * 0.42,
+      0.001
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-7.4 * step.renderDt));
     camera.lookAt(0, 0, 0);
@@ -893,7 +892,7 @@ function ConveyorChaosScene() {
 
         colorScratch
           .copy(EXIT_COLORS[pkg.targetExit])
-          .lerp(WHITE, clamp(pkg.glow * 0.5, 0, 0.58));
+          .lerp(WHITE, clamp(0.34 + pkg.glow * 0.38, 0.34, 0.78));
         packageRef.current.setColorAt(i, colorScratch);
 
         dummy.position.set(pkg.x, PACKAGE_Y + 0.18, pkg.z);
@@ -942,7 +941,7 @@ function ConveyorChaosScene() {
         far={60}
       />
       <color attach="background" args={['#18243a']} />
-      <fog attach="fog" args={['#18243a', 6, 28]} />
+      <fog attach="fog" args={['#18243a', 10, 42]} />
 
       <ambientLight intensity={0.72} />
       <hemisphereLight args={['#b6e8ff', '#2d3950', 0.38]} />
@@ -1029,12 +1028,10 @@ function ConveyorChaosScene() {
 
       <instancedMesh ref={packageRef} args={[undefined, undefined, PACKAGE_POOL]} castShadow>
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial
+        <meshBasicMaterial
           vertexColors
-          roughness={0.26}
-          metalness={0.12}
-          emissive="#2b3a57"
-          emissiveIntensity={0.36}
+          toneMapped={false}
+          fog={false}
         />
       </instancedMesh>
 
@@ -1049,8 +1046,8 @@ function ConveyorChaosScene() {
       </instancedMesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom intensity={0.4} luminanceThreshold={0.56} luminanceSmoothing={0.2} mipmapBlur />
-        <Vignette eskil={false} offset={0.14} darkness={0.62} />
+        <Bloom intensity={0.5} luminanceThreshold={0.34} luminanceSmoothing={0.16} mipmapBlur />
+        <Vignette eskil={false} offset={0.14} darkness={0.46} />
         <Noise premultiply opacity={0.02} />
       </EffectComposer>
 

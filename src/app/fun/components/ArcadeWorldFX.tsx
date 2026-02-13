@@ -704,6 +704,8 @@ const ArcadeWorldFX: React.FC<{ gameId: string }> = ({ gameId }) => {
     'polarity',
     'tetherdrift',
     'trace',
+    'jellyjump',
+    'smashhit',
     'flipbox',
     'portalpunch',
     'conveyorchaos',

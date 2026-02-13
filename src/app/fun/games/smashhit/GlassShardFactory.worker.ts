@@ -17,6 +17,10 @@ export type ShardResult = {
   centers: Float32Array;
 };
 
+type Poly = Array<[number, number]>;
+
+const EPS = 1e-6;
+
 function mulberry32(seed: number) {
   let a = seed >>> 0;
   return () => {
@@ -28,8 +32,75 @@ function mulberry32(seed: number) {
   };
 }
 
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function clipPolygonHalfPlane(poly: Poly, nx: number, ny: number, c: number): Poly {
+  if (poly.length < 3) return [];
+
+  const out: Poly = [];
+  for (let i = 0; i < poly.length; i += 1) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const da = nx * a[0] + ny * a[1] - c;
+    const db = nx * b[0] + ny * b[1] - c;
+
+    const aInside = da <= EPS;
+    const bInside = db <= EPS;
+
+    if (aInside && bInside) {
+      out.push([b[0], b[1]]);
+      continue;
+    }
+
+    if (aInside && !bInside) {
+      const denom = da - db;
+      if (Math.abs(denom) > EPS) {
+        const t = da / denom;
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+      continue;
+    }
+
+    if (!aInside && bInside) {
+      const denom = da - db;
+      if (Math.abs(denom) > EPS) {
+        const t = da / denom;
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+      out.push([b[0], b[1]]);
+    }
+  }
+  return out;
+}
+
+function polygonAreaAndCentroid(poly: Poly) {
+  let twiceArea = 0;
+  let cx = 0;
+  let cy = 0;
+  const len = poly.length;
+  for (let i = 0; i < len; i += 1) {
+    const [x0, y0] = poly[i];
+    const [x1, y1] = poly[(i + 1) % len];
+    const cross = x0 * y1 - x1 * y0;
+    twiceArea += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+  const area = Math.abs(twiceArea * 0.5);
+  if (Math.abs(twiceArea) < EPS) {
+    return { area: 0, x: poly[0]?.[0] ?? 0, y: poly[0]?.[1] ?? 0 };
+  }
+  return {
+    area,
+    x: cx / (3 * twiceArea),
+    y: cy / (3 * twiceArea),
+  };
+}
+
 function pushExtrudedPolygon(
-  poly: Array<[number, number]>,
+  poly: Poly,
   thickness: number,
   positions: number[],
   indices: number[]
@@ -66,28 +137,107 @@ function pushExtrudedPolygon(
   }
 }
 
-function polygonAreaAndCentroid(poly: Array<[number, number]>) {
-  let twiceArea = 0;
-  let cx = 0;
-  let cy = 0;
-  const len = poly.length;
-  for (let i = 0; i < len; i += 1) {
-    const [x0, y0] = poly[i];
-    const [x1, y1] = poly[(i + 1) % len];
-    const cross = x0 * y1 - x1 * y0;
-    twiceArea += cross;
-    cx += (x0 + x1) * cross;
-    cy += (y0 + y1) * cross;
+function makeSeedPoints(
+  width: number,
+  height: number,
+  impactX: number,
+  impactY: number,
+  shardCount: number,
+  rand: () => number
+): Array<[number, number]> {
+  const seeds: Array<[number, number]> = [];
+  const maxDim = Math.max(width, height);
+  const impactRadius = maxDim * 0.45;
+
+  seeds.push([
+    clamp(impactX, -width * 0.5, width * 0.5),
+    clamp(impactY, -height * 0.5, height * 0.5),
+  ]);
+
+  for (let i = 1; i < shardCount; i += 1) {
+    const bias = rand() < 0.68;
+    if (bias) {
+      const angle = rand() * Math.PI * 2;
+      const radius = (0.08 + rand() * 0.92) * impactRadius;
+      const x = impactX + Math.cos(angle) * radius;
+      const y = impactY + Math.sin(angle) * radius;
+      seeds.push([
+        clamp(x, -width * 0.5, width * 0.5),
+        clamp(y, -height * 0.5, height * 0.5),
+      ]);
+    } else {
+      seeds.push([
+        rand() * width - width * 0.5,
+        rand() * height - height * 0.5,
+      ]);
+    }
   }
-  const area = Math.abs(twiceArea * 0.5);
-  if (Math.abs(twiceArea) < 1e-6) {
-    return { area: 0, x: poly[0]?.[0] ?? 0, y: poly[0]?.[1] ?? 0 };
+
+  return seeds;
+}
+
+function buildVoronoiCells(
+  seeds: Array<[number, number]>,
+  width: number,
+  height: number
+): Poly[] {
+  const bounds: Poly = [
+    [-width * 0.5, -height * 0.5],
+    [width * 0.5, -height * 0.5],
+    [width * 0.5, height * 0.5],
+    [-width * 0.5, height * 0.5],
+  ];
+
+  const cells: Poly[] = [];
+  for (let i = 0; i < seeds.length; i += 1) {
+    let cell = bounds.slice() as Poly;
+    const pi = seeds[i];
+
+    for (let j = 0; j < seeds.length; j += 1) {
+      if (i === j) continue;
+      const pj = seeds[j];
+      const nx = pj[0] - pi[0];
+      const ny = pj[1] - pi[1];
+      if (Math.abs(nx) + Math.abs(ny) < EPS) continue;
+      const c = nx * (pi[0] + pj[0]) * 0.5 + ny * (pi[1] + pj[1]) * 0.5;
+      cell = clipPolygonHalfPlane(cell, nx, ny, c);
+      if (cell.length < 3) break;
+    }
+
+    if (cell.length >= 3) cells.push(cell);
   }
-  return {
-    area,
-    x: cx / (3 * twiceArea),
-    y: cy / (3 * twiceArea),
-  };
+
+  return cells;
+}
+
+function fallbackCells(
+  width: number,
+  height: number,
+  impactX: number,
+  impactY: number,
+  shardCount: number,
+  rand: () => number
+): Poly[] {
+  const cells: Poly[] = [];
+  const radius = Math.max(width, height) * 0.3;
+  for (let i = 0; i < shardCount; i += 1) {
+    const t0 = (i / shardCount) * Math.PI * 2 + rand() * 0.12;
+    const t1 = ((i + 1) / shardCount) * Math.PI * 2 + rand() * 0.12;
+    const p0: [number, number] = [
+      clamp(impactX, -width * 0.5, width * 0.5),
+      clamp(impactY, -height * 0.5, height * 0.5),
+    ];
+    const p1: [number, number] = [
+      clamp(impactX + Math.cos(t0) * radius, -width * 0.5, width * 0.5),
+      clamp(impactY + Math.sin(t0) * radius, -height * 0.5, height * 0.5),
+    ];
+    const p2: [number, number] = [
+      clamp(impactX + Math.cos(t1) * radius, -width * 0.5, width * 0.5),
+      clamp(impactY + Math.sin(t1) * radius, -height * 0.5, height * 0.5),
+    ];
+    cells.push([p0, p1, p2]);
+  }
+  return cells;
 }
 
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
@@ -96,46 +246,37 @@ workerScope.onmessage = (e: MessageEvent<ShardRequest>) => {
   const { id, width, height, thickness, impact, shardCount, seed } = e.data;
   const rand = mulberry32(seed || 1);
 
-  const clampedCount = Math.max(6, Math.min(28, Math.floor(shardCount)));
+  const clampedCount = Math.max(8, Math.min(36, Math.floor(shardCount)));
   const positions: number[] = [];
   const indices: number[] = [];
   const centers: number[] = [];
 
-  const maxRadius = Math.max(width, height) * 0.26;
-  for (let i = 0; i < clampedCount; i += 1) {
-    const t = i / clampedCount;
-    const angleA = t * Math.PI * 2 + rand() * 0.32;
-    const angleB = ((i + 1) / clampedCount) * Math.PI * 2 + rand() * 0.32;
+  const seeds = makeSeedPoints(
+    width,
+    height,
+    impact.x,
+    impact.y,
+    clampedCount,
+    rand
+  );
+  let cells = buildVoronoiCells(seeds, width, height);
+  if (cells.length < 4) {
+    cells = fallbackCells(width, height, impact.x, impact.y, clampedCount, rand);
+  }
 
-    const near = maxRadius * (0.14 + rand() * 0.24);
-    const far = maxRadius * (0.55 + rand() * 0.5);
-
-    const x0 = impact.x;
-    const y0 = impact.y;
-    const x1 = x0 + Math.cos(angleA) * near;
-    const y1 = y0 + Math.sin(angleA) * near;
-    const x2 = x0 + Math.cos((angleA + angleB) * 0.5) * far;
-    const y2 = y0 + Math.sin((angleA + angleB) * 0.5) * far;
-    const x3 = x0 + Math.cos(angleB) * near;
-    const y3 = y0 + Math.sin(angleB) * near;
-
-    const poly: Array<[number, number]> = [
-      [x0, y0],
-      [x1, y1],
-      [x2, y2],
-      [x3, y3],
-    ].map(([x, y]) => [
-      Math.max(-width * 0.5, Math.min(width * 0.5, x)),
-      Math.max(-height * 0.5, Math.min(height * 0.5, y)),
-    ]);
+  const minArea = width * height * 0.0008;
+  for (let i = 0; i < cells.length; i += 1) {
+    const poly = cells[i];
+    if (!poly || poly.length < 3) continue;
 
     const centroid = polygonAreaAndCentroid(poly);
+    if (centroid.area < minArea) continue;
+
     const normalizedArea = Math.max(
-      0.08,
-      Math.min(1.0, centroid.area / (width * height * 0.075))
+      0.06,
+      Math.min(1.0, centroid.area / (width * height * 0.08))
     );
     centers.push(centroid.x, centroid.y, normalizedArea);
-
     pushExtrudedPolygon(poly, thickness, positions, indices);
   }
 
@@ -145,6 +286,7 @@ workerScope.onmessage = (e: MessageEvent<ShardRequest>) => {
     indices: new Uint16Array(indices),
     centers: new Float32Array(centers),
   };
+
   const transfer: Transferable[] = [
     out.positions.buffer as ArrayBuffer,
     out.indices.buffer as ArrayBuffer,

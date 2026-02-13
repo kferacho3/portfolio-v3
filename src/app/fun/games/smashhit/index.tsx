@@ -272,6 +272,142 @@ const THEME_COLORS = THEMES.map((theme) => ({
   bloom: new THREE.Color(theme.bloom),
 }));
 
+type ThemeGameplayTuning = {
+  speedMul: number;
+  holeBias: number;
+  stoneBias: number;
+  crystalBias: number;
+  clearScoreMul: number;
+  hitScoreMul: number;
+  crystalScoreMul: number;
+  penaltyMul: number;
+  driftMul: number;
+};
+
+const THEME_GAMEPLAY: ThemeGameplayTuning[] = [
+  {
+    speedMul: 0.98,
+    holeBias: 0.05,
+    stoneBias: -0.04,
+    crystalBias: 0.08,
+    clearScoreMul: 1.0,
+    hitScoreMul: 1.0,
+    crystalScoreMul: 1.02,
+    penaltyMul: 0.96,
+    driftMul: 0.9,
+  },
+  {
+    speedMul: 1.0,
+    holeBias: 0.03,
+    stoneBias: -0.02,
+    crystalBias: 0.05,
+    clearScoreMul: 1.04,
+    hitScoreMul: 1.04,
+    crystalScoreMul: 1.08,
+    penaltyMul: 1.0,
+    driftMul: 0.95,
+  },
+  {
+    speedMul: 1.03,
+    holeBias: -0.01,
+    stoneBias: 0.04,
+    crystalBias: -0.03,
+    clearScoreMul: 1.1,
+    hitScoreMul: 1.12,
+    crystalScoreMul: 1.05,
+    penaltyMul: 1.05,
+    driftMul: 1.02,
+  },
+  {
+    speedMul: 0.97,
+    holeBias: 0.06,
+    stoneBias: -0.08,
+    crystalBias: 0.14,
+    clearScoreMul: 0.96,
+    hitScoreMul: 0.98,
+    crystalScoreMul: 1.12,
+    penaltyMul: 0.9,
+    driftMul: 0.88,
+  },
+  {
+    speedMul: 1.05,
+    holeBias: -0.03,
+    stoneBias: 0.05,
+    crystalBias: -0.01,
+    clearScoreMul: 1.16,
+    hitScoreMul: 1.14,
+    crystalScoreMul: 1.06,
+    penaltyMul: 1.08,
+    driftMul: 1.04,
+  },
+  {
+    speedMul: 1.08,
+    holeBias: -0.07,
+    stoneBias: 0.1,
+    crystalBias: -0.08,
+    clearScoreMul: 1.18,
+    hitScoreMul: 1.22,
+    crystalScoreMul: 1.0,
+    penaltyMul: 1.14,
+    driftMul: 1.08,
+  },
+  {
+    speedMul: 1.01,
+    holeBias: 0.02,
+    stoneBias: 0.03,
+    crystalBias: 0.04,
+    clearScoreMul: 1.08,
+    hitScoreMul: 1.1,
+    crystalScoreMul: 1.1,
+    penaltyMul: 1.0,
+    driftMul: 1.2,
+  },
+  {
+    speedMul: 0.99,
+    holeBias: 0.04,
+    stoneBias: -0.03,
+    crystalBias: 0.09,
+    clearScoreMul: 1.02,
+    hitScoreMul: 1.0,
+    crystalScoreMul: 1.12,
+    penaltyMul: 0.94,
+    driftMul: 0.92,
+  },
+  {
+    speedMul: 0.95,
+    holeBias: -0.02,
+    stoneBias: 0.06,
+    crystalBias: 0.0,
+    clearScoreMul: 1.08,
+    hitScoreMul: 1.12,
+    crystalScoreMul: 1.02,
+    penaltyMul: 1.06,
+    driftMul: 1.0,
+  },
+  {
+    speedMul: 1.1,
+    holeBias: -0.06,
+    stoneBias: 0.09,
+    crystalBias: -0.05,
+    clearScoreMul: 1.22,
+    hitScoreMul: 1.24,
+    crystalScoreMul: 1.0,
+    penaltyMul: 1.12,
+    driftMul: 1.14,
+  },
+  {
+    speedMul: 1.02,
+    holeBias: 0.01,
+    stoneBias: 0.01,
+    crystalBias: 0.07,
+    clearScoreMul: 1.14,
+    hitScoreMul: 1.1,
+    crystalScoreMul: 1.12,
+    penaltyMul: 1.0,
+    driftMul: 0.98,
+  },
+];
+
 const COLOR_WHITE = new THREE.Color('#ffffff');
 const COLOR_BASE_GLASS = new THREE.Color('#e6f1ff');
 const COLOR_STONE = new THREE.Color('#6b7280');
@@ -292,6 +428,13 @@ type Barrier = {
   crystalX: number;
   crystalY: number;
   crystalValue: number;
+  archetype: RoomArchetype;
+  clearBonus: number;
+  breachPenaltyMul: number;
+  driftAmp: number;
+  driftYAmp: number;
+  driftSpeed: number;
+  driftPhase: number;
 };
 
 type Projectile = {
@@ -348,6 +491,142 @@ type PendingDynamicShard = {
   maxCount: number;
 };
 
+type RoomStats = {
+  targets: number;
+  cleared: number;
+  breaches: number;
+  crystals: number;
+  themeIndex: number;
+  archetype: RoomArchetype;
+};
+
+type RoomArchetype =
+  | 'calm'
+  | 'lane'
+  | 'split'
+  | 'cross'
+  | 'weave'
+  | 'fortress'
+  | 'gauntlet';
+
+const ROOM_ARCHETYPE_LABEL: Record<RoomArchetype, string> = {
+  calm: 'Calm Flow',
+  lane: 'Lane Control',
+  split: 'Split Gates',
+  cross: 'Crossfield',
+  weave: 'Weave Drift',
+  fortress: 'Fortress',
+  gauntlet: 'Gauntlet',
+};
+
+type RoomArchetypeProfile = {
+  holeBias: number;
+  stoneBias: number;
+  heroBias: number;
+  crystalBias: number;
+  clearBonus: number;
+  breachPenaltyMul: number;
+  speedBase: number;
+  speedRamp: number;
+  driftX: [number, number];
+  driftY: [number, number];
+  driftSpeed: [number, number];
+};
+
+const ROOM_PROFILE: Record<RoomArchetype, RoomArchetypeProfile> = {
+  calm: {
+    holeBias: 0.08,
+    stoneBias: -0.08,
+    heroBias: 0.03,
+    crystalBias: 0.15,
+    clearBonus: 26,
+    breachPenaltyMul: 0.86,
+    speedBase: 0.97,
+    speedRamp: 0.005,
+    driftX: [0, 0.06],
+    driftY: [0, 0.04],
+    driftSpeed: [0.45, 0.75],
+  },
+  lane: {
+    holeBias: -0.05,
+    stoneBias: 0.02,
+    heroBias: 0.04,
+    crystalBias: 0.04,
+    clearBonus: 32,
+    breachPenaltyMul: 1.0,
+    speedBase: 1.0,
+    speedRamp: 0.008,
+    driftX: [0.02, 0.16],
+    driftY: [0, 0.08],
+    driftSpeed: [0.55, 0.95],
+  },
+  split: {
+    holeBias: -0.08,
+    stoneBias: 0.04,
+    heroBias: 0.05,
+    crystalBias: 0.02,
+    clearBonus: 36,
+    breachPenaltyMul: 1.04,
+    speedBase: 1.02,
+    speedRamp: 0.01,
+    driftX: [0.05, 0.2],
+    driftY: [0.01, 0.1],
+    driftSpeed: [0.65, 1.05],
+  },
+  cross: {
+    holeBias: -0.1,
+    stoneBias: 0.07,
+    heroBias: 0.06,
+    crystalBias: -0.02,
+    clearBonus: 40,
+    breachPenaltyMul: 1.08,
+    speedBase: 1.04,
+    speedRamp: 0.01,
+    driftX: [0.04, 0.18],
+    driftY: [0.02, 0.12],
+    driftSpeed: [0.7, 1.1],
+  },
+  weave: {
+    holeBias: -0.06,
+    stoneBias: 0.1,
+    heroBias: 0.05,
+    crystalBias: 0.01,
+    clearBonus: 44,
+    breachPenaltyMul: 1.12,
+    speedBase: 1.06,
+    speedRamp: 0.012,
+    driftX: [0.08, 0.28],
+    driftY: [0.02, 0.12],
+    driftSpeed: [0.85, 1.25],
+  },
+  fortress: {
+    holeBias: -0.14,
+    stoneBias: 0.14,
+    heroBias: 0.08,
+    crystalBias: -0.06,
+    clearBonus: 52,
+    breachPenaltyMul: 1.18,
+    speedBase: 1.08,
+    speedRamp: 0.012,
+    driftX: [0.02, 0.16],
+    driftY: [0.02, 0.1],
+    driftSpeed: [0.75, 1.15],
+  },
+  gauntlet: {
+    holeBias: -0.2,
+    stoneBias: 0.18,
+    heroBias: 0.1,
+    crystalBias: -0.08,
+    clearBonus: 62,
+    breachPenaltyMul: 1.24,
+    speedBase: 1.12,
+    speedRamp: 0.014,
+    driftX: [0.1, 0.34],
+    driftY: [0.04, 0.14],
+    driftSpeed: [0.95, 1.35],
+  },
+};
+
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 
@@ -395,28 +674,112 @@ function themeIndexForRoom(seed: number, roomIndex: number) {
   return hashInt(seed * 3 + 17, roomIndex) % THEMES.length;
 }
 
-function requiredPattern(difficulty: number, rng: SeededRandom): number[] {
+function roomArchetypeFor(seed: number, roomIndex: number): RoomArchetype {
+  if (roomIndex <= 0) return 'calm';
+  const roll = (hashInt(seed * 11 + 71, roomIndex) % 1000) / 1000;
+  const phase = Math.floor(roomIndex / 4);
+
+  if (phase <= 1) {
+    if (roll < 0.58) return 'calm';
+    if (roll < 0.82) return 'lane';
+    return 'split';
+  }
+  if (phase <= 3) {
+    if (roll < 0.2) return 'calm';
+    if (roll < 0.42) return 'lane';
+    if (roll < 0.62) return 'split';
+    if (roll < 0.8) return 'cross';
+    return 'weave';
+  }
+  if (roll < 0.16) return 'lane';
+  if (roll < 0.32) return 'split';
+  if (roll < 0.5) return 'cross';
+  if (roll < 0.7) return 'weave';
+  if (roll < 0.86) return 'fortress';
+  return 'gauntlet';
+}
+
+function roomSpeedMultiplier(archetype: RoomArchetype, difficulty: number) {
+  const profile = ROOM_PROFILE[archetype];
+  return clamp(profile.speedBase + difficulty * profile.speedRamp, 0.92, 1.25);
+}
+
+function requiredPattern(
+  difficulty: number,
+  rng: SeededRandom,
+  archetype: RoomArchetype,
+  barrierIndex: number
+): number[] {
   const center = Math.floor(ROWS / 2) * COLS + Math.floor(COLS / 2);
   const left = center - 1;
   const right = center + 1;
   const up = center - COLS;
   const down = center + COLS;
+  const row = (r: number) =>
+    new Array(COLS).fill(0).map((_, c) => r * COLS + c);
+  const col = (c: number) =>
+    new Array(ROWS).fill(0).map((_, r) => r * COLS + c);
+  const dedupe = (arr: number[]) =>
+    [...new Set(arr)].filter((i) => i >= 0 && i < BLOCKS_PER_BARRIER);
 
-  if (difficulty < 1) return [center];
-  if (difficulty < 2) return rng.bool(0.5) ? [center, left] : [center, right];
-  if (difficulty < 3) {
-    return rng.bool(0.5)
-      ? [center, left, right]
-      : [center, up, down].filter((i) => i >= 0 && i < BLOCKS_PER_BARRIER);
+  if (archetype === 'calm') {
+    if (difficulty < 1) return [center];
+    if (difficulty < 2) return rng.bool(0.5) ? [center, left] : [center, right];
+    return rng.bool(0.5) ? [center, left, right] : [center, up, down];
   }
 
-  const cross = [center, left, right, up, down].filter(
-    (i) => i >= 0 && i < BLOCKS_PER_BARRIER
-  );
-  if (cross.length > 3 && rng.bool(0.45)) {
-    cross.splice(1 + rng.int(0, cross.length - 2), 1);
+  if (archetype === 'lane') {
+    const laneCol = clamp(2 + rng.int(-1, 1), 0, COLS - 1);
+    const lane = col(laneCol);
+    if (difficulty < 2) return [lane[1]];
+    if (difficulty < 4) return dedupe([lane[0], lane[1]]);
+    return dedupe(lane);
   }
-  return cross;
+
+  if (archetype === 'split') {
+    const midRow = Math.floor(ROWS / 2) * COLS;
+    const leftGate = midRow + 1;
+    const rightGate = midRow + 3;
+    if (difficulty < 3) return [leftGate, rightGate];
+    return dedupe([leftGate, rightGate, center]);
+  }
+
+  if (archetype === 'cross') {
+    const cross = dedupe([center, left, right, up, down]);
+    if (difficulty < 3) return dedupe([center, left, right]);
+    if (difficulty < 5 && cross.length > 4) {
+      cross.splice(rng.bool(0.5) ? 1 : 2, 1);
+    }
+    return cross;
+  }
+
+  if (archetype === 'weave') {
+    const zigA = dedupe([0, 6, 12, center]);
+    const zigB = dedupe([2, 8, 14, center]);
+    const pickA = (barrierIndex + difficulty) % 2 === 0;
+    const zig = pickA ? zigA : zigB;
+    if (difficulty < 3) return dedupe([zig[1], zig[2]]);
+    return zig;
+  }
+
+  if (archetype === 'fortress') {
+    const shell = dedupe([center, left, right, up, down, row(0)[0], row(0)[4]]);
+    if (difficulty < 4) return dedupe([center, up, down, left]);
+    return shell.slice(0, 5 + (rng.bool(0.5) ? 1 : 0));
+  }
+
+  // gauntlet
+  const gauntlet = dedupe([
+    center,
+    left,
+    right,
+    up,
+    down,
+    row(0)[rng.int(0, 4)],
+    row(2)[rng.int(0, 4)],
+  ]);
+  if (difficulty < 5) return gauntlet.slice(0, 4);
+  return gauntlet.slice(0, 5 + (rng.bool(0.45) ? 1 : 0));
 }
 
 function makeShotDirection(pointerX: number, pointerY: number, spread = 0) {
@@ -540,6 +903,13 @@ function SmashHit() {
         crystalX: 0,
         crystalY: 0,
         crystalValue: 3,
+        archetype: 'calm',
+        clearBonus: 30,
+        breachPenaltyMul: 1,
+        driftAmp: 0,
+        driftYAmp: 0,
+        driftSpeed: 0.6,
+        driftPhase: 0,
       })
     ),
 
@@ -548,9 +918,13 @@ function SmashHit() {
     blockStone: new Array<boolean>(MAX_BLOCKS).fill(false),
     blockHero: new Array<boolean>(MAX_BLOCKS).fill(false),
 
+    blockBaseX: new Float32Array(MAX_BLOCKS),
+    blockBaseY: new Float32Array(MAX_BLOCKS),
     blockX: new Float32Array(MAX_BLOCKS),
     blockY: new Float32Array(MAX_BLOCKS),
     blockZ: new Float32Array(MAX_BLOCKS),
+    barrierDriftX: new Float32Array(MAX_BARRIERS),
+    barrierDriftY: new Float32Array(MAX_BARRIERS),
 
     blockCrack: new Float32Array(MAX_BLOCKS),
     blockDelayFrames: new Uint8Array(MAX_BLOCKS),
@@ -609,6 +983,13 @@ function SmashHit() {
 
     beatClock: 0,
     beatInterval: 60 / THEMES[0].bpm,
+    currentRoomArchetype: 'calm' as RoomArchetype,
+    currentRoomSpeedMul: 1,
+    currentThemeTuning: THEME_GAMEPLAY[0],
+    flawlessRoomStreak: 0,
+    lastFinalizedRoom: -1,
+    roomStats: new Map<number, RoomStats>(),
+    finalizedRooms: new Set<number>(),
 
     spaceWasDown: false,
     fireCooldown: 0,
@@ -722,6 +1103,8 @@ function SmashHit() {
     barrier.active = false;
     barrier.passed = false;
     barrier.crystalActive = false;
+    w.barrierDriftX[slot] = 0;
+    w.barrierDriftY[slot] = 0;
 
     const blockBase = slot * BLOCKS_PER_BARRIER;
     for (let i = 0; i < BLOCKS_PER_BARRIER; i += 1) {
@@ -984,7 +1367,14 @@ function SmashHit() {
     }
 
     spawnHitFx(x, y, z, color, 0.28);
-    emitEvent(w.eventBus, EVT.GLASS_HIT, blockIdx, hero && !isMid ? 1 : 0, 0);
+    const themeIndex = w.barriers[barrierSlot]?.themeIndex ?? 0;
+    emitEvent(
+      w.eventBus,
+      EVT.GLASS_HIT,
+      blockIdx,
+      hero && !isMid ? 1 : 0,
+      themeIndex
+    );
   };
 
   const startCrack = (
@@ -1012,48 +1402,182 @@ function SmashHit() {
     spawnHitFx(hitPos.x, hitPos.y, hitPos.z + 0.02, color, 0.2);
   };
 
+  const ensureRoomStats = (
+    roomIndex: number,
+    themeIndex: number,
+    archetype: RoomArchetype
+  ) => {
+    const w = world.current;
+    let stats = w.roomStats.get(roomIndex);
+    if (!stats) {
+      stats = {
+        targets: 0,
+        cleared: 0,
+        breaches: 0,
+        crystals: 0,
+        themeIndex,
+        archetype,
+      };
+      w.roomStats.set(roomIndex, stats);
+    }
+    return stats;
+  };
+
+  const syncRoomRuntime = (roomIndex: number) => {
+    const w = world.current;
+    const themeIndex = themeIndexForRoom(w.seed, roomIndex);
+    const archetype = roomArchetypeFor(w.seed, roomIndex);
+    const difficulty = Math.floor(roomIndex / 3);
+    const themeTuning = THEME_GAMEPLAY[themeIndex];
+    const archetypeSpeed = roomSpeedMultiplier(archetype, difficulty);
+
+    w.currentRoomArchetype = archetype;
+    w.currentThemeTuning = themeTuning;
+    w.currentRoomSpeedMul = clamp(
+      archetypeSpeed * themeTuning.speedMul,
+      0.9,
+      1.28
+    );
+  };
+
+  const finalizeRoom = (roomIndex: number) => {
+    const w = world.current;
+    if (roomIndex < 0 || w.finalizedRooms.has(roomIndex)) return;
+
+    const stats = w.roomStats.get(roomIndex);
+    w.finalizedRooms.add(roomIndex);
+    if (!stats || stats.targets <= 0) return;
+
+    const difficulty = Math.floor(roomIndex / 3);
+    const completion = clamp(stats.cleared / stats.targets, 0, 1);
+    const themeTuning = THEME_GAMEPLAY[stats.themeIndex];
+    let bonus = 0;
+
+    if (stats.breaches === 0 && completion >= 0.999) {
+      w.flawlessRoomStreak += 1;
+      bonus = Math.floor(
+        (105 +
+          stats.targets * 18 +
+          stats.crystals * 7 +
+          difficulty * 15 +
+          w.flawlessRoomStreak * 22) *
+          themeTuning.clearScoreMul
+      );
+      const ammoBonus = clamp(
+        2 +
+          Math.floor(stats.targets / 3) +
+          Math.floor(w.flawlessRoomStreak / 2),
+        2,
+        8
+      );
+      smashHitState.addAmmo(ammoBonus);
+      w.bloomPunch = Math.max(w.bloomPunch, 0.32);
+      playTone(520 + Math.random() * 80, 0.12, 'triangle', 0.07);
+    } else if (completion >= 0.67) {
+      w.flawlessRoomStreak = 0;
+      bonus = Math.floor(
+        (42 + stats.cleared * 9 + stats.crystals * 4 + difficulty * 8) *
+          themeTuning.clearScoreMul
+      );
+    } else {
+      w.flawlessRoomStreak = 0;
+    }
+
+    if (bonus > 0) {
+      smashHitState.addScore(bonus);
+    }
+
+    const cleanupBefore = roomIndex - (CLEANUP_BEHIND_ROOMS + 3);
+    if (cleanupBefore >= 0) {
+      w.roomStats.delete(cleanupBefore);
+      w.finalizedRooms.delete(cleanupBefore);
+    }
+  };
+
   const spawnBarrier = (
     roomIndex: number,
     z: number,
     themeIndex: number,
     rng: SeededRandom,
-    difficulty: number
+    difficulty: number,
+    archetype: RoomArchetype,
+    barrierIndex: number
   ) => {
     const w = world.current;
     const slot = allocateBarrierSlot();
     const barrier = w.barriers[slot];
+    const profile = ROOM_PROFILE[archetype];
+    const themeTuning = THEME_GAMEPLAY[themeIndex];
 
     barrier.active = true;
     barrier.roomIndex = roomIndex;
     barrier.z = z;
     barrier.passed = false;
     barrier.themeIndex = themeIndex;
+    barrier.archetype = archetype;
+    barrier.clearBonus = Math.floor(
+      (profile.clearBonus + difficulty * 4 + rng.int(-2, 4)) *
+        themeTuning.clearScoreMul
+    );
+    barrier.breachPenaltyMul = profile.breachPenaltyMul * themeTuning.penaltyMul;
+    barrier.driftAmp =
+      rng.float(profile.driftX[0], profile.driftX[1]) *
+      themeTuning.driftMul *
+      clamp(0.78 + difficulty * 0.06, 0.78, 1.28);
+    barrier.driftYAmp =
+      rng.float(profile.driftY[0], profile.driftY[1]) *
+      themeTuning.driftMul *
+      clamp(0.74 + difficulty * 0.05, 0.74, 1.16);
+    barrier.driftSpeed = rng.float(profile.driftSpeed[0], profile.driftSpeed[1]);
+    barrier.driftPhase = rng.float(0, Math.PI * 2);
     barrier.color
       .copy(THEME_COLORS[themeIndex].corridor)
       .lerp(COLOR_WHITE, 0.15);
 
-    const crystalChance = roomIndex === 0 ? 0.65 : roomIndex === 1 ? 0.52 : 0.36;
+    const crystalChance = clamp(
+      (roomIndex === 0 ? 0.64 : roomIndex === 1 ? 0.5 : 0.34) +
+        profile.crystalBias +
+        themeTuning.crystalBias,
+      0.12,
+      0.82
+    );
     barrier.crystalActive = rng.bool(crystalChance);
     barrier.crystalX = rng.float(-2.3, 2.3);
     barrier.crystalY = rng.float(-1.2, 1.2);
     barrier.crystalValue = pickCrystalValue(rng);
 
-    const required = requiredPattern(difficulty, rng);
+    const required = requiredPattern(difficulty, rng, archetype, barrierIndex);
 
     const holeChance =
       roomIndex === 0
-        ? 0.72
+        ? clamp(0.68 + profile.holeBias + themeTuning.holeBias, 0.36, 0.82)
         : roomIndex === 1
-          ? 0.5
-          : clamp(0.13 + difficulty * 0.03, 0.13, 0.42);
+          ? clamp(0.46 + profile.holeBias + themeTuning.holeBias, 0.2, 0.72)
+          : clamp(
+              0.13 +
+                difficulty * 0.03 +
+                profile.holeBias +
+                themeTuning.holeBias,
+              0.07,
+              0.44
+            );
     const stoneChance =
       roomIndex <= 1
         ? 0
-        : clamp(0.08 + difficulty * 0.035, 0.08, 0.35);
+        : clamp(
+            0.08 +
+              difficulty * 0.035 +
+              profile.stoneBias +
+              themeTuning.stoneBias,
+            0.06,
+            0.42
+          );
     const heroChance =
       roomIndex <= 1
-        ? 0.24
-        : clamp(0.08 + difficulty * 0.02, 0.08, 0.22);
+        ? clamp(0.22 + profile.heroBias * 0.5, 0.12, 0.34)
+        : clamp(0.08 + difficulty * 0.02 + profile.heroBias, 0.08, 0.32);
+
+    ensureRoomStats(roomIndex, themeIndex, archetype).targets += 1;
 
     const blockBase = slot * BLOCKS_PER_BARRIER;
     for (let b = 0; b < BLOCKS_PER_BARRIER; b += 1) {
@@ -1072,6 +1596,8 @@ function SmashHit() {
       w.blockCrack[idx] = 0;
       w.blockDelayFrames[idx] = 0;
 
+      w.blockBaseX[idx] = cell.x;
+      w.blockBaseY[idx] = cell.y;
       w.blockX[idx] = cell.x;
       w.blockY[idx] = cell.y;
       w.blockZ[idx] = z;
@@ -1084,14 +1610,31 @@ function SmashHit() {
     const rng = new SeededRandom(seed);
 
     const themeIndex = themeIndexForRoom(w.seed, roomIndex);
+    const archetype = roomArchetypeFor(w.seed, roomIndex);
+    const profile = ROOM_PROFILE[archetype];
     const roomStartZ =
       START_SPAWN_Z - roomIndex * ROOM_LENGTH - (roomIndex === 0 ? INTRO_SPAWN_BUFFER : 0);
 
     const difficulty = Math.floor(roomIndex / 3);
+    const densityBias =
+      archetype === 'calm'
+        ? -1
+        : archetype === 'gauntlet'
+          ? 2
+          : archetype === 'fortress'
+            ? 1
+            : 0;
     const barrierCount =
       roomIndex === 0
         ? 2 + rng.int(0, 1)
-        : clamp(3 + rng.int(0, 2) + Math.floor(difficulty * 0.35), 3, 6);
+        : clamp(
+            3 +
+              densityBias +
+              rng.int(0, 2) +
+              Math.floor(difficulty * 0.35 + profile.stoneBias * 2.4),
+            3,
+            7
+          );
 
     let cursorZ =
       roomIndex === 0
@@ -1099,7 +1642,7 @@ function SmashHit() {
         : roomStartZ - rng.float(4.5, 7.5);
 
     for (let i = 0; i < barrierCount; i += 1) {
-      spawnBarrier(roomIndex, cursorZ, themeIndex, rng, difficulty);
+      spawnBarrier(roomIndex, cursorZ, themeIndex, rng, difficulty, archetype, i);
       cursorZ -= rng.float(SPACING_MIN, SPACING_MAX);
     }
   };
@@ -1150,9 +1693,21 @@ function SmashHit() {
 
     w.currentRoom = 0;
     w.maxGeneratedRoom = -1;
+    w.flawlessRoomStreak = 0;
+    w.lastFinalizedRoom = -1;
+    w.roomStats.clear();
+    w.finalizedRooms.clear();
 
     for (let i = 0; i < MAX_BARRIERS; i += 1) {
       deactivateBarrier(i);
+    }
+
+    for (let i = 0; i < MAX_BLOCKS; i += 1) {
+      w.blockBaseX[i] = 0;
+      w.blockBaseY[i] = 0;
+      w.blockX[i] = 0;
+      w.blockY[i] = 0;
+      w.blockZ[i] = 0;
     }
 
     for (let i = 0; i < MAX_PROJECTILES; i += 1) {
@@ -1198,6 +1753,10 @@ function SmashHit() {
     w.pendingTheme = -1;
     w.beatClock = 0;
     w.beatInterval = 60 / THEMES[t0].bpm;
+    w.currentRoomArchetype = roomArchetypeFor(w.seed, 0);
+    w.currentThemeTuning = THEME_GAMEPLAY[t0];
+    w.currentRoomSpeedMul = roomSpeedMultiplier('calm', 0) * THEME_GAMEPLAY[t0].speedMul;
+    syncRoomRuntime(0);
 
     w.spaceWasDown = false;
     w.fireCooldown = 0;
@@ -1328,9 +1887,13 @@ function SmashHit() {
       const type = bus.type[idx];
       const a = bus.a[idx];
       const b = bus.b[idx];
+      const c = bus.c[idx];
 
       if (type === EVT.GLASS_HIT) {
-        smashHitState.addScore(12 + (b > 0.5 ? 8 : 0));
+        const themeIndex = clamp(Math.floor(c), 0, THEMES.length - 1);
+        const tuning = THEME_GAMEPLAY[themeIndex];
+        const hitScore = Math.floor((12 + (b > 0.5 ? 8 : 0)) * tuning.hitScoreMul);
+        smashHitState.addScore(hitScore);
         w.cameraShake = Math.max(w.cameraShake, 0.15 + b * 0.14);
         w.bloomPunch = Math.max(w.bloomPunch, 0.32 + b * 0.08);
         w.flashAlpha = Math.max(w.flashAlpha, 0.25 + b * 0.1);
@@ -1339,13 +1902,37 @@ function SmashHit() {
           0.04 + b * 0.01 + GLASS_PHYSICS.restitution * 0.01
         );
       } else if (type === EVT.CRYSTAL_HIT) {
-        smashHitState.onCrystalHit(Math.max(1, Math.floor(a)));
+        const themeIndex = clamp(Math.floor(b), 0, THEMES.length - 1);
+        const roomIndex = Math.floor(c);
+        const tuning = THEME_GAMEPLAY[themeIndex];
+        const gain = Math.max(1, Math.floor(a));
+        smashHitState.onCrystalHit(gain);
+        const crystalBonus = Math.floor((18 + gain * 3) * tuning.crystalScoreMul);
+        smashHitState.addScore(crystalBonus);
+        if (roomIndex >= 0) {
+          const stats = ensureRoomStats(
+            roomIndex,
+            themeIndex,
+            roomArchetypeFor(w.seed, roomIndex)
+          );
+          stats.crystals += 1;
+        }
         w.cameraShake = Math.max(w.cameraShake, 0.32);
         w.bloomPunch = Math.max(w.bloomPunch, 0.28);
         const toneLift = comboIntensity(smashHitState.combo);
         playTone(720 + toneLift * 120 + Math.random() * 40, 0.12, 'sine', 0.08);
       } else if (type === EVT.PENALTY_HIT) {
         const penalty = Math.max(1, Math.floor(a || 10));
+        const roomIndex = Math.floor(b);
+        const themeIndex = clamp(Math.floor(c), 0, THEMES.length - 1);
+        if (roomIndex >= 0) {
+          const stats = ensureRoomStats(
+            roomIndex,
+            themeIndex,
+            roomArchetypeFor(w.seed, roomIndex)
+          );
+          stats.breaches += 1;
+        }
         smashHitState.combo = 0;
         smashHitState.multiball = 1;
         smashHitState.addAmmo(-penalty);
@@ -1395,11 +1982,17 @@ function SmashHit() {
 
     w.simTime += step;
 
+    syncRoomRuntime(w.currentRoom);
+
     const speedRamp = Math.min(
       MAX_SPEED - BASE_SPEED,
       smashHitState.score * 0.0035 + w.distance * 0.0028
     );
-    w.speed = BASE_SPEED + speedRamp;
+    w.speed = clamp(
+      (BASE_SPEED + speedRamp) * w.currentRoomSpeedMul,
+      BASE_SPEED * 0.9,
+      MAX_SPEED * 1.14
+    );
 
     w.cameraZ -= w.speed * step;
     w.distance = START_Z - w.cameraZ;
@@ -1411,6 +2004,7 @@ function SmashHit() {
         emitEvent(w.eventBus, EVT.ROOM_ADVANCE, r, themeIndex, 0);
       }
       w.currentRoom = roomNow;
+      syncRoomRuntime(w.currentRoom);
       ensureRooms(w.currentRoom);
       cleanupBehindRooms(w.currentRoom);
     }
@@ -1419,6 +2013,38 @@ function SmashHit() {
     if (w.beatClock >= w.beatInterval) {
       w.beatClock -= w.beatInterval;
       emitEvent(w.eventBus, EVT.BEAT, 0, 0, 0);
+    }
+
+    for (let slot = 0; slot < MAX_BARRIERS; slot += 1) {
+      const barrier = w.barriers[slot];
+      if (!barrier.active) {
+        w.barrierDriftX[slot] = 0;
+        w.barrierDriftY[slot] = 0;
+        continue;
+      }
+
+      const roomDepth = Math.max(0, barrier.roomIndex - w.currentRoom);
+      const phaseBoost = 1 + Math.min(0.35, roomDepth * 0.06);
+      const driftX =
+        Math.sin(w.simTime * barrier.driftSpeed + barrier.driftPhase) *
+        barrier.driftAmp *
+        phaseBoost;
+      const driftY =
+        Math.cos(
+          w.simTime * (barrier.driftSpeed * 0.82) + barrier.driftPhase * 1.24
+        ) *
+        barrier.driftYAmp *
+        phaseBoost;
+
+      w.barrierDriftX[slot] = driftX;
+      w.barrierDriftY[slot] = driftY;
+
+      const blockBase = slot * BLOCKS_PER_BARRIER;
+      for (let b = 0; b < BLOCKS_PER_BARRIER; b += 1) {
+        const idx = blockBase + b;
+        w.blockX[idx] = w.blockBaseX[idx] + driftX;
+        w.blockY[idx] = w.blockBaseY[idx] + driftY;
+      }
     }
 
     for (let i = 0; i < MAX_PROJECTILES; i += 1) {
@@ -1457,6 +2083,8 @@ function SmashHit() {
         if (!barrier.active) continue;
 
         const crystalZ = barrier.z - 2.2;
+        const crystalX = barrier.crystalX + w.barrierDriftX[slot] * 0.85;
+        const crystalY = barrier.crystalY + w.barrierDriftY[slot] * 0.85;
         if (barrier.crystalActive) {
           const crystalNear = Math.abs(shot.pos.z - crystalZ) < 0.8;
           const crystalT = Math.abs(segDz) > 1e-6 ? (crystalZ - prevZ) / segDz : -1;
@@ -1465,18 +2093,24 @@ function SmashHit() {
             const sampleX = crossedCrystal ? prevX + segDx * crystalT : shot.pos.x;
             const sampleY = crossedCrystal ? prevY + segDy * crystalT : shot.pos.y;
             const sampleZ = crossedCrystal ? crystalZ : shot.pos.z;
-            const dx = sampleX - barrier.crystalX;
-            const dy = sampleY - barrier.crystalY;
+            const dx = sampleX - crystalX;
+            const dy = sampleY - crystalY;
             const dz = sampleZ - crystalZ;
             if (
               dx * dx + dy * dy + dz * dz <=
               (SHOT_RADIUS + 0.23) * (SHOT_RADIUS + 0.23)
             ) {
               barrier.crystalActive = false;
-              emitEvent(w.eventBus, EVT.CRYSTAL_HIT, barrier.crystalValue, 0, 0);
+              emitEvent(
+                w.eventBus,
+                EVT.CRYSTAL_HIT,
+                barrier.crystalValue,
+                barrier.themeIndex,
+                barrier.roomIndex
+              );
               spawnHitFx(
-                barrier.crystalX,
-                barrier.crystalY,
+                crystalX,
+                crystalY,
                 crystalZ,
                 THEME_COLORS[barrier.themeIndex].bloom,
                 0.32
@@ -1512,7 +2146,20 @@ function SmashHit() {
           if (dx > half + SHOT_RADIUS || dy > half + SHOT_RADIUS) continue;
 
           if (stone) {
-            emitEvent(w.eventBus, EVT.PENALTY_HIT, 10, 0, 0);
+            const stonePenalty = Math.floor(
+              clamp(
+                10 * barrier.breachPenaltyMul,
+                6,
+                24
+              )
+            );
+            emitEvent(
+              w.eventBus,
+              EVT.PENALTY_HIT,
+              stonePenalty,
+              barrier.roomIndex,
+              barrier.themeIndex
+            );
             spawnHitFx(
               w.blockX[idx],
               w.blockY[idx],
@@ -1611,12 +2258,19 @@ function SmashHit() {
             clamp(
               (BREACH_AMMO_PENALTY_BASE +
                 requiredLeft * BREACH_AMMO_PENALTY_PER_BLOCK) *
-                introPenaltyScale,
+                introPenaltyScale *
+                barrier.breachPenaltyMul,
               4,
-              24
+              30
             )
           );
-          emitEvent(w.eventBus, EVT.PENALTY_HIT, penalty, requiredLeft, 0);
+          emitEvent(
+            w.eventBus,
+            EVT.PENALTY_HIT,
+            penalty,
+            barrier.roomIndex,
+            barrier.themeIndex
+          );
           barrier.crystalActive = false;
 
           for (let b = 0; b < BLOCKS_PER_BARRIER; b += 1) {
@@ -1637,7 +2291,15 @@ function SmashHit() {
 
         barrier.passed = true;
         barrier.crystalActive = false;
-        smashHitState.addScore(35 + Math.floor(smashHitState.combo * 0.6));
+        ensureRoomStats(
+          barrier.roomIndex,
+          barrier.themeIndex,
+          barrier.archetype
+        ).cleared += 1;
+        const clearScore = Math.floor(
+          barrier.clearBonus + Math.floor(smashHitState.combo * 0.62)
+        );
+        smashHitState.addScore(clearScore);
       }
     }
 
@@ -1649,6 +2311,14 @@ function SmashHit() {
     }
 
     processEvents();
+
+    const finalizeUntil = w.currentRoom - 1;
+    if (finalizeUntil > w.lastFinalizedRoom) {
+      for (let room = w.lastFinalizedRoom + 1; room <= finalizeUntil; room += 1) {
+        finalizeRoom(room);
+      }
+      w.lastFinalizedRoom = finalizeUntil;
+    }
   };
 
   useEffect(() => {
@@ -1957,7 +2627,9 @@ function SmashHit() {
           continue;
         }
 
-        dummy.position.set(barrier.crystalX, barrier.crystalY, barrier.z - 2.2);
+        const crystalX = barrier.crystalX + w.barrierDriftX[slot] * 0.85;
+        const crystalY = barrier.crystalY + w.barrierDriftY[slot] * 0.85;
+        dummy.position.set(crystalX, crystalY, barrier.z - 2.2);
         dummy.rotation.set(w.simTime * 2.1, w.simTime * 1.7, 0);
         const scale = 0.86 + Math.sin(w.simTime * 8 + slot) * 0.07;
         dummy.scale.set(scale, scale, scale);
@@ -2305,7 +2977,9 @@ function SmashHit() {
             {snap.multiball}
           </div>
           <div style={{ fontSize: 12, opacity: 0.62 }}>
-            Room {snap.roomIndex + 1} • Seed {snap.seed}
+            Room {snap.roomIndex + 1} •{' '}
+            {ROOM_ARCHETYPE_LABEL[world.current.currentRoomArchetype]} • Seed{' '}
+            {snap.seed}
           </div>
           <div style={{ fontSize: 11, opacity: 0.52 }}>Best: {snap.best}</div>
         </div>
@@ -2399,6 +3073,7 @@ function SmashHit() {
             <div>Tier: {snap.qualityTier}</div>
             <div>Seed: {snap.seed}</div>
             <div>Room: {snap.roomIndex}</div>
+            <div>Archetype: {world.current.currentRoomArchetype}</div>
             <div>Bodies (est): {activeBodiesEstimate}</div>
             <div>Draw Calls: {gl.info.render.calls}</div>
             <div>Theme: {THEMES[world.current.themeTo].name}</div>

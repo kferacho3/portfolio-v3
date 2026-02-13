@@ -1,6 +1,7 @@
 import { SeededRandom } from '../../utils/seededRandom';
 import {
   PLATFORM_ANIM_DURATION,
+  PLATFORM_ANIM_MIN_DURATION,
   PLATFORM_CLOSED_PIECE_X,
   PLATFORM_OPEN_SLIDE_X,
   PLATFORM_PATTERN_SIZE,
@@ -66,26 +67,38 @@ export function generatePattern(
 
   // Generate obstacles, levers, boosters, and gems (only after level 5 for difficulty)
   for (let i = 5; i < size; i += 1) {
-    const difficulty = clamp01((i - 5) / 120);
+    const difficulty = clamp01((i - 5) / 160);
     const obstacleRate = lerp(
       OBSTACLE_SPAWN_RATE,
-      OBSTACLE_SPAWN_RATE + 0.18,
+      OBSTACLE_SPAWN_RATE + 0.16,
       difficulty
     );
     const leverRate = lerp(
-      LEVER_SPAWN_RATE,
-      LEVER_SPAWN_RATE + 0.06,
-      difficulty * 0.6
+      LEVER_SPAWN_RATE + 0.02,
+      LEVER_SPAWN_RATE + 0.08,
+      difficulty * 0.65
     );
     const boosterRate = lerp(
       BOOSTER_SPAWN_RATE,
-      BOOSTER_SPAWN_RATE * 0.6,
+      BOOSTER_SPAWN_RATE * 0.55,
       difficulty
     );
-    const gemRate = lerp(GEM_SPAWN_RATE, GEM_SPAWN_RATE * 0.85, difficulty);
+    const gemRate = lerp(GEM_SPAWN_RATE, GEM_SPAWN_RATE * 0.8, difficulty);
+
+    // Levers (unlock next level). Keep lever rows clear from bombs for fairness.
+    const hasLever = rng.random() < leverRate && i < size - 1;
+    if (hasLever) {
+      levers.push({
+        rowIndex: i,
+        x: rng.float(-2, 2),
+        z: 0,
+        targetRowIndex: i + 1, // unlocks next row
+        activated: false,
+      });
+    }
 
     // Obstacles (bombs)
-    if (rng.random() < obstacleRate) {
+    if (!hasLever && rng.random() < obstacleRate) {
       obstacles.push({
         rowIndex: i,
         x: rng.float(-CORRIDOR_HALF_WIDTH + 1, CORRIDOR_HALF_WIDTH - 1),
@@ -98,17 +111,6 @@ export function generatePattern(
           rng.float(OBSTACLE_DRIFT_SPEED_MIN, OBSTACLE_DRIFT_SPEED_MAX) *
           lerp(0.8, 1.4, difficulty),
         driftPhase: rng.float(0, Math.PI * 2),
-      });
-    }
-
-    // Levers (unlock next level)
-    if (rng.random() < leverRate && i < size - 1) {
-      levers.push({
-        rowIndex: i,
-        x: rng.float(-2, 2),
-        z: 0,
-        targetRowIndex: i + 1, // unlocks next row
-        activated: false,
       });
     }
 
@@ -153,6 +155,7 @@ export function getPlatformPieces(
   pattern: PlatformPattern
 ): {
   kind: PlatformKind;
+  progress: number;
   pieces: [PlatformPieceTransform, PlatformPieceTransform];
 } {
   const y = index * PLATFORM_SPACING;
@@ -162,6 +165,7 @@ export function getPlatformPieces(
     // A fully closed stable platform at the start.
     return {
       kind,
+      progress: 1,
       pieces: [
         { x: -PLATFORM_CLOSED_PIECE_X, y, z: 0, rotZ: 0, solid: true },
         { x: PLATFORM_CLOSED_PIECE_X, y, z: 0, rotZ: 0, solid: true },
@@ -171,13 +175,20 @@ export function getPlatformPieces(
 
   const activation =
     pattern.activationTimes[index % pattern.activationTimes.length];
-  const t = clamp01((timeS - activation) / PLATFORM_ANIM_DURATION);
+  const rowDifficulty = clamp01((index - 5) / 160);
+  const animDuration = lerp(
+    PLATFORM_ANIM_DURATION,
+    PLATFORM_ANIM_MIN_DURATION,
+    rowDifficulty
+  );
+  const t = clamp01((timeS - activation) / animDuration);
 
   if (kind === 'slide') {
     const xL = lerp(-PLATFORM_OPEN_SLIDE_X, -PLATFORM_CLOSED_PIECE_X, t);
     const xR = lerp(PLATFORM_OPEN_SLIDE_X, PLATFORM_CLOSED_PIECE_X, t);
     return {
       kind,
+      progress: t,
       pieces: [
         { x: xL, y, z: 0, rotZ: 0, solid: true },
         { x: xR, y, z: 0, rotZ: 0, solid: true },
@@ -209,7 +220,7 @@ export function getPlatformPieces(
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };
 
-  return { kind, pieces: [left, right] };
+  return { kind, progress: t, pieces: [left, right] };
 }
 
 export function getLavaY(timeS: number, currentLevel: number): number {
