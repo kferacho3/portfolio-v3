@@ -1,76 +1,69 @@
 # Rolette: Pinball Ultimate Theme Guide
 
-## Core Direction
-- Keep gameplay symmetry for fairness.
-- Keep arena topology unique per theme.
-- Use direct ball-control readability first, visual noise second.
+## Gameplay Tuning Pass
+Each arena now has a dedicated tuning profile for:
+- Bounce: floor/wall restitution and obstacle kick behavior.
+- Lane Flow: orbit/ramp assist forces and route carry.
+- Scoring: per-theme base score scale, jackpot scale, end-of-ball scale.
+
+## Active Theme Keys
+- `1` Neon Nebula Galaxy
+- `2` Cotton Candy World
+- `3` Naturalistic Nature
+- `4` Abyssal Current
+- `5` Volcanic Forge
+- `6` Cyber Grid Matrix
+- `7` Aurora Prism
+- `8` Desert Relic Run
 
 ## Global Color Rules
 - `background/fog` sets atmosphere.
-- `floor/rail` should be lower contrast than targets.
-- `accent` marks interactive standard targets.
-- `secondary` marks motion lanes/orbits.
-- `hazard` marks punishers/drain risk.
-- `highlight` marks jackpots, mystery, wizard-critical shots.
+- `floor/rail` should read lower contrast than gameplay targets.
+- `accent` marks interactives and active feedback.
+- `secondary` marks routing elements (orbits/ramps/flow lanes).
+- `hazard` marks punisher space (drain, crushers, danger objects).
+- `highlight` marks jackpots, mystery, wizard-critical interactions.
 
-## Theme Tokens
+## Arena Identity Map
 
 ### Neon Nebula Galaxy
-- `background`: `#02030a`
-- `fog`: `#070b1e`
-- `floor`: `#0a1027`
-- `rail`: `#1a1431`
-- `accent`: `#24ff9f`
-- `secondary`: `#8e4bff`
-- `hazard`: `#ff4f45`
-- `highlight`: `#ffd84d`
-- `lane`: `#10d9ff`
+- Layout: long X-cross routes with deep upper mini zone.
+- Feel: fast, elastic, high rebound side rails.
 
 ### Cotton Candy World
-- `background`: `#faf5ff`
-- `fog`: `#ffeef8`
-- `floor`: `#f7f6ff`
-- `rail`: `#d7d7ef`
-- `accent`: `#ff99cd`
-- `secondary`: `#7ecbff`
-- `hazard`: `#ff6e8d`
-- `highlight`: `#ffffff`
-- `lane`: `#dcaeff`
+- Layout: tight concentric hub, clustered interactions.
+- Feel: slower, softer rebounds, forgiving drain width.
 
 ### Naturalistic Nature
-- `background`: `#081709`
-- `fog`: `#102814`
-- `floor`: `#12311a`
-- `rail`: `#2a3f24`
-- `accent`: `#68d764`
-- `secondary`: `#9ad64a`
-- `hazard`: `#8d5430`
-- `highlight`: `#d6ff87`
-- `lane`: `#7ecf7d`
+- Layout: trunk + mirrored branches, medium depth progression.
+- Feel: balanced control and neutral scoring economy.
+
+### Abyssal Current
+- Layout: wide side orbits and trench lanes.
+- Feel: slippery flow and high carry through curved lanes.
+
+### Volcanic Forge
+- Layout: V-shaped pressure lanes with heavy center danger.
+- Feel: sticky floor, tighter drain, high jackpot scaling.
+
+### Cyber Grid Matrix
+- Layout: orthogonal grid shots and high-speed side channels.
+- Feel: fastest response and strongest orbit/ramp flow assist.
+
+### Aurora Prism
+- Layout: layered arc routes with balanced vertical progression.
+- Feel: smooth high-control lane carry and moderate bounce.
+
+### Desert Relic Run
+- Layout: canyon-style staggered targets with precision lines.
+- Feel: high friction, tighter windows, high reward conversion.
 
 ## Symmetry System
-- Mirror all major shots across X-axis:
-  - drop banks, ramps, orbits, wormholes, magnets, spinners, slingshots.
-- Keep centerline-only skill targets:
-  - bullseye pair, mystery, kicker, gobble.
-- Obstacle count must be balanced left/right even when phase offsets differ.
-
-## Arena Structure Identities
-
-### Neon Nebula: X-Cross
-- Long side orbits and deep top mini-zone.
-- Central rotating cross obstacle.
-- Strong neon contrast on dark table.
-
-### Cotton Candy: Concentric Hub
-- Circular lane ribbons and dense central interactions.
-- Softer obstacles with smoother pacing.
-- Pastel lighting and rounded visual language.
-
-### Naturalistic Nature: Trunk + Branch
-- Central trunk lane and mirrored branch routes.
-- Deeper topfield progression.
-- Organic accents with earthy hazard colors.
+- All primary shots mirror on X-axis:
+  - drops, ramps, orbits, wormholes, magnets, spinners, slings.
+- Centerline feature shots remain single:
+  - bullseye, mystery, kicker, gobble.
+- Obstacles keep left/right balance even with differing motion phase.
 
 ## Required Scorable Set (per arena)
 - Standups
@@ -79,7 +72,7 @@
 - Spinners
 - Slingshots
 - Vari targets
-- Bullseye outer+inner
+- Bullseye outer + inner
 - Saucers
 - Rollovers
 - Ramps
@@ -100,7 +93,7 @@
 - `obstacle/drain`: heavier hazard-colored impacts.
 
 ## Audio Rules
-- Use synth pinball tones, not cartoon one-shots.
-- Bumper impacts should be punchy.
-- Jackpot/mystery should have layered tones.
-- Drain/obstacle should be lower and harsher.
+- Use synth pinball tones; avoid cartoon/goofy SFX.
+- Bumpers: punchy transients.
+- Jackpot/mystery: layered rising tones.
+- Drain/obstacle: lower and harsher danger signature.

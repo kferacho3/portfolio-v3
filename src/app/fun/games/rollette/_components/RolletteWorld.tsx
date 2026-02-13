@@ -283,7 +283,1193 @@ const canStartWizard = (o: Objectives) =>
   o.rampHits >= 6 &&
   o.mysteryHits >= 2;
 
+interface ThemeTuning {
+  gravity: Vec3;
+  floorFriction: number;
+  floorRestitution: number;
+  wallRestitution: number;
+  drainGap: number;
+  controlSpeed: number;
+  mouseForce: number;
+  maxPlanarSpeed: number;
+  linearDamping: number;
+  ghostLinearDamping: number;
+  angularDamping: number;
+  heavyAngularDamping: number;
+  heavyGravityScale: number;
+  popKick: number;
+  heavyPopKick: number;
+  spinnerSideImpulse: number;
+  spinnerForwardImpulse: number;
+  slingSideImpulse: number;
+  slingForwardImpulse: number;
+  rampForwardImpulse: number;
+  orbitSideImpulse: number;
+  orbitForwardImpulse: number;
+  kickerImpulse: number;
+  magnetForce: number;
+  orbitFlowForce: number;
+  rampFlowForce: number;
+  scoreScale: number;
+  jackpotScale: number;
+  endBonusScale: number;
+}
+
+const THEME_TUNING: Record<ThemeId, ThemeTuning> = {
+  nebula: {
+    gravity: GRAVITY,
+    floorFriction: 0.1,
+    floorRestitution: 0.66,
+    wallRestitution: 0.84,
+    drainGap: DRAIN_GAP,
+    controlSpeed: CONTROL_SPEED + 1,
+    mouseForce: MOUSE_FORCE + 5,
+    maxPlanarSpeed: MAX_PLANAR_SPEED + 1,
+    linearDamping: 0.08,
+    ghostLinearDamping: 0.03,
+    angularDamping: 0.45,
+    heavyAngularDamping: 0.32,
+    heavyGravityScale: 1.08,
+    popKick: 14,
+    heavyPopKick: 20,
+    spinnerSideImpulse: 1.8,
+    spinnerForwardImpulse: -2.6,
+    slingSideImpulse: 11,
+    slingForwardImpulse: -10.5,
+    rampForwardImpulse: -8.6,
+    orbitSideImpulse: 5.4,
+    orbitForwardImpulse: -6.8,
+    kickerImpulse: -21,
+    magnetForce: 24,
+    orbitFlowForce: 5.2,
+    rampFlowForce: 4.2,
+    scoreScale: 1,
+    jackpotScale: 1,
+    endBonusScale: 1,
+  },
+  cotton: {
+    gravity: [0, -23, 11],
+    floorFriction: 0.14,
+    floorRestitution: 0.62,
+    wallRestitution: 0.8,
+    drainGap: 14.4,
+    controlSpeed: 18,
+    mouseForce: 190,
+    maxPlanarSpeed: 34,
+    linearDamping: 0.11,
+    ghostLinearDamping: 0.045,
+    angularDamping: 0.5,
+    heavyAngularDamping: 0.37,
+    heavyGravityScale: 1.02,
+    popKick: 12,
+    heavyPopKick: 18,
+    spinnerSideImpulse: 1.5,
+    spinnerForwardImpulse: -2.1,
+    slingSideImpulse: 9,
+    slingForwardImpulse: -9,
+    rampForwardImpulse: -7.4,
+    orbitSideImpulse: 4.2,
+    orbitForwardImpulse: -5.7,
+    kickerImpulse: -18,
+    magnetForce: 20,
+    orbitFlowForce: 4.6,
+    rampFlowForce: 3.5,
+    scoreScale: 0.96,
+    jackpotScale: 0.94,
+    endBonusScale: 0.92,
+  },
+  nature: {
+    gravity: [0, -25, 12],
+    floorFriction: 0.11,
+    floorRestitution: 0.64,
+    wallRestitution: 0.83,
+    drainGap: 13.2,
+    controlSpeed: 20,
+    mouseForce: 198,
+    maxPlanarSpeed: 36,
+    linearDamping: 0.09,
+    ghostLinearDamping: 0.038,
+    angularDamping: 0.47,
+    heavyAngularDamping: 0.34,
+    heavyGravityScale: 1.1,
+    popKick: 13,
+    heavyPopKick: 19,
+    spinnerSideImpulse: 1.6,
+    spinnerForwardImpulse: -2.4,
+    slingSideImpulse: 10.2,
+    slingForwardImpulse: -9.8,
+    rampForwardImpulse: -8.2,
+    orbitSideImpulse: 4.9,
+    orbitForwardImpulse: -6.2,
+    kickerImpulse: -20,
+    magnetForce: 22,
+    orbitFlowForce: 5.3,
+    rampFlowForce: 4.4,
+    scoreScale: 1,
+    jackpotScale: 1.02,
+    endBonusScale: 1,
+  },
+  abyss: {
+    gravity: [0, -22, 11],
+    floorFriction: 0.06,
+    floorRestitution: 0.74,
+    wallRestitution: 0.88,
+    drainGap: 12.4,
+    controlSpeed: 22,
+    mouseForce: 216,
+    maxPlanarSpeed: 40,
+    linearDamping: 0.065,
+    ghostLinearDamping: 0.025,
+    angularDamping: 0.41,
+    heavyAngularDamping: 0.3,
+    heavyGravityScale: 1.03,
+    popKick: 15,
+    heavyPopKick: 21,
+    spinnerSideImpulse: 2.1,
+    spinnerForwardImpulse: -3,
+    slingSideImpulse: 11.5,
+    slingForwardImpulse: -11.5,
+    rampForwardImpulse: -9.2,
+    orbitSideImpulse: 6.4,
+    orbitForwardImpulse: -7.8,
+    kickerImpulse: -23,
+    magnetForce: 28,
+    orbitFlowForce: 7.2,
+    rampFlowForce: 5.6,
+    scoreScale: 1.08,
+    jackpotScale: 1.12,
+    endBonusScale: 1.05,
+  },
+  forge: {
+    gravity: [0, -28, 13],
+    floorFriction: 0.16,
+    floorRestitution: 0.58,
+    wallRestitution: 0.8,
+    drainGap: 11.6,
+    controlSpeed: 19,
+    mouseForce: 188,
+    maxPlanarSpeed: 34,
+    linearDamping: 0.12,
+    ghostLinearDamping: 0.055,
+    angularDamping: 0.54,
+    heavyAngularDamping: 0.36,
+    heavyGravityScale: 1.16,
+    popKick: 13,
+    heavyPopKick: 23,
+    spinnerSideImpulse: 1.2,
+    spinnerForwardImpulse: -1.8,
+    slingSideImpulse: 8.8,
+    slingForwardImpulse: -8.2,
+    rampForwardImpulse: -6.8,
+    orbitSideImpulse: 4.1,
+    orbitForwardImpulse: -5.2,
+    kickerImpulse: -17,
+    magnetForce: 19,
+    orbitFlowForce: 3.6,
+    rampFlowForce: 2.8,
+    scoreScale: 1.14,
+    jackpotScale: 1.2,
+    endBonusScale: 1.15,
+  },
+  cyber: {
+    gravity: [0, -24, 10],
+    floorFriction: 0.04,
+    floorRestitution: 0.82,
+    wallRestitution: 0.92,
+    drainGap: 12.9,
+    controlSpeed: 23,
+    mouseForce: 224,
+    maxPlanarSpeed: 42,
+    linearDamping: 0.055,
+    ghostLinearDamping: 0.022,
+    angularDamping: 0.4,
+    heavyAngularDamping: 0.3,
+    heavyGravityScale: 1.05,
+    popKick: 16,
+    heavyPopKick: 22,
+    spinnerSideImpulse: 2.5,
+    spinnerForwardImpulse: -3.4,
+    slingSideImpulse: 12.5,
+    slingForwardImpulse: -12.2,
+    rampForwardImpulse: -10,
+    orbitSideImpulse: 7.2,
+    orbitForwardImpulse: -8.6,
+    kickerImpulse: -24,
+    magnetForce: 30,
+    orbitFlowForce: 8.4,
+    rampFlowForce: 6.4,
+    scoreScale: 1.1,
+    jackpotScale: 1.1,
+    endBonusScale: 1.08,
+  },
+  aurora: {
+    gravity: [0, -23, 11],
+    floorFriction: 0.08,
+    floorRestitution: 0.72,
+    wallRestitution: 0.86,
+    drainGap: 13.5,
+    controlSpeed: 21,
+    mouseForce: 208,
+    maxPlanarSpeed: 37,
+    linearDamping: 0.07,
+    ghostLinearDamping: 0.03,
+    angularDamping: 0.43,
+    heavyAngularDamping: 0.33,
+    heavyGravityScale: 1.07,
+    popKick: 14,
+    heavyPopKick: 20,
+    spinnerSideImpulse: 1.9,
+    spinnerForwardImpulse: -2.7,
+    slingSideImpulse: 10.2,
+    slingForwardImpulse: -10,
+    rampForwardImpulse: -8.7,
+    orbitSideImpulse: 5.8,
+    orbitForwardImpulse: -7,
+    kickerImpulse: -21,
+    magnetForce: 25,
+    orbitFlowForce: 6.6,
+    rampFlowForce: 5.2,
+    scoreScale: 1.06,
+    jackpotScale: 1.08,
+    endBonusScale: 1.04,
+  },
+  desert: {
+    gravity: [0, -26, 12],
+    floorFriction: 0.2,
+    floorRestitution: 0.56,
+    wallRestitution: 0.79,
+    drainGap: 11.9,
+    controlSpeed: 18.5,
+    mouseForce: 184,
+    maxPlanarSpeed: 33,
+    linearDamping: 0.13,
+    ghostLinearDamping: 0.06,
+    angularDamping: 0.57,
+    heavyAngularDamping: 0.39,
+    heavyGravityScale: 1.1,
+    popKick: 11.2,
+    heavyPopKick: 19,
+    spinnerSideImpulse: 1.1,
+    spinnerForwardImpulse: -1.9,
+    slingSideImpulse: 8.4,
+    slingForwardImpulse: -8,
+    rampForwardImpulse: -6.2,
+    orbitSideImpulse: 3.8,
+    orbitForwardImpulse: -4.8,
+    kickerImpulse: -16.5,
+    magnetForce: 18,
+    orbitFlowForce: 3.2,
+    rampFlowForce: 2.5,
+    scoreScale: 1.18,
+    jackpotScale: 1.24,
+    endBonusScale: 1.2,
+  },
+};
+
+type AdvancedThemeId = Exclude<ThemeId, 'nebula' | 'cotton' | 'nature'>;
+
+interface MirrorBandSpec {
+  x: number;
+  zs: number[];
+  points: number;
+  radius: number;
+}
+
+interface PairTargetSpec {
+  x: number;
+  z: number;
+  points: number;
+  radius: number;
+  objective?: ObjectiveTag;
+}
+
+interface LaneSpec {
+  id: string;
+  mirrored?: boolean;
+  kind: 'orbit' | 'ramp' | 'lane';
+  x: number;
+  z: number;
+  inner: number;
+  outer: number;
+  start: number;
+  length: number;
+  tint?: string;
+}
+
+interface ThemeLayoutProfile {
+  prefix: string;
+  pointScale: number;
+  launch: Vec3;
+  miniCenterZ: number;
+  miniHalf: [number, number];
+  dropA: MirrorBandSpec;
+  dropB: MirrorBandSpec;
+  stand: MirrorBandSpec;
+  spinner: MirrorBandSpec;
+  sling: PairTargetSpec;
+  vari: PairTargetSpec;
+  saucer: PairTargetSpec;
+  magnet: PairTargetSpec;
+  orbitA: PairTargetSpec;
+  orbitB: PairTargetSpec;
+  rampA: PairTargetSpec;
+  rampB: PairTargetSpec;
+  wormIn: PairTargetSpec;
+  wormOut: PairTargetSpec;
+  mini: PairTargetSpec;
+  captive: PairTargetSpec;
+  miniCore: { z: number; points: number; radius: number };
+  bullOuter: { z: number; points: number; radius: number };
+  bullInner: { z: number; points: number; radius: number };
+  mystery: { z: number; points: number; radius: number };
+  kicker: { z: number; points: number; radius: number };
+  gobble: { z: number; points: number; radius: number };
+  rollovers: { xs: number[]; z: number; points: number; radius: number };
+  pops: Array<[number, number]>;
+  popPoints: number;
+  popRadius: number;
+  obstacles: ArenaObstacle[];
+  lanes: LaneSpec[];
+}
+
+const ADVANCED_LAYOUTS: Record<AdvancedThemeId, ThemeLayoutProfile> = {
+  abyss: {
+    prefix: 'a',
+    pointScale: 1.06,
+    launch: [0, 2.4, 45],
+    miniCenterZ: -50.8,
+    miniHalf: [13, 8],
+    dropA: { x: 14.8, zs: [-8, -14, -20, -26], points: 1040, radius: 1.4 },
+    dropB: { x: 24.4, zs: [-30, -36, -42, -48], points: 1280, radius: 1.48 },
+    stand: { x: 6.8, zs: [-6, -16, -26, -36, -46], points: 285, radius: 1.17 },
+    spinner: { x: 26, zs: [-18, -38], points: 460, radius: 1.9 },
+    sling: { x: 14.2, z: 41.2, points: 610, radius: 2.18 },
+    vari: { x: 22.2, z: 23.2, points: 760, radius: 1.58 },
+    saucer: { x: 8.8, z: -40.2, points: 2280, radius: 1.8 },
+    magnet: { x: 11.5, z: -28, points: 520, radius: 2.2 },
+    orbitA: { x: 30, z: -6, points: 990, radius: 2.45, objective: 'orbit' },
+    orbitB: { x: 30, z: -30, points: 1040, radius: 2.45, objective: 'orbit' },
+    rampA: { x: 8.7, z: -18, points: 1120, radius: 2.08, objective: 'ramp' },
+    rampB: { x: 14.7, z: -34, points: 1040, radius: 1.9, objective: 'ramp' },
+    wormIn: { x: 27, z: 18.5, points: 2900, radius: 1.92 },
+    wormOut: { x: 7.1, z: -52, points: 0, radius: 1.55 },
+    mini: { x: 5.5, z: -53.1, points: 1140, radius: 1.43 },
+    captive: { x: 19.6, z: -17.5, points: 580, radius: 1.36 },
+    miniCore: { z: -53.9, points: 1550, radius: 1.48 },
+    bullOuter: { z: -54.8, points: 1700, radius: 2.42 },
+    bullInner: { z: -54.8, points: 4950, radius: 1.1 },
+    mystery: { z: -24.2, points: 1950, radius: 1.62 },
+    kicker: { z: -46, points: 1240, radius: 1.5 },
+    gobble: { z: -10.4, points: 8200, radius: 1.48 },
+    rollovers: { xs: [-22, -11, 0, 11, 22], z: -54, points: 380, radius: 1.2 },
+    pops: [
+      [-8, -34],
+      [8, -34],
+      [0, -38],
+      [-12, -27],
+      [12, -27],
+      [0, -30],
+    ],
+    popPoints: 600,
+    popRadius: 1.78,
+    obstacles: [
+      {
+        id: 'a-obs-vortex',
+        pos: [0, ITEM_Y + 0.86, -14],
+        size: [9.8, 0.9, 1.02],
+        motion: 'rotate',
+        amp: 0,
+        speed: 1.45,
+        damage: 10,
+        tint: '#2dc1ff',
+      },
+      {
+        id: 'a-obs-surge-r',
+        pos: [19.2, ITEM_Y + 0.72, 4],
+        size: [4.7, 0.9, 1.8],
+        motion: 'slide',
+        axis: 'z',
+        amp: 9,
+        speed: 1.42,
+        damage: 8,
+        tint: '#69e7ff',
+      },
+      {
+        id: 'a-obs-surge-l',
+        pos: [-19.2, ITEM_Y + 0.72, 4],
+        size: [4.7, 0.9, 1.8],
+        motion: 'slide',
+        axis: 'z',
+        amp: 9,
+        speed: 1.42,
+        damage: 8,
+        tint: '#69e7ff',
+      },
+      {
+        id: 'a-obs-core',
+        pos: [0, ITEM_Y + 1.08, -33],
+        size: [2.6, 2.8, 2.6],
+        motion: 'pulse',
+        amp: 2.9,
+        speed: 1.85,
+        damage: 11,
+        tint: '#9bf9ff',
+      },
+    ],
+    lanes: [
+      {
+        id: 'a-lane-orbit',
+        mirrored: true,
+        kind: 'orbit',
+        x: 29.1,
+        z: -20,
+        inner: 6.2,
+        outer: 7.8,
+        start: Math.PI * 0.06,
+        length: Math.PI * 0.94,
+      },
+      {
+        id: 'a-lane-ramp',
+        mirrored: true,
+        kind: 'ramp',
+        x: 9.4,
+        z: -30.5,
+        inner: 3.9,
+        outer: 5.4,
+        start: Math.PI * 0.25,
+        length: Math.PI * 0.74,
+      },
+      {
+        id: 'a-lane-trench',
+        mirrored: false,
+        kind: 'lane',
+        x: 0,
+        z: -46.5,
+        inner: 3.5,
+        outer: 4.9,
+        start: Math.PI * 0.1,
+        length: Math.PI * 1.82,
+      },
+    ],
+  },
+  forge: {
+    prefix: 'f',
+    pointScale: 1.1,
+    launch: [0, 2.4, 45],
+    miniCenterZ: -49,
+    miniHalf: [12, 8],
+    dropA: { x: 18, zs: [-10, -18, -26, -34], points: 1120, radius: 1.42 },
+    dropB: { x: 24, zs: [-38, -44, -50], points: 1360, radius: 1.48 },
+    stand: { x: 10, zs: [-8, -18, -28, -38], points: 290, radius: 1.2 },
+    spinner: { x: 25.2, zs: [-26, -44], points: 500, radius: 1.92 },
+    sling: { x: 12.8, z: 39.2, points: 620, radius: 2.18 },
+    vari: { x: 20.6, z: 18.6, points: 840, radius: 1.62 },
+    saucer: { x: 7.9, z: -35.5, points: 2360, radius: 1.84 },
+    magnet: { x: 8.8, z: -23.8, points: 540, radius: 2.15 },
+    orbitA: { x: 26.5, z: -9.2, points: 980, radius: 2.35, objective: 'orbit' },
+    orbitB: { x: 26.5, z: -31.5, points: 1060, radius: 2.35, objective: 'orbit' },
+    rampA: { x: 6.4, z: -20.8, points: 1180, radius: 2.08, objective: 'ramp' },
+    rampB: { x: 12.6, z: -34.8, points: 1080, radius: 1.86, objective: 'ramp' },
+    wormIn: { x: 23.2, z: 19.8, points: 3050, radius: 1.88 },
+    wormOut: { x: 6.4, z: -50.8, points: 0, radius: 1.52 },
+    mini: { x: 5, z: -51.8, points: 1180, radius: 1.42 },
+    captive: { x: 18.5, z: -18.6, points: 610, radius: 1.36 },
+    miniCore: { z: -52.8, points: 1680, radius: 1.5 },
+    bullOuter: { z: -53.6, points: 1800, radius: 2.44 },
+    bullInner: { z: -53.6, points: 5200, radius: 1.08 },
+    mystery: { z: -19.8, points: 2050, radius: 1.64 },
+    kicker: { z: -42.4, points: 1320, radius: 1.52 },
+    gobble: { z: -7.5, points: 8800, radius: 1.5 },
+    rollovers: { xs: [-20, -10, 0, 10, 20], z: -54, points: 390, radius: 1.2 },
+    pops: [
+      [-6, -40.2],
+      [6, -40.2],
+      [0, -44],
+      [-11.2, -30.5],
+      [11.2, -30.5],
+    ],
+    popPoints: 640,
+    popRadius: 1.8,
+    obstacles: [
+      {
+        id: 'f-obs-anvil',
+        pos: [0, ITEM_Y + 0.9, -16],
+        size: [10.4, 0.96, 1.02],
+        motion: 'rotate',
+        amp: 0,
+        speed: 1.2,
+        damage: 10,
+        tint: '#ff6e2f',
+      },
+      {
+        id: 'f-obs-crush-r',
+        pos: [17.5, ITEM_Y + 0.76, 4.8],
+        size: [4.4, 0.94, 1.9],
+        motion: 'slide',
+        axis: 'x',
+        amp: 6.8,
+        speed: 1.68,
+        damage: 9,
+        tint: '#ff9e4f',
+      },
+      {
+        id: 'f-obs-crush-l',
+        pos: [-17.5, ITEM_Y + 0.76, 4.8],
+        size: [4.4, 0.94, 1.9],
+        motion: 'slide',
+        axis: 'x',
+        amp: 6.8,
+        speed: 1.68,
+        damage: 9,
+        tint: '#ff9e4f',
+      },
+      {
+        id: 'f-obs-smelter',
+        pos: [0, ITEM_Y + 1.12, -31],
+        size: [2.8, 2.8, 2.8],
+        motion: 'pulse',
+        amp: 2.6,
+        speed: 1.58,
+        damage: 12,
+        tint: '#ffbb6e',
+      },
+    ],
+    lanes: [
+      {
+        id: 'f-lane-orbit',
+        mirrored: true,
+        kind: 'orbit',
+        x: 26.4,
+        z: -18,
+        inner: 5.9,
+        outer: 7.4,
+        start: Math.PI * 0.08,
+        length: Math.PI * 0.9,
+      },
+      {
+        id: 'f-lane-ramp',
+        mirrored: true,
+        kind: 'ramp',
+        x: 8,
+        z: -29,
+        inner: 3.7,
+        outer: 5.1,
+        start: Math.PI * 0.22,
+        length: Math.PI * 0.72,
+      },
+      {
+        id: 'f-lane-channel',
+        mirrored: false,
+        kind: 'lane',
+        x: 0,
+        z: -44.5,
+        inner: 3.3,
+        outer: 4.7,
+        start: Math.PI * 0.14,
+        length: Math.PI * 1.7,
+      },
+    ],
+  },
+  cyber: {
+    prefix: 'y',
+    pointScale: 1.08,
+    launch: [0, 2.4, 45],
+    miniCenterZ: -44,
+    miniHalf: [11, 8.5],
+    dropA: { x: 16.2, zs: [-12, -18, -24, -30, -36], points: 1080, radius: 1.38 },
+    dropB: { x: 24.2, zs: [-14, -22, -30, -38], points: 1260, radius: 1.44 },
+    stand: { x: 8.2, zs: [-8, -16, -24, -32, -40], points: 300, radius: 1.18 },
+    spinner: { x: 20.8, zs: [-14, -34], points: 520, radius: 1.88 },
+    sling: { x: 13.5, z: 39.5, points: 640, radius: 2.16 },
+    vari: { x: 19.8, z: 20.2, points: 780, radius: 1.54 },
+    saucer: { x: 7.2, z: -32.5, points: 2200, radius: 1.78 },
+    magnet: { x: 10.8, z: -20.5, points: 560, radius: 2.1 },
+    orbitA: { x: 28, z: -4.2, points: 1020, radius: 2.36, objective: 'orbit' },
+    orbitB: { x: 28, z: -24.2, points: 1080, radius: 2.36, objective: 'orbit' },
+    rampA: { x: 5.6, z: -12, points: 1120, radius: 1.98, objective: 'ramp' },
+    rampB: { x: 11.2, z: -26.2, points: 1050, radius: 1.78, objective: 'ramp' },
+    wormIn: { x: 22, z: 16.8, points: 2800, radius: 1.8 },
+    wormOut: { x: 4.8, z: -41.5, points: 0, radius: 1.46 },
+    mini: { x: 5.2, z: -43, points: 1120, radius: 1.34 },
+    captive: { x: 15.8, z: -15.5, points: 610, radius: 1.32 },
+    miniCore: { z: -44.7, points: 1520, radius: 1.4 },
+    bullOuter: { z: -45.6, points: 1680, radius: 2.3 },
+    bullInner: { z: -45.6, points: 4900, radius: 1.02 },
+    mystery: { z: -16.2, points: 1980, radius: 1.56 },
+    kicker: { z: -29.8, points: 1220, radius: 1.4 },
+    gobble: { z: -5.8, points: 8400, radius: 1.45 },
+    rollovers: { xs: [-18, -9, 0, 9, 18], z: -47.8, points: 380, radius: 1.18 },
+    pops: [
+      [-6.2, -20.5],
+      [6.2, -20.5],
+      [-6.2, -30.2],
+      [6.2, -30.2],
+      [0, -25.4],
+      [0, -36.2],
+    ],
+    popPoints: 620,
+    popRadius: 1.7,
+    obstacles: [
+      {
+        id: 'y-obs-firewall',
+        pos: [0, ITEM_Y + 0.84, -10.5],
+        size: [9.2, 0.9, 0.96],
+        motion: 'rotate',
+        amp: 0,
+        speed: 1.9,
+        damage: 9,
+        tint: '#00eaff',
+      },
+      {
+        id: 'y-obs-gate-r',
+        pos: [14.5, ITEM_Y + 0.73, 3.5],
+        size: [4, 0.88, 1.7],
+        motion: 'slide',
+        axis: 'x',
+        amp: 7.2,
+        speed: 1.35,
+        damage: 8,
+        tint: '#ff59ff',
+      },
+      {
+        id: 'y-obs-gate-l',
+        pos: [-14.5, ITEM_Y + 0.73, 3.5],
+        size: [4, 0.88, 1.7],
+        motion: 'slide',
+        axis: 'x',
+        amp: 7.2,
+        speed: 1.35,
+        damage: 8,
+        tint: '#ff59ff',
+      },
+      {
+        id: 'y-obs-core',
+        pos: [0, ITEM_Y + 1.05, -27],
+        size: [2.3, 2.4, 2.3],
+        motion: 'pulse',
+        amp: 2.4,
+        speed: 2.1,
+        damage: 10,
+        tint: '#a5ff3d',
+      },
+    ],
+    lanes: [
+      {
+        id: 'y-lane-orbit',
+        mirrored: true,
+        kind: 'orbit',
+        x: 27.2,
+        z: -12.2,
+        inner: 5.6,
+        outer: 7,
+        start: Math.PI * 0.08,
+        length: Math.PI * 0.95,
+      },
+      {
+        id: 'y-lane-ramp',
+        mirrored: true,
+        kind: 'ramp',
+        x: 6.2,
+        z: -21.5,
+        inner: 3.9,
+        outer: 5.1,
+        start: Math.PI * 0.24,
+        length: Math.PI * 0.8,
+      },
+      {
+        id: 'y-lane-grid',
+        mirrored: false,
+        kind: 'lane',
+        x: 0,
+        z: -32.2,
+        inner: 5.8,
+        outer: 7.4,
+        start: Math.PI * 0.04,
+        length: Math.PI * 1.92,
+      },
+    ],
+  },
+  aurora: {
+    prefix: 'u',
+    pointScale: 1.04,
+    launch: [0, 2.4, 45],
+    miniCenterZ: -49.5,
+    miniHalf: [12.5, 7.5],
+    dropA: { x: 13.4, zs: [-14, -22, -30, -38], points: 1020, radius: 1.38 },
+    dropB: { x: 20.6, zs: [-20, -28, -36, -44], points: 1240, radius: 1.44 },
+    stand: { x: 6.4, zs: [-10, -20, -30, -40, -50], points: 275, radius: 1.16 },
+    spinner: { x: 21.2, zs: [-18, -40], points: 450, radius: 1.86 },
+    sling: { x: 12, z: 40.6, points: 600, radius: 2.12 },
+    vari: { x: 18.8, z: 21.8, points: 760, radius: 1.52 },
+    saucer: { x: 7.1, z: -37.2, points: 2160, radius: 1.76 },
+    magnet: { x: 9.2, z: -27, points: 500, radius: 2.08 },
+    orbitA: { x: 24.4, z: -6.8, points: 960, radius: 2.25, objective: 'orbit' },
+    orbitB: { x: 24.4, z: -28.2, points: 1020, radius: 2.25, objective: 'orbit' },
+    rampA: { x: 6.8, z: -18.5, points: 1080, radius: 2.02, objective: 'ramp' },
+    rampB: { x: 12.6, z: -32.8, points: 1010, radius: 1.82, objective: 'ramp' },
+    wormIn: { x: 21.8, z: 18.4, points: 2680, radius: 1.82 },
+    wormOut: { x: 5.8, z: -51.4, points: 0, radius: 1.5 },
+    mini: { x: 4.8, z: -52.4, points: 1080, radius: 1.38 },
+    captive: { x: 16.8, z: -19.8, points: 560, radius: 1.33 },
+    miniCore: { z: -53.3, points: 1500, radius: 1.45 },
+    bullOuter: { z: -54, points: 1620, radius: 2.34 },
+    bullInner: { z: -54, points: 4720, radius: 1.04 },
+    mystery: { z: -22, points: 1900, radius: 1.58 },
+    kicker: { z: -43, points: 1210, radius: 1.46 },
+    gobble: { z: -9.4, points: 7900, radius: 1.44 },
+    rollovers: { xs: [-20, -10, 0, 10, 20], z: -54, points: 370, radius: 1.18 },
+    pops: [
+      [-7, -36.2],
+      [7, -36.2],
+      [0, -40.4],
+      [-10.6, -28.8],
+      [10.6, -28.8],
+      [0, -33.2],
+    ],
+    popPoints: 590,
+    popRadius: 1.74,
+    obstacles: [
+      {
+        id: 'u-obs-arc',
+        pos: [0, ITEM_Y + 0.84, -12.8],
+        size: [8.8, 0.88, 0.96],
+        motion: 'rotate',
+        amp: 0,
+        speed: 1.3,
+        damage: 9,
+        tint: '#7cb5ff',
+      },
+      {
+        id: 'u-obs-prism-r',
+        pos: [15.8, ITEM_Y + 0.72, 3],
+        size: [4.1, 0.86, 1.7],
+        motion: 'slide',
+        axis: 'z',
+        amp: 7.5,
+        speed: 1.28,
+        damage: 8,
+        tint: '#75ffe0',
+      },
+      {
+        id: 'u-obs-prism-l',
+        pos: [-15.8, ITEM_Y + 0.72, 3],
+        size: [4.1, 0.86, 1.7],
+        motion: 'slide',
+        axis: 'z',
+        amp: 7.5,
+        speed: 1.28,
+        damage: 8,
+        tint: '#75ffe0',
+      },
+      {
+        id: 'u-obs-heart',
+        pos: [0, ITEM_Y + 1.08, -31.5],
+        size: [2.35, 2.45, 2.35],
+        motion: 'pulse',
+        amp: 2.7,
+        speed: 1.62,
+        damage: 10,
+        tint: '#d9f7ff',
+      },
+    ],
+    lanes: [
+      {
+        id: 'u-lane-orbit',
+        mirrored: true,
+        kind: 'orbit',
+        x: 24.1,
+        z: -17.2,
+        inner: 5.8,
+        outer: 7.2,
+        start: Math.PI * 0.08,
+        length: Math.PI * 0.9,
+      },
+      {
+        id: 'u-lane-ramp',
+        mirrored: true,
+        kind: 'ramp',
+        x: 7.6,
+        z: -28.5,
+        inner: 3.7,
+        outer: 5.1,
+        start: Math.PI * 0.26,
+        length: Math.PI * 0.72,
+      },
+      {
+        id: 'u-lane-core',
+        mirrored: false,
+        kind: 'lane',
+        x: 0,
+        z: -45,
+        inner: 3.6,
+        outer: 4.8,
+        start: Math.PI * 0.13,
+        length: Math.PI * 1.74,
+      },
+    ],
+  },
+  desert: {
+    prefix: 'd',
+    pointScale: 1.12,
+    launch: [0, 2.4, 45],
+    miniCenterZ: -47.8,
+    miniHalf: [11.5, 7.5],
+    dropA: { x: 15.2, zs: [-6, -14, -22, -30], points: 1180, radius: 1.42 },
+    dropB: { x: 21.6, zs: [-34, -42, -50], points: 1420, radius: 1.5 },
+    stand: { x: 9.2, zs: [-8, -20, -32, -44], points: 300, radius: 1.2 },
+    spinner: { x: 24.2, zs: [-24, -46], points: 540, radius: 1.9 },
+    sling: { x: 12.4, z: 40.5, points: 650, radius: 2.2 },
+    vari: { x: 20.6, z: 22, points: 820, radius: 1.56 },
+    saucer: { x: 8.4, z: -38, points: 2440, radius: 1.8 },
+    magnet: { x: 10.6, z: -29.2, points: 560, radius: 2.12 },
+    orbitA: { x: 27.8, z: -8.2, points: 1020, radius: 2.36, objective: 'orbit' },
+    orbitB: { x: 27.8, z: -32.8, points: 1120, radius: 2.36, objective: 'orbit' },
+    rampA: { x: 7.4, z: -19.6, points: 1210, radius: 2.02, objective: 'ramp' },
+    rampB: { x: 13.4, z: -36.2, points: 1090, radius: 1.82, objective: 'ramp' },
+    wormIn: { x: 24, z: 20.2, points: 3120, radius: 1.86 },
+    wormOut: { x: 6.2, z: -49.2, points: 0, radius: 1.52 },
+    mini: { x: 5.3, z: -50.2, points: 1200, radius: 1.4 },
+    captive: { x: 18.2, z: -18, points: 620, radius: 1.35 },
+    miniCore: { z: -51.2, points: 1700, radius: 1.47 },
+    bullOuter: { z: -52.2, points: 1840, radius: 2.4 },
+    bullInner: { z: -52.2, points: 5300, radius: 1.08 },
+    mystery: { z: -20.8, points: 2120, radius: 1.62 },
+    kicker: { z: -43.8, points: 1360, radius: 1.5 },
+    gobble: { z: -8.6, points: 9200, radius: 1.5 },
+    rollovers: { xs: [-20, -10, 0, 10, 20], z: -53.2, points: 390, radius: 1.2 },
+    pops: [
+      [-7.2, -27.5],
+      [7.2, -27.5],
+      [-3.2, -39.4],
+      [3.2, -39.4],
+      [0, -45.2],
+    ],
+    popPoints: 640,
+    popRadius: 1.76,
+    obstacles: [
+      {
+        id: 'd-obs-windmill',
+        pos: [0, ITEM_Y + 0.84, -13],
+        size: [9.4, 0.9, 1.02],
+        motion: 'rotate',
+        amp: 0,
+        speed: 1.24,
+        damage: 10,
+        tint: '#e2ad63',
+      },
+      {
+        id: 'd-obs-dune-r',
+        pos: [16.8, ITEM_Y + 0.73, 4],
+        size: [4.4, 0.9, 1.82],
+        motion: 'slide',
+        axis: 'z',
+        amp: 8.5,
+        speed: 1.22,
+        damage: 9,
+        tint: '#d39a4f',
+      },
+      {
+        id: 'd-obs-dune-l',
+        pos: [-16.8, ITEM_Y + 0.73, 4],
+        size: [4.4, 0.9, 1.82],
+        motion: 'slide',
+        axis: 'z',
+        amp: 8.5,
+        speed: 1.22,
+        damage: 9,
+        tint: '#d39a4f',
+      },
+      {
+        id: 'd-obs-relic',
+        pos: [0, ITEM_Y + 1.08, -33.5],
+        size: [2.55, 2.7, 2.55],
+        motion: 'pulse',
+        amp: 2.6,
+        speed: 1.56,
+        damage: 11,
+        tint: '#f8d48b',
+      },
+    ],
+    lanes: [
+      {
+        id: 'd-lane-orbit',
+        mirrored: true,
+        kind: 'orbit',
+        x: 27,
+        z: -20,
+        inner: 5.9,
+        outer: 7.3,
+        start: Math.PI * 0.08,
+        length: Math.PI * 0.9,
+      },
+      {
+        id: 'd-lane-ramp',
+        mirrored: true,
+        kind: 'ramp',
+        x: 8,
+        z: -31.8,
+        inner: 3.7,
+        outer: 5,
+        start: Math.PI * 0.24,
+        length: Math.PI * 0.73,
+      },
+      {
+        id: 'd-lane-canyon',
+        mirrored: false,
+        kind: 'lane',
+        x: 0,
+        z: -45.6,
+        inner: 3.2,
+        outer: 4.5,
+        start: Math.PI * 0.12,
+        length: Math.PI * 1.74,
+      },
+    ],
+  },
+};
+
+const buildProfileLayout = (profile: ThemeLayoutProfile): ArenaLayout => {
+  const targets: ArenaTarget[] = [];
+  const lanes: ArenaLane[] = [];
+
+  const scalePoints = (raw: number) => Math.max(1, Math.round(raw * profile.pointScale));
+
+  const mirrorTarget = (
+    baseId: string,
+    kind: TargetKind,
+    x: number,
+    z: number,
+    cfg: Partial<ArenaTarget> = {}
+  ) => {
+    targets.push({
+      id: `${baseId}-r`,
+      kind,
+      pos: [Math.abs(x), ITEM_Y + 0.45, z],
+      radius: 1.4,
+      points: 240,
+      active: true,
+      ...cfg,
+    });
+    targets.push({
+      id: `${baseId}-l`,
+      kind,
+      pos: [-Math.abs(x), ITEM_Y + 0.45, z],
+      radius: 1.4,
+      points: 240,
+      active: true,
+      yRot: Math.PI,
+      ...cfg,
+    });
+  };
+
+  const addDropSet = (band: MirrorBandSpec, key: 'a' | 'b') => {
+    const midpoint = Math.ceil(band.zs.length / 2);
+    for (const [i, z] of band.zs.entries()) {
+      mirrorTarget(`${profile.prefix}-drop-${key}-${i}`, 'drop', band.x, z, {
+        bank: `${profile.prefix}-bank-${key}${i < midpoint ? '1' : '2'}`,
+        points: scalePoints(band.points),
+        radius: band.radius,
+        objective: 'drop',
+      });
+    }
+  };
+
+  const addMirrorBand = (
+    band: MirrorBandSpec,
+    kind: TargetKind,
+    idPrefix: string,
+    objective?: ObjectiveTag
+  ) => {
+    for (const [i, z] of band.zs.entries()) {
+      mirrorTarget(`${profile.prefix}-${idPrefix}-${i}`, kind, band.x, z, {
+        points: scalePoints(band.points),
+        radius: band.radius,
+        ...(objective ? { objective } : {}),
+      });
+    }
+  };
+
+  const addPair = (
+    key: string,
+    kind: TargetKind,
+    spec: PairTargetSpec,
+    objective?: ObjectiveTag
+  ) => {
+    mirrorTarget(`${profile.prefix}-${key}`, kind, spec.x, spec.z, {
+      points: scalePoints(spec.points),
+      radius: spec.radius,
+      objective: objective ?? spec.objective,
+    });
+  };
+
+  addDropSet(profile.dropA, 'a');
+  addDropSet(profile.dropB, 'b');
+  addMirrorBand(profile.stand, 'standup', 'stand');
+  addMirrorBand(profile.spinner, 'spinner', 'spin', 'spinner');
+
+  addPair('sling', 'sling', profile.sling);
+  addPair('vari', 'vari', profile.vari);
+  addPair('saucer', 'saucer', profile.saucer);
+  addPair('magnet', 'magnet', profile.magnet);
+  addPair('orbit-a', 'orbit', profile.orbitA, 'orbit');
+  addPair('orbit-b', 'orbit', profile.orbitB, 'orbit');
+  addPair('ramp-a', 'ramp', profile.rampA, 'ramp');
+  addPair('ramp-b', 'ramp', profile.rampB, 'ramp');
+  addPair('worm-in', 'wormIn', profile.wormIn);
+  addPair('worm-out', 'wormOut', profile.wormOut);
+  addPair('mini', 'mini', profile.mini);
+  addPair('captive', 'captive', profile.captive);
+
+  targets.push({
+    id: `${profile.prefix}-mini-core`,
+    kind: 'mini',
+    pos: [0, ITEM_Y + 0.45, profile.miniCore.z],
+    radius: profile.miniCore.radius,
+    points: scalePoints(profile.miniCore.points),
+    active: true,
+  });
+
+  targets.push({
+    id: `${profile.prefix}-bull-outer`,
+    kind: 'bullOuter',
+    pos: [0, ITEM_Y + 0.4, profile.bullOuter.z],
+    radius: profile.bullOuter.radius,
+    points: scalePoints(profile.bullOuter.points),
+    objective: 'bullseye',
+    active: true,
+  });
+
+  targets.push({
+    id: `${profile.prefix}-bull-inner`,
+    kind: 'bullInner',
+    pos: [0, ITEM_Y + 0.45, profile.bullInner.z],
+    radius: profile.bullInner.radius,
+    points: scalePoints(profile.bullInner.points),
+    objective: 'bullseye',
+    active: true,
+  });
+
+  targets.push({
+    id: `${profile.prefix}-mystery`,
+    kind: 'mystery',
+    pos: [0, ITEM_Y + 0.44, profile.mystery.z],
+    radius: profile.mystery.radius,
+    points: scalePoints(profile.mystery.points),
+    objective: 'mystery',
+    active: true,
+  });
+
+  targets.push({
+    id: `${profile.prefix}-kicker`,
+    kind: 'kicker',
+    pos: [0, ITEM_Y + 0.45, profile.kicker.z],
+    radius: profile.kicker.radius,
+    points: scalePoints(profile.kicker.points),
+    active: true,
+  });
+
+  targets.push({
+    id: `${profile.prefix}-gobble`,
+    kind: 'gobble',
+    pos: [0, ITEM_Y + 0.43, profile.gobble.z],
+    radius: profile.gobble.radius,
+    points: scalePoints(profile.gobble.points),
+    active: true,
+  });
+
+  for (const [i, x] of profile.rollovers.xs.entries()) {
+    targets.push({
+      id: `${profile.prefix}-roll-${i}`,
+      kind: 'rollover',
+      pos: [x, ITEM_Y + 0.35, profile.rollovers.z],
+      radius: profile.rollovers.radius,
+      points: scalePoints(profile.rollovers.points),
+      active: true,
+    });
+  }
+
+  for (const [i, [x, z]] of profile.pops.entries()) {
+    targets.push({
+      id: `${profile.prefix}-pop-${i}`,
+      kind: 'pop',
+      pos: [x, ITEM_Y + 0.45, z],
+      radius: profile.popRadius,
+      points: scalePoints(profile.popPoints),
+      active: true,
+    });
+  }
+
+  for (const lane of profile.lanes) {
+    if (lane.mirrored) {
+      lanes.push({
+        id: `${lane.id}-r`,
+        kind: lane.kind,
+        pos: [Math.abs(lane.x), ITEM_Y - 0.08, lane.z],
+        inner: lane.inner,
+        outer: lane.outer,
+        start: lane.start,
+        length: lane.length,
+        tint: lane.tint,
+      });
+      lanes.push({
+        id: `${lane.id}-l`,
+        kind: lane.kind,
+        pos: [-Math.abs(lane.x), ITEM_Y - 0.08, lane.z],
+        inner: lane.inner,
+        outer: lane.outer,
+        start: lane.start,
+        length: lane.length,
+        tint: lane.tint,
+      });
+      continue;
+    }
+
+    lanes.push({
+      id: lane.id,
+      kind: lane.kind,
+      pos: [lane.x, ITEM_Y - 0.08, lane.z],
+      inner: lane.inner,
+      outer: lane.outer,
+      start: lane.start,
+      length: lane.length,
+      tint: lane.tint,
+    });
+  }
+
+  const rightIn = targets.find((t) => t.id === `${profile.prefix}-worm-in-r`);
+  const leftIn = targets.find((t) => t.id === `${profile.prefix}-worm-in-l`);
+  if (rightIn) rightIn.pairId = `${profile.prefix}-worm-out-r`;
+  if (leftIn) leftIn.pairId = `${profile.prefix}-worm-out-l`;
+
+  return {
+    targets,
+    obstacles: profile.obstacles,
+    lanes,
+    miniZone: { center: [0, ITEM_Y, profile.miniCenterZ], half: profile.miniHalf },
+    launch: profile.launch,
+    skillShotTargetId: `${profile.prefix}-roll-${Math.floor(profile.rollovers.xs.length / 2)}`,
+  };
+};
+
+const buildAdvancedLayout = (theme: AdvancedThemeId): ArenaLayout =>
+  buildProfileLayout(ADVANCED_LAYOUTS[theme]);
+
+const normalizeAngle = (angle: number) =>
+  ((angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+
+const isAngleInArc = (angle: number, start: number, length: number) => {
+  const a = normalizeAngle(angle);
+  const s = normalizeAngle(start);
+  const e = normalizeAngle(start + length);
+  if (s <= e) return a >= s && a <= e;
+  return a >= s || a <= e;
+};
+
 const buildLayout = (theme: ThemeId): ArenaLayout => {
+  if (theme === 'abyss' || theme === 'forge' || theme === 'cyber' || theme === 'aurora' || theme === 'desert') {
+    return buildAdvancedLayout(theme);
+  }
+
   const targets: ArenaTarget[] = [];
   const obstacles: ArenaObstacle[] = [];
   const lanes: ArenaLane[] = [];
@@ -1041,6 +2227,116 @@ const ThemeDecor: React.FC<{ theme: ThemeConfig }> = ({ theme }) => {
     );
   }
 
+  if (theme.id === 'abyss') {
+    return (
+      <group>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const z = -8 - i * 8;
+          return (
+            <group key={`abyss-column-${i}`}>
+              <mesh position={[27, ITEM_Y + 1.1, z]} castShadow>
+                <cylinderGeometry args={[0.35, 0.55, 2.2, 12]} />
+                <meshStandardMaterial color="#0f4f78" emissive="#1ec7ff" emissiveIntensity={0.35} />
+              </mesh>
+              <mesh position={[-27, ITEM_Y + 1.1, z]} castShadow>
+                <cylinderGeometry args={[0.35, 0.55, 2.2, 12]} />
+                <meshStandardMaterial color="#0f4f78" emissive="#1ec7ff" emissiveIntensity={0.35} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (theme.id === 'forge') {
+    return (
+      <group>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const z = -8 - i * 8;
+          return (
+            <group key={`forge-furnace-${i}`}>
+              <mesh position={[26.5, ITEM_Y + 1.25, z]} castShadow>
+                <boxGeometry args={[1, 2.2, 1]} />
+                <meshStandardMaterial color="#4a190f" emissive="#ff6320" emissiveIntensity={0.28} />
+              </mesh>
+              <mesh position={[-26.5, ITEM_Y + 1.25, z]} castShadow>
+                <boxGeometry args={[1, 2.2, 1]} />
+                <meshStandardMaterial color="#4a190f" emissive="#ff6320" emissiveIntensity={0.28} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (theme.id === 'cyber') {
+    return (
+      <group>
+        {Array.from({ length: 7 }).map((_, i) => {
+          const z = -6 - i * 7.2;
+          return (
+            <group key={`cyber-node-${i}`}>
+              <mesh position={[26.8, ITEM_Y + 1.4, z]} castShadow>
+                <octahedronGeometry args={[0.78, 0]} />
+                <meshStandardMaterial color="#081f33" emissive="#00efff" emissiveIntensity={0.6} />
+              </mesh>
+              <mesh position={[-26.8, ITEM_Y + 1.4, z]} castShadow>
+                <octahedronGeometry args={[0.78, 0]} />
+                <meshStandardMaterial color="#081f33" emissive="#ff4dff" emissiveIntensity={0.5} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (theme.id === 'aurora') {
+    return (
+      <group>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const z = -7 - i * 8.5;
+          return (
+            <group key={`aurora-crystal-${i}`}>
+              <mesh position={[26, ITEM_Y + 1.3, z]} castShadow>
+                <coneGeometry args={[0.55, 2.1, 6]} />
+                <meshStandardMaterial color="#5f7dff" emissive="#7bf4ff" emissiveIntensity={0.34} />
+              </mesh>
+              <mesh position={[-26, ITEM_Y + 1.3, z]} castShadow>
+                <coneGeometry args={[0.55, 2.1, 6]} />
+                <meshStandardMaterial color="#5f7dff" emissive="#7bf4ff" emissiveIntensity={0.34} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  }
+
+  if (theme.id === 'desert') {
+    return (
+      <group>
+        {Array.from({ length: 6 }).map((_, i) => {
+          const z = -8 - i * 8;
+          return (
+            <group key={`desert-marker-${i}`}>
+              <mesh position={[26, ITEM_Y + 1.05, z]} castShadow>
+                <cylinderGeometry args={[0.55, 0.65, 1.9, 8]} />
+                <meshStandardMaterial color="#6b4a25" emissive="#d8ab63" emissiveIntensity={0.22} />
+              </mesh>
+              <mesh position={[-26, ITEM_Y + 1.05, z]} castShadow>
+                <cylinderGeometry args={[0.55, 0.65, 1.9, 8]} />
+                <meshStandardMaterial color="#6b4a25" emissive="#d8ab63" emissiveIntensity={0.22} />
+              </mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  }
+
   if (theme.id === 'nature') {
     return (
       <group>
@@ -1124,6 +2420,7 @@ export const RolletteWorld: React.FC<{
   const [flashes, setFlashes] = useState<Flash[]>([]);
 
   const theme = THEMES[themeId];
+  const tuning = THEME_TUNING[themeId];
 
   const ballRef = useRef<RapierRigidBody>(null);
   const mouseRef = useRef(new THREE.Vector2(0, 0));
@@ -1412,11 +2709,12 @@ export const RolletteWorld: React.FC<{
   const awardPoints = useCallback(
     (base: number, pos: Vec3, color: string, kind: TargetKind | 'obstacle' | 'drain' | 'jackpot') => {
       if (base <= 0) return;
-      rolletteState.addComboPoints(base, rolletteState.inMiniZone);
+      const scaled = Math.max(1, Math.round(base * tuning.scoreScale));
+      rolletteState.addComboPoints(scaled, rolletteState.inMiniZone);
       spawnImpact(kind, pos, color);
       playTone(soundForKind(kind), 1.05);
     },
-    [playTone, spawnImpact]
+    [playTone, spawnImpact, tuning.scoreScale]
   );
 
   const repel = useCallback((rb: RapierRigidBody, from: Vec3, center: Vec3, force = 12) => {
@@ -1449,7 +2747,7 @@ export const RolletteWorld: React.FC<{
       const o = objectivesRef.current;
 
       if (roll < 0.22) {
-        const bonus = 2800 + Math.floor(Math.random() * 2800);
+        const bonus = Math.round((2800 + Math.floor(Math.random() * 2800)) * tuning.scoreScale);
         rolletteState.addScore(bonus);
         rolletteState.setToast(`MYSTERY +${bonus.toLocaleString()}`);
       } else if (roll < 0.38) {
@@ -1476,7 +2774,7 @@ export const RolletteWorld: React.FC<{
       spawnImpact('mystery', [pos[0], ITEM_Y + 0.55, pos[2]], theme.highlight);
       playTone('mystery', 1.2);
     },
-    [playTone, setPower, spawnImpact, theme.highlight]
+    [playTone, setPower, spawnImpact, theme.highlight, tuning.scoreScale]
   );
 
   const setTargetsSafe = useCallback((updater: (prev: ArenaTarget[]) => ArenaTarget[]) => {
@@ -1530,7 +2828,9 @@ export const RolletteWorld: React.FC<{
 
             if (down >= bank.length && bank.length > 0) {
               o.dropBanks.add(target.bank);
-              const bankBonus = rolletteState.wizardActive ? 20000 : 11000;
+              const bankBonus = Math.round(
+                (rolletteState.wizardActive ? 20000 : 11000) * tuning.jackpotScale
+              );
               rolletteState.addScore(bankBonus);
               rolletteState.addBank(bankBonus * 0.25);
               rolletteState.setToast(`DROP BANK CLEARED +${bankBonus.toLocaleString()}`);
@@ -1548,7 +2848,7 @@ export const RolletteWorld: React.FC<{
         }
 
         case 'pop': {
-          const kick = powerMode === 'HEAVY' ? 20 : 14;
+          const kick = powerMode === 'HEAVY' ? tuning.heavyPopKick : tuning.popKick;
           repel(rb, playerPos, target.pos, kick);
           awardPoints(target.points, pos, tint, 'pop');
           break;
@@ -1557,14 +2857,24 @@ export const RolletteWorld: React.FC<{
         case 'spinner': {
           const points = target.points + Math.floor(speed * 30);
           awardPoints(points, pos, tint, 'spinner');
-          rb.applyImpulse({ x: Math.sign(target.pos[0]) * 1.8, y: 0, z: -2.6 }, true);
+          rb.applyImpulse(
+            {
+              x: Math.sign(target.pos[0]) * tuning.spinnerSideImpulse,
+              y: 0,
+              z: tuning.spinnerForwardImpulse,
+            },
+            true
+          );
           evaluateProgress();
           break;
         }
 
         case 'sling': {
           const side = Math.sign(target.pos[0]) || 1;
-          rb.applyImpulse({ x: -side * 11, y: 0.5, z: -10.5 }, true);
+          rb.applyImpulse(
+            { x: -side * tuning.slingSideImpulse, y: 0.5, z: tuning.slingForwardImpulse },
+            true
+          );
           awardPoints(target.points, pos, tint, 'sling');
           break;
         }
@@ -1598,9 +2908,9 @@ export const RolletteWorld: React.FC<{
             target.id === layoutRef.current.skillShotTargetId
           ) {
             o.skillShotActive = false;
-            const bonus = 7200;
+            const bonus = Math.round(7200 * tuning.jackpotScale);
             rolletteState.addScore(bonus);
-            rolletteState.addBank(1500);
+            rolletteState.addBank(Math.round(1500 * tuning.endBonusScale));
             rolletteState.setToast(`SKILL SHOT +${bonus.toLocaleString()}`);
             spawnImpact('jackpot', pos, theme.highlight);
             playTone('jackpot', 1.05);
@@ -1610,7 +2920,7 @@ export const RolletteWorld: React.FC<{
 
         case 'ramp': {
           awardPoints(target.points, pos, tint, 'ramp');
-          rb.applyImpulse({ x: 0, y: 0.12, z: -8.6 }, true);
+          rb.applyImpulse({ x: 0, y: 0.12, z: tuning.rampForwardImpulse }, true);
           evaluateProgress();
           break;
         }
@@ -1618,7 +2928,14 @@ export const RolletteWorld: React.FC<{
         case 'orbit': {
           awardPoints(target.points, pos, tint, 'orbit');
           const side = Math.sign(target.pos[0]) || 1;
-          rb.applyImpulse({ x: side * 5.4, y: 0.1, z: -6.8 }, true);
+          rb.applyImpulse(
+            {
+              x: side * tuning.orbitSideImpulse,
+              y: 0.1,
+              z: tuning.orbitForwardImpulse,
+            },
+            true
+          );
           evaluateProgress();
           break;
         }
@@ -1638,8 +2955,8 @@ export const RolletteWorld: React.FC<{
           }, 620);
 
           if (rolletteState.multiballLit) {
-            const jackpot = o.jackpotValue;
-            o.jackpotValue += 3200;
+            const jackpot = Math.round(o.jackpotValue * tuning.jackpotScale);
+            o.jackpotValue += Math.round(3200 * tuning.jackpotScale);
             rolletteState.setMultiballLit(false);
             rolletteState.activateMultiball(18);
             rolletteState.addScore(jackpot);
@@ -1647,7 +2964,9 @@ export const RolletteWorld: React.FC<{
             spawnImpact('jackpot', pos, theme.highlight);
             playTone('jackpot', 1.2);
           } else if (rolletteState.multiballActive) {
-            const superJackpot = 3600 + Math.floor(o.spinnerHits * 120 + o.orbitHits * 90);
+            const superJackpot = Math.round(
+              (3600 + Math.floor(o.spinnerHits * 120 + o.orbitHits * 90)) * tuning.jackpotScale
+            );
             rolletteState.addScore(superJackpot);
             rolletteState.setToast(`SUPER JACKPOT +${superJackpot.toLocaleString()}`);
             spawnImpact('jackpot', pos, theme.highlight);
@@ -1675,7 +2994,14 @@ export const RolletteWorld: React.FC<{
           if (!exit) break;
           const lv = rb.linvel();
           rb.setTranslation({ x: exit.pos[0], y: playerPos[1], z: exit.pos[2] }, true);
-          rb.setLinvel({ x: lv.x * 1.1, y: lv.y, z: lv.z * 1.1 - 2.4 }, true);
+          rb.setLinvel(
+            {
+              x: lv.x * (1.08 + tuning.orbitFlowForce * 0.01),
+              y: lv.y,
+              z: lv.z * (1.08 + tuning.rampFlowForce * 0.01) - 2.4,
+            },
+            true
+          );
           targetHitAtRef.current[exit.id] = nowSec();
           awardPoints(target.points, pos, theme.accent, 'wormIn');
           break;
@@ -1687,7 +3013,7 @@ export const RolletteWorld: React.FC<{
 
         case 'kicker': {
           awardPoints(target.points, pos, tint, 'kicker');
-          rb.applyImpulse({ x: 0, y: 0.58, z: -21 }, true);
+          rb.applyImpulse({ x: 0, y: 0.58, z: tuning.kickerImpulse }, true);
           break;
         }
 
@@ -1710,7 +3036,9 @@ export const RolletteWorld: React.FC<{
 
         case 'gobble': {
           o.gobbleHits += 1;
-          const gobbleBonus = target.points + Math.min(12000, o.gobbleHits * 900);
+          const gobbleBonus = Math.round(
+            (target.points + Math.min(12000, o.gobbleHits * 900)) * tuning.jackpotScale
+          );
           rolletteState.addScore(gobbleBonus);
           rolletteState.setToast(`GOBBLE +${gobbleBonus.toLocaleString()}`);
           spawnImpact('jackpot', pos, theme.highlight);
@@ -1736,6 +3064,20 @@ export const RolletteWorld: React.FC<{
       theme.hazard,
       theme.highlight,
       theme.secondary,
+      tuning.endBonusScale,
+      tuning.heavyPopKick,
+      tuning.jackpotScale,
+      tuning.kickerImpulse,
+      tuning.orbitFlowForce,
+      tuning.orbitForwardImpulse,
+      tuning.orbitSideImpulse,
+      tuning.popKick,
+      tuning.rampFlowForce,
+      tuning.rampForwardImpulse,
+      tuning.slingForwardImpulse,
+      tuning.slingSideImpulse,
+      tuning.spinnerForwardImpulse,
+      tuning.spinnerSideImpulse,
     ]
   );
 
@@ -1857,9 +3199,13 @@ export const RolletteWorld: React.FC<{
       objectivesRef.current.skillShotActive = false;
     }
 
-    rb.setLinearDamping(powerMode === 'GHOST' ? 0.03 : 0.08);
-    rb.setAngularDamping(powerMode === 'HEAVY' ? 0.32 : 0.45);
-    rb.setGravityScale(powerMode === 'HEAVY' ? 1.08 : 1, true);
+    rb.setLinearDamping(
+      powerMode === 'GHOST' ? tuning.ghostLinearDamping : tuning.linearDamping
+    );
+    rb.setAngularDamping(
+      powerMode === 'HEAVY' ? tuning.heavyAngularDamping : tuning.angularDamping
+    );
+    rb.setGravityScale(powerMode === 'HEAVY' ? tuning.heavyGravityScale : 1, true);
 
     if (powerMode === 'HEAVY') {
       rb.setAdditionalMass(45, true);
@@ -1880,17 +3226,31 @@ export const RolletteWorld: React.FC<{
       if (ix !== 0 || iz !== 0) {
         const len = Math.max(1, Math.hypot(ix, iz));
         const gain = powerMode === 'HEAVY' ? 1.2 : 1;
-        rb.setLinvel({ x: (ix / len) * CONTROL_SPEED * gain, y: v.y, z: (iz / len) * CONTROL_SPEED * gain }, true);
+        rb.setLinvel(
+          {
+            x: (ix / len) * tuning.controlSpeed * gain,
+            y: v.y,
+            z: (iz / len) * tuning.controlSpeed * gain,
+          },
+          true
+        );
       } else {
         rb.setLinvel({ x: v.x * 0.94, y: v.y, z: v.z * 0.94 }, true);
       }
     } else {
       const gain = powerMode === 'HEAVY' ? 1.18 : 1;
-      rb.addForce({ x: mouseRef.current.x * MOUSE_FORCE * gain, y: 0, z: -mouseRef.current.y * MOUSE_FORCE * gain }, true);
+      rb.addForce(
+        {
+          x: mouseRef.current.x * tuning.mouseForce * gain,
+          y: 0,
+          z: -mouseRef.current.y * tuning.mouseForce * gain,
+        },
+        true
+      );
     }
 
     const planar = Math.hypot(v.x, v.z);
-    const cap = powerMode === 'HEAVY' ? MAX_PLANAR_SPEED + 4 : MAX_PLANAR_SPEED;
+    const cap = powerMode === 'HEAVY' ? tuning.maxPlanarSpeed + 4 : tuning.maxPlanarSpeed;
     if (planar > cap) {
       const k = cap / planar;
       rb.setLinvel({ x: v.x * k, y: v.y, z: v.z * k }, true);
@@ -1995,6 +3355,30 @@ export const RolletteWorld: React.FC<{
       if (spinner) spinner.rotation.y += delta * 8;
     }
 
+    // Theme-specific lane-flow assist keeps each table's routes feeling unique.
+    for (const lane of layoutRef.current.lanes) {
+      if (lane.kind === 'lane') continue;
+
+      const lx = playerPos[0] - lane.pos[0];
+      const lz = playerPos[2] - lane.pos[2];
+      const radius = Math.hypot(lx, lz);
+      if (radius < lane.inner || radius > lane.outer) continue;
+
+      const angle = Math.atan2(lz, lx);
+      if (!isAngleInArc(angle, lane.start, lane.length)) continue;
+
+      const tangent = new THREE.Vector2(-lz, lx);
+      if (tangent.lengthSq() < 1e-6) continue;
+      tangent.normalize();
+
+      const sideBias = -Math.sign(lane.pos[0]) * 0.24;
+      const flowVec = new THREE.Vector2(tangent.x + sideBias, tangent.y - 0.45).normalize();
+      const flowStrength =
+        lane.kind === 'orbit' ? tuning.orbitFlowForce : tuning.rampFlowForce;
+
+      rb.addForce({ x: flowVec.x * flowStrength, y: 0, z: flowVec.y * flowStrength }, true);
+    }
+
     if (powerMode === 'MAGNET') {
       const hi = targetsRef.current.filter(
         (target) => target.kind === 'bullInner' || target.kind === 'saucer' || target.kind === 'mystery' || target.kind === 'kicker'
@@ -2018,7 +3402,10 @@ export const RolletteWorld: React.FC<{
         const dz = nearest.pos[2] - playerPos[2];
         const d = Math.max(1, Math.hypot(dx, dz));
 
-        rb.addForce({ x: (dx / d) * 24, y: 0, z: (dz / d) * 24 }, true);
+        rb.addForce(
+          { x: (dx / d) * tuning.magnetForce, y: 0, z: (dz / d) * tuning.magnetForce },
+          true
+        );
       }
     }
 
@@ -2040,19 +3427,21 @@ export const RolletteWorld: React.FC<{
       handleTargetHit(target, playerPos, v, rb);
     }
 
-    if (p.z > ARENA_HALF + 2.8 && Math.abs(p.x) < DRAIN_GAP * 0.54) {
+    if (p.z > ARENA_HALF + 2.8 && Math.abs(p.x) < tuning.drainGap * 0.54) {
       if (now - drainLockRef.current > 0.95) {
         drainLockRef.current = now;
 
         const o = objectivesRef.current;
-        const endBonus =
-          Math.floor(rolletteState.bonusBank) +
-          o.dropBanks.size * 1200 +
-          o.spinnerHits * 130 +
-          o.bullHits * 760 +
-          o.orbitHits * 180 +
-          o.rampHits * 200 +
-          (rolletteState.multiballActive ? 4200 : 0);
+        const endBonus = Math.round(
+          (Math.floor(rolletteState.bonusBank) +
+            o.dropBanks.size * 1200 +
+            o.spinnerHits * 130 +
+            o.bullHits * 760 +
+            o.orbitHits * 180 +
+            o.rampHits * 200 +
+            (rolletteState.multiballActive ? 4200 : 0)) *
+            tuning.endBonusScale
+        );
 
         if (endBonus > 0) {
           rolletteState.addScore(endBonus);
@@ -2080,15 +3469,38 @@ export const RolletteWorld: React.FC<{
   });
 
   const floorColor = useMemo(() => new THREE.Color(theme.floor), [theme.floor]);
+  const drainGap = tuning.drainGap;
 
   return (
     <>
       <color attach="background" args={[theme.background]} />
       <Sky inclination={0.47} azimuth={0.18} distance={450000} />
-      <Stars radius={280} depth={96} count={theme.id === 'cotton' ? 2500 : 3800} factor={4} saturation={0} fade />
+      <Stars
+        radius={280}
+        depth={96}
+        count={theme.id === 'cotton' ? 2500 : theme.id === 'cyber' ? 4200 : 3600}
+        factor={4}
+        saturation={0}
+        fade
+      />
 
       {theme.id === 'nebula' && (
         <Sparkles count={220} size={2.2} scale={[80, 24, 110]} color={theme.secondary} speed={0.24} />
+      )}
+      {theme.id === 'abyss' && (
+        <Sparkles count={180} size={2.4} scale={[78, 20, 100]} color={theme.accent} speed={0.28} />
+      )}
+      {theme.id === 'forge' && (
+        <Sparkles count={140} size={2.6} scale={[80, 18, 96]} color={theme.hazard} speed={0.34} />
+      )}
+      {theme.id === 'cyber' && (
+        <Sparkles count={240} size={1.8} scale={[84, 24, 108]} color={theme.secondary} speed={0.38} />
+      )}
+      {theme.id === 'aurora' && (
+        <Sparkles count={170} size={2.1} scale={[82, 22, 106]} color={theme.highlight} speed={0.2} />
+      )}
+      {theme.id === 'desert' && (
+        <Sparkles count={120} size={2.3} scale={[78, 18, 100]} color={theme.accent} speed={0.18} />
       )}
 
       <ambientLight intensity={theme.id === 'nature' ? 0.36 : 0.42} />
@@ -2112,18 +3524,52 @@ export const RolletteWorld: React.FC<{
                   : 'Build Objectives'}
           </div>
           <div>Power: {powerMode ?? 'None'}</div>
+          <div className="text-white/60">Theme Keys: 1-8</div>
         </div>
       </Html>
 
-      <Physics gravity={GRAVITY} interpolation={false}>
+      <Physics gravity={tuning.gravity} interpolation={false}>
         <RigidBody type="fixed" colliders={false}>
-          <CuboidCollider args={[ARENA_SIZE / 2, 0.2, ARENA_SIZE / 2]} position={[0, FLOOR_Y - 0.2, 0]} friction={0.1} restitution={0.66} />
-          <CuboidCollider args={[ARENA_SIZE / 2 + WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS]} position={[0, WALL_HEIGHT, -ARENA_HALF - WALL_THICKNESS]} restitution={0.84} />
-          <CuboidCollider args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]} position={[-ARENA_HALF - WALL_THICKNESS, WALL_HEIGHT, 0]} restitution={0.84} />
-          <CuboidCollider args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]} position={[ARENA_HALF + WALL_THICKNESS, WALL_HEIGHT, 0]} restitution={0.84} />
+          <CuboidCollider
+            args={[ARENA_SIZE / 2, 0.2, ARENA_SIZE / 2]}
+            position={[0, FLOOR_Y - 0.2, 0]}
+            friction={tuning.floorFriction}
+            restitution={tuning.floorRestitution}
+          />
+          <CuboidCollider
+            args={[ARENA_SIZE / 2 + WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS]}
+            position={[0, WALL_HEIGHT, -ARENA_HALF - WALL_THICKNESS]}
+            restitution={tuning.wallRestitution}
+          />
+          <CuboidCollider
+            args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]}
+            position={[-ARENA_HALF - WALL_THICKNESS, WALL_HEIGHT, 0]}
+            restitution={tuning.wallRestitution}
+          />
+          <CuboidCollider
+            args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]}
+            position={[ARENA_HALF + WALL_THICKNESS, WALL_HEIGHT, 0]}
+            restitution={tuning.wallRestitution}
+          />
 
-          <CuboidCollider args={[(ARENA_SIZE - DRAIN_GAP) / 4, WALL_HEIGHT, WALL_THICKNESS]} position={[-(DRAIN_GAP / 2 + (ARENA_SIZE - DRAIN_GAP) / 4), WALL_HEIGHT, ARENA_HALF + WALL_THICKNESS]} restitution={0.84} />
-          <CuboidCollider args={[(ARENA_SIZE - DRAIN_GAP) / 4, WALL_HEIGHT, WALL_THICKNESS]} position={[DRAIN_GAP / 2 + (ARENA_SIZE - DRAIN_GAP) / 4, WALL_HEIGHT, ARENA_HALF + WALL_THICKNESS]} restitution={0.84} />
+          <CuboidCollider
+            args={[(ARENA_SIZE - drainGap) / 4, WALL_HEIGHT, WALL_THICKNESS]}
+            position={[
+              -(drainGap / 2 + (ARENA_SIZE - drainGap) / 4),
+              WALL_HEIGHT,
+              ARENA_HALF + WALL_THICKNESS,
+            ]}
+            restitution={tuning.wallRestitution}
+          />
+          <CuboidCollider
+            args={[(ARENA_SIZE - drainGap) / 4, WALL_HEIGHT, WALL_THICKNESS]}
+            position={[
+              drainGap / 2 + (ARENA_SIZE - drainGap) / 4,
+              WALL_HEIGHT,
+              ARENA_HALF + WALL_THICKNESS,
+            ]}
+            restitution={tuning.wallRestitution}
+          />
         </RigidBody>
 
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
@@ -2147,7 +3593,7 @@ export const RolletteWorld: React.FC<{
         </mesh>
 
         <mesh position={[0, 0.2, ARENA_HALF + WALL_THICKNESS + 0.02]}>
-          <boxGeometry args={[DRAIN_GAP, 0.42, WALL_THICKNESS]} />
+          <boxGeometry args={[drainGap, 0.42, WALL_THICKNESS]} />
           <meshStandardMaterial color={theme.hazard} emissive={theme.hazard} emissiveIntensity={0.45} transparent opacity={0.8} />
         </mesh>
 
