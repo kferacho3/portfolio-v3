@@ -35,6 +35,7 @@ import { octaSurgeState } from '../games/octasurge';
 import { prismJumpState } from '../games/prismjump';
 import { onePathState } from '../games/onepath';
 import { oscillateState } from '../games/oscillate';
+import { rolletteState } from '../games/rollette';
 import { rolletteClassicState } from '../games/rolletteClassic';
 import { skyBlitzClassicState } from '../games/skyblitzClassic';
 import { dropperClassicState } from '../games/dropperClassic';
@@ -132,6 +133,9 @@ export function resetGameState(gameId: GameId): void {
       return;
     case 'polyforge':
       polyForgeState.reset();
+      return;
+    case 'rollette':
+      rolletteState.reset();
       return;
     case 'onepath':
       oscillateState.retry();

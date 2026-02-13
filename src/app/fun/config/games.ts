@@ -519,10 +519,12 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Time your flipper hits. Aim for the bumpers!',
   },
   rollette: {
-    controls: 'Mouse/WASD to steer',
+    controls:
+      'Mouse + WASD/Arrows to steer the ball directly • Space to nudge • 1/2/3 switch arenas • R restart',
     objective:
-      'Steer the ball, collect golden rings, and avoid red cones to maintain health.',
-    tips: 'Keep moving. Green pyramids restore health.',
+      'Player-controlled 3D pinball maze: score through bumpers, drop banks, spinners, saucers, ramps, orbits, wormholes, and mini-playfield boss shots.',
+    tips:
+      'Stay in flow chains (ramp→orbit), clear drop banks to light wizard scoring, and use nudge sparingly to avoid tilt lock.',
   },
   flappybird: {
     controls: 'Space/Click to flap',

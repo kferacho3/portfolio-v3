@@ -89,6 +89,7 @@ const scoreGetters: Partial<Record<GameId, (snap: any) => number>> = {
   sizr: (snap) => snap.score ?? 0,
   shapeshifter: (snap) => snap.score ?? 0,
   fluxhop: (snap) => snap.score ?? 0,
+  rollette: (snap) => snap.score ?? 0,
   prismjump: (snap) => snap.score ?? 0,
 };
 
@@ -122,6 +123,7 @@ const stateGetters: Partial<Record<GameId, (mod: GameModule) => any>> = {
   shades: (mod) => mod.shadesState,
   twodots: (mod) => mod.twoDotsState,
   polyforge: (mod) => mod.polyForgeState,
+  rollette: (mod) => mod.rolletteState,
   onepath: (mod) => mod.onePathState,
   slowmo: (mod) => mod.slowMoState,
   bouncer: (mod) => mod.bouncerState,
@@ -171,6 +173,7 @@ const resetters: Partial<Record<GameId, (mod: GameModule) => void>> = {
   shades: (mod) => mod.shadesState.reset(),
   twodots: (mod) => mod.twoDotsState.reset(),
   polyforge: (mod) => mod.polyForgeState.reset(),
+  rollette: (mod) => mod.rolletteState.reset(),
   onepath: (mod) => mod.onePathState.retry(),
   slowmo: (mod) => mod.slowMoState.backToMenu(),
   bouncer: (mod) => {
