@@ -3,9 +3,13 @@ import { motion } from 'framer-motion';
 
 interface StartOverlayProps {
   onStart: () => void;
+  paletteName: string;
 }
 
-export default function StartOverlay({ onStart }: StartOverlayProps) {
+export default function StartOverlay({
+  onStart,
+  paletteName,
+}: StartOverlayProps) {
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
       <div className="absolute inset-0 pointer-events-auto grid place-items-center bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.22),transparent_45%),radial-gradient(circle_at_80%_15%,rgba(168,85,247,0.14),transparent_42%),radial-gradient(circle_at_65%_78%,rgba(34,197,94,0.15),transparent_46%),linear-gradient(180deg,#04060f_0%,#0b1020_100%)] px-6">
@@ -26,8 +30,11 @@ export default function StartOverlay({ onStart }: StartOverlayProps) {
             scale into a chrome titan. Start near the center on tiny shapes,
             then push outward toward bigger tiers.
           </p>
+          <div className="mt-3 inline-flex rounded-full border border-cyan-200/45 bg-cyan-300/10 px-3 py-1 text-[11px] uppercase tracking-[0.14em] text-cyan-100/90">
+            Active Palette: {paletteName}
+          </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-2 text-xs text-cyan-100/80 md:grid-cols-4 md:text-sm">
+          <div className="mt-5 grid grid-cols-1 gap-2 text-xs text-cyan-100/80 md:grid-cols-5 md:text-sm">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="font-semibold text-cyan-200">Move</div>
               <div>WASD / Arrow Keys</div>
@@ -43,6 +50,10 @@ export default function StartOverlay({ onStart }: StartOverlayProps) {
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="font-semibold text-cyan-200">Reset</div>
               <div>Press R</div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <div className="font-semibold text-cyan-200">Palette</div>
+              <div>Press P</div>
             </div>
           </div>
 

@@ -18,6 +18,7 @@ import {
   COLLISION_GROUPS,
   RENDER_TUNING,
   WORLD_TUNING,
+  getGeoChromePalette,
 } from './engine/constants';
 import { SpeedEffects } from './engine/SpeedEffects';
 import { useKatamariAudio } from './engine/useKatamariAudio';
@@ -85,6 +86,14 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const setWorldCount = useGeoChromeStore((state) => state.setWorldCount);
   const resetProgress = useGeoChromeStore((state) => state.resetProgress);
   const resetRun = useGeoChromeStore((state) => state.resetRun);
+  const paletteId = useGeoChromeStore((state) => state.paletteId);
+  const nextPalette = useGeoChromeStore((state) => state.nextPalette);
+  const randomizePalette = useGeoChromeStore((state) => state.randomizePalette);
+
+  const palette = React.useMemo(
+    () => getGeoChromePalette(paletteId),
+    [paletteId]
+  );
 
   const worldMeshRef = React.useRef<THREE.InstancedMesh | null>(null);
   const stuckMeshRef = React.useRef<THREE.InstancedMesh | null>(null);
@@ -144,15 +153,17 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
 
   const handleStart = useCallback(() => {
     setRunLiteMode(lowPerf);
+    randomizePalette();
     start();
     setAudioReady(soundsOn);
-  }, [lowPerf, setAudioReady, soundsOn, start]);
+  }, [lowPerf, randomizePalette, setAudioReady, soundsOn, start]);
 
   const handleRestart = useCallback(() => {
     resetEngine();
     setStuckBuffers(null);
     setWorldData(null);
     setRunLiteMode(lowPerf);
+    randomizePalette();
     resetProgress();
     pendingCollectRef.current.length = 0;
     pendingCollectSetRef.current.clear();
@@ -160,20 +171,26 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     worldMeshRef.current = null;
     stuckMeshRef.current = null;
     setWorldSeed((prev) => prev + 1);
-  }, [lowPerf, resetEngine, resetProgress]);
+  }, [lowPerf, randomizePalette, resetEngine, resetProgress]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== 'r') return;
-      event.preventDefault();
-      handleRestart();
+      const key = event.key.toLowerCase();
+      if (key === 'r') {
+        event.preventDefault();
+        handleRestart();
+      }
+      if (key === 'p') {
+        event.preventDefault();
+        nextPalette();
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [handleRestart]);
+  }, [handleRestart, nextPalette]);
 
   const handleWorldReady = useCallback((data: WorldRuntimeData) => {
     setWorldData(data);
@@ -232,24 +249,40 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     <>
       <AdaptivePerformanceController />
 
-      <color attach="background" args={['#060d1f']} />
-      <fog attach="fog" args={['#081426', 88, 360]} />
+      <color attach="background" args={[palette.background]} />
+      <fog attach="fog" args={[palette.fog, 88, 360]} />
 
-      <ambientLight intensity={0.48} />
-      <hemisphereLight intensity={0.5} color="#dbeafe" groundColor="#101627" />
+      <ambientLight intensity={0.48} color={palette.ambient} />
+      <hemisphereLight
+        intensity={0.5}
+        color={palette.hemisphereSky}
+        groundColor={palette.hemisphereGround}
+      />
       <directionalLight
         position={[24, 44, 20]}
         intensity={1.26}
-        color="#c8f0ff"
+        color={palette.keyLight}
         castShadow={!lowPerf}
         shadow-mapSize-width={lowPerf ? 512 : 1024}
         shadow-mapSize-height={lowPerf ? 512 : 1024}
       />
-      <pointLight position={[-42, 14, -35]} color="#22d3ee" intensity={1.1} />
-      <pointLight position={[36, 12, 30]} color="#38bdf8" intensity={0.92} />
-      <pointLight position={[0, 18, 0]} color="#a5f3fc" intensity={0.55} />
+      <pointLight
+        position={[-42, 14, -35]}
+        color={palette.fillLightA}
+        intensity={1.1}
+      />
+      <pointLight
+        position={[36, 12, 30]}
+        color={palette.fillLightB}
+        intensity={0.92}
+      />
+      <pointLight
+        position={[0, 18, 0]}
+        color={palette.centerLight}
+        intensity={0.55}
+      />
 
-      <ArenaEnvironment lowPerf={lowPerf} />
+      <ArenaEnvironment lowPerf={lowPerf} palette={palette} />
 
       <Physics
         gravity={[0, -9.81, 0]}
@@ -311,6 +344,7 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
           seed={worldSeed}
           lowPerf={lowPerf}
           liteMode={runLiteMode}
+          palette={palette}
           worldMeshRef={worldMeshRef}
           worldBodiesRef={worldBodiesRef}
           onWorldReady={handleWorldReady}
@@ -321,10 +355,11 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
         started={started}
         lowPerf={lowPerf}
         playerBodyRef={playerBodyRef}
+        accentColor={palette.hudAccent}
       />
 
-      <HUD />
-      {!started && <StartOverlay onStart={handleStart} />}
+      <HUD onCyclePalette={nextPalette} paletteName={palette.name} />
+      {!started && <StartOverlay onStart={handleStart} paletteName={palette.name} />}
     </>
   );
 };

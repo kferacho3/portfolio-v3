@@ -677,15 +677,14 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
         </Html>
       )}
 
-      {/* HUD - Top stats - positioned via screen coordinates */}
-      <Html
-        position={[0, offset + 2, 0]}
-        center
-        style={{ pointerEvents: 'none' }}
-        zIndexRange={[0, 0]}
-      >
+      {/* HUD - Top stats (fixed to viewport so it never clips under the site header) */}
+      <Html fullscreen style={{ pointerEvents: 'none' }} zIndexRange={[0, 0]}>
         <div
           style={{
+            position: 'absolute',
+            top: 'calc(env(safe-area-inset-top, 0px) + 92px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
             color: 'white',
             fontSize: '1rem',
             background: 'rgba(15, 23, 42, 0.85)',
@@ -696,6 +695,9 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
             whiteSpace: 'nowrap',
             fontFamily: 'system-ui, sans-serif',
             pointerEvents: 'none',
+            maxWidth: 'calc(100vw - 1.5rem)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           <span style={{ marginRight: '0.8rem' }}>

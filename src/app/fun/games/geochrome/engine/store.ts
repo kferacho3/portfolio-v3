@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import type { PickupToast } from './types';
-import { PLAYER_TUNING } from './constants';
+import {
+  DEFAULT_GEOCHROME_PALETTE,
+  GEOCHROME_PALETTE_ORDER,
+  PLAYER_TUNING,
+  randomGeoChromePaletteId,
+  type GeoChromePaletteId,
+} from './constants';
 
 interface GeoChromeStore {
   started: boolean;
@@ -12,6 +18,7 @@ interface GeoChromeStore {
   stuckCount: number;
   worldCount: number;
   recentPickups: PickupToast[];
+  paletteId: GeoChromePaletteId;
   start: () => void;
   setAudioReady: (ready: boolean) => void;
   setLowPerf: (lowPerf: boolean) => void;
@@ -20,6 +27,9 @@ interface GeoChromeStore {
   setPickupLimit: (pickupLimit: number) => void;
   setStuckCount: (count: number) => void;
   setWorldCount: (count: number) => void;
+  setPalette: (paletteId: GeoChromePaletteId) => void;
+  nextPalette: () => void;
+  randomizePalette: () => void;
   pushPickup: (pickup: Omit<PickupToast, 'id'>) => void;
   resetProgress: () => void;
   resetRun: () => void;
@@ -39,6 +49,7 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   stuckCount: 0,
   worldCount: 0,
   recentPickups: [],
+  paletteId: DEFAULT_GEOCHROME_PALETTE,
 
   start: () => set({ started: true }),
 
@@ -55,6 +66,31 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   setStuckCount: (stuckCount) => set({ stuckCount }),
 
   setWorldCount: (worldCount) => set({ worldCount }),
+
+  setPalette: (paletteId) => set({ paletteId }),
+
+  nextPalette: () =>
+    set((state) => {
+      const currentIndex = GEOCHROME_PALETTE_ORDER.indexOf(state.paletteId);
+      const nextIndex =
+        currentIndex >= 0
+          ? (currentIndex + 1) % GEOCHROME_PALETTE_ORDER.length
+          : 0;
+      return { paletteId: GEOCHROME_PALETTE_ORDER[nextIndex] };
+    }),
+
+  randomizePalette: () =>
+    set((state) => {
+      let next = randomGeoChromePaletteId();
+      if (GEOCHROME_PALETTE_ORDER.length > 1 && next === state.paletteId) {
+        const currentIndex = GEOCHROME_PALETTE_ORDER.indexOf(state.paletteId);
+        next =
+          GEOCHROME_PALETTE_ORDER[
+            (Math.max(0, currentIndex) + 1) % GEOCHROME_PALETTE_ORDER.length
+          ];
+      }
+      return { paletteId: next };
+    }),
 
   pushPickup: (pickup) =>
     set((state) => ({
@@ -74,7 +110,7 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
     }),
 
   resetRun: () =>
-    set({
+    set((state) => ({
       started: false,
       audioReady: false,
       diameter: baseDiameter,
@@ -84,5 +120,6 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
       recentPickups: [],
       lowPerf: false,
       targetDpr: 1.25,
-    }),
+      paletteId: state.paletteId ?? DEFAULT_GEOCHROME_PALETTE,
+    })),
 }));

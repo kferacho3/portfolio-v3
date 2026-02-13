@@ -4,7 +4,12 @@ import { useMemo } from 'react';
 import { GOAL_DIAMETERS } from '../engine/constants';
 import { useGeoChromeStore } from '../engine/store';
 
-export default function HUD() {
+interface HUDProps {
+  paletteName: string;
+  onCyclePalette: () => void;
+}
+
+export default function HUD({ paletteName, onCyclePalette }: HUDProps) {
   const diameter = useGeoChromeStore((state) => state.diameter);
   const pickupLimit = useGeoChromeStore((state) => state.pickupLimit);
   const recentPickups = useGeoChromeStore((state) => state.recentPickups);
@@ -20,7 +25,10 @@ export default function HUD() {
 
   return (
     <Html fullscreen style={{ pointerEvents: 'none' }}>
-      <div className="pointer-events-none absolute inset-0 select-none p-4 md:p-8 text-white">
+      <div
+        className="pointer-events-none absolute inset-0 select-none p-4 md:p-8 text-white"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 82px)' }}
+      >
         <div className="flex justify-between">
           <motion.div
             key={diameterKey}
@@ -71,14 +79,23 @@ export default function HUD() {
             </div>
           </motion.div>
 
-          <div
-            className={`h-fit rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${
-              lowPerf
-                ? 'border-amber-300/50 bg-amber-400/20 text-amber-100'
-                : 'border-emerald-300/50 bg-emerald-400/20 text-emerald-100'
-            }`}
-          >
-            {lowPerf ? 'Lite Mode' : 'Full Mode'}
+          <div className="flex h-fit items-center gap-2">
+            <button
+              type="button"
+              onClick={onCyclePalette}
+              className="pointer-events-auto rounded-full border border-cyan-200/55 bg-slate-900/75 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-100 transition hover:bg-slate-800/90"
+            >
+              Palette: {paletteName}
+            </button>
+            <div
+              className={`h-fit rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] ${
+                lowPerf
+                  ? 'border-amber-300/50 bg-amber-400/20 text-amber-100'
+                  : 'border-emerald-300/50 bg-emerald-400/20 text-emerald-100'
+              }`}
+            >
+              {lowPerf ? 'Lite Mode' : 'Full Mode'}
+            </div>
           </div>
         </div>
 

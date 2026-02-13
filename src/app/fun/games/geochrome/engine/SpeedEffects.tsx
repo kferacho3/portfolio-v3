@@ -13,12 +13,14 @@ interface SpeedEffectsProps {
   started: boolean;
   lowPerf: boolean;
   playerBodyRef: React.MutableRefObject<RapierRigidBody | null>;
+  accentColor: string;
 }
 
 export function SpeedEffects({
   started,
   lowPerf,
   playerBodyRef,
+  accentColor,
 }: SpeedEffectsProps) {
   const strengthRef = useRef(0);
   const timerRef = useRef(0);
@@ -27,6 +29,12 @@ export function SpeedEffects({
   const chromaRef = useRef<{ offset: THREE.Vector2 } | null>(null);
   const chromaOffset = useMemo(() => new THREE.Vector2(0, 0), []);
   const zeroOffset = useMemo(() => new THREE.Vector2(0, 0), []);
+  const accentBoost = useMemo(() => {
+    const color = new THREE.Color(accentColor);
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    return THREE.MathUtils.clamp(0.7 + hsl.s * 0.6 + hsl.l * 0.2, 0.7, 1.5);
+  }, [accentColor]);
 
   useFrame((_, delta) => {
     if (!started || !playerBodyRef.current) return;
@@ -46,18 +54,22 @@ export function SpeedEffects({
     strengthRef.current = THREE.MathUtils.lerp(strengthRef.current, normalized, 0.35);
 
     const strength = strengthRef.current;
-    chromaOffset.set(strength * 0.0034, strength * 0.0026);
+    chromaOffset.set(
+      strength * 0.0034 * accentBoost,
+      strength * 0.0026 * accentBoost
+    );
 
     if (chromaRef.current?.offset) {
       chromaRef.current.offset.copy(lowPerf ? zeroOffset : chromaOffset);
     }
 
     if (vignetteRef.current) {
-      vignetteRef.current.darkness = 0.52 + strength * 0.4;
+      vignetteRef.current.darkness = 0.52 + strength * 0.4 * accentBoost;
     }
 
     if (noiseRef.current) {
-      noiseRef.current.opacity = lowPerf ? 0 : 0.028 + strength * 0.08;
+      noiseRef.current.opacity =
+        lowPerf ? 0 : 0.028 + strength * 0.08 * accentBoost;
     }
   });
 
