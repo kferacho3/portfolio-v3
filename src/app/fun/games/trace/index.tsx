@@ -9,6 +9,13 @@ import { useSnapshot } from 'valtio';
 import { create } from 'zustand';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { traceState } from './state';
+import {
+  TRACE_LEVEL_COUNT,
+  getTraceLevelDefinition,
+  speedCapForDifficulty,
+  speedForTraceLevel,
+  type TraceDifficulty,
+} from './levels';
 
 type GameStatus = 'START' | 'PLAYING' | 'LEVEL_CLEAR' | 'GAMEOVER';
 type DirectionIndex = 0 | 1 | 2 | 3;
@@ -50,6 +57,12 @@ type TrailCell = {
   createdAt: number;
 };
 
+type GridCell = {
+  key: number;
+  x: number;
+  z: number;
+};
+
 type VoidSquare = {
   x: number;
   z: number;
@@ -82,9 +95,12 @@ type Runtime = {
   danger: number;
   speed: number;
   baseSpeed: number;
+  speedCap: number;
+  difficulty: TraceDifficulty;
   bound: number;
   level: number;
   gridSize: number;
+  layoutName: string;
   fillCols: number;
   totalCells: number;
   completion: number;
@@ -112,6 +128,8 @@ type Runtime = {
   nextSegmentId: number;
   trailCells: TrailCell[];
   trailCellSet: Set<number>;
+  blockedCells: GridCell[];
+  blockedCellSet: Set<number>;
   currentCellKey: number;
   voids: VoidSquare[];
   pickups: PhasePickup[];
@@ -134,6 +152,7 @@ type TraceStore = {
   completion: number;
   collectibles: number;
   medal: MedalTier;
+  difficulty: TraceDifficulty;
   themeMode: ThemeMode;
   manualThemeIndex: number;
   manualHeadIndex: number;
@@ -170,6 +189,7 @@ type TraceStore = {
     collectibles: number;
   }) => void;
   setThemeMode: (mode: ThemeMode) => void;
+  setDifficulty: (difficulty: TraceDifficulty) => void;
   cycleTheme: () => void;
   cycleHead: () => void;
 };
@@ -278,20 +298,16 @@ const TRAIL_VISUAL_Y = 0.22;
 const MAX_TRAIL_SEGMENTS = 6200;
 const TRAIL_INSTANCE_CAP = 4200;
 const FILL_CELL_CAP = 2400;
+const BLOCKED_CELL_CAP = 900;
 const VOID_POOL = 20;
 const PICKUP_POOL = 14;
 const MAX_SPARKS = 120;
 const GRID_LINE_CAP = 128;
 
-const LEVEL_GRID_START = 7;
-const LEVEL_GRID_MAX = 17;
 const TIGHT_TURN_THRESHOLD = 0.62;
 const SWIPE_THRESHOLD = 0.08;
 const SWIPE_AXIS_RATIO = 1.1;
 const TURN_GRACE_TIME = 0.1;
-
-const SPEED_START = 1.75;
-const SPEED_MAX = 4.2;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -327,19 +343,12 @@ const writeBest = (score: number) => {
 const bucketKey = (x: number, z: number) => `${x},${z}`;
 const toCell = (v: number) => Math.floor(v / CELL_SIZE);
 
-const gridSizeForLevel = (level: number) =>
-  Math.floor(clamp(LEVEL_GRID_START + (level - 1), LEVEL_GRID_START, LEVEL_GRID_MAX));
-const speedForLevel = (level: number) =>
-  clamp(SPEED_START + (level - 1) * 0.16, SPEED_START, SPEED_MAX);
-const levelBound = (gridSize: number) => gridSize * CELL_SIZE * 0.5;
-const fillColsForBound = (bound: number) =>
-  Math.max(1, Math.round((bound * 2) / TRAIL_TILE_SIZE));
-const boundsForLevel = (level: number) => {
-  const gridSize = gridSizeForLevel(level);
-  const baseBound = levelBound(gridSize);
-  const fillCols = fillColsForBound(baseBound);
+const levelBound = (fillCols: number) => fillCols * TRAIL_TILE_SIZE * 0.5;
+const layoutForLevel = (level: number) => {
+  const definition = getTraceLevelDefinition(level);
+  const fillCols = definition.size;
   const bound = (fillCols * TRAIL_TILE_SIZE) * 0.5;
-  return { gridSize, fillCols, bound };
+  return { definition, gridSize: definition.size, fillCols, bound };
 };
 
 const medalForCompletion = (completion: number): MedalTier => {
@@ -432,6 +441,7 @@ const useTraceStore = create<TraceStore>((set) => ({
   completion: 0,
   collectibles: 0,
   medal: null,
+  difficulty: 'EASY',
   themeMode: 'RANDOM',
   manualThemeIndex: 0,
   manualHeadIndex: 0,
@@ -508,6 +518,7 @@ const useTraceStore = create<TraceStore>((set) => ({
       collectibles,
     }),
   setThemeMode: (mode) => set({ themeMode: mode }),
+  setDifficulty: (difficulty) => set({ difficulty }),
   cycleTheme: () =>
     set((state) => ({
       manualThemeIndex: (state.manualThemeIndex + 1) % TRACE_THEMES.length,
@@ -534,22 +545,41 @@ const createPickup = (): PhasePickup => ({
   active: false,
 });
 
+const blockedCellsForLayout = (fillCols: number, bound: number, blockedKeys: number[]): GridCell[] =>
+  blockedKeys.map((key) => {
+    const gx = key % fillCols;
+    const gz = Math.floor(key / fillCols);
+    return {
+      key,
+      x: -bound + (gx + 0.5) * TRAIL_TILE_SIZE,
+      z: -bound + (gz + 0.5) * TRAIL_TILE_SIZE,
+    };
+  });
+
 const createRuntime = (): Runtime => {
-  const initial = boundsForLevel(1);
+  const initial = layoutForLevel(1);
   const start = startCellCenter(initial.fillCols, initial.bound);
+  const initialBlockedCells = blockedCellsForLayout(
+    initial.fillCols,
+    initial.bound,
+    initial.definition.blockedKeys
+  );
   return {
     elapsed: 0,
     score: 0,
     tightTurnBonus: 0,
     tightTurns: 0,
     danger: 0,
-    speed: speedForLevel(1),
-    baseSpeed: speedForLevel(1),
+    speed: speedForTraceLevel(1, 'EASY'),
+    baseSpeed: speedForTraceLevel(1, 'EASY'),
+    speedCap: speedCapForDifficulty('EASY'),
+    difficulty: 'EASY',
     bound: initial.bound,
     level: 1,
     gridSize: initial.gridSize,
+    layoutName: initial.definition.name,
     fillCols: initial.fillCols,
-    totalCells: initial.fillCols * initial.fillCols,
+    totalCells: initial.definition.openCells,
     completion: 0,
     collectibles: 0,
     playerX: start,
@@ -575,6 +605,8 @@ const createRuntime = (): Runtime => {
     nextSegmentId: 1,
     trailCells: [],
     trailCellSet: new Set(),
+    blockedCells: initialBlockedCells,
+    blockedCellSet: new Set(initial.definition.blockedKeys),
     currentCellKey: -1,
     voids: Array.from({ length: VOID_POOL }, createVoid),
     pickups: Array.from({ length: PICKUP_POOL }, createPickup),
@@ -691,6 +723,7 @@ const cellFromWorld = (runtime: Runtime, x: number, z: number) => {
 };
 
 const addTrailCell = (runtime: Runtime, cell: { key: number; cx: number; cz: number }) => {
+  if (runtime.blockedCellSet.has(cell.key)) return;
   if (runtime.trailCellSet.has(cell.key)) return;
   runtime.trailCellSet.add(cell.key);
   runtime.trailCells.push({
@@ -710,15 +743,25 @@ const markTrailCell = (runtime: Runtime, x: number, z: number) => {
 
 const updateCellVisit = (runtime: Runtime, x: number, z: number) => {
   const cell = cellFromWorld(runtime, x, z);
-  if (!cell) return { outOfBounds: true, hitTrail: false };
-  if (cell.key === runtime.currentCellKey) return { outOfBounds: false, hitTrail: false };
+  if (!cell) return { outOfBounds: true, hitTrail: false, hitBlocked: false };
+  if (runtime.blockedCellSet.has(cell.key)) {
+    runtime.currentCellKey = cell.key;
+    return { outOfBounds: false, hitTrail: false, hitBlocked: true };
+  }
+  if (cell.key === runtime.currentCellKey) return { outOfBounds: false, hitTrail: false, hitBlocked: false };
   if (runtime.trailCellSet.has(cell.key)) {
     runtime.currentCellKey = cell.key;
-    return { outOfBounds: false, hitTrail: true };
+    return { outOfBounds: false, hitTrail: true, hitBlocked: false };
   }
   runtime.currentCellKey = cell.key;
   addTrailCell(runtime, cell);
-  return { outOfBounds: false, hitTrail: false };
+  return { outOfBounds: false, hitTrail: false, hitBlocked: false };
+};
+
+const isWalkableWorld = (runtime: Runtime, x: number, z: number) => {
+  const cell = cellFromWorld(runtime, x, z);
+  if (!cell) return false;
+  return !runtime.blockedCellSet.has(cell.key);
 };
 
 const queryNearbySegmentIds = (runtime: Runtime, x: number, z: number) => {
@@ -752,13 +795,30 @@ const checkTrailCollision = (runtime: Runtime, x: number, z: number) => {
   return { hit: false, near };
 };
 
+const applyLayoutToRuntime = (runtime: Runtime, level: number) => {
+  const layout = layoutForLevel(level);
+  runtime.gridSize = layout.gridSize;
+  runtime.layoutName = layout.definition.name;
+  runtime.fillCols = layout.fillCols;
+  runtime.bound = layout.bound;
+  runtime.totalCells = layout.definition.openCells;
+  runtime.blockedCells = blockedCellsForLayout(
+    layout.fillCols,
+    layout.bound,
+    layout.definition.blockedKeys
+  );
+  runtime.blockedCellSet = new Set(layout.definition.blockedKeys);
+  return layout;
+};
+
 const prepareLevelRuntime = (
   runtime: Runtime,
   level: number,
   themeIndex: number,
-  headIndex: number
+  headIndex: number,
+  difficulty: TraceDifficulty
 ) => {
-  const layout = boundsForLevel(level);
+  const layout = applyLayoutToRuntime(runtime, level);
   const start = startCellCenter(layout.fillCols, layout.bound);
   runtime.elapsed = 0;
   runtime.score = 0;
@@ -766,12 +826,10 @@ const prepareLevelRuntime = (
   runtime.tightTurns = 0;
   runtime.danger = 0;
   runtime.level = level;
-  runtime.gridSize = layout.gridSize;
-  runtime.fillCols = layout.fillCols;
-  runtime.totalCells = layout.fillCols * layout.fillCols;
-  runtime.baseSpeed = speedForLevel(level);
+  runtime.difficulty = difficulty;
+  runtime.baseSpeed = speedForTraceLevel(level, difficulty);
+  runtime.speedCap = speedCapForDifficulty(difficulty);
   runtime.speed = runtime.baseSpeed;
-  runtime.bound = layout.bound;
   runtime.completion = 0;
   runtime.collectibles = 0;
   runtime.playerX = start;
@@ -820,20 +878,18 @@ const prepareLevelRuntime = (
   runtime.currentCellKey = startCell ? startCell.key : -1;
 };
 
-const resetRuntime = (runtime: Runtime) => {
+const resetRuntime = (runtime: Runtime, difficulty: TraceDifficulty = 'EASY') => {
   runtime.elapsed = 0;
   runtime.score = 0;
   runtime.tightTurnBonus = 0;
   runtime.tightTurns = 0;
   runtime.danger = 0;
-  const layout = boundsForLevel(1);
+  const layout = applyLayoutToRuntime(runtime, 1);
   const start = startCellCenter(layout.fillCols, layout.bound);
   runtime.level = 1;
-  runtime.gridSize = layout.gridSize;
-  runtime.bound = layout.bound;
-  runtime.fillCols = layout.fillCols;
-  runtime.totalCells = runtime.fillCols * runtime.fillCols;
-  runtime.baseSpeed = speedForLevel(1);
+  runtime.difficulty = difficulty;
+  runtime.baseSpeed = speedForTraceLevel(1, difficulty);
+  runtime.speedCap = speedCapForDifficulty(difficulty);
   runtime.speed = runtime.baseSpeed;
   runtime.completion = 0;
   runtime.collectibles = 0;
@@ -895,6 +951,7 @@ const spawnVoid = (runtime: Runtime) => {
     const x = (Math.random() * 2 - 1) * (runtime.bound - margin);
     const z = (Math.random() * 2 - 1) * (runtime.bound - margin);
     if (Math.hypot(x - runtime.playerX, z - runtime.playerZ) < 1.1) continue;
+    if (!isWalkableWorld(runtime, x, z)) continue;
     slot.x = x;
     slot.z = z;
     slot.size = size;
@@ -913,6 +970,7 @@ const spawnPickup = (runtime: Runtime) => {
     const x = (Math.random() * 2 - 1) * (runtime.bound - margin);
     const z = (Math.random() * 2 - 1) * (runtime.bound - margin);
     if (Math.hypot(x - runtime.playerX, z - runtime.playerZ) < 1.0) continue;
+    if (!isWalkableWorld(runtime, x, z)) continue;
     slot.x = x;
     slot.z = z;
     slot.spin = Math.random() * Math.PI * 2;
@@ -941,17 +999,21 @@ function TraceOverlay() {
   const completion = useTraceStore((s) => s.completion);
   const collectibles = useTraceStore((s) => s.collectibles);
   const medal = useTraceStore((s) => s.medal);
+  const difficulty = useTraceStore((s) => s.difficulty);
 
   const themeMode = useTraceStore((s) => s.themeMode);
   const manualThemeIndex = useTraceStore((s) => s.manualThemeIndex);
   const manualHeadIndex = useTraceStore((s) => s.manualHeadIndex);
   const activeThemeIndex = useTraceStore((s) => s.activeThemeIndex);
   const setThemeMode = useTraceStore((s) => s.setThemeMode);
+  const setDifficulty = useTraceStore((s) => s.setDifficulty);
   const cycleTheme = useTraceStore((s) => s.cycleTheme);
   const cycleHead = useTraceStore((s) => s.cycleHead);
 
   const previewThemeIndex = themeMode === 'MANUAL' ? manualThemeIndex : activeThemeIndex;
   const previewTheme = TRACE_THEMES[previewThemeIndex] ?? TRACE_THEMES[0];
+  const activeLayout = ((level - 1) % TRACE_LEVEL_COUNT) + 1;
+  const resultLayout = ((resultLevel - 1) % TRACE_LEVEL_COUNT) + 1;
 
   const stopPointer: React.PointerEventHandler<HTMLElement> = (event) => {
     event.stopPropagation();
@@ -975,6 +1037,9 @@ function TraceOverlay() {
             Level <span className="font-semibold text-cyan-200">{level}</span>
           </div>
           <div>
+            Layout <span className="font-semibold text-cyan-200">{activeLayout}/{TRACE_LEVEL_COUNT}</span>
+          </div>
+          <div>
             Fill <span className="font-semibold text-emerald-200">{completion.toFixed(1)}%</span>
           </div>
           <div>
@@ -986,6 +1051,9 @@ function TraceOverlay() {
           <div>
             PHASE <span className="font-semibold text-fuchsia-200">{phaseCharges}</span>
           </div>
+          <div>
+            Mode <span className="font-semibold text-rose-100">{difficulty}</span>
+          </div>
         </div>
       )}
 
@@ -995,10 +1063,11 @@ function TraceOverlay() {
             <div className="text-2xl font-black tracking-wide">TRACE</div>
             <div className="mt-2 text-sm text-white/85">Fill the grid and never overlap your path.</div>
             <div className="mt-1 text-sm text-white/80">Your full trail now stays painted on the arena.</div>
+            <div className="mt-1 text-sm text-white/80">120 handcrafted-style level grids: mostly symmetric, with chaotic challenge sets.</div>
             <div className="mt-2 text-xs text-white/75">
               Medals: 70-79 Bronze • 80-89 Silver • 90-99 Gold • 100 Diamond
             </div>
-            <div className="mt-3 text-sm text-cyan-200/90">Tap to start Level 1.</div>
+            <div className="mt-3 text-sm text-cyan-200/90">Tap to start Level 1 on {difficulty}.</div>
           </div>
         </div>
       )}
@@ -1007,6 +1076,7 @@ function TraceOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-emerald-100/45 bg-gradient-to-br from-black/84 via-emerald-950/44 to-cyan-950/30 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-emerald-100">Level {resultLevel} Cleared</div>
+            <div className="mt-1 text-xs text-white/70">Layout {resultLayout}/{TRACE_LEVEL_COUNT}</div>
             <div className={`mt-2 text-sm font-semibold tracking-wide ${medalClassName(medal)}`}>
               {medal} Medal
             </div>
@@ -1021,7 +1091,9 @@ function TraceOverlay() {
         <div className="absolute inset-0 grid place-items-center">
           <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/44 to-cyan-950/30 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-fuchsia-200">Trace Lost</div>
-            <div className="mt-2 text-sm text-white/80">Level {resultLevel} • Fill {completion.toFixed(1)}%</div>
+            <div className="mt-2 text-sm text-white/80">
+              Level {resultLevel} • Layout {resultLayout}/{TRACE_LEVEL_COUNT} • Fill {completion.toFixed(1)}%
+            </div>
             <div className="mt-1 text-sm text-white/75">Collectibles {collectibles}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap to restart at Level 1.</div>
@@ -1054,6 +1126,21 @@ function TraceOverlay() {
         >
           Head {HEAD_STYLES[manualHeadIndex]}
         </button>
+        {(['EASY', 'MEDIUM', 'HARD'] as const).map((mode) => (
+          <button
+            key={`trace-difficulty-${mode}`}
+            type="button"
+            onPointerDown={stopPointer}
+            onClick={() => setDifficulty(mode)}
+            className={`rounded px-2 py-1 ${
+              difficulty === mode
+                ? 'bg-cyan-300/35 text-cyan-100'
+                : 'bg-white/10 text-white/90 hover:bg-white/20'
+            }`}
+          >
+            {mode}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1093,6 +1180,7 @@ function TraceScene() {
 
   const runtimeRef = useRef<Runtime>(createRuntime());
 
+  const blockedMeshRef = useRef<THREE.InstancedMesh>(null);
   const fillMeshRef = useRef<THREE.InstancedMesh>(null);
   const trailMeshRef = useRef<THREE.InstancedMesh>(null);
   const voidMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -1104,6 +1192,7 @@ function TraceScene() {
   const currentTrailRef = useRef<THREE.Mesh>(null);
   const trailMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const fillMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const blockedMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const playerMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const sparkPointsRef = useRef<THREE.Points>(null);
   const sparkMatRef = useRef<THREE.PointsMaterial>(null);
@@ -1141,12 +1230,12 @@ function TraceScene() {
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    resetRuntime(runtimeRef.current);
+    resetRuntime(runtimeRef.current, useTraceStore.getState().difficulty);
     useTraceStore.getState().resetToStart();
   }, []);
 
   useEffect(() => {
-    resetRuntime(runtimeRef.current);
+    resetRuntime(runtimeRef.current, useTraceStore.getState().difficulty);
     useTraceStore.getState().resetToStart();
   }, [resetVersion]);
 
@@ -1228,7 +1317,7 @@ function TraceScene() {
           ? Math.floor(Math.random() * TRACE_THEMES.length)
           : store.manualThemeIndex;
       const headIndex = store.manualHeadIndex;
-      prepareLevelRuntime(runtime, levelToStart, themeIndex, headIndex);
+      prepareLevelRuntime(runtime, levelToStart, themeIndex, headIndex, store.difficulty);
       if (directionInput !== null) {
         runtime.dir = directionInput;
         runtime.targetYaw = DIR_YAWS[directionInput];
@@ -1281,6 +1370,12 @@ function TraceScene() {
     };
 
     if (store.status === 'PLAYING') {
+      if (runtime.difficulty !== store.difficulty) {
+        runtime.difficulty = store.difficulty;
+        runtime.baseSpeed = speedForTraceLevel(runtime.level, runtime.difficulty);
+        runtime.speedCap = speedCapForDifficulty(runtime.difficulty);
+      }
+
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.phaseTimer = Math.max(0, runtime.phaseTimer - dt);
@@ -1288,7 +1383,7 @@ function TraceScene() {
       runtime.turnGrace = Math.max(0, runtime.turnGrace - dt);
 
       const d = difficultyAt(runtime);
-      runtime.speed = clamp(runtime.baseSpeed + runtime.elapsed * 0.03, runtime.baseSpeed, SPEED_MAX);
+      runtime.speed = clamp(runtime.baseSpeed + runtime.elapsed * 0.03, runtime.baseSpeed, runtime.speedCap);
       runtime.danger = Math.max(0, runtime.danger - dt * 1.7);
 
       runtime.voidSpawnTimer -= dt;
@@ -1408,7 +1503,7 @@ function TraceScene() {
 
         commitTrailTo(runtime, runtime.playerX, runtime.playerZ, false);
         const cellVisit = updateCellVisit(runtime, runtime.playerX, runtime.playerZ);
-        if (cellVisit.outOfBounds || cellVisit.hitTrail) {
+        if (cellVisit.outOfBounds || cellVisit.hitTrail || cellVisit.hitBlocked) {
           gameOver = true;
           break;
         }
@@ -1471,6 +1566,32 @@ function TraceScene() {
     themePickup.set(activeTheme.pickup);
     themeHazard.set(activeTheme.hazard);
     themeSpark.set(activeTheme.spark);
+
+    if (blockedMeshRef.current) {
+      let idx = 0;
+      for (let i = 0; i < runtime.blockedCells.length && idx < BLOCKED_CELL_CAP; i += 1) {
+        const cell = runtime.blockedCells[i];
+        dummy.position.set(cell.x, 0.045, cell.z);
+        dummy.scale.set(TRAIL_TILE_SIZE * 0.94, 0.085, TRAIL_TILE_SIZE * 0.94);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        blockedMeshRef.current.setMatrixAt(idx, dummy.matrix);
+        idx += 1;
+      }
+      while (idx < BLOCKED_CELL_CAP) {
+        dummy.position.copy(OFFSCREEN_POS);
+        dummy.scale.copy(TINY_SCALE);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        blockedMeshRef.current.setMatrixAt(idx, dummy.matrix);
+        idx += 1;
+      }
+      blockedMeshRef.current.instanceMatrix.needsUpdate = true;
+    }
+
+    if (blockedMatRef.current) {
+      blockedMatRef.current.color.copy(themeHazard).lerp(themeBorderZ, 0.25);
+    }
 
     if (fillMeshRef.current) {
       let idx = 0;
@@ -1786,6 +1907,21 @@ function TraceScene() {
         <planeGeometry args={[14, 14]} />
         <meshStandardMaterial color="#111722" roughness={0.92} metalness={0.04} />
       </mesh>
+
+      <instancedMesh
+        ref={blockedMeshRef}
+        args={[undefined, undefined, BLOCKED_CELL_CAP]}
+        frustumCulled={false}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial
+          ref={blockedMatRef}
+          color="#ff5f78"
+          toneMapped={false}
+          transparent
+          opacity={0.82}
+        />
+      </instancedMesh>
 
       <instancedMesh
         ref={fillMeshRef}

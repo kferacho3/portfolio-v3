@@ -337,6 +337,102 @@ const PALETTES: DriftPalette[] = [
     pointA: '#6ce6ea',
     pointB: '#90c6ff',
   },
+  {
+    name: 'Solar Pop',
+    clear: '#ffd6a8',
+    fog: '#f8c791',
+    bgSea: '#ff9f68',
+    bgSky: '#7ed8ff',
+    bgMist: '#fff4da',
+    roadBaseA: '#694033',
+    roadBaseB: '#8c5442',
+    roadStripeA: '#ffe682',
+    roadStripeB: '#8ff8ff',
+    railA: '#ffe48d',
+    railB: '#8fd7ff',
+    anchor: '#fff7d8',
+    carBody: '#fff8ef',
+    carCockpit: '#fff0bf',
+    carFront: '#ffd77a',
+    carRear: '#9fd8ff',
+    tether: '#fff9d7',
+    guide: '#ffe58f',
+    barrierCore: '#8f4a35',
+    barrierHit: '#ff8f6a',
+    marker: '#fff4c7',
+    collectible: '#ffe16f',
+    blaster: '#8ba2ff',
+    boost: '#9cf7bb',
+    hemiSky: '#fff7e8',
+    hemiGround: '#8f5f3f',
+    dirLight: '#fff6e0',
+    pointA: '#ffcd67',
+    pointB: '#8fc8ff',
+  },
+  {
+    name: 'Neon Harbor',
+    clear: '#7ed6d9',
+    fog: '#6fc2ca',
+    bgSea: '#2ea0b2',
+    bgSky: '#ff8fa7',
+    bgMist: '#f6ffff',
+    roadBaseA: '#163942',
+    roadBaseB: '#21515c',
+    roadStripeA: '#69f6ff',
+    roadStripeB: '#ffb7d2',
+    railA: '#7cf9ea',
+    railB: '#ff9cc0',
+    anchor: '#e6ffff',
+    carBody: '#f8ffff',
+    carCockpit: '#d6f7ff',
+    carFront: '#70f0ff',
+    carRear: '#ff9cc0',
+    tether: '#e1ffff',
+    guide: '#89fbff',
+    barrierCore: '#24606c',
+    barrierHit: '#ff8b87',
+    marker: '#bffcff',
+    collectible: '#ffe28e',
+    blaster: '#b2a4ff',
+    boost: '#85ffbd',
+    hemiSky: '#f0ffff',
+    hemiGround: '#2a6570',
+    dirLight: '#f6ffff',
+    pointA: '#4fe8e0',
+    pointB: '#ff9cb8',
+  },
+  {
+    name: 'Midnight Citrus',
+    clear: '#7589c4',
+    fog: '#677cb5',
+    bgSea: '#2e3e7c',
+    bgSky: '#ffbf66',
+    bgMist: '#f6f3ff',
+    roadBaseA: '#1f274d',
+    roadBaseB: '#2d3767',
+    roadStripeA: '#ffc75c',
+    roadStripeB: '#8ec9ff',
+    railA: '#ffd17f',
+    railB: '#9cd2ff',
+    anchor: '#fff3d8',
+    carBody: '#fefaff',
+    carCockpit: '#d9e4ff',
+    carFront: '#ffc96b',
+    carRear: '#9ec8ff',
+    tether: '#fff3dd',
+    guide: '#ffd689',
+    barrierCore: '#37457e',
+    barrierHit: '#ff966a',
+    marker: '#ffe1a3',
+    collectible: '#ffe17c',
+    blaster: '#b3afff',
+    boost: '#9effc9',
+    hemiSky: '#fff3df',
+    hemiGround: '#36457c',
+    dirLight: '#fff8eb',
+    pointA: '#ffc56a',
+    pointB: '#87b6ff',
+  },
 ];
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
@@ -789,7 +885,8 @@ function TetherDriftOverlay() {
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/60 bg-gradient-to-br from-emerald-500/30 via-cyan-500/24 to-sky-500/26 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">Tether Drift</div>
         <div className="text-[11px] text-cyan-50/85">Hold to tighten tether and carve drift lines. Release to slide out.</div>
-        <div className="text-[11px] text-cyan-50/85">A/D or Arrow keys steer. Press F to blast blockers when ammo is loaded.</div>
+        <div className="text-[11px] text-cyan-50/85">A/D or Arrow keys steer. Walls bounce your drift line instead of ending the run.</div>
+        <div className="text-[11px] text-cyan-50/85">Press F to blast blockers. Each block needs 3 hits before it breaks.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-sky-100/60 bg-gradient-to-br from-slate-900/60 via-cyan-900/42 to-emerald-700/35 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -844,7 +941,8 @@ function TetherDriftOverlay() {
             <div className="mt-2 text-sm text-white/85">A tethered drift car blasts through an endless corridor.</div>
             <div className="mt-1 text-sm text-white/85">Hold to reel your anchor and snap into line. Release to sling wide around blockers.</div>
             <div className="mt-1 text-sm text-white/85">Steer with A/D or ←/→. Collect crystals and power cells. Press F to shoot blockers away.</div>
-            <div className="mt-1 text-sm text-white/85">Every new run rotates to a fresh crystal palette.</div>
+            <div className="mt-1 text-sm text-white/85">Blaster pickups trigger full-wall barrages, so carve an opening before impact.</div>
+            <div className="mt-1 text-sm text-white/85">Blocks cycle to a new color phase every 200 points and each run gets a fresh palette.</div>
             <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
           </div>
         </div>
