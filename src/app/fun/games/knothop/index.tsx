@@ -53,6 +53,8 @@ type SpiralEvent = {
   hitAngle: number;
 };
 
+type ParticleKind = 'burst' | 'crash' | 'collect';
+
 type BurstParticle = {
   active: boolean;
   x: number;
@@ -65,6 +67,14 @@ type BurstParticle = {
   life: number;
   size: number;
   color: number;
+  kind: ParticleKind;
+  drag: number;
+  gravity: number;
+  homing: number;
+  swirl: number;
+  targetX: number;
+  targetY: number;
+  targetZ: number;
 };
 
 type Runtime = {
@@ -214,6 +224,14 @@ const createParticle = (): BurstParticle => ({
   life: 0,
   size: 0.04,
   color: 0xffffff,
+  kind: 'burst',
+  drag: 2.2,
+  gravity: 0,
+  homing: 0,
+  swirl: 0,
+  targetX: 0,
+  targetY: 0,
+  targetZ: 0,
 });
 
 const createRuntime = (): Runtime => ({
@@ -789,6 +807,64 @@ function KnotHop() {
     trailAttr.needsUpdate = true;
   };
 
+  const collectibleColorHex = (variant: CollectibleVariant) => {
+    if (variant === 'purple') return 0xb068ff;
+    if (variant === 'green') return 0x58ff8d;
+    return 0xffd74c;
+  };
+
+  const crashColorHex = (variant: HazardVariant) => {
+    if (variant === 'anomaly') return 0xff566e;
+    if (variant === 'crusher') return 0xd67c49;
+    return 0x5a2727;
+  };
+
+  const emitParticle = (
+    runtime: Runtime,
+    config: {
+      x: number;
+      y: number;
+      z: number;
+      vx: number;
+      vy: number;
+      vz: number;
+      life: number;
+      size: number;
+      color: number;
+      kind?: ParticleKind;
+      drag?: number;
+      gravity?: number;
+      homing?: number;
+      swirl?: number;
+      targetX?: number;
+      targetY?: number;
+      targetZ?: number;
+    }
+  ) => {
+    const p = runtime.particles[runtime.particleCursor];
+    runtime.particleCursor = (runtime.particleCursor + 1) % runtime.particles.length;
+
+    p.active = true;
+    p.x = config.x;
+    p.y = config.y;
+    p.z = config.z;
+    p.vx = config.vx;
+    p.vy = config.vy;
+    p.vz = config.vz;
+    p.age = 0;
+    p.life = config.life;
+    p.size = config.size;
+    p.color = config.color;
+    p.kind = config.kind ?? 'burst';
+    p.drag = config.drag ?? 2.2;
+    p.gravity = config.gravity ?? 0;
+    p.homing = config.homing ?? 0;
+    p.swirl = config.swirl ?? 0;
+    p.targetX = config.targetX ?? config.x;
+    p.targetY = config.targetY ?? config.y;
+    p.targetZ = config.targetZ ?? config.z;
+  };
+
   const spawnBurst = (
     runtime: Runtime,
     x: number,
@@ -801,28 +877,134 @@ function KnotHop() {
     sizeMin: number,
     sizeMax: number,
     lifeMin: number,
-    lifeMax: number
+    lifeMax: number,
+    tuning?: {
+      kind?: ParticleKind;
+      drag?: number;
+      gravity?: number;
+      homing?: number;
+      swirl?: number;
+      targetX?: number;
+      targetY?: number;
+      targetZ?: number;
+      spreadZ?: number;
+    }
   ) => {
     for (let i = 0; i < count; i += 1) {
-      const p = runtime.particles[runtime.particleCursor];
       const a = Math.random() * Math.PI * 2;
       const radial = speedMin + Math.random() * (speedMax - speedMin);
-      const zKick = (Math.random() - 0.5) * radial * 1.15;
-
-      p.active = true;
-      p.x = x;
-      p.y = y;
-      p.z = z;
-      p.vx = Math.cos(a) * radial;
-      p.vy = Math.sin(a) * radial;
-      p.vz = zKick;
-      p.age = 0;
-      p.life = lifeMin + Math.random() * (lifeMax - lifeMin);
-      p.size = sizeMin + Math.random() * (sizeMax - sizeMin);
-      p.color = color;
-
-      runtime.particleCursor = (runtime.particleCursor + 1) % runtime.particles.length;
+      const zKick = (Math.random() - 0.5) * radial * (tuning?.spreadZ ?? 1.15);
+      emitParticle(runtime, {
+        x,
+        y,
+        z,
+        vx: Math.cos(a) * radial,
+        vy: Math.sin(a) * radial,
+        vz: zKick,
+        life: lifeMin + Math.random() * (lifeMax - lifeMin),
+        size: sizeMin + Math.random() * (sizeMax - sizeMin),
+        color,
+        kind: tuning?.kind,
+        drag: tuning?.drag,
+        gravity: tuning?.gravity,
+        homing: tuning?.homing,
+        swirl: tuning?.swirl,
+        targetX: tuning?.targetX,
+        targetY: tuning?.targetY,
+        targetZ: tuning?.targetZ,
+      });
     }
+  };
+
+  const spawnCrashExplosion = (
+    runtime: Runtime,
+    x: number,
+    y: number,
+    z: number,
+    variant: HazardVariant
+  ) => {
+    const core = crashColorHex(variant);
+
+    spawnBurst(runtime, x, y, z, core, 84, 1.8, 4.4, 0.038, 0.094, 0.36, 0.88, {
+      kind: 'crash',
+      drag: 2.4,
+      gravity: -2.5,
+      spreadZ: 1.45,
+    });
+    spawnBurst(runtime, x, y, z, 0xffd4c1, 26, 0.95, 2.4, 0.026, 0.074, 0.26, 0.54, {
+      kind: 'crash',
+      drag: 1.7,
+      gravity: -0.9,
+      spreadZ: 1.65,
+    });
+    spawnBurst(runtime, x, y, z, 0x1a0f0f, 20, 0.52, 1.52, 0.07, 0.13, 0.44, 0.96, {
+      kind: 'crash',
+      drag: 3.5,
+      gravity: -0.35,
+      spreadZ: 0.9,
+    });
+  };
+
+  const spawnCollectionEffect = (
+    runtime: Runtime,
+    x: number,
+    y: number,
+    z: number,
+    variant: CollectibleVariant,
+    playerX: number,
+    playerY: number
+  ) => {
+    const color = collectibleColorHex(variant);
+    const orbitCount = variant === 'purple' ? 22 : variant === 'green' ? 18 : 15;
+    const haloCount = variant === 'purple' ? 16 : variant === 'green' ? 13 : 11;
+    const toPlayerX = playerX;
+    const toPlayerY = playerY;
+    const toPlayerZ = PLAYER_Z;
+
+    const baseHoming = variant === 'purple' ? 12.8 : variant === 'green' ? 10.8 : 9.2;
+    const baseSwirl = variant === 'purple' ? 7.8 : variant === 'green' ? 6.8 : 5.8;
+
+    for (let i = 0; i < orbitCount; i += 1) {
+      const a = (i / orbitCount) * Math.PI * 2 + Math.random() * 0.22;
+      const ringR = 0.08 + Math.random() * 0.17;
+      const tx = -Math.sin(a);
+      const ty = Math.cos(a);
+      const towardX = toPlayerX - x;
+      const towardY = toPlayerY - y;
+      const towardZ = toPlayerZ - z;
+      const towardScale = 2.1 + Math.random() * 1.5;
+      emitParticle(runtime, {
+        x: x + Math.cos(a) * ringR,
+        y: y + Math.sin(a) * ringR,
+        z: z + (Math.random() - 0.5) * 0.08,
+        vx: towardX * 0.45 + tx * (0.5 + Math.random() * 0.42),
+        vy: towardY * 0.45 + ty * (0.5 + Math.random() * 0.42),
+        vz: towardZ * 0.36 + (Math.random() - 0.5) * 0.42,
+        life: 0.34 + Math.random() * 0.24,
+        size: 0.022 + Math.random() * 0.02,
+        color,
+        kind: 'collect',
+        drag: 2.9,
+        gravity: 0,
+        homing: baseHoming + towardScale,
+        swirl: (Math.random() < 0.5 ? -1 : 1) * (baseSwirl + Math.random() * 3.4),
+        targetX: toPlayerX,
+        targetY: toPlayerY,
+        targetZ: toPlayerZ,
+      });
+    }
+
+    spawnBurst(runtime, x, y, z, color, haloCount, 0.34, 1.24, 0.018, 0.052, 0.18, 0.38, {
+      kind: 'collect',
+      drag: 3.1,
+      gravity: 0,
+      homing: baseHoming * 0.72,
+      swirl: baseSwirl * 0.62,
+      targetX: toPlayerX,
+      targetY: toPlayerY,
+      targetZ: toPlayerZ,
+      spreadZ: 1.85,
+    });
   };
 
   const hideInstance = (mesh: THREE.InstancedMesh | null, idx: number) => {
@@ -973,7 +1155,7 @@ function KnotHop() {
 
               const ox = Math.cos(currentTheta) * ORBIT_RADIUS;
               const oy = Math.sin(currentTheta) * ORBIT_RADIUS;
-              spawnBurst(runtime, ox, oy, event.z, 0xff8b7d, 42, 1.4, 3.2, 0.04, 0.08, 0.3, 0.62);
+              spawnCrashExplosion(runtime, ox, oy, event.z, event.variant as HazardVariant);
 
               const reason =
                 event.variant === 'crusher'
@@ -1005,7 +1187,11 @@ function KnotHop() {
 
               const nx = Math.cos(currentTheta) * ORBIT_RADIUS;
               const ny = Math.sin(currentTheta) * ORBIT_RADIUS;
-              spawnBurst(runtime, nx, ny, event.z, 0xffc2a8, 8, 0.9, 1.8, 0.025, 0.045, 0.18, 0.32);
+              spawnBurst(runtime, nx, ny, event.z, 0xffd3b8, 12, 0.95, 1.92, 0.022, 0.046, 0.2, 0.4, {
+                kind: 'burst',
+                drag: 2.4,
+                gravity: -0.35,
+              });
             }
 
             runtime.score += scoreGain + Math.min(runtime.streak, 30) * 2.8;
@@ -1046,27 +1232,16 @@ function KnotHop() {
 
               const cx = Math.cos(currentTheta) * ORBIT_RADIUS;
               const cy = Math.sin(currentTheta) * ORBIT_RADIUS;
-              spawnBurst(
+              const absorbX = Math.cos(runtime.theta) * ORBIT_RADIUS;
+              const absorbY = Math.sin(runtime.theta) * ORBIT_RADIUS;
+              spawnCollectionEffect(
                 runtime,
                 cx,
                 cy,
                 event.z,
-                collectibleVariant === 'purple'
-                  ? 0xb068ff
-                  : collectibleVariant === 'green'
-                    ? 0x58ff8d
-                    : 0xffd74c,
-                collectibleVariant === 'purple'
-                  ? 20
-                  : collectibleVariant === 'green'
-                    ? 16
-                    : 14,
-                0.65,
-                1.45,
-                0.03,
-                0.06,
-                0.2,
-                0.42
+                collectibleVariant,
+                absorbX,
+                absorbY
               );
 
               if (collectibleVariant === 'purple') {
@@ -1109,6 +1284,9 @@ function KnotHop() {
 
     runtime.flash = Math.max(0, runtime.flash - dt * 2.9);
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
+    const orbitNow = ORBIT_RADIUS + runtime.hopPulse * 0.13;
+    const px = Math.cos(runtime.theta) * orbitNow;
+    const py = Math.sin(runtime.theta) * orbitNow;
 
     for (const p of runtime.particles) {
       if (!p.active) continue;
@@ -1117,19 +1295,36 @@ function KnotHop() {
         p.active = false;
         continue;
       }
+
+      if (p.homing > 0) {
+        const tx = p.targetX + (px - p.targetX) * 0.92;
+        const ty = p.targetY + (py - p.targetY) * 0.92;
+        const tz = p.targetZ;
+        const dx = tx - p.x;
+        const dy = ty - p.y;
+        const dz = tz - p.z;
+        p.vx += (dx * p.homing - dy * p.swirl) * dt;
+        p.vy += (dy * p.homing + dx * p.swirl) * dt;
+        p.vz += dz * p.homing * dt;
+
+        if (p.kind === 'collect' && p.age > 0.08 && dx * dx + dy * dy + dz * dz < 0.0072) {
+          p.active = false;
+          continue;
+        }
+      }
+
+      p.vy += p.gravity * dt;
+      const damping = Math.exp(-p.drag * dt);
+      p.vx *= damping;
+      p.vy *= damping;
+      p.vz *= damping;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
-      p.vx *= 0.95;
-      p.vy *= 0.95;
-      p.vz *= 0.94;
     }
 
     const shakeAmp = runtime.shake * 0.06;
     const shakeTime = runtime.elapsed * 18;
-
-    const px = Math.cos(runtime.theta) * (ORBIT_RADIUS + runtime.hopPulse * 0.13);
-    const py = Math.sin(runtime.theta) * (ORBIT_RADIUS + runtime.hopPulse * 0.13);
 
     camTarget.set(
       px * 0.27 + shakeNoiseSigned(shakeTime, 2.1) * shakeAmp,
@@ -1349,15 +1544,47 @@ function KnotHop() {
       for (const p of runtime.particles) {
         if (!p.active) continue;
         const t = p.age / p.life;
+        const speed = Math.hypot(p.vx, p.vy, p.vz);
+        const easeIn = clamp(t / 0.16, 0, 1);
+        const easeOut = 1 - clamp((t - 0.58) / 0.42, 0, 1);
+        const fade = easeIn * easeOut;
 
         dummy.position.set(p.x, p.y, p.z);
-        dummy.rotation.set(p.age * 8.2, p.age * 7.5, p.age * 6.8);
-        const s = p.size * (1 - t * 0.78);
-        dummy.scale.setScalar(Math.max(0.0001, s));
+        if (p.kind === 'crash' && speed > 0.001) {
+          dummy.lookAt(p.x + p.vx, p.y + p.vy, p.z + p.vz);
+        } else {
+          dummy.rotation.set(p.age * 9.4, p.age * 8.2, p.age * 7.2);
+        }
+
+        const s =
+          p.size *
+          (0.3 + fade * 1.05) *
+          (p.kind === 'collect' ? 1.12 : p.kind === 'crash' ? 1.24 : 1);
+        const stretch =
+          p.kind === 'crash'
+            ? 1 + Math.min(2.4, speed * 0.24)
+            : p.kind === 'collect'
+              ? 1.38
+              : 1;
+        dummy.scale.set(
+          Math.max(0.0001, s * stretch),
+          Math.max(0.0001, s * (p.kind === 'collect' ? 0.86 : 1)),
+          Math.max(0.0001, s)
+        );
         dummy.updateMatrix();
 
         particleRef.current.setMatrixAt(idx, dummy.matrix);
-        colorScratch.setHex(p.color).lerp(whiteColor, t * 0.22);
+        colorScratch
+          .setHex(p.color)
+          .lerp(
+            whiteColor,
+            p.kind === 'collect'
+              ? 0.36 + (1 - fade) * 0.28
+              : p.kind === 'crash'
+                ? t * 0.26
+                : t * 0.22
+          )
+          .multiplyScalar(0.28 + fade * 1.02);
         particleRef.current.setColorAt(idx, colorScratch);
         idx += 1;
 
@@ -1600,7 +1827,14 @@ function KnotHop() {
 
       <instancedMesh ref={particleRef} args={[undefined, undefined, PARTICLE_POOL]}>
         <sphereGeometry args={[1, 7, 7]} />
-        <meshBasicMaterial vertexColors transparent opacity={0.8} toneMapped={false} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.94}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
       </instancedMesh>
 
       <group ref={playerGroupRef} position={[ORBIT_RADIUS, 0, PLAYER_Z]}>
