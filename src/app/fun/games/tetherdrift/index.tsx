@@ -123,6 +123,7 @@ type Runtime = {
   boostMix: number;
   shootCooldown: number;
   wallBounceCooldown: number;
+  blasterActiveTime: number;
 
   serial: number;
   clusterCursorZ: number;
@@ -150,13 +151,19 @@ const BREAK_SHARD_POOL = 220;
 
 const FIELD_HALF_X = ((LANE_COUNT - 1) * LANE_SPACING) / 2 + 0.95;
 const ROAD_HALF_WIDTH = FIELD_HALF_X + 0.85;
+const ROAD_LENGTH = 104;
+const ROAD_CENTER_Z = -22;
+const SIDE_WALL_HALF_W = 0.12;
+const SIDE_WALL_HEIGHT = 1.02;
 
 const CAR_Z = 0;
 const CAR_Y = 0.2;
 const CAR_HALF_W = 0.36;
+const CAR_HALF_D = 0.64;
 
 const BARRIER_HALF_W = 0.55;
 const BARRIER_DEPTH = 0.52;
+const BARRIER_HALF_D = 0.43;
 
 const BOOST_W = 0.9;
 const SHARD_W = 0.7;
@@ -165,16 +172,17 @@ const BLASTER_W = 0.8;
 const ANCHOR_Z = -2.35;
 const ANCHOR_Y = 0.42;
 
-const BASE_SPEED = 6.8;
-const MAX_SPEED = 13.4;
+const BASE_SPEED = 6.1;
+const MAX_SPEED = 11.8;
 const BOOST_WINDOW = 4.2;
 const SHOOT_COOLDOWN = 0.18;
 const MAX_AMMO = 10;
 const BLOCK_BASE_HP = 3;
 const BLOCK_COLOR_SCORE_STEP = 200;
 const FULL_BLOCK_MASK = (1 << LANE_COUNT) - 1;
-const WALL_BOUNCE_DAMPING = 0.62;
+const WALL_BOUNCE_DAMPING = 0.56;
 const WALL_BOUNCE_COOLDOWN = 0.12;
+const BLASTER_ACTIVE_WINDOW = 6.8;
 
 const PALETTES: DriftPalette[] = [
   {
@@ -572,6 +580,7 @@ const createRuntime = (): Runtime => ({
   boostMix: 0,
   shootCooldown: 0,
   wallBounceCooldown: 0,
+  blasterActiveTime: 0,
 
   serial: 0,
   clusterCursorZ: -9,
@@ -737,6 +746,19 @@ const spawnForcedBlasterWall = (runtime: Runtime) => {
   runtime.clusterCursorZ = Math.min(runtime.clusterCursorZ, targetZ - (4.4 + Math.random() * 1.4));
 };
 
+const relaxForcedWallsWhenBlasterInactive = (runtime: Runtime) => {
+  if (runtime.blasterActiveTime > 0) return;
+  for (const cluster of runtime.clusters) {
+    if (!cluster.forcedWall) continue;
+    if (cluster.mask !== FULL_BLOCK_MASK) continue;
+    const fallbackGap = nearestLaneIndex(runtime.carX);
+    cluster.gapLane = fallbackGap;
+    cluster.mask &= ~(1 << fallbackGap);
+    cluster.laneHp[fallbackGap] = 0;
+    cluster.forcedWall = false;
+  }
+};
+
 const resetRuntime = (runtime: Runtime) => {
   runtime.elapsed = 0;
   runtime.distance = 0;
@@ -767,6 +789,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.boostMix = 0;
   runtime.shootCooldown = 0;
   runtime.wallBounceCooldown = 0;
+  runtime.blasterActiveTime = 0;
 
   runtime.serial = 0;
   runtime.clusterCursorZ = -9;
@@ -807,6 +830,33 @@ const findLeadCluster = (runtime: Runtime): ObstacleCluster | null => {
   return lead;
 };
 
+const resolveClusterPass = (runtime: Runtime, cluster: ObstacleCluster) => {
+  runtime.clustersPassed += 1;
+  const gapX = laneX(cluster.gapLane);
+  const offset = Math.abs(runtime.carX - gapX);
+  const perfect = offset < 0.28;
+
+  if (perfect) {
+    runtime.combo = Math.min(runtime.combo + 1, 30);
+    runtime.comboTimer = 2.1;
+    runtime.perfects += 1;
+    runtime.score += 26 + runtime.combo * 7;
+    cluster.flash = 1;
+    runtime.shake = Math.min(1.2, runtime.shake + 0.2);
+    tetherDriftState.perfectFlash = 0.28;
+    if (runtime.combo >= 2) {
+      tetherDriftState.setToast(`DRIFT FLOW x${runtime.combo}`, 0.45);
+    }
+    playTone(960 + runtime.combo * 6, 0.05, 0.03);
+  } else {
+    runtime.combo = Math.max(0, runtime.combo - 1);
+    runtime.comboTimer = Math.max(runtime.comboTimer, 0.95);
+    runtime.score += 14 + Math.floor(runtime.speed * 0.9);
+    cluster.flash = 0.56;
+    playTone(640, 0.035, 0.02);
+  }
+};
+
 const syncHud = (runtime: Runtime, holding: boolean) => {
   const lanePressure = Math.abs(runtime.carX) / (FIELD_HALF_X - CAR_HALF_W);
   const stability = clamp(100 - lanePressure * 42 - runtime.tension * 48, 18, 100);
@@ -821,6 +871,7 @@ const syncHud = (runtime: Runtime, holding: boolean) => {
   tetherDriftState.speed = runtime.speed;
   tetherDriftState.reeling = holding;
   tetherDriftState.ammo = runtime.ammo;
+  tetherDriftState.blasterTime = runtime.blasterActiveTime;
   tetherDriftState.collectibles = runtime.collectibles;
   tetherDriftState.shotsFired = runtime.shotsFired;
   tetherDriftState.paletteName = PALETTES[runtime.paletteIndex]?.name ?? PALETTES[0].name;
@@ -843,6 +894,7 @@ const beginRun = (runtime: Runtime) => {
   tetherDriftState.speed = BASE_SPEED;
   tetherDriftState.reeling = false;
   tetherDriftState.ammo = runtime.ammo;
+  tetherDriftState.blasterTime = runtime.blasterActiveTime;
   tetherDriftState.collectibles = runtime.collectibles;
   tetherDriftState.shotsFired = runtime.shotsFired;
   tetherDriftState.paletteName = PALETTES[runtime.paletteIndex]?.name ?? PALETTES[0].name;
@@ -871,6 +923,7 @@ const endRun = (runtime: Runtime) => {
   tetherDriftState.speed = runtime.speed;
   tetherDriftState.chainTime = 0;
   tetherDriftState.ammo = runtime.ammo;
+  tetherDriftState.blasterTime = runtime.blasterActiveTime;
   tetherDriftState.collectibles = runtime.collectibles;
   tetherDriftState.shotsFired = runtime.shotsFired;
   tetherDriftState.paletteName = PALETTES[runtime.paletteIndex]?.name ?? PALETTES[0].name;
@@ -920,6 +973,11 @@ function TetherDriftOverlay() {
           <div>
             Blaster Ammo <span className="font-semibold text-cyan-100">{snap.ammo}</span>
           </div>
+          {snap.blasterTime > 0 ? (
+            <div>
+              Power <span className="font-semibold text-fuchsia-100">BLASTER {snap.blasterTime.toFixed(1)}s</span>
+            </div>
+          ) : null}
           <div>
             World <span className="font-semibold text-rose-100">{snap.paletteName}</span>
           </div>
@@ -941,7 +999,7 @@ function TetherDriftOverlay() {
             <div className="mt-2 text-sm text-white/85">A tethered drift car blasts through an endless corridor.</div>
             <div className="mt-1 text-sm text-white/85">Hold to reel your anchor and snap into line. Release to sling wide around blockers.</div>
             <div className="mt-1 text-sm text-white/85">Steer with A/D or ←/→. Collect crystals and power cells. Press F to shoot blockers away.</div>
-            <div className="mt-1 text-sm text-white/85">Blaster pickups trigger full-wall barrages, so carve an opening before impact.</div>
+            <div className="mt-1 text-sm text-white/85">Full-wall barrages appear only while BLASTER is active, so shoot your own opening before impact.</div>
             <div className="mt-1 text-sm text-white/85">Blocks cycle to a new color phase every 200 points and each run gets a fresh palette.</div>
             <div className="mt-3 text-sm text-cyan-100/95">Tap or press Space to start.</div>
           </div>
@@ -1046,6 +1104,7 @@ function TetherDriftScene() {
     resetRuntime(runtimeRef.current);
     tetherDriftState.paletteName = PALETTES[runtimeRef.current.paletteIndex]?.name ?? PALETTES[0].name;
     tetherDriftState.ammo = runtimeRef.current.ammo;
+    tetherDriftState.blasterTime = runtimeRef.current.blasterActiveTime;
     tetherDriftState.collectibles = runtimeRef.current.collectibles;
     tetherDriftState.shotsFired = runtimeRef.current.shotsFired;
     primeTrail(0);
@@ -1057,6 +1116,7 @@ function TetherDriftScene() {
     resetRuntime(runtimeRef.current);
     tetherDriftState.paletteName = PALETTES[runtimeRef.current.paletteIndex]?.name ?? PALETTES[0].name;
     tetherDriftState.ammo = runtimeRef.current.ammo;
+    tetherDriftState.blasterTime = runtimeRef.current.blasterActiveTime;
     tetherDriftState.collectibles = runtimeRef.current.collectibles;
     tetherDriftState.shotsFired = runtimeRef.current.shotsFired;
     primeTrail(0);
@@ -1138,6 +1198,8 @@ function TetherDriftScene() {
       runtime.boostMix = clamp(runtime.boostTime / BOOST_WINDOW, 0, 1);
       runtime.shootCooldown = Math.max(0, runtime.shootCooldown - dt);
       runtime.wallBounceCooldown = Math.max(0, runtime.wallBounceCooldown - dt);
+      runtime.blasterActiveTime = Math.max(0, runtime.blasterActiveTime - dt);
+      relaxForcedWallsWhenBlasterInactive(runtime);
       const boostScale = 1 + runtime.boostMix * 0.28;
       runtime.speed = baseSpeed * boostScale;
       runtime.hudCommit += dt;
@@ -1182,10 +1244,10 @@ function TetherDriftScene() {
       const dir = dx >= 0 ? 1 : -1;
       const stretch = Math.max(0, dist - runtime.tetherLen);
 
-      const springK = holding ? lerp(72, 112, d) : lerp(32, 56, d);
+      const springK = holding ? lerp(64, 96, d) : lerp(28, 48, d);
       const ropeForce = -dir * stretch * springK;
-      const assistForce = (runtime.anchorX - runtime.carX) * (holding ? 7.4 : 1.7);
-      const steerForce = steerInput * (holding ? 48 : 58) * (1 + runtime.boostMix * 0.16);
+      const assistForce = (runtime.anchorX - runtime.carX) * (holding ? 6.7 : 1.5);
+      const steerForce = steerInput * (holding ? 42 : 50) * (1 + runtime.boostMix * 0.14);
 
       runtime.carVx += (ropeForce + assistForce + steerForce) * dt;
       const drag = holding ? 5.6 : 2.8;
@@ -1204,7 +1266,7 @@ function TetherDriftScene() {
       runtime.carRoll = lerp(runtime.carRoll, rollTarget, 1 - Math.exp(-9.4 * dt));
 
       let crashed = false;
-      const wallLimit = FIELD_HALF_X - CAR_HALF_W * 0.72;
+      const wallLimit = ROAD_HALF_WIDTH - SIDE_WALL_HALF_W - CAR_HALF_W * 0.92;
       if (runtime.carX > wallLimit) {
         runtime.carX = wallLimit;
         if (runtime.carVx > 0) runtime.carVx = -Math.abs(runtime.carVx) * WALL_BOUNCE_DAMPING;
@@ -1300,51 +1362,37 @@ function TetherDriftScene() {
         }
       }
 
+      const carMinX = runtime.carX - CAR_HALF_W * 0.88;
+      const carMaxX = runtime.carX + CAR_HALF_W * 0.88;
+      const carMinZ = CAR_Z - CAR_HALF_D * 0.92;
+      const carMaxZ = CAR_Z + CAR_HALF_D * 0.92;
+      const blockHalfX = BARRIER_HALF_W * 0.92;
+      const blockHalfZ = BARRIER_HALF_D * 0.96;
+
       for (const cluster of runtime.clusters) {
         if (crashed) break;
+        if (cluster.resolved) continue;
 
-        if (!cluster.resolved && cluster.z > CAR_Z + BARRIER_DEPTH * 0.55) {
-          cluster.resolved = true;
-
-          let collision = false;
+        const blockMinZ = cluster.z - blockHalfZ;
+        const blockMaxZ = cluster.z + blockHalfZ;
+        const overlapsZ = blockMinZ <= carMaxZ && blockMaxZ >= carMinZ;
+        if (cluster.mask !== 0 && overlapsZ) {
           for (let lane = 0; lane < LANE_COUNT; lane += 1) {
             if ((cluster.mask & (1 << lane)) === 0) continue;
-            const bx = laneX(lane);
-            if (Math.abs(runtime.carX - bx) < BARRIER_HALF_W + CAR_HALF_W * 0.84) {
-              collision = true;
+            const laneCenterX = laneX(lane);
+            const blockMinX = laneCenterX - blockHalfX;
+            const blockMaxX = laneCenterX + blockHalfX;
+            if (blockMinX <= carMaxX && blockMaxX >= carMinX) {
+              crashed = true;
               break;
             }
           }
+          if (crashed) break;
+        }
 
-          if (collision) {
-            crashed = true;
-            break;
-          }
-
-          runtime.clustersPassed += 1;
-          const gapX = laneX(cluster.gapLane);
-          const offset = Math.abs(runtime.carX - gapX);
-          const perfect = offset < 0.28;
-
-          if (perfect) {
-            runtime.combo = Math.min(runtime.combo + 1, 30);
-            runtime.comboTimer = 2.1;
-            runtime.perfects += 1;
-            runtime.score += 26 + runtime.combo * 7;
-            cluster.flash = 1;
-            runtime.shake = Math.min(1.2, runtime.shake + 0.2);
-            tetherDriftState.perfectFlash = 0.28;
-            if (runtime.combo >= 2) {
-              tetherDriftState.setToast(`DRIFT FLOW x${runtime.combo}`, 0.45);
-            }
-            playTone(960 + runtime.combo * 6, 0.05, 0.03);
-          } else {
-            runtime.combo = Math.max(0, runtime.combo - 1);
-            runtime.comboTimer = Math.max(runtime.comboTimer, 0.95);
-            runtime.score += 14 + Math.floor(runtime.speed * 0.9);
-            cluster.flash = 0.56;
-            playTone(640, 0.035, 0.02);
-          }
+        if (blockMinZ > carMaxZ + 0.12) {
+          cluster.resolved = true;
+          resolveClusterPass(runtime, cluster);
         }
       }
 
@@ -1385,6 +1433,7 @@ function TetherDriftScene() {
             runtime.ammo = clamp(runtime.ammo + 4, 0, MAX_AMMO);
             runtime.score += 32 + runtime.combo * 2;
             runtime.boostTime = clamp(runtime.boostTime + 0.8, 0, BOOST_WINDOW);
+            runtime.blasterActiveTime = Math.max(runtime.blasterActiveTime, BLASTER_ACTIVE_WINDOW);
             runtime.shake = Math.min(1.28, runtime.shake + 0.11);
             spawnForcedBlasterWall(runtime);
             tetherDriftState.setToast('BLASTER ONLINE', 0.45);
@@ -1430,6 +1479,8 @@ function TetherDriftScene() {
       runtime.leadGapZ = -6;
       runtime.boostMix = Math.max(0, runtime.boostMix - dt * 0.8);
       runtime.shootCooldown = Math.max(0, runtime.shootCooldown - dt);
+      runtime.blasterActiveTime = Math.max(0, runtime.blasterActiveTime - dt * 0.7);
+      relaxForcedWallsWhenBlasterInactive(runtime);
     }
 
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
@@ -1533,9 +1584,9 @@ function TetherDriftScene() {
         for (let lane = 0; lane < LANE_COUNT; lane += 1) {
           if ((cluster.mask & (1 << lane)) !== 0) {
             const hpNorm = clamp(cluster.laneHp[lane] / BLOCK_BASE_HP, 0.14, 1);
-            dummy.position.set(laneX(lane), 0.36, cluster.z);
+            dummy.position.set(laneX(lane), 0.52, cluster.z);
             dummy.rotation.set(0, 0, 0);
-            dummy.scale.set(1.08, 0.66 + hpNorm * 0.5, 0.82);
+            dummy.scale.set(1.06, 1.04, 0.84);
             dummy.updateMatrix();
             barrierRef.current.setMatrixAt(index, dummy.matrix);
 
@@ -1557,7 +1608,9 @@ function TetherDriftScene() {
           index += 1;
         }
 
-        if (cluster.forcedWall && cluster.mask === FULL_BLOCK_MASK) {
+        const blasterWallVisible =
+          runtime.blasterActiveTime > 0 && cluster.forcedWall && cluster.mask === FULL_BLOCK_MASK;
+        if (blasterWallVisible) {
           dummy.position.copy(OFFSCREEN_POS);
           dummy.scale.copy(TINY_SCALE);
           dummy.rotation.set(0, 0, 0);
@@ -1805,8 +1858,8 @@ function TetherDriftScene() {
         />
       </mesh>
 
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -12]}>
-        <planeGeometry args={[ROAD_HALF_WIDTH * 2, 60]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, ROAD_CENTER_Z]}>
+        <planeGeometry args={[ROAD_HALF_WIDTH * 2, ROAD_LENGTH]} />
         <shaderMaterial
           ref={roadMatRef}
           uniforms={{
@@ -1848,8 +1901,8 @@ function TetherDriftScene() {
         />
       </mesh>
 
-      <mesh position={[-ROAD_HALF_WIDTH, 0.24, -12]}>
-        <boxGeometry args={[0.18, 0.5, 60]} />
+      <mesh position={[-(ROAD_HALF_WIDTH - SIDE_WALL_HALF_W), SIDE_WALL_HEIGHT * 0.5, ROAD_CENTER_Z]}>
+        <boxGeometry args={[SIDE_WALL_HALF_W * 2, SIDE_WALL_HEIGHT, ROAD_LENGTH]} />
         <meshStandardMaterial
           ref={leftRailMatRef}
           color={PALETTES[0].railA}
@@ -1858,8 +1911,8 @@ function TetherDriftScene() {
           roughness={0.25}
         />
       </mesh>
-      <mesh position={[ROAD_HALF_WIDTH, 0.24, -12]}>
-        <boxGeometry args={[0.18, 0.5, 60]} />
+      <mesh position={[ROAD_HALF_WIDTH - SIDE_WALL_HALF_W, SIDE_WALL_HEIGHT * 0.5, ROAD_CENTER_Z]}>
+        <boxGeometry args={[SIDE_WALL_HALF_W * 2, SIDE_WALL_HEIGHT, ROAD_LENGTH]} />
         <meshStandardMaterial
           ref={rightRailMatRef}
           color={PALETTES[0].railB}

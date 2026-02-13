@@ -22,6 +22,7 @@ export const tetherDriftState = proxy({
   ammo: 0,
   collectibles: 0,
   shotsFired: 0,
+  blasterTime: 0,
   paletteName: 'Peach Teal',
 
   // Momentary feedback
@@ -48,6 +49,7 @@ export const tetherDriftState = proxy({
     this.ammo = 0;
     this.collectibles = 0;
     this.shotsFired = 0;
+    this.blasterTime = 0;
     this.paletteName = 'Peach Teal';
     this.perfectFlash = 0;
     this.perfects = 0;
