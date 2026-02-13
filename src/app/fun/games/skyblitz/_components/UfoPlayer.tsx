@@ -2,12 +2,18 @@ import { useFrame, useThree } from '@react-three/fiber';
 import React, { useRef } from 'react';
 import * as THREE from 'three';
 import UfoShip from '../../models/UFOGames';
-import { MAX_FRAME_DELTA, PLAYER_SPEED } from '../constants';
+import {
+  MAX_FRAME_DELTA,
+  PLAYER_SPEED,
+  UFO_LATERAL_DAMPING,
+  UFO_LATERAL_STIFFNESS,
+} from '../constants';
 import { skyBlitzState } from '../state';
 
 const UfoPlayer: React.FC<{
   playerRef: React.MutableRefObject<THREE.Group | null>;
-}> = ({ playerRef }) => {
+  forwardSpeedRef: React.MutableRefObject<number>;
+}> = ({ playerRef, forwardSpeedRef }) => {
   const { camera } = useThree();
 
   const velocity = useRef(new THREE.Vector3());
@@ -28,16 +34,17 @@ const UfoPlayer: React.FC<{
 
     const targetX = state.pointer.x * 7.25;
     const targetY = THREE.MathUtils.clamp(state.pointer.y * 4.25, 0, 5.25);
-    const targetZ = player.position.z - PLAYER_SPEED * dt;
+    const forwardSpeed = forwardSpeedRef.current || PLAYER_SPEED;
+    const targetZ = player.position.z - forwardSpeed * dt;
     targetPosition.current.set(targetX, targetY, targetZ);
 
-    // Organic flight: critically-damped spring towards the pointer target (XY),
-    // plus constant forward motion (Z).
-    const stiffness = 55;
-    const damping = 14;
-
-    const ax = (targetX - player.position.x) * stiffness - velocity.current.x * damping;
-    const ay = (targetY - player.position.y) * stiffness - velocity.current.y * damping;
+    // Smooth critically damped steering for premium feel.
+    const ax =
+      (targetX - player.position.x) * UFO_LATERAL_STIFFNESS -
+      velocity.current.x * UFO_LATERAL_DAMPING;
+    const ay =
+      (targetY - player.position.y) * UFO_LATERAL_STIFFNESS -
+      velocity.current.y * UFO_LATERAL_DAMPING;
     velocity.current.x += ax * dt;
     velocity.current.y += ay * dt;
     player.position.x += velocity.current.x * dt;
@@ -71,10 +78,11 @@ const UfoPlayer: React.FC<{
 
     tmpCameraPos.current.copy(player.position).add(cameraOffset.current);
     tmpCameraPos.current.y -= 2;
-    const camAlpha = 1 - Math.exp(-dt * 6);
+    const camAlpha = 1 - Math.exp(-dt * 7.5);
     camera.position.lerp(tmpCameraPos.current, camAlpha);
 
     tmpCameraTarget.current.copy(player.position);
+    tmpCameraTarget.current.z -= 2.8;
     camera.lookAt(tmpCameraTarget.current);
   });
 

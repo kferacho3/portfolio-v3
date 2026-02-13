@@ -44,4 +44,11 @@ export interface ObstacleData {
   id: number;
   position: [number, number, number];
   active: boolean;
+  width?: number;
+  height?: number;
+  depth?: number;
+  wobbleAmp?: number;
+  wobbleSpeed?: number;
+  wobblePhase?: number;
+  spin?: number;
 }

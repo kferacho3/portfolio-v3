@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { RUNNER_JUMP_VELOCITY } from '../constants';
 import { skyBlitzState } from '../state';
 import type { SkyBlitzPhase } from '../types';
 
@@ -17,17 +18,28 @@ export const useRunnerControls = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (
         event.code === 'Space' &&
+        !event.repeat &&
         !isJumpingRef.current &&
         phase === 'playing'
       ) {
-        velocityRef.current = 7;
+        velocityRef.current = RUNNER_JUMP_VELOCITY;
         isJumpingRef.current = true;
       }
       if (event.key.toLowerCase() === 'r' && phase === 'gameover') {
         skyBlitzState.reset();
       }
     };
+    const handlePointerDown = () => {
+      if (!isJumpingRef.current && phase === 'playing') {
+        velocityRef.current = RUNNER_JUMP_VELOCITY;
+        isJumpingRef.current = true;
+      }
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pointerdown', handlePointerDown);
+    };
   }, [phase, isJumpingRef, velocityRef]);
 };

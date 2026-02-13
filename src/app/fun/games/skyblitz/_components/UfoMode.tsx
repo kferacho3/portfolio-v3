@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
+  ALIEN_MODEL_YAW_OFFSET,
+  ALIEN_TRACKING_STRENGTH,
   ALIEN_COLLISION_RADIUS,
   DEATH_ANIM_DURATION,
   MAX_FRAME_DELTA,
@@ -18,6 +20,10 @@ import {
   PROJECTILE_SPEED,
   PROJECTILE_SPAWN_OFFSET,
   PROJECTILE_TTL,
+  UFO_AIM_DISTANCE,
+  UFO_BASE_FORWARD_SPEED,
+  UFO_FORWARD_ACCEL,
+  UFO_MAX_FORWARD_SPEED,
   WAVE_KILL_TARGET,
 } from '../constants';
 import { useUfoControls } from '../hooks/useUfoControls';
@@ -50,6 +56,7 @@ const UfoMode: React.FC = () => {
   const scoreAccumulator = useRef(0);
   const killsThisWave = useRef(0);
   const lastScoreSync = useRef(0);
+  const forwardSpeedRef = useRef(UFO_BASE_FORWARD_SPEED);
 
   const aimRaycaster = useRef(new THREE.Raycaster());
   const tmpDir = useRef(new THREE.Vector3());
@@ -59,10 +66,10 @@ const UfoMode: React.FC = () => {
   const tmpAB = useRef(new THREE.Vector3());
   const tmpAP = useRef(new THREE.Vector3());
   const tmpClosest = useRef(new THREE.Vector3());
+  const tmpLookTarget = useRef(new THREE.Vector3());
 
-  const SPAWN_AHEAD = 60;
-  const DESPAWN_BEHIND = 28;
-  const AIM_DISTANCE = 220;
+  const SPAWN_AHEAD = 74;
+  const DESPAWN_BEHIND = 36;
 
   const respawnAlien = useCallback((alien: AlienData, z: number) => {
     const pos = generateRandomPosition(z);
@@ -147,7 +154,7 @@ const UfoMode: React.FC = () => {
       tmpDir.current.copy(aimRaycaster.current.ray.direction).normalize();
       tmpTarget.current
         .copy(aimRaycaster.current.ray.origin)
-        .addScaledVector(tmpDir.current, AIM_DISTANCE);
+        .addScaledVector(tmpDir.current, UFO_AIM_DISTANCE);
 
       tmpPos.current.copy(playerRef.current.position);
       tmpPos.current.y += 0.25;
@@ -189,7 +196,20 @@ const UfoMode: React.FC = () => {
     const now = performance.now();
 
     if (skyBlitzState.phase === 'playing') {
-      scoreAccumulator.current += dt * 10;
+      const targetForward = THREE.MathUtils.clamp(
+        UFO_BASE_FORWARD_SPEED +
+          skyBlitzState.wave * 0.95 +
+          scoreAccumulator.current * 0.0013,
+        UFO_BASE_FORWARD_SPEED,
+        UFO_MAX_FORWARD_SPEED
+      );
+      forwardSpeedRef.current = THREE.MathUtils.lerp(
+        forwardSpeedRef.current,
+        targetForward,
+        Math.min(1, dt * UFO_FORWARD_ACCEL)
+      );
+      scoreAccumulator.current +=
+        dt * (4 + forwardSpeedRef.current * 0.34 + skyBlitzState.wave * 0.4);
     }
 
     if (skyBlitzState.phase !== 'playing') return;
@@ -261,7 +281,10 @@ const UfoMode: React.FC = () => {
     }
 
     const t = now * 0.001;
-    const approachSpeed = Math.min(14, 6 + skyBlitzState.wave * 0.55);
+    const approachSpeed = Math.min(
+      22,
+      3.5 + forwardSpeedRef.current * 0.56 + skyBlitzState.wave * 0.34
+    );
     const chase = Math.min(1, dt * (0.55 + skyBlitzState.wave * 0.03));
 
     for (let i = 0; i < aliensRef.current.length; i++) {
@@ -284,8 +307,16 @@ const UfoMode: React.FC = () => {
         // Aliens drift organically while "coming at" the player.
         alien.position.z += approachSpeed * dt;
 
-        alien.baseX = THREE.MathUtils.lerp(alien.baseX, playerPos.x, chase * 0.22);
-        alien.baseY = THREE.MathUtils.lerp(alien.baseY, playerPos.y, chase * 0.18);
+        alien.baseX = THREE.MathUtils.lerp(
+          alien.baseX,
+          playerPos.x,
+          chase * ALIEN_TRACKING_STRENGTH
+        );
+        alien.baseY = THREE.MathUtils.lerp(
+          alien.baseY,
+          playerPos.y,
+          chase * (ALIEN_TRACKING_STRENGTH * 0.78)
+        );
         alien.baseX = THREE.MathUtils.clamp(alien.baseX, -7.2, 7.2);
         alien.baseY = THREE.MathUtils.clamp(alien.baseY, 0, 5.6);
 
@@ -323,6 +354,11 @@ const UfoMode: React.FC = () => {
         mesh.visible = alien.scale > 0.01;
         mesh.position.copy(alien.position);
         mesh.scale.setScalar(alien.scale);
+        if (alien.alive) {
+          tmpLookTarget.current.set(playerPos.x, alien.position.y, playerPos.z);
+          mesh.lookAt(tmpLookTarget.current);
+          mesh.rotateY(ALIEN_MODEL_YAW_OFFSET);
+        }
       }
     }
 
@@ -378,7 +414,7 @@ const UfoMode: React.FC = () => {
       />
 
       <UfoGround />
-      <UfoPlayer playerRef={playerRef} />
+      <UfoPlayer playerRef={playerRef} forwardSpeedRef={forwardSpeedRef} />
 
       {initialized &&
         aliensRef.current.map((alien) => (
