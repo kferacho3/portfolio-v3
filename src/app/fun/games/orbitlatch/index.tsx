@@ -1146,7 +1146,6 @@ function OrbitLatchScene() {
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -1158,6 +1157,7 @@ function OrbitLatchScene() {
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
+      input.justPressed.has('spacebar') ||
       input.justPressed.has('enter');
 
     if (tap) {
@@ -1224,6 +1224,8 @@ function OrbitLatchScene() {
       } else {
         let bestPlanet: Planet | null = null;
         let bestDelta = Infinity;
+        let fallbackPlanet: Planet | null = null;
+        let fallbackDelta = Infinity;
         const dNorm = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
         const speed = Math.hypot(runtime.velX, runtime.velY);
         const speedAssist = clamp(speed * 0.08, 0, runtime.mode === 'scattered' ? 0.22 : 0.16);
@@ -1243,9 +1245,6 @@ function OrbitLatchScene() {
         );
 
         for (const planet of runtime.planets) {
-          if (runtime.latches === 0 && runtime.releaseCount <= 1 && planet.slot === runtime.latchedPlanet) {
-            continue;
-          }
           const dx = runtime.playerX - planet.x;
           const dy = runtime.playerY - planet.y;
           const dist = Math.hypot(dx, dy);
@@ -1262,9 +1261,19 @@ function OrbitLatchScene() {
             Math.abs(dist - planet.orbitRadius),
             Math.abs(predictDist - planet.orbitRadius)
           );
+          if (deltaRing < fallbackDelta) {
+            fallbackDelta = deltaRing;
+            fallbackPlanet = planet;
+          }
           if (deltaRing <= latchDistance && deltaRing < bestDelta) {
             bestDelta = deltaRing;
             bestPlanet = planet;
+          }
+        }
+        if (!bestPlanet && fallbackPlanet) {
+          const fallbackSlack = runtime.latches === 0 ? 0.22 : 0.14;
+          if (fallbackDelta <= latchDistance + fallbackSlack) {
+            bestPlanet = fallbackPlanet;
           }
         }
 
@@ -1755,12 +1764,12 @@ function OrbitLatchScene() {
         />
       </mesh>
 
-      <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]}>
+      <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
         <meshStandardMaterial vertexColors roughness={0.26} metalness={0.32} />
       </instancedMesh>
 
-      <instancedMesh ref={ringRef} args={[undefined, undefined, PLANET_POOL]}>
+      <instancedMesh ref={ringRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <torusGeometry args={[1, 0.032, 12, 96]} />
         <meshBasicMaterial
           vertexColors
@@ -1773,7 +1782,7 @@ function OrbitLatchScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={starRef} args={[undefined, undefined, STAR_POOL]}>
+      <instancedMesh ref={starRef} args={[undefined, undefined, STAR_POOL]} frustumCulled={false}>
         <octahedronGeometry args={[1, 0]} />
         <meshBasicMaterial
           vertexColors
@@ -1785,7 +1794,7 @@ function OrbitLatchScene() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={hazardRef} args={[undefined, undefined, HAZARD_POOL]}>
+      <instancedMesh ref={hazardRef} args={[undefined, undefined, HAZARD_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial vertexColors roughness={0.2} metalness={0.56} />
       </instancedMesh>
@@ -1815,7 +1824,7 @@ function OrbitLatchScene() {
         />
       </mesh>
 
-      <instancedMesh ref={shardRef} args={[undefined, undefined, SHARD_POOL]}>
+      <instancedMesh ref={shardRef} args={[undefined, undefined, SHARD_POOL]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
           vertexColors
