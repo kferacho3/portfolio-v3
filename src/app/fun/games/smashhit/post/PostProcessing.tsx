@@ -4,6 +4,8 @@ import React from 'react';
 import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
+const ZERO_OFFSET = new THREE.Vector2(0, 0);
+
 type PostProcessingProps = {
   enabled: boolean;
   bloomEnabled: boolean;
@@ -41,15 +43,16 @@ const PostProcessing: React.FC<PostProcessingProps> = ({
         radius={0.65}
         kernelSize={qualityTier === 'high' ? 4 : 3}
       />
-      {chromaticEnabled && (
-        <ChromaticAberration
-          offset={chromaticOffset}
-          radialModulation
-          modulationOffset={0.15}
-        />
-      )}
-      {noiseEnabled && <Noise opacity={0.07} />}
-      {vignetteEnabled && <Vignette darkness={0.42} offset={0.22} />}
+      <ChromaticAberration
+        offset={chromaticEnabled ? chromaticOffset : ZERO_OFFSET}
+        radialModulation
+        modulationOffset={0.15}
+      />
+      <Noise opacity={noiseEnabled ? 0.07 : 0} />
+      <Vignette
+        darkness={vignetteEnabled ? 0.42 : 0}
+        offset={vignetteEnabled ? 0.22 : 0}
+      />
     </EffectComposer>
   );
 };
