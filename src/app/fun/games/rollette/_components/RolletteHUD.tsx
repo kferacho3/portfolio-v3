@@ -6,7 +6,7 @@ import { CHAIN_WINDOW_S, DASH_COOLDOWN_S, ZONE_MULTIPLIER } from '../constants';
 export interface RolletteHUDProps {
   score: number;
   highScore: number;
-  debt: number;
+  bonusBank?: number;
   health: number;
   maxHealth: number;
   gameOver: boolean;
@@ -35,7 +35,7 @@ const healthColor = (pct: number) => {
 export const RolletteHUD: React.FC<RolletteHUDProps> = ({
   score,
   highScore,
-  debt,
+  bonusBank = 0,
   health,
   maxHealth,
   gameOver,
@@ -109,10 +109,10 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
           <div className="mt-3 grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
               <div className="text-[10px] uppercase tracking-[0.3em] text-white/40">
-                Penalty
+                Bonus Bank
               </div>
               <div className="font-mono text-lg">
-                {Math.floor(debt).toLocaleString()}
+                {Math.floor(bonusBank).toLocaleString()}
               </div>
             </div>
 
@@ -178,9 +178,9 @@ export const RolletteHUD: React.FC<RolletteHUDProps> = ({
         </div>
 
         <div className="text-white/50 text-xs pointer-events-auto">
-          <div>WASD/Arrows: steer ball • T: mouse/keyboard mode</div>
-          <div>Space: nudge (tilt if spammed) • 1/2/3: swap arena theme</div>
-          <div>R: restart • P: pause</div>
+          <div>WASD/Arrows: legacy velocity control • T: mouse/keyboard mode</div>
+          <div>Mouse mode uses direct force steering (legacy Rollette feel)</div>
+          <div>Space: nudge (tilt if spammed) • 1/2/3: swap arena theme • R: restart • P: pause</div>
         </div>
       </div>
 

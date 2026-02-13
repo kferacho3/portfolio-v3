@@ -17,7 +17,7 @@ export const HudLayer: React.FC<{ paused?: boolean }> = ({ paused }) => {
     <RolletteHUD
       score={snap.score}
       highScore={snap.highScore}
-      debt={snap.debt}
+      bonusBank={snap.bonusBank}
       health={snap.health}
       maxHealth={snap.maxHealth}
       gameOver={snap.gameOver}

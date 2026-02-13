@@ -24,6 +24,7 @@ export const rolletteState = proxy({
   gameOver: false,
 
   debt: 0,
+  bonusBank: 0,
 
   health: 100,
   maxHealth: 100,
@@ -62,6 +63,7 @@ export const rolletteState = proxy({
   reset: () => {
     rolletteState.score = 0;
     rolletteState.debt = 0;
+    rolletteState.bonusBank = 0;
     rolletteState.health = rolletteState.maxHealth;
     rolletteState.gameOver = false;
     rolletteState.combo = 0;
@@ -113,6 +115,11 @@ export const rolletteState = proxy({
   addDebt: (amount: number) => {
     if (!Number.isFinite(amount) || amount <= 0) return;
     rolletteState.debt += Math.floor(amount);
+  },
+
+  setBonusBank: (amount: number) => {
+    if (!Number.isFinite(amount)) return;
+    rolletteState.bonusBank = Math.max(0, Math.floor(amount));
   },
 
   takeDamage: (amount: number) => {
