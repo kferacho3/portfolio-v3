@@ -24,6 +24,8 @@ type ObstacleCluster = {
   flash: number;
   pulse: number;
   hue: number;
+  forcedWall: boolean;
+  laneHp: number[];
 };
 
 type PickupKind = 'boost' | 'shard' | 'blaster';
@@ -120,6 +122,7 @@ type Runtime = {
   boostTime: number;
   boostMix: number;
   shootCooldown: number;
+  wallBounceCooldown: number;
 
   serial: number;
   clusterCursorZ: number;
@@ -162,11 +165,16 @@ const BLASTER_W = 0.8;
 const ANCHOR_Z = -2.35;
 const ANCHOR_Y = 0.42;
 
-const BASE_SPEED = 9;
-const MAX_SPEED = 18.4;
+const BASE_SPEED = 6.8;
+const MAX_SPEED = 13.4;
 const BOOST_WINDOW = 4.2;
-const SHOOT_COOLDOWN = 0.22;
-const MAX_AMMO = 7;
+const SHOOT_COOLDOWN = 0.18;
+const MAX_AMMO = 10;
+const BLOCK_BASE_HP = 3;
+const BLOCK_COLOR_SCORE_STEP = 200;
+const FULL_BLOCK_MASK = (1 << LANE_COUNT) - 1;
+const WALL_BOUNCE_DAMPING = 0.62;
+const WALL_BOUNCE_COOLDOWN = 0.12;
 
 const PALETTES: DriftPalette[] = [
   {
@@ -407,6 +415,8 @@ const createCluster = (): ObstacleCluster => ({
   flash: 0,
   pulse: 0,
   hue: 0,
+  forcedWall: false,
+  laneHp: Array.from({ length: LANE_COUNT }, () => 0),
 });
 
 const createPickupPad = (): PickupPad => ({
@@ -465,6 +475,7 @@ const createRuntime = (): Runtime => ({
   boostTime: 0,
   boostMix: 0,
   shootCooldown: 0,
+  wallBounceCooldown: 0,
 
   serial: 0,
   clusterCursorZ: -9,
@@ -484,6 +495,15 @@ const createRuntime = (): Runtime => ({
 
 const difficultyAt = (runtime: Runtime) =>
   clamp(runtime.distance / 280 + runtime.clustersPassed / 160, 0, 1);
+
+const applyClusterMask = (cluster: ObstacleCluster, mask: number, laneHp = BLOCK_BASE_HP) => {
+  cluster.mask = 0;
+  for (let lane = 0; lane < LANE_COUNT; lane += 1) {
+    const blocked = (mask & (1 << lane)) !== 0;
+    cluster.laneHp[lane] = blocked ? laneHp : 0;
+    if (blocked) cluster.mask |= 1 << lane;
+  }
+};
 
 const pickGapLane = (runtime: Runtime) => {
   const prevGap = runtime.serial > 0 ? runtime.clusters[(runtime.serial - 1) % CLUSTER_POOL].gapLane : 2;
@@ -527,12 +547,13 @@ const seedCluster = (cluster: ObstacleCluster, runtime: Runtime, z: number) => {
   }
 
   cluster.z = z;
-  cluster.mask = mask;
+  applyClusterMask(cluster, mask);
   cluster.gapLane = gapLane;
   cluster.resolved = false;
   cluster.flash = 0;
   cluster.pulse = Math.random() * Math.PI * 2;
   cluster.hue = Math.random();
+  cluster.forcedWall = false;
 };
 
 const seedPickup = (boost: PickupPad, runtime: Runtime, z: number) => {
@@ -596,6 +617,30 @@ const spawnShatterBurst = (
   }
 };
 
+const spawnForcedBlasterWall = (runtime: Runtime) => {
+  let target: ObstacleCluster | null = null;
+  let farthestZ = Infinity;
+  for (const cluster of runtime.clusters) {
+    if (cluster.z < farthestZ) {
+      farthestZ = cluster.z;
+      target = cluster;
+    }
+  }
+  if (!target) return;
+
+  const targetZ = clamp(runtime.leadGapZ - 7.2, -16.8, -10.2);
+  target.z = targetZ;
+  target.gapLane = nearestLaneIndex(runtime.carX);
+  target.resolved = false;
+  target.flash = 0.34;
+  target.pulse = Math.random() * Math.PI * 2;
+  target.hue = Math.random();
+  target.forcedWall = true;
+  applyClusterMask(target, FULL_BLOCK_MASK, BLOCK_BASE_HP);
+
+  runtime.clusterCursorZ = Math.min(runtime.clusterCursorZ, targetZ - (4.4 + Math.random() * 1.4));
+};
+
 const resetRuntime = (runtime: Runtime) => {
   runtime.elapsed = 0;
   runtime.distance = 0;
@@ -625,6 +670,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.boostTime = 0;
   runtime.boostMix = 0;
   runtime.shootCooldown = 0;
+  runtime.wallBounceCooldown = 0;
 
   runtime.serial = 0;
   runtime.clusterCursorZ = -9;
@@ -993,7 +1039,8 @@ function TetherDriftScene() {
       runtime.boostTime = Math.max(0, runtime.boostTime - dt);
       runtime.boostMix = clamp(runtime.boostTime / BOOST_WINDOW, 0, 1);
       runtime.shootCooldown = Math.max(0, runtime.shootCooldown - dt);
-      const boostScale = 1 + runtime.boostMix * 0.46;
+      runtime.wallBounceCooldown = Math.max(0, runtime.wallBounceCooldown - dt);
+      const boostScale = 1 + runtime.boostMix * 0.28;
       runtime.speed = baseSpeed * boostScale;
       runtime.hudCommit += dt;
 
@@ -1024,8 +1071,8 @@ function TetherDriftScene() {
         Math.sin(runtime.elapsed * 1.3) * 0.2;
       const targetX = clamp(runtime.leadGapX * 0.86 + wave, -FIELD_HALF_X * 0.9, FIELD_HALF_X * 0.9);
 
-      runtime.anchorVel += (targetX - runtime.anchorX) * (8 + d * 4.2) * dt;
-      runtime.anchorVel *= Math.exp(-(4.9 + d * 1.6) * dt);
+      runtime.anchorVel += (targetX - runtime.anchorX) * (6.2 + d * 3.2) * dt;
+      runtime.anchorVel *= Math.exp(-(4.2 + d * 1.2) * dt);
       runtime.anchorX += runtime.anchorVel * dt;
 
       runtime.tetherTargetLen = holding ? lerp(0.58, 0.44, d) : lerp(2.4, 3.1, d * 0.8);
@@ -1037,13 +1084,13 @@ function TetherDriftScene() {
       const dir = dx >= 0 ? 1 : -1;
       const stretch = Math.max(0, dist - runtime.tetherLen);
 
-      const springK = holding ? lerp(96, 146, d) : lerp(46, 78, d);
+      const springK = holding ? lerp(72, 112, d) : lerp(32, 56, d);
       const ropeForce = -dir * stretch * springK;
-      const assistForce = (runtime.anchorX - runtime.carX) * (holding ? 10 : 2.1);
-      const steerForce = steerInput * (holding ? 64 : 78) * (1 + runtime.boostMix * 0.24);
+      const assistForce = (runtime.anchorX - runtime.carX) * (holding ? 7.4 : 1.7);
+      const steerForce = steerInput * (holding ? 48 : 58) * (1 + runtime.boostMix * 0.16);
 
       runtime.carVx += (ropeForce + assistForce + steerForce) * dt;
-      const drag = holding ? 4.2 : 1.9;
+      const drag = holding ? 5.6 : 2.8;
       runtime.carVx *= Math.exp(-drag * dt);
       runtime.carX += runtime.carVx * dt;
 
@@ -1059,9 +1106,29 @@ function TetherDriftScene() {
       runtime.carRoll = lerp(runtime.carRoll, rollTarget, 1 - Math.exp(-9.4 * dt));
 
       let crashed = false;
-
-      if (Math.abs(runtime.carX) > FIELD_HALF_X - CAR_HALF_W * 0.72) {
-        crashed = true;
+      const wallLimit = FIELD_HALF_X - CAR_HALF_W * 0.72;
+      if (runtime.carX > wallLimit) {
+        runtime.carX = wallLimit;
+        if (runtime.carVx > 0) runtime.carVx = -Math.abs(runtime.carVx) * WALL_BOUNCE_DAMPING;
+        runtime.carYaw = Math.max(runtime.carYaw, 0.08);
+        runtime.carRoll = Math.max(runtime.carRoll, 0.14);
+        runtime.shake = Math.min(1.2, runtime.shake + 0.22);
+        if (runtime.wallBounceCooldown <= 0) {
+          runtime.wallBounceCooldown = WALL_BOUNCE_COOLDOWN;
+          playTone(300, 0.04, 0.028);
+          maybeVibrate(5);
+        }
+      } else if (runtime.carX < -wallLimit) {
+        runtime.carX = -wallLimit;
+        if (runtime.carVx < 0) runtime.carVx = Math.abs(runtime.carVx) * WALL_BOUNCE_DAMPING;
+        runtime.carYaw = Math.min(runtime.carYaw, -0.08);
+        runtime.carRoll = Math.min(runtime.carRoll, -0.14);
+        runtime.shake = Math.min(1.2, runtime.shake + 0.22);
+        if (runtime.wallBounceCooldown <= 0) {
+          runtime.wallBounceCooldown = WALL_BOUNCE_COOLDOWN;
+          playTone(300, 0.04, 0.028);
+          maybeVibrate(5);
+        }
       }
 
       if (shootPressed && runtime.shootCooldown <= 0) {
@@ -1096,19 +1163,35 @@ function TetherDriftScene() {
             }
 
             if (laneToBlast >= 0) {
-              targetCluster.mask &= ~(1 << laneToBlast);
-              if (targetCluster.mask === 0) {
+              const laneBit = 1 << laneToBlast;
+              const previousHp = Math.max(1, targetCluster.laneHp[laneToBlast] || BLOCK_BASE_HP);
+              const nextHp = Math.max(0, previousHp - 1);
+              targetCluster.laneHp[laneToBlast] = nextHp;
+              if (nextHp <= 0) {
+                targetCluster.mask &= ~laneBit;
                 targetCluster.gapLane = laneToBlast;
+                if (targetCluster.mask === 0) targetCluster.forcedWall = false;
               }
               targetCluster.flash = 1;
               runtime.ammo = Math.max(0, runtime.ammo - 1);
               runtime.shotsFired += 1;
               runtime.shootCooldown = SHOOT_COOLDOWN;
-              runtime.score += 12 + runtime.combo * 2;
+              runtime.score += nextHp > 0 ? 9 + runtime.combo : 16 + runtime.combo * 2;
               runtime.shake = Math.min(1.4, runtime.shake + 0.12);
-              spawnShatterBurst(runtime, laneX(laneToBlast), targetCluster.z, targetCluster.hue, 1.25);
-              tetherDriftState.setToast('BLAST', 0.3);
-              playTone(1320, 0.04, 0.034);
+              spawnShatterBurst(
+                runtime,
+                laneX(laneToBlast),
+                targetCluster.z,
+                targetCluster.hue,
+                nextHp > 0 ? 0.95 : 1.45
+              );
+              if (nextHp > 0) {
+                tetherDriftState.setToast(`BLOCK ${nextHp}/${BLOCK_BASE_HP}`, 0.26);
+                playTone(1020, 0.035, 0.028);
+              } else {
+                tetherDriftState.setToast('BLOCK SHATTERED', 0.3);
+                playTone(1320, 0.04, 0.034);
+              }
             }
           } else {
             tetherDriftState.setToast('NO TARGET', 0.22);
@@ -1201,11 +1284,12 @@ function TetherDriftScene() {
             spawnShatterBurst(runtime, boost.x, boost.z, 0.1 + boost.hue * 0.2, 0.78);
             playTone(870, 0.04, 0.028);
           } else {
-            runtime.ammo = clamp(runtime.ammo + 2, 0, MAX_AMMO);
-            runtime.score += 28 + runtime.combo * 2;
+            runtime.ammo = clamp(runtime.ammo + 4, 0, MAX_AMMO);
+            runtime.score += 32 + runtime.combo * 2;
             runtime.boostTime = clamp(runtime.boostTime + 0.8, 0, BOOST_WINDOW);
             runtime.shake = Math.min(1.28, runtime.shake + 0.11);
-            tetherDriftState.setToast('BLASTER +2', 0.45);
+            spawnForcedBlasterWall(runtime);
+            tetherDriftState.setToast('BLASTER ONLINE', 0.45);
             spawnShatterBurst(runtime, boost.x, boost.z, 0.68 + boost.hue * 0.1, 1);
             playTone(1040, 0.06, 0.03);
             maybeVibrate(8);
@@ -1340,6 +1424,9 @@ function TetherDriftScene() {
 
     if (barrierRef.current && gapMarkerRef.current) {
       let index = 0;
+      const scoreBand = Math.floor(Math.max(0, runtime.score) / BLOCK_COLOR_SCORE_STEP);
+      const hueBandShift = (scoreBand % 7) * 0.09;
+      const satBandBoost = (scoreBand % 3) * 0.03;
 
       for (let i = 0; i < runtime.clusters.length; i += 1) {
         const cluster = runtime.clusters[i];
@@ -1347,16 +1434,18 @@ function TetherDriftScene() {
 
         for (let lane = 0; lane < LANE_COUNT; lane += 1) {
           if ((cluster.mask & (1 << lane)) !== 0) {
+            const hpNorm = clamp(cluster.laneHp[lane] / BLOCK_BASE_HP, 0.14, 1);
             dummy.position.set(laneX(lane), 0.36, cluster.z);
             dummy.rotation.set(0, 0, 0);
-            dummy.scale.set(1.08, 1.06, 0.82);
+            dummy.scale.set(1.08, 0.66 + hpNorm * 0.5, 0.82);
             dummy.updateMatrix();
             barrierRef.current.setMatrixAt(index, dummy.matrix);
 
             const barrierColor = colorScratch
               .set(activePalette.barrierCore)
-              .offsetHSL(cluster.hue * 0.08, 0, pulse * 0.08)
-              .lerp(colorScratchB.set(activePalette.barrierHit), cluster.flash * 0.46)
+              .offsetHSL(cluster.hue * 0.05 + hueBandShift, satBandBoost, pulse * 0.07 + (1 - hpNorm) * 0.08)
+              .lerp(colorScratchB.set(activePalette.blaster), cluster.forcedWall ? 0.24 : 0)
+              .lerp(colorScratchB.set(activePalette.barrierHit), cluster.flash * (0.36 + (1 - hpNorm) * 0.38))
               .lerp(colorScratchC.set(activePalette.boost), runtime.boostMix * 0.24);
             barrierRef.current.setColorAt(index, barrierColor);
           } else {
@@ -1370,17 +1459,26 @@ function TetherDriftScene() {
           index += 1;
         }
 
-        dummy.position.set(laneX(cluster.gapLane), 0.12, cluster.z + 0.01);
-        dummy.rotation.set(Math.PI / 2, 0, 0);
-        const markerScale = 0.6 + pulse * 0.06 + cluster.flash * 0.38;
-        dummy.scale.set(markerScale, markerScale, markerScale);
-        dummy.updateMatrix();
-        gapMarkerRef.current.setMatrixAt(i, dummy.matrix);
+        if (cluster.forcedWall && cluster.mask === FULL_BLOCK_MASK) {
+          dummy.position.copy(OFFSCREEN_POS);
+          dummy.scale.copy(TINY_SCALE);
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          gapMarkerRef.current.setMatrixAt(i, dummy.matrix);
+          gapMarkerRef.current.setColorAt(i, colorScratchB.set(activePalette.barrierHit));
+        } else {
+          dummy.position.set(laneX(cluster.gapLane), 0.12, cluster.z + 0.01);
+          dummy.rotation.set(Math.PI / 2, 0, 0);
+          const markerScale = 0.6 + pulse * 0.06 + cluster.flash * 0.38;
+          dummy.scale.set(markerScale, markerScale, markerScale);
+          dummy.updateMatrix();
+          gapMarkerRef.current.setMatrixAt(i, dummy.matrix);
 
-        const markerColor = colorScratch
-          .set(activePalette.marker)
-          .lerp(colorScratchB.set(activePalette.tether), 0.35 + pulse * 0.25 + cluster.flash * 0.25);
-        gapMarkerRef.current.setColorAt(i, markerColor);
+          const markerColor = colorScratch
+            .set(activePalette.marker)
+            .lerp(colorScratchB.set(activePalette.tether), 0.35 + pulse * 0.25 + cluster.flash * 0.25);
+          gapMarkerRef.current.setColorAt(i, markerColor);
+        }
       }
 
       barrierRef.current.instanceMatrix.needsUpdate = true;
