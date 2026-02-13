@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Html, OrthographicCamera } from '@react-three/drei';
+import { Html, OrthographicCamera, Sparkles } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import { useSnapshot } from 'valtio';
@@ -111,6 +111,13 @@ type RunState = {
   ended: boolean;
   levelGoal: number;
 
+  guideSide: Side;
+  guideX: number;
+  guidePulse: number;
+  paletteOffset: number;
+  paletteDirection: Side;
+  palettePulseOffset: number;
+
   trailHead: number;
   trail: THREE.Vector3[];
 };
@@ -168,6 +175,8 @@ const rand = (run: RunState) => {
 };
 
 const nextSide = (side: Side): Side => (side === -1 ? 1 : -1);
+const wrapIndex = (value: number, size: number) =>
+  ((value % size) + size) % size;
 
 const computeDifficulty = (distanceMeters: number): Difficulty => {
   const add = Math.min(
@@ -573,6 +582,56 @@ const spawnPattern = (
   spawnTierExtras(run, diff, obstacles, collectibles, warnings, startY, now);
 };
 
+const HAZARD_WEIGHT: Record<ObstacleKind, number> = {
+  spike: 1,
+  bird: 0.86,
+  pendulum: 0.9,
+  tar: 0.58,
+  portal: 0.45,
+  projectile: 1.12,
+  false_floor: 1.2,
+};
+
+const estimateGuideSide = (run: RunState, obstacles: Obstacle[]): Side => {
+  if (run.playerState === 'switching') return run.playerSide;
+
+  const lookMin = run.playerY + 0.25;
+  const lookMax = run.playerY + 6.6;
+  const span = Math.max(EPS, lookMax - lookMin);
+
+  let threatLeft = 0;
+  let threatRight = 0;
+
+  for (let i = 0; i < obstacles.length; i += 1) {
+    const o = obstacles[i];
+    if (!o.active || o.y < lookMin || o.y > lookMax) continue;
+
+    const depth = clamp((o.y - lookMin) / span, 0, 1);
+    const proximity = 1 - depth;
+    const base = HAZARD_WEIGHT[o.kind] * (0.55 + proximity * 0.9);
+
+    if (o.kind === 'bird') {
+      if (Math.abs(o.x) < 0.72) {
+        threatLeft += base * 0.58;
+        threatRight += base * 0.58;
+      } else if (o.x < 0) {
+        threatLeft += base;
+      } else {
+        threatRight += base;
+      }
+      continue;
+    }
+
+    const side = o.side === 0 ? (o.x < 0 ? -1 : 1) : (o.side as Side);
+    if (side === -1) threatLeft += base;
+    else threatRight += base;
+  }
+
+  const delta = threatLeft - threatRight;
+  if (Math.abs(delta) < 0.28) return run.playerSide;
+  return delta < 0 ? -1 : 1;
+};
+
 function Overlay() {
   const snap = useSnapshot(onePathState);
 
@@ -800,7 +859,7 @@ function HUD({
 function Scene() {
   const snap = useSnapshot(onePathState);
   const inputRef = useInputRef();
-  const { size } = useThree();
+  const { size, scene } = useThree();
 
   const runRef = React.useRef<RunState>({
     t: 0,
@@ -843,6 +902,13 @@ function Scene() {
     alive: true,
     ended: false,
     levelGoal: getLevelGoalMeters(1),
+
+    guideSide: -1,
+    guideX: wallX(-1) + 0.58,
+    guidePulse: 0,
+    paletteOffset: 0,
+    paletteDirection: 1,
+    palettePulseOffset: 0,
 
     trailHead: 0,
     trail: Array.from(
@@ -895,6 +961,13 @@ function Scene() {
   const playerRef = React.useRef<THREE.Mesh>(null);
   const waveRef = React.useRef<THREE.Mesh>(null);
   const trailRef = React.useRef<THREE.InstancedMesh>(null);
+  const guideMarkerRef = React.useRef<THREE.Group>(null);
+  const guideInnerRef = React.useRef<THREE.Mesh>(null);
+  const guideOuterRef = React.useRef<THREE.Mesh>(null);
+  const laneGlowLeftRef = React.useRef<THREE.Mesh>(null);
+  const laneGlowRightRef = React.useRef<THREE.Mesh>(null);
+  const accentLightRef = React.useRef<THREE.PointLight>(null);
+  const fillLightRef = React.useRef<THREE.PointLight>(null);
   const tmpObj = React.useMemo(() => new THREE.Object3D(), []);
 
   const obstacleRefs = React.useMemo(
@@ -997,6 +1070,50 @@ function Scene() {
       new THREE.MeshBasicMaterial({ color: '#142238', side: THREE.DoubleSide }),
     []
   );
+  const laneGlowMat = React.useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#82e9ff',
+        transparent: true,
+        opacity: 0.26,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    []
+  );
+  const guideCoreMat = React.useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#9af9ff',
+        transparent: true,
+        opacity: 0.82,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    []
+  );
+  const guideRingMat = React.useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#a3fff1',
+        transparent: true,
+        opacity: 0.58,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    []
+  );
+  const guideTrailMat = React.useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        color: '#93f6ff',
+        transparent: true,
+        opacity: 0.34,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    []
+  );
   const paletteColors = React.useMemo(
     () =>
       BIOME_PALETTES.map((p) => ({
@@ -1014,6 +1131,10 @@ function Scene() {
   const paletteTmpA = React.useMemo(() => new THREE.Color(), []);
   const paletteTmpB = React.useMemo(() => new THREE.Color(), []);
   const paletteTmpC = React.useMemo(() => new THREE.Color(), []);
+  const sceneBgColor = React.useMemo(
+    () => new THREE.Color(BIOME_PALETTES[0].bgA),
+    []
+  );
   const trailGeom = React.useMemo(
     () => new THREE.SphereGeometry(1, 10, 10),
     []
@@ -1085,6 +1206,12 @@ function Scene() {
     run.alive = true;
     run.ended = false;
     run.levelGoal = getLevelGoalMeters(snap.level);
+    run.guideSide = -1;
+    run.guideX = wallX(-1) + 0.58;
+    run.guidePulse = rand(run) * Math.PI * 2;
+    run.paletteOffset = Math.floor(rand(run) * paletteColors.length);
+    run.paletteDirection = rand(run) < 0.5 ? -1 : 1;
+    run.palettePulseOffset = rand(run) * Math.PI * 2;
 
     for (let i = 0; i < run.trail.length; i += 1) {
       run.trail[i].set(run.playerX, run.playerY, 0);
@@ -1100,7 +1227,7 @@ function Scene() {
 
     const warnings = warningsRef.current;
     for (let i = 0; i < warnings.length; i += 1) resetWarning(warnings[i]);
-  }, [snap.level]);
+  }, [paletteColors.length, snap.level]);
 
   React.useEffect(() => {
     if (
@@ -1206,13 +1333,19 @@ function Scene() {
     playTone(960, 0.1, 'sine', 0.03);
   };
 
-  const applyPalette = (distance: number) => {
+  const applyPalette = (distance: number, run: RunState) => {
     const biomeSpan = TUNING.difficulty.biomeEveryMeters;
-    const idx = Math.floor(distance / biomeSpan);
+    const cycle = Math.floor(distance / biomeSpan);
+    const idx = wrapIndex(
+      run.paletteOffset + cycle * run.paletteDirection,
+      paletteColors.length
+    );
+    const nextIdx = wrapIndex(idx + run.paletteDirection, paletteColors.length);
     const p = clamp((distance % biomeSpan) / biomeSpan, 0, 1);
+    const pulse = 0.5 + 0.5 * Math.sin(run.t * 0.85 + run.palettePulseOffset);
 
-    const a = paletteColors[idx % paletteColors.length];
-    const b = paletteColors[(idx + 1) % paletteColors.length];
+    const a = paletteColors[idx];
+    const b = paletteColors[nextIdx];
 
     paletteTmpA.lerpColors(a.wallA, b.wallA, p);
     wallMatA.color.copy(paletteTmpA);
@@ -1222,20 +1355,32 @@ function Scene() {
     paletteTmpA.lerpColors(a.obstacle, b.obstacle, p);
     obstacleMat.color.copy(paletteTmpA);
     obstacleMat.emissive.copy(paletteTmpA);
+    obstacleMat.emissiveIntensity = 0.1 + pulse * 0.08;
 
     paletteTmpA.lerpColors(a.danger, b.danger, p);
     dangerMat.color.copy(paletteTmpA);
     dangerMat.emissive.copy(paletteTmpA);
+    dangerMat.emissiveIntensity = 0.12 + pulse * 0.1;
 
     paletteTmpA.lerpColors(a.collectible, b.collectible, p);
     gemMat.color.copy(paletteTmpA);
     gemMat.emissive.copy(paletteTmpA);
+    gemMat.emissiveIntensity = 0.14 + pulse * 0.12;
+    trailMat.color.copy(paletteTmpA);
+    trailMat.emissive.copy(paletteTmpA);
+    trailMat.opacity = 0.14 + pulse * 0.08;
 
     paletteTmpA.lerpColors(a.accent, b.accent, p);
     shieldOrbMat.color.copy(paletteTmpA);
     shieldOrbMat.emissive.copy(paletteTmpA);
     portalMat.color.copy(paletteTmpA);
     portalMat.emissive.copy(paletteTmpA);
+    shieldOrbMat.emissiveIntensity = 0.15 + pulse * 0.14;
+    portalMat.emissiveIntensity = 0.14 + pulse * 0.2;
+    laneGlowMat.color.copy(paletteTmpA);
+    guideCoreMat.color.copy(paletteTmpA);
+    guideTrailMat.color.copy(paletteTmpA);
+    if (accentLightRef.current) accentLightRef.current.color.copy(paletteTmpA);
 
     paletteTmpA.lerpColors(a.bgA, b.bgA, p);
     bgBackMat.color.copy(paletteTmpA);
@@ -1243,6 +1388,15 @@ function Scene() {
     bgMidMat.color.copy(paletteTmpB);
     paletteTmpC.copy(paletteTmpA).lerp(paletteTmpB, 0.5);
     bgFrontMat.color.copy(paletteTmpC);
+    sceneBgColor.copy(paletteTmpA).lerp(paletteTmpB, 0.24 + pulse * 0.14);
+    if (fillLightRef.current) fillLightRef.current.color.copy(paletteTmpC);
+    guideRingMat.color.copy(paletteTmpC);
+
+    if (scene.background && scene.background instanceof THREE.Color) {
+      scene.background.copy(sceneBgColor);
+    } else {
+      scene.background = sceneBgColor;
+    }
   };
 
   useFrame((_, dt) => {
@@ -1562,6 +1716,8 @@ function Scene() {
         }
       }
 
+      run.guideSide = estimateGuideSide(run, obstacles);
+
       if (onePathState.mode === 'levels' && run.distance >= run.levelGoal) {
         clearRun(run);
       }
@@ -1725,7 +1881,52 @@ function Scene() {
       m.color.set(w.kind === 'projectile' ? '#ff4569' : '#ff9c54');
     }
 
-    applyPalette(run.distance);
+    run.guidePulse += dt * (run.playerState === 'switching' ? 11 : 6.8);
+    const guideTargetX =
+      wallX(run.guideSide) + (run.guideSide === -1 ? 0.58 : -0.58);
+    run.guideX = lerp(run.guideX, guideTargetX, 1 - Math.exp(-11 * dt));
+    const guideY = run.playerY + 4 + Math.sin(run.t * 2.2) * 0.24;
+    const guidePulse01 = 0.5 + 0.5 * Math.sin(run.guidePulse);
+
+    if (guideMarkerRef.current) {
+      guideMarkerRef.current.position.set(run.guideX, guideY, 1.04);
+      guideMarkerRef.current.rotation.z =
+        run.guideSide === -1 ? 0.14 : -0.14;
+      const guideScale =
+        1 + guidePulse01 * 0.24 + (run.playerState === 'switching' ? 0.1 : 0);
+      guideMarkerRef.current.scale.setScalar(guideScale);
+    }
+
+    if (guideInnerRef.current) {
+      guideInnerRef.current.scale.setScalar(0.74 + guidePulse01 * 0.38);
+    }
+    if (guideOuterRef.current) {
+      guideOuterRef.current.scale.setScalar(1 + guidePulse01 * 0.56);
+    }
+
+    guideCoreMat.opacity = 0.36 + guidePulse01 * 0.42;
+    guideRingMat.opacity = 0.2 + guidePulse01 * 0.5;
+    guideTrailMat.opacity = 0.16 + guidePulse01 * 0.28;
+
+    const laneGlowY = run.playerY + 3;
+    if (laneGlowLeftRef.current) {
+      laneGlowLeftRef.current.position.set(
+        wallX(-1) + 0.44,
+        laneGlowY,
+        0.92
+      );
+    }
+    if (laneGlowRightRef.current) {
+      laneGlowRightRef.current.position.set(
+        wallX(1) - 0.44,
+        laneGlowY,
+        0.92
+      );
+    }
+    laneGlowMat.opacity =
+      0.08 + guidePulse01 * 0.16 + (run.playerState === 'switching' ? 0.06 : 0);
+
+    applyPalette(run.distance, run);
 
     clearFrameInput(inputRef);
   });
@@ -1747,10 +1948,31 @@ function Scene() {
         far={220}
       />
 
-      <color attach="background" args={[BIOME_PALETTES[0].bgA]} />
-      <ambientLight intensity={0.42} />
-      <directionalLight position={[8, 14, 14]} intensity={0.56} />
-      <directionalLight position={[-7, 6, 10]} intensity={0.2} />
+      <color attach="background" args={[sceneBgColor]} />
+      <ambientLight intensity={0.45} />
+      <directionalLight position={[8, 14, 14]} intensity={0.6} />
+      <directionalLight position={[-7, 6, 10]} intensity={0.24} />
+      <pointLight
+        ref={accentLightRef}
+        position={[0, 9, 9]}
+        intensity={0.58}
+        distance={36}
+      />
+      <pointLight
+        ref={fillLightRef}
+        position={[0, 3, 18]}
+        intensity={0.38}
+        distance={42}
+      />
+      <Sparkles
+        count={120}
+        speed={0.22}
+        opacity={0.34}
+        color={'#b8eeff'}
+        scale={[18, 88, 10]}
+        size={2.2}
+        position={[0, 24, -2]}
+      />
 
       <mesh position={[0, 0, -24]} material={bgBackMat}>
         <planeGeometry args={[98, 240]} />
@@ -1787,10 +2009,50 @@ function Scene() {
         <boxGeometry args={[10.2, 1.1, 0.8]} />
       </mesh>
 
+      {snap.phase === 'playing' && (
+        <>
+          <mesh ref={laneGlowLeftRef} material={laneGlowMat}>
+            <planeGeometry args={[0.3, 9.6]} />
+          </mesh>
+          <mesh ref={laneGlowRightRef} material={laneGlowMat}>
+            <planeGeometry args={[0.3, 9.6]} />
+          </mesh>
+        </>
+      )}
+
       <instancedMesh
         ref={trailRef}
         args={[trailGeom, trailMat, TUNING.juice.trailPoints]}
       />
+
+      {snap.phase === 'playing' && (
+        <group ref={guideMarkerRef} position={[wallX(-1) + 0.58, 4, 1.04]}>
+          <mesh
+            position={[0, -0.35, 0.01]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            material={guideTrailMat}
+          >
+            <planeGeometry args={[0.24, 0.9]} />
+          </mesh>
+          <mesh
+            ref={guideOuterRef}
+            rotation={[-Math.PI / 2, 0, 0]}
+            material={guideRingMat}
+          >
+            <ringGeometry args={[0.28, 0.38, 32]} />
+          </mesh>
+          <mesh
+            ref={guideInnerRef}
+            rotation={[-Math.PI / 2, 0, 0]}
+            material={guideRingMat}
+          >
+            <ringGeometry args={[0.12, 0.2, 24]} />
+          </mesh>
+          <mesh position={[0, 0.17, 0.02]} material={guideCoreMat}>
+            <coneGeometry args={[0.14, 0.34, 5]} />
+          </mesh>
+        </group>
+      )}
 
       <mesh ref={playerRef} position={[wallX(-1), 0, 1.2]}>
         <sphereGeometry args={[TUNING.player.radius, 20, 20]} />
