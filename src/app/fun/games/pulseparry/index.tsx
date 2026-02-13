@@ -142,10 +142,11 @@ const PULSE_POOL = 84;
 const SHARD_POOL = 96;
 const SPARK_POOL = 14;
 
-const SPAWN_RADIUS_BASE = 0.05;
 const CORE_FAIL_RADIUS = 0.22;
-const PARRY_RADIUS_BASE = 2.45;
-const MISS_RADIUS = 3.55;
+const SPAWN_RADIUS_BASE = CORE_FAIL_RADIUS + 0.1;
+const PARRY_RADIUS_BASE = 2.8;
+const MISS_RADIUS = 4.05;
+const TARGET_NODE_RADIUS = 0.16;
 const CAMERA_BASE_Y = 9.8;
 const SWIPE_THRESHOLD = 0.16;
 
@@ -163,7 +164,7 @@ const LANE_INPUT_NAMES = ['Right', 'Up', 'Left', 'Down'] as const;
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const TAU = Math.PI * 2;
-const CARDINAL_ANGLES = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5] as const;
+const CARDINAL_ANGLES = [0, Math.PI * 1.5, Math.PI, Math.PI * 0.5] as const;
 const laneBit = (lane: number) => 1 << lane;
 const PHASE_LANE_MASKS = [
   laneBit(0) | laneBit(1) | laneBit(2) | laneBit(3),
@@ -499,17 +500,19 @@ type OverlapCandidate = {
   pulse: Pulse;
   diff: number;
   hitWindow: number;
+  contactRadius: number;
 };
 
 const findOverlapCandidate = (runtime: Runtime, slack = 1): OverlapCandidate | null => {
   let best: OverlapCandidate | null = null;
   for (const pulse of runtime.pulses) {
     if (!pulse.active || pulse.parried || !laneIsActive(runtime, pulse.lane)) continue;
+    const contactRadius = TARGET_NODE_RADIUS + pulse.thickness * 0.52;
     const diff = Math.abs(pulse.radius - runtime.parryRadius);
-    const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
+    const hitWindow = runtime.hitThreshold + contactRadius;
     if (diff > hitWindow * slack) continue;
     if (!best || diff < best.diff) {
-      best = { pulse, diff, hitWindow };
+      best = { pulse, diff, hitWindow, contactRadius };
     }
   }
   return best;
@@ -524,11 +527,12 @@ const findLaneOverlapCandidate = (
   for (const pulse of runtime.pulses) {
     if (!pulse.active || pulse.parried || pulse.lane !== lane) continue;
     if (!laneIsActive(runtime, pulse.lane)) continue;
+    const contactRadius = TARGET_NODE_RADIUS + pulse.thickness * 0.52;
     const diff = Math.abs(pulse.radius - runtime.parryRadius);
-    const hitWindow = runtime.hitThreshold + pulse.thickness * 0.3;
+    const hitWindow = runtime.hitThreshold + contactRadius;
     if (diff > hitWindow * slack) continue;
     if (!best || diff < best.diff) {
-      best = { pulse, diff, hitWindow };
+      best = { pulse, diff, hitWindow, contactRadius };
     }
   }
   return best;
@@ -580,7 +584,7 @@ const spawnPulseSet = (runtime: Runtime) => {
   if (lanes.length === 0) return;
   count = Math.min(count, lanes.length);
 
-  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.02;
+  const baseRadius = SPAWN_RADIUS_BASE + Math.random() * 0.04;
   for (let i = lanes.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
@@ -600,7 +604,7 @@ const spawnPulseSet = (runtime: Runtime) => {
       0.75,
       4.2
     );
-    pulse.thickness = clamp(lerp(0.14, 0.27, d) + tier * 0.01 + Math.random() * 0.05, 0.12, 0.34);
+    pulse.thickness = clamp(lerp(0.18, 0.34, d) + tier * 0.01 + Math.random() * 0.06, 0.16, 0.42);
     pulse.colorIndex = runtime.nextColor;
     pulse.life = 0;
     pulse.flash = 0;
@@ -620,18 +624,24 @@ const spawnBurst = (
   radius: number,
   color: THREE.Color,
   count: number,
-  spread: number
+  spread: number,
+  lane?: number
 ) => {
+  const hasLane = typeof lane === 'number' && lane >= 0 && lane < CARDINAL_ANGLES.length;
+  const laneAngle = hasLane ? CARDINAL_ANGLES[lane] : 0;
+  const laneX = hasLane ? Math.cos(laneAngle) * radius : 0;
+  const laneZ = hasLane ? Math.sin(laneAngle) * radius : 0;
+
   for (let i = 0; i < count; i += 1) {
     const shard = acquireShard(runtime);
-    const angle = Math.random() * Math.PI * 2;
-    const r = Math.max(0.15, radius + (Math.random() * 2 - 1) * 0.08);
+    const angle = hasLane ? laneAngle + (Math.random() * 2 - 1) * 0.95 : Math.random() * Math.PI * 2;
+    const r = hasLane ? Math.random() * 0.11 : Math.max(0.15, radius + (Math.random() * 2 - 1) * 0.08);
     const speed = spread * (0.55 + Math.random() * 0.9);
 
     shard.active = true;
-    shard.x = Math.cos(angle) * r;
+    shard.x = (hasLane ? laneX : 0) + Math.cos(angle) * r;
     shard.y = -0.02 + Math.random() * 0.05;
-    shard.z = Math.sin(angle) * r;
+    shard.z = (hasLane ? laneZ : 0) + Math.sin(angle) * r;
     shard.vx = Math.cos(angle) * speed + (Math.random() * 2 - 1) * 0.25;
     shard.vz = Math.sin(angle) * speed + (Math.random() * 2 - 1) * 0.25;
     shard.vy = 1.6 + Math.random() * 2.1;
@@ -679,15 +689,15 @@ const syncPulseLaneMesh = (
       continue;
     }
 
-    const appear = clamp(pulse.life / 0.18, 0, 1);
-    const organic = 0.82 + 0.18 * Math.sin((runtime.elapsed + pulse.slot * 0.037) * 6.4);
+    const appear = clamp(pulse.life / 0.14, 0, 1);
+    const organic = 0.9 + 0.1 * Math.sin((runtime.elapsed + pulse.slot * 0.037) * 6.4);
     dummy.position.set(
       Math.cos(pulse.angle) * pulse.radius,
-      0.02 + (1 - appear) * 0.03 + Math.sin((pulse.life + pulse.slot) * 7) * 0.004,
+      0.022 + (1 - appear) * 0.06 + Math.sin((pulse.life + pulse.slot) * 7) * 0.006,
       Math.sin(pulse.angle) * pulse.radius
     );
-    const s = Math.max(0.001, pulse.thickness * (0.16 + 0.84 * appear) * organic);
-    dummy.scale.setScalar(s * 1.2);
+    const s = Math.max(0.001, pulse.thickness * (0.35 + 0.65 * appear) * organic);
+    dummy.scale.setScalar(s * 1.08);
     dummy.rotation.set(
       pulse.life * 3.4 + lane * 0.3,
       runtime.elapsed * 0.55 + pulse.slot * 0.1,
@@ -724,7 +734,7 @@ function PulseParryOverlay() {
       <div className="absolute left-5 top-5 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
         <div className="text-[11px] text-cyan-50/85">
-          Shot shapes from center to targets. Press matching direction on overlap.
+          Send shapes from center to targets. Press the matching direction when they touch.
         </div>
         <div className="text-[10px] text-cyan-100/70">
           W/↑ Top • A/← Left • S/↓ Bottom • D/→ Right • Swipe on mobile
@@ -767,7 +777,7 @@ function PulseParryOverlay() {
           <div className="rounded-xl border border-emerald-100/42 bg-gradient-to-br from-slate-950/80 via-emerald-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">PULSE PARRY</div>
             <div className="mt-2 text-sm text-white/85">
-              Shapes launch from the center. Hit the matching direction exactly on overlap.
+              Shapes launch from the center. Hit the matching direction when the moving and fixed shapes touch.
             </div>
             <div className="mt-1 text-sm text-white/80">
               Keyboard: W/A/S/D or arrows. Mobile: swipe Up/Left/Down/Right.
@@ -992,14 +1002,14 @@ function PulseParryScene() {
       runtime.parryWindowLeft = Math.max(0, runtime.parryWindowLeft - dt);
 
       const d = clamp((runtime.difficulty.speed - 3) / 3.5, 0, 1);
-      runtime.hitThreshold = clamp((runtime.difficulty.decisionWindowMs / 1000) * (0.8 + d * 0.18), 0.09, 0.3);
-      runtime.perfectThreshold = runtime.hitThreshold * 0.5;
+      runtime.hitThreshold = clamp((runtime.difficulty.decisionWindowMs / 1000) * (0.24 + d * 0.12), 0.045, 0.125);
+      runtime.perfectThreshold = runtime.hitThreshold * 0.4;
       runtime.parryRadius = PARRY_RADIUS_BASE;
       runtime.tapCooldown = Math.max(0, runtime.tapCooldown - dt);
-      const overlapCandidate = findOverlapCandidate(runtime, 1.35);
+      const overlapCandidate = findOverlapCandidate(runtime, 1.15);
       runtime.overlapLane = overlapCandidate?.pulse.lane ?? -1;
       runtime.overlapStrength = overlapCandidate
-        ? clamp(1 - overlapCandidate.diff / (overlapCandidate.hitWindow * 1.35), 0, 1)
+        ? clamp(1 - overlapCandidate.diff / (overlapCandidate.hitWindow * 1.15), 0, 1)
         : 0;
       runtime.cursorAngle =
         runtime.overlapLane >= 0
@@ -1017,7 +1027,7 @@ function PulseParryScene() {
         const hit = findLaneOverlapCandidate(runtime, laneInput, 1);
         if (hit) {
           const pulse = hit.pulse;
-          const perfect = hit.diff <= runtime.perfectThreshold;
+          const perfect = hit.diff <= runtime.perfectThreshold + hit.contactRadius * 0.2;
           pulse.active = false;
           pulse.parried = true;
           pulse.flash = 1;
@@ -1045,7 +1055,8 @@ function PulseParryScene() {
             runtime.parryRadius,
             perfect ? WHITE : PULSE_COLORS[pulse.colorIndex],
             perfect ? 11 : 8,
-            perfect ? 2.8 : 2.1
+            perfect ? 2.8 : 2.1,
+            pulse.lane
           );
           playClick(perfect);
           if (perfect) {
@@ -1064,7 +1075,7 @@ function PulseParryScene() {
             runtime.tapMisses = 0;
             runtime.lives -= 1;
             runtime.perfectFlash = 1;
-            spawnBurst(runtime, runtime.parryRadius, DANGER, 10, 2.1);
+            spawnBurst(runtime, runtime.parryRadius, DANGER, 10, 2.1, laneInput);
             usePulseParryStore.getState().setLives(runtime.lives);
             if (runtime.lives <= 0) {
               runtime.failMessage = `Wrong direction or mistimed input on ${LANE_INPUT_NAMES[laneInput]}.`;
@@ -1103,11 +1114,11 @@ function PulseParryScene() {
         pulse.velocity *= Math.exp(-0.2 * dt);
         pulse.radius += pulse.velocity * dt;
 
-        if (pulse.radius >= MISS_RADIUS + pulse.thickness * 0.45) {
+        if (pulse.radius >= MISS_RADIUS + pulse.thickness * 0.6) {
           runtime.resonance = Math.max(0, runtime.resonance - 0.8);
           runtime.shake = Math.min(1.5, runtime.shake + 0.72);
           runtime.perfectFlash = 1;
-          spawnBurst(runtime, runtime.parryRadius + 0.14, DANGER, 14, 2.4);
+          spawnBurst(runtime, runtime.parryRadius + 0.14, DANGER, 14, 2.4, pulse.lane);
           runtime.lives -= 1;
           runtime.tapMisses = 0;
           runtime.perfectCombo = 0;
@@ -1238,13 +1249,13 @@ function PulseParryScene() {
           Math.sin(angle) * runtime.parryRadius
         );
         petal.rotation.set(-Math.PI * 0.5, runtime.elapsed * 0.5 + i, angle);
-        const idleScale = 0.118 + pulse * 0.006;
-        const hotScale = 0.136 + runtime.overlapStrength * 0.02;
-        const lockedScale = 0.17;
+        const idleScale = 0.19 + pulse * 0.01;
+        const hotScale = 0.235 + runtime.overlapStrength * 0.04;
+        const lockedScale = 0.285;
         petal.scale.setScalar(isLocked ? lockedScale : isHot ? hotScale : idleScale);
         const mat = petal.material as THREE.MeshBasicMaterial;
         mat.color.copy(isLocked || isHot ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
-        mat.opacity = isLocked ? 0.95 : isHot ? clamp(0.6 + runtime.overlapStrength * 0.3, 0.6, 0.92) : 0.5;
+        mat.opacity = isLocked ? 0.95 : isHot ? clamp(0.68 + runtime.overlapStrength * 0.25, 0.68, 0.96) : 0.6;
       }
 
       const rune = runeRefs.current[i];
@@ -1263,10 +1274,10 @@ function PulseParryScene() {
           runtime.elapsed * 0.53
         );
         const runeScale = isLocked
-          ? 0.225
+          ? 0.275
           : isHot
-            ? 0.2 + runtime.overlapStrength * 0.04
-            : 0.17 + pulse * 0.012;
+            ? 0.24 + runtime.overlapStrength * 0.05
+            : 0.21 + pulse * 0.014;
         rune.scale.setScalar(runeScale);
         const mat = rune.material as THREE.MeshBasicMaterial;
         mat.color.copy(isLocked ? WHITE : isHot ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
@@ -1274,14 +1285,15 @@ function PulseParryScene() {
           ? 0.97
           : isHot
             ? clamp(0.74 + runtime.overlapStrength * 0.2, 0.74, 0.95)
-            : 0.62 + runtime.resonance * 0.02;
+            : 0.68 + runtime.resonance * 0.018;
       }
 
       const laneBeam = laneBeamRefs.current[i];
       if (laneBeam) {
         laneBeam.visible = laneActive;
         const lanePulse = 0.2 + Math.max(0, Math.sin(runtime.elapsed * 3 + i) * 0.1);
-        laneBeam.position.set(Math.cos(angle) * 1.65, 0.005, Math.sin(angle) * 1.65);
+        laneBeam.position.set(Math.cos(angle) * runtime.parryRadius * 0.5, 0.005, Math.sin(angle) * runtime.parryRadius * 0.5);
+        laneBeam.scale.set(1, Math.max(0.75, runtime.parryRadius / 1.55), 1);
         laneBeam.rotation.set(-Math.PI * 0.5, 0, angle);
         const mat = laneBeam.material as THREE.MeshBasicMaterial;
         mat.opacity = (lanePulse + (isLocked ? 0.26 : 0) + (isHot ? runtime.overlapStrength * 0.25 : 0)) * 0.62;
