@@ -366,6 +366,12 @@ const directionFromSwipe = (
   return null;
 };
 
+const isPerpendicularTurn = (from: DirectionIndex, to: DirectionIndex) => {
+  const a = DIRECTIONS[from];
+  const b = DIRECTIONS[to];
+  return a.x * b.x + a.z * b.z === 0;
+};
+
 const pointSegmentDistance = (
   px: number,
   pz: number,
@@ -1167,8 +1173,7 @@ function TraceScene() {
         resetScore: true,
       });
     } else if (store.status === 'PLAYING' && directionInput !== null) {
-      const opposite = ((runtime.dir + 2) % 4) as DirectionIndex;
-      if (directionInput !== runtime.dir && directionInput !== opposite) {
+      if (isPerpendicularTurn(runtime.dir, directionInput)) {
         commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
         runtime.dir = directionInput;
         runtime.targetYaw = DIR_YAWS[runtime.dir];
