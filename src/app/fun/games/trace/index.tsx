@@ -94,6 +94,7 @@ type Runtime = {
   laneX: number;
   laneZ: number;
   dir: DirectionIndex;
+  queuedDir: DirectionIndex | null;
   playerYaw: number;
   targetYaw: number;
   trailStartX: number;
@@ -111,6 +112,7 @@ type Runtime = {
   nextSegmentId: number;
   trailCells: TrailCell[];
   trailCellSet: Set<number>;
+  currentCellKey: number;
   voids: VoidSquare[];
   pickups: PhasePickup[];
   voidSpawnTimer: number;
@@ -394,13 +396,9 @@ const alignRuntimeToLane = (runtime: Runtime, dir: DirectionIndex = runtime.dir)
   if (direction.x !== 0) {
     runtime.laneZ = nearestCellCenter(runtime, runtime.playerZ);
     runtime.playerZ = runtime.laneZ;
-    runtime.trailStartZ = runtime.laneZ;
-    runtime.turnAnchorZ = runtime.laneZ;
   } else {
     runtime.laneX = nearestCellCenter(runtime, runtime.playerX);
     runtime.playerX = runtime.laneX;
-    runtime.trailStartX = runtime.laneX;
-    runtime.turnAnchorX = runtime.laneX;
   }
 };
 
@@ -559,6 +557,7 @@ const createRuntime = (): Runtime => {
     laneX: start,
     laneZ: start,
     dir: 0,
+    queuedDir: null,
     playerYaw: DIR_YAWS[0],
     targetYaw: DIR_YAWS[0],
     trailStartX: start,
@@ -576,6 +575,7 @@ const createRuntime = (): Runtime => {
     nextSegmentId: 1,
     trailCells: [],
     trailCellSet: new Set(),
+    currentCellKey: -1,
     voids: Array.from({ length: VOID_POOL }, createVoid),
     pickups: Array.from({ length: PICKUP_POOL }, createPickup),
     voidSpawnTimer: 2.4,
@@ -690,9 +690,7 @@ const cellFromWorld = (runtime: Runtime, x: number, z: number) => {
   return { key, cx, cz };
 };
 
-const markTrailCell = (runtime: Runtime, x: number, z: number) => {
-  const cell = cellFromWorld(runtime, x, z);
-  if (!cell) return;
+const addTrailCell = (runtime: Runtime, cell: { key: number; cx: number; cz: number }) => {
   if (runtime.trailCellSet.has(cell.key)) return;
   runtime.trailCellSet.add(cell.key);
   runtime.trailCells.push({
@@ -702,6 +700,25 @@ const markTrailCell = (runtime: Runtime, x: number, z: number) => {
     createdAt: runtime.elapsed,
   });
   runtime.completion = (runtime.trailCellSet.size / Math.max(1, runtime.totalCells)) * 100;
+};
+
+const markTrailCell = (runtime: Runtime, x: number, z: number) => {
+  const cell = cellFromWorld(runtime, x, z);
+  if (!cell) return;
+  addTrailCell(runtime, cell);
+};
+
+const updateCellVisit = (runtime: Runtime, x: number, z: number) => {
+  const cell = cellFromWorld(runtime, x, z);
+  if (!cell) return { outOfBounds: true, hitTrail: false };
+  if (cell.key === runtime.currentCellKey) return { outOfBounds: false, hitTrail: false };
+  if (runtime.trailCellSet.has(cell.key)) {
+    runtime.currentCellKey = cell.key;
+    return { outOfBounds: false, hitTrail: true };
+  }
+  runtime.currentCellKey = cell.key;
+  addTrailCell(runtime, cell);
+  return { outOfBounds: false, hitTrail: false };
 };
 
 const queryNearbySegmentIds = (runtime: Runtime, x: number, z: number) => {
@@ -762,6 +779,7 @@ const prepareLevelRuntime = (
   runtime.laneX = start;
   runtime.laneZ = start;
   runtime.dir = 0;
+  runtime.queuedDir = null;
   runtime.playerYaw = DIR_YAWS[0];
   runtime.targetYaw = DIR_YAWS[0];
   runtime.trailStartX = start;
@@ -779,6 +797,7 @@ const prepareLevelRuntime = (
   runtime.nextSegmentId = 1;
   runtime.trailCells.length = 0;
   runtime.trailCellSet.clear();
+  runtime.currentCellKey = -1;
   runtime.voidSpawnTimer = level <= 2 ? 6 : 2.4;
   runtime.pickupSpawnTimer = 3.6;
   runtime.sparks.length = 0;
@@ -797,6 +816,8 @@ const prepareLevelRuntime = (
   }
 
   markTrailCell(runtime, runtime.playerX, runtime.playerZ);
+  const startCell = cellFromWorld(runtime, runtime.playerX, runtime.playerZ);
+  runtime.currentCellKey = startCell ? startCell.key : -1;
 };
 
 const resetRuntime = (runtime: Runtime) => {
@@ -821,6 +842,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.laneX = start;
   runtime.laneZ = start;
   runtime.dir = 0;
+  runtime.queuedDir = null;
   runtime.playerYaw = DIR_YAWS[0];
   runtime.targetYaw = DIR_YAWS[0];
   runtime.trailStartX = start;
@@ -838,6 +860,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.nextSegmentId = 1;
   runtime.trailCells.length = 0;
   runtime.trailCellSet.clear();
+  runtime.currentCellKey = -1;
   runtime.voidSpawnTimer = 2.4;
   runtime.pickupSpawnTimer = 4.2;
   runtime.sparks.length = 0;
@@ -854,6 +877,10 @@ const resetRuntime = (runtime: Runtime) => {
     p.ttl = 0;
     p.spin = 0;
   }
+
+  markTrailCell(runtime, runtime.playerX, runtime.playerZ);
+  const startCell = cellFromWorld(runtime, runtime.playerX, runtime.playerZ);
+  runtime.currentCellKey = startCell ? startCell.key : -1;
 };
 
 const spawnVoid = (runtime: Runtime) => {
@@ -1216,35 +1243,7 @@ function TraceScene() {
       });
     } else if (store.status === 'PLAYING' && directionInput !== null) {
       if (isPerpendicularTurn(runtime.dir, directionInput)) {
-        commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
-        runtime.dir = directionInput;
-        runtime.targetYaw = DIR_YAWS[runtime.dir];
-        runtime.turnGrace = TURN_GRACE_TIME;
-        alignRuntimeToLane(runtime, runtime.dir);
-
-        const distToWall = Math.min(
-          runtime.bound - Math.abs(runtime.playerX),
-          runtime.bound - Math.abs(runtime.playerZ)
-        );
-        if (distToWall < TIGHT_TURN_THRESHOLD) {
-          const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 110);
-          runtime.tightTurnBonus += bonus;
-          runtime.tightTurns += 1;
-          runtime.score += bonus;
-        }
-
-        for (let i = 0; i < 8; i += 1) {
-          if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
-          const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.7;
-          const speed = 1.6 + Math.random() * 1.5;
-          runtime.sparks.push({
-            x: runtime.playerX,
-            z: runtime.playerZ,
-            vx: Math.cos(a) * speed,
-            vz: Math.sin(a) * speed,
-            life: 0.33 + Math.random() * 0.24,
-          });
-        }
+        runtime.queuedDir = directionInput;
       }
     }
 
@@ -1323,13 +1322,67 @@ function TraceScene() {
         runtime.ignoreSegmentId = -1;
       }
 
-      const dir = DIRECTIONS[runtime.dir];
-      alignRuntimeToLane(runtime, runtime.dir);
       const stepCount = Math.max(1, Math.ceil((runtime.speed * dt) / 0.045));
       const subDt = dt / stepCount;
       let gameOver = false;
 
       for (let i = 0; i < stepCount; i += 1) {
+        const stepDistance = runtime.speed * subDt;
+        if (runtime.queuedDir !== null && isPerpendicularTurn(runtime.dir, runtime.queuedDir)) {
+          const currentDir = DIRECTIONS[runtime.dir];
+          let canTurn = false;
+          if (currentDir.x !== 0) {
+            const turnX = nearestCellCenter(runtime, runtime.playerX);
+            if (Math.abs(turnX - runtime.playerX) <= stepDistance + 0.0001) {
+              runtime.playerX = turnX;
+              runtime.laneX = turnX;
+              canTurn = true;
+            }
+          } else {
+            const turnZ = nearestCellCenter(runtime, runtime.playerZ);
+            if (Math.abs(turnZ - runtime.playerZ) <= stepDistance + 0.0001) {
+              runtime.playerZ = turnZ;
+              runtime.laneZ = turnZ;
+              canTurn = true;
+            }
+          }
+
+          if (canTurn) {
+            commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
+            runtime.dir = runtime.queuedDir;
+            runtime.targetYaw = DIR_YAWS[runtime.dir];
+            runtime.turnGrace = TURN_GRACE_TIME;
+            runtime.queuedDir = null;
+            alignRuntimeToLane(runtime, runtime.dir);
+
+            const distToWall = Math.min(
+              runtime.bound - Math.abs(runtime.playerX),
+              runtime.bound - Math.abs(runtime.playerZ)
+            );
+            if (distToWall < TIGHT_TURN_THRESHOLD) {
+              const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 110);
+              runtime.tightTurnBonus += bonus;
+              runtime.tightTurns += 1;
+              runtime.score += bonus;
+            }
+
+            for (let j = 0; j < 8; j += 1) {
+              if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
+              const a = (Math.PI * 2 * j) / 8 + Math.random() * 0.7;
+              const speed = 1.6 + Math.random() * 1.5;
+              runtime.sparks.push({
+                x: runtime.playerX,
+                z: runtime.playerZ,
+                vx: Math.cos(a) * speed,
+                vz: Math.sin(a) * speed,
+                life: 0.33 + Math.random() * 0.24,
+              });
+            }
+          }
+        }
+
+        const dir = DIRECTIONS[runtime.dir];
+        alignRuntimeToLane(runtime, runtime.dir);
         runtime.playerX += dir.x * runtime.speed * subDt;
         runtime.playerZ += dir.z * runtime.speed * subDt;
         if (dir.x !== 0) runtime.playerZ = runtime.laneZ;
@@ -1354,17 +1407,8 @@ function TraceScene() {
         }
 
         commitTrailTo(runtime, runtime.playerX, runtime.playerZ, false);
-        markTrailCell(runtime, runtime.playerX, runtime.playerZ);
-
-        let trailHit = false;
-        const trailCollision = checkTrailCollision(runtime, runtime.playerX, runtime.playerZ);
-        if (trailCollision.hit) {
-          trailHit = true;
-        } else if (trailCollision.near) {
-          runtime.danger = Math.min(1, runtime.danger + 0.35);
-        }
-
-        if (trailHit) {
+        const cellVisit = updateCellVisit(runtime, runtime.playerX, runtime.playerZ);
+        if (cellVisit.outOfBounds || cellVisit.hitTrail) {
           gameOver = true;
           break;
         }
