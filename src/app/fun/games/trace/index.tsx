@@ -91,6 +91,8 @@ type Runtime = {
   collectibles: number;
   playerX: number;
   playerZ: number;
+  laneX: number;
+  laneZ: number;
   dir: DirectionIndex;
   playerYaw: number;
   targetYaw: number;
@@ -372,6 +374,36 @@ const isPerpendicularTurn = (from: DirectionIndex, to: DirectionIndex) => {
   return a.x * b.x + a.z * b.z === 0;
 };
 
+const cellCenterFromIndex = (bound: number, index: number) =>
+  -bound + (index + 0.5) * TRAIL_TILE_SIZE;
+
+const nearestCellCenter = (runtime: Runtime, value: number) => {
+  const centered = (value + runtime.bound) / TRAIL_TILE_SIZE - 0.5;
+  const idx = Math.round(centered);
+  const clamped = Math.max(0, Math.min(runtime.fillCols - 1, idx));
+  return cellCenterFromIndex(runtime.bound, clamped);
+};
+
+const startCellCenter = (fillCols: number, bound: number) => {
+  const mid = Math.floor(fillCols / 2);
+  return cellCenterFromIndex(bound, mid);
+};
+
+const alignRuntimeToLane = (runtime: Runtime, dir: DirectionIndex = runtime.dir) => {
+  const direction = DIRECTIONS[dir];
+  if (direction.x !== 0) {
+    runtime.laneZ = nearestCellCenter(runtime, runtime.playerZ);
+    runtime.playerZ = runtime.laneZ;
+    runtime.trailStartZ = runtime.laneZ;
+    runtime.turnAnchorZ = runtime.laneZ;
+  } else {
+    runtime.laneX = nearestCellCenter(runtime, runtime.playerX);
+    runtime.playerX = runtime.laneX;
+    runtime.trailStartX = runtime.laneX;
+    runtime.turnAnchorX = runtime.laneX;
+  }
+};
+
 const pointSegmentDistance = (
   px: number,
   pz: number,
@@ -506,6 +538,7 @@ const createPickup = (): PhasePickup => ({
 
 const createRuntime = (): Runtime => {
   const initial = boundsForLevel(1);
+  const start = startCellCenter(initial.fillCols, initial.bound);
   return {
     elapsed: 0,
     score: 0,
@@ -521,15 +554,17 @@ const createRuntime = (): Runtime => {
     totalCells: initial.fillCols * initial.fillCols,
     completion: 0,
     collectibles: 0,
-    playerX: 0,
-    playerZ: 0,
+    playerX: start,
+    playerZ: start,
+    laneX: start,
+    laneZ: start,
     dir: 0,
     playerYaw: DIR_YAWS[0],
     targetYaw: DIR_YAWS[0],
-    trailStartX: 0,
-    trailStartZ: 0,
-    turnAnchorX: 0,
-    turnAnchorZ: 0,
+    trailStartX: start,
+    trailStartZ: start,
+    turnAnchorX: start,
+    turnAnchorZ: start,
     ignoreSegmentId: -1,
     phaseCharges: 0,
     phaseTimer: 0,
@@ -707,6 +742,7 @@ const prepareLevelRuntime = (
   headIndex: number
 ) => {
   const layout = boundsForLevel(level);
+  const start = startCellCenter(layout.fillCols, layout.bound);
   runtime.elapsed = 0;
   runtime.score = 0;
   runtime.tightTurnBonus = 0;
@@ -721,15 +757,17 @@ const prepareLevelRuntime = (
   runtime.bound = layout.bound;
   runtime.completion = 0;
   runtime.collectibles = 0;
-  runtime.playerX = 0;
-  runtime.playerZ = 0;
+  runtime.playerX = start;
+  runtime.playerZ = start;
+  runtime.laneX = start;
+  runtime.laneZ = start;
   runtime.dir = 0;
   runtime.playerYaw = DIR_YAWS[0];
   runtime.targetYaw = DIR_YAWS[0];
-  runtime.trailStartX = 0;
-  runtime.trailStartZ = 0;
-  runtime.turnAnchorX = 0;
-  runtime.turnAnchorZ = 0;
+  runtime.trailStartX = start;
+  runtime.trailStartZ = start;
+  runtime.turnAnchorX = start;
+  runtime.turnAnchorZ = start;
   runtime.ignoreSegmentId = -1;
   runtime.phaseCharges = 0;
   runtime.phaseTimer = 0;
@@ -768,6 +806,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.tightTurns = 0;
   runtime.danger = 0;
   const layout = boundsForLevel(1);
+  const start = startCellCenter(layout.fillCols, layout.bound);
   runtime.level = 1;
   runtime.gridSize = layout.gridSize;
   runtime.bound = layout.bound;
@@ -777,15 +816,17 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.speed = runtime.baseSpeed;
   runtime.completion = 0;
   runtime.collectibles = 0;
-  runtime.playerX = 0;
-  runtime.playerZ = 0;
+  runtime.playerX = start;
+  runtime.playerZ = start;
+  runtime.laneX = start;
+  runtime.laneZ = start;
   runtime.dir = 0;
   runtime.playerYaw = DIR_YAWS[0];
   runtime.targetYaw = DIR_YAWS[0];
-  runtime.trailStartX = 0;
-  runtime.trailStartZ = 0;
-  runtime.turnAnchorX = 0;
-  runtime.turnAnchorZ = 0;
+  runtime.trailStartX = start;
+  runtime.trailStartZ = start;
+  runtime.turnAnchorX = start;
+  runtime.turnAnchorZ = start;
   runtime.ignoreSegmentId = -1;
   runtime.phaseCharges = 0;
   runtime.phaseTimer = 0;
@@ -1166,6 +1207,7 @@ function TraceScene() {
         runtime.targetYaw = DIR_YAWS[directionInput];
         runtime.playerYaw = DIR_YAWS[directionInput];
       }
+      alignRuntimeToLane(runtime, runtime.dir);
       useTraceStore.getState().startRun({
         level: levelToStart,
         themeIndex,
@@ -1178,6 +1220,7 @@ function TraceScene() {
         runtime.dir = directionInput;
         runtime.targetYaw = DIR_YAWS[runtime.dir];
         runtime.turnGrace = TURN_GRACE_TIME;
+        alignRuntimeToLane(runtime, runtime.dir);
 
         const distToWall = Math.min(
           runtime.bound - Math.abs(runtime.playerX),
@@ -1281,6 +1324,7 @@ function TraceScene() {
       }
 
       const dir = DIRECTIONS[runtime.dir];
+      alignRuntimeToLane(runtime, runtime.dir);
       const stepCount = Math.max(1, Math.ceil((runtime.speed * dt) / 0.045));
       const subDt = dt / stepCount;
       let gameOver = false;
@@ -1288,6 +1332,8 @@ function TraceScene() {
       for (let i = 0; i < stepCount; i += 1) {
         runtime.playerX += dir.x * runtime.speed * subDt;
         runtime.playerZ += dir.z * runtime.speed * subDt;
+        if (dir.x !== 0) runtime.playerZ = runtime.laneZ;
+        if (dir.z !== 0) runtime.playerX = runtime.laneX;
 
         if (
           Math.abs(runtime.playerX) + PLAYER_RADIUS > runtime.bound ||
