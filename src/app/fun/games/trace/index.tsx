@@ -325,6 +325,13 @@ const speedForLevel = (level: number) =>
 const levelBound = (gridSize: number) => gridSize * CELL_SIZE * 0.5;
 const fillColsForBound = (bound: number) =>
   Math.max(1, Math.round((bound * 2) / TRAIL_TILE_SIZE));
+const boundsForLevel = (level: number) => {
+  const gridSize = gridSizeForLevel(level);
+  const baseBound = levelBound(gridSize);
+  const fillCols = fillColsForBound(baseBound);
+  const bound = (fillCols * TRAIL_TILE_SIZE) * 0.5;
+  return { gridSize, fillCols, bound };
+};
 
 const medalForCompletion = (completion: number): MedalTier => {
   const pct = clamp(completion, 0, 100);
@@ -487,9 +494,7 @@ const createPickup = (): PhasePickup => ({
 });
 
 const createRuntime = (): Runtime => {
-  const gridSize = gridSizeForLevel(1);
-  const bound = levelBound(gridSize);
-  const fillCols = fillColsForBound(bound);
+  const initial = boundsForLevel(1);
   return {
     elapsed: 0,
     score: 0,
@@ -498,11 +503,11 @@ const createRuntime = (): Runtime => {
     danger: 0,
     speed: speedForLevel(1),
     baseSpeed: speedForLevel(1),
-    bound,
+    bound: initial.bound,
     level: 1,
-    gridSize,
-    fillCols,
-    totalCells: fillCols * fillCols,
+    gridSize: initial.gridSize,
+    fillCols: initial.fillCols,
+    totalCells: initial.fillCols * initial.fillCols,
     completion: 0,
     collectibles: 0,
     playerX: 0,
@@ -689,21 +694,19 @@ const prepareLevelRuntime = (
   themeIndex: number,
   headIndex: number
 ) => {
-  const gridSize = gridSizeForLevel(level);
-  const bound = levelBound(gridSize);
-  const fillCols = fillColsForBound(bound);
+  const layout = boundsForLevel(level);
   runtime.elapsed = 0;
   runtime.score = 0;
   runtime.tightTurnBonus = 0;
   runtime.tightTurns = 0;
   runtime.danger = 0;
   runtime.level = level;
-  runtime.gridSize = gridSize;
-  runtime.fillCols = fillCols;
-  runtime.totalCells = fillCols * fillCols;
+  runtime.gridSize = layout.gridSize;
+  runtime.fillCols = layout.fillCols;
+  runtime.totalCells = layout.fillCols * layout.fillCols;
   runtime.baseSpeed = speedForLevel(level);
   runtime.speed = runtime.baseSpeed;
-  runtime.bound = bound;
+  runtime.bound = layout.bound;
   runtime.completion = 0;
   runtime.collectibles = 0;
   runtime.playerX = 0;
@@ -751,10 +754,11 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.tightTurnBonus = 0;
   runtime.tightTurns = 0;
   runtime.danger = 0;
+  const layout = boundsForLevel(1);
   runtime.level = 1;
-  runtime.gridSize = gridSizeForLevel(1);
-  runtime.bound = levelBound(runtime.gridSize);
-  runtime.fillCols = fillColsForBound(runtime.bound);
+  runtime.gridSize = layout.gridSize;
+  runtime.bound = layout.bound;
+  runtime.fillCols = layout.fillCols;
   runtime.totalCells = runtime.fillCols * runtime.fillCols;
   runtime.baseSpeed = speedForLevel(1);
   runtime.speed = runtime.baseSpeed;
@@ -1017,6 +1021,7 @@ function TraceScene() {
   const headStyleMatRefs = useRef<Array<THREE.MeshBasicMaterial | null>>([]);
   const currentTrailRef = useRef<THREE.Mesh>(null);
   const trailMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const fillMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const playerMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const sparkPointsRef = useRef<THREE.Points>(null);
   const sparkMatRef = useRef<THREE.PointsMaterial>(null);
@@ -1388,17 +1393,12 @@ function TraceScene() {
       const total = runtime.trailCells.length;
       for (let i = 0; i < total && idx < FILL_CELL_CAP; i += 1) {
         const cell = runtime.trailCells[i];
-        const gradient = total > 1 ? i / (total - 1) : 0;
 
         dummy.position.set(cell.x, 0.06, cell.z);
         dummy.scale.set(TRAIL_TILE_SIZE, 0.06, TRAIL_TILE_SIZE);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         fillMeshRef.current.setMatrixAt(idx, dummy.matrix);
-
-        segColor.copy(themeTrailA).lerp(themeTrailB, gradient);
-        if (runtime.phaseTimer > 0) segColor.lerp(themeTrailPulse, 0.25);
-        fillMeshRef.current.setColorAt(idx, segColor);
         idx += 1;
       }
 
@@ -1408,12 +1408,14 @@ function TraceScene() {
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         fillMeshRef.current.setMatrixAt(idx, dummy.matrix);
-        fillMeshRef.current.setColorAt(idx, themeTrailA);
         idx += 1;
       }
 
       fillMeshRef.current.instanceMatrix.needsUpdate = true;
-      if (fillMeshRef.current.instanceColor) fillMeshRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (fillMatRef.current) {
+      fillMatRef.current.color.copy(runtime.phaseTimer > 0 ? themeTrailPulse : themeTrailA);
     }
 
     if (trailMeshRef.current) {
@@ -1717,7 +1719,7 @@ function TraceScene() {
         frustumCulled={false}
       >
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
+        <meshBasicMaterial ref={fillMatRef} color="#2be4ff" toneMapped={false} />
       </instancedMesh>
 
       <instancedMesh ref={gridLineRef} args={[undefined, undefined, GRID_LINE_CAP]}>
