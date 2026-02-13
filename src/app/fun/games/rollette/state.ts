@@ -1,19 +1,6 @@
 import { proxy } from 'valtio';
-import {
-  CHAIN_WINDOW_S,
-  COMBO_STEP,
-  DASH_COOLDOWN_S,
-  DIFFICULTY_STEP_S,
-  PYRAMID_DAMAGE,
-  PYRAMID_DEBT,
-  RING_BASE_POINTS,
-  ZONE_DURATION_S,
-  ZONE_INTERVAL_S,
-  ZONE_MULTIPLIER,
-  ZONE_RADIUS_END,
-  ZONE_RADIUS_START,
-} from './constants';
-import type { PyramidType, RingColor, Vec3 } from './types';
+import { COMBO_WINDOW_S, NUDGE_COOLDOWN_S } from './constants';
+import type { PowerMode, ThemeId } from './types';
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
@@ -23,234 +10,193 @@ export const rolletteState = proxy({
   highScore: 0,
   gameOver: false,
 
-  debt: 0,
-  bonusBank: 0,
-
   health: 100,
   maxHealth: 100,
+
+  bonusBank: 0,
 
   combo: 0,
   comboTimer: 0,
 
-  dashCooldown: 0,
-  dashCooldownMax: DASH_COOLDOWN_S,
+  nudgeCooldown: 0,
+  nudgeCooldownMax: NUDGE_COOLDOWN_S,
 
   shieldTime: 0,
-  slowTime: 0,
-  slipperyTime: 0,
+  multiplier: 1,
+  multiplierTime: 0,
 
-  bonusMultiplier: 1,
-  bonusMultiplierTime: 0,
+  powerMode: null as PowerMode,
+  powerTime: 0,
 
-  inZone: false,
+  wizardActive: false,
+  wizardTime: 0,
 
-  zoneCenter: [0, 0, 0] as Vec3,
-  zoneTimeLeft: ZONE_DURATION_S,
-  zoneSinceMove: 0,
-  zoneMoveId: 0,
-  zoneRadius: ZONE_RADIUS_START,
+  multiballActive: false,
+  multiballTime: 0,
+  multiballLit: false,
 
-  starChain: 0,
+  inMiniZone: false,
 
-  difficultyLevel: 1,
-  elapsed: 0,
+  theme: 'nebula' as ThemeId,
 
   toast: '',
   toastTime: 0,
 
-  lastDamageAtMs: 0,
-
   reset: () => {
     rolletteState.score = 0;
-    rolletteState.debt = 0;
-    rolletteState.bonusBank = 0;
-    rolletteState.health = rolletteState.maxHealth;
     rolletteState.gameOver = false;
+
+    rolletteState.health = rolletteState.maxHealth;
+    rolletteState.bonusBank = 0;
+
     rolletteState.combo = 0;
     rolletteState.comboTimer = 0;
-    rolletteState.dashCooldown = 0;
+
+    rolletteState.nudgeCooldown = 0;
+
     rolletteState.shieldTime = 0;
-    rolletteState.slowTime = 0;
-    rolletteState.slipperyTime = 0;
-    rolletteState.bonusMultiplier = 1;
-    rolletteState.bonusMultiplierTime = 0;
-    rolletteState.inZone = false;
-    rolletteState.zoneCenter = [0, 0, 0];
-    rolletteState.zoneTimeLeft = ZONE_DURATION_S;
-    rolletteState.zoneSinceMove = 0;
-    rolletteState.zoneMoveId = 0;
-    rolletteState.zoneRadius = ZONE_RADIUS_START;
-    rolletteState.starChain = 0;
-    rolletteState.difficultyLevel = 1;
-    rolletteState.elapsed = 0;
+    rolletteState.multiplier = 1;
+    rolletteState.multiplierTime = 0;
+
+    rolletteState.powerMode = null;
+    rolletteState.powerTime = 0;
+
+    rolletteState.wizardActive = false;
+    rolletteState.wizardTime = 0;
+
+    rolletteState.multiballActive = false;
+    rolletteState.multiballTime = 0;
+    rolletteState.multiballLit = false;
+
+    rolletteState.inMiniZone = false;
+
     rolletteState.toast = '';
     rolletteState.toastTime = 0;
-    rolletteState.lastDamageAtMs = 0;
   },
 
-  setToast: (text: string, time = 1.25) => {
-    rolletteState.toast = text;
-    rolletteState.toastTime = Math.max(rolletteState.toastTime, time);
+  setTheme: (theme: ThemeId) => {
+    rolletteState.theme = theme;
   },
 
-  addScore: (rawPoints: number) => {
-    if (!Number.isFinite(rawPoints) || rawPoints <= 0) return;
-    const points = Math.floor(rawPoints);
-    if (rolletteState.debt > 0) {
-      const before = rolletteState.debt;
-      rolletteState.debt = Math.max(0, rolletteState.debt - points);
-      const paid = before - rolletteState.debt;
-      const leftover = points - paid;
-      if (rolletteState.debt === 0 && before > 0) {
-        rolletteState.setToast('DEBT CLEARED!');
-      }
-      if (leftover > 0) rolletteState.score += leftover;
-    } else {
-      rolletteState.score += points;
-    }
-    if (rolletteState.score > rolletteState.highScore)
+  setToast: (msg: string, t = 1.2) => {
+    rolletteState.toast = msg;
+    rolletteState.toastTime = Math.max(rolletteState.toastTime, t);
+  },
+
+  addScore: (raw: number) => {
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    const pts = Math.floor(raw);
+    rolletteState.score += pts;
+    if (rolletteState.score > rolletteState.highScore) {
       rolletteState.highScore = rolletteState.score;
+    }
   },
 
-  addDebt: (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    rolletteState.debt += Math.floor(amount);
+  addBank: (raw: number) => {
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    rolletteState.bonusBank += Math.floor(raw);
   },
 
-  setBonusBank: (amount: number) => {
-    if (!Number.isFinite(amount)) return;
-    rolletteState.bonusBank = Math.max(0, Math.floor(amount));
+  clearBank: () => {
+    rolletteState.bonusBank = 0;
   },
 
-  takeDamage: (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    const nowMs = performance.now();
-    rolletteState.lastDamageAtMs = nowMs;
+  addComboPoints: (base: number, inMini = false) => {
+    if (!Number.isFinite(base) || base <= 0) return;
+
+    rolletteState.combo = rolletteState.comboTimer > 0 ? rolletteState.combo + 1 : 1;
+    rolletteState.comboTimer = COMBO_WINDOW_S;
+
+    const comboMult = 1 + Math.max(0, rolletteState.combo - 1) * 0.08;
+    const miniMult = inMini ? 1.3 : 1;
+    const wizardMult = rolletteState.wizardActive ? 2.25 : 1;
+    const multiBallMult = rolletteState.multiballActive ? 1.7 : 1;
+    const powerMult = rolletteState.multiplier;
+
+    const points =
+      base * comboMult * miniMult * wizardMult * multiBallMult * powerMult;
+    rolletteState.addScore(points);
+    rolletteState.addBank(points * 0.14);
+  },
+
+  takeDamage: (raw: number) => {
+    if (!Number.isFinite(raw) || raw <= 0) return;
 
     if (rolletteState.shieldTime > 0) {
       rolletteState.shieldTime = 0;
-      rolletteState.setToast('SHIELD BROKE');
+      rolletteState.setToast('SHIELD BROKE', 0.7);
       return;
     }
 
-    rolletteState.health = clamp(
-      rolletteState.health - amount,
-      0,
-      rolletteState.maxHealth
-    );
+    rolletteState.health = clamp(rolletteState.health - raw, 0, rolletteState.maxHealth);
     rolletteState.combo = 0;
     rolletteState.comboTimer = 0;
-    rolletteState.starChain = 0;
+
     if (rolletteState.health <= 0) {
+      rolletteState.health = 0;
       rolletteState.gameOver = true;
-      rolletteState.setToast('RUN LOST');
+      rolletteState.setToast('GAME OVER', 1.6);
     }
   },
 
-  heal: (amount: number) => {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-    rolletteState.health = clamp(
-      rolletteState.health + amount,
-      0,
-      rolletteState.maxHealth
-    );
+  heal: (raw: number) => {
+    if (!Number.isFinite(raw) || raw <= 0) return;
+    rolletteState.health = clamp(rolletteState.health + raw, 0, rolletteState.maxHealth);
   },
 
-  refillDash: (fraction: number) => {
-    if (!Number.isFinite(fraction) || fraction <= 0) return;
-    rolletteState.dashCooldown = Math.max(
-      0,
-      rolletteState.dashCooldown - rolletteState.dashCooldownMax * fraction
-    );
+  setPower: (mode: PowerMode, duration: number) => {
+    rolletteState.powerMode = mode;
+    rolletteState.powerTime = mode ? Math.max(rolletteState.powerTime, duration) : 0;
   },
 
-  hitRing: (color: RingColor, inZone: boolean) => {
-    const base = RING_BASE_POINTS[color];
-    if (rolletteState.comboTimer > 0) rolletteState.combo += 1;
-    else rolletteState.combo = 0;
-    rolletteState.comboTimer = CHAIN_WINDOW_S;
-
-    const comboMult = 1 + rolletteState.combo * COMBO_STEP;
-    const zoneMult = inZone ? ZONE_MULTIPLIER : 1;
-    const mult = rolletteState.bonusMultiplier;
-
-    rolletteState.addScore(base * comboMult * zoneMult * mult);
+  activateMultiplier: (mult: number, duration: number) => {
+    rolletteState.multiplier = Math.max(rolletteState.multiplier, mult);
+    rolletteState.multiplierTime = Math.max(rolletteState.multiplierTime, duration);
   },
 
-  hitPyramid: (type: PyramidType) => {
-    rolletteState.addDebt(PYRAMID_DEBT[type]);
-    rolletteState.takeDamage(PYRAMID_DAMAGE[type]);
-    rolletteState.setToast(`PENALTY +${PYRAMID_DEBT[type]}`);
-    if (type === 'black') {
-      rolletteState.slipperyTime = Math.max(rolletteState.slipperyTime, 3);
-      rolletteState.setToast('SLIPPERY!');
-    }
+  activateShield: (duration: number) => {
+    rolletteState.shieldTime = Math.max(rolletteState.shieldTime, duration);
   },
 
-  hitStar: () => {
-    rolletteState.starChain += 1;
-    const chain = rolletteState.starChain;
-    const reward = 300 * Math.pow(chain, 1.35);
-    rolletteState.addScore(reward);
-    rolletteState.setToast(`STAR CHAIN x${chain}`);
+  activateWizard: (duration: number) => {
+    rolletteState.wizardActive = true;
+    rolletteState.wizardTime = Math.max(rolletteState.wizardTime, duration);
   },
 
-  activateMultiplier: (mult: number, time: number) => {
-    rolletteState.bonusMultiplier = Math.max(
-      rolletteState.bonusMultiplier,
-      mult
-    );
-    rolletteState.bonusMultiplierTime = Math.max(
-      rolletteState.bonusMultiplierTime,
-      time
-    );
-    rolletteState.setToast(`MULTIPLIER x${rolletteState.bonusMultiplier}`);
+  activateMultiball: (duration: number) => {
+    rolletteState.multiballActive = true;
+    rolletteState.multiballTime = Math.max(rolletteState.multiballTime, duration);
+    rolletteState.multiballLit = false;
   },
 
-  activateShield: (time: number) => {
-    rolletteState.shieldTime = Math.max(rolletteState.shieldTime, time);
-    rolletteState.setToast('SHIELD ON');
-  },
-
-  activateSlow: (time: number) => {
-    rolletteState.slowTime = Math.max(rolletteState.slowTime, time);
-    rolletteState.setToast('SLOW-MO');
+  setMultiballLit: (lit: boolean) => {
+    rolletteState.multiballLit = lit;
   },
 
   tick: (dt: number) => {
-    rolletteState.elapsed += dt;
-
     rolletteState.comboTimer = Math.max(0, rolletteState.comboTimer - dt);
-    rolletteState.dashCooldown = Math.max(0, rolletteState.dashCooldown - dt);
+    rolletteState.nudgeCooldown = Math.max(0, rolletteState.nudgeCooldown - dt);
     rolletteState.shieldTime = Math.max(0, rolletteState.shieldTime - dt);
-    rolletteState.slowTime = Math.max(0, rolletteState.slowTime - dt);
-    rolletteState.slipperyTime = Math.max(0, rolletteState.slipperyTime - dt);
     rolletteState.toastTime = Math.max(0, rolletteState.toastTime - dt);
 
-    if (rolletteState.bonusMultiplierTime > 0) {
-      rolletteState.bonusMultiplierTime = Math.max(
-        0,
-        rolletteState.bonusMultiplierTime - dt
-      );
-      if (rolletteState.bonusMultiplierTime === 0)
-        rolletteState.bonusMultiplier = 1;
+    if (rolletteState.multiplierTime > 0) {
+      rolletteState.multiplierTime = Math.max(0, rolletteState.multiplierTime - dt);
+      if (rolletteState.multiplierTime === 0) rolletteState.multiplier = 1;
     }
 
-    rolletteState.zoneSinceMove += dt;
-    rolletteState.zoneTimeLeft = Math.max(0, rolletteState.zoneTimeLeft - dt);
-    const t = 1 - clamp(rolletteState.zoneTimeLeft / ZONE_DURATION_S, 0, 1);
-    rolletteState.zoneRadius =
-      ZONE_RADIUS_START + (ZONE_RADIUS_END - ZONE_RADIUS_START) * t;
-
-    if (rolletteState.zoneSinceMove >= ZONE_INTERVAL_S) {
-      rolletteState.zoneSinceMove = 0;
-      rolletteState.zoneTimeLeft = ZONE_DURATION_S;
-      rolletteState.zoneMoveId += 1;
-      // zoneCenter is set externally so the arena can apply spawn fairness.
+    if (rolletteState.powerTime > 0) {
+      rolletteState.powerTime = Math.max(0, rolletteState.powerTime - dt);
+      if (rolletteState.powerTime === 0) rolletteState.powerMode = null;
     }
 
-    // difficulty ramps every ~25s
-    const nextLevel = Math.floor(rolletteState.elapsed / DIFFICULTY_STEP_S) + 1;
-    rolletteState.difficultyLevel = Math.max(1, nextLevel);
+    if (rolletteState.wizardTime > 0) {
+      rolletteState.wizardTime = Math.max(0, rolletteState.wizardTime - dt);
+      if (rolletteState.wizardTime === 0) rolletteState.wizardActive = false;
+    }
+
+    if (rolletteState.multiballTime > 0) {
+      rolletteState.multiballTime = Math.max(0, rolletteState.multiballTime - dt);
+      if (rolletteState.multiballTime === 0) rolletteState.multiballActive = false;
+    }
   },
 });

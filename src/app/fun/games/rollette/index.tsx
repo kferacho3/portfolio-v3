@@ -1,19 +1,17 @@
-// @ts-nocheck
 'use client';
 
 import React, { useEffect, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
-import { rolletteState } from './state';
-import { HudLayer } from './_components/HudLayer';
-import { DamageVignette } from './_components/DamageVignette';
-import { RolletteWorld } from './_components/RolletteWorld';
 import { useGameUIState } from '../../store/selectors';
+import { BEST_SCORE_KEY } from './constants';
+import { rolletteState } from './state';
+import { DamageVignette } from './_components/DamageVignette';
+import { HudLayer } from './_components/HudLayer';
+import { RolletteWorld } from './_components/RolletteWorld';
 
 export { rolletteState } from './state';
 
-const BEST_SCORE_KEY = 'rollette_overdrive_best_v1';
-
-const RolletteOverdrive: React.FC<{ soundsOn?: boolean }> = ({
+const RollettePinballUltimate: React.FC<{ soundsOn?: boolean }> = ({
   soundsOn = true,
 }) => {
   const { gl } = useThree();
@@ -29,6 +27,7 @@ const RolletteOverdrive: React.FC<{ soundsOn?: boolean }> = ({
 
     const previousTouchAction = gl.domElement.style.touchAction;
     gl.domElement.style.touchAction = 'none';
+
     return () => {
       gl.domElement.style.touchAction = previousTouchAction;
     };
@@ -48,4 +47,4 @@ const RolletteOverdrive: React.FC<{ soundsOn?: boolean }> = ({
   );
 };
 
-export default RolletteOverdrive;
+export default RollettePinballUltimate;

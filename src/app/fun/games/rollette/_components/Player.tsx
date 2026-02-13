@@ -9,9 +9,8 @@ import {
 } from '@react-three/rapier';
 import * as THREE from 'three';
 import { PLAYER_RADIUS } from '../constants';
+import type { PowerMode } from '../types';
 import { rolletteState } from '../state';
-
-type PowerMode = 'HEAVY' | 'GHOST' | 'MAGNET' | null;
 
 export const Player: React.FC<{
   ballRef: React.RefObject<RapierRigidBody>;
@@ -34,14 +33,13 @@ export const Player: React.FC<{
   const resolvedShieldRef = shieldLightRef ?? fallbackShieldLightRef;
 
   useFrame(({ clock }) => {
-    const shieldT = rolletteState.shieldTime;
-    const shieldOn = shieldT > 0;
-    const fade = THREE.MathUtils.clamp(shieldT / 0.9, 0, 1);
+    const shieldOn = rolletteState.shieldTime > 0;
+    const shieldFade = THREE.MathUtils.clamp(rolletteState.shieldTime / 0.8, 0, 1);
 
     if (bubbleRef.current) {
       bubbleRef.current.visible = shieldOn;
       if (shieldOn) {
-        const pulse = 0.04 + Math.sin(clock.elapsedTime * 6.2) * 0.02;
+        const pulse = 0.04 + Math.sin(clock.elapsedTime * 6.4) * 0.02;
         bubbleRef.current.scale.setScalar(1 + pulse);
       }
     }
@@ -49,31 +47,32 @@ export const Player: React.FC<{
     if (bubbleMatRef.current) {
       bubbleMatRef.current.color.set(glow);
       bubbleMatRef.current.emissive.set(glow);
-      bubbleMatRef.current.opacity = 0.15 * fade;
-      bubbleMatRef.current.emissiveIntensity = 0.5 + fade * 0.85;
+      bubbleMatRef.current.opacity = 0.15 * shieldFade;
+      bubbleMatRef.current.emissiveIntensity = 0.5 + shieldFade * 0.8;
     }
 
     if (ballMatRef.current) {
-      const pulse = 0.2 + Math.sin(clock.elapsedTime * 8.5) * 0.06;
+      const pulse = 0.2 + Math.sin(clock.elapsedTime * 8.7) * 0.06;
+
       if (powerMode === 'HEAVY') {
         ballMatRef.current.color.set('#ff6b35');
         ballMatRef.current.emissive.set('#ff3b1f');
-        ballMatRef.current.emissiveIntensity = 0.45 + pulse;
+        ballMatRef.current.emissiveIntensity = 0.5 + pulse;
         ballMatRef.current.opacity = 1;
       } else if (powerMode === 'GHOST') {
         ballMatRef.current.color.set('#9ae6ff');
         ballMatRef.current.emissive.set('#3cb3ff');
-        ballMatRef.current.emissiveIntensity = 0.34 + pulse * 0.75;
+        ballMatRef.current.emissiveIntensity = 0.34 + pulse * 0.76;
         ballMatRef.current.opacity = 0.58;
       } else if (powerMode === 'MAGNET') {
         ballMatRef.current.color.set('#ffd950');
         ballMatRef.current.emissive.set('#ffb300');
-        ballMatRef.current.emissiveIntensity = 0.38 + pulse * 0.9;
+        ballMatRef.current.emissiveIntensity = 0.4 + pulse * 0.9;
         ballMatRef.current.opacity = 1;
       } else {
         ballMatRef.current.color.set(tint);
         ballMatRef.current.emissive.set(tint);
-        ballMatRef.current.emissiveIntensity = 0.22 + pulse * 0.35;
+        ballMatRef.current.emissiveIntensity = 0.24 + pulse * 0.34;
         ballMatRef.current.opacity = 1;
       }
     }
@@ -83,13 +82,14 @@ export const Player: React.FC<{
     <RigidBody
       ref={ballRef}
       colliders={false}
-      position={[0, 2.5, 0]}
+      position={[0, 2.4, 0]}
       linearDamping={0.08}
       angularDamping={0.45}
       canSleep={false}
       ccd
     >
       <BallCollider args={[PLAYER_RADIUS]} friction={0.05} restitution={0.88} />
+
       <mesh castShadow>
         <sphereGeometry args={[PLAYER_RADIUS, 32, 32]} />
         <meshStandardMaterial
@@ -104,15 +104,10 @@ export const Player: React.FC<{
         />
       </mesh>
 
-      <pointLight
-        ref={resolvedShieldRef}
-        color={glow}
-        intensity={0}
-        distance={7}
-      />
+      <pointLight ref={resolvedShieldRef} color={glow} intensity={0} distance={7} />
 
       <mesh ref={bubbleRef} visible={false}>
-        <sphereGeometry args={[PLAYER_RADIUS * 1.36, 28, 28]} />
+        <sphereGeometry args={[PLAYER_RADIUS * 1.35, 28, 28]} />
         <meshStandardMaterial
           ref={bubbleMatRef}
           color={glow}

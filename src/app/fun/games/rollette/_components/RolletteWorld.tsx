@@ -15,58 +15,40 @@ import * as THREE from 'three';
 import {
   ARENA_HALF,
   ARENA_SIZE,
-  CHAIN_WINDOW_S,
+  COMBO_WINDOW_S,
+  CONTROL_SPEED,
+  DRAIN_GAP,
   FLOOR_Y,
+  GRAVITY,
   ITEM_Y,
+  MAX_PLANAR_SPEED,
+  MOUSE_FORCE,
+  NUDGE_COOLDOWN_S,
+  NUDGE_LIMIT,
+  NUDGE_WINDOW_S,
   PLAYER_RADIUS,
+  SKILL_SHOT_WINDOW_S,
+  TILT_LOCK_S,
 } from '../constants';
 import { rolletteState } from '../state';
-import type { Vec3 } from '../types';
-import { BurstFX, type Burst } from './BurstFX';
+import type {
+  ControlMode,
+  ObjectiveTag,
+  ObstacleMotion,
+  PowerMode,
+  TargetKind,
+  ThemeId,
+  Vec3,
+} from '../types';
+import { BurstFX, FlashFX, type Burst, type Flash, type Wave, WaveFX } from './BurstFX';
 import { Player } from './Player';
+
+const WALL_THICKNESS = 1.35;
+const WALL_HEIGHT = 4;
 
 const nowSec = () => performance.now() / 1000;
 
-const WALL_THICKNESS = 1.3;
-const WALL_HEIGHT = 3.6;
-const TABLE_DRAIN_GAP = 13;
-
-const CONTROL_SPEED = 20; // matched to Rollette JS legacy keyboard velocity
-const MOUSE_FORCE = 205; // matched to Rollette JS legacy mouse force feel
-const MAX_SPEED = 38;
-
-const NUDGE_COOLDOWN_S = 0.95;
-const MAX_NUDGES_PER_WINDOW = 3;
-const NUDGE_WINDOW_S = 5;
-const TILT_LOCK_S = 3;
-
-type ThemeId = 'nebula' | 'cotton' | 'nature';
-type ControlMode = 'mouse' | 'keyboard';
-type PowerMode = 'HEAVY' | 'GHOST' | 'MAGNET' | null;
-
-type TargetKind =
-  | 'standup'
-  | 'drop'
-  | 'pop'
-  | 'spinner'
-  | 'slingshot'
-  | 'vari'
-  | 'bullOuter'
-  | 'bullCore'
-  | 'saucer'
-  | 'rollover'
-  | 'ramp'
-  | 'orbit'
-  | 'magnet'
-  | 'wormholeIn'
-  | 'wormholeOut'
-  | 'mystery'
-  | 'kicker'
-  | 'mini';
-
-type ObjectiveTag = 'drop' | 'spinner' | 'bullseye' | 'orbit' | 'ramp' | 'mystery';
-
-interface ArenaTheme {
+interface ThemeConfig {
   id: ThemeId;
   name: string;
   background: string;
@@ -77,11 +59,11 @@ interface ArenaTheme {
   secondary: string;
   hazard: string;
   highlight: string;
+  lane: string;
   glow: number;
-  laneTint: string;
 }
 
-interface PinballTarget {
+interface ArenaTarget {
   id: string;
   kind: TargetKind;
   pos: Vec3;
@@ -89,17 +71,17 @@ interface PinballTarget {
   points: number;
   active?: boolean;
   bank?: string;
+  objective?: ObjectiveTag;
   pairId?: string;
   yRot?: number;
   tint?: string;
-  objective?: ObjectiveTag;
 }
 
 interface ArenaObstacle {
   id: string;
   pos: Vec3;
   size: [number, number, number];
-  motion: 'rotate' | 'slide' | 'pulse';
+  motion: ObstacleMotion;
   axis?: 'x' | 'z';
   amp: number;
   speed: number;
@@ -107,74 +89,51 @@ interface ArenaObstacle {
   tint: string;
 }
 
-interface PathRibbon {
+interface ArenaLane {
   id: string;
   pos: Vec3;
   inner: number;
   outer: number;
   start: number;
   length: number;
-  tilt?: number;
-  tint?: string;
   kind: 'orbit' | 'ramp' | 'lane';
+  tint?: string;
 }
 
 interface ArenaLayout {
-  targets: PinballTarget[];
+  targets: ArenaTarget[];
   obstacles: ArenaObstacle[];
-  ribbons: PathRibbon[];
+  lanes: ArenaLane[];
   miniZone: { center: Vec3; half: [number, number] };
   launch: Vec3;
   skillShotTargetId: string;
-  drainGap: number;
 }
 
-interface ObjectiveState {
+interface Objectives {
   dropBanks: Set<string>;
   spinnerHits: number;
-  bullseyeHits: number;
+  bullHits: number;
   orbitHits: number;
   rampHits: number;
   mysteryHits: number;
-  rolloverHits: number;
+  captiveHits: number;
+  gobbleHits: number;
   jackpotValue: number;
-  multiballLit: boolean;
-  multiballUntil: number;
   skillShotActive: boolean;
   launchAt: number;
 }
 
-interface WaveFx {
-  id: string;
-  pos: Vec3;
-  color: string;
-  bornAt: number;
-  life: number;
-  maxScale: number;
-}
-
-interface FlashFx {
-  id: string;
-  pos: Vec3;
-  color: string;
-  bornAt: number;
-  life: number;
-  intensity: number;
-}
-
 type SoundEvent =
-  | 'hit'
   | 'target'
   | 'bumper'
   | 'drop'
   | 'jackpot'
   | 'nudge'
   | 'danger'
-  | 'mode'
   | 'wizard'
   | 'mystery';
 
-const THEMES: Record<ThemeId, ArenaTheme> = {
+const THEMES: Record<ThemeId, ThemeConfig> = {
   nebula: {
     id: 'nebula',
     name: 'Neon Nebula Galaxy',
@@ -186,8 +145,8 @@ const THEMES: Record<ThemeId, ArenaTheme> = {
     secondary: '#8e4bff',
     hazard: '#ff4f45',
     highlight: '#ffd84d',
+    lane: '#10d9ff',
     glow: 1.75,
-    laneTint: '#10d9ff',
   },
   cotton: {
     id: 'cotton',
@@ -200,8 +159,8 @@ const THEMES: Record<ThemeId, ArenaTheme> = {
     secondary: '#7ecbff',
     hazard: '#ff6e8d',
     highlight: '#ffffff',
+    lane: '#dcaeff',
     glow: 1.05,
-    laneTint: '#dcaeff',
   },
   nature: {
     id: 'nature',
@@ -214,8 +173,78 @@ const THEMES: Record<ThemeId, ArenaTheme> = {
     secondary: '#9ad64a',
     hazard: '#8d5430',
     highlight: '#d6ff87',
+    lane: '#7ecf7d',
     glow: 0.95,
-    laneTint: '#7ecf7d',
+  },
+  abyss: {
+    id: 'abyss',
+    name: 'Abyssal Current',
+    background: '#010916',
+    fog: '#031024',
+    floor: '#072039',
+    rail: '#0f3353',
+    accent: '#24d8ff',
+    secondary: '#4d9dff',
+    hazard: '#0f5d86',
+    highlight: '#8ff6ff',
+    lane: '#3fc8ff',
+    glow: 1.28,
+  },
+  forge: {
+    id: 'forge',
+    name: 'Volcanic Forge',
+    background: '#140603',
+    fog: '#2a0d05',
+    floor: '#311109',
+    rail: '#4a1d10',
+    accent: '#ff6a2a',
+    secondary: '#ffb347',
+    hazard: '#d9361d',
+    highlight: '#ffd88a',
+    lane: '#ff7a34',
+    glow: 1.38,
+  },
+  cyber: {
+    id: 'cyber',
+    name: 'Cyber Grid Matrix',
+    background: '#03060f',
+    fog: '#081324',
+    floor: '#0b1020',
+    rail: '#10223f',
+    accent: '#00f0ff',
+    secondary: '#ff4dff',
+    hazard: '#ff2d7a',
+    highlight: '#a5ff3d',
+    lane: '#24c9ff',
+    glow: 1.6,
+  },
+  aurora: {
+    id: 'aurora',
+    name: 'Aurora Prism',
+    background: '#081028',
+    fog: '#101e3e',
+    floor: '#172848',
+    rail: '#20365f',
+    accent: '#58ffd8',
+    secondary: '#7f8bff',
+    hazard: '#7e5adf',
+    highlight: '#ddf9ff',
+    lane: '#63b9ff',
+    glow: 1.25,
+  },
+  desert: {
+    id: 'desert',
+    name: 'Desert Relic Run',
+    background: '#1a1208',
+    fog: '#2b1f11',
+    floor: '#3a2a17',
+    rail: '#5a3d1f',
+    accent: '#e6c170',
+    secondary: '#d6a85b',
+    hazard: '#b46c2d',
+    highlight: '#ffe2a9',
+    lane: '#e4bf79',
+    glow: 1.08,
   },
 };
 
@@ -223,52 +252,55 @@ const THEME_KEYS: Record<string, ThemeId> = {
   '1': 'nebula',
   '2': 'cotton',
   '3': 'nature',
+  '4': 'abyss',
+  '5': 'forge',
+  '6': 'cyber',
+  '7': 'aurora',
+  '8': 'desert',
 };
 
-const makeId = (prefix: string) =>
-  `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
+const id = (prefix: string) => `${prefix}-${Math.random().toString(36).slice(2, 8)}`;
 
-const makeObjectives = (): ObjectiveState => ({
+const makeObjectives = (): Objectives => ({
   dropBanks: new Set<string>(),
   spinnerHits: 0,
-  bullseyeHits: 0,
+  bullHits: 0,
   orbitHits: 0,
   rampHits: 0,
   mysteryHits: 0,
-  rolloverHits: 0,
+  captiveHits: 0,
+  gobbleHits: 0,
   jackpotValue: 14000,
-  multiballLit: false,
-  multiballUntil: 0,
   skillShotActive: true,
   launchAt: nowSec(),
 });
 
-const wizardReady = (o: ObjectiveState) =>
+const canStartWizard = (o: Objectives) =>
   o.dropBanks.size >= 2 &&
   o.spinnerHits >= 8 &&
-  o.bullseyeHits >= 4 &&
+  o.bullHits >= 4 &&
   o.orbitHits >= 6 &&
   o.rampHits >= 6 &&
   o.mysteryHits >= 2;
 
-const createArenaLayout = (theme: ThemeId): ArenaLayout => {
-  const targets: PinballTarget[] = [];
+const buildLayout = (theme: ThemeId): ArenaLayout => {
+  const targets: ArenaTarget[] = [];
   const obstacles: ArenaObstacle[] = [];
-  const ribbons: PathRibbon[] = [];
+  const lanes: ArenaLane[] = [];
 
-  const addMirror = (
+  const mirrorTarget = (
     baseId: string,
     kind: TargetKind,
     x: number,
     z: number,
-    cfg: Partial<PinballTarget> = {}
+    cfg: Partial<ArenaTarget> = {}
   ) => {
     targets.push({
       id: `${baseId}-r`,
       kind,
       pos: [Math.abs(x), ITEM_Y + 0.45, z],
       radius: 1.4,
-      points: 250,
+      points: 240,
       active: true,
       ...cfg,
     });
@@ -277,43 +309,35 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       kind,
       pos: [-Math.abs(x), ITEM_Y + 0.45, z],
       radius: 1.4,
-      points: 250,
+      points: 240,
       active: true,
       yRot: Math.PI,
       ...cfg,
     });
   };
 
-  const addRibbonMirror = (
+  const mirrorLane = (
     baseId: string,
     x: number,
     z: number,
-    cfg: Omit<PathRibbon, 'id' | 'pos'>
+    cfg: Omit<ArenaLane, 'id' | 'pos'>
   ) => {
-    ribbons.push({
-      id: `${baseId}-r`,
-      pos: [Math.abs(x), ITEM_Y - 0.07, z],
-      ...cfg,
-    });
-    ribbons.push({
-      id: `${baseId}-l`,
-      pos: [-Math.abs(x), ITEM_Y - 0.07, z],
-      ...cfg,
-    });
+    lanes.push({ id: `${baseId}-r`, pos: [Math.abs(x), ITEM_Y - 0.07, z], ...cfg });
+    lanes.push({ id: `${baseId}-l`, pos: [-Math.abs(x), ITEM_Y - 0.07, z], ...cfg });
   };
 
   if (theme === 'nebula') {
     for (const [i, z] of [-10, -15, -20, -25].entries()) {
-      addMirror(`drop-nebula-a-${i}`, 'drop', 16, z, {
-        bank: z <= -20 ? 'nebula-bank-a2' : 'nebula-bank-a1',
+      mirrorTarget(`n-drop-a-${i}`, 'drop', 16, z, {
+        bank: z <= -20 ? 'n-bank-a2' : 'n-bank-a1',
         points: 1000,
         radius: 1.45,
         objective: 'drop',
       });
     }
     for (const [i, z] of [-30, -35, -40, -45].entries()) {
-      addMirror(`drop-nebula-b-${i}`, 'drop', 22, z, {
-        bank: z <= -40 ? 'nebula-bank-b2' : 'nebula-bank-b1',
+      mirrorTarget(`n-drop-b-${i}`, 'drop', 22, z, {
+        bank: z <= -40 ? 'n-bank-b2' : 'n-bank-b1',
         points: 1200,
         radius: 1.48,
         objective: 'drop',
@@ -321,68 +345,48 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     }
 
     for (const [i, z] of [-4, -12, -20, -28, -36].entries()) {
-      addMirror(`stand-nebula-${i}`, 'standup', 8, z, {
-        points: 260,
-        radius: 1.16,
-      });
+      mirrorTarget(`n-stand-${i}`, 'standup', 8, z, { points: 260, radius: 1.16 });
     }
 
     for (const [i, z] of [-14, -30].entries()) {
-      addMirror(`spin-nebula-${i}`, 'spinner', 24, z, {
+      mirrorTarget(`n-spin-${i}`, 'spinner', 24, z, {
         radius: 1.9,
         points: 420,
         objective: 'spinner',
       });
     }
 
-    addMirror('sling-nebula', 'slingshot', 12.3, 38, {
-      radius: 2.15,
-      points: 560,
-    });
-    addMirror('vari-nebula', 'vari', 20.4, 22, { radius: 1.5, points: 700 });
-    addMirror('saucer-nebula', 'saucer', 9.2, -39, {
-      radius: 1.75,
-      points: 2100,
-    });
-    addMirror('magnet-nebula', 'magnet', 8, -26, {
-      radius: 2.1,
-      points: 420,
-    });
-    addMirror('orbit-nebula-a', 'orbit', 28, -4, {
+    mirrorTarget('n-sling', 'sling', 12.3, 40, { radius: 2.15, points: 560 });
+    mirrorTarget('n-vari', 'vari', 20.4, 22, { radius: 1.52, points: 700 });
+    mirrorTarget('n-saucer', 'saucer', 9.2, -39, { radius: 1.75, points: 2100 });
+    mirrorTarget('n-magnet', 'magnet', 8.2, -26, { radius: 2.1, points: 420 });
+    mirrorTarget('n-orbit-a', 'orbit', 28, -4, {
       radius: 2.35,
       points: 900,
       objective: 'orbit',
     });
-    addMirror('orbit-nebula-b', 'orbit', 28, -24, {
+    mirrorTarget('n-orbit-b', 'orbit', 28, -24, {
       radius: 2.35,
       points: 950,
       objective: 'orbit',
     });
-    addMirror('ramp-nebula-a', 'ramp', 8, -8, {
+    mirrorTarget('n-ramp-a', 'ramp', 8, -8, {
       radius: 2.1,
       points: 1050,
       objective: 'ramp',
     });
-    addMirror('ramp-nebula-b', 'ramp', 13.2, -22, {
+    mirrorTarget('n-ramp-b', 'ramp', 13.2, -22, {
       radius: 1.9,
       points: 980,
       objective: 'ramp',
     });
-    addMirror('worm-in-nebula', 'wormholeIn', 24, 18, {
-      radius: 1.9,
-      points: 2600,
-    });
-    addMirror('worm-out-nebula', 'wormholeOut', 6.4, -47, {
-      radius: 1.5,
-      points: 0,
-    });
-    addMirror('mini-nebula', 'mini', 5.5, -48.5, {
-      radius: 1.45,
-      points: 980,
-    });
+    mirrorTarget('n-worm-in', 'wormIn', 24, 18, { radius: 1.9, points: 2600 });
+    mirrorTarget('n-worm-out', 'wormOut', 6.4, -47, { radius: 1.5, points: 0 });
+    mirrorTarget('n-mini', 'mini', 5.5, -48.5, { radius: 1.45, points: 980 });
+    mirrorTarget('n-captive', 'captive', 18.6, -12, { radius: 1.35, points: 520 });
 
     targets.push({
-      id: 'mini-nebula-core',
+      id: 'n-mini-core',
       kind: 'mini',
       pos: [0, ITEM_Y + 0.45, -49.5],
       radius: 1.5,
@@ -391,7 +395,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     });
 
     targets.push({
-      id: 'bull-nebula-outer',
+      id: 'n-bull-outer',
       kind: 'bullOuter',
       pos: [0, ITEM_Y + 0.4, -52.5],
       radius: 2.45,
@@ -399,9 +403,10 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       objective: 'bullseye',
       active: true,
     });
+
     targets.push({
-      id: 'bull-nebula-core',
-      kind: 'bullCore',
+      id: 'n-bull-inner',
+      kind: 'bullInner',
       pos: [0, ITEM_Y + 0.45, -52.5],
       radius: 1.1,
       points: 4600,
@@ -410,7 +415,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     });
 
     targets.push({
-      id: 'mystery-nebula',
+      id: 'n-mystery',
       kind: 'mystery',
       pos: [0, ITEM_Y + 0.44, -18],
       radius: 1.6,
@@ -420,7 +425,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     });
 
     targets.push({
-      id: 'kicker-nebula',
+      id: 'n-kicker',
       kind: 'kicker',
       pos: [0, ITEM_Y + 0.45, -37],
       radius: 1.5,
@@ -428,9 +433,18 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       active: true,
     });
 
+    targets.push({
+      id: 'n-gobble',
+      kind: 'gobble',
+      pos: [0, ITEM_Y + 0.43, -9],
+      radius: 1.45,
+      points: 7500,
+      active: true,
+    });
+
     for (const [i, x] of [-20, -10, 0, 10, 20].entries()) {
       targets.push({
-        id: `roll-nebula-${i}`,
+        id: `n-roll-${i}`,
         kind: 'rollover',
         pos: [x, ITEM_Y + 0.35, -55],
         radius: 1.2,
@@ -447,7 +461,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       [10.5, -24],
     ].entries()) {
       targets.push({
-        id: `pop-nebula-${i}`,
+        id: `n-pop-${i}`,
         kind: 'pop',
         pos: [x, ITEM_Y + 0.45, z],
         radius: 1.72,
@@ -457,7 +471,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     }
 
     obstacles.push({
-      id: 'obs-nebula-cross',
+      id: 'n-obs-cross',
       pos: [0, ITEM_Y + 0.82, -12],
       size: [10.5, 0.95, 1.05],
       motion: 'rotate',
@@ -466,8 +480,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       damage: 11,
       tint: '#ff5a56',
     });
+
     obstacles.push({
-      id: 'obs-nebula-gate-r',
+      id: 'n-obs-gate-r',
       pos: [17, ITEM_Y + 0.72, 5],
       size: [4.8, 1, 2],
       motion: 'slide',
@@ -477,8 +492,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       damage: 8,
       tint: '#2dc6ff',
     });
+
     obstacles.push({
-      id: 'obs-nebula-gate-l',
+      id: 'n-obs-gate-l',
       pos: [-17, ITEM_Y + 0.72, 5],
       size: [4.8, 1, 2],
       motion: 'slide',
@@ -488,8 +504,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       damage: 8,
       tint: '#2dc6ff',
     });
+
     obstacles.push({
-      id: 'obs-nebula-sentinel',
+      id: 'n-obs-core',
       pos: [0, ITEM_Y + 1.05, -29],
       size: [2.4, 2.5, 2.4],
       motion: 'pulse',
@@ -499,62 +516,60 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       tint: '#a958ff',
     });
 
-    addRibbonMirror('lane-nebula-orbit', 26.5, -14, {
+    mirrorLane('n-lane-orbit', 26.5, -14, {
       kind: 'orbit',
       inner: 5.8,
       outer: 7.4,
       start: Math.PI * 0.05,
       length: Math.PI * 0.85,
-      tilt: 0,
     });
-    addRibbonMirror('lane-nebula-ramp', 8.8, -19, {
+
+    mirrorLane('n-lane-ramp', 8.8, -19, {
       kind: 'ramp',
       inner: 3.6,
       outer: 5.1,
       start: Math.PI * 0.3,
       length: Math.PI * 0.72,
-      tilt: 0,
     });
 
-    ribbons.push({
-      id: 'lane-nebula-center',
+    lanes.push({
+      id: 'n-lane-center',
       kind: 'lane',
       pos: [0, ITEM_Y - 0.08, -38],
       inner: 2.8,
       outer: 4,
       start: Math.PI * 0.15,
       length: Math.PI * 1.7,
-      tilt: 0,
     });
 
-    const inRight = targets.find((t) => t.id === 'worm-in-nebula-r');
-    const inLeft = targets.find((t) => t.id === 'worm-in-nebula-l');
-    if (inRight) inRight.pairId = 'worm-out-nebula-r';
-    if (inLeft) inLeft.pairId = 'worm-out-nebula-l';
+    const rightIn = targets.find((t) => t.id === 'n-worm-in-r');
+    const leftIn = targets.find((t) => t.id === 'n-worm-in-l');
+    if (rightIn) rightIn.pairId = 'n-worm-out-r';
+    if (leftIn) leftIn.pairId = 'n-worm-out-l';
 
     return {
       targets,
       obstacles,
-      ribbons,
+      lanes,
       miniZone: { center: [0, ITEM_Y, -49], half: [12, 8] },
       launch: [0, 2.4, 45],
-      skillShotTargetId: 'roll-nebula-2',
-      drainGap: TABLE_DRAIN_GAP,
+      skillShotTargetId: 'n-roll-2',
     };
   }
 
   if (theme === 'cotton') {
     for (const [i, z] of [-6, -11, -16, -21].entries()) {
-      addMirror(`drop-cotton-a-${i}`, 'drop', 12.5, z, {
-        bank: z <= -16 ? 'cotton-bank-a2' : 'cotton-bank-a1',
+      mirrorTarget(`c-drop-a-${i}`, 'drop', 12.5, z, {
+        bank: z <= -16 ? 'c-bank-a2' : 'c-bank-a1',
         points: 980,
         radius: 1.35,
         objective: 'drop',
       });
     }
+
     for (const [i, z] of [-26, -31, -36, -41].entries()) {
-      addMirror(`drop-cotton-b-${i}`, 'drop', 18.5, z, {
-        bank: z <= -36 ? 'cotton-bank-b2' : 'cotton-bank-b1',
+      mirrorTarget(`c-drop-b-${i}`, 'drop', 18.5, z, {
+        bank: z <= -36 ? 'c-bank-b2' : 'c-bank-b1',
         points: 1150,
         radius: 1.4,
         objective: 'drop',
@@ -562,71 +577,48 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     }
 
     for (const [i, z] of [-4, -12, -20, -28, -36].entries()) {
-      addMirror(`stand-cotton-${i}`, 'standup', 7.2, z, {
-        points: 250,
-        radius: 1.12,
-      });
+      mirrorTarget(`c-stand-${i}`, 'standup', 7.2, z, { points: 250, radius: 1.12 });
     }
 
     for (const [i, z] of [-10, -30].entries()) {
-      addMirror(`spin-cotton-${i}`, 'spinner', 18.8, z, {
+      mirrorTarget(`c-spin-${i}`, 'spinner', 18.8, z, {
         radius: 1.82,
         points: 390,
         objective: 'spinner',
       });
     }
 
-    addMirror('sling-cotton', 'slingshot', 11.2, 39.2, {
-      radius: 2.1,
-      points: 560,
-    });
-    addMirror('vari-cotton', 'vari', 19.5, 20, {
-      radius: 1.45,
-      points: 690,
-    });
-    addMirror('saucer-cotton', 'saucer', 7.5, -33.5, {
-      radius: 1.7,
-      points: 1900,
-    });
-    addMirror('magnet-cotton', 'magnet', 9.5, -21, {
-      radius: 2,
-      points: 420,
-    });
-    addMirror('orbit-cotton-a', 'orbit', 23.8, -2.5, {
+    mirrorTarget('c-sling', 'sling', 11.2, 39.2, { radius: 2.1, points: 560 });
+    mirrorTarget('c-vari', 'vari', 19.5, 20, { radius: 1.45, points: 690 });
+    mirrorTarget('c-saucer', 'saucer', 7.5, -33.5, { radius: 1.7, points: 1900 });
+    mirrorTarget('c-magnet', 'magnet', 9.5, -21, { radius: 2, points: 420 });
+    mirrorTarget('c-orbit-a', 'orbit', 23.8, -2.5, {
       radius: 2.25,
       points: 880,
       objective: 'orbit',
     });
-    addMirror('orbit-cotton-b', 'orbit', 23.8, -22.5, {
+    mirrorTarget('c-orbit-b', 'orbit', 23.8, -22.5, {
       radius: 2.25,
       points: 910,
       objective: 'orbit',
     });
-    addMirror('ramp-cotton-a', 'ramp', 5.8, -10.5, {
+    mirrorTarget('c-ramp-a', 'ramp', 5.8, -10.5, {
       radius: 1.95,
       points: 1020,
       objective: 'ramp',
     });
-    addMirror('ramp-cotton-b', 'ramp', 10.8, -24.5, {
+    mirrorTarget('c-ramp-b', 'ramp', 10.8, -24.5, {
       radius: 1.72,
       points: 930,
       objective: 'ramp',
     });
-    addMirror('worm-in-cotton', 'wormholeIn', 16.5, 16, {
-      radius: 1.75,
-      points: 2400,
-    });
-    addMirror('worm-out-cotton', 'wormholeOut', 4.2, -35.2, {
-      radius: 1.45,
-      points: 0,
-    });
-    addMirror('mini-cotton', 'mini', 5.8, -37.2, {
-      radius: 1.3,
-      points: 950,
-    });
+    mirrorTarget('c-worm-in', 'wormIn', 16.5, 16, { radius: 1.75, points: 2400 });
+    mirrorTarget('c-worm-out', 'wormOut', 4.2, -35.2, { radius: 1.45, points: 0 });
+    mirrorTarget('c-mini', 'mini', 5.8, -37.2, { radius: 1.3, points: 950 });
+    mirrorTarget('c-captive', 'captive', 15.5, -16.5, { radius: 1.28, points: 500 });
 
     targets.push({
-      id: 'mini-cotton-core',
+      id: 'c-mini-core',
       kind: 'mini',
       pos: [0, ITEM_Y + 0.45, -39.3],
       radius: 1.35,
@@ -635,7 +627,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     });
 
     targets.push({
-      id: 'bull-cotton-outer',
+      id: 'c-bull-outer',
       kind: 'bullOuter',
       pos: [0, ITEM_Y + 0.4, -41.5],
       radius: 2.3,
@@ -643,9 +635,10 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       objective: 'bullseye',
       active: true,
     });
+
     targets.push({
-      id: 'bull-cotton-core',
-      kind: 'bullCore',
+      id: 'c-bull-inner',
+      kind: 'bullInner',
       pos: [0, ITEM_Y + 0.45, -41.5],
       radius: 1.02,
       points: 4300,
@@ -654,7 +647,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     });
 
     targets.push({
-      id: 'mystery-cotton',
+      id: 'c-mystery',
       kind: 'mystery',
       pos: [0, ITEM_Y + 0.44, -16],
       radius: 1.5,
@@ -664,7 +657,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     });
 
     targets.push({
-      id: 'kicker-cotton',
+      id: 'c-kicker',
       kind: 'kicker',
       pos: [0, ITEM_Y + 0.45, -30.5],
       radius: 1.4,
@@ -672,9 +665,18 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       active: true,
     });
 
+    targets.push({
+      id: 'c-gobble',
+      kind: 'gobble',
+      pos: [0, ITEM_Y + 0.43, -5],
+      radius: 1.42,
+      points: 6900,
+      active: true,
+    });
+
     for (const [i, x] of [-16, -8, 0, 8, 16].entries()) {
       targets.push({
-        id: `roll-cotton-${i}`,
+        id: `c-roll-${i}`,
         kind: 'rollover',
         pos: [x, ITEM_Y + 0.35, -43.5],
         radius: 1.18,
@@ -692,7 +694,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       [0, -14],
     ].entries()) {
       targets.push({
-        id: `pop-cotton-${i}`,
+        id: `c-pop-${i}`,
         kind: 'pop',
         pos: [x, ITEM_Y + 0.45, z],
         radius: 1.62,
@@ -702,7 +704,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     }
 
     obstacles.push({
-      id: 'obs-cotton-pinwheel',
+      id: 'c-obs-pinwheel',
       pos: [0, ITEM_Y + 0.8, -8],
       size: [8.2, 0.85, 1],
       motion: 'rotate',
@@ -711,8 +713,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       damage: 8,
       tint: '#ff9bcf',
     });
+
     obstacles.push({
-      id: 'obs-cotton-slide-r',
+      id: 'c-obs-slide-r',
       pos: [14.8, ITEM_Y + 0.72, 2.5],
       size: [3.8, 0.82, 1.75],
       motion: 'slide',
@@ -722,8 +725,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       damage: 7,
       tint: '#93d8ff',
     });
+
     obstacles.push({
-      id: 'obs-cotton-slide-l',
+      id: 'c-obs-slide-l',
       pos: [-14.8, ITEM_Y + 0.72, 2.5],
       size: [3.8, 0.82, 1.75],
       motion: 'slide',
@@ -733,8 +737,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       damage: 7,
       tint: '#93d8ff',
     });
+
     obstacles.push({
-      id: 'obs-cotton-pulse',
+      id: 'c-obs-pulse',
       pos: [0, ITEM_Y + 1.05, -24],
       size: [2.1, 2.2, 2.1],
       motion: 'pulse',
@@ -744,61 +749,59 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
       tint: '#e4b6ff',
     });
 
-    addRibbonMirror('lane-cotton-orbit', 22.6, -12, {
+    mirrorLane('c-lane-orbit', 22.6, -12, {
       kind: 'orbit',
       inner: 5.4,
       outer: 6.9,
       start: Math.PI * 0.1,
       length: Math.PI * 0.92,
-      tilt: 0,
     });
-    addRibbonMirror('lane-cotton-ramp', 6.5, -19.5, {
+
+    mirrorLane('c-lane-ramp', 6.5, -19.5, {
       kind: 'ramp',
       inner: 4.1,
       outer: 5.3,
       start: Math.PI * 0.24,
       length: Math.PI * 0.76,
-      tilt: 0,
     });
 
-    ribbons.push({
-      id: 'lane-cotton-hub',
+    lanes.push({
+      id: 'c-lane-hub',
       kind: 'lane',
       pos: [0, ITEM_Y - 0.08, -26],
       inner: 5.5,
       outer: 7.1,
       start: Math.PI * 0.05,
       length: Math.PI * 1.9,
-      tilt: 0,
     });
 
-    const inRight = targets.find((t) => t.id === 'worm-in-cotton-r');
-    const inLeft = targets.find((t) => t.id === 'worm-in-cotton-l');
-    if (inRight) inRight.pairId = 'worm-out-cotton-r';
-    if (inLeft) inLeft.pairId = 'worm-out-cotton-l';
+    const rightIn = targets.find((t) => t.id === 'c-worm-in-r');
+    const leftIn = targets.find((t) => t.id === 'c-worm-in-l');
+    if (rightIn) rightIn.pairId = 'c-worm-out-r';
+    if (leftIn) leftIn.pairId = 'c-worm-out-l';
 
     return {
       targets,
       obstacles,
-      ribbons,
+      lanes,
       miniZone: { center: [0, ITEM_Y, -38.5], half: [11, 9] },
       launch: [0, 2.4, 45],
-      skillShotTargetId: 'roll-cotton-2',
-      drainGap: TABLE_DRAIN_GAP,
+      skillShotTargetId: 'c-roll-2',
     };
   }
 
   for (const [i, z] of [-12, -18, -24, -30].entries()) {
-    addMirror(`drop-nature-a-${i}`, 'drop', 17.8, z, {
-      bank: z <= -24 ? 'nature-bank-a2' : 'nature-bank-a1',
+    mirrorTarget(`g-drop-a-${i}`, 'drop', 17.8, z, {
+      bank: z <= -24 ? 'g-bank-a2' : 'g-bank-a1',
       points: 1040,
       radius: 1.43,
       objective: 'drop',
     });
   }
+
   for (const [i, z] of [-34, -40, -46].entries()) {
-    addMirror(`drop-nature-b-${i}`, 'drop', 22.8, z, {
-      bank: z <= -40 ? 'nature-bank-b2' : 'nature-bank-b1',
+    mirrorTarget(`g-drop-b-${i}`, 'drop', 22.8, z, {
+      bank: z <= -40 ? 'g-bank-b2' : 'g-bank-b1',
       points: 1260,
       radius: 1.5,
       objective: 'drop',
@@ -806,65 +809,48 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
   }
 
   for (const [i, z] of [-8, -16, -24, -32].entries()) {
-    addMirror(`stand-nature-${i}`, 'standup', 9.2, z, {
-      points: 270,
-      radius: 1.18,
-    });
+    mirrorTarget(`g-stand-${i}`, 'standup', 9.2, z, { points: 270, radius: 1.18 });
   }
 
   for (const [i, z] of [-24, -39].entries()) {
-    addMirror(`spin-nature-${i}`, 'spinner', 23.2, z, {
+    mirrorTarget(`g-spin-${i}`, 'spinner', 23.2, z, {
       radius: 1.88,
       points: 430,
       objective: 'spinner',
     });
   }
 
-  addMirror('sling-nature', 'slingshot', 13.7, 37.6, {
-    radius: 2.15,
-    points: 570,
-  });
-  addMirror('vari-nature', 'vari', 21.2, 19.4, { radius: 1.55, points: 710 });
-  addMirror('saucer-nature', 'saucer', 9.4, -36, {
-    radius: 1.75,
-    points: 2050,
-  });
-  addMirror('magnet-nature', 'magnet', 10.2, -30.5, {
-    radius: 2.15,
-    points: 450,
-  });
-  addMirror('orbit-nature-a', 'orbit', 27.2, -7, {
+  mirrorTarget('g-sling', 'sling', 13.7, 37.6, { radius: 2.15, points: 570 });
+  mirrorTarget('g-vari', 'vari', 21.2, 19.4, { radius: 1.55, points: 710 });
+  mirrorTarget('g-saucer', 'saucer', 9.4, -36, { radius: 1.75, points: 2050 });
+  mirrorTarget('g-magnet', 'magnet', 10.2, -30.5, { radius: 2.15, points: 450 });
+  mirrorTarget('g-orbit-a', 'orbit', 27.2, -7, {
     radius: 2.3,
     points: 920,
     objective: 'orbit',
   });
-  addMirror('orbit-nature-b', 'orbit', 27.2, -29, {
+  mirrorTarget('g-orbit-b', 'orbit', 27.2, -29, {
     radius: 2.3,
     points: 980,
     objective: 'orbit',
   });
-  addMirror('ramp-nature-a', 'ramp', 7.1, -22.5, {
+  mirrorTarget('g-ramp-a', 'ramp', 7.1, -22.5, {
     radius: 2,
     points: 1060,
     objective: 'ramp',
   });
-  addMirror('ramp-nature-b', 'ramp', 13.5, -33.5, {
+  mirrorTarget('g-ramp-b', 'ramp', 13.5, -33.5, {
     radius: 1.8,
     points: 990,
     objective: 'ramp',
   });
-  addMirror('worm-in-nature', 'wormholeIn', 25.4, 22, {
-    radius: 1.82,
-    points: 2500,
-  });
-  addMirror('worm-out-nature', 'wormholeOut', 7, -46.5, {
-    radius: 1.55,
-    points: 0,
-  });
-  addMirror('mini-nature', 'mini', 5.2, -49.2, { radius: 1.4, points: 1000 });
+  mirrorTarget('g-worm-in', 'wormIn', 25.4, 22, { radius: 1.82, points: 2500 });
+  mirrorTarget('g-worm-out', 'wormOut', 7, -46.5, { radius: 1.55, points: 0 });
+  mirrorTarget('g-mini', 'mini', 5.2, -49.2, { radius: 1.4, points: 1000 });
+  mirrorTarget('g-captive', 'captive', 18.8, -18.5, { radius: 1.35, points: 520 });
 
   targets.push({
-    id: 'mini-nature-core',
+    id: 'g-mini-core',
     kind: 'mini',
     pos: [0, ITEM_Y + 0.45, -50.8],
     radius: 1.45,
@@ -873,7 +859,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
   });
 
   targets.push({
-    id: 'bull-nature-outer',
+    id: 'g-bull-outer',
     kind: 'bullOuter',
     pos: [0, ITEM_Y + 0.4, -53.3],
     radius: 2.45,
@@ -881,9 +867,10 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     objective: 'bullseye',
     active: true,
   });
+
   targets.push({
-    id: 'bull-nature-core',
-    kind: 'bullCore',
+    id: 'g-bull-inner',
+    kind: 'bullInner',
     pos: [0, ITEM_Y + 0.45, -53.3],
     radius: 1.1,
     points: 4700,
@@ -892,7 +879,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
   });
 
   targets.push({
-    id: 'mystery-nature',
+    id: 'g-mystery',
     kind: 'mystery',
     pos: [0, ITEM_Y + 0.44, -21.2],
     radius: 1.56,
@@ -902,7 +889,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
   });
 
   targets.push({
-    id: 'kicker-nature',
+    id: 'g-kicker',
     kind: 'kicker',
     pos: [0, ITEM_Y + 0.45, -42],
     radius: 1.48,
@@ -910,9 +897,18 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     active: true,
   });
 
+  targets.push({
+    id: 'g-gobble',
+    kind: 'gobble',
+    pos: [0, ITEM_Y + 0.43, -10],
+    radius: 1.46,
+    points: 7800,
+    active: true,
+  });
+
   for (const [i, x] of [-20, -10, 0, 10, 20].entries()) {
     targets.push({
-      id: `roll-nature-${i}`,
+      id: `g-roll-${i}`,
       kind: 'rollover',
       pos: [x, ITEM_Y + 0.35, -56],
       radius: 1.2,
@@ -929,7 +925,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     [11.2, -31],
   ].entries()) {
     targets.push({
-      id: `pop-nature-${i}`,
+      id: `g-pop-${i}`,
       kind: 'pop',
       pos: [x, ITEM_Y + 0.45, z],
       radius: 1.75,
@@ -939,7 +935,7 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
   }
 
   obstacles.push({
-    id: 'obs-nature-branch',
+    id: 'g-obs-branch',
     pos: [0, ITEM_Y + 0.84, -16],
     size: [9.8, 0.95, 1.05],
     motion: 'rotate',
@@ -948,8 +944,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     damage: 9,
     tint: '#7d522c',
   });
+
   obstacles.push({
-    id: 'obs-nature-log-r',
+    id: 'g-obs-log-r',
     pos: [17, ITEM_Y + 0.73, 5],
     size: [4.5, 0.9, 1.8],
     motion: 'slide',
@@ -959,8 +956,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     damage: 8,
     tint: '#4a8a3e',
   });
+
   obstacles.push({
-    id: 'obs-nature-log-l',
+    id: 'g-obs-log-l',
     pos: [-17, ITEM_Y + 0.73, 5],
     size: [4.5, 0.9, 1.8],
     motion: 'slide',
@@ -970,8 +968,9 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     damage: 8,
     tint: '#4a8a3e',
   });
+
   obstacles.push({
-    id: 'obs-nature-root',
+    id: 'g-obs-root',
     pos: [0, ITEM_Y + 1.08, -34.5],
     size: [2.4, 2.6, 2.4],
     motion: 'pulse',
@@ -981,56 +980,53 @@ const createArenaLayout = (theme: ThemeId): ArenaLayout => {
     tint: '#9f6f41',
   });
 
-  addRibbonMirror('lane-nature-orbit', 25.8, -18, {
+  mirrorLane('g-lane-orbit', 25.8, -18, {
     kind: 'orbit',
     inner: 6,
     outer: 7.5,
     start: Math.PI * 0.08,
     length: Math.PI * 0.9,
-    tilt: 0,
   });
-  addRibbonMirror('lane-nature-ramp', 8.2, -29, {
+
+  mirrorLane('g-lane-ramp', 8.2, -29, {
     kind: 'ramp',
     inner: 3.8,
     outer: 5.2,
     start: Math.PI * 0.24,
     length: Math.PI * 0.72,
-    tilt: 0,
   });
 
-  ribbons.push({
-    id: 'lane-nature-trunk',
+  lanes.push({
+    id: 'g-lane-trunk',
     kind: 'lane',
     pos: [0, ITEM_Y - 0.08, -44],
     inner: 3.4,
     outer: 4.6,
     start: Math.PI * 0.14,
     length: Math.PI * 1.72,
-    tilt: 0,
   });
 
-  const inRight = targets.find((t) => t.id === 'worm-in-nature-r');
-  const inLeft = targets.find((t) => t.id === 'worm-in-nature-l');
-  if (inRight) inRight.pairId = 'worm-out-nature-r';
-  if (inLeft) inLeft.pairId = 'worm-out-nature-l';
+  const rightIn = targets.find((t) => t.id === 'g-worm-in-r');
+  const leftIn = targets.find((t) => t.id === 'g-worm-in-l');
+  if (rightIn) rightIn.pairId = 'g-worm-out-r';
+  if (leftIn) leftIn.pairId = 'g-worm-out-l';
 
   return {
     targets,
     obstacles,
-    ribbons,
+    lanes,
     miniZone: { center: [0, ITEM_Y, -50], half: [13, 7] },
     launch: [0, 2.4, 45],
-    skillShotTargetId: 'roll-nature-2',
-    drainGap: TABLE_DRAIN_GAP,
+    skillShotTargetId: 'g-roll-2',
   };
 };
 
-const ThemeDecor: React.FC<{ theme: ArenaTheme }> = ({ theme }) => {
+const ThemeDecor: React.FC<{ theme: ThemeConfig }> = ({ theme }) => {
   if (theme.id === 'cotton') {
     return (
       <group>
         {[-1, 1].map((side) => (
-          <group key={`cotton-clouds-${side}`} position={[side * 22, ITEM_Y + 1.8, -24]}>
+          <group key={`cotton-cloud-${side}`} position={[side * 22, ITEM_Y + 1.8, -24]}>
             <mesh>
               <sphereGeometry args={[2.8, 18, 18]} />
               <meshStandardMaterial color="#ffe6f5" emissive="#ffd6f4" emissiveIntensity={0.22} />
@@ -1075,23 +1071,11 @@ const ThemeDecor: React.FC<{ theme: ArenaTheme }> = ({ theme }) => {
           <group key={`nebula-pylon-${i}`}>
             <mesh position={[26.5, ITEM_Y + 1.35, z]} castShadow>
               <cylinderGeometry args={[0.45, 0.65, 2.7, 14]} />
-              <meshStandardMaterial
-                color="#182649"
-                emissive="#2a74ff"
-                emissiveIntensity={0.35}
-                metalness={0.65}
-                roughness={0.25}
-              />
+              <meshStandardMaterial color="#182649" emissive="#2a74ff" emissiveIntensity={0.35} metalness={0.65} roughness={0.25} />
             </mesh>
             <mesh position={[-26.5, ITEM_Y + 1.35, z]} castShadow>
               <cylinderGeometry args={[0.45, 0.65, 2.7, 14]} />
-              <meshStandardMaterial
-                color="#182649"
-                emissive="#2a74ff"
-                emissiveIntensity={0.35}
-                metalness={0.65}
-                roughness={0.25}
-              />
+              <meshStandardMaterial color="#182649" emissive="#2a74ff" emissiveIntensity={0.35} metalness={0.65} roughness={0.25} />
             </mesh>
           </group>
         );
@@ -1100,58 +1084,10 @@ const ThemeDecor: React.FC<{ theme: ArenaTheme }> = ({ theme }) => {
   );
 };
 
-const ImpactWave: React.FC<{ wave: WaveFx }> = ({ wave }) => {
-  const groupRef = useRef<THREE.Group>(null);
-  const matRef = useRef<THREE.MeshBasicMaterial>(null);
-
-  useFrame(() => {
-    if (!groupRef.current || !matRef.current) return;
-    const t = THREE.MathUtils.clamp((nowSec() - wave.bornAt) / wave.life, 0, 1);
-    const s = THREE.MathUtils.lerp(0.2, wave.maxScale, t);
-    groupRef.current.scale.setScalar(s);
-    matRef.current.opacity = THREE.MathUtils.lerp(0.62, 0, t);
-  });
-
-  return (
-    <group ref={groupRef} position={wave.pos as unknown as THREE.Vector3Tuple}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.55, 1.1, 42]} />
-        <meshBasicMaterial
-          ref={matRef}
-          color={wave.color}
-          transparent
-          opacity={0.6}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-    </group>
-  );
-};
-
-const ImpactFlash: React.FC<{ flash: FlashFx }> = ({ flash }) => {
-  const lightRef = useRef<THREE.PointLight>(null);
-
-  useFrame(() => {
-    if (!lightRef.current) return;
-    const t = THREE.MathUtils.clamp((nowSec() - flash.bornAt) / flash.life, 0, 1);
-    lightRef.current.intensity = THREE.MathUtils.lerp(flash.intensity, 0, t);
-  });
-
-  return (
-    <pointLight
-      ref={lightRef}
-      position={flash.pos as unknown as THREE.Vector3Tuple}
-      color={flash.color}
-      distance={6}
-      intensity={flash.intensity}
-    />
-  );
-};
-
-const kindToSound = (kind: TargetKind | 'obstacle' | 'drain' | 'jackpot'): SoundEvent => {
+const soundForKind = (kind: TargetKind | 'obstacle' | 'drain' | 'jackpot'): SoundEvent => {
   switch (kind) {
     case 'pop':
-    case 'slingshot':
+    case 'sling':
       return 'bumper';
     case 'drop':
       return 'drop';
@@ -1177,17 +1113,15 @@ export const RolletteWorld: React.FC<{
 
   const [themeId, setThemeId] = useState<ThemeId>('nebula');
   const [controlMode, setControlMode] = useState<ControlMode>('mouse');
-  const [activePower, setActivePower] = useState<PowerMode>(null);
-  const [wizardActive, setWizardActive] = useState(false);
-  const [multiballReady, setMultiballReady] = useState(false);
+  const [powerMode, setPowerMode] = useState<PowerMode>(null);
 
-  const initialLayout = useMemo(() => createArenaLayout('nebula'), []);
-  const [layout, setLayout] = useState<ArenaLayout>(initialLayout);
-  const [targets, setTargets] = useState<PinballTarget[]>(initialLayout.targets);
-  const [obstacles, setObstacles] = useState<ArenaObstacle[]>(initialLayout.obstacles);
+  const layout0 = useMemo(() => buildLayout('nebula'), []);
+  const [layout, setLayout] = useState(layout0);
+  const [targets, setTargets] = useState(layout0.targets);
+  const [obstacles, setObstacles] = useState(layout0.obstacles);
   const [bursts, setBursts] = useState<Burst[]>([]);
-  const [waves, setWaves] = useState<WaveFx[]>([]);
-  const [flashes, setFlashes] = useState<FlashFx[]>([]);
+  const [waves, setWaves] = useState<Wave[]>([]);
+  const [flashes, setFlashes] = useState<Flash[]>([]);
 
   const theme = THEMES[themeId];
 
@@ -1199,29 +1133,25 @@ export const RolletteWorld: React.FC<{
   const tiltLockUntilRef = useRef(0);
   const tiltToastAtRef = useRef(0);
   const pausedRef = useRef(paused);
+
+  const timersRef = useRef<number[]>([]);
   const pendingLaunchRef = useRef<Vec3 | null>(null);
   const drainLockRef = useRef(0);
   const activeSaucerRef = useRef<string | null>(null);
 
-  const timersRef = useRef<number[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
-
   const layoutRef = useRef(layout);
   const targetsRef = useRef(targets);
   const obstaclesRef = useRef(obstacles);
-  const targetMapRef = useRef<Record<string, PinballTarget>>(
-    Object.fromEntries(targets.map((t) => [t.id, t]))
-  );
-  const targetLastHitRef = useRef<Record<string, number>>({});
-  const obstacleLastHitRef = useRef<Record<string, number>>({});
+  const targetMapRef = useRef<Record<string, ArenaTarget>>(Object.fromEntries(targets.map((t) => [t.id, t])));
+
+  const targetHitAtRef = useRef<Record<string, number>>({});
+  const obstacleHitAtRef = useRef<Record<string, number>>({});
   const obstacleBodiesRef = useRef<Record<string, RapierRigidBody | null>>({});
-  const obstacleWorldRef = useRef<Record<string, Vec3>>({});
   const spinnerRefs = useRef<Record<string, THREE.Group | null>>({});
 
-  const objectivesRef = useRef<ObjectiveState>(makeObjectives());
-  const wizardUntilRef = useRef(0);
-  const powerUntilRef = useRef(0);
-  const bonusBankRef = useRef(0);
+  const objectivesRef = useRef<Objectives>(makeObjectives());
+
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -1244,53 +1174,49 @@ export const RolletteWorld: React.FC<{
   useEffect(() => {
     gl.setClearColor(theme.background, 1);
     scene.fog = new THREE.Fog(theme.fog, 26, 150);
+    rolletteState.setTheme(theme.id);
     return () => {
       scene.fog = null;
     };
-  }, [gl, scene, theme.background, theme.fog]);
-
-  useEffect(() => {
-    const previousTouchAction = gl.domElement.style.touchAction;
-    gl.domElement.style.touchAction = 'none';
-    return () => {
-      gl.domElement.style.touchAction = previousTouchAction;
-    };
-  }, [gl]);
-
-  const queueTimer = useCallback((cb: () => void, ms: number) => {
-    const id = window.setTimeout(() => {
-      cb();
-      timersRef.current = timersRef.current.filter((x) => x !== id);
-    }, ms);
-    timersRef.current.push(id);
-  }, []);
+  }, [gl, scene, theme]);
 
   useEffect(
     () => () => {
-      for (const id of timersRef.current) window.clearTimeout(id);
+      for (const timer of timersRef.current) window.clearTimeout(timer);
       timersRef.current = [];
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => undefined);
-        audioContextRef.current = null;
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => undefined);
+        audioCtxRef.current = null;
       }
     },
     []
   );
 
+  const queueTimer = useCallback((fn: () => void, ms: number) => {
+    const timer = window.setTimeout(() => {
+      fn();
+      timersRef.current = timersRef.current.filter((t) => t !== timer);
+    }, ms);
+    timersRef.current.push(timer);
+  }, []);
+
   const ensureAudio = useCallback(() => {
     if (!soundsOn || typeof window === 'undefined') return null;
-    if (!audioContextRef.current) {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!Ctx) return null;
-      audioContextRef.current = new Ctx();
+
+    if (!audioCtxRef.current) {
+      const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctor) return null;
+      audioCtxRef.current = new Ctor();
     }
-    if (audioContextRef.current.state === 'suspended') {
-      audioContextRef.current.resume().catch(() => undefined);
+
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume().catch(() => undefined);
     }
-    return audioContextRef.current;
+
+    return audioCtxRef.current;
   }, [soundsOn]);
 
-  const playSynth = useCallback(
+  const playTone = useCallback(
     (event: SoundEvent, velocity = 1) => {
       const ctx = ensureAudio();
       if (!ctx) return;
@@ -1298,32 +1224,29 @@ export const RolletteWorld: React.FC<{
       const now = ctx.currentTime;
 
       const tone = (
-        freq: number,
-        endFreq: number,
+        from: number,
+        to: number,
         duration: number,
         type: OscillatorType,
-        gainValue: number,
-        offset = 0
+        amp: number,
+        delay = 0
       ) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        const startAt = now + offset;
+        const t0 = now + delay;
 
         osc.type = type;
-        osc.frequency.setValueAtTime(Math.max(40, freq), startAt);
-        osc.frequency.exponentialRampToValueAtTime(
-          Math.max(40, endFreq),
-          startAt + duration
-        );
+        osc.frequency.setValueAtTime(Math.max(30, from), t0);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(30, to), t0 + duration);
 
-        const level = Math.max(0.0001, gainValue * velocity);
-        gain.gain.setValueAtTime(level, startAt);
-        gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+        gain.gain.setValueAtTime(Math.max(0.0001, amp * velocity), t0);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
 
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start(startAt);
-        osc.stop(startAt + duration + 0.02);
+
+        osc.start(t0);
+        osc.stop(t0 + duration + 0.02);
       };
 
       if (event === 'target') {
@@ -1339,79 +1262,49 @@ export const RolletteWorld: React.FC<{
         tone(170, 120, 0.08, 'sawtooth', 0.03);
       } else if (event === 'danger') {
         tone(180, 70, 0.14, 'square', 0.035);
-      } else if (event === 'mode') {
-        tone(250, 440, 0.12, 'triangle', 0.03);
       } else if (event === 'wizard') {
         tone(260, 780, 0.22, 'sine', 0.035);
         tone(580, 1200, 0.16, 'triangle', 0.03, 0.08);
       } else if (event === 'mystery') {
         tone(330, 520, 0.09, 'triangle', 0.03);
         tone(540, 300, 0.11, 'triangle', 0.025, 0.08);
-      } else {
-        tone(260, 180, 0.07, 'triangle', 0.03);
       }
     },
     [ensureAudio]
   );
 
-  const spawnBurst = useCallback(
-    (
-      pos: Vec3,
-      color: string,
-      count = 14,
-      life = 0.6,
-      shape: Burst['shape'] = 'spark'
-    ) => {
-      setBursts((prev) => [
-        ...prev.slice(-70),
-        {
-          id: makeId('burst'),
-          pos,
-          color,
-          count,
-          life,
-          shape,
-          bornAt: nowSec(),
-        },
-      ]);
-    },
-    []
-  );
-
-  const spawnWave = useCallback((pos: Vec3, color: string, life = 0.45, maxScale = 3.2) => {
-    setWaves((prev) => [
-      ...prev.slice(-40),
+  const spawnBurst = useCallback((pos: Vec3, color: string, count = 14, life = 0.6, shape: Burst['shape'] = 'spark') => {
+    setBursts((prev) => [
+      ...prev.slice(-80),
       {
-        id: makeId('wave'),
+        id: id('burst'),
         pos,
         color,
-        bornAt: nowSec(),
+        count,
         life,
-        maxScale,
+        shape,
+        bornAt: nowSec(),
       },
     ]);
   }, []);
 
-  const spawnFlash = useCallback(
-    (pos: Vec3, color: string, life = 0.18, intensity = 1.6) => {
-      setFlashes((prev) => [
-        ...prev.slice(-30),
-        {
-          id: makeId('flash'),
-          pos,
-          color,
-          bornAt: nowSec(),
-          life,
-          intensity,
-        },
-      ]);
-    },
-    []
-  );
+  const spawnWave = useCallback((pos: Vec3, color: string, life = 0.45, maxScale = 3.2) => {
+    setWaves((prev) => [
+      ...prev.slice(-40),
+      { id: id('wave'), pos, color, bornAt: nowSec(), life, maxScale },
+    ]);
+  }, []);
+
+  const spawnFlash = useCallback((pos: Vec3, color: string, life = 0.18, intensity = 1.6) => {
+    setFlashes((prev) => [
+      ...prev.slice(-40),
+      { id: id('flash'), pos, color, bornAt: nowSec(), life, intensity },
+    ]);
+  }, []);
 
   const spawnImpact = useCallback(
     (kind: TargetKind | 'obstacle' | 'drain' | 'jackpot', pos: Vec3, color: string) => {
-      if (kind === 'pop' || kind === 'slingshot') {
+      if (kind === 'pop' || kind === 'sling') {
         spawnBurst(pos, color, 28, 0.66, 'spark');
         spawnBurst(pos, '#ffffff', 14, 0.42, 'box');
         spawnWave(pos, color, 0.45, 4.1);
@@ -1423,7 +1316,7 @@ export const RolletteWorld: React.FC<{
       } else if (kind === 'spinner') {
         spawnBurst(pos, color, 22, 0.56, 'spark');
         spawnWave(pos, color, 0.36, 2.8);
-      } else if (kind === 'vari' || kind === 'bullCore' || kind === 'mini') {
+      } else if (kind === 'vari' || kind === 'bullInner' || kind === 'mini') {
         spawnBurst(pos, color, 22, 0.72, 'tetra');
         spawnWave(pos, color, 0.56, 3.8);
         spawnFlash([pos[0], pos[1] + 0.5, pos[2]], color, 0.22, 2.1);
@@ -1432,7 +1325,7 @@ export const RolletteWorld: React.FC<{
         spawnBurst(pos, '#ffffff', 18, 0.66, 'spark');
         spawnWave(pos, color, 0.68, 4.6);
         spawnFlash([pos[0], pos[1] + 0.8, pos[2]], color, 0.24, 2.6);
-      } else if (kind === 'wormholeIn') {
+      } else if (kind === 'wormIn') {
         spawnBurst(pos, color, 30, 0.82, 'spark');
         spawnWave(pos, color, 0.72, 5.1);
       } else if (kind === 'jackpot') {
@@ -1452,20 +1345,20 @@ export const RolletteWorld: React.FC<{
     [spawnBurst, spawnFlash, spawnWave]
   );
 
-  const setPowerMode = useCallback((next: PowerMode, duration: number) => {
-    setActivePower(next);
-    powerUntilRef.current = next ? nowSec() + duration : 0;
-    if (next) rolletteState.setToast(`${next} MODE`);
+  const setPower = useCallback((mode: PowerMode, duration = 0) => {
+    setPowerMode(mode);
+    rolletteState.setPower(mode, duration);
+    if (mode) rolletteState.setToast(`${mode} MODE`);
   }, []);
 
-  const launchBall = useCallback((launchPos: Vec3, resetSkillShot = true) => {
+  const launchBall = useCallback((pos: Vec3, resetSkillShot = true) => {
     const rb = ballRef.current;
     if (!rb) {
-      pendingLaunchRef.current = launchPos;
+      pendingLaunchRef.current = pos;
       return;
     }
 
-    rb.setTranslation({ x: launchPos[0], y: launchPos[1], z: launchPos[2] }, true);
+    rb.setTranslation({ x: pos[0], y: pos[1], z: pos[2] }, true);
     rb.setLinvel({ x: 0, y: 0, z: -18 }, true);
     rb.setAngvel({ x: 0, y: 0, z: 0 }, true);
 
@@ -1475,62 +1368,39 @@ export const RolletteWorld: React.FC<{
     }
   }, []);
 
-  const updateTargets = useCallback((updater: (prev: PinballTarget[]) => PinballTarget[]) => {
-    setTargets((prev) => {
-      const next = updater(prev);
-      targetsRef.current = next;
-      targetMapRef.current = Object.fromEntries(next.map((t) => [t.id, t]));
-      return next;
-    });
-  }, []);
+  const resetRun = useCallback(
+    (nextTheme: ThemeId = themeId) => {
+      const built = buildLayout(nextTheme);
+      setLayout(built);
+      setTargets(built.targets);
+      setObstacles(built.obstacles);
+      layoutRef.current = built;
+      targetsRef.current = built.targets;
+      obstaclesRef.current = built.obstacles;
+      targetMapRef.current = Object.fromEntries(built.targets.map((t) => [t.id, t]));
 
-  const initializeArena = useCallback(
-    (nextTheme: ThemeId) => {
-      const arena = createArenaLayout(nextTheme);
-      setLayout(arena);
-      layoutRef.current = arena;
-      setTargets(arena.targets);
-      targetsRef.current = arena.targets;
-      targetMapRef.current = Object.fromEntries(arena.targets.map((t) => [t.id, t]));
-      setObstacles(arena.obstacles);
-      obstaclesRef.current = arena.obstacles;
+      targetHitAtRef.current = {};
+      obstacleHitAtRef.current = {};
+      spinnerRefs.current = {};
 
+      objectivesRef.current = makeObjectives();
       activeSaucerRef.current = null;
       drainLockRef.current = 0;
-      targetLastHitRef.current = {};
-      obstacleLastHitRef.current = {};
-      obstacleWorldRef.current = {};
-      spinnerRefs.current = {};
-      bonusBankRef.current = 0;
-      objectivesRef.current = makeObjectives();
-      wizardUntilRef.current = 0;
-      powerUntilRef.current = 0;
-      setWizardActive(false);
-      setMultiballReady(false);
-      setPowerMode(null, 0);
+
+      setPower(null, 0);
       setBursts([]);
       setWaves([]);
       setFlashes([]);
-      rolletteState.zoneCenter = [...arena.miniZone.center];
 
-      queueTimer(() => launchBall(arena.launch, true), 80);
-    },
-    [launchBall, queueTimer, setPowerMode]
-  );
-
-  const resetRun = useCallback(
-    (nextTheme: ThemeId = themeId) => {
       rolletteState.reset();
       rolletteState.health = 100;
       rolletteState.maxHealth = 100;
-      rolletteState.dashCooldown = 0;
-      rolletteState.dashCooldownMax = NUDGE_COOLDOWN_S;
-      rolletteState.debt = 0;
-      rolletteState.setBonusBank(0);
+      rolletteState.nudgeCooldownMax = NUDGE_COOLDOWN_S;
       rolletteState.setToast('ROLETTE: PINBALL ULTIMATE');
-      initializeArena(nextTheme);
+
+      queueTimer(() => launchBall(built.launch, true), 40);
     },
-    [initializeArena, themeId]
+    [launchBall, queueTimer, setPower, themeId]
   );
 
   useEffect(() => {
@@ -1539,78 +1409,47 @@ export const RolletteWorld: React.FC<{
     camera.lookAt(0, 1, 0);
   }, [camera, resetRun, themeId]);
 
-  const evaluateModes = useCallback(() => {
+  const awardPoints = useCallback(
+    (base: number, pos: Vec3, color: string, kind: TargetKind | 'obstacle' | 'drain' | 'jackpot') => {
+      if (base <= 0) return;
+      rolletteState.addComboPoints(base, rolletteState.inMiniZone);
+      spawnImpact(kind, pos, color);
+      playTone(soundForKind(kind), 1.05);
+    },
+    [playTone, spawnImpact]
+  );
+
+  const repel = useCallback((rb: RapierRigidBody, from: Vec3, center: Vec3, force = 12) => {
+    const dx = from[0] - center[0];
+    const dz = from[2] - center[2];
+    const len = Math.max(1e-4, Math.hypot(dx, dz));
+    rb.applyImpulse({ x: (dx / len) * force, y: 0.4, z: (dz / len) * force }, true);
+  }, []);
+
+  const evaluateProgress = useCallback(() => {
     const o = objectivesRef.current;
-    if (!o.multiballLit && o.dropBanks.size >= 2 && o.spinnerHits >= 6) {
-      o.multiballLit = true;
-      setMultiballReady(true);
+
+    if (!rolletteState.multiballLit && o.dropBanks.size >= 2 && o.spinnerHits >= 6) {
+      rolletteState.setMultiballLit(true);
       rolletteState.setToast('MULTIBALL JACKPOT LIT');
-      playSynth('mode');
+      playTone('target', 1.1);
     }
 
-    if (!wizardActive && wizardReady(o)) {
-      setWizardActive(true);
-      wizardUntilRef.current = nowSec() + 38;
+    if (!rolletteState.wizardActive && canStartWizard(o)) {
+      rolletteState.activateWizard(38);
       rolletteState.activateMultiplier(3, 38);
       rolletteState.setToast('WIZARD MODE ONLINE');
-      playSynth('wizard');
+      playTone('wizard', 1.15);
     }
-  }, [playSynth, wizardActive]);
+  }, [playTone]);
 
-  const applyRepelImpulse = useCallback(
-    (rb: RapierRigidBody, from: Vec3, center: Vec3, force = 12) => {
-      const dx = from[0] - center[0];
-      const dz = from[2] - center[2];
-      const len = Math.max(1e-4, Math.hypot(dx, dz));
-      rb.applyImpulse(
-        {
-          x: (dx / len) * force,
-          y: 0.4,
-          z: (dz / len) * force,
-        },
-        true
-      );
-    },
-    []
-  );
-
-  const awardPoints = useCallback(
-    (
-      basePoints: number,
-      pos: Vec3,
-      color: string,
-      kind: TargetKind | 'obstacle' | 'drain' | 'jackpot'
-    ) => {
-      if (basePoints <= 0) return;
-
-      const o = objectivesRef.current;
-      rolletteState.combo = rolletteState.comboTimer > 0 ? rolletteState.combo + 1 : 1;
-      rolletteState.comboTimer = CHAIN_WINDOW_S;
-
-      const comboMult = 1 + Math.max(0, rolletteState.combo - 1) * 0.08;
-      let points = basePoints * comboMult;
-
-      if (rolletteState.inZone) points *= 1.35;
-      if (o.multiballUntil > nowSec()) points *= 1.7;
-      if (wizardActive) points *= 2.25;
-      if (rolletteState.bonusMultiplier > 1) points *= rolletteState.bonusMultiplier;
-
-      rolletteState.addScore(points);
-      bonusBankRef.current += Math.floor(points * 0.14);
-      rolletteState.setBonusBank(bonusBankRef.current);
-
-      spawnImpact(kind, pos, color);
-      playSynth(kindToSound(kind), 1.05);
-    },
-    [playSynth, spawnImpact, wizardActive]
-  );
-
-  const handleMysteryAward = useCallback(
-    (p: Vec3) => {
+  const mysteryAward = useCallback(
+    (pos: Vec3) => {
       const roll = Math.random();
       const o = objectivesRef.current;
-      if (roll < 0.24) {
-        const bonus = 3000 + Math.floor(Math.random() * 3000);
+
+      if (roll < 0.22) {
+        const bonus = 2800 + Math.floor(Math.random() * 2800);
         rolletteState.addScore(bonus);
         rolletteState.setToast(`MYSTERY +${bonus.toLocaleString()}`);
       } else if (roll < 0.38) {
@@ -1623,33 +1462,38 @@ export const RolletteWorld: React.FC<{
         rolletteState.activateMultiplier(2, 12);
         rolletteState.setToast('MYSTERY x2');
       } else if (roll < 0.79) {
-        setPowerMode('HEAVY', 10);
+        setPower('HEAVY', 10);
       } else if (roll < 0.9) {
-        setPowerMode('GHOST', 8);
+        setPower('GHOST', 8);
       } else if (roll < 0.97) {
-        setPowerMode('MAGNET', 10);
+        setPower('MAGNET', 10);
       } else {
-        o.multiballLit = true;
-        setMultiballReady(true);
+        rolletteState.setMultiballLit(true);
         rolletteState.setToast('MYSTERY JACKPOT LIT');
       }
 
-      spawnImpact('mystery', [p[0], ITEM_Y + 0.55, p[2]], theme.highlight);
-      playSynth('mystery', 1.2);
+      o.mysteryHits += 1;
+      spawnImpact('mystery', [pos[0], ITEM_Y + 0.55, pos[2]], theme.highlight);
+      playTone('mystery', 1.2);
     },
-    [playSynth, setPowerMode, spawnImpact, theme.highlight]
+    [playTone, setPower, spawnImpact, theme.highlight]
   );
 
-  const resolveTargetHit = useCallback(
-    (
-      target: PinballTarget,
-      playerPos: Vec3,
-      vel: { x: number; y: number; z: number },
-      rb: RapierRigidBody
-    ) => {
+  const setTargetsSafe = useCallback((updater: (prev: ArenaTarget[]) => ArenaTarget[]) => {
+    setTargets((prev) => {
+      const next = updater(prev);
+      targetsRef.current = next;
+      targetMapRef.current = Object.fromEntries(next.map((t) => [t.id, t]));
+      return next;
+    });
+  }, []);
+
+  const handleTargetHit = useCallback(
+    (target: ArenaTarget, playerPos: Vec3, vel: { x: number; y: number; z: number }, rb: RapierRigidBody) => {
       const o = objectivesRef.current;
       const speed = Math.hypot(vel.x, vel.z);
       const pos: Vec3 = [target.pos[0], ITEM_Y + 0.45, target.pos[2]];
+
       const tint =
         target.tint ??
         (target.kind === 'drop'
@@ -1658,143 +1502,132 @@ export const RolletteWorld: React.FC<{
             ? theme.highlight
             : target.kind === 'magnet'
               ? theme.accent
-              : target.kind === 'slingshot'
+              : target.kind === 'sling'
                 ? theme.hazard
                 : theme.secondary);
 
       if (target.objective === 'spinner') o.spinnerHits += 1;
-      if (target.objective === 'bullseye') o.bullseyeHits += 1;
+      if (target.objective === 'bullseye') o.bullHits += 1;
       if (target.objective === 'orbit') o.orbitHits += 1;
       if (target.objective === 'ramp') o.rampHits += 1;
       if (target.objective === 'mystery') o.mysteryHits += 1;
 
       switch (target.kind) {
-        case 'pop': {
-          const push = activePower === 'HEAVY' ? 20 : 14;
-          applyRepelImpulse(rb, playerPos, target.pos, push);
-          awardPoints(target.points, pos, tint, 'pop');
-          break;
-        }
-        case 'slingshot': {
-          const side = Math.sign(target.pos[0]) || 1;
-          rb.applyImpulse({ x: -side * 11, y: 0.5, z: -10.5 }, true);
-          awardPoints(target.points, pos, tint, 'slingshot');
-          break;
-        }
         case 'standup': {
           awardPoints(target.points, pos, tint, 'standup');
           break;
         }
+
         case 'drop': {
           if (target.active === false) break;
           awardPoints(target.points, pos, tint, 'drop');
-          updateTargets((prev) =>
-            prev.map((t) => (t.id === target.id ? { ...t, active: false } : t))
-          );
+
+          setTargetsSafe((prev) => prev.map((t) => (t.id === target.id ? { ...t, active: false } : t)));
 
           if (target.bank) {
-            const bankTargets = targetsRef.current.filter((t) => t.bank === target.bank);
-            const downCount = bankTargets.reduce(
-              (sum, t) => sum + (t.id === target.id || t.active === false ? 1 : 0),
-              0
-            );
+            const bank = targetsRef.current.filter((t) => t.bank === target.bank);
+            const down = bank.reduce((sum, t) => sum + (t.id === target.id || t.active === false ? 1 : 0), 0);
 
-            if (downCount >= bankTargets.length && bankTargets.length > 0) {
+            if (down >= bank.length && bank.length > 0) {
               o.dropBanks.add(target.bank);
-              const bankBonus = wizardActive ? 20000 : 11000;
+              const bankBonus = rolletteState.wizardActive ? 20000 : 11000;
               rolletteState.addScore(bankBonus);
-              bonusBankRef.current += Math.floor(bankBonus * 0.25);
-              rolletteState.setBonusBank(bonusBankRef.current);
+              rolletteState.addBank(bankBonus * 0.25);
               rolletteState.setToast(`DROP BANK CLEARED +${bankBonus.toLocaleString()}`);
               spawnImpact('jackpot', pos, theme.highlight);
-              playSynth('jackpot', 1.1);
+              playTone('jackpot', 1.1);
 
               queueTimer(() => {
-                updateTargets((prev) =>
-                  prev.map((t) =>
-                    t.bank === target.bank
-                      ? {
-                          ...t,
-                          active: true,
-                        }
-                      : t
-                  )
-                );
+                setTargetsSafe((prev) => prev.map((t) => (t.bank === target.bank ? { ...t, active: true } : t)));
               }, 1400);
             }
           }
 
-          evaluateModes();
+          evaluateProgress();
           break;
         }
+
+        case 'pop': {
+          const kick = powerMode === 'HEAVY' ? 20 : 14;
+          repel(rb, playerPos, target.pos, kick);
+          awardPoints(target.points, pos, tint, 'pop');
+          break;
+        }
+
         case 'spinner': {
-          const points = target.points + Math.floor(speed * 32);
+          const points = target.points + Math.floor(speed * 30);
           awardPoints(points, pos, tint, 'spinner');
-          rb.applyImpulse({ x: Math.sign(target.pos[0]) * 1.8, y: 0, z: -2.5 }, true);
-          evaluateModes();
+          rb.applyImpulse({ x: Math.sign(target.pos[0]) * 1.8, y: 0, z: -2.6 }, true);
+          evaluateProgress();
           break;
         }
+
+        case 'sling': {
+          const side = Math.sign(target.pos[0]) || 1;
+          rb.applyImpulse({ x: -side * 11, y: 0.5, z: -10.5 }, true);
+          awardPoints(target.points, pos, tint, 'sling');
+          break;
+        }
+
         case 'vari': {
           const powerScore = THREE.MathUtils.clamp(Math.floor(speed * 46), 320, 2800);
           awardPoints(powerScore, pos, tint, 'vari');
-          applyRepelImpulse(rb, playerPos, target.pos, 10);
+          repel(rb, playerPos, target.pos, 10);
           break;
         }
+
         case 'bullOuter': {
           awardPoints(target.points, pos, tint, 'bullOuter');
-          evaluateModes();
+          evaluateProgress();
           break;
         }
-        case 'bullCore': {
-          o.bullseyeHits += 1;
-          awardPoints(target.points + (wizardActive ? 4200 : 0), pos, theme.highlight, 'bullCore');
-          evaluateModes();
+
+        case 'bullInner': {
+          o.bullHits += 1;
+          awardPoints(target.points + (rolletteState.wizardActive ? 4200 : 0), pos, theme.highlight, 'bullInner');
+          evaluateProgress();
           break;
         }
+
         case 'rollover': {
-          o.rolloverHits += 1;
           awardPoints(target.points, pos, theme.accent, 'rollover');
 
           if (
             o.skillShotActive &&
-            nowSec() - o.launchAt <= 8 &&
+            nowSec() - o.launchAt <= SKILL_SHOT_WINDOW_S &&
             target.id === layoutRef.current.skillShotTargetId
           ) {
             o.skillShotActive = false;
-            const skillBonus = 7200;
-            rolletteState.addScore(skillBonus);
-            bonusBankRef.current += 1500;
-            rolletteState.setBonusBank(bonusBankRef.current);
-            rolletteState.setToast(`SKILL SHOT +${skillBonus.toLocaleString()}`);
+            const bonus = 7200;
+            rolletteState.addScore(bonus);
+            rolletteState.addBank(1500);
+            rolletteState.setToast(`SKILL SHOT +${bonus.toLocaleString()}`);
             spawnImpact('jackpot', pos, theme.highlight);
-            playSynth('jackpot', 1.05);
-          }
-
-          if (o.rolloverHits % 5 === 0) {
-            rolletteState.activateMultiplier(2, 6);
-            rolletteState.setToast('LANE COMBO x2');
+            playTone('jackpot', 1.05);
           }
           break;
         }
+
         case 'ramp': {
           awardPoints(target.points, pos, tint, 'ramp');
           rb.applyImpulse({ x: 0, y: 0.12, z: -8.6 }, true);
-          evaluateModes();
+          evaluateProgress();
           break;
         }
+
         case 'orbit': {
           awardPoints(target.points, pos, tint, 'orbit');
           const side = Math.sign(target.pos[0]) || 1;
           rb.applyImpulse({ x: side * 5.4, y: 0.1, z: -6.8 }, true);
-          evaluateModes();
+          evaluateProgress();
           break;
         }
+
         case 'saucer': {
           if (activeSaucerRef.current) break;
           activeSaucerRef.current = target.id;
 
           awardPoints(target.points, pos, tint, 'saucer');
-
           rb.setTranslation({ x: target.pos[0], y: playerPos[1], z: target.pos[2] }, true);
           rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
 
@@ -1804,87 +1637,105 @@ export const RolletteWorld: React.FC<{
             activeSaucerRef.current = null;
           }, 620);
 
-          if (o.multiballLit) {
+          if (rolletteState.multiballLit) {
             const jackpot = o.jackpotValue;
             o.jackpotValue += 3200;
-            o.multiballLit = false;
-            setMultiballReady(false);
-            o.multiballUntil = nowSec() + 18;
+            rolletteState.setMultiballLit(false);
+            rolletteState.activateMultiball(18);
             rolletteState.addScore(jackpot);
             rolletteState.setToast(`MULTIBALL JACKPOT +${jackpot.toLocaleString()}`);
             spawnImpact('jackpot', pos, theme.highlight);
-            playSynth('jackpot', 1.2);
-          } else if (o.multiballUntil > nowSec()) {
+            playTone('jackpot', 1.2);
+          } else if (rolletteState.multiballActive) {
             const superJackpot = 3600 + Math.floor(o.spinnerHits * 120 + o.orbitHits * 90);
             rolletteState.addScore(superJackpot);
             rolletteState.setToast(`SUPER JACKPOT +${superJackpot.toLocaleString()}`);
             spawnImpact('jackpot', pos, theme.highlight);
-            playSynth('jackpot', 1.2);
+            playTone('jackpot', 1.2);
           }
 
           break;
         }
+
         case 'mystery': {
           awardPoints(target.points, pos, tint, 'mystery');
-          handleMysteryAward(target.pos);
-          evaluateModes();
+          mysteryAward(target.pos);
+          evaluateProgress();
           break;
         }
+
         case 'magnet': {
           awardPoints(target.points, pos, tint, 'magnet');
-          setPowerMode('MAGNET', 9);
+          setPower('MAGNET', 9);
           break;
         }
-        case 'wormholeIn': {
+
+        case 'wormIn': {
           const exit = target.pairId ? targetMapRef.current[target.pairId] : null;
           if (!exit) break;
-
           const lv = rb.linvel();
           rb.setTranslation({ x: exit.pos[0], y: playerPos[1], z: exit.pos[2] }, true);
-          rb.setLinvel(
-            {
-              x: lv.x * 1.1,
-              y: lv.y,
-              z: lv.z * 1.1 - 2.4,
-            },
-            true
-          );
-          targetLastHitRef.current[exit.id] = nowSec();
-          awardPoints(target.points, pos, theme.accent, 'wormholeIn');
+          rb.setLinvel({ x: lv.x * 1.1, y: lv.y, z: lv.z * 1.1 - 2.4 }, true);
+          targetHitAtRef.current[exit.id] = nowSec();
+          awardPoints(target.points, pos, theme.accent, 'wormIn');
           break;
         }
+
+        case 'wormOut': {
+          break;
+        }
+
         case 'kicker': {
           awardPoints(target.points, pos, tint, 'kicker');
           rb.applyImpulse({ x: 0, y: 0.58, z: -21 }, true);
           break;
         }
+
         case 'mini': {
           awardPoints(target.points, pos, theme.highlight, 'mini');
           break;
         }
-        case 'wormholeOut': {
+
+        case 'captive': {
+          o.captiveHits += 1;
+          const captivePts = target.points + Math.min(1800, o.captiveHits * 140);
+          awardPoints(captivePts, pos, tint, 'captive');
+          repel(rb, playerPos, target.pos, 9);
+          if (o.captiveHits % 5 === 0) {
+            rolletteState.activateMultiplier(2, 6);
+            rolletteState.setToast('CAPTIVE COMBO x2');
+          }
           break;
         }
-        default:
+
+        case 'gobble': {
+          o.gobbleHits += 1;
+          const gobbleBonus = target.points + Math.min(12000, o.gobbleHits * 900);
+          rolletteState.addScore(gobbleBonus);
+          rolletteState.setToast(`GOBBLE +${gobbleBonus.toLocaleString()}`);
+          spawnImpact('jackpot', pos, theme.highlight);
+          playTone('jackpot', 1.25);
+          queueTimer(() => launchBall(layoutRef.current.launch, false), 260);
           break;
+        }
       }
     },
     [
-      activePower,
-      applyRepelImpulse,
       awardPoints,
-      evaluateModes,
-      handleMysteryAward,
-      playSynth,
+      evaluateProgress,
+      launchBall,
+      mysteryAward,
+      playTone,
+      powerMode,
       queueTimer,
-      setPowerMode,
+      repel,
+      setPower,
+      setTargetsSafe,
       spawnImpact,
       theme.accent,
       theme.hazard,
       theme.highlight,
       theme.secondary,
-      updateTargets,
-      wizardActive,
     ]
   );
 
@@ -1896,13 +1747,13 @@ export const RolletteWorld: React.FC<{
 
     const onKeyDown = (e: KeyboardEvent) => {
       ensureAudio();
-
       const key = e.key.toLowerCase();
+
       if (THEME_KEYS[key] && !e.repeat) {
         const next = THEME_KEYS[key];
         setThemeId(next);
         rolletteState.setToast(`${THEMES[next].name} loaded`);
-        playSynth('mode');
+        playTone('target', 1.08);
         return;
       }
 
@@ -1912,7 +1763,7 @@ export const RolletteWorld: React.FC<{
           rolletteState.setToast(`CONTROL: ${next.toUpperCase()}`);
           return next;
         });
-        playSynth('mode');
+        playTone('target', 1.06);
         return;
       }
 
@@ -1956,25 +1807,27 @@ export const RolletteWorld: React.FC<{
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [ensureAudio, playSynth, resetRun]);
+  }, [ensureAudio, playTone, resetRun]);
 
   useFrame((state, delta) => {
     const now = nowSec();
 
     if (pendingLaunchRef.current && ballRef.current) {
-      const launchPos = pendingLaunchRef.current;
+      const pos = pendingLaunchRef.current;
       pendingLaunchRef.current = null;
-      launchBall(launchPos, true);
+      launchBall(pos, true);
     }
 
     if (bursts.length) {
       const alive = bursts.filter((b) => now - b.bornAt <= b.life);
       if (alive.length !== bursts.length) setBursts(alive);
     }
+
     if (waves.length) {
       const alive = waves.filter((w) => now - w.bornAt <= w.life);
       if (alive.length !== waves.length) setWaves(alive);
     }
+
     if (flashes.length) {
       const alive = flashes.filter((f) => now - f.bornAt <= f.life);
       if (alive.length !== flashes.length) setFlashes(alive);
@@ -1984,39 +1837,38 @@ export const RolletteWorld: React.FC<{
 
     rolletteState.tick(delta);
 
+    if (powerMode !== rolletteState.powerMode) {
+      setPowerMode(rolletteState.powerMode);
+    }
+
     const rb = ballRef.current;
     if (!rb) return;
-
-    if (wizardActive && now >= wizardUntilRef.current) {
-      setWizardActive(false);
-      rolletteState.setToast('WIZARD MODE COMPLETE');
-    }
-
-    if (activePower && now >= powerUntilRef.current) {
-      setPowerMode(null, 0);
-      rolletteState.setToast('POWER DOWN');
-    }
 
     const p = rb.translation();
     const v = rb.linvel();
     const playerPos: Vec3 = [p.x, p.y, p.z];
 
     const mini = layoutRef.current.miniZone;
-    const inMini =
+    rolletteState.inMiniZone =
       Math.abs(playerPos[0] - mini.center[0]) <= mini.half[0] &&
       Math.abs(playerPos[2] - mini.center[2]) <= mini.half[1];
-    rolletteState.inZone = inMini;
 
-    if (objectivesRef.current.skillShotActive && now - objectivesRef.current.launchAt > 8) {
+    if (objectivesRef.current.skillShotActive && now - objectivesRef.current.launchAt > SKILL_SHOT_WINDOW_S) {
       objectivesRef.current.skillShotActive = false;
     }
 
-    rb.setLinearDamping(activePower === 'GHOST' ? 0.03 : 0.08);
-    rb.setAngularDamping(activePower === 'HEAVY' ? 0.32 : 0.45);
-    rb.setGravityScale(activePower === 'HEAVY' ? 1.08 : 1, true);
+    rb.setLinearDamping(powerMode === 'GHOST' ? 0.03 : 0.08);
+    rb.setAngularDamping(powerMode === 'HEAVY' ? 0.32 : 0.45);
+    rb.setGravityScale(powerMode === 'HEAVY' ? 1.08 : 1, true);
 
-    const controlsLocked = now < tiltLockUntilRef.current;
-    if (controlsLocked) {
+    if (powerMode === 'HEAVY') {
+      rb.setAdditionalMass(45, true);
+    } else {
+      rb.setAdditionalMass(0, true);
+    }
+
+    const locked = now < tiltLockUntilRef.current;
+    if (locked) {
       if (now - tiltToastAtRef.current > 0.75) {
         tiltToastAtRef.current = now;
         rolletteState.setToast('TILT LOCK', 0.45);
@@ -2024,71 +1876,52 @@ export const RolletteWorld: React.FC<{
     } else if (controlMode === 'keyboard') {
       const ix = (keysRef.current.d ? 1 : 0) - (keysRef.current.a ? 1 : 0);
       const iz = (keysRef.current.s ? 1 : 0) - (keysRef.current.w ? 1 : 0);
+
       if (ix !== 0 || iz !== 0) {
         const len = Math.max(1, Math.hypot(ix, iz));
-        const gain = activePower === 'HEAVY' ? 1.2 : 1;
-        rb.setLinvel(
-          {
-            x: (ix / len) * CONTROL_SPEED * gain,
-            y: v.y,
-            z: (iz / len) * CONTROL_SPEED * gain,
-          },
-          true
-        );
+        const gain = powerMode === 'HEAVY' ? 1.2 : 1;
+        rb.setLinvel({ x: (ix / len) * CONTROL_SPEED * gain, y: v.y, z: (iz / len) * CONTROL_SPEED * gain }, true);
       } else {
         rb.setLinvel({ x: v.x * 0.94, y: v.y, z: v.z * 0.94 }, true);
       }
     } else {
-      const gain = activePower === 'HEAVY' ? 1.18 : 1;
-      rb.addForce(
-        {
-          x: mouseRef.current.x * MOUSE_FORCE * gain,
-          y: 0,
-          z: -mouseRef.current.y * MOUSE_FORCE * gain,
-        },
-        true
-      );
+      const gain = powerMode === 'HEAVY' ? 1.18 : 1;
+      rb.addForce({ x: mouseRef.current.x * MOUSE_FORCE * gain, y: 0, z: -mouseRef.current.y * MOUSE_FORCE * gain }, true);
     }
 
-    const planarSpeed = Math.hypot(v.x, v.z);
-    const maxSpeed = activePower === 'HEAVY' ? MAX_SPEED + 4 : MAX_SPEED;
-    if (planarSpeed > maxSpeed) {
-      const k = maxSpeed / planarSpeed;
+    const planar = Math.hypot(v.x, v.z);
+    const cap = powerMode === 'HEAVY' ? MAX_PLANAR_SPEED + 4 : MAX_PLANAR_SPEED;
+    if (planar > cap) {
+      const k = cap / planar;
       rb.setLinvel({ x: v.x * k, y: v.y, z: v.z * k }, true);
     }
 
     if (nudgeQueuedRef.current) {
       nudgeQueuedRef.current = false;
-      if (rolletteState.dashCooldown <= 0) {
-        const nudges = nudgeTimesRef.current.filter((t) => now - t < NUDGE_WINDOW_S);
-        nudgeTimesRef.current = [...nudges, now];
+      if (rolletteState.nudgeCooldown <= 0) {
+        const fresh = nudgeTimesRef.current.filter((t) => now - t < NUDGE_WINDOW_S);
+        nudgeTimesRef.current = [...fresh, now];
 
-        if (nudgeTimesRef.current.length > MAX_NUDGES_PER_WINDOW) {
+        if (nudgeTimesRef.current.length > NUDGE_LIMIT) {
           tiltLockUntilRef.current = now + TILT_LOCK_S;
           rolletteState.setToast('TILT');
           rolletteState.takeDamage(4);
-          playSynth('danger');
+          playTone('danger');
         } else if (now >= tiltLockUntilRef.current) {
-          rb.applyImpulse(
-            {
-              x: (Math.random() - 0.5) * 4,
-              y: 4.8,
-              z: -2 + Math.random() * 4,
-            },
-            true
-          );
-          playSynth('nudge');
+          rb.applyImpulse({ x: (Math.random() - 0.5) * 4, y: 4.8, z: -2 + Math.random() * 4 }, true);
+          playTone('nudge');
           spawnImpact('standup', [p.x, ITEM_Y + 0.35, p.z], theme.accent);
         }
 
-        rolletteState.dashCooldown = NUDGE_COOLDOWN_S;
+        rolletteState.nudgeCooldown = NUDGE_COOLDOWN_S;
       }
     }
 
-    const cameraTarget = inMini
+    const camTarget = rolletteState.inMiniZone
       ? new THREE.Vector3(p.x * 0.27, p.y + 17.5, p.z + 18)
       : new THREE.Vector3(p.x * 0.22, p.y + 21, p.z + 30);
-    camera.position.lerp(cameraTarget, 0.08);
+
+    camera.position.lerp(camTarget, 0.08);
     camera.lookAt(p.x, p.y + 1.1, p.z - 6);
 
     if (damageFlashRef.current > 0) {
@@ -2104,12 +1937,12 @@ export const RolletteWorld: React.FC<{
 
     if (shieldLightRef.current) {
       const fade = THREE.MathUtils.clamp(rolletteState.shieldTime / 0.8, 0, 1);
-      shieldLightRef.current.intensity =
-        rolletteState.shieldTime > 0 ? 0.42 + fade * 0.9 : 0;
+      shieldLightRef.current.intensity = rolletteState.shieldTime > 0 ? 0.42 + fade * 0.9 : 0;
       shieldLightRef.current.distance = 6 + fade * 2;
     }
 
-    const obstacleNow = state.clock.elapsedTime;
+    const t = state.clock.elapsedTime;
+
     for (const obstacle of obstaclesRef.current) {
       const body = obstacleBodiesRef.current[obstacle.id];
       if (!body) continue;
@@ -2119,88 +1952,82 @@ export const RolletteWorld: React.FC<{
       let z = obstacle.pos[2];
 
       if (obstacle.motion === 'slide') {
-        const offset = Math.sin(obstacleNow * obstacle.speed) * obstacle.amp;
+        const offset = Math.sin(t * obstacle.speed) * obstacle.amp;
         if (obstacle.axis === 'x') x += offset;
         else z += offset;
       }
 
       if (obstacle.motion === 'pulse') {
-        y += Math.sin(obstacleNow * obstacle.speed) * obstacle.amp * 0.32;
+        y += Math.sin(t * obstacle.speed) * obstacle.amp * 0.32;
       }
 
       body.setNextKinematicTranslation({ x, y, z });
 
       if (obstacle.motion === 'rotate') {
-        const q = new THREE.Quaternion().setFromEuler(
-          new THREE.Euler(0, obstacleNow * obstacle.speed, 0)
-        );
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, t * obstacle.speed, 0));
         body.setNextKinematicRotation(q);
       }
-
-      obstacleWorldRef.current[obstacle.id] = [x, y, z];
 
       const hitX = Math.abs(playerPos[0] - x) <= obstacle.size[0] * 0.54 + PLAYER_RADIUS;
       const hitZ = Math.abs(playerPos[2] - z) <= obstacle.size[2] * 0.54 + PLAYER_RADIUS;
       const hitY = Math.abs(playerPos[1] - y) <= obstacle.size[1] * 0.7 + PLAYER_RADIUS;
 
-      const last = obstacleLastHitRef.current[obstacle.id] ?? -999;
+      const last = obstacleHitAtRef.current[obstacle.id] ?? -999;
       if (hitX && hitZ && hitY && now - last > 0.62) {
-        obstacleLastHitRef.current[obstacle.id] = now;
+        obstacleHitAtRef.current[obstacle.id] = now;
 
-        if (activePower !== 'GHOST') {
-          if (activePower === 'HEAVY') {
+        if (powerMode !== 'GHOST') {
+          if (powerMode === 'HEAVY') {
             awardPoints(1200, [x, ITEM_Y + 0.45, z], theme.highlight, 'obstacle');
             rolletteState.setToast('HEAVY IMPACT +1,200', 0.45);
           } else {
             rolletteState.takeDamage(obstacle.damage);
             damageFlashRef.current = Math.min(0.82, damageFlashRef.current + 0.5);
-            playSynth('danger');
+            playTone('danger');
             spawnImpact('obstacle', [x, ITEM_Y + 0.4, z], theme.hazard);
           }
-          applyRepelImpulse(rb, playerPos, [x, y, z], 14);
+          repel(rb, playerPos, [x, y, z], 14);
         }
       }
     }
 
-    for (const g of Object.values(spinnerRefs.current)) {
-      if (g) g.rotation.y += delta * 8;
+    for (const spinner of Object.values(spinnerRefs.current)) {
+      if (spinner) spinner.rotation.y += delta * 8;
     }
 
-    if (activePower === 'MAGNET') {
-      const candidates = targetsRef.current.filter(
-        (t) =>
-          t.kind === 'bullCore' ||
-          t.kind === 'saucer' ||
-          t.kind === 'mystery' ||
-          t.kind === 'kicker'
+    if (powerMode === 'MAGNET') {
+      const hi = targetsRef.current.filter(
+        (target) => target.kind === 'bullInner' || target.kind === 'saucer' || target.kind === 'mystery' || target.kind === 'kicker'
       );
-      if (candidates.length) {
-        let nearest = candidates[0];
+
+      if (hi.length) {
+        let nearest = hi[0];
         let best = Number.POSITIVE_INFINITY;
-        for (const c of candidates) {
-          const dx = c.pos[0] - playerPos[0];
-          const dz = c.pos[2] - playerPos[2];
+
+        for (const h of hi) {
+          const dx = h.pos[0] - playerPos[0];
+          const dz = h.pos[2] - playerPos[2];
           const d2 = dx * dx + dz * dz;
           if (d2 < best) {
             best = d2;
-            nearest = c;
+            nearest = h;
           }
         }
+
         const dx = nearest.pos[0] - playerPos[0];
         const dz = nearest.pos[2] - playerPos[2];
         const d = Math.max(1, Math.hypot(dx, dz));
+
         rb.addForce({ x: (dx / d) * 24, y: 0, z: (dz / d) * 24 }, true);
       }
     }
 
     for (const target of targetsRef.current) {
-      if (target.kind === 'wormholeOut') continue;
+      if (target.kind === 'wormOut') continue;
       if (target.kind === 'drop' && target.active === false) continue;
 
-      const cooldown =
-        target.kind === 'rollover' ? 0.28 : target.kind === 'spinner' ? 0.19 : 0.34;
-
-      const last = targetLastHitRef.current[target.id] ?? -999;
+      const cooldown = target.kind === 'rollover' ? 0.28 : target.kind === 'spinner' ? 0.19 : 0.34;
+      const last = targetHitAtRef.current[target.id] ?? -999;
       if (now - last < cooldown) continue;
 
       const dx = playerPos[0] - target.pos[0];
@@ -2209,34 +2036,32 @@ export const RolletteWorld: React.FC<{
 
       if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
 
-      targetLastHitRef.current[target.id] = now;
-      resolveTargetHit(target, playerPos, v, rb);
+      targetHitAtRef.current[target.id] = now;
+      handleTargetHit(target, playerPos, v, rb);
     }
 
-    const drainGap = layoutRef.current.drainGap;
-    if (p.z > ARENA_HALF + 2.8 && Math.abs(p.x) < drainGap * 0.54) {
+    if (p.z > ARENA_HALF + 2.8 && Math.abs(p.x) < DRAIN_GAP * 0.54) {
       if (now - drainLockRef.current > 0.95) {
         drainLockRef.current = now;
 
         const o = objectivesRef.current;
         const endBonus =
-          Math.floor(bonusBankRef.current) +
+          Math.floor(rolletteState.bonusBank) +
           o.dropBanks.size * 1200 +
           o.spinnerHits * 130 +
-          o.bullseyeHits * 760 +
+          o.bullHits * 760 +
           o.orbitHits * 180 +
           o.rampHits * 200 +
-          (o.multiballUntil > now ? 4200 : 0);
+          (rolletteState.multiballActive ? 4200 : 0);
 
         if (endBonus > 0) {
           rolletteState.addScore(endBonus);
           rolletteState.setToast(`END OF BALL BONUS +${endBonus.toLocaleString()}`);
         }
 
-        bonusBankRef.current = 0;
-        rolletteState.setBonusBank(0);
+        rolletteState.clearBank();
 
-        if (o.multiballUntil > now) {
+        if (rolletteState.multiballActive) {
           rolletteState.setToast('BALL SAVE');
           spawnImpact('drain', [p.x, ITEM_Y + 0.35, p.z], theme.hazard);
           queueTimer(() => launchBall(layoutRef.current.launch, false), 280);
@@ -2244,7 +2069,8 @@ export const RolletteWorld: React.FC<{
           rolletteState.takeDamage(24);
           damageFlashRef.current = Math.min(0.86, damageFlashRef.current + 0.52);
           spawnImpact('drain', [p.x, ITEM_Y + 0.35, p.z], theme.hazard);
-          playSynth('danger', 1.2);
+          playTone('danger', 1.2);
+
           if (!rolletteState.gameOver) {
             queueTimer(() => launchBall(layoutRef.current.launch, true), 420);
           }
@@ -2255,42 +2081,21 @@ export const RolletteWorld: React.FC<{
 
   const floorColor = useMemo(() => new THREE.Color(theme.floor), [theme.floor]);
 
-  const drainGap = layout.drainGap;
-  const bottomSegmentWidth = (ARENA_SIZE - drainGap) / 2;
-  const bottomSegmentHalf = bottomSegmentWidth / 2;
-
   return (
     <>
       <color attach="background" args={[theme.background]} />
       <Sky inclination={0.47} azimuth={0.18} distance={450000} />
-      <Stars
-        radius={280}
-        depth={96}
-        count={theme.id === 'cotton' ? 2500 : 3800}
-        factor={4}
-        saturation={0}
-        fade
-      />
+      <Stars radius={280} depth={96} count={theme.id === 'cotton' ? 2500 : 3800} factor={4} saturation={0} fade />
 
       {theme.id === 'nebula' && (
         <Sparkles count={220} size={2.2} scale={[80, 24, 110]} color={theme.secondary} speed={0.24} />
       )}
 
       <ambientLight intensity={theme.id === 'nature' ? 0.36 : 0.42} />
-      <directionalLight
-        position={[16, 25, 12]}
-        intensity={theme.id === 'cotton' ? 0.95 : 1.15}
-        castShadow
-      />
+      <directionalLight position={[16, 25, 12]} intensity={theme.id === 'cotton' ? 0.95 : 1.15} castShadow />
       <pointLight position={[0, 19, -12]} intensity={theme.glow} color={theme.accent} />
-      <pointLight
-        position={[0, 15, 20]}
-        intensity={theme.glow * 0.58}
-        color={theme.secondary}
-      />
-      {wizardActive && (
-        <pointLight position={[0, 10, -24]} intensity={2.4} color={theme.highlight} />
-      )}
+      <pointLight position={[0, 15, 20]} intensity={theme.glow * 0.58} color={theme.secondary} />
+      {rolletteState.wizardActive && <pointLight position={[0, 10, -24]} intensity={2.4} color={theme.highlight} />}
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
         <div className="absolute top-4 right-4 rounded-xl border border-white/10 bg-black/45 px-3 py-2 text-white/90 text-xs backdrop-blur-sm">
@@ -2298,135 +2103,68 @@ export const RolletteWorld: React.FC<{
           <div>Controls: {controlMode === 'keyboard' ? 'Legacy Keyboard Velocity' : 'Legacy Mouse Force'}</div>
           <div>
             Mode:{' '}
-            {wizardActive
+            {rolletteState.wizardActive
               ? 'Wizard'
-              : objectivesRef.current.multiballUntil > nowSec()
+              : rolletteState.multiballActive
                 ? 'Multiball'
-                : multiballReady
+                : rolletteState.multiballLit
                   ? 'Jackpot Lit'
                   : 'Build Objectives'}
           </div>
-          <div>Power: {activePower ?? 'None'}</div>
+          <div>Power: {powerMode ?? 'None'}</div>
         </div>
       </Html>
 
-      <Physics gravity={[0, -25, 12]} interpolation={false}>
+      <Physics gravity={GRAVITY} interpolation={false}>
         <RigidBody type="fixed" colliders={false}>
-          <CuboidCollider
-            args={[ARENA_SIZE / 2, 0.2, ARENA_SIZE / 2]}
-            position={[0, FLOOR_Y - 0.2, 0]}
-            friction={0.1}
-            restitution={0.66}
-          />
-          <CuboidCollider
-            args={[ARENA_SIZE / 2 + WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS]}
-            position={[0, WALL_HEIGHT, -ARENA_HALF - WALL_THICKNESS]}
-            restitution={0.84}
-          />
-          <CuboidCollider
-            args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]}
-            position={[-ARENA_HALF - WALL_THICKNESS, WALL_HEIGHT, 0]}
-            restitution={0.84}
-          />
-          <CuboidCollider
-            args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]}
-            position={[ARENA_HALF + WALL_THICKNESS, WALL_HEIGHT, 0]}
-            restitution={0.84}
-          />
-          <CuboidCollider
-            args={[bottomSegmentHalf, WALL_HEIGHT, WALL_THICKNESS]}
-            position={[
-              -(drainGap / 2 + bottomSegmentHalf),
-              WALL_HEIGHT,
-              ARENA_HALF + WALL_THICKNESS,
-            ]}
-            restitution={0.84}
-          />
-          <CuboidCollider
-            args={[bottomSegmentHalf, WALL_HEIGHT, WALL_THICKNESS]}
-            position={[
-              drainGap / 2 + bottomSegmentHalf,
-              WALL_HEIGHT,
-              ARENA_HALF + WALL_THICKNESS,
-            ]}
-            restitution={0.84}
-          />
+          <CuboidCollider args={[ARENA_SIZE / 2, 0.2, ARENA_SIZE / 2]} position={[0, FLOOR_Y - 0.2, 0]} friction={0.1} restitution={0.66} />
+          <CuboidCollider args={[ARENA_SIZE / 2 + WALL_THICKNESS, WALL_HEIGHT, WALL_THICKNESS]} position={[0, WALL_HEIGHT, -ARENA_HALF - WALL_THICKNESS]} restitution={0.84} />
+          <CuboidCollider args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]} position={[-ARENA_HALF - WALL_THICKNESS, WALL_HEIGHT, 0]} restitution={0.84} />
+          <CuboidCollider args={[WALL_THICKNESS, WALL_HEIGHT, ARENA_SIZE / 2 + WALL_THICKNESS]} position={[ARENA_HALF + WALL_THICKNESS, WALL_HEIGHT, 0]} restitution={0.84} />
+
+          <CuboidCollider args={[(ARENA_SIZE - DRAIN_GAP) / 4, WALL_HEIGHT, WALL_THICKNESS]} position={[-(DRAIN_GAP / 2 + (ARENA_SIZE - DRAIN_GAP) / 4), WALL_HEIGHT, ARENA_HALF + WALL_THICKNESS]} restitution={0.84} />
+          <CuboidCollider args={[(ARENA_SIZE - DRAIN_GAP) / 4, WALL_HEIGHT, WALL_THICKNESS]} position={[DRAIN_GAP / 2 + (ARENA_SIZE - DRAIN_GAP) / 4, WALL_HEIGHT, ARENA_HALF + WALL_THICKNESS]} restitution={0.84} />
         </RigidBody>
 
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
           <planeGeometry args={[ARENA_SIZE, ARENA_SIZE, 8, 8]} />
-          <meshStandardMaterial
-            color={floorColor}
-            emissive={theme.floor}
-            emissiveIntensity={theme.id === 'nebula' ? 0.26 : 0.14}
-            roughness={theme.id === 'cotton' ? 0.62 : 0.42}
-            metalness={theme.id === 'nebula' ? 0.3 : 0.12}
-          />
+          <meshStandardMaterial color={floorColor} emissive={theme.floor} emissiveIntensity={theme.id === 'nebula' ? 0.26 : 0.14} roughness={theme.id === 'cotton' ? 0.62 : 0.42} metalness={theme.id === 'nebula' ? 0.3 : 0.12} />
         </mesh>
 
         <mesh position={[0, 0.36, -ARENA_HALF - WALL_THICKNESS]} castShadow>
           <boxGeometry args={[ARENA_SIZE + WALL_THICKNESS * 2, 0.72, WALL_THICKNESS * 2]} />
           <meshStandardMaterial color={theme.rail} emissive={theme.secondary} emissiveIntensity={0.16} />
         </mesh>
+
         <mesh position={[-ARENA_HALF - WALL_THICKNESS, 0.36, 0]} castShadow>
           <boxGeometry args={[WALL_THICKNESS * 2, 0.72, ARENA_SIZE + WALL_THICKNESS * 2]} />
           <meshStandardMaterial color={theme.rail} emissive={theme.secondary} emissiveIntensity={0.16} />
         </mesh>
+
         <mesh position={[ARENA_HALF + WALL_THICKNESS, 0.36, 0]} castShadow>
           <boxGeometry args={[WALL_THICKNESS * 2, 0.72, ARENA_SIZE + WALL_THICKNESS * 2]} />
           <meshStandardMaterial color={theme.rail} emissive={theme.secondary} emissiveIntensity={0.16} />
         </mesh>
 
         <mesh position={[0, 0.2, ARENA_HALF + WALL_THICKNESS + 0.02]}>
-          <boxGeometry args={[drainGap, 0.42, WALL_THICKNESS]} />
-          <meshStandardMaterial
-            color={theme.hazard}
-            emissive={theme.hazard}
-            emissiveIntensity={0.45}
-            transparent
-            opacity={0.8}
-          />
+          <boxGeometry args={[DRAIN_GAP, 0.42, WALL_THICKNESS]} />
+          <meshStandardMaterial color={theme.hazard} emissive={theme.hazard} emissiveIntensity={0.45} transparent opacity={0.8} />
         </mesh>
 
-        <mesh
-          position={[
-            layout.miniZone.center[0],
-            ITEM_Y - 0.04,
-            layout.miniZone.center[2],
-          ]}
-          receiveShadow
-        >
-          <boxGeometry
-            args={[
-              layout.miniZone.half[0] * 1.96,
-              0.14,
-              layout.miniZone.half[1] * 1.96,
-            ]}
-          />
-          <meshStandardMaterial
-            color={theme.id === 'nature' ? '#203a1f' : theme.id === 'cotton' ? '#fff2fb' : '#121a33'}
-            emissive={theme.accent}
-            emissiveIntensity={0.09}
-            roughness={0.5}
-            metalness={0.18}
-          />
+        <mesh position={[layout.miniZone.center[0], ITEM_Y - 0.04, layout.miniZone.center[2]]} receiveShadow>
+          <boxGeometry args={[layout.miniZone.half[0] * 1.96, 0.14, layout.miniZone.half[1] * 1.96]} />
+          <meshStandardMaterial color={theme.id === 'nature' ? '#203a1f' : theme.id === 'cotton' ? '#fff2fb' : '#121a33'} emissive={theme.accent} emissiveIntensity={0.09} roughness={0.5} metalness={0.18} />
         </mesh>
 
         <ThemeDecor theme={theme} />
 
-        {layout.ribbons.map((ribbon) => (
-          <mesh
-            key={ribbon.id}
-            position={ribbon.pos as unknown as THREE.Vector3Tuple}
-            rotation={[-Math.PI / 2 + (ribbon.tilt ?? 0), 0, 0]}
-          >
-            <ringGeometry args={[ribbon.inner, ribbon.outer, 48, 1, ribbon.start, ribbon.length]} />
+        {layout.lanes.map((lane) => (
+          <mesh key={lane.id} position={lane.pos as unknown as THREE.Vector3Tuple} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[lane.inner, lane.outer, 48, 1, lane.start, lane.length]} />
             <meshStandardMaterial
-              color={ribbon.tint ?? theme.laneTint}
-              emissive={ribbon.tint ?? theme.laneTint}
-              emissiveIntensity={
-                ribbon.kind === 'orbit' ? 0.52 : ribbon.kind === 'ramp' ? 0.42 : 0.36
-              }
+              color={lane.tint ?? theme.lane}
+              emissive={lane.tint ?? theme.lane}
+              emissiveIntensity={lane.kind === 'orbit' ? 0.52 : lane.kind === 'ramp' ? 0.42 : 0.36}
               transparent
               opacity={theme.id === 'cotton' ? 0.55 : 0.48}
               side={THREE.DoubleSide}
@@ -2435,35 +2173,16 @@ export const RolletteWorld: React.FC<{
         ))}
 
         {obstacles.map((obstacle) => (
-          <RigidBody
-            key={obstacle.id}
-            ref={(rb) => {
-              obstacleBodiesRef.current[obstacle.id] = rb;
-            }}
-            type="kinematicPosition"
-            colliders={false}
-          >
+          <RigidBody key={obstacle.id} ref={(rb) => { obstacleBodiesRef.current[obstacle.id] = rb; }} type="kinematicPosition" colliders={false}>
             <CuboidCollider args={[obstacle.size[0] / 2, obstacle.size[1] / 2, obstacle.size[2] / 2]} />
             <mesh castShadow>
               <boxGeometry args={obstacle.size} />
-              <meshStandardMaterial
-                color={obstacle.tint}
-                emissive={obstacle.tint}
-                emissiveIntensity={0.58}
-                roughness={0.34}
-                metalness={0.3}
-              />
+              <meshStandardMaterial color={obstacle.tint} emissive={obstacle.tint} emissiveIntensity={0.58} roughness={0.34} metalness={0.3} />
             </mesh>
           </RigidBody>
         ))}
 
-        <Player
-          ballRef={ballRef}
-          shieldLightRef={shieldLightRef}
-          tint={theme.accent}
-          glow={theme.secondary}
-          powerMode={activePower}
-        />
+        <Player ballRef={ballRef} shieldLightRef={shieldLightRef} tint={theme.accent} glow={theme.secondary} powerMode={powerMode} />
 
         {targets.map((target) => {
           const active = target.active !== false;
@@ -2477,16 +2196,12 @@ export const RolletteWorld: React.FC<{
                 ? theme.highlight
                 : target.kind === 'magnet'
                   ? theme.accent
-                  : target.kind === 'slingshot'
+                  : target.kind === 'sling'
                     ? theme.hazard
                     : theme.secondary);
 
           return (
-            <group
-              key={target.id}
-              position={[target.pos[0], target.pos[1] + yOffset, target.pos[2]]}
-              rotation={[0, target.yRot ?? 0, 0]}
-            >
+            <group key={target.id} position={[target.pos[0], target.pos[1] + yOffset, target.pos[2]]} rotation={[0, target.yRot ?? 0, 0]}>
               {target.kind === 'pop' && (
                 <mesh castShadow>
                   <cylinderGeometry args={[0.95, 1.12, 0.74, 22]} />
@@ -2504,22 +2219,12 @@ export const RolletteWorld: React.FC<{
               {target.kind === 'drop' && (
                 <mesh castShadow>
                   <boxGeometry args={[1.14, 1.58, 0.36]} />
-                  <meshStandardMaterial
-                    color={tint}
-                    emissive={tint}
-                    emissiveIntensity={active ? 0.56 : 0.08}
-                    opacity={active ? 1 : 0.35}
-                    transparent
-                  />
+                  <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={active ? 0.56 : 0.08} opacity={active ? 1 : 0.35} transparent />
                 </mesh>
               )}
 
               {target.kind === 'spinner' && (
-                <group
-                  ref={(g) => {
-                    spinnerRefs.current[target.id] = g;
-                  }}
-                >
+                <group ref={(g) => { spinnerRefs.current[target.id] = g; }}>
                   <mesh castShadow>
                     <boxGeometry args={[3.1, 0.24, 0.24]} />
                     <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={0.56} />
@@ -2527,7 +2232,7 @@ export const RolletteWorld: React.FC<{
                 </group>
               )}
 
-              {target.kind === 'slingshot' && (
+              {target.kind === 'sling' && (
                 <mesh castShadow rotation={[-Math.PI / 2, 0, 0]}>
                   <coneGeometry args={[1.22, 1.25, 3]} />
                   <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={0.46} />
@@ -2554,14 +2259,10 @@ export const RolletteWorld: React.FC<{
                 </mesh>
               )}
 
-              {target.kind === 'bullCore' && (
+              {target.kind === 'bullInner' && (
                 <mesh>
                   <sphereGeometry args={[0.74, 18, 18]} />
-                  <meshStandardMaterial
-                    color={theme.highlight}
-                    emissive={theme.highlight}
-                    emissiveIntensity={1.05}
-                  />
+                  <meshStandardMaterial color={theme.highlight} emissive={theme.highlight} emissiveIntensity={1.05} />
                 </mesh>
               )}
 
@@ -2582,24 +2283,14 @@ export const RolletteWorld: React.FC<{
               {target.kind === 'ramp' && (
                 <mesh rotation={[-Math.PI / 2, 0, 0]}>
                   <ringGeometry args={[1.12, 1.78, 32, 1, 0.24, Math.PI * 1.2]} />
-                  <meshStandardMaterial
-                    color={tint}
-                    emissive={tint}
-                    emissiveIntensity={0.52}
-                    side={THREE.DoubleSide}
-                  />
+                  <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={0.52} side={THREE.DoubleSide} />
                 </mesh>
               )}
 
               {target.kind === 'orbit' && (
                 <mesh rotation={[-Math.PI / 2, 0, 0]}>
                   <ringGeometry args={[1.24, 2.14, 40, 1, Math.PI * 0.15, Math.PI * 1.64]} />
-                  <meshStandardMaterial
-                    color={tint}
-                    emissive={tint}
-                    emissiveIntensity={0.54}
-                    side={THREE.DoubleSide}
-                  />
+                  <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={0.54} side={THREE.DoubleSide} />
                 </mesh>
               )}
 
@@ -2616,7 +2307,7 @@ export const RolletteWorld: React.FC<{
                 </group>
               )}
 
-              {target.kind === 'wormholeIn' && (
+              {target.kind === 'wormIn' && (
                 <group>
                   <mesh rotation={[-Math.PI / 2, 0, 0]}>
                     <torusGeometry args={[1.06, 0.18, 16, 34]} />
@@ -2626,27 +2317,17 @@ export const RolletteWorld: React.FC<{
                 </group>
               )}
 
-              {target.kind === 'wormholeOut' && (
+              {target.kind === 'wormOut' && (
                 <mesh>
                   <sphereGeometry args={[0.52, 14, 14]} />
-                  <meshStandardMaterial
-                    color={theme.highlight}
-                    emissive={theme.highlight}
-                    emissiveIntensity={0.8}
-                    transparent
-                    opacity={0.5}
-                  />
+                  <meshStandardMaterial color={theme.highlight} emissive={theme.highlight} emissiveIntensity={0.8} transparent opacity={0.5} />
                 </mesh>
               )}
 
               {target.kind === 'mystery' && (
                 <mesh>
                   <cylinderGeometry args={[1.16, 1.3, 0.6, 18]} />
-                  <meshStandardMaterial
-                    color={theme.highlight}
-                    emissive={theme.highlight}
-                    emissiveIntensity={0.75}
-                  />
+                  <meshStandardMaterial color={theme.highlight} emissive={theme.highlight} emissiveIntensity={0.75} />
                 </mesh>
               )}
 
@@ -2660,27 +2341,37 @@ export const RolletteWorld: React.FC<{
               {target.kind === 'mini' && (
                 <mesh>
                   <octahedronGeometry args={[0.8, 0]} />
-                  <meshStandardMaterial
-                    color={theme.highlight}
-                    emissive={theme.highlight}
-                    emissiveIntensity={0.9}
-                  />
+                  <meshStandardMaterial color={theme.highlight} emissive={theme.highlight} emissiveIntensity={0.9} />
+                </mesh>
+              )}
+
+              {target.kind === 'captive' && (
+                <mesh>
+                  <sphereGeometry args={[0.62, 16, 16]} />
+                  <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={0.64} metalness={0.55} roughness={0.2} />
+                </mesh>
+              )}
+
+              {target.kind === 'gobble' && (
+                <mesh>
+                  <cylinderGeometry args={[1.1, 1.36, 0.58, 20]} />
+                  <meshStandardMaterial color={theme.hazard} emissive={theme.hazard} emissiveIntensity={0.66} />
                 </mesh>
               )}
             </group>
           );
         })}
 
-        {bursts.map((b) => (
-          <BurstFX key={b.id} burst={b} />
+        {bursts.map((burst) => (
+          <BurstFX key={burst.id} burst={burst} />
         ))}
 
-        {waves.map((w) => (
-          <ImpactWave key={w.id} wave={w} />
+        {waves.map((wave) => (
+          <WaveFX key={wave.id} wave={wave} />
         ))}
 
-        {flashes.map((f) => (
-          <ImpactFlash key={f.id} flash={f} />
+        {flashes.map((flash) => (
+          <FlashFX key={flash.id} flash={flash} />
         ))}
       </Physics>
     </>
