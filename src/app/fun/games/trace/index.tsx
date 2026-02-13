@@ -267,6 +267,9 @@ const PLAYER_RADIUS = 0.12;
 const TRAIL_THICKNESS = PLAYER_RADIUS;
 const TRAIL_TILE_SIZE = PLAYER_RADIUS * 2;
 const TRAIL_COMMIT_STEP = TRAIL_TILE_SIZE * 0.95;
+const FILL_TILE_HEIGHT = 0.06;
+const FILL_TILE_Y = 0.06;
+const TRAIL_VISUAL_Y = 0.22;
 
 const MAX_TRAIL_SEGMENTS = 6200;
 const TRAIL_INSTANCE_CAP = 4200;
@@ -290,9 +293,9 @@ const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const DIRECTIONS: Array<{ x: number; z: number }> = [
-  { x: 1, z: 0 },
-  { x: 0, z: -1 },
   { x: -1, z: 0 },
+  { x: 0, z: -1 },
+  { x: 1, z: 0 },
   { x: 0, z: 1 },
 ];
 const DIR_YAWS: number[] = [-Math.PI / 2, Math.PI, Math.PI / 2, 0];
@@ -345,9 +348,9 @@ const medalForCompletion = (completion: number): MedalTier => {
 };
 
 const directionFromKeys = (justPressed: Set<string>): DirectionIndex | null => {
-  if (justPressed.has('arrowup') || justPressed.has('w')) return 1;
+  if (justPressed.has('arrowup') || justPressed.has('w')) return 3;
   if (justPressed.has('arrowright') || justPressed.has('d')) return 0;
-  if (justPressed.has('arrowdown') || justPressed.has('s')) return 3;
+  if (justPressed.has('arrowdown') || justPressed.has('s')) return 1;
   if (justPressed.has('arrowleft') || justPressed.has('a')) return 2;
   return null;
 };
@@ -675,7 +678,7 @@ const queryNearbySegmentIds = (runtime: Runtime, x: number, z: number) => {
 };
 
 const checkTrailCollision = (runtime: Runtime, x: number, z: number) => {
-  if (runtime.phaseInvuln > 0 || runtime.turnGrace > 0) return { hit: false, near: false };
+  if (runtime.turnGrace > 0) return { hit: false, near: false };
   const ids = queryNearbySegmentIds(runtime, x, z);
   let near = false;
   const hitThreshold = TRAIL_THICKNESS + PLAYER_RADIUS * 0.9;
@@ -1311,29 +1314,9 @@ function TraceScene() {
         }
 
         if (trailHit) {
-          if (runtime.phaseCharges > 0) {
-            runtime.phaseCharges -= 1;
-            runtime.phaseTimer = 0.52;
-            runtime.phaseInvuln = 0.52;
-            useTraceStore.getState().setPhaseCharges(runtime.phaseCharges);
-          } else {
-            gameOver = true;
-            break;
-          }
+          gameOver = true;
+          break;
         }
-
-        for (const v of runtime.voids) {
-          if (!v.active) continue;
-          const half = v.size * 0.5;
-          if (
-            Math.abs(runtime.playerX - v.x) < half + PLAYER_RADIUS * 0.86 &&
-            Math.abs(runtime.playerZ - v.z) < half + PLAYER_RADIUS * 0.86
-          ) {
-            gameOver = true;
-            break;
-          }
-        }
-        if (gameOver) break;
 
         for (const p of runtime.pickups) {
           if (!p.active) continue;
@@ -1400,8 +1383,8 @@ function TraceScene() {
       for (let i = 0; i < total && idx < FILL_CELL_CAP; i += 1) {
         const cell = runtime.trailCells[i];
 
-        dummy.position.set(cell.x, 0.06, cell.z);
-        dummy.scale.set(TRAIL_TILE_SIZE, 0.06, TRAIL_TILE_SIZE);
+        dummy.position.set(cell.x, FILL_TILE_Y, cell.z);
+        dummy.scale.set(TRAIL_TILE_SIZE, FILL_TILE_HEIGHT, TRAIL_TILE_SIZE);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         fillMeshRef.current.setMatrixAt(idx, dummy.matrix);
@@ -1435,20 +1418,14 @@ function TraceScene() {
         if (len < 0.001) continue;
         const midX = (seg.ax + seg.bx) * 0.5;
         const midZ = (seg.az + seg.bz) * 0.5;
-        dummy.position.set(midX, 0.13, midZ);
+        dummy.position.set(midX, TRAIL_VISUAL_Y, midZ);
         segDirection.set(dx / len, 0, dz / len);
         dummy.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, segDirection);
         dummy.scale.set(seg.thickness, len, seg.thickness);
         dummy.updateMatrix();
         trailMeshRef.current.setMatrixAt(idx, dummy.matrix);
 
-        const gradient = count > 1 ? i / (count - 1) : 0;
-        segColor.copy(themeTrailA).lerp(themeTrailB, clamp(gradient * 0.82 + 0.1, 0, 1));
-        if (runtime.phaseTimer > 0 && i % 2 === 0) {
-          segColor.lerp(themeTrailPulse, 0.65);
-          segColor.multiplyScalar(0.65 + Math.sin(runtime.elapsed * 40) * 0.15);
-        }
-        segColor.multiplyScalar(1 + runtime.danger * 0.32);
+        segColor.copy(runtime.phaseTimer > 0 ? themeTrailPulse : themeTrailA);
         trailMeshRef.current.setColorAt(idx, segColor);
         idx += 1;
       }
@@ -1474,7 +1451,7 @@ function TraceScene() {
       if (len > 0.001) {
         const midX = (runtime.trailStartX + runtime.playerX) * 0.5;
         const midZ = (runtime.trailStartZ + runtime.playerZ) * 0.5;
-        currentTrailRef.current.position.set(midX, 0.13, midZ);
+        currentTrailRef.current.position.set(midX, TRAIL_VISUAL_Y, midZ);
         segDirection.set(dx / len, 0, dz / len);
         currentTrailRef.current.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, segDirection);
         currentTrailRef.current.scale.set(PLAYER_RADIUS, len, PLAYER_RADIUS);
@@ -1721,7 +1698,15 @@ function TraceScene() {
         frustumCulled={false}
       >
         <boxGeometry args={[1, 1, 1]} />
-        <meshBasicMaterial ref={fillMatRef} color="#2be4ff" toneMapped={false} />
+        <meshBasicMaterial
+          ref={fillMatRef}
+          color="#2be4ff"
+          toneMapped={false}
+          transparent
+          opacity={0.96}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
       </instancedMesh>
 
       <instancedMesh ref={gridLineRef} args={[undefined, undefined, GRID_LINE_CAP]}>
@@ -1759,15 +1744,26 @@ function TraceScene() {
         frustumCulled={false}
       >
         <cylinderGeometry args={[1, 1, 1, 8]} />
-        <meshBasicMaterial vertexColors toneMapped={false} />
+        <meshBasicMaterial
+          vertexColors
+          toneMapped={false}
+          transparent
+          opacity={0.84}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
       </instancedMesh>
 
-      <mesh ref={currentTrailRef} position={[0, 0.13, 0]}>
+      <mesh ref={currentTrailRef} position={[0, TRAIL_VISUAL_Y, 0]}>
         <cylinderGeometry args={[1, 1, 1, 8]} />
         <meshBasicMaterial
           ref={trailMatRef}
           color="#2be4ff"
           toneMapped={false}
+          transparent
+          opacity={0.9}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
       </mesh>
 
