@@ -102,6 +102,7 @@ type Runtime = {
   phaseCharges: number;
   phaseTimer: number;
   phaseInvuln: number;
+  turnGrace: number;
   segments: TrailSegment[];
   segmentMap: Map<number, TrailSegment>;
   buckets: Map<string, number[]>;
@@ -262,10 +263,10 @@ const HEAD_STYLES = ['Comet', 'Prism', 'Halo', 'Bolt'] as const;
 const BEST_KEY = 'trace_hyper_best_v2';
 
 const CELL_SIZE = 0.62;
-const TRAIL_THICKNESS = 0.16;
 const PLAYER_RADIUS = 0.12;
+const TRAIL_THICKNESS = PLAYER_RADIUS;
 const TRAIL_TILE_SIZE = PLAYER_RADIUS * 2;
-const TRAIL_COMMIT_STEP = CELL_SIZE * 0.46;
+const TRAIL_COMMIT_STEP = TRAIL_TILE_SIZE * 0.95;
 
 const MAX_TRAIL_SEGMENTS = 6200;
 const TRAIL_INSTANCE_CAP = 4200;
@@ -280,6 +281,7 @@ const LEVEL_GRID_MAX = 17;
 const TIGHT_TURN_THRESHOLD = 0.62;
 const SWIPE_THRESHOLD = 0.08;
 const SWIPE_AXIS_RATIO = 1.1;
+const TURN_GRACE_TIME = 0.1;
 
 const SPEED_START = 1.75;
 const SPEED_MAX = 4.2;
@@ -523,6 +525,7 @@ const createRuntime = (): Runtime => {
     phaseCharges: 0,
     phaseTimer: 0,
     phaseInvuln: 0,
+    turnGrace: 0,
     segments: [],
     segmentMap: new Map(),
     buckets: new Map(),
@@ -672,7 +675,7 @@ const queryNearbySegmentIds = (runtime: Runtime, x: number, z: number) => {
 };
 
 const checkTrailCollision = (runtime: Runtime, x: number, z: number) => {
-  if (runtime.phaseInvuln > 0) return { hit: false, near: false };
+  if (runtime.phaseInvuln > 0 || runtime.turnGrace > 0) return { hit: false, near: false };
   const ids = queryNearbySegmentIds(runtime, x, z);
   let near = false;
   const hitThreshold = TRAIL_THICKNESS + PLAYER_RADIUS * 0.9;
@@ -722,6 +725,7 @@ const prepareLevelRuntime = (
   runtime.phaseCharges = 0;
   runtime.phaseTimer = 0;
   runtime.phaseInvuln = 0;
+  runtime.turnGrace = 0;
   runtime.segments.length = 0;
   runtime.segmentMap.clear();
   runtime.buckets.clear();
@@ -777,6 +781,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.phaseCharges = 0;
   runtime.phaseTimer = 0;
   runtime.phaseInvuln = 0;
+  runtime.turnGrace = 0;
   runtime.segments.length = 0;
   runtime.segmentMap.clear();
   runtime.buckets.clear();
@@ -1158,37 +1163,37 @@ function TraceScene() {
         headIndex,
         resetScore: true,
       });
-    } else if (
-      store.status === 'PLAYING' &&
-      directionInput !== null &&
-      directionInput !== runtime.dir
-    ) {
-      commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
-      runtime.dir = directionInput;
-      runtime.targetYaw = DIR_YAWS[runtime.dir];
+    } else if (store.status === 'PLAYING' && directionInput !== null) {
+      const opposite = ((runtime.dir + 2) % 4) as DirectionIndex;
+      if (directionInput !== runtime.dir && directionInput !== opposite) {
+        commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
+        runtime.dir = directionInput;
+        runtime.targetYaw = DIR_YAWS[runtime.dir];
+        runtime.turnGrace = TURN_GRACE_TIME;
 
-      const distToWall = Math.min(
-        runtime.bound - Math.abs(runtime.playerX),
-        runtime.bound - Math.abs(runtime.playerZ)
-      );
-      if (distToWall < TIGHT_TURN_THRESHOLD) {
-        const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 110);
-        runtime.tightTurnBonus += bonus;
-        runtime.tightTurns += 1;
-        runtime.score += bonus;
-      }
+        const distToWall = Math.min(
+          runtime.bound - Math.abs(runtime.playerX),
+          runtime.bound - Math.abs(runtime.playerZ)
+        );
+        if (distToWall < TIGHT_TURN_THRESHOLD) {
+          const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 110);
+          runtime.tightTurnBonus += bonus;
+          runtime.tightTurns += 1;
+          runtime.score += bonus;
+        }
 
-      for (let i = 0; i < 8; i += 1) {
-        if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
-        const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.7;
-        const speed = 1.6 + Math.random() * 1.5;
-        runtime.sparks.push({
-          x: runtime.playerX,
-          z: runtime.playerZ,
-          vx: Math.cos(a) * speed,
-          vz: Math.sin(a) * speed,
-          life: 0.33 + Math.random() * 0.24,
-        });
+        for (let i = 0; i < 8; i += 1) {
+          if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
+          const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.7;
+          const speed = 1.6 + Math.random() * 1.5;
+          runtime.sparks.push({
+            x: runtime.playerX,
+            z: runtime.playerZ,
+            vx: Math.cos(a) * speed,
+            vz: Math.sin(a) * speed,
+            life: 0.33 + Math.random() * 0.24,
+          });
+        }
       }
     }
 
@@ -1230,6 +1235,7 @@ function TraceScene() {
       runtime.hudCommit += dt;
       runtime.phaseTimer = Math.max(0, runtime.phaseTimer - dt);
       runtime.phaseInvuln = Math.max(0, runtime.phaseInvuln - dt);
+      runtime.turnGrace = Math.max(0, runtime.turnGrace - dt);
 
       const d = difficultyAt(runtime);
       runtime.speed = clamp(runtime.baseSpeed + runtime.elapsed * 0.03, runtime.baseSpeed, SPEED_MAX);
@@ -1471,7 +1477,7 @@ function TraceScene() {
         currentTrailRef.current.position.set(midX, 0.13, midZ);
         segDirection.set(dx / len, 0, dz / len);
         currentTrailRef.current.quaternion.setFromUnitVectors(THREE.Object3D.DEFAULT_UP, segDirection);
-        currentTrailRef.current.scale.set(TRAIL_THICKNESS * 1.05, len, TRAIL_THICKNESS * 1.05);
+        currentTrailRef.current.scale.set(PLAYER_RADIUS, len, PLAYER_RADIUS);
         currentTrailRef.current.visible = true;
       } else {
         currentTrailRef.current.visible = false;
@@ -1479,10 +1485,6 @@ function TraceScene() {
     }
 
     if (trailMatRef.current) {
-      trailMatRef.current.opacity =
-        runtime.phaseTimer > 0
-          ? clamp(0.3 + 0.42 * (Math.sin(runtime.elapsed * 43) * 0.5 + 0.5), 0.24, 0.72)
-          : 0.94;
       trailMatRef.current.color.copy(runtime.phaseTimer > 0 ? themeTrailPulse : themeTrailA);
     }
 
@@ -1765,9 +1767,6 @@ function TraceScene() {
         <meshBasicMaterial
           ref={trailMatRef}
           color="#2be4ff"
-          transparent
-          opacity={0.9}
-          blending={THREE.AdditiveBlending}
           toneMapped={false}
         />
       </mesh>
