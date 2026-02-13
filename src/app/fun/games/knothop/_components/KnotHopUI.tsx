@@ -1,12 +1,24 @@
 'use client';
 
 import { Html } from '@react-three/drei';
+import { useMemo } from 'react';
 import { useSnapshot } from 'valtio';
 
+import { CHARACTER_MODELS } from '../constants';
 import { knotHopState } from '../state';
 
 export function KnotHopUI() {
   const snap = useSnapshot(knotHopState);
+
+  const selectedCharacter = useMemo(
+    () =>
+      CHARACTER_MODELS.find((character) => character.id === snap.selectedCharacter) ??
+      CHARACTER_MODELS[0],
+    [snap.selectedCharacter]
+  );
+
+  const selectedUnlocked = snap.unlockedCharacters.includes(selectedCharacter.id);
+  const lockCost = `${selectedCharacter.cost.gold}G ${selectedCharacter.cost.green}E ${selectedCharacter.cost.purple}V`;
 
   return (
     <Html fullscreen>
@@ -16,8 +28,8 @@ export function KnotHopUI() {
             Knot Hop
           </div>
           <div className="text-[11px] text-cyan-50/80">
-            Tap to reverse spiral direction, dodge anomaly hazards, and collect
-            prism gems.
+            Tap to reverse spiral direction, dodge hazards, and collect rare
+            flux shards.
           </div>
         </div>
 
@@ -26,10 +38,19 @@ export function KnotHopUI() {
           <div className="text-[11px] uppercase tracking-[0.2em] text-white/70">
             Best {snap.best}
           </div>
+          <div className="mt-1 text-[11px] text-yellow-300">
+            Gold <span className="font-semibold">{snap.gold}</span>
+          </div>
+          <div className="text-[11px] text-green-300">
+            Emerald <span className="font-semibold">{snap.green}</span>
+          </div>
+          <div className="text-[11px] text-purple-300">
+            Void <span className="font-semibold">{snap.purple}</span>
+          </div>
         </div>
 
         {snap.phase === 'playing' && (
-          <div className="absolute left-4 top-[92px] rounded-md border border-white/20 bg-black/38 px-3 py-2 text-xs text-white/90">
+          <div className="absolute left-4 top-[98px] rounded-md border border-white/20 bg-black/38 px-3 py-2 text-xs text-white/90">
             <div>
               Dodged <span className="font-semibold text-cyan-100">{snap.dodged}</span>
             </div>
@@ -53,6 +74,19 @@ export function KnotHopUI() {
               Direction{' '}
               <span className="font-semibold text-violet-100">{snap.direction}</span>
             </div>
+            <div>
+              Run Gold <span className="font-semibold text-yellow-300">{snap.runGold}</span>
+            </div>
+            <div>
+              Run Emerald <span className="font-semibold text-green-300">{snap.runGreen}</span>
+            </div>
+            <div>
+              Run Void <span className="font-semibold text-purple-300">{snap.runPurple}</span>
+            </div>
+            <div>
+              Character{' '}
+              <span className="font-semibold text-rose-100">{selectedCharacter.name}</span>
+            </div>
           </div>
         )}
 
@@ -61,13 +95,34 @@ export function KnotHopUI() {
             <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/84 via-cyan-950/38 to-teal-950/30 px-6 py-5 text-center backdrop-blur-md">
               <div className="text-2xl font-black tracking-wide">KNOT HOP</div>
               <div className="mt-2 text-sm text-white/85">
-                A prism spirals forward through a high-speed hazard tunnel.
+                A spiral runner through black/red/rust hazard lanes.
               </div>
               <div className="mt-1 text-sm text-white/85">
-                Tap to reverse spin, dodge crusher spikes and void anomalies,
-                and line up with gem clusters.
+                Collect Gold, Emerald, and Void shards to unlock new character
+                forms.
               </div>
-              <div className="mt-3 text-sm text-cyan-100/90">
+              <div className="mt-3 rounded-lg border border-white/15 bg-black/35 px-3 py-2 text-left">
+                <div className="text-[11px] uppercase tracking-[0.2em] text-cyan-100/90">
+                  Selected Character
+                </div>
+                <div className="mt-1 text-sm font-semibold text-white">
+                  {selectedCharacter.name}
+                </div>
+                <div className="text-[11px] text-white/75">
+                  {selectedCharacter.description}
+                </div>
+                <div className="mt-1 text-[11px]">
+                  {selectedUnlocked ? (
+                    <span className="text-emerald-200">Unlocked</span>
+                  ) : (
+                    <span className="text-amber-200">Locked • Cost {lockCost}</span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 text-sm text-cyan-100/95">
+                Q / E cycle characters • U unlock selected
+              </div>
+              <div className="mt-1 text-sm text-cyan-100/95">
                 Tap, click, or press Space to start.
               </div>
             </div>
@@ -80,6 +135,15 @@ export function KnotHopUI() {
               <div className="text-2xl font-black text-cyan-100">Signal Lost</div>
               <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
               <div className="mt-1 text-sm text-white/75">Best {snap.best}</div>
+              <div className="mt-1 text-sm text-yellow-300">
+                Run Gold +{snap.runGold}
+              </div>
+              <div className="text-sm text-green-300">
+                Run Emerald +{snap.runGreen}
+              </div>
+              <div className="text-sm text-purple-300">
+                Run Void +{snap.runPurple}
+              </div>
               {snap.crashReason ? (
                 <div className="mt-2 text-sm text-rose-100/90">{snap.crashReason}</div>
               ) : null}

@@ -21,13 +21,19 @@ import {
   createFixedStepState,
   shakeNoiseSigned,
 } from '../_shared/hyperUpgradeKit';
+import {
+  CHARACTER_MODELS,
+  COLLECTIBLE_COLORS,
+  OBSTACLE_COLORS,
+} from './constants';
 import { KnotHopUI } from './_components/KnotHopUI';
 import { knotHopState, type SpiralDirection } from './state';
+import type { CollectibleRarity, KnotCharacter } from './types';
 
 export { knotHopState } from './state';
 
 type HazardVariant = 'shard' | 'crusher' | 'anomaly';
-type CollectibleVariant = 'gem' | 'prism';
+type CollectibleVariant = CollectibleRarity;
 type SpiralEventKind = 'obstacle' | 'collectible';
 
 type SpiralEvent = {
@@ -114,8 +120,9 @@ const MAX_SPIN = 4.95;
 const SPACING_START = 4.2;
 const SPACING_END = 2.4;
 
-const COLLECT_ANGLE_GEM = 0.44;
-const COLLECT_ANGLE_PRISM = 0.4;
+const COLLECT_ANGLE_GOLD = 0.45;
+const COLLECT_ANGLE_GREEN = 0.41;
+const COLLECT_ANGLE_PURPLE = 0.37;
 const NEAR_MISS_BONUS_RANGE = 0.18;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
@@ -265,8 +272,20 @@ const pickObstacleVariant = (difficulty: number): HazardVariant => {
   return 'shard';
 };
 
-const pickCollectibleVariant = (difficulty: number): CollectibleVariant =>
-  Math.random() < lerp(0.22, 0.48, difficulty) ? 'prism' : 'gem';
+const pickCollectibleVariant = (difficulty: number): CollectibleVariant => {
+  const purpleChance = lerp(0.07, 0.16, difficulty);
+  const greenChance = lerp(0.24, 0.31, difficulty);
+  const roll = Math.random();
+  if (roll < purpleChance) return 'purple';
+  if (roll < purpleChance + greenChance) return 'green';
+  return 'gold';
+};
+
+const collectAngleForVariant = (variant: CollectibleVariant) => {
+  if (variant === 'purple') return COLLECT_ANGLE_PURPLE;
+  if (variant === 'green') return COLLECT_ANGLE_GREEN;
+  return COLLECT_ANGLE_GOLD;
+};
 
 const pickEventKind = (runtime: Runtime, difficulty: number): SpiralEventKind => {
   if (runtime.obstacleStreak >= 3) return 'collectible';
@@ -346,9 +365,11 @@ const seedEvent = (event: SpiralEvent, runtime: Runtime, z: number) => {
     runtime.obstacleStreak += 1;
   } else {
     event.variant = pickCollectibleVariant(difficulty);
-    event.hitAngle = event.variant === 'prism' ? COLLECT_ANGLE_PRISM : COLLECT_ANGLE_GEM;
-    event.wobbleAmp = event.variant === 'prism' ? 0.07 : 0.04;
-    event.wobbleFreq = event.variant === 'prism' ? 4.2 : 3.6;
+    event.hitAngle = collectAngleForVariant(event.variant);
+    event.wobbleAmp =
+      event.variant === 'purple' ? 0.09 : event.variant === 'green' ? 0.065 : 0.045;
+    event.wobbleFreq =
+      event.variant === 'purple' ? 4.8 : event.variant === 'green' ? 4.2 : 3.6;
     runtime.obstacleStreak = 0;
   }
 };
@@ -409,12 +430,277 @@ const syncHud = (runtime: Runtime) => {
   });
 };
 
+const findCharacter = (characterId: string): KnotCharacter =>
+  CHARACTER_MODELS.find((character) => character.id === characterId) ??
+  CHARACTER_MODELS[0];
+
+const costLabel = (character: KnotCharacter) =>
+  `${character.cost.gold}G ${character.cost.green}E ${character.cost.purple}V`;
+
+const CharacterModel = ({ character }: { character: KnotCharacter }) => {
+  const roughness = character.roughness ?? 0.16;
+  const metalness = character.metalness ?? 0.3;
+  const emissive = character.emissive ?? character.secondary;
+
+  const coreMaterial = (
+    <meshStandardMaterial
+      color={character.primary}
+      emissive={emissive}
+      emissiveIntensity={0.56}
+      roughness={roughness}
+      metalness={metalness}
+    />
+  );
+
+  const accentMaterial = (
+    <meshStandardMaterial
+      color={character.secondary}
+      emissive={emissive}
+      emissiveIntensity={0.4}
+      roughness={Math.min(1, roughness + 0.06)}
+      metalness={Math.max(0, metalness - 0.06)}
+    />
+  );
+
+  if (character.model === 'core') {
+    return (
+      <>
+        <mesh>
+          <icosahedronGeometry args={[0.26, 1]} />
+          {coreMaterial}
+        </mesh>
+        <mesh scale={0.5}>
+          <sphereGeometry args={[0.25, 18, 18]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'supershape') {
+    return (
+      <>
+        <mesh scale={[1.2, 0.82, 1.2]}>
+          <sphereGeometry args={[0.24, 26, 22]} />
+          {coreMaterial}
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0.2, 0]} scale={[1, 1, 0.55]}>
+          <torusGeometry args={[0.28, 0.055, 9, 42]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'fractal') {
+    return (
+      <>
+        <mesh>
+          <dodecahedronGeometry args={[0.22, 0]} />
+          {coreMaterial}
+        </mesh>
+        <mesh position={[0.23, 0, 0]} scale={0.45}>
+          <icosahedronGeometry args={[0.24, 0]} />
+          {accentMaterial}
+        </mesh>
+        <mesh position={[-0.23, 0, 0]} scale={0.45}>
+          <icosahedronGeometry args={[0.24, 0]} />
+          {accentMaterial}
+        </mesh>
+        <mesh position={[0, 0.23, 0]} scale={0.45}>
+          <icosahedronGeometry args={[0.24, 0]} />
+          {accentMaterial}
+        </mesh>
+        <mesh position={[0, -0.23, 0]} scale={0.45}>
+          <icosahedronGeometry args={[0.24, 0]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'knot') {
+    return (
+      <>
+        <mesh rotation={[0.1, 0.2, 0]}>
+          <torusKnotGeometry args={[0.2, 0.06, 96, 14, 2, 3]} />
+          {coreMaterial}
+        </mesh>
+        <mesh rotation={[-0.1, -0.2, 0]}>
+          <torusKnotGeometry args={[0.14, 0.04, 64, 10, 2, 5]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'spike') {
+    return (
+      <>
+        <mesh>
+          <octahedronGeometry args={[0.24, 0]} />
+          {coreMaterial}
+        </mesh>
+        <mesh position={[0, 0.24, 0]}>
+          <coneGeometry args={[0.08, 0.24, 5]} />
+          {accentMaterial}
+        </mesh>
+        <mesh position={[0, -0.24, 0]} rotation={[Math.PI, 0, 0]}>
+          <coneGeometry args={[0.08, 0.24, 5]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'capsule') {
+    return (
+      <>
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <capsuleGeometry args={[0.11, 0.28, 7, 14]} />
+          {coreMaterial}
+        </mesh>
+        <mesh position={[0.2, 0, 0]} scale={0.38}>
+          <sphereGeometry args={[0.24, 14, 14]} />
+          {accentMaterial}
+        </mesh>
+        <mesh position={[-0.2, 0, 0]} scale={0.38}>
+          <sphereGeometry args={[0.24, 14, 14]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'poly') {
+    return (
+      <>
+        <mesh rotation={[0.15, 0.4, 0]}>
+          <boxGeometry args={[0.36, 0.26, 0.28]} />
+          {coreMaterial}
+        </mesh>
+        <mesh rotation={[0.4, 0, 0.25]} scale={0.7}>
+          <tetrahedronGeometry args={[0.2, 0]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'ringed') {
+    return (
+      <>
+        <mesh scale={0.88}>
+          <sphereGeometry args={[0.23, 20, 20]} />
+          {coreMaterial}
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0.3, 0]}>
+          <torusGeometry args={[0.28, 0.05, 9, 42]} />
+          {accentMaterial}
+        </mesh>
+        <mesh rotation={[0.2, 0.2, Math.PI / 2]} scale={0.76}>
+          <torusGeometry args={[0.28, 0.03, 9, 42]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'winged') {
+    return (
+      <>
+        <mesh>
+          <icosahedronGeometry args={[0.2, 0]} />
+          {coreMaterial}
+        </mesh>
+        <mesh position={[0.2, 0, 0]} rotation={[0, 0.2, 0.2]}>
+          <coneGeometry args={[0.09, 0.26, 4]} />
+          {accentMaterial}
+        </mesh>
+        <mesh position={[-0.2, 0, 0]} rotation={[0, -0.2, -0.2]}>
+          <coneGeometry args={[0.09, 0.26, 4]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'helix') {
+    return (
+      <>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <torusKnotGeometry args={[0.16, 0.045, 72, 10, 1, 2]} />
+          {coreMaterial}
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0.2, 0]}>
+          <torusKnotGeometry args={[0.16, 0.035, 72, 10, 1, 2]} />
+          {accentMaterial}
+        </mesh>
+      </>
+    );
+  }
+
+  if (character.model === 'asteroid') {
+    return (
+      <>
+        <mesh rotation={[0.5, 0.2, 0.1]}>
+          <icosahedronGeometry args={[0.25, 0]} />
+          {coreMaterial}
+        </mesh>
+        <mesh position={[0.18, 0.08, 0.06]} scale={0.28}>
+          <sphereGeometry args={[0.24, 10, 10]} />
+          <meshBasicMaterial color={character.secondary} transparent opacity={0.55} />
+        </mesh>
+        <mesh position={[-0.16, -0.1, -0.05]} scale={0.23}>
+          <sphereGeometry args={[0.24, 10, 10]} />
+          <meshBasicMaterial color={character.secondary} transparent opacity={0.48} />
+        </mesh>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <mesh>
+        <sphereGeometry args={[0.18, 16, 16]} />
+        {coreMaterial}
+      </mesh>
+      <mesh position={[0, 0.24, 0]}>
+        <coneGeometry args={[0.06, 0.2, 6]} />
+        {accentMaterial}
+      </mesh>
+      <mesh position={[0.2, -0.1, 0]}>
+        <coneGeometry args={[0.06, 0.2, 6]} />
+        {accentMaterial}
+      </mesh>
+      <mesh position={[-0.2, -0.1, 0]}>
+        <coneGeometry args={[0.06, 0.2, 6]} />
+        {accentMaterial}
+      </mesh>
+    </>
+  );
+};
+
 function KnotHop() {
   const snap = useSnapshot(knotHopState);
   const uiSnap = useGameUIState();
 
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'r',
+      'R',
+      'q',
+      'Q',
+      'e',
+      'E',
+      'u',
+      'U',
+    ],
   });
 
   const runtimeRef = useRef<Runtime>(createRuntime());
@@ -427,12 +713,13 @@ function KnotHop() {
   const crusherRef = useRef<THREE.InstancedMesh>(null);
   const anomalyRef = useRef<THREE.InstancedMesh>(null);
 
-  const gemRef = useRef<THREE.InstancedMesh>(null);
-  const prismRef = useRef<THREE.InstancedMesh>(null);
+  const goldRef = useRef<THREE.InstancedMesh>(null);
+  const greenRef = useRef<THREE.InstancedMesh>(null);
+  const purpleRef = useRef<THREE.InstancedMesh>(null);
   const collectibleRingRef = useRef<THREE.InstancedMesh>(null);
 
   const particleRef = useRef<THREE.InstancedMesh>(null);
-  const playerRef = useRef<THREE.Mesh>(null);
+  const playerGroupRef = useRef<THREE.Group>(null);
 
   const guideLineARef = useRef<any>(null);
   const guideLineBRef = useRef<any>(null);
@@ -443,20 +730,23 @@ function KnotHop() {
   const chromaOffset = useMemo(() => new THREE.Vector2(0.00025, 0.0001), []);
   const zeroOffset = useMemo(() => new THREE.Vector2(0, 0), []);
 
-  const shardColor = useMemo(() => new THREE.Color('#ff6f61'), []);
-  const shardFlashColor = useMemo(() => new THREE.Color('#ffd3cb'), []);
+  const shardColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.blackCore), []);
+  const shardFlashColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.blackFlash), []);
 
-  const crusherColor = useMemo(() => new THREE.Color('#f97316'), []);
-  const crusherFlashColor = useMemo(() => new THREE.Color('#ffe2b8'), []);
+  const crusherColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.rustCore), []);
+  const crusherFlashColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.rustFlash), []);
 
-  const anomalyColor = useMemo(() => new THREE.Color('#ff2e95'), []);
-  const anomalyFlashColor = useMemo(() => new THREE.Color('#ffd1f0'), []);
+  const anomalyColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.redCore), []);
+  const anomalyFlashColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.redFlash), []);
 
-  const gemColorA = useMemo(() => new THREE.Color('#ffe084'), []);
-  const gemColorB = useMemo(() => new THREE.Color('#fff6cd'), []);
+  const goldColorA = useMemo(() => new THREE.Color(COLLECTIBLE_COLORS.goldA), []);
+  const goldColorB = useMemo(() => new THREE.Color(COLLECTIBLE_COLORS.goldB), []);
 
-  const prismColorA = useMemo(() => new THREE.Color('#7ce6ff'), []);
-  const prismColorB = useMemo(() => new THREE.Color('#d9f7ff'), []);
+  const greenColorA = useMemo(() => new THREE.Color(COLLECTIBLE_COLORS.greenA), []);
+  const greenColorB = useMemo(() => new THREE.Color(COLLECTIBLE_COLORS.greenB), []);
+
+  const purpleColorA = useMemo(() => new THREE.Color(COLLECTIBLE_COLORS.purpleA), []);
+  const purpleColorB = useMemo(() => new THREE.Color(COLLECTIBLE_COLORS.purpleB), []);
 
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
@@ -483,6 +773,11 @@ function KnotHop() {
   const guideFlatB = useMemo(() => new Float32Array(GUIDE_POINTS * 3), []);
 
   const { camera } = useThree();
+  const selectedCharacter = useMemo(
+    () => findCharacter(snap.selectedCharacter),
+    [snap.selectedCharacter]
+  );
+  const selectedUnlocked = snap.unlockedCharacters.includes(selectedCharacter.id);
 
   const primeTrail = (x: number, y: number) => {
     for (let i = 0; i < TRAIL_POINTS; i += 1) {
@@ -591,13 +886,29 @@ function KnotHop() {
       input.justPressed.has('enter');
     const restart = input.justPressed.has('r');
 
-    if ((tap || restart) && knotHopState.phase !== 'playing') {
-      startRun(runtime);
-      const startX = Math.cos(runtime.theta) * ORBIT_RADIUS;
-      const startY = Math.sin(runtime.theta) * ORBIT_RADIUS;
-      primeTrail(startX, startY);
-      maybeVibrate(10);
-      playTone(540, 0.045, 0.024);
+    const onMenu = knotHopState.phase !== 'playing';
+    const cyclePrev = onMenu && input.justPressed.has('q');
+    const cycleNext = onMenu && input.justPressed.has('e');
+    const unlockSelected = onMenu && input.justPressed.has('u');
+    if (cyclePrev) knotHopState.cycleCharacter(-1);
+    if (cycleNext) knotHopState.cycleCharacter(1);
+    if (unlockSelected) knotHopState.unlockSelectedCharacter();
+    const menuInputConsumed = cyclePrev || cycleNext || unlockSelected;
+
+    if ((tap || restart) && onMenu && !menuInputConsumed) {
+      if (!selectedUnlocked) {
+        knotHopState.setToast(
+          `Unlock ${selectedCharacter.name} first (${costLabel(selectedCharacter)})`,
+          1
+        );
+      } else {
+        startRun(runtime);
+        const startX = Math.cos(runtime.theta) * ORBIT_RADIUS;
+        const startY = Math.sin(runtime.theta) * ORBIT_RADIUS;
+        primeTrail(startX, startY);
+        maybeVibrate(10);
+        playTone(540, 0.045, 0.024);
+      }
     } else if (restart && knotHopState.phase === 'playing') {
       startRun(runtime);
       const startX = Math.cos(runtime.theta) * ORBIT_RADIUS;
@@ -704,23 +1015,34 @@ function KnotHop() {
               knotHopState.setToast(`FLOW x${runtime.streak}`, 0.54);
             }
           } else {
-            const collectAngle =
-              event.variant === 'prism' ? COLLECT_ANGLE_PRISM : COLLECT_ANGLE_GEM;
+            const collectibleVariant = event.variant as CollectibleVariant;
+            const collectAngle = collectAngleForVariant(collectibleVariant);
 
             if (err <= collectAngle) {
               runtime.collected += 1;
               runtime.streak = Math.min(runtime.streak + 1, 80);
+              knotHopState.addCollectible(collectibleVariant);
 
               const gain =
-                event.variant === 'prism'
-                  ? 36 + Math.min(runtime.streak, 24) * 3.1
-                  : 24 + Math.min(runtime.streak, 22) * 2.5;
+                collectibleVariant === 'purple'
+                  ? 62 + Math.min(runtime.streak, 26) * 3.6
+                  : collectibleVariant === 'green'
+                    ? 40 + Math.min(runtime.streak, 24) * 3.1
+                    : 24 + Math.min(runtime.streak, 22) * 2.5;
 
               runtime.score += gain;
               event.flash = 1;
               runtime.shake = Math.min(1.2, runtime.shake + 0.09);
               runtime.flash = Math.max(runtime.flash, 0.22);
-              playTone(event.variant === 'prism' ? 1080 : 920, 0.04, 0.022);
+              playTone(
+                collectibleVariant === 'purple'
+                  ? 1210
+                  : collectibleVariant === 'green'
+                    ? 1020
+                    : 900,
+                0.04,
+                0.022
+              );
 
               const cx = Math.cos(currentTheta) * ORBIT_RADIUS;
               const cy = Math.sin(currentTheta) * ORBIT_RADIUS;
@@ -729,8 +1051,16 @@ function KnotHop() {
                 cx,
                 cy,
                 event.z,
-                event.variant === 'prism' ? 0x98f5ff : 0xffe99f,
-                event.variant === 'prism' ? 18 : 14,
+                collectibleVariant === 'purple'
+                  ? 0xb068ff
+                  : collectibleVariant === 'green'
+                    ? 0x58ff8d
+                    : 0xffd74c,
+                collectibleVariant === 'purple'
+                  ? 20
+                  : collectibleVariant === 'green'
+                    ? 16
+                    : 14,
                 0.65,
                 1.45,
                 0.03,
@@ -739,8 +1069,10 @@ function KnotHop() {
                 0.42
               );
 
-              if (runtime.collected > 0 && runtime.collected % 5 === 0) {
-                knotHopState.setToast('GEM CHAIN', 0.45);
+              if (collectibleVariant === 'purple') {
+                knotHopState.setToast('VOID SHARD', 0.52);
+              } else if (runtime.collected > 0 && runtime.collected % 6 === 0) {
+                knotHopState.setToast('SHARD CHAIN', 0.45);
               }
             } else {
               runtime.streak = Math.max(0, runtime.streak - 1);
@@ -817,11 +1149,11 @@ function KnotHop() {
       coreMatRef.current.emissiveIntensity = 0.25 + runtime.shake * 0.24 + runtime.flash * 0.28;
     }
 
-    if (playerRef.current) {
-      playerRef.current.position.set(px, py, PLAYER_Z);
+    if (playerGroupRef.current) {
+      playerGroupRef.current.position.set(px, py, PLAYER_Z);
       const pulse = 1 + runtime.hopPulse * 0.16 + Math.sin(runtime.elapsed * 8.2) * 0.03;
-      playerRef.current.scale.setScalar(pulse);
-      playerRef.current.rotation.set(
+      playerGroupRef.current.scale.setScalar(pulse);
+      playerGroupRef.current.rotation.set(
         runtime.flash * 0.12,
         runtime.flash * 0.08,
         runtime.theta + Math.PI / 2
@@ -832,15 +1164,17 @@ function KnotHop() {
       shardRef.current &&
       crusherRef.current &&
       anomalyRef.current &&
-      gemRef.current &&
-      prismRef.current &&
+      goldRef.current &&
+      greenRef.current &&
+      purpleRef.current &&
       collectibleRingRef.current
     ) {
       let shardIdx = 0;
       let crusherIdx = 0;
       let anomalyIdx = 0;
-      let gemIdx = 0;
-      let prismIdx = 0;
+      let goldIdx = 0;
+      let greenIdx = 0;
+      let purpleIdx = 0;
       let ringIdx = 0;
 
       for (const event of runtime.events) {
@@ -889,29 +1223,47 @@ function KnotHop() {
           }
         } else {
           const collectScale =
-            event.variant === 'prism'
-              ? 0.2 + Math.sin(event.pulse) * 0.03 + event.flash * 0.06
-              : 0.17 + Math.sin(event.pulse) * 0.025 + event.flash * 0.05;
+            event.variant === 'purple'
+              ? 0.21 + Math.sin(event.pulse) * 0.032 + event.flash * 0.07
+              : event.variant === 'green'
+                ? 0.19 + Math.sin(event.pulse) * 0.028 + event.flash * 0.06
+                : 0.17 + Math.sin(event.pulse) * 0.025 + event.flash * 0.05;
 
           dummy.position.set(x, y, event.z);
           dummy.rotation.set(event.spin * 0.24, event.spin * 0.9, event.spin * 0.31);
           dummy.scale.setScalar(collectScale);
           dummy.updateMatrix();
 
-          if (event.variant === 'prism') {
-            prismRef.current.setMatrixAt(prismIdx, dummy.matrix);
+          if (event.variant === 'purple') {
+            purpleRef.current.setMatrixAt(purpleIdx, dummy.matrix);
             colorScratch
-              .copy(prismColorA)
-              .lerp(prismColorB, (Math.sin(event.pulse * 0.9) * 0.5 + 0.5) * 0.55 + event.flash * 0.3);
-            prismRef.current.setColorAt(prismIdx, colorScratch);
-            prismIdx += 1;
+              .copy(purpleColorA)
+              .lerp(
+                purpleColorB,
+                (Math.sin(event.pulse * 0.9) * 0.5 + 0.5) * 0.56 + event.flash * 0.34
+              );
+            purpleRef.current.setColorAt(purpleIdx, colorScratch);
+            purpleIdx += 1;
+          } else if (event.variant === 'green') {
+            greenRef.current.setMatrixAt(greenIdx, dummy.matrix);
+            colorScratch
+              .copy(greenColorA)
+              .lerp(
+                greenColorB,
+                (Math.sin(event.pulse * 0.8) * 0.5 + 0.5) * 0.58 + event.flash * 0.32
+              );
+            greenRef.current.setColorAt(greenIdx, colorScratch);
+            greenIdx += 1;
           } else {
-            gemRef.current.setMatrixAt(gemIdx, dummy.matrix);
+            goldRef.current.setMatrixAt(goldIdx, dummy.matrix);
             colorScratch
-              .copy(gemColorA)
-              .lerp(gemColorB, (Math.sin(event.pulse * 0.75) * 0.5 + 0.5) * 0.58 + event.flash * 0.34);
-            gemRef.current.setColorAt(gemIdx, colorScratch);
-            gemIdx += 1;
+              .copy(goldColorA)
+              .lerp(
+                goldColorB,
+                (Math.sin(event.pulse * 0.75) * 0.5 + 0.5) * 0.58 + event.flash * 0.34
+              );
+            goldRef.current.setColorAt(goldIdx, colorScratch);
+            goldIdx += 1;
           }
 
           dummy.position.set(x, y, event.z);
@@ -920,8 +1272,21 @@ function KnotHop() {
           dummy.updateMatrix();
           collectibleRingRef.current.setMatrixAt(ringIdx, dummy.matrix);
           colorScratch
-            .copy(event.variant === 'prism' ? prismColorA : gemColorA)
-            .lerp(event.variant === 'prism' ? prismColorB : gemColorB, 0.6);
+            .copy(
+              event.variant === 'purple'
+                ? purpleColorA
+                : event.variant === 'green'
+                  ? greenColorA
+                  : goldColorA
+            )
+            .lerp(
+              event.variant === 'purple'
+                ? purpleColorB
+                : event.variant === 'green'
+                  ? greenColorB
+                  : goldColorB,
+              0.6
+            );
           collectibleRingRef.current.setColorAt(ringIdx, colorScratch);
           ringIdx += 1;
         }
@@ -942,19 +1307,24 @@ function KnotHop() {
         anomalyRef.current.setColorAt(anomalyIdx, anomalyColor);
         anomalyIdx += 1;
       }
-      while (gemIdx < EVENT_POOL) {
-        hideInstance(gemRef.current, gemIdx);
-        gemRef.current.setColorAt(gemIdx, gemColorA);
-        gemIdx += 1;
+      while (goldIdx < EVENT_POOL) {
+        hideInstance(goldRef.current, goldIdx);
+        goldRef.current.setColorAt(goldIdx, goldColorA);
+        goldIdx += 1;
       }
-      while (prismIdx < EVENT_POOL) {
-        hideInstance(prismRef.current, prismIdx);
-        prismRef.current.setColorAt(prismIdx, prismColorA);
-        prismIdx += 1;
+      while (greenIdx < EVENT_POOL) {
+        hideInstance(greenRef.current, greenIdx);
+        greenRef.current.setColorAt(greenIdx, greenColorA);
+        greenIdx += 1;
+      }
+      while (purpleIdx < EVENT_POOL) {
+        hideInstance(purpleRef.current, purpleIdx);
+        purpleRef.current.setColorAt(purpleIdx, purpleColorA);
+        purpleIdx += 1;
       }
       while (ringIdx < EVENT_POOL) {
         hideInstance(collectibleRingRef.current, ringIdx);
-        collectibleRingRef.current.setColorAt(ringIdx, gemColorA);
+        collectibleRingRef.current.setColorAt(ringIdx, goldColorA);
         ringIdx += 1;
       }
 
@@ -967,8 +1337,9 @@ function KnotHop() {
       updateMesh(shardRef.current);
       updateMesh(crusherRef.current);
       updateMesh(anomalyRef.current);
-      updateMesh(gemRef.current);
-      updateMesh(prismRef.current);
+      updateMesh(goldRef.current);
+      updateMesh(greenRef.current);
+      updateMesh(purpleRef.current);
       updateMesh(collectibleRingRef.current);
     }
 
@@ -1160,10 +1531,10 @@ function KnotHop() {
         <tetrahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
           vertexColors
-          roughness={0.22}
-          metalness={0.2}
-          emissive="#6f2222"
-          emissiveIntensity={0.26}
+          roughness={0.3}
+          metalness={0.16}
+          emissive={OBSTACLE_COLORS.blackCore}
+          emissiveIntensity={0.34}
         />
       </instancedMesh>
 
@@ -1173,7 +1544,7 @@ function KnotHop() {
           vertexColors
           roughness={0.24}
           metalness={0.24}
-          emissive="#6f350f"
+          emissive={OBSTACLE_COLORS.rustCore}
           emissiveIntensity={0.26}
         />
       </instancedMesh>
@@ -1184,29 +1555,40 @@ function KnotHop() {
           vertexColors
           roughness={0.16}
           metalness={0.28}
-          emissive="#7a1a59"
+          emissive={OBSTACLE_COLORS.redCore}
           emissiveIntensity={0.32}
         />
       </instancedMesh>
 
-      <instancedMesh ref={gemRef} args={[undefined, undefined, EVENT_POOL]}>
+      <instancedMesh ref={goldRef} args={[undefined, undefined, EVENT_POOL]}>
         <octahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
           vertexColors
           roughness={0.12}
           metalness={0.24}
-          emissive="#80621a"
+          emissive={COLLECTIBLE_COLORS.goldA}
           emissiveIntensity={0.28}
         />
       </instancedMesh>
 
-      <instancedMesh ref={prismRef} args={[undefined, undefined, EVENT_POOL]}>
+      <instancedMesh ref={greenRef} args={[undefined, undefined, EVENT_POOL]}>
+        <icosahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.1}
+          metalness={0.28}
+          emissive={COLLECTIBLE_COLORS.greenA}
+          emissiveIntensity={0.3}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={purpleRef} args={[undefined, undefined, EVENT_POOL]}>
         <dodecahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
           vertexColors
           roughness={0.1}
           metalness={0.28}
-          emissive="#1b637f"
+          emissive={COLLECTIBLE_COLORS.purpleA}
           emissiveIntensity={0.34}
         />
       </instancedMesh>
@@ -1221,16 +1603,9 @@ function KnotHop() {
         <meshBasicMaterial vertexColors transparent opacity={0.8} toneMapped={false} />
       </instancedMesh>
 
-      <mesh ref={playerRef} position={[ORBIT_RADIUS, 0, PLAYER_Z]}>
-        <icosahedronGeometry args={[0.26, 1]} />
-        <meshStandardMaterial
-          color="#f3fbff"
-          emissive="#9df2ff"
-          emissiveIntensity={0.54}
-          roughness={0.1}
-          metalness={0.28}
-        />
-      </mesh>
+      <group ref={playerGroupRef} position={[ORBIT_RADIUS, 0, PLAYER_Z]}>
+        <CharacterModel key={selectedCharacter.id} character={selectedCharacter} />
+      </group>
 
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[ORBIT_RADIUS, 0.016, 10, 96]} />

@@ -1266,7 +1266,7 @@ function TetherDriftScene() {
       runtime.carRoll = lerp(runtime.carRoll, rollTarget, 1 - Math.exp(-9.4 * dt));
 
       let crashed = false;
-      const wallLimit = ROAD_HALF_WIDTH - SIDE_WALL_HALF_W - CAR_HALF_W * 0.92;
+      const wallLimit = ROAD_HALF_WIDTH - SIDE_WALL_HALF_W * 2 - CAR_HALF_W * 0.92;
       if (runtime.carX > wallLimit) {
         runtime.carX = wallLimit;
         if (runtime.carVx > 0) runtime.carVx = -Math.abs(runtime.carVx) * WALL_BOUNCE_DAMPING;
