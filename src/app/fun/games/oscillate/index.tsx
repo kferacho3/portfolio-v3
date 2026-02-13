@@ -8,7 +8,7 @@ import { useSnapshot } from 'valtio';
 import * as THREE from 'three';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
-import { COLORS, CONST } from './constants';
+import { COLOR_PALETTES, COLORS, CONST } from './constants';
 import { clamp, damp } from './helpers';
 import { onePathState, type OnePathLevel, type OnePathSegment } from './state';
 import type { RunStatus } from './types';
@@ -19,6 +19,23 @@ export { onePathState } from './state';
 
 function formatLevel(n: number) {
   return `${n}`;
+}
+
+function smoothstep01(t: number) {
+  const x = clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
+function segmentDirection(seg: OnePathSegment) {
+  if (seg.axis === 'x') return { x: seg.dir, z: 0 };
+  return { x: 0, z: seg.dir };
+}
+
+function worldVelocityToLocal(seg: OnePathSegment, vx: number, vz: number) {
+  if (seg.axis === 'x') {
+    return { sVel: vx * seg.dir, lVel: vz };
+  }
+  return { sVel: vz * seg.dir, lVel: vx };
 }
 
 function Overlay() {
@@ -360,6 +377,7 @@ function CameraRig({ levelRef, runRef }: CameraRigProps) {
 function Scene() {
   const snap = useSnapshot(onePathState);
   const inputRef = useInputRef();
+  const { scene } = useThree();
 
   const levelRef = React.useRef<OnePathLevel>(
     onePathState.buildLevel(onePathState.level, onePathState.mode)
@@ -403,6 +421,13 @@ function Scene() {
   const ballRef = React.useRef<THREE.Mesh>(null);
   const portalRef = React.useRef<THREE.Group>(null);
   const gateGlowRef = React.useRef<THREE.Mesh>(null);
+  const targetMarkerRef = React.useRef<THREE.Group>(null);
+  const targetRingRef = React.useRef<THREE.Mesh>(null);
+  const targetHaloRef = React.useRef<THREE.Mesh>(null);
+  const targetBeamRef = React.useRef<THREE.Mesh>(null);
+  const ambientLightRef = React.useRef<THREE.AmbientLight>(null);
+  const keyLightRef = React.useRef<THREE.DirectionalLight>(null);
+  const fillLightRef = React.useRef<THREE.DirectionalLight>(null);
 
   const baseEvenRef = React.useRef<THREE.InstancedMesh>(null);
   const baseOddRef = React.useRef<THREE.InstancedMesh>(null);
@@ -414,6 +439,57 @@ function Scene() {
 
   const tmpObj = React.useMemo(() => new THREE.Object3D(), []);
   const tmpVec = React.useMemo(() => new THREE.Vector3(), []);
+  const colorTmpA = React.useMemo(() => new THREE.Color(), []);
+  const colorTmpB = React.useMemo(() => new THREE.Color(), []);
+
+  const palettePool = React.useMemo(
+    () =>
+      COLOR_PALETTES.map((p) => ({
+        bgTop: new THREE.Color(p.bgTop),
+        bgBottom: new THREE.Color(p.bgBottom),
+        floorA: new THREE.Color(p.floorA),
+        floorB: new THREE.Color(p.floorB),
+        deck: new THREE.Color(p.deck),
+        deckGlow: new THREE.Color(p.deckGlow),
+        wall: new THREE.Color(p.wall),
+        wallDanger: new THREE.Color(p.wallDanger),
+        gem: new THREE.Color(p.gem),
+        portal: new THREE.Color(p.portal),
+        ballTrail: new THREE.Color(p.ballTrail),
+        markerCore: new THREE.Color(p.markerCore),
+        markerRing: new THREE.Color(p.markerRing),
+        markerHalo: new THREE.Color(p.markerHalo),
+      })),
+    []
+  );
+
+  const paletteRef = React.useRef({
+    index: 0,
+    nextIndex: Math.min(1, palettePool.length - 1),
+    blend: 0,
+    speed: 0.06,
+    pulseOffset: Math.PI * 0.5,
+  });
+
+  const pickNextPaletteIndex = React.useCallback((exclude: number) => {
+    if (palettePool.length <= 1) return exclude;
+    const offset = 1 + Math.floor(Math.random() * (palettePool.length - 1));
+    return (exclude + offset) % palettePool.length;
+  }, [palettePool.length]);
+
+  const assignRunPalette = React.useCallback(() => {
+    if (palettePool.length === 0) return;
+    const state = paletteRef.current;
+    let idx = Math.floor(Math.random() * palettePool.length);
+    if (palettePool.length > 1 && idx === state.index) {
+      idx = (idx + 1) % palettePool.length;
+    }
+    state.index = idx;
+    state.nextIndex = pickNextPaletteIndex(idx);
+    state.blend = 0;
+    state.speed = 0.048 + Math.random() * 0.042;
+    state.pulseOffset = Math.random() * Math.PI * 2;
+  }, [palettePool.length, pickNextPaletteIndex]);
 
   const trailState = React.useRef<{ head: number; points: THREE.Vector3[] }>({
     head: 0,
@@ -427,6 +503,10 @@ function Scene() {
       gem: new THREE.OctahedronGeometry(0.13, 0),
       gateGlow: new THREE.PlaneGeometry(1, 1),
       ring: new THREE.TorusGeometry(0.58, 0.1, 10, 44),
+      targetCore: new THREE.CircleGeometry(0.12, 36),
+      targetRing: new THREE.RingGeometry(0.2, 0.29, 44),
+      targetHalo: new THREE.RingGeometry(0.32, 0.54, 52),
+      targetBeam: new THREE.CylinderGeometry(0.045, 0.09, 0.52, 16, 1, true),
       trailDot: new THREE.SphereGeometry(1, 8, 8),
     };
   }, []);
@@ -496,6 +576,37 @@ function Scene() {
       transparent: true,
       opacity: 0.22,
     });
+    const targetCore = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.markerCore),
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const targetRing = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.markerRing),
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const targetHalo = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.markerHalo),
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const targetBeam = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(COLORS.markerHalo),
+      transparent: true,
+      opacity: 0.42,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
 
     return {
       baseEven,
@@ -507,6 +618,10 @@ function Scene() {
       gem,
       portal,
       trail,
+      targetCore,
+      targetRing,
+      targetHalo,
+      targetBeam,
     };
   }, []);
 
@@ -569,6 +684,7 @@ function Scene() {
     r.gemsThisRun = 0;
     r.deathSVel = 0;
     r.deathLVel = 0;
+    assignRunPalette();
 
     simAccumulatorRef.current = 0;
     staticNeedsBuildRef.current = true;
@@ -578,10 +694,10 @@ function Scene() {
       trailState.current.points[i].set(p.x, r.y, p.z);
     }
     trailState.current.head = 0;
-  }, []);
+  }, [assignRunPalette]);
 
   React.useEffect(() => {
-    const runKey = `${snap.phase}:${snap.mode}:${snap.level}`;
+    const runKey = `${snap.phase}:${snap.mode}:${snap.level}:${snap.resetTick}`;
     if (runKey === runKeyRef.current) return;
 
     if (snap.phase === 'playing' || snap.phase === 'menu') {
@@ -591,22 +707,33 @@ function Scene() {
     }
 
     runKeyRef.current = runKey;
-  }, [snap.phase, snap.mode, snap.level, resetRun]);
+  }, [snap.phase, snap.mode, snap.level, snap.resetTick, resetRun]);
 
-  const triggerFail = React.useCallback((forcedDir?: -1 | 1) => {
+  const triggerFail = React.useCallback((opts?: {
+    forcedDir?: -1 | 1;
+    worldImpulse?: { x: number; z: number };
+  }) => {
     const lvl = levelRef.current;
     const r = runRef.current;
     if (!r.alive || r.cleared) return;
     const seg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
-    const failDir = forcedDir ?? r.lDir;
+    const failDir = opts?.forcedDir ?? r.lDir;
 
     r.alive = false;
-    r.vy = -2.4;
-    r.deathSVel = lvl.lateralSpeed * failDir * 1.08;
-    if (seg) {
+    r.vy = -2.3;
+    r.deathSVel = lvl.lateralSpeed * failDir * 1.2;
+    if (seg && opts?.worldImpulse) {
+      const projected = worldVelocityToLocal(
+        seg,
+        opts.worldImpulse.x,
+        opts.worldImpulse.z
+      );
+      r.deathSVel = projected.sVel;
+      r.deathLVel = projected.lVel;
+    } else if (seg) {
       const mid = (seg.centerMin + seg.centerMax) * 0.5;
       const sidePush = r.s >= mid ? 1 : -1;
-      r.deathLVel = sidePush * Math.max(0.34, seg.halfWidth * 0.22);
+      r.deathLVel = sidePush * Math.max(0.42, seg.halfWidth * 0.28);
     } else {
       r.deathLVel = 0;
     }
@@ -630,7 +757,7 @@ function Scene() {
           wall.broken = true;
           r.gateFlash = 1;
           // Timeout pressure mechanic: waiting too long breaks a wall and ends the run.
-          triggerFail(side === 'neg' ? -1 : 1);
+          triggerFail({ forcedDir: side === 'neg' ? -1 : 1 });
           return;
         }
       }
@@ -664,19 +791,37 @@ function Scene() {
     const seg = lvl.segments[r.seg];
     if (!seg || !seg.gate) return;
 
+    const failTowardPath = () => {
+      const nextSeg = lvl.segments[r.seg + 1];
+      const desired = nextSeg ? segmentDirection(nextSeg) : segmentDirection(seg);
+      const n = Math.max(1e-6, Math.hypot(desired.x, desired.z));
+      const laneError = clamp(seg.gate.offset - r.s, -1, 1);
+      const towardCenter = laneError * 0.9;
+
+      const worldImpulse = {
+        x:
+          (desired.x / n) * lvl.lateralSpeed * 1.7 +
+          (seg.axis === 'z' ? towardCenter : 0),
+        z:
+          (desired.z / n) * lvl.lateralSpeed * 1.7 +
+          (seg.axis === 'x' ? towardCenter : 0),
+      };
+      triggerFail({ worldImpulse });
+    };
+
     if (r.s < seg.gate.triggerStart || r.s > seg.gate.triggerEnd) {
-      triggerFail();
+      failTowardPath();
       return;
     }
 
     if (!seg.gate.isOpen) {
-      triggerFail();
+      failTowardPath();
       return;
     }
 
     const turnError = Math.abs(r.s - seg.gate.offset);
     if (turnError > lvl.tolerance) {
-      triggerFail();
+      failTowardPath();
       return;
     }
 
@@ -726,8 +871,8 @@ function Scene() {
         r.y += r.vy * dt;
         r.s += r.deathSVel * dt;
         r.l += r.deathLVel * dt;
-        r.deathSVel *= 1 + dt * 0.22;
-        r.deathLVel = damp(r.deathLVel, 0, 2.6, dt);
+        r.deathSVel *= 1 + dt * 0.26;
+        r.deathLVel = damp(r.deathLVel, 0, 1.5, dt);
         return;
       }
 
@@ -905,6 +1050,12 @@ function Scene() {
     const currentSeg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
     if (gateGlow && currentSeg?.gate && r.alive && !r.cleared) {
       const gatePoint = segmentWorldPos(currentSeg, currentSeg.gate.offset, 0);
+      const readWindow = Math.max(
+        lvl.tolerance * 2.8,
+        currentSeg.corridorWidth * 0.42
+      );
+      const proximity = 1 - clamp(Math.abs(r.s - currentSeg.gate.offset) / readWindow, 0, 1);
+      const pulse = 0.5 + 0.5 * Math.sin(r.t * 8.2 + 0.7);
       gateGlow.visible = true;
       gateGlow.position.set(gatePoint.x, CONST.BASE_H + CONST.DECK_H + 0.015, gatePoint.z);
       gateGlow.rotation.set(
@@ -912,10 +1063,18 @@ function Scene() {
         currentSeg.axis === 'z' ? Math.PI / 2 : 0,
         0
       );
-      gateGlow.scale.set(0.24, currentSeg.corridorWidth * 0.94, 1);
+      gateGlow.scale.set(
+        0.34 + proximity * 0.2 + pulse * 0.05,
+        currentSeg.corridorWidth * (1.02 + proximity * 0.1),
+        1
+      );
       const gateMat = gateGlow.material as THREE.MeshBasicMaterial;
       const openBoost = currentSeg.gate.isOpen ? 0.75 : 0.38;
-      gateMat.opacity = openBoost + Math.sin(r.t * 6.4) * 0.12 + r.gateFlash * 0.2;
+      gateMat.opacity = clamp(
+        openBoost + pulse * 0.2 + proximity * 0.28 + r.gateFlash * 0.2,
+        0.24,
+        0.98
+      );
     } else if (gateGlow) {
       gateGlow.visible = false;
     }
@@ -996,8 +1155,8 @@ function Scene() {
         r.y += r.vy * d;
         r.s += r.deathSVel * d;
         r.l += r.deathLVel * d;
-        r.deathSVel *= 1 + d * 0.2;
-        r.deathLVel = damp(r.deathLVel, 0, 2.5, d);
+        r.deathSVel *= 1 + d * 0.24;
+        r.deathLVel = damp(r.deathLVel, 0, 1.5, d);
       } else {
         const seg0 = levelRef.current.segments[0];
         if (seg0) {
@@ -1014,6 +1173,70 @@ function Scene() {
     const lvl = levelRef.current;
     const seg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
     const p = seg ? segmentWorldPos(seg, r.s, r.l) : tmpVec.set(0, 0, 0);
+    const paletteState = paletteRef.current;
+    if (palettePool.length > 0) {
+      paletteState.blend += d * paletteState.speed;
+      if (paletteState.blend >= 1) {
+        paletteState.index = paletteState.nextIndex;
+        paletteState.nextIndex = pickNextPaletteIndex(paletteState.index);
+        paletteState.blend = 0;
+      }
+
+      const blend = smoothstep01(paletteState.blend);
+      const a = palettePool[paletteState.index];
+      const b = palettePool[paletteState.nextIndex];
+      const auraPulse = 0.5 + 0.5 * Math.sin(r.t * 1.65 + paletteState.pulseOffset);
+
+      colorTmpA.lerpColors(a.bgTop, b.bgTop, blend);
+      if (scene.background instanceof THREE.Color) {
+        scene.background.copy(colorTmpA);
+      } else {
+        scene.background = colorTmpA.clone();
+      }
+      colorTmpB.lerpColors(a.bgBottom, b.bgBottom, blend);
+      if (scene.fog instanceof THREE.Fog) {
+        scene.fog.color.copy(colorTmpB);
+      }
+
+      materials.baseEven.color.lerpColors(a.floorA, b.floorA, blend);
+      materials.baseOdd.color.lerpColors(a.floorB, b.floorB, blend);
+      materials.deck.color.lerpColors(a.deck, b.deck, blend);
+      materials.deck.emissive.lerpColors(a.deckGlow, b.deckGlow, blend);
+      materials.walls.color.lerpColors(a.wall, b.wall, blend);
+      materials.walls.emissive.lerpColors(a.deckGlow, b.deckGlow, blend);
+      materials.gates.color.lerpColors(a.markerCore, b.markerCore, blend);
+      materials.gates.emissive.lerpColors(a.deckGlow, b.deckGlow, blend);
+      materials.gateGlow.color.lerpColors(a.portal, b.portal, blend);
+      materials.gem.color.lerpColors(a.gem, b.gem, blend);
+      materials.gem.emissive.lerpColors(a.gem, b.gem, blend);
+      materials.portal.emissive.lerpColors(a.portal, b.portal, blend);
+      materials.trail.color.lerpColors(a.ballTrail, b.ballTrail, blend);
+      materials.trail.emissive.lerpColors(a.ballTrail, b.ballTrail, blend);
+      materials.targetCore.color.lerpColors(a.markerCore, b.markerCore, blend);
+      materials.targetRing.color.lerpColors(a.markerRing, b.markerRing, blend);
+      materials.targetHalo.color.lerpColors(a.markerHalo, b.markerHalo, blend);
+      materials.targetBeam.color.lerpColors(a.markerHalo, b.markerHalo, blend);
+
+      materials.deck.emissiveIntensity = 0.1 + auraPulse * 0.1;
+      materials.walls.emissiveIntensity = 0.14 + auraPulse * 0.16 + r.missFlash * 0.22;
+      materials.gates.emissiveIntensity = 0.42 + auraPulse * 0.2 + r.gateFlash * 0.3;
+      materials.gem.emissiveIntensity = 0.2 + auraPulse * 0.22;
+      materials.portal.emissiveIntensity = 0.32 + auraPulse * 0.16;
+      materials.trail.opacity = 0.16 + auraPulse * 0.18;
+
+      if (ambientLightRef.current) {
+        ambientLightRef.current.color.copy(colorTmpA).lerp(colorTmpB, 0.45);
+        ambientLightRef.current.intensity = 0.78 + auraPulse * 0.14 + r.perfectFlash * 0.1;
+      }
+      if (keyLightRef.current) {
+        keyLightRef.current.color.copy(colorTmpB).lerp(colorTmpA, 0.2);
+        keyLightRef.current.intensity = 1.02 + auraPulse * 0.24 + r.perfectFlash * 0.18;
+      }
+      if (fillLightRef.current) {
+        fillLightRef.current.color.copy(colorTmpA).lerp(colorTmpB, 0.7);
+        fillLightRef.current.intensity = 0.32 + (1 - auraPulse) * 0.18 + r.missFlash * 0.12;
+      }
+    }
 
     if (ballRef.current) {
       ballRef.current.position.set(p.x, r.y, p.z);
@@ -1050,6 +1273,66 @@ function Scene() {
       }
     }
 
+    const targetMarker = targetMarkerRef.current;
+    const activeSeg = lvl.segments[clamp(r.seg, 0, lvl.segments.length - 1)];
+    if (targetMarker && activeSeg?.gate && r.alive && !r.cleared) {
+      const gatePoint = segmentWorldPos(activeSeg, activeSeg.gate.offset, 0);
+      const pulse = 0.5 + 0.5 * Math.sin(r.t * 10.8 + paletteState.pulseOffset * 0.7);
+      const readWindow = Math.max(
+        lvl.tolerance * 2.8,
+        activeSeg.corridorWidth * 0.42
+      );
+      const proximity = 1 - clamp(Math.abs(r.s - activeSeg.gate.offset) / readWindow, 0, 1);
+      const openFactor = activeSeg.gate.isOpen ? 1 : 0.46;
+
+      targetMarker.visible = true;
+      targetMarker.position.set(
+        gatePoint.x,
+        CONST.BASE_H + CONST.DECK_H + 0.01,
+        gatePoint.z
+      );
+      targetMarker.rotation.set(0, activeSeg.axis === 'z' ? Math.PI / 2 : 0, 0);
+      const markerScale = 1 + pulse * 0.08 + proximity * 0.14;
+      targetMarker.scale.set(markerScale, markerScale, markerScale);
+
+      if (targetRingRef.current) {
+        targetRingRef.current.scale.setScalar(0.94 + pulse * 0.36 + proximity * 0.22);
+      }
+      if (targetHaloRef.current) {
+        targetHaloRef.current.scale.setScalar(0.82 + pulse * 0.52 + proximity * 0.3);
+      }
+      if (targetBeamRef.current) {
+        targetBeamRef.current.scale.set(
+          1 + pulse * 0.18,
+          0.9 + proximity * 0.28,
+          1 + pulse * 0.18
+        );
+      }
+
+      materials.targetCore.opacity = clamp(
+        0.34 + openFactor * 0.28 + pulse * 0.2 + proximity * 0.22,
+        0.2,
+        0.96
+      );
+      materials.targetRing.opacity = clamp(
+        0.3 + openFactor * 0.26 + pulse * 0.28 + proximity * 0.26,
+        0.22,
+        0.98
+      );
+      materials.targetHalo.opacity = clamp(
+        0.18 + openFactor * 0.2 + pulse * 0.34 + proximity * 0.22,
+        0.1,
+        0.92
+      );
+      materials.targetBeam.opacity = clamp(
+        0.16 + openFactor * 0.2 + pulse * 0.28 + proximity * 0.2,
+        0.1,
+        0.9
+      );
+    } else if (targetMarker) {
+      targetMarker.visible = false;
+    }
+
     if (staticNeedsBuildRef.current) {
       rebuildStaticInstances();
       staticNeedsBuildRef.current = false;
@@ -1066,15 +1349,16 @@ function Scene() {
       <color attach="background" args={[COLORS.bgTop]} />
       <fog attach="fog" args={[COLORS.bgBottom, 16, 82]} />
 
-      <ambientLight intensity={0.85} />
+      <ambientLight ref={ambientLightRef} intensity={0.85} />
       <directionalLight
+        ref={keyLightRef}
         position={[8, 12, 8]}
         intensity={1.12}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
       />
-      <directionalLight position={[-7, 6, -2]} intensity={0.42} />
+      <directionalLight ref={fillLightRef} position={[-7, 6, -2]} intensity={0.42} />
 
       <CameraRig levelRef={levelRef} runRef={runRef} />
 
@@ -1091,6 +1375,31 @@ function Scene() {
         material={materials.gateGlow}
         visible={false}
       />
+      <group ref={targetMarkerRef} visible={false}>
+        <mesh
+          ref={targetHaloRef}
+          geometry={geoms.targetHalo}
+          material={materials.targetHalo}
+          rotation={[-Math.PI / 2, 0, 0]}
+        />
+        <mesh
+          ref={targetRingRef}
+          geometry={geoms.targetRing}
+          material={materials.targetRing}
+          rotation={[-Math.PI / 2, 0, 0]}
+        />
+        <mesh
+          geometry={geoms.targetCore}
+          material={materials.targetCore}
+          rotation={[-Math.PI / 2, 0, 0]}
+        />
+        <mesh
+          ref={targetBeamRef}
+          geometry={geoms.targetBeam}
+          material={materials.targetBeam}
+          position={[0, 0.28, 0]}
+        />
+      </group>
 
       <group ref={portalRef}>
         <mesh geometry={geoms.ring} material={materials.portal} castShadow />

@@ -1,16 +1,8 @@
 export type Vec3 = [number, number, number];
 
-export type ThemeId =
-  | 'nebula'
-  | 'cotton'
-  | 'nature'
-  | 'abyss'
-  | 'forge'
-  | 'cyber'
-  | 'aurora'
-  | 'desert';
-export type ControlMode = 'keyboard' | 'mouse';
-export type PowerMode = 'HEAVY' | 'GHOST' | 'MAGNET' | null;
+export type ArenaThemeId = 'nebula' | 'cotton' | 'nature';
+
+export type PowerMode = 'HEAVY' | 'GHOST' | 'MAGNET' | 'MULTIBALL' | null;
 
 export type TargetKind =
   | 'standup'
@@ -26,20 +18,13 @@ export type TargetKind =
   | 'ramp'
   | 'orbit'
   | 'magnet'
-  | 'wormIn'
-  | 'wormOut'
   | 'mystery'
   | 'kicker'
-  | 'mini'
   | 'captive'
-  | 'gobble';
+  | 'gobble'
+  | 'mini'
+  | 'wormhole';
 
-export type ObjectiveTag =
-  | 'drop'
-  | 'spinner'
-  | 'bullseye'
-  | 'orbit'
-  | 'ramp'
-  | 'mystery';
+export type ObstacleKind = 'spinFlag' | 'dropWall' | 'crusher';
 
-export type ObstacleMotion = 'rotate' | 'slide' | 'pulse';
+export type GamePhase = 'playing' | 'gameover';

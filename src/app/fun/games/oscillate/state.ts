@@ -463,6 +463,7 @@ function buildFallbackLevel(
 export const onePathState = proxy({
   phase: 'menu' as OnePathPhase,
   mode: 'levels' as OnePathMode,
+  resetTick: 0,
 
   level: 1,
   selectedLevel: 1,
@@ -557,6 +558,7 @@ export const onePathState = proxy({
     onePathState.mode = 'levels';
     onePathState.level = onePathState.selectedLevel;
     onePathState.phase = 'playing';
+    onePathState.resetTick += 1;
   },
 
   startEndless: () => {
@@ -566,10 +568,12 @@ export const onePathState = proxy({
       (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0
     );
     onePathState.phase = 'playing';
+    onePathState.resetTick += 1;
   },
 
   retry: () => {
     onePathState.phase = 'playing';
+    onePathState.resetTick += 1;
   },
 
   fail: () => {
@@ -598,6 +602,7 @@ export const onePathState = proxy({
     onePathState.level += 1;
     onePathState.endlessBest = Math.max(onePathState.endlessBest, onePathState.level);
     onePathState.phase = 'playing';
+    onePathState.resetTick += 1;
     onePathState.save();
   },
 
@@ -611,6 +616,7 @@ export const onePathState = proxy({
       onePathState.endlessBest = Math.max(onePathState.endlessBest, onePathState.level);
     }
     onePathState.phase = 'playing';
+    onePathState.resetTick += 1;
     onePathState.save();
   },
 
