@@ -16,15 +16,16 @@ import {
   canUnlockBall,
 } from './state';
 
-const TRACK_WIDTH = 2.6;
+const TRACK_WIDTH = 3.4;
 const TRACK_THICK = 0.12;
 const RAIL_WIDTH = 0.22;
 const SEG_LEN = 6;
-const SEG_COUNT = 24;
+const SEG_COUNT = 30;
 
-const BALL_RADIUS = 0.25;
+const BALL_RADIUS = 0.21;
 const OBST_THICK = 0.38;
 const OBST_HEIGHT = 0.36;
+const IMPACT_POOL_SIZE = 44;
 
 const LANE_HALF = TRACK_WIDTH / 2 - RAIL_WIDTH - 0.06;
 const HUD_PUBLISH_INTERVAL = 1 / 15;
@@ -38,8 +39,8 @@ const GAME_TUNING = {
     scoreRamp: 0.045,
   },
   side: {
-    baseSpeed: 3.15,
-    maxSpeed: 4.3,
+    baseSpeed: 3.35,
+    maxSpeed: 4.7,
     responseLambda: 12.5,
     dragBase: 2.1,
     dragSlow: 5.9,
@@ -52,12 +53,12 @@ const GAME_TUNING = {
     lambdaOut: 13,
   },
   spawn: {
-    poolSize: 30,
+    poolSize: 42,
     initialSpawnZ: 7,
     gapMin: 2.35,
     gapMax: 4.05,
     respawnBehind: 10,
-    lookAhead: 52,
+    lookAhead: 68,
   },
   energy: {
     drainPerSecond: 0.35,
@@ -71,17 +72,17 @@ const GAME_TUNING = {
     size: BALL_RADIUS * 1.05,
   },
   tunnel: {
-    ringCount: 8,
-    spacing: 10,
+    ringCount: 14,
+    spacing: 8,
     radius: TRACK_WIDTH * 0.82,
   },
   camera: {
-    offsetX: 4.6,
-    offsetZ: -4.7,
-    height: 5.5,
+    offsetX: 5.4,
+    offsetZ: -5.2,
+    height: 6,
     lookAhead: 4.9,
-    baseZoom: 90,
-    slowZoom: 99,
+    baseZoom: 82,
+    slowZoom: 91,
     followLambda: 10,
     zoomLambda: 11,
     releaseDamp: 13,
@@ -120,6 +121,25 @@ type Obstacle = {
   giftCollected: boolean;
 };
 
+type ImpactFxKind = 'wall' | 'obstacle' | 'pickup';
+
+type ImpactFx = {
+  id: number;
+  active: boolean;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  life: number;
+  maxLife: number;
+  size: number;
+  spin: number;
+  color: THREE.Color;
+  kind: ImpactFxKind;
+};
+
 type WorldRuntime = {
   realTime: number;
   gameTime: number;
@@ -144,6 +164,10 @@ type WorldRuntime = {
   fps: number;
   wasSlow: boolean;
   visualSlowBucket: number;
+  wallPulseL: number;
+  wallPulseR: number;
+  impactCursor: number;
+  impacts: ImpactFx[];
   trailPoints: THREE.Vector3[];
 };
 
@@ -192,6 +216,25 @@ function createObstacleSlot(id: number): Obstacle {
     passed: false,
     starCollected: true,
     giftCollected: true,
+  };
+}
+
+function createImpactFxSlot(id: number): ImpactFx {
+  return {
+    id,
+    active: false,
+    x: 0,
+    y: BALL_RADIUS,
+    z: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    life: 0,
+    maxLife: 0.2,
+    size: 0.2,
+    spin: 0,
+    color: new THREE.Color('#ffffff'),
+    kind: 'obstacle',
   };
 }
 
@@ -250,6 +293,13 @@ function SlowMoScene() {
   const slowRingRef = useRef<THREE.Mesh>(null!);
   const slowRingMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
   const trailMaterialRef = useRef<THREE.PointsMaterial>(null!);
+  const wallGlowLeftRef = useRef<THREE.Mesh>(null!);
+  const wallGlowRightRef = useRef<THREE.Mesh>(null!);
+  const wallGlowLeftMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
+  const wallGlowRightMaterialRef = useRef<THREE.MeshBasicMaterial>(null!);
+  const impactGroupRefs = useRef<(THREE.Group | null)[]>([]);
+  const impactCoreMaterialRefs = useRef<(THREE.MeshBasicMaterial | null)[]>([]);
+  const impactRingMaterialRefs = useRef<(THREE.MeshBasicMaterial | null)[]>([]);
 
   const segmentGroupRefs = useRef<(THREE.Group | null)[]>([]);
   const tunnelRingRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -260,6 +310,8 @@ function SlowMoScene() {
   const giftRefs = useRef<(THREE.Mesh | null)[]>([]);
 
   const trailColorRef = useRef(new THREE.Color(THEME.trailBase));
+  const impactColorScratchRef = useRef(new THREE.Color());
+  const whiteColorRef = useRef(new THREE.Color('#ffffff'));
 
   const segments = useMemo(
     () =>
@@ -284,6 +336,11 @@ function SlowMoScene() {
       Array.from({ length: GAME_TUNING.spawn.poolSize }, (_, i) =>
         createObstacleSlot(i)
       ),
+    []
+  );
+
+  const impactSlots = useMemo(
+    () => Array.from({ length: IMPACT_POOL_SIZE }, (_, i) => i),
     []
   );
 
@@ -340,6 +397,12 @@ function SlowMoScene() {
     fps: 60,
     wasSlow: false,
     visualSlowBucket: -1,
+    wallPulseL: 0,
+    wallPulseR: 0,
+    impactCursor: 0,
+    impacts: Array.from({ length: IMPACT_POOL_SIZE }, (_, i) =>
+      createImpactFxSlot(i)
+    ),
     trailPoints: Array.from(
       { length: GAME_TUNING.trail.length },
       () => new THREE.Vector3(0, BALL_RADIUS + 0.02, 0)
@@ -386,6 +449,42 @@ function SlowMoScene() {
       if (!ring) continue;
       const material = ring.material as THREE.MeshBasicMaterial;
       material.opacity = ringOpacity;
+    }
+  }
+
+  function spawnImpactFx(
+    kind: ImpactFxKind,
+    x: number,
+    y: number,
+    z: number,
+    color: THREE.ColorRepresentation,
+    size: number,
+    ttl: number,
+    count = 1,
+    vxBias = 0,
+    vzBias = 0
+  ) {
+    const w = world.current;
+    const burstCount = Math.max(1, count);
+
+    for (let i = 0; i < burstCount; i += 1) {
+      const fx = w.impacts[w.impactCursor % w.impacts.length];
+      w.impactCursor += 1;
+
+      const spread = kind === 'wall' ? 0.32 : kind === 'pickup' ? 0.62 : 0.46;
+      fx.active = true;
+      fx.kind = kind;
+      fx.x = x + rand(-0.04, 0.04);
+      fx.y = y + rand(-0.04, 0.06);
+      fx.z = z + rand(-0.05, 0.05);
+      fx.vx = vxBias + rand(-spread, spread);
+      fx.vy = rand(0.2, 1.1) * (kind === 'pickup' ? 1.25 : 0.85);
+      fx.vz = vzBias + rand(-spread, spread) * 0.28;
+      fx.maxLife = ttl * rand(0.82, 1.18);
+      fx.life = fx.maxLife;
+      fx.size = size * rand(0.82, 1.18);
+      fx.spin = rand(-6, 6);
+      fx.color.set(color);
     }
   }
 
@@ -524,6 +623,18 @@ function SlowMoScene() {
     world.current.fps = 60;
     world.current.wasSlow = false;
     world.current.visualSlowBucket = -1;
+    world.current.wallPulseL = 0;
+    world.current.wallPulseR = 0;
+    world.current.impactCursor = 0;
+
+    for (let i = 0; i < world.current.impacts.length; i += 1) {
+      const fx = world.current.impacts[i];
+      fx.active = false;
+      fx.life = 0;
+      fx.vx = 0;
+      fx.vy = 0;
+      fx.vz = 0;
+    }
 
     resetTrail(startX, 0);
 
@@ -633,6 +744,19 @@ function SlowMoScene() {
       }
       w.sideDir = -1;
       w.bouncePulse = 1;
+      w.wallPulseR = 1;
+      spawnImpactFx(
+        'wall',
+        bound + 0.03,
+        BALL_RADIUS + 0.08,
+        w.runnerDistance,
+        THEME.rails,
+        0.13,
+        0.24,
+        5,
+        -0.45,
+        0
+      );
     } else if (w.x < -bound) {
       const penetration = -bound - w.x;
       w.x = -bound + penetration * GAME_TUNING.side.wallSpring;
@@ -641,10 +765,94 @@ function SlowMoScene() {
       }
       w.sideDir = 1;
       w.bouncePulse = 1;
+      w.wallPulseL = 1;
+      spawnImpactFx(
+        'wall',
+        -bound - 0.03,
+        BALL_RADIUS + 0.08,
+        w.runnerDistance,
+        THEME.rails,
+        0.13,
+        0.24,
+        5,
+        0.45,
+        0
+      );
     }
 
     w.bouncePulse = expDamp(w.bouncePulse, 0, 12, delta);
     w.ringPulse += delta * (w.isSlow ? 8 : 4);
+    w.wallPulseL = expDamp(w.wallPulseL, 0, 10.5, delta);
+    w.wallPulseR = expDamp(w.wallPulseR, 0, 10.5, delta);
+
+    const wallGlowZ = w.runnerDistance + SEG_LEN * 2.2;
+    if (wallGlowLeftRef.current) wallGlowLeftRef.current.position.z = wallGlowZ;
+    if (wallGlowRightRef.current) wallGlowRightRef.current.position.z = wallGlowZ;
+
+    if (wallGlowLeftMaterialRef.current) {
+      const leftOpacity = 0.08 + w.slowStrength * 0.05 + w.wallPulseL * 0.45;
+      wallGlowLeftMaterialRef.current.opacity = leftOpacity;
+      impactColorScratchRef.current
+        .set(THEME.rails)
+        .lerp(whiteColorRef.current, 0.1 + w.wallPulseL * 0.35);
+      wallGlowLeftMaterialRef.current.color.copy(impactColorScratchRef.current);
+    }
+
+    if (wallGlowRightMaterialRef.current) {
+      const rightOpacity = 0.08 + w.slowStrength * 0.05 + w.wallPulseR * 0.45;
+      wallGlowRightMaterialRef.current.opacity = rightOpacity;
+      impactColorScratchRef.current
+        .set(THEME.rails)
+        .lerp(whiteColorRef.current, 0.1 + w.wallPulseR * 0.35);
+      wallGlowRightMaterialRef.current.color.copy(impactColorScratchRef.current);
+    }
+
+    for (let i = 0; i < w.impacts.length; i += 1) {
+      const fx = w.impacts[i];
+      const group = impactGroupRefs.current[i];
+      const coreMaterial = impactCoreMaterialRefs.current[i];
+      const ringMaterial = impactRingMaterialRefs.current[i];
+      if (!fx.active || !group || !coreMaterial || !ringMaterial) {
+        if (group) group.visible = false;
+        continue;
+      }
+
+      fx.life -= delta;
+      if (fx.life <= 0) {
+        fx.active = false;
+        group.visible = false;
+        continue;
+      }
+
+      const age = 1 - fx.life / Math.max(0.001, fx.maxLife);
+      fx.vx *= Math.exp(-2.2 * delta);
+      fx.vy = fx.vy * Math.exp(-2.6 * delta) - 0.8 * delta;
+      fx.vz *= Math.exp(-2.2 * delta);
+      fx.x += fx.vx * delta;
+      fx.y += fx.vy * delta;
+      fx.z += fx.vz * delta;
+
+      group.visible = true;
+      group.position.set(fx.x, fx.y, fx.z);
+      group.rotation.z += fx.spin * delta;
+
+      const scaleCore = fx.size * (1 + age * 1.1);
+      const scaleRing = fx.size * (1 + age * 2.2);
+      group.scale.set(1, 1, 1);
+      const coreMesh = group.children[0] as THREE.Mesh | undefined;
+      const ringMesh = group.children[1] as THREE.Mesh | undefined;
+      if (coreMesh) coreMesh.scale.setScalar(scaleCore);
+      if (ringMesh) ringMesh.scale.setScalar(scaleRing);
+
+      const alpha = Math.max(0, 1 - age);
+      coreMaterial.color.copy(fx.color);
+      coreMaterial.opacity =
+        alpha * (fx.kind === 'pickup' ? 0.85 : fx.kind === 'wall' ? 0.74 : 0.78);
+
+      impactColorScratchRef.current.copy(fx.color).lerp(whiteColorRef.current, 0.28);
+      ringMaterial.color.copy(impactColorScratchRef.current);
+      ringMaterial.opacity = alpha * 0.68;
+    }
 
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
@@ -705,6 +913,16 @@ function SlowMoScene() {
           run.starsThisRun += 1;
           w.slowEnergy = Math.min(1, w.slowEnergy + 0.08);
           addStars(1);
+          spawnImpactFx(
+            'pickup',
+            pickupX(o),
+            0.46,
+            o.z,
+            '#ffd36a',
+            0.16,
+            0.3,
+            7
+          );
           const star = starRefs.current[i];
           if (star) star.visible = false;
         }
@@ -719,6 +937,16 @@ function SlowMoScene() {
           run.starsThisRun += bonus;
           w.slowEnergy = Math.min(1, w.slowEnergy + GAME_TUNING.energy.pickupRefill);
           addStars(bonus);
+          spawnImpactFx(
+            'pickup',
+            pickupX(o),
+            0.42,
+            o.z,
+            '#ffffff',
+            0.2,
+            0.34,
+            9
+          );
           const gift = giftRefs.current[i];
           if (gift) gift.visible = false;
         }
@@ -729,6 +957,16 @@ function SlowMoScene() {
         const { xMin, xMax } = obstacleXRange(o);
         const inX = w.x + BALL_RADIUS > xMin && w.x - BALL_RADIUS < xMax;
         if (inX) {
+          spawnImpactFx(
+            'obstacle',
+            w.x,
+            BALL_RADIUS + 0.04,
+            w.runnerDistance,
+            o.color,
+            0.24,
+            0.34,
+            10
+          );
           setHighScore(run.score);
           holdInput.isHolding = false;
           publishHud(forwardSpeed);
@@ -958,6 +1196,38 @@ function SlowMoScene() {
           </mesh>
         </group>
       ))}
+
+      <mesh
+        ref={wallGlowLeftRef}
+        position={[-(TRACK_WIDTH / 2 - RAIL_WIDTH * 0.5), 0.06, SEG_LEN]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[0.16, SEG_LEN * 8]} />
+        <meshBasicMaterial
+          ref={wallGlowLeftMaterialRef}
+          color={THEME.rails}
+          transparent
+          opacity={0.08}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      <mesh
+        ref={wallGlowRightRef}
+        position={[TRACK_WIDTH / 2 - RAIL_WIDTH * 0.5, 0.06, SEG_LEN]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[0.16, SEG_LEN * 8]} />
+        <meshBasicMaterial
+          ref={wallGlowRightMaterialRef}
+          color={THEME.rails}
+          transparent
+          opacity={0.08}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
 
       {tunnelRings.map((ring, i) => (
         <mesh
