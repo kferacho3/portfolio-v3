@@ -85,6 +85,7 @@ type Runtime = {
   bound: number;
   level: number;
   gridSize: number;
+  fillCols: number;
   totalCells: number;
   completion: number;
   collectibles: number;
@@ -263,15 +264,16 @@ const BEST_KEY = 'trace_hyper_best_v2';
 const CELL_SIZE = 0.62;
 const TRAIL_THICKNESS = 0.16;
 const PLAYER_RADIUS = 0.12;
+const TRAIL_TILE_SIZE = PLAYER_RADIUS * 2;
 const TRAIL_COMMIT_STEP = CELL_SIZE * 0.46;
 
 const MAX_TRAIL_SEGMENTS = 6200;
 const TRAIL_INSTANCE_CAP = 4200;
-const FILL_CELL_CAP = 400;
+const FILL_CELL_CAP = 2400;
 const VOID_POOL = 20;
 const PICKUP_POOL = 14;
 const MAX_SPARKS = 120;
-const GRID_LINE_CAP = 64;
+const GRID_LINE_CAP = 128;
 
 const LEVEL_GRID_START = 7;
 const LEVEL_GRID_MAX = 17;
@@ -319,6 +321,8 @@ const gridSizeForLevel = (level: number) =>
 const speedForLevel = (level: number) =>
   clamp(SPEED_START + (level - 1) * 0.16, SPEED_START, SPEED_MAX);
 const levelBound = (gridSize: number) => gridSize * CELL_SIZE * 0.5;
+const fillColsForBound = (bound: number) =>
+  Math.max(1, Math.round((bound * 2) / TRAIL_TILE_SIZE));
 
 const medalForCompletion = (completion: number): MedalTier => {
   const pct = clamp(completion, 0, 100);
@@ -463,6 +467,8 @@ const createPickup = (): PhasePickup => ({
 
 const createRuntime = (): Runtime => {
   const gridSize = gridSizeForLevel(1);
+  const bound = levelBound(gridSize);
+  const fillCols = fillColsForBound(bound);
   return {
     elapsed: 0,
     score: 0,
@@ -471,10 +477,11 @@ const createRuntime = (): Runtime => {
     danger: 0,
     speed: speedForLevel(1),
     baseSpeed: speedForLevel(1),
-    bound: levelBound(gridSize),
+    bound,
     level: 1,
     gridSize,
-    totalCells: gridSize * gridSize,
+    fillCols,
+    totalCells: fillCols * fillCols,
     completion: 0,
     collectibles: 0,
     playerX: 0,
@@ -601,12 +608,12 @@ const commitTrailTo = (runtime: Runtime, endX: number, endZ: number, force = fal
 const cellFromWorld = (runtime: Runtime, x: number, z: number) => {
   const localX = x + runtime.bound;
   const localZ = z + runtime.bound;
-  const gx = Math.floor(localX / CELL_SIZE);
-  const gz = Math.floor(localZ / CELL_SIZE);
-  if (gx < 0 || gz < 0 || gx >= runtime.gridSize || gz >= runtime.gridSize) return null;
-  const key = gz * runtime.gridSize + gx;
-  const cx = -runtime.bound + (gx + 0.5) * CELL_SIZE;
-  const cz = -runtime.bound + (gz + 0.5) * CELL_SIZE;
+  const gx = Math.floor(localX / TRAIL_TILE_SIZE);
+  const gz = Math.floor(localZ / TRAIL_TILE_SIZE);
+  if (gx < 0 || gz < 0 || gx >= runtime.fillCols || gz >= runtime.fillCols) return null;
+  const key = gz * runtime.fillCols + gx;
+  const cx = -runtime.bound + (gx + 0.5) * TRAIL_TILE_SIZE;
+  const cz = -runtime.bound + (gz + 0.5) * TRAIL_TILE_SIZE;
   return { key, cx, cz };
 };
 
@@ -662,6 +669,8 @@ const prepareLevelRuntime = (
   headIndex: number
 ) => {
   const gridSize = gridSizeForLevel(level);
+  const bound = levelBound(gridSize);
+  const fillCols = fillColsForBound(bound);
   runtime.elapsed = 0;
   runtime.score = 0;
   runtime.tightTurnBonus = 0;
@@ -669,10 +678,11 @@ const prepareLevelRuntime = (
   runtime.danger = 0;
   runtime.level = level;
   runtime.gridSize = gridSize;
-  runtime.totalCells = gridSize * gridSize;
+  runtime.fillCols = fillCols;
+  runtime.totalCells = fillCols * fillCols;
   runtime.baseSpeed = speedForLevel(level);
   runtime.speed = runtime.baseSpeed;
-  runtime.bound = levelBound(gridSize);
+  runtime.bound = bound;
   runtime.completion = 0;
   runtime.collectibles = 0;
   runtime.playerX = 0;
@@ -722,10 +732,11 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.danger = 0;
   runtime.level = 1;
   runtime.gridSize = gridSizeForLevel(1);
-  runtime.totalCells = runtime.gridSize * runtime.gridSize;
+  runtime.bound = levelBound(runtime.gridSize);
+  runtime.fillCols = fillColsForBound(runtime.bound);
+  runtime.totalCells = runtime.fillCols * runtime.fillCols;
   runtime.baseSpeed = speedForLevel(1);
   runtime.speed = runtime.baseSpeed;
-  runtime.bound = levelBound(runtime.gridSize);
   runtime.completion = 0;
   runtime.collectibles = 0;
   runtime.playerX = 0;
@@ -1298,7 +1309,7 @@ function TraceScene() {
         const gradient = total > 1 ? i / (total - 1) : 0;
 
         dummy.position.set(cell.x, 0.06, cell.z);
-        dummy.scale.set(CELL_SIZE * 0.94, 0.06, CELL_SIZE * 0.94);
+        dummy.scale.set(TRAIL_TILE_SIZE, 0.06, TRAIL_TILE_SIZE);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         fillMeshRef.current.setMatrixAt(idx, dummy.matrix);
@@ -1527,7 +1538,7 @@ function TraceScene() {
     }
 
     if (gridLineRef.current) {
-      const divisions = runtime.gridSize;
+      const divisions = runtime.fillCols;
       let idx = 0;
       for (let i = 0; i <= divisions; i += 1) {
         const t = i / divisions;
