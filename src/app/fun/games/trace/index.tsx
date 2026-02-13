@@ -278,6 +278,8 @@ const GRID_LINE_CAP = 128;
 const LEVEL_GRID_START = 7;
 const LEVEL_GRID_MAX = 17;
 const TIGHT_TURN_THRESHOLD = 0.62;
+const SWIPE_THRESHOLD = 0.08;
+const SWIPE_AXIS_RATIO = 1.1;
 
 const SPEED_START = 1.75;
 const SPEED_MAX = 4.2;
@@ -330,6 +332,25 @@ const medalForCompletion = (completion: number): MedalTier => {
   if (pct >= 90) return 'GOLD';
   if (pct >= 80) return 'SILVER';
   if (pct >= 70) return 'BRONZE';
+  return null;
+};
+
+const directionFromKeys = (justPressed: Set<string>): DirectionIndex | null => {
+  if (justPressed.has('arrowup') || justPressed.has('w')) return 1;
+  if (justPressed.has('arrowright') || justPressed.has('d')) return 0;
+  if (justPressed.has('arrowdown') || justPressed.has('s')) return 3;
+  if (justPressed.has('arrowleft') || justPressed.has('a')) return 2;
+  return null;
+};
+
+const directionFromSwipe = (
+  dx: number,
+  dy: number,
+  threshold = SWIPE_THRESHOLD
+): DirectionIndex | null => {
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) return null;
+  if (Math.abs(dx) > Math.abs(dy) * SWIPE_AXIS_RATIO) return dx > 0 ? 0 : 2;
+  if (Math.abs(dy) > Math.abs(dx) * SWIPE_AXIS_RATIO) return dy > 0 ? 1 : 3;
   return null;
 };
 
@@ -854,7 +875,7 @@ function TraceOverlay() {
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/16 to-emerald-500/20 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.24em] text-cyan-100/80">Trace</div>
-        <div className="text-[11px] text-cyan-50/80">Tap to turn 90° clockwise.</div>
+        <div className="text-[11px] text-cyan-50/80">Arrows/WASD or swipe to steer.</div>
       </div>
 
       <div className="absolute right-4 top-4 rounded-md border border-amber-100/55 bg-gradient-to-br from-amber-500/24 via-fuchsia-500/16 to-violet-500/20 px-3 py-2 text-right backdrop-blur-[2px]">
@@ -955,7 +976,33 @@ function TraceOverlay() {
 function TraceScene() {
   const resetVersion = useSnapshot(traceState).resetVersion;
   const inputRef = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
+    preventDefault: [
+      ' ',
+      'Space',
+      'space',
+      'enter',
+      'Enter',
+      'arrowup',
+      'ArrowUp',
+      'arrowdown',
+      'ArrowDown',
+      'arrowleft',
+      'ArrowLeft',
+      'arrowright',
+      'ArrowRight',
+      'w',
+      'a',
+      's',
+      'd',
+      'W',
+      'A',
+      'S',
+      'D',
+      'KeyW',
+      'KeyA',
+      'KeyS',
+      'KeyD',
+    ],
   });
 
   const runtimeRef = useRef<Runtime>(createRuntime());
@@ -1003,7 +1050,8 @@ function TraceScene() {
     return geom;
   }, [sparkPositions]);
 
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     resetRuntime(runtimeRef.current);
@@ -1040,6 +1088,14 @@ function TraceScene() {
     [sparkGeometry]
   );
 
+  useEffect(() => {
+    const previousTouchAction = gl.domElement.style.touchAction;
+    gl.domElement.style.touchAction = 'none';
+    return () => {
+      gl.domElement.style.touchAction = previousTouchAction;
+    };
+  }, [gl]);
+
   useFrame((state, delta) => {
     const dt = Math.min(0.033, Math.max(0.001, delta));
     const runtime = runtimeRef.current;
@@ -1053,55 +1109,81 @@ function TraceScene() {
       }
     }
 
-    const tap =
+    const startTap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
+    const keyDirection = directionFromKeys(input.justPressed);
 
-    if (tap) {
-      if (store.status !== 'PLAYING') {
-        const levelToStart = store.status === 'LEVEL_CLEAR' ? store.level : 1;
-        const themeIndex =
-          store.themeMode === 'RANDOM'
-            ? Math.floor(Math.random() * TRACE_THEMES.length)
-            : store.manualThemeIndex;
-        const headIndex = store.manualHeadIndex;
-        prepareLevelRuntime(runtime, levelToStart, themeIndex, headIndex);
-        useTraceStore.getState().startRun({
-          level: levelToStart,
-          themeIndex,
-          headIndex,
-          resetScore: true,
-        });
-      } else {
-        commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
-        runtime.dir = ((runtime.dir + 1) % 4) as DirectionIndex;
-        runtime.targetYaw = DIR_YAWS[runtime.dir];
+    if (input.pointerJustDown) {
+      swipeStartRef.current = { x: input.pointerX, y: input.pointerY };
+    }
 
-        const distToWall = Math.min(
-          runtime.bound - Math.abs(runtime.playerX),
-          runtime.bound - Math.abs(runtime.playerZ)
+    let swipeDirection: DirectionIndex | null = null;
+    if (input.pointerJustUp) {
+      const swipeStart = swipeStartRef.current;
+      if (swipeStart) {
+        swipeDirection = directionFromSwipe(
+          input.pointerX - swipeStart.x,
+          input.pointerY - swipeStart.y
         );
-        if (distToWall < TIGHT_TURN_THRESHOLD) {
-          const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 110);
-          runtime.tightTurnBonus += bonus;
-          runtime.tightTurns += 1;
-          runtime.score += bonus;
-        }
+      }
+      swipeStartRef.current = null;
+    }
 
-        for (let i = 0; i < 8; i += 1) {
-          if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
-          const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.7;
-          const speed = 1.6 + Math.random() * 1.5;
-          runtime.sparks.push({
-            x: runtime.playerX,
-            z: runtime.playerZ,
-            vx: Math.cos(a) * speed,
-            vz: Math.sin(a) * speed,
-            life: 0.33 + Math.random() * 0.24,
-          });
-        }
+    const directionInput = keyDirection ?? swipeDirection;
+
+    if (store.status !== 'PLAYING' && (startTap || directionInput !== null)) {
+      const levelToStart = store.status === 'LEVEL_CLEAR' ? store.level : 1;
+      const themeIndex =
+        store.themeMode === 'RANDOM'
+          ? Math.floor(Math.random() * TRACE_THEMES.length)
+          : store.manualThemeIndex;
+      const headIndex = store.manualHeadIndex;
+      prepareLevelRuntime(runtime, levelToStart, themeIndex, headIndex);
+      if (directionInput !== null) {
+        runtime.dir = directionInput;
+        runtime.targetYaw = DIR_YAWS[directionInput];
+        runtime.playerYaw = DIR_YAWS[directionInput];
+      }
+      useTraceStore.getState().startRun({
+        level: levelToStart,
+        themeIndex,
+        headIndex,
+        resetScore: true,
+      });
+    } else if (
+      store.status === 'PLAYING' &&
+      directionInput !== null &&
+      directionInput !== runtime.dir
+    ) {
+      commitTrailTo(runtime, runtime.playerX, runtime.playerZ, true);
+      runtime.dir = directionInput;
+      runtime.targetYaw = DIR_YAWS[runtime.dir];
+
+      const distToWall = Math.min(
+        runtime.bound - Math.abs(runtime.playerX),
+        runtime.bound - Math.abs(runtime.playerZ)
+      );
+      if (distToWall < TIGHT_TURN_THRESHOLD) {
+        const bonus = Math.round((TIGHT_TURN_THRESHOLD - distToWall) * 110);
+        runtime.tightTurnBonus += bonus;
+        runtime.tightTurns += 1;
+        runtime.score += bonus;
+      }
+
+      for (let i = 0; i < 8; i += 1) {
+        if (runtime.sparks.length >= MAX_SPARKS) runtime.sparks.shift();
+        const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.7;
+        const speed = 1.6 + Math.random() * 1.5;
+        runtime.sparks.push({
+          x: runtime.playerX,
+          z: runtime.playerZ,
+          vx: Math.cos(a) * speed,
+          vz: Math.sin(a) * speed,
+          life: 0.33 + Math.random() * 0.24,
+        });
       }
     }
 
