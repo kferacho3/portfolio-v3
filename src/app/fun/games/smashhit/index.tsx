@@ -33,8 +33,10 @@ const MAX_BARRIERS = 84;
 const MAX_BLOCKS = MAX_BARRIERS * BLOCKS_PER_BARRIER;
 
 const MAX_PROJECTILES = 72;
-const MAX_SHARDS = 640;
+const MAX_SHARDS = 320;
 const MAX_HIT_FX = 220;
+const MAX_ACTIVE_SHARDS_BUDGET = 160;
+const MIN_ACTIVE_SHARDS_BUDGET = 68;
 
 const ROOM_LENGTH = 34;
 const ROOMS_AHEAD = 3;
@@ -68,8 +70,14 @@ const SPACING_MIN = 7.4;
 const SPACING_MAX = 10.8;
 const INTRO_SPAWN_BUFFER = 12;
 
-const BREACH_AMMO_PENALTY_BASE = 6;
-const BREACH_AMMO_PENALTY_PER_BLOCK = 2;
+const BREACH_AMMO_PENALTY_BASE = 4;
+const BREACH_AMMO_PENALTY_PER_BLOCK = 1;
+
+const CAMERA_IMPULSE_DAMPING = 8;
+const CAMERA_IMPULSE_STIFFNESS = 120;
+const AUDIO_BASE_GAIN = 0.16;
+
+const CHROMATIC_OFFSET = new THREE.Vector2(0.0007, 0.0012);
 
 const GLASS_PHYSICS = {
   restitution: 0.8,
@@ -799,6 +807,20 @@ function pickCrystalValue(rng: SeededRandom) {
   return 10;
 }
 
+function getAdaptiveShardCount(base: number, fps: number) {
+  if (fps > 58) return base;
+  if (fps > 50) return Math.max(4, Math.floor(base * 0.7));
+  if (fps > 45) return Math.max(4, Math.floor(base * 0.5));
+  return Math.max(3, Math.floor(base * 0.3));
+}
+
+function getAdaptiveShardBudget(fps: number) {
+  if (fps > 58) return MAX_ACTIVE_SHARDS_BUDGET;
+  if (fps > 50) return Math.floor(MAX_ACTIVE_SHARDS_BUDGET * 0.85);
+  if (fps > 45) return Math.floor(MAX_ACTIVE_SHARDS_BUDGET * 0.65);
+  return MIN_ACTIVE_SHARDS_BUDGET;
+}
+
 function makeEventBus() {
   return {
     type: new Int16Array(MAX_EVENTS),
@@ -866,6 +888,8 @@ function SmashHit() {
     tempColorA: new THREE.Color(),
     tempColorB: new THREE.Color(),
     tempColorC: new THREE.Color(),
+    tempVecA: new THREE.Vector3(),
+    tempVecB: new THREE.Vector3(),
     sceneBg: new THREE.Color(THEMES[0].bg),
     sceneFogColor: new THREE.Color(THEMES[0].fog),
     sceneFog: new THREE.Fog(
@@ -881,6 +905,8 @@ function SmashHit() {
     cameraX: 0,
     cameraY: 0,
     cameraShake: 0,
+    cameraImpulseOffset: new THREE.Vector3(),
+    cameraImpulseVelocity: new THREE.Vector3(),
     bloomPunch: 0,
     flashAlpha: 0,
 
@@ -1000,6 +1026,10 @@ function SmashHit() {
 
     audioCtx: null as AudioContext | null,
     audioGain: null as GainNode | null,
+    audioFilter: null as BiquadFilterNode | null,
+    audioDuckUntil: 0,
+    audioBaseGain: AUDIO_BASE_GAIN,
+    noiseBuffers: new Map<number, AudioBuffer>(),
 
     dynamicShardReqId: 0,
   });
@@ -1020,10 +1050,18 @@ function SmashHit() {
       if (!Ctx) return;
       const ctx = new Ctx();
       const gainNode = ctx.createGain();
-      gainNode.gain.value = 0.16;
-      gainNode.connect(ctx.destination);
+      const filterNode = ctx.createBiquadFilter();
+      filterNode.type = 'lowpass';
+      filterNode.frequency.value = 620;
+      filterNode.Q.value = 1.2;
+      gainNode.gain.value = w.audioBaseGain;
+      gainNode.connect(filterNode);
+      filterNode.connect(ctx.destination);
       w.audioCtx = ctx;
       w.audioGain = gainNode;
+      w.audioFilter = filterNode;
+      w.audioDuckUntil = 0;
+      w.noiseBuffers.clear();
     }
 
     if (w.audioCtx && w.audioCtx.state === 'suspended') {
@@ -1040,13 +1078,14 @@ function SmashHit() {
     const w = world.current;
     if (!soundsOn) return;
     if (!w.audioCtx || !w.audioGain) return;
+    const comboRate = 1 + Math.min(smashHitState.combo, 15) * 0.015;
 
     const t0 = w.audioCtx.currentTime;
     const osc = w.audioCtx.createOscillator();
     const amp = w.audioCtx.createGain();
 
     osc.type = type;
-    osc.frequency.value = freq;
+    osc.frequency.value = freq * comboRate;
 
     amp.gain.setValueAtTime(0.0001, t0);
     amp.gain.exponentialRampToValueAtTime(gain, t0 + 0.008);
@@ -1065,14 +1104,18 @@ function SmashHit() {
     if (!w.audioCtx || !w.audioGain) return;
 
     const frameCount = Math.floor(w.audioCtx.sampleRate * duration);
-    const buffer = w.audioCtx.createBuffer(
-      1,
-      frameCount,
-      w.audioCtx.sampleRate
-    );
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < frameCount; i += 1) {
-      data[i] = (Math.random() * 2 - 1) * (1 - i / frameCount);
+    let buffer = w.noiseBuffers.get(frameCount);
+    if (!buffer) {
+      buffer = w.audioCtx.createBuffer(
+        1,
+        frameCount,
+        w.audioCtx.sampleRate
+      );
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < frameCount; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / frameCount);
+      }
+      w.noiseBuffers.set(frameCount, buffer);
     }
 
     const source = w.audioCtx.createBufferSource();
@@ -1095,6 +1138,62 @@ function SmashHit() {
     w.dummy.rotation.set(0, 0, 0);
     w.dummy.updateMatrix();
     mesh.setMatrixAt(index, w.dummy.matrix);
+  };
+
+  const applyCameraImpulse = (
+    dirX: number,
+    dirY: number,
+    dirZ: number,
+    strength: number
+  ) => {
+    const w = world.current;
+    w.tempVecA.set(dirX, dirY, dirZ);
+    const lenSq = w.tempVecA.lengthSq();
+    if (lenSq <= 1e-6) return;
+    w.tempVecA.multiplyScalar(strength / Math.sqrt(lenSq));
+    w.cameraImpulseVelocity.add(w.tempVecA);
+  };
+
+  const countActiveShards = () => {
+    const w = world.current;
+    let active = 0;
+    for (let i = 0; i < MAX_SHARDS; i += 1) {
+      if (w.shards[i].active) active += 1;
+    }
+    return active;
+  };
+
+  const enforceShardBudget = () => {
+    const w = world.current;
+    const target = clamp(
+      getAdaptiveShardBudget(w.smoothedFps),
+      MIN_ACTIVE_SHARDS_BUDGET,
+      MAX_ACTIVE_SHARDS_BUDGET
+    );
+    let active = countActiveShards();
+    if (active <= target) return;
+
+    let remove = active - target;
+
+    // Cull low-impact shards first to keep hero impacts readable.
+    for (let i = 0; i < MAX_SHARDS && remove > 0; i += 1) {
+      const shard = w.shards[i];
+      if (!shard.active) continue;
+      if (shard.life < SHARD_TTL * 0.45 || shard.pos.z > w.cameraZ + 3.5) {
+        shard.active = false;
+        remove -= 1;
+      }
+    }
+
+    // Hard cap fallback under heavy pressure.
+    if (remove > 0) {
+      for (let i = 0; i < MAX_SHARDS && remove > 0; i += 1) {
+        const shard = w.shards[i];
+        if (!shard.active) continue;
+        shard.active = false;
+        remove -= 1;
+      }
+    }
   };
 
   const deactivateBarrier = (slot: number) => {
@@ -1328,6 +1427,16 @@ function SmashHit() {
     const distanceToCamera = Math.abs(z - w.cameraZ);
     const isFar = distanceToCamera > 86;
     const isMid = distanceToCamera > 42 && distanceToCamera <= 86;
+    const adaptiveNormalCount = getAdaptiveShardCount(
+      tier.shardNormal,
+      w.smoothedFps
+    );
+    const adaptiveHeroCount = getAdaptiveShardCount(tier.shardHero, w.smoothedFps);
+    const impactStrength = clamp(
+      adaptiveNormalCount / Math.max(1, tier.shardNormal),
+      0.35,
+      1
+    );
 
     const hero = w.blockHero[blockIdx] && smashHitState.qualityTier !== 'low';
     if (isFar) {
@@ -1343,15 +1452,24 @@ function SmashHit() {
         vy,
         vz,
         color,
-        tier.shardHero
+        adaptiveHeroCount
       );
       if (!requested) {
-        spawnVoronoiStyleShards(x, y, z, vx, vy, vz, tier.shardHero, color);
+        spawnVoronoiStyleShards(
+          x,
+          y,
+          z,
+          vx,
+          vy,
+          vz,
+          adaptiveHeroCount,
+          color
+        );
       }
     } else {
       const shardCount = isMid
-        ? Math.max(4, Math.floor(tier.shardNormal * 0.55))
-        : tier.shardNormal;
+        ? Math.max(3, Math.floor(adaptiveNormalCount * 0.55))
+        : adaptiveNormalCount;
       for (let i = 0; i < shardCount; i += 1) {
         spawnShard(
           x,
@@ -1367,12 +1485,18 @@ function SmashHit() {
     }
 
     spawnHitFx(x, y, z, color, 0.28);
+    applyCameraImpulse(
+      x - camera.position.x,
+      y - camera.position.y,
+      1,
+      hero && !isMid ? 0.032 : 0.02
+    );
     const themeIndex = w.barriers[barrierSlot]?.themeIndex ?? 0;
     emitEvent(
       w.eventBus,
       EVT.GLASS_HIT,
       blockIdx,
-      hero && !isMid ? 1 : 0,
+      hero && !isMid ? 1 : impactStrength,
       themeIndex
     );
   };
@@ -1396,6 +1520,13 @@ function SmashHit() {
     w.blockHitVx[blockIdx] = vel.x;
     w.blockHitVy[blockIdx] = vel.y;
     w.blockHitVz[blockIdx] = vel.z;
+
+    applyCameraImpulse(
+      hitPos.x - camera.position.x,
+      hitPos.y - camera.position.y,
+      1,
+      0.012 + clamp(vel.length() / (SHOT_SPEED * 1.2), 0, 1) * 0.014
+    );
 
     const barrierSlot = Math.floor(blockIdx / BLOCKS_PER_BARRIER);
     const color = w.barriers[barrierSlot]?.color ?? COLOR_SHARD_FALLBACK;
@@ -1685,6 +1816,8 @@ function SmashHit() {
     w.cameraX = 0;
     w.cameraY = 0;
     w.cameraShake = 0;
+    w.cameraImpulseOffset.set(0, 0, 0);
+    w.cameraImpulseVelocity.set(0, 0, 0);
     w.bloomPunch = 0;
     w.flashAlpha = 0;
 
@@ -1760,6 +1893,7 @@ function SmashHit() {
 
     w.spaceWasDown = false;
     w.fireCooldown = 0;
+    w.audioDuckUntil = 0;
 
     camera.position.set(0, 0, START_Z);
     camera.lookAt(0, 0, START_Z - 12);
@@ -1892,14 +2026,17 @@ function SmashHit() {
       if (type === EVT.GLASS_HIT) {
         const themeIndex = clamp(Math.floor(c), 0, THEMES.length - 1);
         const tuning = THEME_GAMEPLAY[themeIndex];
-        const hitScore = Math.floor((12 + (b > 0.5 ? 8 : 0)) * tuning.hitScoreMul);
+        const impactIntensity = clamp(b || 0.4, 0.25, 1.2);
+        const hitScore = Math.floor(
+          (12 + Math.round(impactIntensity * 8)) * tuning.hitScoreMul
+        );
         smashHitState.addScore(hitScore);
-        w.cameraShake = Math.max(w.cameraShake, 0.15 + b * 0.14);
-        w.bloomPunch = Math.max(w.bloomPunch, 0.32 + b * 0.08);
-        w.flashAlpha = Math.max(w.flashAlpha, 0.25 + b * 0.1);
+        w.cameraShake = Math.max(w.cameraShake, 0.15 + impactIntensity * 0.14);
+        w.bloomPunch = Math.max(w.bloomPunch, 0.32 + impactIntensity * 0.08);
+        w.flashAlpha = Math.max(w.flashAlpha, 0.25 + impactIntensity * 0.1);
         playNoiseBurst(
           0.07,
-          0.04 + b * 0.01 + GLASS_PHYSICS.restitution * 0.01
+          0.04 + impactIntensity * 0.01 + GLASS_PHYSICS.restitution * 0.01
         );
       } else if (type === EVT.CRYSTAL_HIT) {
         const themeIndex = clamp(Math.floor(b), 0, THEMES.length - 1);
@@ -1919,6 +2056,7 @@ function SmashHit() {
         }
         w.cameraShake = Math.max(w.cameraShake, 0.32);
         w.bloomPunch = Math.max(w.bloomPunch, 0.28);
+        applyCameraImpulse(0, 0, -1, 0.018);
         const toneLift = comboIntensity(smashHitState.combo);
         playTone(720 + toneLift * 120 + Math.random() * 40, 0.12, 'sine', 0.08);
       } else if (type === EVT.PENALTY_HIT) {
@@ -1939,6 +2077,10 @@ function SmashHit() {
         w.cameraShake = Math.max(w.cameraShake, 0.45);
         w.bloomPunch = Math.max(w.bloomPunch, 0.18);
         w.flashAlpha = Math.max(w.flashAlpha, 0.2);
+        applyCameraImpulse(0, 0, 1, 0.034);
+        if (w.audioCtx) {
+          w.audioDuckUntil = Math.max(w.audioDuckUntil, w.audioCtx.currentTime + 0.18);
+        }
         playTone(120, 0.18, 'sawtooth', 0.07 + STONE_PHYSICS.friction * 0.035);
         if (smashHitState.ammo <= 0) {
           emitEvent(w.eventBus, EVT.GAME_OVER, 0, 0, 0);
@@ -1948,12 +2090,14 @@ function SmashHit() {
         w.cameraShake = Math.max(w.cameraShake, 0.7);
         w.bloomPunch = Math.max(w.bloomPunch, 0.44);
         w.flashAlpha = Math.max(w.flashAlpha, 0.34);
+        applyCameraImpulse(0, 0, 1, 0.05);
         playTone(78, 0.32, 'square', 0.1);
       } else if (type === EVT.ROOM_ADVANCE) {
         const roomIndex = Math.floor(a);
         smashHitState.setRoomIndex(roomIndex);
         const nextTheme = Math.floor(b);
         w.pendingTheme = nextTheme;
+        applyCameraImpulse(0, 0, -1, 0.014);
       } else if (type === EVT.BEAT) {
         if (w.pendingTheme >= 0 && w.pendingTheme !== w.themeTo) {
           w.themeFrom = w.themeTo;
@@ -2220,6 +2364,8 @@ function SmashHit() {
       shard.rot.y += shard.spin.y * step;
       shard.rot.z += shard.spin.z * step;
     }
+
+    enforceShardBudget();
 
     for (let i = 0; i < MAX_HIT_FX; i += 1) {
       const fx = w.hitFx[i];
@@ -2516,10 +2662,35 @@ function SmashHit() {
     const shakeY =
       (Math.cos(w.simTime * 39) + Math.sin(w.simTime * 21)) * 0.03 * shake;
 
-    camera.position.x = w.cameraX + shakeX;
-    camera.position.y = w.cameraY + shakeY;
-    camera.position.z = w.cameraZ;
+    // Directional spring impulse keeps camera punch short and physical.
+    w.tempVecA
+      .copy(w.cameraImpulseOffset)
+      .multiplyScalar(-CAMERA_IMPULSE_STIFFNESS);
+    w.cameraImpulseVelocity.addScaledVector(w.tempVecA, dtRender);
+    w.cameraImpulseVelocity.multiplyScalar(
+      Math.exp(-CAMERA_IMPULSE_DAMPING * dtRender)
+    );
+    w.cameraImpulseOffset.addScaledVector(w.cameraImpulseVelocity, dtRender);
+
+    camera.position.x = w.cameraX + shakeX + w.cameraImpulseOffset.x;
+    camera.position.y = w.cameraY + shakeY + w.cameraImpulseOffset.y;
+    camera.position.z = w.cameraZ + w.cameraImpulseOffset.z;
     camera.lookAt(0, 0, w.cameraZ - 13);
+
+    if (w.audioCtx && w.audioGain) {
+      const now = w.audioCtx.currentTime;
+      const combo = Math.max(0, smashHitState.combo);
+      const duckMul = now < w.audioDuckUntil ? 0.62 : 1;
+      const targetGain = w.audioBaseGain * duckMul;
+      w.audioGain.gain.setTargetAtTime(targetGain, now, 0.04);
+
+      if (w.audioFilter) {
+        const targetFrequency = 400 + Math.min(combo, 15) * 120;
+        const targetQ = 0.8 + comboIntensity(combo) * 2.1;
+        w.audioFilter.frequency.setTargetAtTime(targetFrequency, now, 0.07);
+        w.audioFilter.Q.setTargetAtTime(targetQ, now, 0.09);
+      }
+    }
 
     if (impactFlashRef.current) {
       impactFlashRef.current.visible = w.flashAlpha > 0.001;
@@ -2724,13 +2895,12 @@ function SmashHit() {
     const w = world.current;
     let barriers = 0;
     let projectiles = 0;
-    let shards = 0;
+    const shards = countActiveShards();
 
     for (let i = 0; i < MAX_BARRIERS; i += 1)
       if (w.barriers[i].active) barriers += 1;
     for (let i = 0; i < MAX_PROJECTILES; i += 1)
       if (w.projectiles[i].active) projectiles += 1;
-    for (let i = 0; i < MAX_SHARDS; i += 1) if (w.shards[i].active) shards += 1;
 
     return barriers * 15 + projectiles + shards;
   })();
@@ -2810,6 +2980,7 @@ function SmashHit() {
         ref={glassRef}
         args={[undefined, undefined, MAX_BLOCKS]}
         castShadow
+        frustumCulled={false}
       >
         <boxGeometry args={[BLOCK_SIZE, BLOCK_SIZE, BLOCK_THICKNESS]} />
         {tierCfg.transmission ? (
@@ -2847,12 +3018,17 @@ function SmashHit() {
         ref={stoneRef}
         args={[undefined, undefined, MAX_BLOCKS]}
         castShadow
+        frustumCulled={false}
       >
         <boxGeometry args={[BLOCK_SIZE, BLOCK_SIZE, BLOCK_THICKNESS]} />
         <meshStandardMaterial vertexColors roughness={0.82} metalness={0.08} />
       </instancedMesh>
 
-      <instancedMesh ref={crackRef} args={[undefined, undefined, MAX_BLOCKS]}>
+      <instancedMesh
+        ref={crackRef}
+        args={[undefined, undefined, MAX_BLOCKS]}
+        frustumCulled={false}
+      >
         <planeGeometry args={[BLOCK_SIZE * 0.88, BLOCK_SIZE * 0.88]} />
         <meshBasicMaterial
           vertexColors
@@ -2867,6 +3043,7 @@ function SmashHit() {
       <instancedMesh
         ref={crystalRef}
         args={[undefined, undefined, MAX_BARRIERS]}
+        frustumCulled={false}
       >
         <octahedronGeometry args={[0.24, 0]} />
         <meshStandardMaterial
@@ -2882,6 +3059,7 @@ function SmashHit() {
       <instancedMesh
         ref={shotsRef}
         args={[undefined, undefined, MAX_PROJECTILES]}
+        frustumCulled={false}
       >
         <sphereGeometry args={[SHOT_RADIUS, 12, 12]} />
         <meshStandardMaterial
@@ -2894,7 +3072,11 @@ function SmashHit() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={shardsRef} args={[undefined, undefined, MAX_SHARDS]}>
+      <instancedMesh
+        ref={shardsRef}
+        args={[undefined, undefined, MAX_SHARDS]}
+        frustumCulled={false}
+      >
         <boxGeometry args={[0.1, 0.08, 0.045]} />
         <meshStandardMaterial
           vertexColors
@@ -2906,7 +3088,11 @@ function SmashHit() {
         />
       </instancedMesh>
 
-      <instancedMesh ref={hitFxRef} args={[undefined, undefined, MAX_HIT_FX]}>
+      <instancedMesh
+        ref={hitFxRef}
+        args={[undefined, undefined, MAX_HIT_FX]}
+        frustumCulled={false}
+      >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
           vertexColors
@@ -2946,7 +3132,7 @@ function SmashHit() {
           />
           {tierCfg.chromatic && (
             <ChromaticAberration
-              offset={new THREE.Vector2(0.0007, 0.0012)}
+              offset={CHROMATIC_OFFSET}
               radialModulation
               modulationOffset={0.15}
             />
@@ -3074,6 +3260,10 @@ function SmashHit() {
             <div>Seed: {snap.seed}</div>
             <div>Room: {snap.roomIndex}</div>
             <div>Archetype: {world.current.currentRoomArchetype}</div>
+            <div>
+              Shards: {countActiveShards()} /{' '}
+              {getAdaptiveShardBudget(world.current.smoothedFps)}
+            </div>
             <div>Bodies (est): {activeBodiesEstimate}</div>
             <div>Draw Calls: {gl.info.render.calls}</div>
             <div>Theme: {THEMES[world.current.themeTo].name}</div>
