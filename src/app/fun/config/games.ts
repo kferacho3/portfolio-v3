@@ -82,7 +82,8 @@ export const GAME_CARDS: GameCard[] = [
   {
     id: 'rollette',
     title: 'Rollette',
-    description: 'Steer the ball, collect rings, and avoid the red cones.',
+    description:
+      'Pinball Ultimate: control the ball directly, hit symmetric targets, clear drop banks, and trigger jackpots/wizard mode.',
     accent: '#fda4af',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Rollette.png',
