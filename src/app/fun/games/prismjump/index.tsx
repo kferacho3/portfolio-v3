@@ -31,6 +31,7 @@ const PLAYER_START_Y = GAME.platformY + PLATFORM_HALF_Y + PLAYER_HALF + 0.04;
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const WHITE = new THREE.Color('#ffffff');
 
 const wrapX = (x: number, halfWidth: number) => {
   const span = halfWidth * 2;
@@ -48,6 +49,12 @@ const hash = (seed: number, row: number) => {
   x = Math.imul(x, 0xc2b2ae35) >>> 0;
   x ^= x >>> 16;
   return x >>> 0;
+};
+
+const brightenHex = (hex: string, amount: number) => {
+  const c = new THREE.Color(hex);
+  c.lerp(WHITE, clamp(amount, 0, 1));
+  return `#${c.getHexString()}`;
 };
 
 const rngFrom = (seed: number) => {
@@ -139,7 +146,10 @@ const configureRow = (
   );
   row.offset = rand() * span;
   row.span = dynamicSpan;
-  row.color = rowColors[Math.floor(rand() * rowColors.length)] ?? rowColors[0];
+  const baseRowColor =
+    rowColors[Math.floor(rand() * rowColors.length)] ?? rowColors[0];
+  // Keep lanes readable against fog and water.
+  row.color = brightenHex(baseRowColor, 0.28);
   const activeSlots: number[] = [];
 
   for (let i = 0; i < GAME.platformsPerRow; i += 1) {
@@ -696,16 +706,11 @@ export default function PrismJump() {
           <instancedMesh
             ref={platformMeshRef}
             args={[undefined, undefined, TOTAL_PLATFORMS]}
-            castShadow
-            receiveShadow
           >
             <boxGeometry args={GAME.platformSize} />
-            <meshStandardMaterial
-              roughness={0.24}
-              metalness={0.1}
-              emissive="#111111"
-              emissiveIntensity={0.22}
+            <meshBasicMaterial
               vertexColors
+              toneMapped={false}
             />
           </instancedMesh>
         </InstancedRigidBodies>

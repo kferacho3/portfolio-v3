@@ -9,6 +9,7 @@ export type LanePlatform = {
   active: boolean;
   hasCube: boolean;
   cubeTaken: boolean;
+  color: string;
 };
 
 export type LaneRow = {
