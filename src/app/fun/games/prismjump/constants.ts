@@ -8,7 +8,7 @@ export const STORAGE_KEYS = {
 };
 
 export const GAME = {
-  rowSpacing: 3.9,
+  rowSpacing: 3.05,
   rowPoolSize: 26,
   rowsBehindPlayer: 7,
 
@@ -18,9 +18,10 @@ export const GAME = {
   wrapHalfX: 11.4,
   platformJitterX: 1.25,
   platformScaleXMin: 0.78,
-  platformScaleXMax: 1.34,
+  platformScaleXMax: 1.52,
   platformScaleZMin: 0.72,
   platformScaleZMax: 1.22,
+  gapWeightPower: 2.6,
 
   cubeSize: 0.45,
   cubeHeightOffset: 0.86,

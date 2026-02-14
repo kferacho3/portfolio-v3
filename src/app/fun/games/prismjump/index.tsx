@@ -62,6 +62,9 @@ const seeded01 = (index: number, salt: number) => {
   return x - Math.floor(x);
 };
 
+const scaleXForBodyIndex = (bodyIndex: number) =>
+  lerp(GAME.platformScaleXMin, GAME.platformScaleXMax, seeded01(bodyIndex, 1.7));
+
 const rngFrom = (seed: number) => {
   let a = seed >>> 0;
   return () => {
@@ -163,8 +166,7 @@ const configureRow = (
 
   for (let i = 0; i < GAME.platformsPerRow; i += 1) {
     const p = row.platforms[i];
-    const offset = (rand() - 0.5) * GAME.platformJitterX * jitter;
-    p.baseX = left + spacing * (i + 0.5) + offset;
+    p.baseX = left + spacing * (i + 0.5);
     p.x = p.baseX;
     p.z = logicalIndex * GAME.rowSpacing;
     p.active = rand() < spawnChance;
@@ -191,6 +193,36 @@ const configureRow = (
       activeSlots.push(idx);
     }
     if (activeSlots.length >= GAME.platformsPerRow) break;
+  }
+
+  // Random no-overlap layout: variable close/far gaps with guaranteed packing.
+  const packed = activeSlots
+    .map((slotIndex) => {
+      const bodyIndex = row.slot * GAME.platformsPerRow + slotIndex;
+      const halfWidth =
+        (GAME.platformSize[0] * scaleXForBodyIndex(bodyIndex)) * 0.5;
+      return { slotIndex, halfWidth };
+    })
+    .sort((a, b) => a.halfWidth - b.halfWidth);
+
+  if (packed.length > 0) {
+    const widths = packed.reduce((sum, item) => sum + item.halfWidth * 2, 0);
+    const gapCount = packed.length + 1;
+    const free = Math.max(0.12, dynamicSpan - widths);
+    const weights = Array.from({ length: gapCount }, () =>
+      Math.pow(0.08 + rand(), GAME.gapWeightPower)
+    );
+    const weightSum = weights.reduce((sum, w) => sum + w, 0) || 1;
+    const gaps = weights.map((w) => (w / weightSum) * free);
+
+    let cursor = left + gaps[0];
+    for (let i = 0; i < packed.length; i += 1) {
+      const item = packed[i];
+      const center = cursor + item.halfWidth;
+      const platform = row.platforms[item.slotIndex];
+      platform.baseX = center;
+      cursor = center + item.halfWidth + gaps[i + 1];
+    }
   }
 };
 
@@ -738,12 +770,7 @@ export default function PrismJump() {
             args={[undefined, undefined, TOTAL_PLATFORMS]}
           >
             <boxGeometry args={GAME.platformSize} />
-            <meshStandardMaterial
-              color="#ffffff"
-              roughness={0.35}
-              metalness={0.06}
-              emissive="#0d1324"
-              emissiveIntensity={0.28}
+            <meshBasicMaterial
               vertexColors
               toneMapped={false}
             />
