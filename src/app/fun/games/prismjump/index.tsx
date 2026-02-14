@@ -60,6 +60,8 @@ const darkenHex = (hex: string, amount: number) => {
 const rowLogicalZ = (rowIndex: number) => rowIndex * GAME.rowSpacing;
 const rowWorldZ = (rowIndex: number, scrollZ: number) =>
   rowLogicalZ(rowIndex) - scrollZ;
+const rowDirection = (rowIndex: number): 1 | -1 =>
+  rowIndex % 2 === 0 ? 1 : -1;
 
 const hashRowSeed = (seed: number, rowIndex: number) => {
   let x = (seed ^ Math.imul(rowIndex + 1, 0x9e3779b1)) >>> 0;
@@ -90,26 +92,17 @@ function buildRunTopColors(seed: number, paletteIndex: number) {
     PRISM_PALETTES[paletteIndex % PRISM_PALETTES.length] ??
     PRISM_PALETTES[0];
   const rng = new SeededRandom((seed ^ 0x6a09e667) >>> 0);
-  const altIndex =
-    PRISM_PALETTES.length <= 1
-      ? 0
-      : (paletteIndex + 1 + rng.int(0, PRISM_PALETTES.length - 2)) %
-        PRISM_PALETTES.length;
-  const alt = PRISM_PALETTES[altIndex] ?? base;
-  const unique = Array.from(
-    new Set([...base.platformTopColors, ...alt.platformTopColors])
-  );
-  for (let i = unique.length - 1; i > 0; i -= 1) {
+  const colors =
+    base.platformTopColors.length > 0
+      ? [...base.platformTopColors]
+      : ['#2AF6FF', '#FF4D8B', '#8B7BFF', '#45B3FF', '#FFD166'];
+  for (let i = colors.length - 1; i > 0; i -= 1) {
     const j = rng.int(0, i);
-    const temp = unique[i];
-    unique[i] = unique[j];
-    unique[j] = temp;
+    const temp = colors[i];
+    colors[i] = colors[j];
+    colors[j] = temp;
   }
-  if (unique.length === 0) {
-    return ['#2AF6FF', '#FF4D8B', '#8B7BFF', '#45B3FF', '#FFD166'];
-  }
-  const target = Math.min(unique.length, 8);
-  return unique.slice(0, target);
+  return colors;
 }
 
 function makeRow(
@@ -391,7 +384,6 @@ export default function PrismJump() {
     scrollZ: 0,
     scrollSpeed: GAME.baseScrollSpeed,
     lateralTravel: 0,
-    rowFlowDir: 1 as 1 | -1,
 
     mode: 'grounded' as PlayerMode,
     rowIndex: 0,
@@ -426,14 +418,14 @@ export default function PrismJump() {
   }, []);
 
   const updateDynamicRows = useCallback(
-    (lateralTravel: number, scrollZ: number, flowDir: 1 | -1) => {
+    (lateralTravel: number, scrollZ: number) => {
       const w = world.current;
       const maxRowIndex = w.baseRowIndex + GAME.visibleRows - 1;
       for (let ri = w.baseRowIndex; ri <= maxRowIndex; ri += 1) {
         const row = getRow(ri);
         if (!row) continue;
 
-        row.dir = flowDir;
+        row.dir = rowDirection(row.rowIndex);
         const z = rowWorldZ(row.rowIndex, scrollZ);
         for (let i = 0; i < row.platforms.length; i += 1) {
           const p = row.platforms[i];
@@ -497,7 +489,6 @@ export default function PrismJump() {
       w.scrollZ = 0;
       w.scrollSpeed = GAME.baseScrollSpeed;
       w.lateralTravel = 0;
-      w.rowFlowDir = (seed & 1) === 0 ? 1 : -1;
 
       w.mode = 'grounded';
       w.rowIndex = 0;
@@ -511,7 +502,7 @@ export default function PrismJump() {
       w.minimapTimer = 0;
       w.moveInputX = 0;
 
-      updateDynamicRows(0, 0, w.rowFlowDir);
+      updateDynamicRows(0, 0);
 
       const row0 = getRow(0);
       let safeSlot = 0;
@@ -561,7 +552,6 @@ export default function PrismJump() {
     if (w.jumpQueuedMs <= 0) return;
 
     w.jumpQueuedMs = 0;
-    w.rowFlowDir = (w.rowFlowDir === 1 ? -1 : 1) as 1 | -1;
     w.mode = 'air';
     w.vel.set(0, GAME.jumpImpulseY, GAME.jumpImpulseZ);
   };
@@ -681,11 +671,11 @@ export default function PrismJump() {
       GAME.baseScrollSpeed,
       GAME.maxScrollSpeed
     );
-    w.lateralTravel += w.rowFlowDir * w.speed * d;
+    w.lateralTravel += w.speed * d;
     w.scrollZ += w.scrollSpeed * d;
 
     recycleRowsIfNeeded();
-    updateDynamicRows(w.lateralTravel, w.scrollZ, w.rowFlowDir);
+    updateDynamicRows(w.lateralTravel, w.scrollZ);
 
     if (w.mode === 'grounded') {
       const row = getRow(w.rowIndex);
@@ -1032,13 +1022,9 @@ export default function PrismJump() {
           args={[undefined, undefined, instanceCount]}
         >
           <boxGeometry args={[1, 1, 1]} />
-          <meshStandardMaterial
+          <meshBasicMaterial
             vertexColors
-            color="#b7c2d4"
-            roughness={0.24}
-            metalness={0.08}
-            emissive="#090b14"
-            emissiveIntensity={0.1}
+            toneMapped={false}
           />
         </instancedMesh>
 
