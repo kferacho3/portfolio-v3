@@ -34,8 +34,6 @@ export type RowData = {
   rowIndex: number;
   dir: 1 | -1;
   speedMul: number;
-  phase: number;
-  sway: number;
   platforms: PlatformData[];
 };
 

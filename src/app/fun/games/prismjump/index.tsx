@@ -28,6 +28,13 @@ type PopupRender = {
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const wrapX = (x: number, wrapWidth: number) => {
+  let out = x;
+  const span = wrapWidth * 2;
+  while (out > wrapWidth) out -= span;
+  while (out < -wrapWidth) out += span;
+  return out;
+};
 
 const darkenHex = (hex: string, amount: number) => {
   const normalized = hex.startsWith('#') ? hex.slice(1) : hex;
@@ -50,8 +57,6 @@ const darkenHex = (hex: string, amount: number) => {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
-const rowDirection = (rowIndex: number): 1 | -1 =>
-  rowIndex % 2 === 0 ? 1 : -1;
 const rowLogicalZ = (rowIndex: number) => rowIndex * GAME.rowSpacing;
 const rowWorldZ = (rowIndex: number, scrollZ: number) =>
   rowLogicalZ(rowIndex) - scrollZ;
@@ -79,28 +84,60 @@ const pickPaletteIndex = (seed: number, prevIndex: number) => {
   return next;
 };
 
-function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData {
+function buildRunTopColors(seed: number, paletteIndex: number) {
+  const base =
+    PRISM_PALETTES[paletteIndex] ??
+    PRISM_PALETTES[paletteIndex % PRISM_PALETTES.length] ??
+    PRISM_PALETTES[0];
+  const rng = new SeededRandom((seed ^ 0x6a09e667) >>> 0);
+  const altIndex =
+    PRISM_PALETTES.length <= 1
+      ? 0
+      : (paletteIndex + 1 + rng.int(0, PRISM_PALETTES.length - 2)) %
+        PRISM_PALETTES.length;
+  const alt = PRISM_PALETTES[altIndex] ?? base;
+  const unique = Array.from(
+    new Set([...base.platformTopColors, ...alt.platformTopColors])
+  );
+  for (let i = unique.length - 1; i > 0; i -= 1) {
+    const j = rng.int(0, i);
+    const temp = unique[i];
+    unique[i] = unique[j];
+    unique[j] = temp;
+  }
+  if (unique.length === 0) {
+    return ['#2AF6FF', '#FF4D8B', '#8B7BFF', '#45B3FF', '#FFD166'];
+  }
+  const target = Math.min(unique.length, 8);
+  return unique.slice(0, target);
+}
+
+function makeRow(
+  seed: number,
+  rowIndex: number,
+  paletteIndex: number,
+  runTopColors: string[]
+): RowData {
   const rng = new SeededRandom(hashRowSeed(seed, rowIndex));
   const difficulty = difficultyFromRow(rowIndex);
   const palette =
     PRISM_PALETTES[paletteIndex] ??
     PRISM_PALETTES[paletteIndex % PRISM_PALETTES.length] ??
     PRISM_PALETTES[0];
-  const topColors = palette.platformTopColors;
+  const topColors =
+    runTopColors.length > 0 ? runTopColors : palette.platformTopColors;
 
-  const dir = rowDirection(rowIndex);
+  const dir = 1 as 1 | -1;
   const speedMul = rng.float(
     1 - GAME.rowSpeedVariance,
     1 + GAME.rowSpeedVariance
   );
-  const phase = rng.float(0, Math.PI * 2);
-  const sway = rng.float(0.8, 1.22);
 
   const minLen = lerp(GAME.platformLengthNearMin, GAME.platformLengthFarMin, difficulty);
   const maxLen = lerp(GAME.platformLengthNearMax, GAME.platformLengthFarMax, difficulty);
   const minGap = lerp(GAME.gapNearMin, GAME.gapFarMin, difficulty);
   const maxGap = lerp(GAME.gapNearMax, GAME.gapFarMax, difficulty);
-  const colorOffset = rng.int(0, topColors.length - 1);
+  let lastColorIndex = -1;
 
   let targetCount = Math.round(
     lerp(GAME.maxPlatformsPerRow, GAME.minPlatformsPerRow + 1, difficulty) +
@@ -139,7 +176,12 @@ function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData 
       const baseOffsetX = cursor + length * 0.5;
       const cubeChance = clamp(GAME.coinChance - difficulty * 0.08, 0.12, 0.26);
       const cubeValue = rng.bool(cubeChance) ? 1 : 0;
-      const color = topColors[(rowIndex + i + colorOffset) % topColors.length];
+      let colorIndex = rng.int(0, topColors.length - 1);
+      if (topColors.length > 1 && colorIndex === lastColorIndex) {
+        colorIndex = (colorIndex + 1 + rng.int(0, topColors.length - 2)) % topColors.length;
+      }
+      lastColorIndex = colorIndex;
+      const color = topColors[colorIndex];
       normals.push({
         x: baseOffsetX,
         z: rowLogicalZ(rowIndex),
@@ -177,7 +219,12 @@ function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData 
     let cursor = leftBound;
     for (let i = 0; i < fallbackCount; i += 1) {
       const baseOffsetX = cursor + fallbackLen * 0.5;
-      const color = topColors[(rowIndex + i + colorOffset) % topColors.length];
+      let colorIndex = rng.int(0, topColors.length - 1);
+      if (topColors.length > 1 && colorIndex === lastColorIndex) {
+        colorIndex = (colorIndex + 1 + rng.int(0, topColors.length - 2)) % topColors.length;
+      }
+      lastColorIndex = colorIndex;
+      const color = topColors[colorIndex];
       normals.push({
         x: baseOffsetX,
         z: rowLogicalZ(rowIndex),
@@ -195,6 +242,7 @@ function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData 
 
   const platforms: PlatformData[] = [...normals];
   while (platforms.length < GAME.platformsPerRow) {
+    const color = topColors[rng.int(0, topColors.length - 1)];
     platforms.push({
       x: 0,
       z: rowLogicalZ(rowIndex),
@@ -203,8 +251,8 @@ function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData 
       depth: GAME.platformDepth,
       type: 'danger',
       cubeValue: 0,
-      color: topColors[platforms.length % topColors.length],
-      baseColor: darkenHex(topColors[platforms.length % topColors.length], 0.55),
+      color,
+      baseColor: darkenHex(color, 0.55),
     });
   }
 
@@ -212,30 +260,22 @@ function makeRow(seed: number, rowIndex: number, paletteIndex: number): RowData 
     rowIndex,
     dir,
     speedMul,
-    phase,
-    sway,
     platforms,
   };
 }
 
-const buildRows = (seed: number, paletteIndex: number) =>
-  Array.from({ length: GAME.visibleRows }, (_, i) => makeRow(seed, i, paletteIndex));
+const buildRows = (seed: number, paletteIndex: number, runTopColors: string[]) =>
+  Array.from({ length: GAME.visibleRows }, (_, i) =>
+    makeRow(seed, i, paletteIndex, runTopColors)
+  );
 
 function computePlatformX(
   platform: PlatformData,
   row: RowData,
-  elapsed: number,
-  speed: number
+  lateralTravel: number
 ) {
-  const t = elapsed * speed * row.speedMul;
-  const primary = Math.sin(t + row.phase) * GAME.rowSwayAmplitude * row.sway;
-  const secondary =
-    Math.sin(t * 0.53 + row.phase * 0.77) * GAME.rowSwaySecondary;
-  return clamp(
-    platform.baseOffsetX + (primary + secondary) * row.dir,
-    -GAME.xWrap,
-    GAME.xWrap
-  );
+  const travel = lateralTravel * row.speedMul;
+  return wrapX(platform.baseOffsetX + travel, GAME.xWrap);
 }
 
 function findLandingPlatform(
@@ -293,13 +333,16 @@ export default function PrismJump() {
   const world = useRef({
     seed: 1,
     paletteIndex: 0,
-    rows: buildRows(1, 0) as RowData[],
+    runTopColors: PRISM_PALETTES[0]?.platformTopColors ?? ['#45B3FF'],
+    rows: buildRows(1, 0, PRISM_PALETTES[0]?.platformTopColors ?? ['#45B3FF']) as RowData[],
     baseRowIndex: 0,
 
     elapsed: 0,
     speed: GAME.baseSpeed,
     scrollZ: 0,
     scrollSpeed: GAME.baseScrollSpeed,
+    lateralTravel: 0,
+    rowFlowDir: 1 as 1 | -1,
 
     mode: 'grounded' as PlayerMode,
     rowIndex: 0,
@@ -334,23 +377,19 @@ export default function PrismJump() {
   }, []);
 
   const updateDynamicRows = useCallback(
-    (elapsed: number, speed: number, scrollZ: number) => {
+    (lateralTravel: number, scrollZ: number, flowDir: 1 | -1) => {
       const w = world.current;
       const maxRowIndex = w.baseRowIndex + GAME.visibleRows - 1;
       for (let ri = w.baseRowIndex; ri <= maxRowIndex; ri += 1) {
         const row = getRow(ri);
         if (!row) continue;
 
-        row.dir = rowDirection(row.rowIndex);
-        const prev = getRow(ri - 1);
-        if (prev && prev.dir === row.dir) {
-          row.dir = (prev.dir === 1 ? -1 : 1) as 1 | -1;
-        }
+        row.dir = flowDir;
         const z = rowWorldZ(row.rowIndex, scrollZ);
         for (let i = 0; i < row.platforms.length; i += 1) {
           const p = row.platforms[i];
           p.z = z;
-          p.x = computePlatformX(p, row, elapsed, speed);
+          p.x = computePlatformX(p, row, lateralTravel);
         }
       }
     },
@@ -370,7 +409,12 @@ export default function PrismJump() {
       const recycleSlot = w.baseRowIndex % GAME.visibleRows;
       w.baseRowIndex += 1;
       const newRowIndex = w.baseRowIndex + GAME.visibleRows - 1;
-      w.rows[recycleSlot] = makeRow(w.seed, newRowIndex, w.paletteIndex);
+      w.rows[recycleSlot] = makeRow(
+        w.seed,
+        newRowIndex,
+        w.paletteIndex,
+        w.runTopColors
+      );
     }
   }, []);
 
@@ -394,14 +438,17 @@ export default function PrismJump() {
       const nextPaletteIndex = pickPaletteIndex(seed, w.paletteIndex);
       w.seed = seed;
       w.paletteIndex = nextPaletteIndex;
+      w.runTopColors = buildRunTopColors(seed, nextPaletteIndex);
       setPaletteIndex(nextPaletteIndex);
       w.baseRowIndex = 0;
-      w.rows = buildRows(seed, nextPaletteIndex);
+      w.rows = buildRows(seed, nextPaletteIndex, w.runTopColors);
 
       w.elapsed = 0;
       w.speed = GAME.baseSpeed;
       w.scrollZ = 0;
       w.scrollSpeed = GAME.baseScrollSpeed;
+      w.lateralTravel = 0;
+      w.rowFlowDir = (seed & 1) === 0 ? 1 : -1;
 
       w.mode = 'grounded';
       w.rowIndex = 0;
@@ -415,7 +462,7 @@ export default function PrismJump() {
       w.minimapTimer = 0;
       w.moveInputX = 0;
 
-      updateDynamicRows(0, GAME.baseSpeed, 0);
+      updateDynamicRows(0, 0, w.rowFlowDir);
 
       const row0 = getRow(0);
       let safeSlot = 0;
@@ -465,6 +512,7 @@ export default function PrismJump() {
     if (w.jumpQueuedMs <= 0) return;
 
     w.jumpQueuedMs = 0;
+    w.rowFlowDir = (w.rowFlowDir === 1 ? -1 : 1) as 1 | -1;
     w.mode = 'air';
     w.vel.set(0, GAME.jumpImpulseY, GAME.jumpImpulseZ);
   };
@@ -578,10 +626,11 @@ export default function PrismJump() {
       GAME.baseScrollSpeed,
       GAME.maxScrollSpeed
     );
+    w.lateralTravel += w.rowFlowDir * w.speed * d;
     w.scrollZ += w.scrollSpeed * d;
 
     recycleRowsIfNeeded();
-    updateDynamicRows(w.elapsed, w.speed, w.scrollZ);
+    updateDynamicRows(w.lateralTravel, w.scrollZ, w.rowFlowDir);
 
     if (w.mode === 'grounded') {
       const row = getRow(w.rowIndex);
@@ -927,11 +976,11 @@ export default function PrismJump() {
           <boxGeometry args={[1, 1, 1]} />
           <meshStandardMaterial
             vertexColors
-            roughness={0.34}
-            metalness={0.12}
-            emissive={palette.keyLight}
-            emissiveIntensity={0.34}
-            toneMapped={false}
+            color="#b7c2d4"
+            roughness={0.24}
+            metalness={0.08}
+            emissive="#090b14"
+            emissiveIntensity={0.1}
           />
         </instancedMesh>
 
