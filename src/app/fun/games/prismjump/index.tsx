@@ -289,6 +289,7 @@ type Runtime = {
   maxLogicalIndex: number;
   elapsed: number;
   laneTime: number;
+  chaseZ: number;
   runSeconds: number;
   camZ: number;
   jumpBufferMs: number;
@@ -296,6 +297,7 @@ type Runtime = {
   jumpAssistActive: boolean;
   jumpAssistTimer: number;
   jumpTargetX: number;
+  jumpTargetZ: number;
   needsSpawn: boolean;
   spawnX: number;
   spawnZ: number;
@@ -348,6 +350,7 @@ export default function PrismJump() {
     maxLogicalIndex: GAME.rowPoolSize - 1,
     elapsed: 0,
     laneTime: 0,
+    chaseZ: -GAME.rowSpacing * 2.2,
     runSeconds: 0,
     camZ: GAME.cameraZOffset,
     jumpBufferMs: 0,
@@ -355,6 +358,7 @@ export default function PrismJump() {
     jumpAssistActive: false,
     jumpAssistTimer: 0,
     jumpTargetX: 0,
+    jumpTargetZ: 0,
     needsSpawn: false,
     spawnX: 0,
     spawnZ: 0,
@@ -403,6 +407,7 @@ export default function PrismJump() {
     w.paletteIndex = nextPaletteIndex;
     w.elapsed = 0;
     w.laneTime = 0;
+    w.chaseZ = -GAME.rowSpacing * 2.2;
     w.runSeconds = 0;
     w.maxLogicalIndex = GAME.rowPoolSize - 1;
     w.jumpBufferMs = 0;
@@ -410,6 +415,7 @@ export default function PrismJump() {
     w.jumpAssistActive = false;
     w.jumpAssistTimer = 0;
     w.jumpTargetX = 0;
+    w.jumpTargetZ = 0;
     w.camZ = GAME.cameraZOffset;
     w.needsSpawn = true;
 
@@ -437,6 +443,7 @@ export default function PrismJump() {
     const startPlatform = row0.platforms[bestPlatformIndex];
     w.spawnX = rowPlatformX(row0, startPlatform.baseX, 0);
     w.spawnZ = 0;
+    w.chaseZ = w.spawnZ - GAME.rowSpacing * 2.2;
 
     prismJumpState.score = 0;
     prismJumpState.furthestRowIndex = 0;
@@ -537,7 +544,9 @@ export default function PrismJump() {
     w.elapsed += d;
     w.runSeconds += d;
     const speedScale = speedScaleFromScore(prismJumpState.score);
+    const baseForwardSpeed = GAME.rowSpacing / GAME.jumpDuration;
     w.laneTime += d * speedScale;
+    w.chaseZ += d * baseForwardSpeed * speedScale * GAME.cameraChaseFactor;
     w.jumpBufferMs = Math.max(0, w.jumpBufferMs - d * 1000);
     w.coyoteMs = Math.max(0, w.coyoteMs - d * 1000);
     if (wantsJump) w.jumpBufferMs = GAME.jumpBufferMs;
@@ -583,7 +592,6 @@ export default function PrismJump() {
       const jumpTime = GAME.jumpDuration;
       const gAbs = Math.abs(GAME.gravity[1]);
       const vy0 = (gAbs * jumpTime) / 2;
-      const vz = GAME.rowSpacing / jumpTime;
       const now = player.translation();
       const currentRowIndex = Math.max(
         0,
@@ -600,21 +608,24 @@ export default function PrismJump() {
       const targetX = targetRow
         ? ensureLandingPlatform(targetRow, aimX, laneTimeAtLanding)
         : now.x;
+      const targetZ = nextRowIndex * GAME.rowSpacing;
       const vx = clamp(
         (targetX - now.x) / jumpTime,
         -GAME.jumpMaxLateralSpeed,
         GAME.jumpMaxLateralSpeed
       );
+      const vzToTarget = (targetZ - now.z) / jumpTime;
 
       const vel = player.linvel();
       const mass = player.mass();
       const deltaVy = vy0 - vel.y;
       player.applyImpulse({ x: 0, y: deltaVy * mass, z: 0 }, true);
-      player.setLinvel({ x: vx, y: vy0, z: vz }, true);
+      player.setLinvel({ x: vx, y: vy0, z: vzToTarget }, true);
 
       w.jumpAssistActive = true;
       w.jumpAssistTimer = jumpTime;
       w.jumpTargetX = targetX;
+      w.jumpTargetZ = targetZ;
       w.jumpBufferMs = 0;
       w.coyoteMs = 0;
       groundContactsRef.current = 0;
@@ -629,16 +640,16 @@ export default function PrismJump() {
         -GAME.jumpMaxLateralSpeed,
         GAME.jumpMaxLateralSpeed
       );
-      const jumpVz = GAME.rowSpacing / GAME.jumpDuration;
+      const guidedVz = (w.jumpTargetZ - pos.z) / remain;
       const vel = player.linvel();
-      player.setLinvel({ x: guidedVx, y: vel.y, z: jumpVz }, true);
+      player.setLinvel({ x: guidedVx, y: vel.y, z: guidedVz }, true);
       if (
         w.jumpAssistTimer <= 0 ||
-        (groundContactsRef.current > 0 &&
-          w.jumpAssistTimer < GAME.jumpDuration * 0.5)
+        (groundContactsRef.current > 0 && Math.abs(pos.z - w.jumpTargetZ) <= 0.14)
       ) {
         w.jumpAssistActive = false;
         w.jumpAssistTimer = 0;
+        w.jumpTargetZ = pos.z;
       }
     }
 
@@ -732,7 +743,9 @@ export default function PrismJump() {
       endRun();
     }
 
-    const camTargetZ = now.z + GAME.cameraZOffset + 0.24;
+    const playerCamTargetZ = now.z + GAME.cameraZOffset + 0.24;
+    const chaseCamTargetZ = w.chaseZ + GAME.cameraZOffset + 0.24;
+    const camTargetZ = Math.max(playerCamTargetZ, chaseCamTargetZ);
     w.camZ = THREE.MathUtils.lerp(
       w.camZ,
       camTargetZ,
@@ -743,6 +756,10 @@ export default function PrismJump() {
     camera.position.lerp(w.tempA, 1 - Math.exp(-d * 10));
     w.tempB.set(now.x * 0.35, GAME.platformY, now.z + GAME.cameraLookAhead);
     camera.lookAt(w.tempB);
+
+    if (now.z <= w.chaseZ + GAME.cameraCatchUpLoseMargin) {
+      endRun();
+    }
 
     clearFrameInput(inputRef);
   });

@@ -74,6 +74,8 @@ export const GAME = {
   cameraLookAhead: 6.2,
   cameraZOffset: -9.8,
   cameraDamping: 0.12,
+  cameraChaseFactor: 0.78,
+  cameraCatchUpLoseMargin: 0.72,
 };
 
 export const CUBE_PALETTES: CubePalette[] = [
