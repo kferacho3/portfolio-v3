@@ -109,6 +109,7 @@ type Runtime = {
   trailHead: number;
   nextOrbitDirection: number;
   lastTapAt: number;
+  lastAssistAt: number;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -174,7 +175,8 @@ const TRAIL_POINTS = 54;
 
 const SCATTERED_TIME_LIMIT = 80;
 const CLASSIC_MIN_FORWARD_TARGETS = 4;
-const SCATTERED_MIN_FORWARD_TARGETS = 8;
+const SCATTERED_MIN_FORWARD_TARGETS = 6;
+const ASSIST_REPOSITION_COOLDOWN = 0.42;
 
 const FIELD_HALF_X = 4.2;
 const SAFE_FALL_BACK = 10.5;
@@ -186,26 +188,26 @@ const PLAYER_RADIUS = 0.12;
 const RELATCH_LOOKAHEAD_BASE = 0.12;
 
 const STAR_COLORS = [
-  new THREE.Color('#22d3ee'),
-  new THREE.Color('#ff44eb'),
-  new THREE.Color('#f59e0b'),
-  new THREE.Color('#a78bfa'),
-  new THREE.Color('#34d399'),
-  new THREE.Color('#fb7185'),
+  new THREE.Color('#7df9ff'),
+  new THREE.Color('#ff9ae5'),
+  new THREE.Color('#ffd27d'),
+  new THREE.Color('#b8a9ff'),
+  new THREE.Color('#9dffd8'),
+  new THREE.Color('#ffb0c0'),
 ] as const;
 const PLANET_COLORS = [
-  new THREE.Color('#00ffff'),
-  new THREE.Color('#ff00ff'),
-  new THREE.Color('#6c5ce7'),
-  new THREE.Color('#f39c12'),
-  new THREE.Color('#34d399'),
-  new THREE.Color('#f43f5e'),
+  new THREE.Color('#76f2ff'),
+  new THREE.Color('#91cbff'),
+  new THREE.Color('#bea8ff'),
+  new THREE.Color('#ff93e2'),
+  new THREE.Color('#95ffd6'),
+  new THREE.Color('#ffe5a4'),
 ] as const;
 const HAZARD_COLORS = [
-  new THREE.Color('#ff4d74'),
-  new THREE.Color('#fb7185'),
-  new THREE.Color('#f97316'),
-  new THREE.Color('#f43f5e'),
+  new THREE.Color('#ff6c8f'),
+  new THREE.Color('#ff8aa7'),
+  new THREE.Color('#ff9f66'),
+  new THREE.Color('#ff5f86'),
 ] as const;
 const WHITE = new THREE.Color('#fdffff');
 const DANGER = new THREE.Color('#ff4d74');
@@ -357,6 +359,7 @@ const createRuntime = (): Runtime => ({
   trailHead: 0,
   nextOrbitDirection: 1,
   lastTapAt: -99,
+  lastAssistAt: -99,
 
   difficulty: sampleDifficulty('orbit-chain', 0),
   chunkLibrary: buildPatternLibraryTemplate('orbitlatch'),
@@ -611,10 +614,11 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
   } else if (runtime.mode === 'scattered') {
     if (runtime.scatterBandCursor <= 0) {
       runtime.spawnCursorY += nextSpacing(runtime, tier);
-      runtime.scatterBandSize = 3 + (Math.random() < 0.45 ? 1 : 0);
+      runtime.scatterBandSize = 2 + (Math.random() < 0.38 ? 1 : 0);
       runtime.scatterBandCursor = runtime.scatterBandSize;
     }
     const bandIndex = runtime.scatterBandSize - runtime.scatterBandCursor;
+    const bandStep = lerp(0.54, 0.38, d);
     const laneSpread = FIELD_HALF_X - 0.7;
     const laneT = runtime.scatterBandSize <= 1 ? 0.5 : bandIndex / (runtime.scatterBandSize - 1);
     nextX = clamp(
@@ -622,9 +626,15 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
       -FIELD_HALF_X + 0.62,
       FIELD_HALF_X - 0.62
     );
-    nextY = runtime.spawnCursorY + (Math.random() * 2 - 1) * (0.26 + tier * 0.02);
+    nextY =
+      runtime.spawnCursorY +
+      bandIndex * bandStep +
+      (Math.random() * 2 - 1) * (0.14 + tier * 0.015);
     runtime.scatterBandCursor -= 1;
-    if (runtime.scatterBandCursor <= 0) runtime.spawnCursorY += 0.22 + Math.random() * 0.28;
+    if (runtime.scatterBandCursor <= 0) {
+      runtime.spawnCursorY +=
+        runtime.scatterBandSize * bandStep + 0.32 + Math.random() * 0.28;
+    }
   } else {
     const spacing = nextSpacing(runtime, tier);
     nextY = runtime.spawnCursorY + spacing;
@@ -687,7 +697,7 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
     spawnHazardBetween(runtime, runtime.lastSpawnX, runtime.lastSpawnY, nextX, nextY, tier);
   }
 
-  runtime.spawnCursorY = nextY;
+  runtime.spawnCursorY = Math.max(runtime.spawnCursorY, nextY);
   runtime.lastSpawnX = nextX;
   runtime.lastSpawnY = nextY;
 };
@@ -713,8 +723,12 @@ const ensureForwardTargets = (runtime: Runtime) => {
   const minTargets = runtime.mode === 'scattered' ? SCATTERED_MIN_FORWARD_TARGETS : CLASSIC_MIN_FORWARD_TARGETS;
   let ahead = 0;
   let furthestY = runtime.playerY;
+  let furthestX = runtime.playerX;
   for (const planet of runtime.planets) {
-    furthestY = Math.max(furthestY, planet.y);
+    if (planet.y > furthestY) {
+      furthestY = planet.y;
+      furthestX = planet.x;
+    }
     if (planet.y > runtime.playerY + 0.45) ahead += 1;
   }
   if (ahead >= minTargets) return;
@@ -724,15 +738,27 @@ const ensureForwardTargets = (runtime: Runtime) => {
     .filter((planet) => planet.y <= runtime.playerY + 0.45 && (!runtime.latched || planet.slot !== runtime.latchedPlanet))
     .sort((a, b) => a.y - b.y);
   let anchorY = furthestY;
+  let anchorX = furthestX;
 
   for (const planet of recycle) {
     if (needed <= 0) break;
     runtime.spawnCursorY = Math.max(runtime.spawnCursorY, anchorY - 0.12);
     seedPlanet(runtime, planet, false);
-    if (planet.y <= anchorY + 0.36) {
-      planet.y = anchorY + 0.36 + Math.random() * 0.52;
+    const minYStep = runtime.mode === 'scattered' ? 0.56 : 0.86;
+    const yJitter = runtime.mode === 'scattered' ? 0.34 : 0.52;
+    if (planet.y <= anchorY + minYStep) {
+      planet.y = anchorY + minYStep + Math.random() * yJitter;
+    }
+    const minXStep = runtime.mode === 'scattered' ? 0.42 : 0.62;
+    if (Math.abs(planet.x - anchorX) < minXStep) {
+      planet.x = clamp(
+        planet.x + (Math.random() < 0.5 ? -1 : 1) * (minXStep + Math.random() * 0.35),
+        -FIELD_HALF_X + 0.62,
+        FIELD_HALF_X - 0.62
+      );
     }
     anchorY = planet.y;
+    anchorX = planet.x;
     needed -= 1;
   }
 };
@@ -763,8 +789,6 @@ const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) =
     .sort((a, b) => a.y - b.y)[0];
   if (!recycle) return;
 
-  recycle.x = clamp(predictX + (Math.random() * 2 - 1) * 0.48, -FIELD_HALF_X + 0.7, FIELD_HALF_X - 0.7);
-  recycle.y = Math.max(py + 1.35, predictY + 0.85 + Math.random() * 0.75);
   recycle.radius = clamp(
     recycle.radius + (Math.random() * 2 - 1) * 0.03,
     runtime.mode === 'scattered' ? 0.42 : 0.48,
@@ -780,6 +804,33 @@ const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) =
   recycle.colorIndex = Math.floor(Math.random() * PLANET_COLORS.length);
   recycle.glow = 0.45;
   recycle.pulse = Math.random() * Math.PI * 2;
+  let nextX = clamp(
+    predictX + (Math.random() * 2 - 1) * 0.48,
+    -FIELD_HALF_X + 0.7,
+    FIELD_HALF_X - 0.7
+  );
+  let nextY = Math.max(py + 1.35, predictY + 0.85 + Math.random() * 0.75);
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    let crowded = false;
+    for (const other of runtime.planets) {
+      if (other.slot === fromPlanet.slot || other.slot === recycle.slot) continue;
+      if (other.y < py - 1.2 || other.y > py + 7.4) continue;
+      const minDist = recycle.radius + other.radius * 0.55 + (runtime.mode === 'scattered' ? 0.52 : 0.66);
+      if (Math.hypot(nextX - other.x, nextY - other.y) < minDist) {
+        crowded = true;
+        break;
+      }
+    }
+    if (!crowded) break;
+    nextX = clamp(
+      nextX + (Math.random() < 0.5 ? -1 : 1) * (0.54 + Math.random() * 0.44),
+      -FIELD_HALF_X + 0.7,
+      FIELD_HALF_X - 0.7
+    );
+    nextY += 0.34 + Math.random() * 0.32;
+  }
+  recycle.x = nextX;
+  recycle.y = nextY;
   runtime.spawnCursorY = Math.max(runtime.spawnCursorY, recycle.y + 0.24);
   runtime.lastSpawnX = recycle.x;
   runtime.lastSpawnY = recycle.y;
@@ -979,6 +1030,7 @@ function OrbitLatchScene() {
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
+  const bgPlaneRef = useRef<THREE.Mesh>(null);
   const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const impactOverlayRef = useRef<HTMLDivElement>(null);
   const planetRef = useRef<THREE.InstancedMesh>(null);
@@ -1055,6 +1107,7 @@ function OrbitLatchScene() {
     runtime.trailHead = 0;
     runtime.nextOrbitDirection = 1;
     runtime.lastTapAt = -99;
+    runtime.lastAssistAt = -99;
 
     runtime.difficulty = sampleDifficulty('orbit-chain', 0);
     runtime.currentChunk = null;
@@ -1198,6 +1251,7 @@ function OrbitLatchScene() {
 
           if (runtime.releaseCount === 1) {
             ensureImmediateLatchOpportunity(runtime, planet);
+            runtime.lastAssistAt = runtime.elapsed;
           }
           runtime.latched = false;
           runtime.driftTimer = runtime.releaseCount === 1 ? -0.18 : 0;
@@ -1421,8 +1475,18 @@ function OrbitLatchScene() {
           runtime.velY = 0;
         }
 
-        if (runtime.releaseCount === 1 && runtime.latches === 0 && runtime.driftTimer > 0.35) {
-          ensureImmediateLatchOpportunity(runtime, runtime.planets.find((p) => p.slot === runtime.latchedPlanet) ?? runtime.planets[0]);
+        if (
+          runtime.releaseCount === 1 &&
+          runtime.latches === 0 &&
+          runtime.driftTimer > 0.35 &&
+          runtime.elapsed - runtime.lastAssistAt >= ASSIST_REPOSITION_COOLDOWN
+        ) {
+          ensureImmediateLatchOpportunity(
+            runtime,
+            runtime.planets.find((p) => p.slot === runtime.latchedPlanet) ??
+              runtime.planets[0]
+          );
+          runtime.lastAssistAt = runtime.elapsed;
         }
 
         if (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS)) {
@@ -1544,18 +1608,22 @@ function OrbitLatchScene() {
 
     const shakeAmp = runtime.shake * 0.09;
     const shakeTime = runtime.elapsed * 21;
-    const scatteredCamLift = runtime.mode === 'scattered' ? 0.95 : 0;
-    const scatteredCamPull = runtime.mode === 'scattered' ? 1.05 : 0;
+    const scatteredCamLift = runtime.mode === 'scattered' ? 0.72 : 0;
+    const scatteredCamPull = runtime.mode === 'scattered' ? 1.62 : 1.28;
     camTarget.set(
-      runtime.playerX * 0.3 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
-      7.3 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
-      -runtime.playerY + 4.9 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
+      runtime.playerX * 0.26 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
+      6.55 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
+      -runtime.playerY + 5.1 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
-    lookTarget.set(runtime.playerX * 0.2, 0, -runtime.playerY - (runtime.mode === 'scattered' ? 4.2 : 3.4));
+    lookTarget.set(
+      runtime.playerX * 0.17,
+      0,
+      -runtime.playerY - (runtime.mode === 'scattered' ? 5.6 : 4.8)
+    );
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
-      const baseFov = runtime.mode === 'scattered' ? 44 : 39;
+      const baseFov = runtime.mode === 'scattered' ? 50 : 46;
       camera.fov = lerp(camera.fov, baseFov - runtime.coreGlow * 1.8, 1 - Math.exp(-6 * dt));
       camera.updateProjectionMatrix();
     }
@@ -1563,6 +1631,9 @@ function OrbitLatchScene() {
     if (bgMaterialRef.current) {
       bgMaterialRef.current.uniforms.uTime.value += dt;
       bgMaterialRef.current.uniforms.uGlow.value = runtime.coreGlow + runtime.latchFlash;
+    }
+    if (bgPlaneRef.current) {
+      bgPlaneRef.current.position.set(camera.position.x * 0.18, -0.85, camera.position.z - 34);
     }
 
     if (satRef.current) {
@@ -1605,7 +1676,8 @@ function OrbitLatchScene() {
 
         colorScratch
           .copy(PLANET_COLORS[planet.colorIndex])
-          .lerp(WHITE, clamp(planet.glow * 0.35 + pulsing * 0.1, 0, 0.55));
+          .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16, 0, 0.7))
+          .multiplyScalar(1.08);
         planetRef.current.setColorAt(i, colorScratch);
 
         dummy.position.set(world.x, 0.015, world.z);
@@ -1616,7 +1688,8 @@ function OrbitLatchScene() {
 
         colorScratch
           .copy(PLANET_COLORS[planet.colorIndex])
-          .lerp(WHITE, clamp(0.16 + planet.glow * 0.62 + runtime.latchFlash * 0.2, 0, 0.92));
+          .lerp(WHITE, clamp(0.28 + planet.glow * 0.66 + runtime.latchFlash * 0.22, 0, 0.96))
+          .multiplyScalar(1.14);
         ringRef.current.setColorAt(i, colorScratch);
       }
       planetRef.current.instanceMatrix.needsUpdate = true;
@@ -1713,18 +1786,18 @@ function OrbitLatchScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 7.3, 4.9]} fov={39} near={0.1} far={120} />
-      <color attach="background" args={['#0a0a15']} />
-      <fog attach="fog" args={['#0f0a1d', 8, 86]} />
+      <PerspectiveCamera makeDefault position={[0, 6.9, 5.4]} fov={46} near={0.1} far={240} />
+      <color attach="background" args={['#131d34']} />
+      <fog attach="fog" args={['#1b2744', 26, 168]} />
 
-      <ambientLight intensity={0.42} />
-      <directionalLight position={[6, 9, 3]} intensity={0.58} color="#8ad9ff" />
-      <hemisphereLight args={['#6de6ff', '#1b1236', 0.3]} />
-      <pointLight position={[0, 4.1, 2]} intensity={0.72} color="#22d3ee" />
-      <pointLight position={[2.2, 2.8, -3.2]} intensity={0.52} color="#ff44eb" />
-      <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.36} color="#f59e0b" />
+      <ambientLight intensity={0.64} color="#dbe8ff" />
+      <directionalLight position={[6, 9, 3]} intensity={0.86} color="#e6f4ff" />
+      <hemisphereLight args={['#b7e6ff', '#2a315f', 0.58]} />
+      <pointLight position={[0, 4.1, 2]} intensity={0.98} color="#6cf2ff" />
+      <pointLight position={[2.2, 2.8, -3.2]} intensity={0.72} color="#ff8ce5" />
+      <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.56} color="#ffd27d" />
 
-      <mesh position={[0, -0.85, -30]}>
+      <mesh ref={bgPlaneRef} position={[0, -0.85, -30]} frustumCulled={false} renderOrder={-1000}>
         <planeGeometry args={[42, 34]} />
         <shaderMaterial
           ref={bgMaterialRef}
@@ -1743,34 +1816,44 @@ function OrbitLatchScene() {
             void main() {
               vec2 p = vUv * 2.0 - 1.0;
               float r = length(p);
-              vec3 deep = vec3(0.02, 0.02, 0.08);
-              vec3 cyan = vec3(0.02, 0.36, 0.42);
-              vec3 magenta = vec3(0.44, 0.05, 0.35);
-              vec3 amber = vec3(0.42, 0.2, 0.04);
+              vec3 deep = vec3(0.11, 0.16, 0.32);
+              vec3 cyan = vec3(0.33, 0.73, 0.92);
+              vec3 magenta = vec3(0.69, 0.36, 0.86);
+              vec3 amber = vec3(0.95, 0.72, 0.36);
               float grad = smoothstep(-0.25, 1.2, vUv.y);
               float waveA = sin((vUv.x * 2.8 + uTime * 0.18) * 6.2831853) * 0.5 + 0.5;
               float waveB = sin((vUv.y * 3.7 - uTime * 0.23) * 6.2831853) * 0.5 + 0.5;
-              float rim = smoothstep(1.25, 0.28, r);
+              float rim = smoothstep(1.42, 0.22, r);
               float grain = fract(sin(dot(vUv * (uTime + 3.17), vec2(12.9898, 78.233))) * 43758.5453);
               vec3 col = mix(deep, magenta, grad * 0.72);
-              col = mix(col, cyan, waveA * 0.28);
-              col += amber * (waveB * 0.08 + uGlow * 0.16);
-              col += (grain - 0.5) * 0.02;
+              col = mix(col, cyan, waveA * 0.35);
+              col += amber * (waveB * 0.12 + uGlow * 0.24);
+              col += (grain - 0.5) * 0.016;
               col *= rim;
               gl_FragColor = vec4(col, 1.0);
             }
           `}
+          depthWrite={false}
+          depthTest={false}
+          side={THREE.DoubleSide}
           toneMapped={false}
         />
       </mesh>
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
-        <meshStandardMaterial vertexColors roughness={0.26} metalness={0.32} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.16}
+          metalness={0.22}
+          emissive="#29426d"
+          emissiveIntensity={0.6}
+          toneMapped={false}
+        />
       </instancedMesh>
 
       <instancedMesh ref={ringRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
-        <torusGeometry args={[1, 0.032, 12, 96]} />
+        <torusGeometry args={[1, 0.05, 14, 96]} />
         <meshBasicMaterial
           vertexColors
           transparent
@@ -1796,7 +1879,14 @@ function OrbitLatchScene() {
 
       <instancedMesh ref={hazardRef} args={[undefined, undefined, HAZARD_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 1]} />
-        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.56} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={0.16}
+          metalness={0.42}
+          emissive="#5b1a33"
+          emissiveIntensity={0.52}
+          toneMapped={false}
+        />
       </instancedMesh>
 
       <primitive object={trailObject} />
@@ -1838,7 +1928,7 @@ function OrbitLatchScene() {
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
         <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
-        <Vignette eskil={false} offset={0.16} darkness={0.72} />
+        <Vignette eskil={false} offset={0.2} darkness={0.42} />
         <Noise premultiply opacity={0.024} />
       </EffectComposer>
 

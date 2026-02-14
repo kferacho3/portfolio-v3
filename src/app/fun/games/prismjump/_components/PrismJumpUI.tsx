@@ -1,23 +1,33 @@
 'use client';
 
-import { Html } from '@react-three/drei';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSnapshot } from 'valtio';
 import { PRISM_CHARACTER_SKINS, PRISM_JUMP_TITLE } from '../constants';
 import { prismJumpState } from '../state';
 
 export function PrismJumpUI() {
   const snap = useSnapshot(prismJumpState);
+  const [mounted, setMounted] = useState(false);
   const toastVisible = snap.toastUntil > Date.now() && snap.toast.length > 0;
   const cubesTotal = snap.totalCubes + snap.runCubes;
   const currentSkin =
     PRISM_CHARACTER_SKINS[snap.selectedSkin] ?? PRISM_CHARACTER_SKINS[0];
 
-  return (
-    <Html fullscreen>
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <>
       <div
         style={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
+          zIndex: 2147483000,
           pointerEvents: 'none',
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
@@ -396,10 +406,11 @@ export function PrismJumpUI() {
               fontSize: 13,
             }}
           >
-            {snap.toast}
-          </div>
-        )}
+              {snap.toast}
+            </div>
+          )}
       </div>
-    </Html>
+    </>,
+    document.body
   );
 }

@@ -450,6 +450,10 @@ type Runtime = {
   dummy: THREE.Object3D;
   hiddenMatrix: THREE.Matrix4;
   gemSparks: GemSpark[];
+  visualSpin: number;
+  visualSpinVelocity: number;
+  visualTiltX: number;
+  visualTiltZ: number;
 };
 
 export default function PrismJump() {
@@ -488,6 +492,7 @@ export default function PrismJump() {
   const sparkCubeMeshRef = useRef<THREE.InstancedMesh>(null);
   const sparkPrismMeshRef = useRef<THREE.InstancedMesh>(null);
   const sparkNovaMeshRef = useRef<THREE.InstancedMesh>(null);
+  const playerVisualRef = useRef<THREE.Group>(null);
   const groundContactsRef = useRef(0);
   const [paletteIndex, setPaletteIndex] = useState(0);
   const palette = CUBE_PALETTES[paletteIndex] ?? CUBE_PALETTES[0];
@@ -517,6 +522,10 @@ export default function PrismJump() {
     dummy: new THREE.Object3D(),
     hiddenMatrix: new THREE.Matrix4(),
     gemSparks: [],
+    visualSpin: 0,
+    visualSpinVelocity: 0,
+    visualTiltX: 0,
+    visualTiltZ: 0,
   });
 
   const platformVisuals = useMemo(
@@ -544,6 +553,10 @@ export default function PrismJump() {
     rb.setTranslation({ x: w.spawnX, y: PLAYER_START_Y, z: w.spawnZ }, true);
     rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
     rb.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    w.visualSpin = 0;
+    w.visualSpinVelocity = 0;
+    w.visualTiltX = 0;
+    w.visualTiltZ = 0;
     groundContactsRef.current = 0;
     w.needsSpawn = false;
   }, []);
@@ -565,6 +578,10 @@ export default function PrismJump() {
     w.coyoteMs = 0;
     w.camZ = GAME.cameraZOffset;
     w.gemSparks = [];
+    w.visualSpin = 0;
+    w.visualSpinVelocity = 0;
+    w.visualTiltX = 0;
+    w.visualTiltZ = 0;
     w.needsSpawn = true;
 
     setPaletteIndex(nextPaletteIndex);
@@ -714,34 +731,64 @@ export default function PrismJump() {
     const grounded = groundContactsRef.current > 0;
     if (grounded) w.coyoteMs = GAME.coyoteMs;
 
+    const playerPos = player.translation();
     const playerVel = player.linvel();
     const desiredVX = strafeAxis * GAME.maxLateralSpeed;
+    const noStrafeInput = strafeAxis === 0;
+    const targetVX = noStrafeInput ? 0 : desiredVX;
     const controlRate = grounded
       ? GAME.groundControlImpulse
       : GAME.airControlImpulse;
     const controlledVXDamped = clamp(
-      THREE.MathUtils.damp(playerVel.x, desiredVX, controlRate, d),
+      THREE.MathUtils.damp(
+        playerVel.x,
+        targetVX,
+        grounded && noStrafeInput ? GAME.groundedXDampNoInput : controlRate,
+        d
+      ),
       -GAME.maxLateralSpeed,
       GAME.maxLateralSpeed
     );
     const controlledVX =
-      Math.abs(controlledVXDamped) < 0.035 ? 0 : controlledVXDamped;
+      Math.abs(controlledVXDamped) < 0.02 ? 0 : controlledVXDamped;
 
     if (grounded) {
       const groundedRow = Math.max(
         0,
-        Math.round(player.translation().z / GAME.rowSpacing)
+        Math.round(playerPos.z / GAME.rowSpacing)
       );
       w.lastGroundedRowIndex = groundedRow;
+      const lockedVZ = THREE.MathUtils.damp(
+        playerVel.z,
+        0,
+        noStrafeInput ? GAME.groundedZDampNoInput : GAME.groundedZDamp,
+        d
+      );
+      const resolvedVZ = Math.abs(lockedVZ) < 0.02 ? 0 : lockedVZ;
       player.setLinvel(
         {
-          // Keep row movement readable: strafe stays responsive, and grounded z drift is damped.
+          // Landed state: no free slide unless the player is actively strafing.
           x: controlledVX,
           y: playerVel.y,
-          z: THREE.MathUtils.damp(playerVel.z, 0, GAME.groundedZDamp, d),
+          z: resolvedVZ,
         },
         true
       );
+
+      if (noStrafeInput) {
+        const rowCenterZ = groundedRow * GAME.rowSpacing;
+        const zError = rowCenterZ - playerPos.z;
+        if (Math.abs(zError) <= GAME.landingSnapRange) {
+          player.setTranslation(
+            {
+              x: playerPos.x,
+              y: playerPos.y,
+              z: THREE.MathUtils.damp(playerPos.z, rowCenterZ, GAME.landingSnapDamp, d),
+            },
+            true
+          );
+        }
+      }
     } else if (Math.abs(controlledVX - playerVel.x) > 0.0001) {
       player.setLinvel(
         {
@@ -757,18 +804,18 @@ export default function PrismJump() {
       const jumpTime = GAME.jumpDuration;
       const gAbs = Math.abs(GAME.gravity[1]);
       const vy0 = (gAbs * jumpTime) / 2;
-      const now = player.translation();
       const baseRowIndex = Math.max(0, w.lastGroundedRowIndex);
       const nextRowIndex = baseRowIndex + 1;
       const targetZ = nextRowIndex * GAME.rowSpacing;
       const vx = 0;
-      const vzToTarget = (targetZ - now.z) / jumpTime;
+      const vzToTarget = (targetZ - playerPos.z) / jumpTime;
 
       const vel = player.linvel();
       const mass = player.mass();
       const deltaVy = vy0 - vel.y;
       player.applyImpulse({ x: 0, y: deltaVy * mass, z: 0 }, true);
       player.setLinvel({ x: vx, y: vy0, z: vzToTarget }, true);
+      w.visualSpinVelocity = Math.max(w.visualSpinVelocity, GAME.visualJumpSpinSpeed);
 
       w.lastGroundedRowIndex = baseRowIndex;
       prismJumpState.setJumpScore(nextRowIndex);
@@ -785,6 +832,68 @@ export default function PrismJump() {
     const cubeColor = w.cubeColor;
     const sparkColor = w.sparkColor;
     const dummy = w.dummy;
+
+    const visualVel = player.linvel();
+    const targetTiltX = clamp(
+      visualVel.z * GAME.visualPitchFactor * (grounded ? 0.58 : 1),
+      -GAME.visualTiltMax,
+      GAME.visualTiltMax
+    );
+    const targetTiltZ = clamp(
+      -visualVel.x * GAME.visualRollFactor,
+      -GAME.visualTiltMax,
+      GAME.visualTiltMax
+    );
+    w.visualTiltX = THREE.MathUtils.damp(
+      w.visualTiltX,
+      targetTiltX,
+      GAME.visualTiltDamp,
+      d
+    );
+    w.visualTiltZ = THREE.MathUtils.damp(
+      w.visualTiltZ,
+      targetTiltZ,
+      GAME.visualTiltDamp,
+      d
+    );
+    if (
+      grounded &&
+      noStrafeInput &&
+      Math.abs(visualVel.x) < 0.06 &&
+      Math.abs(visualVel.z) < 0.08
+    ) {
+      w.visualTiltX = THREE.MathUtils.damp(
+        w.visualTiltX,
+        0,
+        GAME.visualTiltSettleDamp,
+        d
+      );
+      w.visualTiltZ = THREE.MathUtils.damp(
+        w.visualTiltZ,
+        0,
+        GAME.visualTiltSettleDamp,
+        d
+      );
+    }
+
+    const spinTarget = grounded ? 0 : GAME.visualAirSpinSpeed;
+    const spinDamp = grounded ? GAME.visualSpinDampGround : GAME.visualSpinDampAir;
+    w.visualSpinVelocity = THREE.MathUtils.damp(
+      w.visualSpinVelocity,
+      spinTarget,
+      spinDamp,
+      d
+    );
+    w.visualSpin += w.visualSpinVelocity * d;
+    if (w.visualSpin > Math.PI * 2) w.visualSpin -= Math.PI * 2;
+
+    if (playerVisualRef.current) {
+      playerVisualRef.current.rotation.set(
+        w.visualTiltX,
+        w.visualSpin,
+        w.visualTiltZ
+      );
+    }
 
     for (let rowIndex = 0; rowIndex < w.rows.length; rowIndex += 1) {
       const row = w.rows[rowIndex];
@@ -1061,7 +1170,7 @@ export default function PrismJump() {
             type="kinematicPosition"
             position={[0, -80, 0]}
             colliders={false}
-            friction={0.06}
+            friction={0}
             restitution={0.02}
             canSleep={false}
             userData={{ kind: 'platform' }}
@@ -1072,6 +1181,8 @@ export default function PrismJump() {
                 GAME.platformSize[1] * 0.5,
                 (GAME.platformSize[2] * platformVisual.sz) * 0.5,
               ]}
+              friction={0}
+              restitution={0}
             />
             <mesh
               castShadow
@@ -1125,7 +1236,7 @@ export default function PrismJump() {
         >
           <CuboidCollider
             args={[PLAYER_HALF, PLAYER_HALF, PLAYER_HALF]}
-            friction={0.02}
+            friction={0}
             restitution={0}
           />
           <CuboidCollider
@@ -1135,6 +1246,14 @@ export default function PrismJump() {
             onIntersectionEnter={(event: any) => {
               if (event?.other?.rigidBodyObject?.userData?.kind === 'platform') {
                 groundContactsRef.current += 1;
+                const rb = playerRef.current;
+                if (rb) {
+                  const lv = rb.linvel();
+                  rb.setLinvel(
+                    { x: lv.x * 0.68, y: Math.min(0, lv.y), z: 0 },
+                    true
+                  );
+                }
               }
             }}
             onIntersectionExit={(event: any) => {
@@ -1144,16 +1263,18 @@ export default function PrismJump() {
             }}
           />
 
-          <mesh castShadow scale={[selectedSkin.scale, selectedSkin.scale, selectedSkin.scale]}>
-            {playerGeometry(selectedSkin.geometry)}
-            <meshStandardMaterial
-              color={selectedSkin.color}
-              roughness={0.2}
-              metalness={0.18}
-              emissive={selectedSkin.emissive}
-              emissiveIntensity={0.62}
-            />
-          </mesh>
+          <group ref={playerVisualRef}>
+            <mesh castShadow scale={[selectedSkin.scale, selectedSkin.scale, selectedSkin.scale]}>
+              {playerGeometry(selectedSkin.geometry)}
+              <meshStandardMaterial
+                color={selectedSkin.color}
+                roughness={0.2}
+                metalness={0.18}
+                emissive={selectedSkin.emissive}
+                emissiveIntensity={0.62}
+              />
+            </mesh>
+          </group>
         </RigidBody>
 
         <CuboidCollider
