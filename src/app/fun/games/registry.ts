@@ -90,6 +90,7 @@ const scoreGetters: Partial<Record<GameId, (snap: any) => number>> = {
   shapeshifter: (snap) => snap.score ?? 0,
   fluxhop: (snap) => snap.score ?? 0,
   rollette: (snap) => snap.score ?? 0,
+  bouncer: (snap) => snap.score ?? 0,
   prismjump: (snap) => snap.score ?? 0,
 };
 
@@ -178,6 +179,7 @@ const resetters: Partial<Record<GameId, (mod: GameModule) => void>> = {
   slowmo: (mod) => mod.slowMoState.backToMenu(),
   bouncer: (mod) => {
     mod.bouncerState.phase = 'menu';
+    mod.bouncerState.score = 0;
   },
   prismjump: (mod) => mod.prismJumpState.backToMenu(),
   octasurge: (mod) => {

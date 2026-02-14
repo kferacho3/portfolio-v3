@@ -145,6 +145,7 @@ export function resetGameState(gameId: GameId): void {
       return;
     case 'bouncer':
       bouncerState.phase = 'menu';
+      bouncerState.score = 0;
       return;
     case 'prismjump':
       prismJumpState.backToMenu();

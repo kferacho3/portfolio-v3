@@ -71,6 +71,7 @@ const GAME_STATE_RESETTERS: Partial<Record<GameId, () => void>> = {
   slowmo: () => slowMoState.backToMenu(),
   bouncer: () => {
     bouncerState.phase = 'menu';
+    bouncerState.score = 0;
   },
   prismjump: () => prismJumpState.backToMenu(),
   octasurge: () => {

@@ -274,6 +274,7 @@ const saved = load();
 
 export const bouncerState = proxy({
   phase: 'menu' as BouncerPhase,
+  score: 0,
   bestScore: saved.bestScore,
   squares: saved.squares,
   paletteIndex: Number.isFinite(saved.paletteIndex)
@@ -317,9 +318,17 @@ export function addSquares(n: number) {
 }
 
 export function setBestScore(score: number) {
-  if (score > bouncerState.bestScore) {
-    bouncerState.bestScore = score;
+  const next = Math.max(0, Math.floor(score));
+  if (next > bouncerState.bestScore) {
+    bouncerState.bestScore = next;
     scheduleSave();
+  }
+}
+
+export function setScore(score: number) {
+  const next = Math.max(0, Math.floor(score));
+  if (next !== bouncerState.score) {
+    bouncerState.score = next;
   }
 }
 

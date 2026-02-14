@@ -12,6 +12,7 @@ import {
   paletteAt,
   selectSkin,
   setBestScore,
+  setScore,
   bouncerState,
   tryUnlockSkin,
 } from './state';
@@ -362,6 +363,11 @@ export default function Bouncer() {
   const snap = useSnapshot(bouncerState);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasPointerRef = useRef({
+    down: false,
+    justDown: false,
+    justUp: false,
+  });
   const runtimeRef = useRef<Runtime>(makeRuntime());
   const [ready, setReady] = useState(false);
 
@@ -418,6 +424,51 @@ export default function Bouncer() {
     return () => window.removeEventListener('resize', resize);
   }, []);
 
+  // Canvas-only pointer input to avoid hijacking global app controls (e.g., menu/home buttons).
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const pointer = canvasPointerRef.current;
+    const resetPointer = () => {
+      pointer.down = false;
+      pointer.justDown = false;
+      pointer.justUp = false;
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      pointer.down = true;
+      pointer.justDown = true;
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      pointer.down = false;
+      pointer.justUp = true;
+    };
+
+    const onPointerCancel = () => {
+      pointer.down = false;
+      pointer.justUp = true;
+    };
+
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerCancel);
+    canvas.addEventListener('pointerleave', onPointerCancel);
+
+    return () => {
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerCancel);
+      canvas.removeEventListener('pointerleave', onPointerCancel);
+      canvas.style.touchAction = '';
+      resetPointer();
+    };
+  }, []);
+
   // Main loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -441,12 +492,13 @@ export default function Bouncer() {
       // Tap while playing = immediate forced drop from the current position.
       // Holding increases drop speed, but never max bounce height.
       const input = inputRef.current;
+      const pointer = canvasPointerRef.current;
       const spaceHeld =
         input.keysDown.has(' ') ||
         input.keysDown.has('space') ||
         input.keysDown.has('spacebar');
       rt.dropHeld =
-        rt.phase === 'playing' ? input.pointerDown || spaceHeld : false;
+        rt.phase === 'playing' ? pointer.down || spaceHeld : false;
       rt.holdCharge = clamp(
         rt.holdCharge + (rt.dropHeld ? dtReal * 2.6 : -dtReal * 1.0),
         0,
@@ -455,7 +507,7 @@ export default function Bouncer() {
 
       const dt = dtReal;
       // Tap from menu/gameover starts. During play it never restarts; it triggers an immediate drop.
-      if (input.pointerJustDown) {
+      if (pointer.justDown) {
         if (rt.phase === 'playing') {
           invokeImmediateDrop(rt);
         } else {
@@ -471,7 +523,7 @@ export default function Bouncer() {
       }
       rt.paletteT = clamp(rt.paletteT + dtReal * 2.8, 0, 1);
 
-      if (snap.phase === 'playing') {
+      if (rt.phase === 'playing') {
         updateGame(rt, dt, dtReal, currentSkin);
       } else {
         // In menu/gameover we still animate a gentle bounce and particles for vibe.
@@ -481,6 +533,8 @@ export default function Bouncer() {
       draw(ctx, rt, currentSkin);
 
       clearFrameInput(inputRef);
+      pointer.justDown = false;
+      pointer.justUp = false;
       requestAnimationFrame(step);
     };
 
@@ -577,6 +631,19 @@ export default function Bouncer() {
                   >
                     Ball
                   </button>
+
+                  {snap.phase === 'gameover' && (
+                    <button
+                      className="px-4 py-2 rounded-xl text-sm font-semibold"
+                      style={{
+                        background: 'rgba(0,0,0,0.65)',
+                        color: '#FFFFFF',
+                      }}
+                      onClick={() => backToMenu(runtimeRef.current)}
+                    >
+                      Menu
+                    </button>
+                  )}
                 </div>
 
                 <div
@@ -605,6 +672,7 @@ let idCounter = 1;
 
 function startGame(rt: Runtime) {
   bouncerState.phase = 'playing';
+  setScore(0);
   rt.phase = 'playing';
 
   rt.score = 0;
@@ -630,7 +698,16 @@ function startGame(rt: Runtime) {
 function endGame(rt: Runtime) {
   bouncerState.phase = 'gameover';
   rt.phase = 'gameover';
+  setScore(rt.score);
   setBestScore(rt.score);
+}
+
+function backToMenu(rt: Runtime) {
+  bouncerState.phase = 'menu';
+  rt.phase = 'menu';
+  rt.dropHeld = false;
+  rt.holdCharge = 0;
+  setScore(0);
 }
 
 function invokeImmediateDrop(rt: Runtime) {
@@ -722,6 +799,7 @@ function updateGame(
       rt.score += 1;
     }
   });
+  setScore(rt.score);
 
   // Collision: obstacle variants
   const yBase = rt.groundY - rt.platformH / 2;
