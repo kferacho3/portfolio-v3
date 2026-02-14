@@ -57,6 +57,11 @@ const brightenHex = (hex: string, amount: number) => {
   return `#${c.getHexString()}`;
 };
 
+const seeded01 = (index: number, salt: number) => {
+  const x = Math.sin((index + 1) * 12.9898 + salt * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+
 const rngFrom = (seed: number) => {
   let a = seed >>> 0;
   return () => {
@@ -82,6 +87,7 @@ const makeEmptyRow = (slot: number): LaneRow => ({
     active: true,
     hasCube: false,
     cubeTaken: false,
+    color: '#ffffff',
   })),
 });
 
@@ -119,9 +125,9 @@ const configureRow = (
   const difficulty = difficultyFromRunSeconds(runSeconds);
   const span = GAME.wrapHalfX * 2;
   const widthFactor = lerp(
+    1,
     GAME.rowWidthMinFactor,
-    GAME.rowWidthMaxFactor,
-    0.35 + rand() * 0.65
+    difficulty * (0.35 + rand() * 0.65)
   );
   const dynamicSpan = clamp(
     span * widthFactor,
@@ -131,9 +137,14 @@ const configureRow = (
   const spacing = dynamicSpan / GAME.platformsPerRow;
   const left = -dynamicSpan * 0.5;
   const rowColors = palette.laneColors.length > 0 ? palette.laneColors : ['#ffffff'];
-  const spawnChance = lerp(GAME.spawnChanceEasy, GAME.spawnChanceHard, difficulty);
+  const spawnChance =
+    difficulty <= 0
+      ? GAME.spawnChanceEasy
+      : lerp(GAME.spawnChanceEasy, GAME.spawnChanceHard, difficulty);
   const targetMinActive = Math.round(
-    lerp(GAME.minActiveEasy, GAME.minActiveHard, difficulty)
+    difficulty <= 0
+      ? GAME.minActiveEasy
+      : lerp(GAME.minActiveEasy, GAME.minActiveHard, difficulty)
   );
   const jitter = GAME.rowJitterBase + GAME.rowJitterHardBonus * difficulty;
 
@@ -146,10 +157,8 @@ const configureRow = (
   );
   row.offset = rand() * span;
   row.span = dynamicSpan;
-  const baseRowColor =
-    rowColors[Math.floor(rand() * rowColors.length)] ?? rowColors[0];
-  // Keep lanes readable against fog and water.
-  row.color = brightenHex(baseRowColor, 0.28);
+  const baseRowColor = rowColors[Math.floor(rand() * rowColors.length)] ?? rowColors[0];
+  row.color = brightenHex(baseRowColor, 0.2);
   const activeSlots: number[] = [];
 
   for (let i = 0; i < GAME.platformsPerRow; i += 1) {
@@ -160,6 +169,10 @@ const configureRow = (
     p.z = logicalIndex * GAME.rowSpacing;
     p.active = rand() < spawnChance;
     if (p.active) activeSlots.push(i);
+    const paletteIdx =
+      (logicalIndex + i + Math.floor(rand() * rowColors.length)) %
+      rowColors.length;
+    p.color = brightenHex(rowColors[paletteIdx] ?? rowColors[0], 0.18);
     p.hasCube = p.active && rand() < GAME.cubeChance * (1 - difficulty * 0.45);
     p.cubeTaken = false;
   }
@@ -170,6 +183,10 @@ const configureRow = (
     const p = row.platforms[idx];
     if (!p.active) {
       p.active = true;
+      p.color = brightenHex(
+        rowColors[(logicalIndex + idx) % rowColors.length] ?? rowColors[0],
+        0.18
+      );
       p.hasCube = rand() < GAME.cubeChance;
       activeSlots.push(idx);
     }
@@ -279,12 +296,25 @@ export default function PrismJump() {
 
   const instances = useMemo<InstancedRigidBodyProps[]>(
     () =>
-      Array.from({ length: TOTAL_PLATFORMS }, (_, i) => ({
-        key: `prismjump-platform-${i}`,
-        position: [0, -80, 0],
-        rotation: [0, 0, 0],
-        userData: { kind: 'platform' },
-      })),
+      Array.from({ length: TOTAL_PLATFORMS }, (_, i) => {
+        const sx = lerp(
+          GAME.platformScaleXMin,
+          GAME.platformScaleXMax,
+          seeded01(i, 1.7)
+        );
+        const sz = lerp(
+          GAME.platformScaleZMin,
+          GAME.platformScaleZMax,
+          seeded01(i, 3.9)
+        );
+        return {
+          key: `prismjump-platform-${i}`,
+          position: [0, -80, 0] as [number, number, number],
+          rotation: [0, 0, 0] as [number, number, number],
+          scale: [sx, 1, sz] as [number, number, number],
+          userData: { kind: 'platform' },
+        };
+      }),
     []
   );
 
@@ -573,7 +603,7 @@ export default function PrismJump() {
         platform.z = z;
         body.setNextKinematicTranslation({ x, y: GAME.platformY, z });
 
-        platformMesh.setColorAt(bodyIndex, rowColor.set(row.color));
+        platformMesh.setColorAt(bodyIndex, rowColor.set(platform.color));
         platformColorUpdated = true;
 
         if (platform.hasCube && !platform.cubeTaken) {
@@ -708,7 +738,12 @@ export default function PrismJump() {
             args={[undefined, undefined, TOTAL_PLATFORMS]}
           >
             <boxGeometry args={GAME.platformSize} />
-            <meshBasicMaterial
+            <meshStandardMaterial
+              color="#ffffff"
+              roughness={0.35}
+              metalness={0.06}
+              emissive="#0d1324"
+              emissiveIntensity={0.28}
               vertexColors
               toneMapped={false}
             />
