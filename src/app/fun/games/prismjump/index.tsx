@@ -4,10 +4,8 @@ import { Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   CuboidCollider,
-  InstancedRigidBodies,
   Physics,
   RigidBody,
-  type InstancedRigidBodyProps,
   type RapierRigidBody,
 } from '@react-three/rapier';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -64,6 +62,9 @@ const seeded01 = (index: number, salt: number) => {
 
 const scaleXForBodyIndex = (bodyIndex: number) =>
   lerp(GAME.platformScaleXMin, GAME.platformScaleXMax, seeded01(bodyIndex, 1.7));
+
+const scaleZForBodyIndex = (bodyIndex: number) =>
+  lerp(GAME.platformScaleZMin, GAME.platformScaleZMax, seeded01(bodyIndex, 3.9));
 
 const rngFrom = (seed: number) => {
   let a = seed >>> 0;
@@ -268,7 +269,6 @@ type Runtime = {
   spawnZ: number;
   tempA: THREE.Vector3;
   tempB: THREE.Vector3;
-  color: THREE.Color;
   cubeColor: THREE.Color;
   dummy: THREE.Object3D;
   hiddenMatrix: THREE.Matrix4;
@@ -295,8 +295,15 @@ export default function PrismJump() {
   });
 
   const playerRef = useRef<RapierRigidBody | null>(null);
-  const platformBodiesRef = useRef<(RapierRigidBody | null)[] | null>(null);
-  const platformMeshRef = useRef<THREE.InstancedMesh>(null);
+  const platformBodiesRef = useRef<(RapierRigidBody | null)[]>(
+    Array.from({ length: TOTAL_PLATFORMS }, () => null)
+  );
+  const platformBaseMaterialsRef = useRef<(THREE.MeshStandardMaterial | null)[]>(
+    Array.from({ length: TOTAL_PLATFORMS }, () => null)
+  );
+  const platformTopMaterialsRef = useRef<(THREE.MeshStandardMaterial | null)[]>(
+    Array.from({ length: TOTAL_PLATFORMS }, () => null)
+  );
   const cubeMeshRef = useRef<THREE.InstancedMesh>(null);
   const groundContactsRef = useRef(0);
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -320,31 +327,20 @@ export default function PrismJump() {
     spawnZ: 0,
     tempA: new THREE.Vector3(),
     tempB: new THREE.Vector3(),
-    color: new THREE.Color('#ffffff'),
     cubeColor: new THREE.Color('#ffffff'),
     dummy: new THREE.Object3D(),
     hiddenMatrix: new THREE.Matrix4(),
   });
 
-  const instances = useMemo<InstancedRigidBodyProps[]>(
+  const platformVisuals = useMemo(
     () =>
       Array.from({ length: TOTAL_PLATFORMS }, (_, i) => {
-        const sx = lerp(
-          GAME.platformScaleXMin,
-          GAME.platformScaleXMax,
-          seeded01(i, 1.7)
-        );
-        const sz = lerp(
-          GAME.platformScaleZMin,
-          GAME.platformScaleZMax,
-          seeded01(i, 3.9)
-        );
+        const sx = scaleXForBodyIndex(i);
+        const sz = scaleZForBodyIndex(i);
         return {
           key: `prismjump-platform-${i}`,
-          position: [0, -80, 0] as [number, number, number],
-          rotation: [0, 0, 0] as [number, number, number],
-          scale: [sx, 1, sz] as [number, number, number],
-          userData: { kind: 'platform' },
+          sx,
+          sz,
         };
       }),
     []
@@ -495,10 +491,11 @@ export default function PrismJump() {
 
     const player = playerRef.current;
     const platformBodies = platformBodiesRef.current;
-    const platformMesh = platformMeshRef.current;
+    const platformBaseMaterials = platformBaseMaterialsRef.current;
+    const platformTopMaterials = platformTopMaterialsRef.current;
     const cubeMesh = cubeMeshRef.current;
 
-    if (!player || !platformBodies || !platformMesh || !cubeMesh) {
+    if (!player || !cubeMesh) {
       clearFrameInput(inputRef);
       return;
     }
@@ -607,11 +604,9 @@ export default function PrismJump() {
     }
 
     const now = player.translation();
-    const rowColor = w.color;
     const cubeColor = w.cubeColor;
     const dummy = w.dummy;
     cubeColor.set(palette.cubeColor);
-    let platformColorUpdated = false;
 
     for (let rowIndex = 0; rowIndex < w.rows.length; rowIndex += 1) {
       const row = w.rows[rowIndex];
@@ -634,9 +629,16 @@ export default function PrismJump() {
         platform.x = x;
         platform.z = z;
         body.setNextKinematicTranslation({ x, y: GAME.platformY, z });
-
-        platformMesh.setColorAt(bodyIndex, rowColor.set(platform.color));
-        platformColorUpdated = true;
+        const baseMat = platformBaseMaterials[bodyIndex];
+        if (baseMat) {
+          baseMat.color.set(platform.color).multiplyScalar(0.35);
+          baseMat.emissive.set(platform.color).multiplyScalar(0.08);
+        }
+        const topMat = platformTopMaterials[bodyIndex];
+        if (topMat) {
+          topMat.color.set(platform.color);
+          topMat.emissive.set(platform.color).multiplyScalar(0.24);
+        }
 
         if (platform.hasCube && !platform.cubeTaken) {
           const cubeY = GAME.platformY + PLATFORM_HALF_Y + GAME.cubeHeightOffset;
@@ -661,11 +663,7 @@ export default function PrismJump() {
       }
     }
 
-    platformMesh.instanceMatrix.needsUpdate = true;
     cubeMesh.instanceMatrix.needsUpdate = true;
-    if (platformColorUpdated && platformMesh.instanceColor) {
-      platformMesh.instanceColor.needsUpdate = true;
-    }
     if (cubeMesh.instanceColor) {
       cubeMesh.instanceColor.needsUpdate = true;
     }
@@ -756,26 +754,67 @@ export default function PrismJump() {
       </mesh>
 
       <Physics gravity={GAME.gravity} paused={!phasePlaying} timeStep="vary">
-        <InstancedRigidBodies
-          ref={platformBodiesRef}
-          instances={instances}
-          type="kinematicPosition"
-          colliders="cuboid"
-          friction={1.35}
-          restitution={0.02}
-          canSleep={false}
-        >
-          <instancedMesh
-            ref={platformMeshRef}
-            args={[undefined, undefined, TOTAL_PLATFORMS]}
+        {platformVisuals.map((platformVisual, i) => (
+          <RigidBody
+            key={platformVisual.key}
+            ref={(body) => {
+              platformBodiesRef.current[i] = body;
+            }}
+            type="kinematicPosition"
+            position={[0, -80, 0]}
+            colliders={false}
+            friction={1.35}
+            restitution={0.02}
+            canSleep={false}
+            userData={{ kind: 'platform' }}
           >
-            <boxGeometry args={GAME.platformSize} />
-            <meshBasicMaterial
-              vertexColors
-              toneMapped={false}
+            <CuboidCollider
+              args={[
+                (GAME.platformSize[0] * platformVisual.sx) * 0.5,
+                GAME.platformSize[1] * 0.5,
+                (GAME.platformSize[2] * platformVisual.sz) * 0.5,
+              ]}
             />
-          </instancedMesh>
-        </InstancedRigidBodies>
+            <mesh
+              castShadow
+              receiveShadow
+              scale={[platformVisual.sx, 1, platformVisual.sz]}
+            >
+              <boxGeometry args={GAME.platformSize} />
+              <meshStandardMaterial
+                ref={(material) => {
+                  platformBaseMaterialsRef.current[i] = material;
+                }}
+                color="#1f2d44"
+                roughness={0.72}
+                metalness={0.1}
+                emissive="#0e1420"
+                emissiveIntensity={0.58}
+              />
+            </mesh>
+            <mesh
+              castShadow
+              position={[0, PLATFORM_HALF_Y + 0.06, 0]}
+              scale={[
+                platformVisual.sx * 0.9,
+                0.16,
+                platformVisual.sz * 0.9,
+              ]}
+            >
+              <boxGeometry args={GAME.platformSize} />
+              <meshStandardMaterial
+                ref={(material) => {
+                  platformTopMaterialsRef.current[i] = material;
+                }}
+                color="#58d8ff"
+                roughness={0.3}
+                metalness={0.08}
+                emissive="#112030"
+                emissiveIntensity={0.42}
+              />
+            </mesh>
+          </RigidBody>
+        ))}
 
         <RigidBody
           ref={playerRef}
@@ -831,7 +870,11 @@ export default function PrismJump() {
         />
       </Physics>
 
-      <instancedMesh ref={cubeMeshRef} args={[undefined, undefined, TOTAL_PLATFORMS]}>
+      <instancedMesh
+        ref={cubeMeshRef}
+        args={[undefined, undefined, TOTAL_PLATFORMS]}
+        frustumCulled={false}
+      >
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
           roughness={0.2}

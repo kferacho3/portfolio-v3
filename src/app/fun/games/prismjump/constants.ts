@@ -8,20 +8,20 @@ export const STORAGE_KEYS = {
 };
 
 export const GAME = {
-  rowSpacing: 3.05,
+  rowSpacing: 2.55,
   rowPoolSize: 26,
   rowsBehindPlayer: 7,
 
-  platformsPerRow: 4,
+  platformsPerRow: 5,
   platformSize: [2.1, 0.8, 2.1] as [number, number, number],
   platformY: 0.4,
-  wrapHalfX: 11.4,
+  wrapHalfX: 8.8,
   platformJitterX: 1.25,
-  platformScaleXMin: 0.78,
-  platformScaleXMax: 1.52,
-  platformScaleZMin: 0.72,
-  platformScaleZMax: 1.22,
-  gapWeightPower: 2.6,
+  platformScaleXMin: 0.64,
+  platformScaleXMax: 1.7,
+  platformScaleZMin: 0.66,
+  platformScaleZMax: 1.3,
+  gapWeightPower: 0.48,
 
   cubeSize: 0.45,
   cubeHeightOffset: 0.86,
@@ -57,7 +57,7 @@ export const GAME = {
   groundedZDamp: 10,
   lateralPointerDeadZone: 0.2,
 
-  failX: 13.8,
+  failX: 11.2,
   failY: -6,
 
   playerSize: 0.9,
