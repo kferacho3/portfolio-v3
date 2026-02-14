@@ -107,6 +107,25 @@ export function PrismJumpUI() {
                 }}
               />
             </div>
+
+            <div
+              style={{
+                position: 'absolute',
+                left: 18,
+                bottom: 18,
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                padding: '9px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.22)',
+                background: 'rgba(0,0,0,0.34)',
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              <span style={{ opacity: 0.75, fontSize: 12 }}>Score</span>
+              <span style={{ fontWeight: 900, fontSize: 16 }}>{snap.score}</span>
+            </div>
           </>
         )}
 

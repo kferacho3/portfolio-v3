@@ -1,10 +1,11 @@
-import type { CubePalette } from './types';
+import type { CubePalette, PrismCharacterSkin } from './types';
 
 export const PRISM_JUMP_TITLE = 'Prism Jump';
 
 export const STORAGE_KEYS = {
   best: 'rachos-fun-prismjump-best',
   cubes: 'rachos-fun-prismjump-cubes',
+  skin: 'rachos-fun-prismjump-skin',
 };
 
 export const GAME = {
@@ -31,6 +32,11 @@ export const GAME = {
   cubeHeightOffset: 0.86,
   cubePickupRadius: 0.8,
   cubeChance: 0.23,
+  collectiblePrismChance: 0.24,
+  collectibleNovaChance: 0.08,
+  gemCubePoints: 1,
+  gemPrismPoints: 3,
+  gemNovaPoints: 6,
 
   laneSpeedMin: 2.2,
   laneSpeedMax: 6.3,
@@ -80,6 +86,105 @@ export const GAME = {
   cameraChaseFactor: 0.78,
   cameraCatchUpLoseMargin: 0.72,
 };
+
+export const PRISM_CHARACTER_SKINS: PrismCharacterSkin[] = [
+  {
+    id: 'aurora-cube',
+    name: 'Aurora Cube',
+    geometry: 'cube',
+    color: '#7DFFF1',
+    emissive: '#32A89E',
+    scale: 1,
+  },
+  {
+    id: 'nova-octa',
+    name: 'Nova Octa',
+    geometry: 'octa',
+    color: '#F48BFF',
+    emissive: '#8A43B8',
+    scale: 1.08,
+  },
+  {
+    id: 'sunburst-diamond',
+    name: 'Sunburst Diamond',
+    geometry: 'diamond',
+    color: '#FFD166',
+    emissive: '#B16D00',
+    scale: 1.04,
+  },
+  {
+    id: 'cyan-comet',
+    name: 'Cyan Comet',
+    geometry: 'icosa',
+    color: '#64F5FF',
+    emissive: '#2F6FAE',
+    scale: 1.08,
+  },
+  {
+    id: 'pulse-tetra',
+    name: 'Pulse Tetra',
+    geometry: 'tetra',
+    color: '#FF6BB3',
+    emissive: '#9A2968',
+    scale: 1.14,
+  },
+  {
+    id: 'mint-dodeca',
+    name: 'Mint Dodeca',
+    geometry: 'dodeca',
+    color: '#98FFD6',
+    emissive: '#2F8E68',
+    scale: 1.06,
+  },
+  {
+    id: 'ultra-violet',
+    name: 'Ultra Violet',
+    geometry: 'cube',
+    color: '#C58BFF',
+    emissive: '#5D34B8',
+    scale: 1,
+  },
+  {
+    id: 'ember-cut',
+    name: 'Ember Cut',
+    geometry: 'diamond',
+    color: '#FF9F68',
+    emissive: '#A2481A',
+    scale: 1.04,
+  },
+  {
+    id: 'glacier-core',
+    name: 'Glacier Core',
+    geometry: 'octa',
+    color: '#9FE7FF',
+    emissive: '#2D6F96',
+    scale: 1.1,
+  },
+  {
+    id: 'petal-prism',
+    name: 'Petal Prism',
+    geometry: 'dodeca',
+    color: '#FFB3EB',
+    emissive: '#8A4176',
+    scale: 1.03,
+  },
+  {
+    id: 'neon-storm',
+    name: 'Neon Storm',
+    geometry: 'icosa',
+    color: '#96FF7A',
+    emissive: '#2B8A37',
+    scale: 1.06,
+  },
+  {
+    id: 'royal-bloom',
+    name: 'Royal Bloom',
+    geometry: 'tetra',
+    color: '#BFA6FF',
+    emissive: '#5E44A5',
+    scale: 1.12,
+  },
+];
 
 const BASE_CUBE_PALETTES: CubePalette[] = [
   {
