@@ -483,21 +483,11 @@ export default function PrismJump() {
       input.justPressed.has('arrowright') || input.justPressed.has('d');
     const wantsJump = jumpForward || jumpLeft || jumpRight;
 
-    const leftHeld =
-      input.keysDown.has('arrowleft') || input.keysDown.has('a');
-    const rightHeld =
-      input.keysDown.has('arrowright') || input.keysDown.has('d');
-
     let jumpDirection: -1 | 0 | 1 = 0;
-    if (jumpLeft && !jumpRight) jumpDirection = -1;
-    if (jumpRight && !jumpLeft) jumpDirection = 1;
-    if (jumpDirection === 0 && leftHeld !== rightHeld) {
-      jumpDirection = leftHeld ? -1 : 1;
-    }
-    if (jumpDirection === 0 && input.pointerJustDown) {
-      const pointerAxis = clamp(input.pointerX, -1, 1);
-      if (pointerAxis <= -0.55) jumpDirection = -1;
-      if (pointerAxis >= 0.55) jumpDirection = 1;
+    // Forward inputs are always straight hops; lateral hops only come from explicit left/right jump buttons.
+    if (!jumpForward) {
+      if (jumpLeft && !jumpRight) jumpDirection = -1;
+      if (jumpRight && !jumpLeft) jumpDirection = 1;
     }
 
     if (snap.phase !== 'playing') {
@@ -581,7 +571,11 @@ export default function PrismJump() {
       const gAbs = Math.abs(GAME.gravity[1]);
       const vy0 = (gAbs * jumpTime) / 2;
       const now = player.translation();
-      const nextRowIndex = Math.max(0, w.lastGroundedRowIndex + 1);
+      const baseRowIndex = Math.max(
+        0,
+        Math.round(now.z / GAME.rowSpacing)
+      );
+      const nextRowIndex = baseRowIndex + 1;
       const targetZ = nextRowIndex * GAME.rowSpacing;
       const targetX = now.x + jumpDirection * GAME.jumpLateralStep;
       const vx = clamp(
@@ -597,6 +591,12 @@ export default function PrismJump() {
       player.applyImpulse({ x: 0, y: deltaVy * mass, z: 0 }, true);
       player.setLinvel({ x: vx, y: vy0, z: vzToTarget }, true);
 
+      w.lastGroundedRowIndex = baseRowIndex;
+      prismJumpState.score += 1;
+      prismJumpState.furthestRowIndex = Math.max(
+        prismJumpState.furthestRowIndex,
+        nextRowIndex
+      );
       w.jumpBufferMs = 0;
       w.coyoteMs = 0;
       groundContactsRef.current = 0;
@@ -668,10 +668,7 @@ export default function PrismJump() {
     }
 
     const currentRow = Math.max(0, Math.floor((now.z + GAME.rowSpacing * 0.35) / GAME.rowSpacing));
-    if (currentRow > prismJumpState.furthestRowIndex) {
-      prismJumpState.furthestRowIndex = currentRow;
-      prismJumpState.score = currentRow;
-    }
+    prismJumpState.furthestRowIndex = Math.max(prismJumpState.furthestRowIndex, currentRow);
 
     const recycleBefore = currentRow - GAME.rowsBehindPlayer;
     if (recycleBefore > 0) {
@@ -826,7 +823,7 @@ export default function PrismJump() {
           type="dynamic"
           colliders={false}
           enabledRotations={[false, false, false]}
-          linearDamping={0.9}
+          linearDamping={0}
           angularDamping={3.5}
           ccd
         >
