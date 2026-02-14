@@ -189,14 +189,12 @@ export default function OctaSurge() {
   const deathWaveRef = useRef<THREE.Mesh>(null);
   const deathWaveMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const fxShardMeshRef = useRef<THREE.InstancedMesh>(null);
-  const trailMaterialRef = useRef<THREE.LineBasicMaterial>(null);
 
   const shellMaterialRef = useRef<any>(null);
   const shellWireMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const laneMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const obstacleMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const collectibleMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
-  const playerMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const lightARef = useRef<THREE.PointLight>(null);
   const lightBRef = useRef<THREE.PointLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
@@ -219,6 +217,7 @@ export default function OctaSurge() {
     reason: '',
     type: 'void',
   });
+  const trailEmitRef = useRef(0);
   const fxParticlesRef = useRef<FxParticle[]>(
     Array.from({ length: FX_PARTICLE_COUNT }, () => createFxParticle())
   );
@@ -289,6 +288,22 @@ export default function OctaSurge() {
     g.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
     return g;
   }, [trailPositions]);
+  const trailMaterial = useMemo(
+    () =>
+      new THREE.LineBasicMaterial({
+        color: FIBER_COLORS.wire,
+        transparent: true,
+        opacity: 0.34,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    []
+  );
+  const trailLine = useMemo(
+    () => new THREE.Line(trailGeometry, trailMaterial),
+    [trailGeometry, trailMaterial]
+  );
 
   const hideInstance = useCallback(
     (mesh: THREE.InstancedMesh | null, id: number) => {
@@ -940,6 +955,7 @@ export default function OctaSurge() {
     wireMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     obstacleMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     collectibleMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    fxShardMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   }, []);
 
   useFrame((state, rawDelta) => {
@@ -995,17 +1011,20 @@ export default function OctaSurge() {
         runtimeBefore.audioReactive,
         runtimeBefore.syncTimer
       );
+      updateFxParticles(delta);
       clearFrameInput(inputRef);
       return;
     }
 
     if (paused) {
+      updateFxParticles(delta);
       clearFrameInput(inputRef);
       return;
     }
 
     if (deathFxRef.current.active) {
       const finished = updateDeathFx(delta);
+      updateFxParticles(delta);
       if (finished) {
         const reason = deathFxRef.current.reason || 'Connection dropped.';
         endRun(reason);
@@ -1263,6 +1282,22 @@ export default function OctaSurge() {
         if (graceSaved) {
           score += GAME.scoreRate * 0.22 * multiplier;
           dangerPulse = Math.max(dangerPulse, 0.28);
+          const playerPos = playerRef.current?.position;
+          if (playerPos) {
+            const stageVisual = stageAestheticById(segment.stageId);
+            emitFxBurst(
+              playerPos.x,
+              playerPos.y,
+              playerPos.z,
+              stageVisual.wire,
+              6,
+              0.8,
+              1.8,
+              0.1,
+              0.24,
+              0.6
+            );
+          }
         }
 
         combo += 1;
@@ -1398,9 +1433,76 @@ export default function OctaSurge() {
     });
 
     const stageNow = stageById(stageId);
+    const stageVisualNow = stageAestheticById(stageNow.id);
     const progress =
       snap.mode === 'endless' ? 0 : clamp(score / Math.max(1, runGoal), 0, 1);
 
+    const colorLerp = 1 - Math.exp(-delta * 2.6);
+    sceneBgRef.current.lerp(tempColorA.set(stageVisualNow.bg), colorLerp);
+    sceneFogRef.current.lerp(tempColorB.set(stageVisualNow.fog), colorLerp);
+    gl.setClearColor(sceneBgRef.current, 1);
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.copy(sceneFogRef.current);
+    }
+
+    if (ambientRef.current) {
+      ambientRef.current.color.lerp(
+        tempColorA.set(stageVisualNow.wire),
+        1 - Math.exp(-delta * 2)
+      );
+    }
+    if (directionalRef.current) {
+      directionalRef.current.color.lerp(
+        tempColorA.set('#f8fbff'),
+        1 - Math.exp(-delta * 2)
+      );
+    }
+    if (lightARef.current) {
+      lightARef.current.color.lerp(
+        tempColorA.set(stageVisualNow.wire),
+        1 - Math.exp(-delta * 3)
+      );
+    }
+    if (lightBRef.current) {
+      lightBRef.current.color.lerp(
+        tempColorA.set(stageVisualNow.accent),
+        1 - Math.exp(-delta * 3)
+      );
+    }
+    if (shellMaterialRef.current) {
+      shellMaterialRef.current.color.lerp(
+        tempColorA.set(stageVisualNow.shell),
+        1 - Math.exp(-delta * 2.8)
+      );
+      shellMaterialRef.current.attenuationColor.lerp(
+        tempColorB.set(stageVisualNow.shell2),
+        1 - Math.exp(-delta * 2.8)
+      );
+    }
+    if (shellWireMaterialRef.current) {
+      shellWireMaterialRef.current.color.lerp(
+        tempColorA.set(stageVisualNow.wire),
+        1 - Math.exp(-delta * 3.2)
+      );
+    }
+    if (laneMaterialRef.current) {
+      laneMaterialRef.current.emissive.lerp(
+        tempColorA.set(stageVisualNow.wire),
+        1 - Math.exp(-delta * 3)
+      );
+    }
+    if (obstacleMaterialRef.current) {
+      obstacleMaterialRef.current.emissive.lerp(
+        tempColorA.set(stageVisualNow.obstacle),
+        1 - Math.exp(-delta * 3)
+      );
+    }
+    if (collectibleMaterialRef.current) {
+      collectibleMaterialRef.current.emissive.lerp(
+        tempColorA.set(stageVisualNow.wire),
+        1 - Math.exp(-delta * 3)
+      );
+    }
     octaSurgeState.syncFrame({
       score: Math.floor(score),
       combo,
@@ -1421,11 +1523,28 @@ export default function OctaSurge() {
 
     if (endReason) {
       triggerDeathFx(endReason, deathType);
+      updateFxParticles(delta);
       clearFrameInput(inputRef);
       return;
     }
 
     if (runComplete) {
+      const playerPos = playerRef.current?.position;
+      if (playerPos) {
+        emitFxBurst(
+          playerPos.x,
+          playerPos.y,
+          playerPos.z,
+          stageVisualNow.accent,
+          36,
+          2.4,
+          5.4,
+          0.2,
+          0.62,
+          1.2
+        );
+      }
+      updateFxParticles(delta);
       endRun('Run complete. Packet escaped the corrupted fiber core.');
       clearFrameInput(inputRef);
       return;
@@ -1436,6 +1555,8 @@ export default function OctaSurge() {
         rotation + Math.sin(runTime * 0.42) * 0.008 * (syncTimer > 0 ? 0.35 : 1);
     }
 
+    const speedRatio = clamp(speed / GAME.maxSpeed, 0, 1);
+
     if (playerRef.current) {
       const radius = GAME.radius - 0.58;
       const px = Math.cos(GAME.playerAngle) * radius;
@@ -1445,10 +1566,29 @@ export default function OctaSurge() {
       playerRef.current.position.set(px, py, GAME.playerZ + bob);
       playerRef.current.scale.set(pulse, pulse, pulse);
       playerRef.current.rotation.set(0, 0, -rotation * 0.1 + flipPulse * 0.16);
+
+      pushTrailPoint(px, py, GAME.playerZ - 0.08);
+
+      trailEmitRef.current +=
+        delta * (16 + speedRatio * 22 + audioReactive * 12 + dangerPulse * 8);
+      while (trailEmitRef.current >= 1) {
+        trailEmitRef.current -= 1;
+        emitFxBurst(
+          px,
+          py,
+          GAME.playerZ - 0.24,
+          stageVisualNow.wire,
+          1,
+          0.45,
+          1.24,
+          0.12,
+          0.24,
+          0.36
+        );
+      }
     }
 
     const cam = camera as THREE.PerspectiveCamera;
-    const speedRatio = clamp(speed / GAME.maxSpeed, 0, 1);
     const shake = dangerPulse * 0.03 + audioReactive * 0.009;
 
     if (cameraMode === 'firstPerson') {
@@ -1567,6 +1707,19 @@ export default function OctaSurge() {
       );
     }
 
+    if (trailMaterial) {
+      trailMaterial.opacity = THREE.MathUtils.lerp(
+        trailMaterial.opacity,
+        0.22 + speedRatio * 0.34 + audioReactive * 0.22,
+        1 - Math.exp(-delta * 9)
+      );
+      trailMaterial.color.lerp(
+        tempColorC.set(stageVisualNow.wire),
+        1 - Math.exp(-delta * 6)
+      );
+    }
+
+    updateFxParticles(delta);
     syncInstances(runTime, audioReactive, syncTimer);
     clearFrameInput(inputRef);
   });
@@ -1595,10 +1748,29 @@ export default function OctaSurge() {
         }}
       />
 
-      <ambientLight intensity={0.44} color={FIBER_COLORS.playerGlow} />
-      <directionalLight position={[8, 10, 6]} intensity={1.08} color="#f7fbff" />
-      <pointLight position={[-6, 4, 5]} intensity={0.62} color={FIBER_COLORS.wire} />
-      <pointLight position={[5, -4, 6]} intensity={0.54} color={FIBER_COLORS.accent} />
+      <ambientLight
+        ref={ambientRef}
+        intensity={0.52}
+        color={FIBER_COLORS.playerGlow}
+      />
+      <directionalLight
+        ref={directionalRef}
+        position={[8, 10, 6]}
+        intensity={1.18}
+        color="#f7fbff"
+      />
+      <pointLight
+        ref={lightARef}
+        position={[-6, 4, 5]}
+        intensity={0.72}
+        color={FIBER_COLORS.wire}
+      />
+      <pointLight
+        ref={lightBRef}
+        position={[5, -4, 6]}
+        intensity={0.62}
+        color={FIBER_COLORS.accent}
+      />
 
       <Environment preset="city" background={false} />
       <Stars
@@ -1614,6 +1786,7 @@ export default function OctaSurge() {
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -90]}>
         <primitive object={geometry.shell} attach="geometry" />
         <MeshTransmissionMaterial
+          ref={shellMaterialRef}
           thickness={0.5}
           roughness={0}
           transmission={1}
@@ -1636,6 +1809,7 @@ export default function OctaSurge() {
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -90]}>
         <primitive object={geometry.shellWire} attach="geometry" />
         <meshBasicMaterial
+          ref={shellWireMaterialRef}
           color={FIBER_COLORS.wire}
           wireframe
           transparent
@@ -1648,6 +1822,7 @@ export default function OctaSurge() {
         <instancedMesh ref={laneMeshRef} args={[undefined, undefined, laneInstanceCount]}>
           <primitive object={geometry.lane} attach="geometry" />
           <meshStandardMaterial
+            ref={laneMaterialRef}
             vertexColors
             metalness={0.84}
             roughness={0.03}
@@ -1671,6 +1846,7 @@ export default function OctaSurge() {
         <instancedMesh ref={obstacleMeshRef} args={[undefined, undefined, laneInstanceCount]}>
           <primitive object={geometry.obstacle} attach="geometry" />
           <meshStandardMaterial
+            ref={obstacleMaterialRef}
             vertexColors
             metalness={0.44}
             roughness={0.08}
@@ -1685,6 +1861,7 @@ export default function OctaSurge() {
         >
           <primitive object={geometry.collectible} attach="geometry" />
           <meshStandardMaterial
+            ref={collectibleMaterialRef}
             vertexColors
             metalness={0.3}
             roughness={0.04}
@@ -1693,6 +1870,8 @@ export default function OctaSurge() {
           />
         </instancedMesh>
       </group>
+
+      <primitive object={trailLine} frustumCulled={false} />
 
       <group ref={playerRef}>
         <mesh castShadow visible={playerVariant === 0} rotation={[Math.PI / 2, 0, 0]}>
@@ -1794,6 +1973,22 @@ export default function OctaSurge() {
           side={THREE.DoubleSide}
         />
       </mesh>
+
+      <instancedMesh
+        ref={fxShardMeshRef}
+        args={[undefined, undefined, FX_PARTICLE_COUNT]}
+        frustumCulled={false}
+      >
+        <primitive object={geometry.fxShard} attach="geometry" />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.9}
+          depthWrite={false}
+          toneMapped={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </instancedMesh>
 
       <EffectComposer multisampling={fxMultisample} enableNormalPass={false}>
         <Bloom
