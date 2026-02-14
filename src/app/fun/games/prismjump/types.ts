@@ -17,6 +17,7 @@ export type LaneRow = {
   direction: LaneDirection;
   speed: number;
   offset: number;
+  span: number;
   color: string;
   platforms: LanePlatform[];
 };

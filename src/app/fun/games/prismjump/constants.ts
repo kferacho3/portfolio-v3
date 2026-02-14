@@ -28,10 +28,23 @@ export const GAME = {
   laneSpeedRamp: 0.012,
 
   gravity: [0, -24, 0] as [number, number, number],
-  jumpHeight: 2.25,
-  jumpForwardImpulse: 4.7,
+  jumpDuration: 0.7,
+  jumpLateralAimBias: 1.15,
+  jumpMaxLateralSpeed: 15,
   jumpBufferMs: 120,
   coyoteMs: 90,
+
+  // Difficulty pacing (time based): no widening-gap pressure until 150s.
+  gapDifficultyStartSec: 150,
+  gapDifficultyRampSec: 180,
+  spawnChanceEasy: 0.96,
+  spawnChanceHard: 0.32,
+  minActiveEasy: 3,
+  minActiveHard: 1,
+  rowWidthMinFactor: 0.62,
+  rowWidthMaxFactor: 1,
+  rowJitterBase: 0.7,
+  rowJitterHardBonus: 1.15,
 
   groundControlImpulse: 17,
   airControlImpulse: 10,

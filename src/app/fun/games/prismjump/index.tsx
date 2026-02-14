@@ -30,6 +30,7 @@ const PLAYER_START_Y = GAME.platformY + PLATFORM_HALF_Y + PLAYER_HALF + 0.04;
 
 const clamp = (v: number, min: number, max: number) =>
   Math.max(min, Math.min(max, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 const wrapX = (x: number, halfWidth: number) => {
   const span = halfWidth * 2;
@@ -65,6 +66,7 @@ const makeEmptyRow = (slot: number): LaneRow => ({
   direction: slot % 2 === 0 ? 1 : -1,
   speed: GAME.laneSpeedMin,
   offset: 0,
+  span: GAME.wrapHalfX * 2,
   color: '#ffffff',
   platforms: Array.from({ length: GAME.platformsPerRow }, () => ({
     baseX: 0,
@@ -90,17 +92,43 @@ const rowPlatformX = (row: LaneRow, baseX: number, elapsed: number) =>
     GAME.wrapHalfX
   );
 
+const difficultyFromRunSeconds = (runSeconds: number) => {
+  if (runSeconds <= GAME.gapDifficultyStartSec) return 0;
+  return clamp(
+    (runSeconds - GAME.gapDifficultyStartSec) / GAME.gapDifficultyRampSec,
+    0,
+    1
+  );
+};
+
 const configureRow = (
   row: LaneRow,
   logicalIndex: number,
   seed: number,
-  palette: CubePalette
+  palette: CubePalette,
+  runSeconds: number
 ) => {
   const rand = rngFrom(hash(seed, logicalIndex));
-  const difficulty = clamp(logicalIndex / 280, 0, 1);
+  const difficulty = difficultyFromRunSeconds(runSeconds);
   const span = GAME.wrapHalfX * 2;
-  const spacing = span / GAME.platformsPerRow;
+  const widthFactor = lerp(
+    GAME.rowWidthMinFactor,
+    GAME.rowWidthMaxFactor,
+    0.35 + rand() * 0.65
+  );
+  const dynamicSpan = clamp(
+    span * widthFactor,
+    span * GAME.rowWidthMinFactor,
+    span * GAME.rowWidthMaxFactor
+  );
+  const spacing = dynamicSpan / GAME.platformsPerRow;
+  const left = -dynamicSpan * 0.5;
   const rowColors = palette.laneColors.length > 0 ? palette.laneColors : ['#ffffff'];
+  const spawnChance = lerp(GAME.spawnChanceEasy, GAME.spawnChanceHard, difficulty);
+  const targetMinActive = Math.round(
+    lerp(GAME.minActiveEasy, GAME.minActiveHard, difficulty)
+  );
+  const jitter = GAME.rowJitterBase + GAME.rowJitterHardBonus * difficulty;
 
   row.logicalIndex = logicalIndex;
   row.direction = logicalIndex % 2 === 0 ? 1 : -1;
@@ -110,23 +138,57 @@ const configureRow = (
     GAME.laneSpeedMax
   );
   row.offset = rand() * span;
+  row.span = dynamicSpan;
   row.color = rowColors[Math.floor(rand() * rowColors.length)] ?? rowColors[0];
-
-  let disabledIndex = -1;
-  if (difficulty > 0.35 && rand() < difficulty * 0.55) {
-    disabledIndex = Math.floor(rand() * GAME.platformsPerRow);
-  }
+  const activeSlots: number[] = [];
 
   for (let i = 0; i < GAME.platformsPerRow; i += 1) {
     const p = row.platforms[i];
-    const jitter = (rand() - 0.5) * GAME.platformJitterX;
-    p.baseX = -GAME.wrapHalfX + spacing * (i + 0.5) + jitter;
+    const offset = (rand() - 0.5) * GAME.platformJitterX * jitter;
+    p.baseX = left + spacing * (i + 0.5) + offset;
     p.x = p.baseX;
     p.z = logicalIndex * GAME.rowSpacing;
-    p.active = i !== disabledIndex;
+    p.active = rand() < spawnChance;
+    if (p.active) activeSlots.push(i);
     p.hasCube = p.active && rand() < GAME.cubeChance * (1 - difficulty * 0.45);
     p.cubeTaken = false;
   }
+
+  // Fairness guardrail: never allow a row to become fully empty.
+  while (activeSlots.length < targetMinActive) {
+    const idx = Math.floor(rand() * GAME.platformsPerRow);
+    const p = row.platforms[idx];
+    if (!p.active) {
+      p.active = true;
+      p.hasCube = rand() < GAME.cubeChance;
+      activeSlots.push(idx);
+    }
+    if (activeSlots.length >= GAME.platformsPerRow) break;
+  }
+};
+
+const ensureLandingPlatform = (
+  row: LaneRow,
+  nowX: number,
+  elapsedAtLanding: number
+) => {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < row.platforms.length; i += 1) {
+    const p = row.platforms[i];
+    const x = rowPlatformX(row, p.baseX, elapsedAtLanding);
+    const distance = Math.abs(nowX - x);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = i;
+    }
+  }
+
+  const target = row.platforms[bestIndex];
+  target.active = true;
+  target.cubeTaken = false;
+  return rowPlatformX(row, target.baseX, elapsedAtLanding);
 };
 
 type Runtime = {
@@ -135,9 +197,13 @@ type Runtime = {
   rows: LaneRow[];
   maxLogicalIndex: number;
   elapsed: number;
+  runSeconds: number;
   camZ: number;
   jumpBufferMs: number;
   coyoteMs: number;
+  jumpAssistActive: boolean;
+  jumpAssistTimer: number;
+  jumpTargetX: number;
   needsSpawn: boolean;
   spawnX: number;
   spawnZ: number;
@@ -183,9 +249,13 @@ export default function PrismJump() {
     rows: Array.from({ length: GAME.rowPoolSize }, (_, slot) => makeEmptyRow(slot)),
     maxLogicalIndex: GAME.rowPoolSize - 1,
     elapsed: 0,
+    runSeconds: 0,
     camZ: GAME.cameraZOffset,
     jumpBufferMs: 0,
     coyoteMs: 0,
+    jumpAssistActive: false,
+    jumpAssistTimer: 0,
+    jumpTargetX: 0,
     needsSpawn: false,
     spawnX: 0,
     spawnZ: 0,
@@ -231,9 +301,13 @@ export default function PrismJump() {
     w.seed = seed;
     w.paletteIndex = nextPaletteIndex;
     w.elapsed = 0;
+    w.runSeconds = 0;
     w.maxLogicalIndex = GAME.rowPoolSize - 1;
     w.jumpBufferMs = 0;
     w.coyoteMs = 0;
+    w.jumpAssistActive = false;
+    w.jumpAssistTimer = 0;
+    w.jumpTargetX = 0;
     w.camZ = GAME.cameraZOffset;
     w.needsSpawn = true;
 
@@ -241,7 +315,7 @@ export default function PrismJump() {
 
     for (let slot = 0; slot < GAME.rowPoolSize; slot += 1) {
       const row = w.rows[slot];
-      configureRow(row, slot, seed, nextPalette);
+      configureRow(row, slot, seed, nextPalette, 0);
     }
 
     const row0 = w.rows[0];
@@ -358,6 +432,7 @@ export default function PrismJump() {
     }
 
     w.elapsed += d;
+    w.runSeconds += d;
     w.jumpBufferMs = Math.max(0, w.jumpBufferMs - d * 1000);
     w.coyoteMs = Math.max(0, w.coyoteMs - d * 1000);
     if (wantsJump) w.jumpBufferMs = GAME.jumpBufferMs;
@@ -366,7 +441,7 @@ export default function PrismJump() {
     if (grounded) w.coyoteMs = GAME.coyoteMs;
 
     const playerVel = player.linvel();
-    if (moveAxis !== 0) {
+    if (moveAxis !== 0 && (!w.jumpAssistActive || grounded)) {
       const impulseBase = grounded
         ? GAME.groundControlImpulse
         : GAME.airControlImpulse;
@@ -376,7 +451,7 @@ export default function PrismJump() {
       );
     }
 
-    if (Math.abs(playerVel.x) > GAME.maxLateralSpeed) {
+    if (!w.jumpAssistActive && Math.abs(playerVel.x) > GAME.maxLateralSpeed) {
       player.setLinvel(
         {
           x: clamp(playerVel.x, -GAME.maxLateralSpeed, GAME.maxLateralSpeed),
@@ -400,21 +475,63 @@ export default function PrismJump() {
     }
 
     if (w.jumpBufferMs > 0 && w.coyoteMs > 0) {
-      const vel = player.linvel();
-      const jumpSpeed = Math.sqrt(2 * Math.abs(GAME.gravity[1]) * GAME.jumpHeight);
-      const deltaY = Math.max(0, jumpSpeed - vel.y);
-      const mass = player.mass();
-      player.applyImpulse(
-        {
-          x: 0,
-          y: deltaY * mass,
-          z: GAME.jumpForwardImpulse * mass,
-        },
-        true
+      const jumpTime = GAME.jumpDuration;
+      const gAbs = Math.abs(GAME.gravity[1]);
+      const vy0 = (gAbs * jumpTime) / 2;
+      const vz = GAME.rowSpacing / jumpTime;
+      const now = player.translation();
+      const currentRowIndex = Math.max(0, Math.round(now.z / GAME.rowSpacing));
+      const nextRowIndex = currentRowIndex + 1;
+      const targetRow =
+        w.rows.find((row) => row.logicalIndex === nextRowIndex) ??
+        w.rows
+          .filter((row) => row.logicalIndex > currentRowIndex)
+          .sort((a, b) => a.logicalIndex - b.logicalIndex)[0];
+      const landingElapsed = w.elapsed + jumpTime;
+      const aimX = now.x + moveAxis * GAME.jumpLateralAimBias;
+      const targetX = targetRow
+        ? ensureLandingPlatform(targetRow, aimX, landingElapsed)
+        : now.x;
+      const vx = clamp(
+        (targetX - now.x) / jumpTime,
+        -GAME.jumpMaxLateralSpeed,
+        GAME.jumpMaxLateralSpeed
       );
+
+      const vel = player.linvel();
+      const mass = player.mass();
+      const deltaVy = vy0 - vel.y;
+      player.applyImpulse({ x: 0, y: deltaVy * mass, z: 0 }, true);
+      player.setLinvel({ x: vx, y: vy0, z: vz }, true);
+
+      w.jumpAssistActive = true;
+      w.jumpAssistTimer = jumpTime;
+      w.jumpTargetX = targetX;
       w.jumpBufferMs = 0;
       w.coyoteMs = 0;
       groundContactsRef.current = 0;
+    }
+
+    if (w.jumpAssistActive) {
+      w.jumpAssistTimer = Math.max(0, w.jumpAssistTimer - d);
+      const pos = player.translation();
+      const remain = Math.max(0.01, w.jumpAssistTimer);
+      const guidedVx = clamp(
+        (w.jumpTargetX - pos.x) / remain,
+        -GAME.jumpMaxLateralSpeed,
+        GAME.jumpMaxLateralSpeed
+      );
+      const jumpVz = GAME.rowSpacing / GAME.jumpDuration;
+      const vel = player.linvel();
+      player.setLinvel({ x: guidedVx, y: vel.y, z: jumpVz }, true);
+      if (
+        w.jumpAssistTimer <= 0 ||
+        (groundContactsRef.current > 0 &&
+          w.jumpAssistTimer < GAME.jumpDuration * 0.5)
+      ) {
+        w.jumpAssistActive = false;
+        w.jumpAssistTimer = 0;
+      }
     }
 
     const now = player.translation();
@@ -493,7 +610,7 @@ export default function PrismJump() {
       for (const row of sortedRows) {
         if (row.logicalIndex < recycleBefore) {
           w.maxLogicalIndex += 1;
-          configureRow(row, w.maxLogicalIndex, w.seed, palette);
+          configureRow(row, w.maxLogicalIndex, w.seed, palette, w.runSeconds);
         }
       }
     }
@@ -630,6 +747,21 @@ export default function PrismJump() {
             />
           </mesh>
         </RigidBody>
+
+        <CuboidCollider
+          sensor
+          args={[220, 0.35, 20000]}
+          position={[0, -2.6, 20000]}
+          onIntersectionEnter={(event: any) => {
+            const otherHandle = event?.other?.rigidBody?.handle;
+            if (
+              typeof otherHandle === 'number' &&
+              otherHandle === playerRef.current?.handle
+            ) {
+              endRun();
+            }
+          }}
+        />
       </Physics>
 
       <instancedMesh ref={cubeMeshRef} args={[undefined, undefined, TOTAL_PLATFORMS]}>
