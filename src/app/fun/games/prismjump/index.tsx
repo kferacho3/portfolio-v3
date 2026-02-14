@@ -465,7 +465,7 @@ export default function PrismJump() {
     }
 
     const input = inputRef.current;
-    const wantsJump =
+    const jumpForward =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
@@ -473,18 +473,27 @@ export default function PrismJump() {
       input.justPressed.has('arrowup') ||
       input.justPressed.has('enter') ||
       input.justPressed.has('w');
+    const jumpLeft =
+      input.justPressed.has('arrowleft') || input.justPressed.has('a');
+    const jumpRight =
+      input.justPressed.has('arrowright') || input.justPressed.has('d');
+    const wantsJump = jumpForward || jumpLeft || jumpRight;
 
     const leftHeld =
       input.keysDown.has('arrowleft') || input.keysDown.has('a');
     const rightHeld =
       input.keysDown.has('arrowright') || input.keysDown.has('d');
 
-    let moveAxis = (rightHeld ? 1 : 0) - (leftHeld ? 1 : 0);
-    if (moveAxis === 0 && input.pointerDown) {
-      const pointerAxis = clamp(input.pointerX * 1.35, -1, 1);
-      if (Math.abs(pointerAxis) >= GAME.lateralPointerDeadZone) {
-        moveAxis = pointerAxis;
-      }
+    let jumpDirection: -1 | 0 | 1 = 0;
+    if (jumpLeft && !jumpRight) jumpDirection = -1;
+    if (jumpRight && !jumpLeft) jumpDirection = 1;
+    if (jumpDirection === 0 && leftHeld !== rightHeld) {
+      jumpDirection = leftHeld ? -1 : 1;
+    }
+    if (jumpDirection === 0 && input.pointerJustDown) {
+      const pointerAxis = clamp(input.pointerX, -1, 1);
+      if (pointerAxis <= -0.55) jumpDirection = -1;
+      if (pointerAxis >= 0.55) jumpDirection = 1;
     }
 
     if (snap.phase !== 'playing') {
@@ -535,16 +544,6 @@ export default function PrismJump() {
     if (grounded) w.coyoteMs = GAME.coyoteMs;
 
     const playerVel = player.linvel();
-    if (moveAxis !== 0) {
-      const impulseBase = grounded
-        ? GAME.groundControlImpulse
-        : GAME.airControlImpulse;
-      player.applyImpulse(
-        { x: moveAxis * impulseBase * d * player.mass(), y: 0, z: 0 },
-        true
-      );
-    }
-
     if (Math.abs(playerVel.x) > GAME.maxLateralSpeed) {
       player.setLinvel(
         {
@@ -579,8 +578,9 @@ export default function PrismJump() {
       );
       const nextRowIndex = currentRowIndex + 1;
       const targetZ = nextRowIndex * GAME.rowSpacing;
+      const targetX = now.x + jumpDirection * GAME.jumpLateralStep;
       const vx = clamp(
-        playerVel.x + moveAxis * GAME.jumpLateralAimBias,
+        (targetX - now.x) / jumpTime,
         -GAME.jumpMaxLateralSpeed,
         GAME.jumpMaxLateralSpeed
       );

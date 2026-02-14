@@ -43,6 +43,7 @@ export const GAME = {
 
   gravity: [0, -24, 0] as [number, number, number],
   jumpDuration: 0.7,
+  jumpLateralStep: 1.75,
   jumpLateralAimBias: 1.15,
   jumpMaxLateralSpeed: 15,
   jumpBufferMs: 120,
@@ -320,20 +321,26 @@ const makePaletteVariant = (
   const laneLightMul = 0.95 + seeded01(seed + 7) * 0.22;
   const darkenBg = 0.72 + seeded01(seed + 11) * 0.16;
   const darkenWater = 0.62 + seeded01(seed + 13) * 0.2;
+  const laneCount = 5 + Math.floor(seeded01(seed + 19) * 8); // 5..12
+  const laneColors = Array.from({ length: laneCount }, (_, i) => {
+    const source = base.laneColors[i % base.laneColors.length];
+    const cycle = Math.floor(i / base.laneColors.length);
+    const localHue =
+      hueShift +
+      (i - (laneCount - 1) * 0.5) * 8 +
+      cycle * 11 +
+      seeded01(seed + i * 17) * 10;
+    const localSat = laneSatMul * (0.92 + seeded01(seed + i * 23) * 0.2);
+    const localLight = laneLightMul * (0.9 + seeded01(seed + i * 29) * 0.22);
+    return transformHex(source, localHue, localSat, localLight);
+  });
 
   return {
     id: `${base.id}-v${variantIndex + 1}`,
     name: `${base.name} Variant ${variantIndex + 1}`,
     background: transformHex(base.background, hueShift * 0.7, satMul * 0.9, darkenBg),
     fog: transformHex(base.fog, hueShift * 0.75, satMul, darkenBg * 1.08),
-    laneColors: base.laneColors.map((laneHex, i) =>
-      transformHex(
-        laneHex,
-        hueShift + (i - 2) * 9 + seeded01(seed + i * 17) * 6,
-        laneSatMul,
-        laneLightMul
-      )
-    ),
+    laneColors,
     cubeColor: transformHex(base.cubeColor, hueShift * 0.5, 1.06, 1.07),
     cubeEmissive: transformHex(base.cubeEmissive, hueShift * 0.55, 1.02, 0.93),
     playerColor: transformHex(base.playerColor, hueShift * 0.34, 0.95, 1.02),
@@ -363,4 +370,4 @@ const buildPaletteBank = (targetCount: number) => {
   return out;
 };
 
-export const CUBE_PALETTES: CubePalette[] = buildPaletteBank(50);
+export const CUBE_PALETTES: CubePalette[] = buildPaletteBank(56);
