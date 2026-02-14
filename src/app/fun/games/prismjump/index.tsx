@@ -158,6 +158,7 @@ function makeRow(
     normals.length = 0;
     let cursor = leftBound + rng.float(0.06, Math.max(0.08, minGap * 0.9));
     let fits = true;
+    let prevLength = Number.NaN;
 
     for (let i = 0; i < targetCount; i += 1) {
       const remainingAfter = targetCount - i - 1;
@@ -172,7 +173,15 @@ function makeRow(
       }
 
       const lenMinAllowed = Math.min(minLen, maxLenAllowed);
-      const length = rng.float(lenMinAllowed, maxLenAllowed);
+      let length = rng.float(lenMinAllowed, maxLenAllowed);
+      if (
+        Number.isFinite(prevLength) &&
+        Math.abs(length - prevLength) < 0.24
+      ) {
+        const push = length >= prevLength ? 0.24 : -0.24;
+        length = clamp(length + push, lenMinAllowed, maxLenAllowed);
+      }
+      prevLength = length;
       const baseOffsetX = cursor + length * 0.5;
       const cubeChance = clamp(GAME.coinChance - difficulty * 0.08, 0.12, 0.26);
       const cubeValue = rng.bool(cubeChance) ? 1 : 0;
@@ -213,12 +222,52 @@ function makeRow(
 
   if (normals.length < GAME.minPlatformsPerRow) {
     const fallbackCount = GAME.minPlatformsPerRow;
-    const fallbackLen = Math.max(minLen, 1.2);
-    const totalLen = fallbackLen * fallbackCount;
-    const gap = (rightBound - leftBound - totalLen) / Math.max(1, fallbackCount - 1);
-    let cursor = leftBound;
+    const minVisualLen = 0.9;
+    const desiredGap = Math.max(minGap, 0.22);
+    const laneWidth = rightBound - leftBound;
+    const maxTotalLen = Math.max(
+      fallbackCount * minVisualLen,
+      laneWidth - desiredGap * Math.max(0, fallbackCount - 1)
+    );
+    const lengths = Array.from({ length: fallbackCount }, () =>
+      rng.float(minVisualLen, Math.max(minVisualLen, maxLen))
+    );
+    for (let i = 1; i < lengths.length; i += 1) {
+      if (Math.abs(lengths[i] - lengths[i - 1]) < 0.22) {
+        const push = lengths[i] >= lengths[i - 1] ? 0.22 : -0.22;
+        lengths[i] = clamp(
+          lengths[i] + push,
+          minVisualLen,
+          Math.max(minVisualLen, maxLen)
+        );
+      }
+    }
+    const rawTotal = lengths.reduce((sum, n) => sum + n, 0);
+    const scale = rawTotal > 0 ? maxTotalLen / rawTotal : 1;
+    for (let i = 0; i < lengths.length; i += 1) {
+      lengths[i] = clamp(
+        lengths[i] * scale,
+        minVisualLen,
+        Math.max(minVisualLen, maxLen)
+      );
+    }
+    let totalLen = lengths.reduce((sum, n) => sum + n, 0);
+    if (totalLen > maxTotalLen) {
+      const compress = maxTotalLen / totalLen;
+      for (let i = 0; i < lengths.length; i += 1) {
+        lengths[i] = Math.max(minVisualLen, lengths[i] * compress);
+      }
+      totalLen = lengths.reduce((sum, n) => sum + n, 0);
+    }
+    const gap = Math.max(
+      0.22,
+      (laneWidth - totalLen) / Math.max(1, fallbackCount - 1)
+    );
+    const packedWidth = totalLen + gap * Math.max(0, fallbackCount - 1);
+    let cursor = leftBound + (laneWidth - packedWidth) * 0.5;
     for (let i = 0; i < fallbackCount; i += 1) {
-      const baseOffsetX = cursor + fallbackLen * 0.5;
+      const length = lengths[i] ?? minVisualLen;
+      const baseOffsetX = cursor + length * 0.5;
       let colorIndex = rng.int(0, topColors.length - 1);
       if (topColors.length > 1 && colorIndex === lastColorIndex) {
         colorIndex = (colorIndex + 1 + rng.int(0, topColors.length - 2)) % topColors.length;
@@ -229,14 +278,14 @@ function makeRow(
         x: baseOffsetX,
         z: rowLogicalZ(rowIndex),
         baseOffsetX,
-        length: fallbackLen,
+        length,
         depth: GAME.platformDepth,
         type: 'normal',
         cubeValue: rng.bool(0.18) ? 1 : 0,
         color,
         baseColor: darkenHex(color, 0.5),
       });
-      cursor += fallbackLen + gap;
+      cursor += length + gap;
     }
   }
 
@@ -606,6 +655,12 @@ export default function PrismJump() {
       return;
     }
 
+    const failRunFromFall = () => {
+      w.mode = 'falling';
+      endRun();
+      clearFrameInput(inputRef);
+    };
+
     if (wantsJump) {
       queueJump();
     }
@@ -635,7 +690,8 @@ export default function PrismJump() {
     if (w.mode === 'grounded') {
       const row = getRow(w.rowIndex);
       if (!row) {
-        w.mode = 'falling';
+        failRunFromFall();
+        return;
       } else {
         const currentPlatform = row.platforms[w.platformSlot];
         if (currentPlatform?.type === 'normal') {
@@ -657,12 +713,13 @@ export default function PrismJump() {
               w.pos.y = playerStandY;
               w.pos.z = landing.platform.z;
             } else {
-              w.mode = 'falling';
-              w.vel.set(0, GAME.jumpImpulseY * 0.1, GAME.jumpImpulseZ * 0.72);
+              failRunFromFall();
+              return;
             }
           }
         } else {
-          w.mode = 'falling';
+          failRunFromFall();
+          return;
         }
 
         const lateralSafe = clamp(
@@ -685,6 +742,10 @@ export default function PrismJump() {
     }
 
     if (w.mode === 'air' || w.mode === 'falling') {
+      if (w.mode === 'falling') {
+        failRunFromFall();
+        return;
+      }
       w.pos.x += w.moveInputX * GAME.lateralAirSpeed * d;
       w.pos.z += (w.vel.z - w.scrollSpeed) * d;
       w.pos.y += w.vel.y * d;
@@ -761,13 +822,15 @@ export default function PrismJump() {
               landing.platform.cubeValue = 0;
             }
           } else if (w.pos.z > targetRowZ + GAME.rowSpacing * 0.5) {
-            w.mode = 'falling';
+            failRunFromFall();
+            return;
           }
         }
       }
 
       if (w.pos.y < GAME.killY) {
-        endRun();
+        failRunFromFall();
+        return;
       }
     }
 
@@ -780,24 +843,19 @@ export default function PrismJump() {
     }
 
     {
-      const camTargetZ =
-        GAME.cameraZOffset + clamp(w.pos.z * 0.14, -0.9, 2.1);
+      const camTargetZ = w.pos.z + GAME.cameraZOffset + 0.24;
       w.cameraZ = lerp(
         w.cameraZ,
         camTargetZ,
         1 - Math.exp(-d / GAME.cameraDamping)
       );
 
-      const camX = GAME.cameraX + clamp(w.pos.x * 0.1, -0.8, 0.8);
+      const camX = GAME.cameraX + clamp(w.pos.x * 0.14, -1.05, 1.05);
       const camY = GAME.cameraY;
       w.tempVecA.set(camX, camY, w.cameraZ);
-      camera.position.lerp(w.tempVecA, 1 - Math.exp(-d * 6));
+      camera.position.lerp(w.tempVecA, 1 - Math.exp(-d * 10));
 
-      w.tempVecB.set(
-        0,
-        0,
-        GAME.cameraLookAhead + clamp(w.pos.z * 0.24, -1, 3.2)
-      );
+      w.tempVecB.set(0, 0, w.pos.z + GAME.cameraLookAhead);
       camera.lookAt(w.tempVecB);
     }
 

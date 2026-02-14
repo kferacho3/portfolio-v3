@@ -76,9 +76,9 @@ export const GAME = {
   // Camera
   cameraX: 10,
   cameraY: 10,
-  cameraLookAhead: 2.8,
+  cameraLookAhead: 3.2,
   cameraZOffset: -6,
-  cameraDamping: 0.2,
+  cameraDamping: 0.12,
   chaseLineZ: -4.4,
   chaseWarningSpan: 6.2,
 };
