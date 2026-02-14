@@ -763,7 +763,7 @@ export default function PrismJump() {
             type="kinematicPosition"
             position={[0, -80, 0]}
             colliders={false}
-            friction={1.35}
+            friction={0.42}
             restitution={0.02}
             canSleep={false}
             userData={{ kind: 'platform' }}

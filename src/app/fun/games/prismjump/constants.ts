@@ -80,7 +80,7 @@ export const GAME = {
   cameraCatchUpLoseMargin: 0.72,
 };
 
-export const CUBE_PALETTES: CubePalette[] = [
+const BASE_CUBE_PALETTES: CubePalette[] = [
   {
     id: 'cyber-matcha',
     name: 'Cyber Matcha',
@@ -218,3 +218,149 @@ export const CUBE_PALETTES: CubePalette[] = [
     waterBottom: '#0f0915',
   },
 ];
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+const normalizeHex = (hex: string) => {
+  const value = hex.replace('#', '').trim();
+  if (value.length === 3) {
+    return `${value[0]}${value[0]}${value[1]}${value[1]}${value[2]}${value[2]}`;
+  }
+  return value.slice(0, 6);
+};
+
+const hexToRgb01 = (hex: string) => {
+  const normalized = normalizeHex(hex);
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  return { r, g, b };
+};
+
+const rgb01ToHex = (r: number, g: number, b: number) => {
+  const toHex = (v: number) =>
+    Math.round(clamp01(v) * 255)
+      .toString(16)
+      .padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
+const rgbToHsl = (r: number, g: number, b: number) => {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) * 0.5;
+  const d = max - min;
+  if (d === 0) return { h: 0, s: 0, l };
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  switch (max) {
+    case r:
+      h = (g - b) / d + (g < b ? 6 : 0);
+      break;
+    case g:
+      h = (b - r) / d + 2;
+      break;
+    default:
+      h = (r - g) / d + 4;
+      break;
+  }
+  h /= 6;
+  return { h, s, l };
+};
+
+const hslToRgb = (h: number, s: number, l: number) => {
+  if (s === 0) return { r: l, g: l, b: l };
+  const hue2rgb = (p: number, q: number, t: number) => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return {
+    r: hue2rgb(p, q, h + 1 / 3),
+    g: hue2rgb(p, q, h),
+    b: hue2rgb(p, q, h - 1 / 3),
+  };
+};
+
+const transformHex = (
+  hex: string,
+  hueShiftDeg: number,
+  saturationMul: number,
+  lightnessMul: number
+) => {
+  const { r, g, b } = hexToRgb01(hex);
+  const hsl = rgbToHsl(r, g, b);
+  const h = ((hsl.h * 360 + hueShiftDeg + 360) % 360) / 360;
+  const s = clamp01(hsl.s * saturationMul);
+  const l = clamp01(hsl.l * lightnessMul);
+  const rgb = hslToRgb(h, s, l);
+  return rgb01ToHex(rgb.r, rgb.g, rgb.b);
+};
+
+const seeded01 = (seed: number) => {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+const makePaletteVariant = (
+  base: CubePalette,
+  baseIndex: number,
+  variantIndex: number
+): CubePalette => {
+  const seed = (variantIndex + 1) * 97 + baseIndex * 31;
+  const hueShift = -28 + seeded01(seed) * 56;
+  const satMul = 0.9 + seeded01(seed + 3) * 0.4;
+  const laneSatMul = 1.02 + seeded01(seed + 5) * 0.45;
+  const laneLightMul = 0.95 + seeded01(seed + 7) * 0.22;
+  const darkenBg = 0.72 + seeded01(seed + 11) * 0.16;
+  const darkenWater = 0.62 + seeded01(seed + 13) * 0.2;
+
+  return {
+    id: `${base.id}-v${variantIndex + 1}`,
+    name: `${base.name} Variant ${variantIndex + 1}`,
+    background: transformHex(base.background, hueShift * 0.7, satMul * 0.9, darkenBg),
+    fog: transformHex(base.fog, hueShift * 0.75, satMul, darkenBg * 1.08),
+    laneColors: base.laneColors.map((laneHex, i) =>
+      transformHex(
+        laneHex,
+        hueShift + (i - 2) * 9 + seeded01(seed + i * 17) * 6,
+        laneSatMul,
+        laneLightMul
+      )
+    ),
+    cubeColor: transformHex(base.cubeColor, hueShift * 0.5, 1.06, 1.07),
+    cubeEmissive: transformHex(base.cubeEmissive, hueShift * 0.55, 1.02, 0.93),
+    playerColor: transformHex(base.playerColor, hueShift * 0.34, 0.95, 1.02),
+    playerEmissive: transformHex(base.playerEmissive, hueShift * 0.42, 1.04, 0.94),
+    ambientLight: transformHex(base.ambientLight, hueShift * 0.5, 0.95, 0.96),
+    keyLight: transformHex(base.keyLight, hueShift * 0.2, 0.9, 1.02),
+    fillLightA: transformHex(base.fillLightA, hueShift * 0.9, 1.06, 1.02),
+    fillLightB: transformHex(base.fillLightB, hueShift * 1.02, 1.08, 0.98),
+    waterTop: transformHex(base.waterTop, hueShift * 0.78, satMul * 0.95, darkenWater),
+    waterBottom: transformHex(base.waterBottom, hueShift * 0.82, satMul * 0.9, darkenWater * 0.82),
+  };
+};
+
+const buildPaletteBank = (targetCount: number) => {
+  const out: CubePalette[] = [];
+  let variantIndex = 0;
+  while (out.length < targetCount) {
+    const baseIndex = out.length % BASE_CUBE_PALETTES.length;
+    const base = BASE_CUBE_PALETTES[baseIndex];
+    if (variantIndex === 0) {
+      out.push(base);
+    } else {
+      out.push(makePaletteVariant(base, baseIndex, variantIndex));
+    }
+    if (baseIndex === BASE_CUBE_PALETTES.length - 1) variantIndex += 1;
+  }
+  return out;
+};
+
+export const CUBE_PALETTES: CubePalette[] = buildPaletteBank(50);
