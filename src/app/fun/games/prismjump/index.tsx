@@ -39,6 +39,9 @@ const wrapX = (x: number, halfWidth: number) => {
   return out;
 };
 
+const laneDirectionFor = (logicalIndex: number): 1 | -1 =>
+  Math.abs(logicalIndex) % 2 === 0 ? 1 : -1;
+
 const hash = (seed: number, row: number) => {
   let x = (seed ^ Math.imul(row + 1, 0x9e3779b1)) >>> 0;
   x ^= x >>> 16;
@@ -105,7 +108,7 @@ const pickPaletteIndex = (seed: number, prevIndex: number) => {
 
 const rowPlatformX = (row: LaneRow, baseX: number, elapsed: number) =>
   wrapX(
-    baseX + (row.offset + elapsed * row.speed) * row.direction,
+    baseX + (row.offset + elapsed * row.speed) * laneDirectionFor(row.logicalIndex),
     GAME.wrapHalfX
   );
 
@@ -116,6 +119,33 @@ const difficultyFromRunSeconds = (runSeconds: number) => {
     0,
     1
   );
+};
+
+const speedScaleFromScore = (score: number) => {
+  const s = Math.max(0, score);
+  const step = GAME.speedStepPoints;
+  const rampScore = GAME.speedRampStartScore;
+
+  if (s < rampScore) {
+    const stepIndex = clamp(Math.floor(s / step), 0, 3);
+    const stepT = clamp((s - stepIndex * step) / step, 0, 1);
+    const start = GAME.speedScaleStart;
+    const points = [
+      start,
+      lerp(start, 1, 0.34),
+      lerp(start, 1, 0.62),
+      lerp(start, 1, 0.84),
+      1,
+    ];
+    return lerp(points[stepIndex], points[stepIndex + 1], stepT);
+  }
+
+  const postT = clamp(
+    (s - rampScore) / GAME.speedRampPostPoints,
+    0,
+    1
+  );
+  return lerp(1, GAME.speedScaleMax, postT);
 };
 
 const configureRow = (
@@ -153,9 +183,10 @@ const configureRow = (
   const jitter = GAME.rowJitterBase + GAME.rowJitterHardBonus * difficulty;
 
   row.logicalIndex = logicalIndex;
-  row.direction = logicalIndex % 2 === 0 ? 1 : -1;
+  row.direction = laneDirectionFor(logicalIndex);
+  const laneBand = (Math.abs(logicalIndex) % 5) * 0.24;
   row.speed = clamp(
-    GAME.laneSpeedMin + logicalIndex * GAME.laneSpeedRamp + rand() * 1.6,
+    GAME.laneSpeedMin + logicalIndex * GAME.laneSpeedRamp + laneBand + rand() * 1.35,
     GAME.laneSpeedMin,
     GAME.laneSpeedMax
   );
@@ -257,6 +288,7 @@ type Runtime = {
   rows: LaneRow[];
   maxLogicalIndex: number;
   elapsed: number;
+  laneTime: number;
   runSeconds: number;
   camZ: number;
   jumpBufferMs: number;
@@ -315,6 +347,7 @@ export default function PrismJump() {
     rows: Array.from({ length: GAME.rowPoolSize }, (_, slot) => makeEmptyRow(slot)),
     maxLogicalIndex: GAME.rowPoolSize - 1,
     elapsed: 0,
+    laneTime: 0,
     runSeconds: 0,
     camZ: GAME.cameraZOffset,
     jumpBufferMs: 0,
@@ -369,6 +402,7 @@ export default function PrismJump() {
     w.seed = seed;
     w.paletteIndex = nextPaletteIndex;
     w.elapsed = 0;
+    w.laneTime = 0;
     w.runSeconds = 0;
     w.maxLogicalIndex = GAME.rowPoolSize - 1;
     w.jumpBufferMs = 0;
@@ -475,10 +509,10 @@ export default function PrismJump() {
       if (pos) {
         const camTargetZ = pos.z + GAME.cameraZOffset + 0.24;
         w.camZ = THREE.MathUtils.lerp(w.camZ, camTargetZ, 1 - Math.exp(-d * 8));
-        const camX = GAME.cameraX + clamp(pos.x * 0.14, -1.05, 1.05);
+        const camX = GAME.cameraX + clamp(pos.x * 0.22, -1.45, 1.45);
         w.tempA.set(camX, GAME.cameraY, w.camZ);
         camera.position.lerp(w.tempA, 1 - Math.exp(-d * 10));
-        w.tempB.set(0, 0, pos.z + GAME.cameraLookAhead);
+        w.tempB.set(pos.x * 0.35, GAME.platformY, pos.z + GAME.cameraLookAhead);
         camera.lookAt(w.tempB);
       }
 
@@ -502,6 +536,8 @@ export default function PrismJump() {
 
     w.elapsed += d;
     w.runSeconds += d;
+    const speedScale = speedScaleFromScore(prismJumpState.score);
+    w.laneTime += d * speedScale;
     w.jumpBufferMs = Math.max(0, w.jumpBufferMs - d * 1000);
     w.coyoteMs = Math.max(0, w.coyoteMs - d * 1000);
     if (wantsJump) w.jumpBufferMs = GAME.jumpBufferMs;
@@ -549,17 +585,20 @@ export default function PrismJump() {
       const vy0 = (gAbs * jumpTime) / 2;
       const vz = GAME.rowSpacing / jumpTime;
       const now = player.translation();
-      const currentRowIndex = Math.max(0, Math.round(now.z / GAME.rowSpacing));
+      const currentRowIndex = Math.max(
+        0,
+        Math.floor((now.z + GAME.rowSpacing * 0.22) / GAME.rowSpacing)
+      );
       const nextRowIndex = currentRowIndex + 1;
       const targetRow =
         w.rows.find((row) => row.logicalIndex === nextRowIndex) ??
         w.rows
           .filter((row) => row.logicalIndex > currentRowIndex)
           .sort((a, b) => a.logicalIndex - b.logicalIndex)[0];
-      const landingElapsed = w.elapsed + jumpTime;
+      const laneTimeAtLanding = w.laneTime + jumpTime * speedScale;
       const aimX = now.x + moveAxis * GAME.jumpLateralAimBias;
       const targetX = targetRow
-        ? ensureLandingPlatform(targetRow, aimX, landingElapsed)
+        ? ensureLandingPlatform(targetRow, aimX, laneTimeAtLanding)
         : now.x;
       const vx = clamp(
         (targetX - now.x) / jumpTime,
@@ -625,7 +664,7 @@ export default function PrismJump() {
           continue;
         }
 
-        const x = rowPlatformX(row, platform.baseX, w.elapsed);
+        const x = rowPlatformX(row, platform.baseX, w.laneTime);
         platform.x = x;
         platform.z = z;
         body.setNextKinematicTranslation({ x, y: GAME.platformY, z });
@@ -699,10 +738,10 @@ export default function PrismJump() {
       camTargetZ,
       1 - Math.exp(-d / GAME.cameraDamping)
     );
-    const camX = GAME.cameraX + clamp(now.x * 0.14, -1.05, 1.05);
+    const camX = GAME.cameraX + clamp(now.x * 0.22, -1.45, 1.45);
     w.tempA.set(camX, GAME.cameraY, w.camZ);
     camera.position.lerp(w.tempA, 1 - Math.exp(-d * 10));
-    w.tempB.set(0, 0, now.z + GAME.cameraLookAhead);
+    w.tempB.set(now.x * 0.35, GAME.platformY, now.z + GAME.cameraLookAhead);
     camera.lookAt(w.tempB);
 
     clearFrameInput(inputRef);

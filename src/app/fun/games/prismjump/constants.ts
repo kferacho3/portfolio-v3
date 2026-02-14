@@ -8,19 +8,21 @@ export const STORAGE_KEYS = {
 };
 
 export const GAME = {
-  rowSpacing: 2.55,
+  rowSpacing: 2.35,
   rowPoolSize: 26,
   rowsBehindPlayer: 7,
 
   platformsPerRow: 5,
-  platformSize: [2.1, 0.8, 2.1] as [number, number, number],
+  // X = variable width lane direction, Y = thickness, Z = constant top-face depth.
+  platformSize: [1.45, 0.62, 1.08] as [number, number, number],
   platformY: 0.4,
   wrapHalfX: 8.8,
   platformJitterX: 1.25,
-  platformScaleXMin: 0.64,
-  platformScaleXMax: 1.7,
-  platformScaleZMin: 0.66,
-  platformScaleZMax: 1.3,
+  platformScaleXMin: 0.84,
+  platformScaleXMax: 2.3,
+  // Keep platform top-face depth constant (roughly player width, slightly wider).
+  platformScaleZMin: 1,
+  platformScaleZMax: 1,
   gapWeightPower: 0.48,
 
   cubeSize: 0.45,
@@ -28,9 +30,14 @@ export const GAME = {
   cubePickupRadius: 0.8,
   cubeChance: 0.23,
 
-  laneSpeedMin: 1.8,
-  laneSpeedMax: 5.8,
-  laneSpeedRamp: 0.012,
+  laneSpeedMin: 2.2,
+  laneSpeedMax: 6.3,
+  laneSpeedRamp: 0,
+  speedStepPoints: 25,
+  speedRampStartScore: 100,
+  speedRampPostPoints: 500,
+  speedScaleStart: 0.52,
+  speedScaleMax: 1.45,
 
   gravity: [0, -24, 0] as [number, number, number],
   jumpDuration: 0.7,
@@ -44,7 +51,7 @@ export const GAME = {
   gapDifficultyRampSec: 180,
   spawnChanceEasy: 1,
   spawnChanceHard: 0.32,
-  minActiveEasy: 4,
+  minActiveEasy: 5,
   minActiveHard: 1,
   rowWidthMinFactor: 0.62,
   rowWidthMaxFactor: 1,
@@ -57,15 +64,15 @@ export const GAME = {
   groundedZDamp: 10,
   lateralPointerDeadZone: 0.2,
 
-  failX: 11.2,
+  failX: 10.8,
   failY: -6,
 
   playerSize: 0.9,
 
-  cameraX: 10,
-  cameraY: 10,
-  cameraLookAhead: 3.2,
-  cameraZOffset: -6,
+  cameraX: 8.6,
+  cameraY: 12.6,
+  cameraLookAhead: 6.2,
+  cameraZOffset: -9.8,
   cameraDamping: 0.12,
 };
 
