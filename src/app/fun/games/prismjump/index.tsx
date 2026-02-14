@@ -477,18 +477,21 @@ export default function PrismJump() {
       input.justPressed.has('arrowup') ||
       input.justPressed.has('enter') ||
       input.justPressed.has('w');
-    const jumpLeft =
-      input.justPressed.has('arrowleft') || input.justPressed.has('a');
-    const jumpRight =
-      input.justPressed.has('arrowright') || input.justPressed.has('d');
-    const wantsJump = jumpForward || jumpLeft || jumpRight;
-
-    let jumpDirection: -1 | 0 | 1 = 0;
-    // Forward inputs are always straight hops; lateral hops only come from explicit left/right jump buttons.
-    if (!jumpForward) {
-      if (jumpLeft && !jumpRight) jumpDirection = -1;
-      if (jumpRight && !jumpLeft) jumpDirection = 1;
+    const moveLeft =
+      input.keysDown.has('arrowleft') || input.keysDown.has('a');
+    const moveRight =
+      input.keysDown.has('arrowright') || input.keysDown.has('d');
+    let strafeAxis = 0;
+    if (moveLeft && !moveRight) strafeAxis = -1;
+    if (moveRight && !moveLeft) strafeAxis = 1;
+    if (
+      strafeAxis === 0 &&
+      input.pointerDown &&
+      Math.abs(input.pointerX) > GAME.lateralPointerDeadZone
+    ) {
+      strafeAxis = Math.sign(input.pointerX);
     }
+    const wantsJump = jumpForward;
 
     if (snap.phase !== 'playing') {
       if (w.needsSpawn) {
@@ -538,16 +541,20 @@ export default function PrismJump() {
     if (grounded) w.coyoteMs = GAME.coyoteMs;
 
     const playerVel = player.linvel();
-    if (Math.abs(playerVel.x) > GAME.maxLateralSpeed) {
-      player.setLinvel(
-        {
-          x: clamp(playerVel.x, -GAME.maxLateralSpeed, GAME.maxLateralSpeed),
-          y: playerVel.y,
-          z: playerVel.z,
-        },
-        true
-      );
-    }
+    const desiredVX =
+      strafeAxis === 0
+        ? grounded
+          ? 0
+          : playerVel.x
+        : strafeAxis * GAME.maxLateralSpeed;
+    const controlRate = grounded
+      ? GAME.groundControlImpulse
+      : GAME.airControlImpulse;
+    const controlledVX = clamp(
+      THREE.MathUtils.damp(playerVel.x, desiredVX, controlRate, d),
+      -GAME.maxLateralSpeed,
+      GAME.maxLateralSpeed
+    );
 
     if (grounded) {
       const groundedRow = Math.max(
@@ -557,10 +564,19 @@ export default function PrismJump() {
       w.lastGroundedRowIndex = groundedRow;
       player.setLinvel(
         {
-          // Keep contact-derived platform carry; only damp Z drift on ground.
-          x: playerVel.x,
+          // Keep row movement readable: strafe stays responsive, and grounded z drift is damped.
+          x: controlledVX,
           y: playerVel.y,
           z: THREE.MathUtils.damp(playerVel.z, 0, GAME.groundedZDamp, d),
+        },
+        true
+      );
+    } else if (Math.abs(controlledVX - playerVel.x) > 0.0001) {
+      player.setLinvel(
+        {
+          x: controlledVX,
+          y: playerVel.y,
+          z: playerVel.z,
         },
         true
       );
@@ -571,18 +587,10 @@ export default function PrismJump() {
       const gAbs = Math.abs(GAME.gravity[1]);
       const vy0 = (gAbs * jumpTime) / 2;
       const now = player.translation();
-      const baseRowIndex = Math.max(
-        0,
-        Math.round(now.z / GAME.rowSpacing)
-      );
+      const baseRowIndex = Math.max(0, w.lastGroundedRowIndex);
       const nextRowIndex = baseRowIndex + 1;
       const targetZ = nextRowIndex * GAME.rowSpacing;
-      const targetX = now.x + jumpDirection * GAME.jumpLateralStep;
-      const vx = clamp(
-        (targetX - now.x) / jumpTime,
-        -GAME.jumpMaxLateralSpeed,
-        GAME.jumpMaxLateralSpeed
-      );
+      const vx = 0;
       const vzToTarget = (targetZ - now.z) / jumpTime;
 
       const vel = player.linvel();
@@ -592,7 +600,7 @@ export default function PrismJump() {
       player.setLinvel({ x: vx, y: vy0, z: vzToTarget }, true);
 
       w.lastGroundedRowIndex = baseRowIndex;
-      prismJumpState.score += 1;
+      prismJumpState.score = Math.max(prismJumpState.score, nextRowIndex);
       prismJumpState.furthestRowIndex = Math.max(
         prismJumpState.furthestRowIndex,
         nextRowIndex
