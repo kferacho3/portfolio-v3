@@ -88,6 +88,8 @@ export default function KatamariPlayer({
   const moveDirection = useMemo(() => new THREE.Vector3(), []);
   const planarVelocity = useMemo(() => new THREE.Vector3(), []);
   const desiredVelocity = useMemo(() => new THREE.Vector3(), []);
+  const lateralVelocity = useMemo(() => new THREE.Vector3(), []);
+  const forwardVelocity = useMemo(() => new THREE.Vector3(), []);
   const torqueAxis = useMemo(() => new THREE.Vector3(), []);
   const torque = useMemo(() => new THREE.Vector3(), []);
   const smoothedInput = useRef(new THREE.Vector2(0, 0));
@@ -192,6 +194,24 @@ export default function KatamariPlayer({
         (input.boost ? 1.08 : 1);
       const steerLerp = 1 - Math.exp(-response * delta);
       planarVelocity.lerp(desiredVelocity, steerLerp);
+
+      const forwardSpeed = planarVelocity.dot(moveDirection);
+      forwardVelocity.copy(moveDirection).multiplyScalar(forwardSpeed);
+      lateralVelocity.copy(planarVelocity).sub(forwardVelocity);
+
+      const gripBlend =
+        1 -
+        Math.exp(
+          -PLAYER_TUNING.sideGrip * delta * (input.boost ? 1.3 : 1)
+        );
+      planarVelocity.addScaledVector(lateralVelocity, -gripBlend);
+
+      if (forwardSpeed < targetSpeed * 0.26) {
+        planarVelocity.addScaledVector(
+          moveDirection,
+          PLAYER_TUNING.startAssist * accelScaleFactor * delta
+        );
+      }
     } else {
       const coast = Math.exp(-PLAYER_TUNING.coastDrag * delta);
       planarVelocity.multiplyScalar(coast);
@@ -206,7 +226,7 @@ export default function KatamariPlayer({
       rb.setLinvel(
         {
           x: planarVelocity.x,
-          y: velocity.y,
+          y: THREE.MathUtils.clamp(velocity.y, -6.5, 4.5),
           z: planarVelocity.z,
         },
         true

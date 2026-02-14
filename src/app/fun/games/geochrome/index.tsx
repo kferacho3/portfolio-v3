@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import {
   ARENA_TUNING,
   COLLISION_GROUPS,
+  GROWTH_TUNING,
   RENDER_TUNING,
   WORLD_TUNING,
   getGeoChromePalette,
@@ -83,6 +84,10 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const start = useGeoChromeStore((state) => state.start);
   const setAudioReady = useGeoChromeStore((state) => state.setAudioReady);
   const pushPickup = useGeoChromeStore((state) => state.pushPickup);
+  const registerPickupCombo = useGeoChromeStore(
+    (state) => state.registerPickupCombo
+  );
+  const tickCombo = useGeoChromeStore((state) => state.tickCombo);
   const setWorldCount = useGeoChromeStore((state) => state.setWorldCount);
   const resetProgress = useGeoChromeStore((state) => state.resetProgress);
   const resetRun = useGeoChromeStore((state) => state.resetRun);
@@ -103,20 +108,25 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
   const worldBodiesRef = React.useRef<(RapierRigidBody | null)[] | null>(null);
   const pendingCollectRef = React.useRef<number[]>([]);
   const pendingCollectSetRef = React.useRef<Set<number>>(new Set());
+  const pickupPulseRef = React.useRef(0);
+  const autoCollectTimerRef = React.useRef(0);
+  const comboTickTimerRef = React.useRef(0);
+  const playerPositionRef = React.useRef(new THREE.Vector3());
 
   const inputRef = useInput(started);
 
-  const { tryCollect, scaleRef, resetEngine } = useKatamariEngine({
-    seed: worldSeed,
-    started,
-    worldData,
-    stuckBuffers,
-    worldMeshRef,
-    worldBodiesRef,
-    stuckMeshRef,
-    katamariGroupRef,
-    katamariColliderRef: playerColliderRef,
-  });
+  const { tryCollect, collectNearby, scaleRef, resetEngine, getPickupThreshold } =
+    useKatamariEngine({
+      seed: worldSeed,
+      started,
+      worldData,
+      stuckBuffers,
+      worldMeshRef,
+      worldBodiesRef,
+      stuckMeshRef,
+      katamariGroupRef,
+      katamariColliderRef: playerColliderRef,
+    });
 
   useSpringCamera({
     started,
@@ -134,10 +144,16 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     resetRun();
     pendingCollectRef.current.length = 0;
     pendingCollectSetRef.current.clear();
+    pickupPulseRef.current = 0;
+    autoCollectTimerRef.current = 0;
+    comboTickTimerRef.current = 0;
     return () => {
       resetRun();
       pendingCollectRef.current.length = 0;
       pendingCollectSetRef.current.clear();
+      pickupPulseRef.current = 0;
+      autoCollectTimerRef.current = 0;
+      comboTickTimerRef.current = 0;
       worldBodiesRef.current = null;
       worldMeshRef.current = null;
       stuckMeshRef.current = null;
@@ -167,6 +183,9 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
     resetProgress();
     pendingCollectRef.current.length = 0;
     pendingCollectSetRef.current.clear();
+    pickupPulseRef.current = 0;
+    autoCollectTimerRef.current = 0;
+    comboTickTimerRef.current = 0;
     worldBodiesRef.current = null;
     worldMeshRef.current = null;
     stuckMeshRef.current = null;
@@ -213,21 +232,39 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
       const data = fromObject ?? fromBody;
       if (!data || data.collected === true) return;
 
+      const size = data.size;
+      if (
+        typeof size === 'number' &&
+        size > getPickupThreshold() * 1.02
+      ) {
+        pickupPulseRef.current = Math.min(
+          1.2,
+          pickupPulseRef.current + 0.06 + Math.min(0.2, size * 0.018)
+        );
+        return;
+      }
+
       const index = data?.worldIndex;
       if (typeof index !== 'number') return;
       if (pendingCollectSetRef.current.has(index)) return;
       pendingCollectSetRef.current.add(index);
       pendingCollectRef.current.push(index);
     },
-    [started]
+    [getPickupThreshold, started]
   );
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!started) return;
-    const queue = pendingCollectRef.current;
-    if (queue.length === 0) return;
 
-    const maxPerFrame = 24;
+    comboTickTimerRef.current += delta;
+    if (comboTickTimerRef.current >= 0.12) {
+      comboTickTimerRef.current = 0;
+      tickCombo(performance.now());
+    }
+
+    const queue = pendingCollectRef.current;
+    const maxPerFrame = 28;
+    let collectedThisFrame = 0;
     for (let i = 0; i < maxPerFrame && queue.length > 0; i += 1) {
       const index = queue.shift();
       if (typeof index !== 'number') break;
@@ -235,6 +272,7 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
 
       const result = tryCollect(index);
       if (!result) continue;
+      collectedThisFrame += 1;
 
       pushPickup({
         label: result.label,
@@ -242,6 +280,48 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
         size: result.size,
       });
       playPickup(result.size);
+      registerPickupCombo(result.size);
+      pickupPulseRef.current = Math.min(
+        1.8,
+        pickupPulseRef.current + 0.2 + Math.min(0.6, result.size * 0.095)
+      );
+    }
+
+    autoCollectTimerRef.current += delta;
+    if (autoCollectTimerRef.current >= GROWTH_TUNING.autoCollectInterval) {
+      autoCollectTimerRef.current = 0;
+      const playerBody = playerBodyRef.current;
+      if (playerBody) {
+        try {
+          const translation = playerBody.translation();
+          playerPositionRef.current.set(
+            translation.x,
+            translation.y,
+            translation.z
+          );
+          const autoBudget = Math.max(
+            4,
+            GROWTH_TUNING.autoCollectBudget - collectedThisFrame
+          );
+          const nearbyResults = collectNearby(playerPositionRef.current, autoBudget);
+          for (let i = 0; i < nearbyResults.length; i += 1) {
+            const result = nearbyResults[i];
+            pushPickup({
+              label: result.label,
+              color: result.color,
+              size: result.size,
+            });
+            playPickup(result.size);
+            registerPickupCombo(result.size);
+            pickupPulseRef.current = Math.min(
+              1.8,
+              pickupPulseRef.current + 0.2 + Math.min(0.6, result.size * 0.095)
+            );
+          }
+        } catch {
+          // Body can be stale during restart transitions.
+        }
+      }
     }
   }, 1);
 
@@ -355,6 +435,7 @@ const GeoChrome: React.FC<GeoChromeProps> = ({ soundsOn = true }) => {
         started={started}
         lowPerf={lowPerf}
         playerBodyRef={playerBodyRef}
+        pickupPulseRef={pickupPulseRef}
         accentColor={palette.hudAccent}
       />
 

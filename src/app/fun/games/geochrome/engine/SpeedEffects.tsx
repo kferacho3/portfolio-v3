@@ -13,6 +13,7 @@ interface SpeedEffectsProps {
   started: boolean;
   lowPerf: boolean;
   playerBodyRef: React.MutableRefObject<RapierRigidBody | null>;
+  pickupPulseRef: React.MutableRefObject<number>;
   accentColor: string;
 }
 
@@ -20,6 +21,7 @@ export function SpeedEffects({
   started,
   lowPerf,
   playerBodyRef,
+  pickupPulseRef,
   accentColor,
 }: SpeedEffectsProps) {
   const strengthRef = useRef(0);
@@ -53,7 +55,14 @@ export function SpeedEffects({
     const normalized = THREE.MathUtils.clamp(speed / 24, 0, 1);
     strengthRef.current = THREE.MathUtils.lerp(strengthRef.current, normalized, 0.35);
 
-    const strength = strengthRef.current;
+    pickupPulseRef.current = Math.max(0, pickupPulseRef.current - delta * 1.9);
+
+    const pulseStrength = THREE.MathUtils.clamp(pickupPulseRef.current, 0, 1.4);
+    const strength = THREE.MathUtils.clamp(
+      strengthRef.current + pulseStrength * 0.9,
+      0,
+      1.9
+    );
     chromaOffset.set(
       strength * 0.0034 * accentBoost,
       strength * 0.0026 * accentBoost
@@ -69,7 +78,7 @@ export function SpeedEffects({
 
     if (noiseRef.current) {
       noiseRef.current.opacity =
-        lowPerf ? 0 : 0.028 + strength * 0.08 * accentBoost;
+        lowPerf ? 0 : 0.028 + strength * 0.085 * accentBoost;
     }
   });
 

@@ -53,6 +53,7 @@ export interface CollectResult {
   color: string;
   size: number;
   radius: number;
+  position: [number, number, number];
 }
 
 export type WorldBodyRef = MutableRefObject<(RapierRigidBody | null)[] | null>;

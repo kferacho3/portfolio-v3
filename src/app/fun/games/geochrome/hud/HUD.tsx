@@ -16,6 +16,9 @@ export default function HUD({ paletteName, onCyclePalette }: HUDProps) {
   const lowPerf = useGeoChromeStore((state) => state.lowPerf);
   const stuckCount = useGeoChromeStore((state) => state.stuckCount);
   const worldCount = useGeoChromeStore((state) => state.worldCount);
+  const combo = useGeoChromeStore((state) => state.combo);
+  const comboMultiplier = useGeoChromeStore((state) => state.comboMultiplier);
+  const maxCombo = useGeoChromeStore((state) => state.maxCombo);
 
   const diameterKey = useMemo(() => Math.floor(diameter * 100), [diameter]);
   const nextGoal =
@@ -97,6 +100,34 @@ export default function HUD({ paletteName, onCyclePalette }: HUDProps) {
               {lowPerf ? 'Lite Mode' : 'Full Mode'}
             </div>
           </div>
+        </div>
+
+        <div
+          className="pointer-events-none absolute left-1/2 -translate-x-1/2"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 10px)' }}
+        >
+          <motion.div
+            key={`${combo}-${Math.round(comboMultiplier * 100)}`}
+            initial={{ opacity: 0, y: -8, scale: 0.92 }}
+            animate={{ opacity: combo > 1 ? 1 : 0.82, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+            className="rounded-2xl border border-fuchsia-200/45 bg-slate-950/62 px-4 py-2 text-center shadow-[0_0_38px_-14px_rgba(244,114,182,0.85)] backdrop-blur"
+          >
+            <div className="text-[10px] uppercase tracking-[0.18em] text-fuchsia-200/85">
+              Combo Chain
+            </div>
+            <div className="flex items-end justify-center gap-2">
+              <span className="text-xl font-black leading-none text-fuchsia-50 md:text-3xl">
+                x{comboMultiplier.toFixed(2)}
+              </span>
+              <span className="mb-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-fuchsia-200/80">
+                {combo > 1 ? `${combo} hits` : 'warmup'}
+              </span>
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.12em] text-fuchsia-100/70">
+              best chain: {maxCombo}
+            </div>
+          </motion.div>
         </div>
 
         <div className="absolute bottom-4 left-4 w-[280px] space-y-2 md:bottom-8 md:left-8 md:w-[340px]">

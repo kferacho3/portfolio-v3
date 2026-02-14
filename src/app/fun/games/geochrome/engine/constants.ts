@@ -311,12 +311,12 @@ export const WORLD_TUNING = {
 } as const;
 
 export const PLAYER_TUNING = {
-  spawnHeight: 1.4,
-  accel: 44,
+  spawnHeight: 1.1,
+  accel: 48,
   torque: 19,
-  maxSpeed: 50,
+  maxSpeed: 53,
   boostMultiplier: 1.75,
-  linearDamping: 1.05,
+  linearDamping: 0.96,
   angularDamping: 0.92,
   baseRadius: 0.72,
   friction: 1.05,
@@ -327,17 +327,27 @@ export const PLAYER_TUNING = {
   maxAccelScaleFactor: 3.2,
   torqueScaleGain: 0.17,
   maxTorqueScaleFactor: 1.95,
-  velocityResponse: 7.8,
-  coastDrag: 2.35,
+  velocityResponse: 9.4,
+  coastDrag: 2.05,
+  sideGrip: 7.5,
+  startAssist: 21,
 } as const;
 
 export const GROWTH_TUNING = {
-  pickupFactor: 1.2,
-  growthK: 0.65,
-  visualLerp: 5.5,
-  colliderLerp: 4.8,
-  colliderUpdateInterval: 0.08,
+  pickupFactor: 1.3,
+  growthK: 0.74,
+  visualLerp: 6.2,
+  colliderLerp: 6.6,
+  colliderUpdateInterval: 0.05,
   hudUpdateInterval: 0.05,
+  absorbDistancePadding: 0.34,
+  autoCollectCellSize: 9.5,
+  autoCollectInterval: 0.075,
+  autoCollectBudget: 14,
+  autoCollectMaxCandidates: 180,
+  comboWindowMs: 1700,
+  comboMultiplierStep: 0.08,
+  comboMaxMultiplierBonus: 2.8,
 } as const;
 
 export const CAMERA_TUNING = {

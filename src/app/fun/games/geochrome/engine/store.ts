@@ -3,6 +3,7 @@ import type { PickupToast } from './types';
 import {
   DEFAULT_GEOCHROME_PALETTE,
   GEOCHROME_PALETTE_ORDER,
+  GROWTH_TUNING,
   PLAYER_TUNING,
   randomGeoChromePaletteId,
   type GeoChromePaletteId,
@@ -17,6 +18,10 @@ interface GeoChromeStore {
   pickupLimit: number;
   stuckCount: number;
   worldCount: number;
+  combo: number;
+  comboMultiplier: number;
+  maxCombo: number;
+  lastPickupAt: number;
   recentPickups: PickupToast[];
   paletteId: GeoChromePaletteId;
   start: () => void;
@@ -31,13 +36,15 @@ interface GeoChromeStore {
   nextPalette: () => void;
   randomizePalette: () => void;
   pushPickup: (pickup: Omit<PickupToast, 'id'>) => void;
+  registerPickupCombo: (size: number) => void;
+  tickCombo: (now: number) => void;
   resetProgress: () => void;
   resetRun: () => void;
 }
 
 let pickupId = 1;
 const baseDiameter = PLAYER_TUNING.baseRadius * 2;
-const basePickupLimit = PLAYER_TUNING.baseRadius;
+const basePickupLimit = PLAYER_TUNING.baseRadius * GROWTH_TUNING.pickupFactor;
 
 export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   started: false,
@@ -48,6 +55,10 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
   pickupLimit: basePickupLimit,
   stuckCount: 0,
   worldCount: 0,
+  combo: 0,
+  comboMultiplier: 1,
+  maxCombo: 0,
+  lastPickupAt: 0,
   recentPickups: [],
   paletteId: DEFAULT_GEOCHROME_PALETTE,
 
@@ -100,12 +111,47 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
       ].slice(0, 5),
     })),
 
+  registerPickupCombo: (size) =>
+    set((state) => {
+      const now = performance.now();
+      const withinWindow =
+        state.lastPickupAt > 0 &&
+        now - state.lastPickupAt <= GROWTH_TUNING.comboWindowMs;
+      const combo = withinWindow ? state.combo + 1 : 1;
+      const bonus = Math.min(
+        GROWTH_TUNING.comboMaxMultiplierBonus,
+        combo * GROWTH_TUNING.comboMultiplierStep + size * 0.045
+      );
+      return {
+        combo,
+        comboMultiplier: 1 + bonus,
+        maxCombo: Math.max(state.maxCombo, combo),
+        lastPickupAt: now,
+      };
+    }),
+
+  tickCombo: (now) =>
+    set((state) => {
+      if (state.combo <= 0) return state;
+      if (now - state.lastPickupAt <= GROWTH_TUNING.comboWindowMs) {
+        return state;
+      }
+      return {
+        combo: 0,
+        comboMultiplier: 1,
+      };
+    }),
+
   resetProgress: () =>
     set({
       diameter: baseDiameter,
       pickupLimit: basePickupLimit,
       stuckCount: 0,
       worldCount: 0,
+      combo: 0,
+      comboMultiplier: 1,
+      maxCombo: 0,
+      lastPickupAt: 0,
       recentPickups: [],
     }),
 
@@ -117,6 +163,10 @@ export const useGeoChromeStore = create<GeoChromeStore>((set) => ({
       pickupLimit: basePickupLimit,
       stuckCount: 0,
       worldCount: 0,
+      combo: 0,
+      comboMultiplier: 1,
+      maxCombo: 0,
+      lastPickupAt: 0,
       recentPickups: [],
       lowPerf: false,
       targetDpr: 1.25,

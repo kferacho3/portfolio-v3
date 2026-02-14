@@ -36,6 +36,8 @@ export function useKatamariEngine({
   const worldDataRef = useRef(worldData);
   const stuckBuffersRef = useRef(stuckBuffers);
   const collectedMaskRef = useRef<Uint8Array>(new Uint8Array(0));
+  const worldPositionsRef = useRef<Float32Array>(new Float32Array(0));
+  const spatialBucketsRef = useRef<Map<string, number[]>>(new Map());
 
   const stuckCountRef = useRef(0);
   const totalVolumeRef = useRef(0);
@@ -64,6 +66,41 @@ export function useKatamariEngine({
     collectedMaskRef.current = worldData
       ? new Uint8Array(worldData.count)
       : new Uint8Array(0);
+    if (!worldData) {
+      worldPositionsRef.current = new Float32Array(0);
+      spatialBucketsRef.current = new Map();
+      return;
+    }
+
+    const positions = new Float32Array(worldData.count * 3);
+    const buckets = new Map<string, number[]>();
+    const cellSize = GROWTH_TUNING.autoCollectCellSize;
+
+    for (let i = 0; i < worldData.count; i += 1) {
+      const base = i * 3;
+      const instance = worldData.instances[i];
+      const pos = instance?.position;
+      const x = Array.isArray(pos) ? pos[0] : 0;
+      const y = Array.isArray(pos) ? pos[1] : 0;
+      const z = Array.isArray(pos) ? pos[2] : 0;
+
+      positions[base + 0] = x;
+      positions[base + 1] = y;
+      positions[base + 2] = z;
+
+      const cellX = Math.floor(x / cellSize);
+      const cellZ = Math.floor(z / cellSize);
+      const key = `${cellX}:${cellZ}`;
+      const list = buckets.get(key);
+      if (list) {
+        list.push(i);
+      } else {
+        buckets.set(key, [i]);
+      }
+    }
+
+    worldPositionsRef.current = positions;
+    spatialBucketsRef.current = buckets;
   }, [worldData]);
 
   useEffect(() => {
@@ -233,6 +270,14 @@ export function useKatamariEngine({
 
       setStuckCount(stuckCountRef.current);
 
+      const positions = worldPositionsRef.current;
+      const posBase = index * 3;
+      const pickupPosition: [number, number, number] = [
+        positions[posBase + 0] ?? 0,
+        positions[posBase + 1] ?? 0,
+        positions[posBase + 2] ?? 0,
+      ];
+
       return {
         index,
         stuckIndex,
@@ -240,6 +285,7 @@ export function useKatamariEngine({
         color: meta.color,
         size: meta.size,
         radius: target,
+        position: pickupPosition,
       };
     },
     [
@@ -255,6 +301,75 @@ export function useKatamariEngine({
       worldBodiesRef,
       worldMeshRef,
     ]
+  );
+
+  const collectNearby = useCallback(
+    (
+      playerPosition: THREE.Vector3,
+      budget: number = GROWTH_TUNING.autoCollectBudget
+    ) => {
+      const world = worldDataRef.current;
+      if (!world || budget <= 0) return [] as CollectResult[];
+
+      const positions = worldPositionsRef.current;
+      const buckets = spatialBucketsRef.current;
+      if (positions.length === 0 || buckets.size === 0) {
+        return [] as CollectResult[];
+      }
+
+      const threshold = getPickupThreshold();
+      const radius = currentRadiusRef.current;
+      const scanRadius =
+        radius + threshold * 0.58 + GROWTH_TUNING.absorbDistancePadding;
+      const cellSize = GROWTH_TUNING.autoCollectCellSize;
+      const minX = Math.floor((playerPosition.x - scanRadius) / cellSize);
+      const maxX = Math.floor((playerPosition.x + scanRadius) / cellSize);
+      const minZ = Math.floor((playerPosition.z - scanRadius) / cellSize);
+      const maxZ = Math.floor((playerPosition.z + scanRadius) / cellSize);
+
+      const collected: CollectResult[] = [];
+      let tested = 0;
+
+      for (let cx = minX; cx <= maxX; cx += 1) {
+        for (let cz = minZ; cz <= maxZ; cz += 1) {
+          const candidates = buckets.get(`${cx}:${cz}`);
+          if (!candidates) continue;
+
+          for (let i = 0; i < candidates.length; i += 1) {
+            if (collected.length >= budget) return collected;
+            if (tested >= GROWTH_TUNING.autoCollectMaxCandidates) {
+              return collected;
+            }
+            tested += 1;
+
+            const index = candidates[i];
+            if (collectedMaskRef.current[index] === 1) continue;
+
+            const meta = world.metadata[index];
+            if (!meta || meta.size > threshold) continue;
+
+            const base = index * 3;
+            const dx = positions[base + 0] - playerPosition.x;
+            const dy = positions[base + 1] - playerPosition.y;
+            const dz = positions[base + 2] - playerPosition.z;
+            const absorbRadius =
+              radius + meta.size * 0.56 + GROWTH_TUNING.absorbDistancePadding;
+
+            if (dx * dx + dy * dy + dz * dz > absorbRadius * absorbRadius) {
+              continue;
+            }
+
+            const result = tryCollect(index);
+            if (result) {
+              collected.push(result);
+            }
+          }
+        }
+      }
+
+      return collected;
+    },
+    [getPickupThreshold, tryCollect]
   );
 
   useFrame((_, delta) => {
@@ -302,6 +417,7 @@ export function useKatamariEngine({
   return {
     resetEngine,
     tryCollect,
+    collectNearby,
     currentRadiusRef,
     scaleRef,
     getPickupThreshold,
