@@ -483,9 +483,16 @@ export default function PrismJump() {
     Array.from({ length: TOTAL_PLATFORMS }, () => null)
   );
   const cubeMeshRef = useRef<THREE.InstancedMesh>(null);
+  const prismMeshRef = useRef<THREE.InstancedMesh>(null);
+  const novaMeshRef = useRef<THREE.InstancedMesh>(null);
+  const sparkCubeMeshRef = useRef<THREE.InstancedMesh>(null);
+  const sparkPrismMeshRef = useRef<THREE.InstancedMesh>(null);
+  const sparkNovaMeshRef = useRef<THREE.InstancedMesh>(null);
   const groundContactsRef = useRef(0);
   const [paletteIndex, setPaletteIndex] = useState(0);
   const palette = CUBE_PALETTES[paletteIndex] ?? CUBE_PALETTES[0];
+  const selectedSkin =
+    PRISM_CHARACTER_SKINS[snap.selectedSkin] ?? PRISM_CHARACTER_SKINS[0];
 
   const worldRef = useRef<Runtime>({
     seed: 1,
@@ -506,8 +513,10 @@ export default function PrismJump() {
     tempA: new THREE.Vector3(),
     tempB: new THREE.Vector3(),
     cubeColor: new THREE.Color('#ffffff'),
+    sparkColor: new THREE.Color('#ffffff'),
     dummy: new THREE.Object3D(),
     hiddenMatrix: new THREE.Matrix4(),
+    gemSparks: [],
   });
 
   const platformVisuals = useMemo(
@@ -555,6 +564,7 @@ export default function PrismJump() {
     w.jumpBufferMs = 0;
     w.coyoteMs = 0;
     w.camZ = GAME.cameraZOffset;
+    w.gemSparks = [];
     w.needsSpawn = true;
 
     setPaletteIndex(nextPaletteIndex);
@@ -585,6 +595,8 @@ export default function PrismJump() {
     w.chaseZ = w.spawnZ - GAME.rowSpacing * 2.2;
 
     prismJumpState.score = 0;
+    prismJumpState.jumpScore = 0;
+    prismJumpState.gemBonusScore = 0;
     prismJumpState.furthestRowIndex = 0;
     prismJumpState.runCubes = 0;
     prismJumpState.edgeSafe = 1;
@@ -637,8 +649,9 @@ export default function PrismJump() {
     const moveRight =
       input.keysDown.has('arrowright') || input.keysDown.has('d');
     let strafeAxis = 0;
-    if (moveLeft && !moveRight) strafeAxis = -1;
-    if (moveRight && !moveLeft) strafeAxis = 1;
+    // Camera is angled from the right, so world-axis movement feels inverted on screen.
+    if (moveLeft && !moveRight) strafeAxis = 1;
+    if (moveRight && !moveLeft) strafeAxis = -1;
     const wantsJump = jumpForward;
 
     if (snap.phase !== 'playing') {
@@ -669,8 +682,21 @@ export default function PrismJump() {
     const platformBaseMaterials = platformBaseMaterialsRef.current;
     const platformTopMaterials = platformTopMaterialsRef.current;
     const cubeMesh = cubeMeshRef.current;
+    const prismMesh = prismMeshRef.current;
+    const novaMesh = novaMeshRef.current;
+    const sparkCubeMesh = sparkCubeMeshRef.current;
+    const sparkPrismMesh = sparkPrismMeshRef.current;
+    const sparkNovaMesh = sparkNovaMeshRef.current;
 
-    if (!player || !cubeMesh) {
+    if (
+      !player ||
+      !cubeMesh ||
+      !prismMesh ||
+      !novaMesh ||
+      !sparkCubeMesh ||
+      !sparkPrismMesh ||
+      !sparkNovaMesh
+    ) {
       clearFrameInput(inputRef);
       return;
     }
@@ -745,7 +771,7 @@ export default function PrismJump() {
       player.setLinvel({ x: vx, y: vy0, z: vzToTarget }, true);
 
       w.lastGroundedRowIndex = baseRowIndex;
-      prismJumpState.score = Math.max(prismJumpState.score, nextRowIndex);
+      prismJumpState.setJumpScore(nextRowIndex);
       prismJumpState.furthestRowIndex = Math.max(
         prismJumpState.furthestRowIndex,
         nextRowIndex
@@ -757,8 +783,8 @@ export default function PrismJump() {
 
     const now = player.translation();
     const cubeColor = w.cubeColor;
+    const sparkColor = w.sparkColor;
     const dummy = w.dummy;
-    cubeColor.set(palette.cubeColor);
 
     for (let rowIndex = 0; rowIndex < w.rows.length; rowIndex += 1) {
       const row = w.rows[rowIndex];
@@ -774,6 +800,8 @@ export default function PrismJump() {
           platform.z = z;
           body.setNextKinematicTranslation({ x: 0, y: -80, z });
           cubeMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          prismMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          novaMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
           continue;
         }
 
@@ -795,29 +823,144 @@ export default function PrismJump() {
         if (platform.hasCube && !platform.cubeTaken) {
           const cubeY = GAME.platformY + PLATFORM_HALF_Y + GAME.cubeHeightOffset;
           dummy.position.set(x, cubeY, z);
-          dummy.rotation.set(0, state.clock.elapsedTime * 2.8, 0);
-          dummy.scale.setScalar(GAME.cubeSize);
+          dummy.rotation.set(
+            0,
+            state.clock.elapsedTime * collectibleSpinForKind(platform.collectibleKind),
+            0
+          );
+          dummy.scale.setScalar(collectibleScaleForKind(platform.collectibleKind));
           dummy.updateMatrix();
-          cubeMesh.setMatrixAt(bodyIndex, dummy.matrix);
-          cubeMesh.setColorAt(bodyIndex, cubeColor);
+          cubeColor.set(platform.collectibleColor || palette.cubeColor);
+
+          if (platform.collectibleKind === 'prism') {
+            prismMesh.setMatrixAt(bodyIndex, dummy.matrix);
+            prismMesh.setColorAt(bodyIndex, cubeColor);
+            cubeMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+            novaMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          } else if (platform.collectibleKind === 'nova') {
+            novaMesh.setMatrixAt(bodyIndex, dummy.matrix);
+            novaMesh.setColorAt(bodyIndex, cubeColor);
+            cubeMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+            prismMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          } else {
+            cubeMesh.setMatrixAt(bodyIndex, dummy.matrix);
+            cubeMesh.setColorAt(bodyIndex, cubeColor);
+            prismMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+            novaMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          }
 
           const dx = now.x - x;
           const dy = now.y - cubeY;
           const dz = now.z - z;
           if (dx * dx + dy * dy + dz * dz < GAME.cubePickupRadius * GAME.cubePickupRadius) {
+            const value = Math.max(1, platform.collectibleValue || 1);
+            const cubeGain =
+              platform.collectibleKind === 'nova'
+                ? 3
+                : platform.collectibleKind === 'prism'
+                  ? 2
+                  : 1;
             platform.cubeTaken = true;
-            prismJumpState.addRunCubes(1);
-            prismJumpState.setToast('+1 cube');
+            prismJumpState.addRunCubes(cubeGain);
+            prismJumpState.addGemBonusScore(value);
+            prismJumpState.setToast(`+${value} gem bonus`, 950);
+            spawnGemDissolve(
+              w,
+              x,
+              cubeY,
+              z,
+              value,
+              platform.collectibleColor || palette.cubeColor,
+              platform.collectibleKind
+            );
           }
         } else {
           cubeMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          prismMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
+          novaMesh.setMatrixAt(bodyIndex, w.hiddenMatrix);
         }
       }
+    }
+
+    let sparkCubeCount = 0;
+    let sparkPrismCount = 0;
+    let sparkNovaCount = 0;
+    const aliveSparks: GemSpark[] = [];
+    for (let i = 0; i < w.gemSparks.length; i += 1) {
+      const spark = w.gemSparks[i];
+      spark.age += d;
+      if (spark.age >= spark.life) continue;
+
+      spark.vy += GAME.gravity[1] * 0.22 * d;
+      spark.x += spark.vx * d;
+      spark.y += spark.vy * d;
+      spark.z += spark.vz * d;
+      spark.rx += spark.vrx * d;
+      spark.ry += spark.vry * d;
+      spark.rz += spark.vrz * d;
+
+      const fade = clamp(1 - spark.age / spark.life, 0, 1);
+      dummy.position.set(spark.x, spark.y, spark.z);
+      dummy.rotation.set(spark.rx, spark.ry, spark.rz);
+      dummy.scale.setScalar(spark.size * (0.3 + 0.95 * fade));
+      dummy.updateMatrix();
+      sparkColor.set(spark.color).multiplyScalar(0.56 + 0.74 * fade);
+
+      if (spark.shape === 'nova') {
+        if (sparkNovaCount < MAX_GEM_SPARKS_PER_SHAPE) {
+          sparkNovaMesh.setMatrixAt(sparkNovaCount, dummy.matrix);
+          sparkNovaMesh.setColorAt(sparkNovaCount, sparkColor);
+          sparkNovaCount += 1;
+        }
+      } else if (spark.shape === 'prism') {
+        if (sparkPrismCount < MAX_GEM_SPARKS_PER_SHAPE) {
+          sparkPrismMesh.setMatrixAt(sparkPrismCount, dummy.matrix);
+          sparkPrismMesh.setColorAt(sparkPrismCount, sparkColor);
+          sparkPrismCount += 1;
+        }
+      } else if (sparkCubeCount < MAX_GEM_SPARKS_PER_SHAPE) {
+        sparkCubeMesh.setMatrixAt(sparkCubeCount, dummy.matrix);
+        sparkCubeMesh.setColorAt(sparkCubeCount, sparkColor);
+        sparkCubeCount += 1;
+      }
+
+      aliveSparks.push(spark);
+    }
+    w.gemSparks = aliveSparks;
+
+    for (let i = sparkCubeCount; i < MAX_GEM_SPARKS_PER_SHAPE; i += 1) {
+      sparkCubeMesh.setMatrixAt(i, w.hiddenMatrix);
+    }
+    for (let i = sparkPrismCount; i < MAX_GEM_SPARKS_PER_SHAPE; i += 1) {
+      sparkPrismMesh.setMatrixAt(i, w.hiddenMatrix);
+    }
+    for (let i = sparkNovaCount; i < MAX_GEM_SPARKS_PER_SHAPE; i += 1) {
+      sparkNovaMesh.setMatrixAt(i, w.hiddenMatrix);
     }
 
     cubeMesh.instanceMatrix.needsUpdate = true;
     if (cubeMesh.instanceColor) {
       cubeMesh.instanceColor.needsUpdate = true;
+    }
+    prismMesh.instanceMatrix.needsUpdate = true;
+    if (prismMesh.instanceColor) {
+      prismMesh.instanceColor.needsUpdate = true;
+    }
+    novaMesh.instanceMatrix.needsUpdate = true;
+    if (novaMesh.instanceColor) {
+      novaMesh.instanceColor.needsUpdate = true;
+    }
+    sparkCubeMesh.instanceMatrix.needsUpdate = true;
+    if (sparkCubeMesh.instanceColor) {
+      sparkCubeMesh.instanceColor.needsUpdate = true;
+    }
+    sparkPrismMesh.instanceMatrix.needsUpdate = true;
+    if (sparkPrismMesh.instanceColor) {
+      sparkPrismMesh.instanceColor.needsUpdate = true;
+    }
+    sparkNovaMesh.instanceMatrix.needsUpdate = true;
+    if (sparkNovaMesh.instanceColor) {
+      sparkNovaMesh.instanceColor.needsUpdate = true;
     }
 
     const currentRow = Math.max(0, Math.floor((now.z + GAME.rowSpacing * 0.35) / GAME.rowSpacing));
@@ -1001,14 +1144,14 @@ export default function PrismJump() {
             }}
           />
 
-          <mesh castShadow>
-            <boxGeometry args={[GAME.playerSize, GAME.playerSize, GAME.playerSize]} />
+          <mesh castShadow scale={[selectedSkin.scale, selectedSkin.scale, selectedSkin.scale]}>
+            {playerGeometry(selectedSkin.geometry)}
             <meshStandardMaterial
-              color={palette.playerColor}
-              roughness={0.24}
-              metalness={0.15}
-              emissive={palette.playerEmissive}
-              emissiveIntensity={0.5}
+              color={selectedSkin.color}
+              roughness={0.2}
+              metalness={0.18}
+              emissive={selectedSkin.emissive}
+              emissiveIntensity={0.62}
             />
           </mesh>
         </RigidBody>
@@ -1042,6 +1185,92 @@ export default function PrismJump() {
           emissiveIntensity={0.7}
           vertexColors
           toneMapped={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={prismMeshRef}
+        args={[undefined, undefined, TOTAL_PLATFORMS]}
+        frustumCulled={false}
+      >
+        <octahedronGeometry args={[0.9, 0]} />
+        <meshStandardMaterial
+          roughness={0.16}
+          metalness={0.34}
+          emissive={palette.cubeEmissive}
+          emissiveIntensity={0.86}
+          vertexColors
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={novaMeshRef}
+        args={[undefined, undefined, TOTAL_PLATFORMS]}
+        frustumCulled={false}
+      >
+        <dodecahedronGeometry args={[0.86, 0]} />
+        <meshStandardMaterial
+          roughness={0.12}
+          metalness={0.42}
+          emissive={palette.cubeEmissive}
+          emissiveIntensity={0.95}
+          vertexColors
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={sparkCubeMeshRef}
+        args={[undefined, undefined, MAX_GEM_SPARKS_PER_SHAPE]}
+        frustumCulled={false}
+      >
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          roughness={0.2}
+          metalness={0.28}
+          emissive={palette.cubeEmissive}
+          emissiveIntensity={0.64}
+          vertexColors
+          toneMapped={false}
+          transparent
+          opacity={0.95}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={sparkPrismMeshRef}
+        args={[undefined, undefined, MAX_GEM_SPARKS_PER_SHAPE]}
+        frustumCulled={false}
+      >
+        <octahedronGeometry args={[0.76, 0]} />
+        <meshStandardMaterial
+          roughness={0.16}
+          metalness={0.33}
+          emissive={palette.cubeEmissive}
+          emissiveIntensity={0.72}
+          vertexColors
+          toneMapped={false}
+          transparent
+          opacity={0.95}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={sparkNovaMeshRef}
+        args={[undefined, undefined, MAX_GEM_SPARKS_PER_SHAPE]}
+        frustumCulled={false}
+      >
+        <icosahedronGeometry args={[0.74, 0]} />
+        <meshStandardMaterial
+          roughness={0.14}
+          metalness={0.36}
+          emissive={palette.cubeEmissive}
+          emissiveIntensity={0.8}
+          vertexColors
+          toneMapped={false}
+          transparent
+          opacity={0.95}
         />
       </instancedMesh>
 

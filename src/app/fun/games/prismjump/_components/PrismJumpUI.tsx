@@ -2,13 +2,15 @@
 
 import { Html } from '@react-three/drei';
 import { useSnapshot } from 'valtio';
-import { PRISM_JUMP_TITLE } from '../constants';
+import { PRISM_CHARACTER_SKINS, PRISM_JUMP_TITLE } from '../constants';
 import { prismJumpState } from '../state';
 
 export function PrismJumpUI() {
   const snap = useSnapshot(prismJumpState);
   const toastVisible = snap.toastUntil > Date.now() && snap.toast.length > 0;
   const cubesTotal = snap.totalCubes + snap.runCubes;
+  const currentSkin =
+    PRISM_CHARACTER_SKINS[snap.selectedSkin] ?? PRISM_CHARACTER_SKINS[0];
 
   return (
     <Html fullscreen>
@@ -123,7 +125,14 @@ export function PrismJumpUI() {
                 backdropFilter: 'blur(8px)',
               }}
             >
-              <span style={{ opacity: 0.75, fontSize: 12 }}>Score</span>
+              <span style={{ opacity: 0.75, fontSize: 12 }}>
+                Jumps {snap.jumpScore}
+              </span>
+              <span style={{ opacity: 0.8 }}>+</span>
+              <span style={{ fontWeight: 800, color: '#75f4ff', fontSize: 14 }}>
+                Gems {snap.gemBonusScore}
+              </span>
+              <span style={{ opacity: 0.82 }}>=</span>
               <span style={{ fontWeight: 900, fontSize: 16 }}>{snap.score}</span>
             </div>
           </>
@@ -165,6 +174,71 @@ export function PrismJumpUI() {
               <p style={{ margin: '10px 0 0', opacity: 0.76, fontSize: 14 }}>
                 Tap/Space to jump. A/D or Left/Right to strafe.
               </p>
+              <div
+                style={{
+                  marginTop: 14,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => prismJumpState.cycleSkin(-1)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Prev Skin
+                </button>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'rgba(0,0,0,0.28)',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      borderRadius: 4,
+                      background: currentSkin.color,
+                      boxShadow: `0 0 10px ${currentSkin.emissive}`,
+                    }}
+                  />
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>
+                    {currentSkin.name}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => prismJumpState.cycleSkin(1)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Next Skin
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => prismJumpState.startGame()}
@@ -222,6 +296,12 @@ export function PrismJumpUI() {
               <p style={{ margin: '12px 0 2px', fontSize: 14, opacity: 0.84 }}>
                 Score: {snap.score} | Best: {snap.best}
               </p>
+              <p style={{ margin: '0 0 2px', fontSize: 14, opacity: 0.84 }}>
+                Jumps: {snap.jumpScore} + Gems:{' '}
+                <span style={{ color: '#75f4ff', fontWeight: 700 }}>
+                  {snap.gemBonusScore}
+                </span>
+              </p>
               <p style={{ margin: '0 0 12px', fontSize: 14, opacity: 0.84 }}>
                 Run Cubes: +{snap.lastRunCubes} | Total Cubes: {snap.totalCubes}
               </p>
@@ -249,6 +329,36 @@ export function PrismJumpUI() {
                   }}
                 >
                   Retry
+                </button>
+                <button
+                  type="button"
+                  onClick={() => prismJumpState.cycleSkin(-1)}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Prev Skin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => prismJumpState.cycleSkin(1)}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Next Skin
                 </button>
                 <button
                   type="button"
