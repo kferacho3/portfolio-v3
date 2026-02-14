@@ -100,6 +100,8 @@ type Runtime = {
   hudCommit: number;
   shake: number;
   flash: number;
+  painFlash: number;
+  collectFlash: number;
 
   obstacleStreak: number;
   lastSpawnTheta: number;
@@ -134,6 +136,7 @@ const COLLECT_ANGLE_GOLD = 0.45;
 const COLLECT_ANGLE_GREEN = 0.41;
 const COLLECT_ANGLE_PURPLE = 0.37;
 const NEAR_MISS_BONUS_RANGE = 0.18;
+const COLLISION_PADDING_MAX = 0.12;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -257,6 +260,8 @@ const createRuntime = (): Runtime => ({
   hudCommit: 0,
   shake: 0,
   flash: 0,
+  painFlash: 0,
+  collectFlash: 0,
 
   obstacleStreak: 0,
   lastSpawnTheta: 0,
@@ -273,6 +278,9 @@ const difficultyAt = (runtime: Runtime) =>
 
 const spacingAtDifficulty = (difficulty: number) =>
   lerp(SPACING_START, SPACING_END, clamp(difficulty, 0, 1));
+
+const collisionPaddingAtDifficulty = (difficulty: number) =>
+  lerp(0.015, COLLISION_PADDING_MAX, clamp(difficulty, 0, 1));
 
 const hitAngleForVariant = (variant: HazardVariant) => {
   if (variant === 'crusher') return 0.44;
@@ -415,6 +423,8 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.hudCommit = 0;
   runtime.shake = 0;
   runtime.flash = 0;
+  runtime.painFlash = 0;
+  runtime.collectFlash = 0;
 
   runtime.obstacleStreak = 0;
   runtime.lastSpawnTheta = 0;
@@ -726,6 +736,7 @@ function KnotHop() {
 
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
   const coreMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const painOverlayMatRef = useRef<THREE.MeshBasicMaterial>(null);
 
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const crusherRef = useRef<THREE.InstancedMesh>(null);
@@ -747,6 +758,8 @@ function KnotHop() {
   const whiteColor = useMemo(() => new THREE.Color('#ffffff'), []);
   const chromaOffset = useMemo(() => new THREE.Vector2(0.00025, 0.0001), []);
   const zeroOffset = useMemo(() => new THREE.Vector2(0, 0), []);
+  const painOverlayColor = useMemo(() => new THREE.Color('#ff2d58'), []);
+  const collectOverlayColor = useMemo(() => new THREE.Color('#84f9ff'), []);
 
   const shardColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.blackCore), []);
   const shardFlashColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.blackFlash), []);
@@ -811,6 +824,12 @@ function KnotHop() {
     if (variant === 'purple') return 0xb068ff;
     if (variant === 'green') return 0x58ff8d;
     return 0xffd74c;
+  };
+
+  const collectibleAccentHex = (variant: CollectibleVariant) => {
+    if (variant === 'purple') return 0xf0ceff;
+    if (variant === 'green') return 0xc6ffe0;
+    return 0xfff3b4;
   };
 
   const crashColorHex = (variant: HazardVariant) => {
@@ -955,8 +974,10 @@ function KnotHop() {
     playerY: number
   ) => {
     const color = collectibleColorHex(variant);
+    const accent = collectibleAccentHex(variant);
     const orbitCount = variant === 'purple' ? 22 : variant === 'green' ? 18 : 15;
     const haloCount = variant === 'purple' ? 16 : variant === 'green' ? 13 : 11;
+    const sparkleCount = variant === 'purple' ? 20 : variant === 'green' ? 16 : 12;
     const toPlayerX = playerX;
     const toPlayerY = playerY;
     const toPlayerZ = PLAYER_Z;
@@ -1004,6 +1025,44 @@ function KnotHop() {
       targetY: toPlayerY,
       targetZ: toPlayerZ,
       spreadZ: 1.85,
+    });
+
+    spawnBurst(
+      runtime,
+      x,
+      y,
+      z,
+      accent,
+      sparkleCount,
+      0.52,
+      1.8,
+      0.014,
+      0.044,
+      0.22,
+      0.46,
+      {
+        kind: 'collect',
+        drag: 2.3,
+        gravity: -0.22,
+        homing: baseHoming * 0.88,
+        swirl: baseSwirl * 0.95,
+        targetX: toPlayerX,
+        targetY: toPlayerY,
+        targetZ: toPlayerZ,
+        spreadZ: 2.2,
+      }
+    );
+
+    spawnBurst(runtime, x, y, z, 0xffffff, 8, 0.26, 0.92, 0.018, 0.046, 0.12, 0.24, {
+      kind: 'collect',
+      drag: 4.2,
+      gravity: 0,
+      homing: baseHoming * 0.64,
+      swirl: baseSwirl * 0.28,
+      targetX: toPlayerX,
+      targetY: toPlayerY,
+      targetZ: toPlayerZ,
+      spreadZ: 1.4,
     });
   };
 
@@ -1115,6 +1174,7 @@ function KnotHop() {
 
       runtime.targetAngularVelocity = runtime.spinDir * runtime.spinSpeed;
 
+      const thetaStart = runtime.theta;
       const turnResponse = 12.4;
       runtime.angularVelocity = lerp(
         runtime.angularVelocity,
@@ -1122,11 +1182,14 @@ function KnotHop() {
         1 - Math.exp(-turnResponse * dt)
       );
       runtime.theta = normalizeAngle(runtime.theta + runtime.angularVelocity * dt);
+      const thetaEnd = runtime.theta;
       runtime.hopPulse = Math.max(0, runtime.hopPulse - dt * 5.6);
 
       let crashed = false;
+      const collisionPadding = collisionPaddingAtDifficulty(difficulty);
 
       for (const event of runtime.events) {
+        const prevZ = event.z;
         event.z += runtime.speed * dt;
         event.pulse += dt * (event.kind === 'collectible' ? 6.8 : 4.2);
         event.spin += dt *
@@ -1139,23 +1202,42 @@ function KnotHop() {
                 : 2.4);
         event.flash = Math.max(0, event.flash - dt * 3.8);
 
-        const currentTheta = eventThetaAtTime(event, runtime.elapsed);
-
-        if (!event.resolved && event.z >= PASS_Z) {
+        const crossedPlayer = !event.resolved && prevZ < PASS_Z && event.z >= PASS_Z;
+        if (crossedPlayer) {
           event.resolved = true;
 
-          const err = Math.abs(shortestAngleDiff(currentTheta, runtime.theta));
+          const crossAlpha = clamp(
+            (PASS_Z - prevZ) / Math.max(0.0001, event.z - prevZ),
+            0,
+            1
+          );
+          const sampleElapsed = runtime.elapsed - dt + dt * crossAlpha;
+          const playerThetaAtCross = normalizeAngle(
+            thetaStart + shortestAngleDiff(thetaEnd, thetaStart) * crossAlpha
+          );
+          const eventTheta = eventThetaAtTime(event, sampleElapsed);
+          const err = Math.abs(shortestAngleDiff(eventTheta, playerThetaAtCross));
+          const impactX = Math.cos(eventTheta) * ORBIT_RADIUS;
+          const impactY = Math.sin(eventTheta) * ORBIT_RADIUS;
+          const impactZ = PASS_Z;
 
           if (event.kind === 'obstacle') {
-            if (err <= event.hitAngle) {
-              runtime.shake = 1.28;
+            const obstacleHitAngle = event.hitAngle + collisionPadding;
+            if (err <= obstacleHitAngle) {
+              runtime.shake = 1.34;
               runtime.flash = 1;
+              runtime.painFlash = 1;
+              runtime.collectFlash *= 0.5;
               maybeVibrate(28);
               playTone(170, 0.14, 0.055);
 
-              const ox = Math.cos(currentTheta) * ORBIT_RADIUS;
-              const oy = Math.sin(currentTheta) * ORBIT_RADIUS;
-              spawnCrashExplosion(runtime, ox, oy, event.z, event.variant as HazardVariant);
+              spawnCrashExplosion(
+                runtime,
+                impactX,
+                impactY,
+                impactZ,
+                event.variant as HazardVariant
+              );
 
               const reason =
                 event.variant === 'crusher'
@@ -1180,18 +1262,30 @@ function KnotHop() {
                   ? 24
                   : 16;
 
-            if (err <= event.hitAngle + NEAR_MISS_BONUS_RANGE) {
+            if (err <= obstacleHitAngle + NEAR_MISS_BONUS_RANGE) {
               scoreGain += 10;
               runtime.shake = Math.min(1.2, runtime.shake + 0.11);
               knotHopState.setToast('NEAR MISS', 0.3);
 
-              const nx = Math.cos(currentTheta) * ORBIT_RADIUS;
-              const ny = Math.sin(currentTheta) * ORBIT_RADIUS;
-              spawnBurst(runtime, nx, ny, event.z, 0xffd3b8, 12, 0.95, 1.92, 0.022, 0.046, 0.2, 0.4, {
-                kind: 'burst',
-                drag: 2.4,
-                gravity: -0.35,
-              });
+              spawnBurst(
+                runtime,
+                impactX,
+                impactY,
+                impactZ,
+                0xffd3b8,
+                12,
+                0.95,
+                1.92,
+                0.022,
+                0.046,
+                0.2,
+                0.4,
+                {
+                  kind: 'burst',
+                  drag: 2.4,
+                  gravity: -0.35,
+                }
+              );
             }
 
             runtime.score += scoreGain + Math.min(runtime.streak, 30) * 2.8;
@@ -1202,7 +1296,8 @@ function KnotHop() {
             }
           } else {
             const collectibleVariant = event.variant as CollectibleVariant;
-            const collectAngle = collectAngleForVariant(collectibleVariant);
+            const collectAngle =
+              collectAngleForVariant(collectibleVariant) + collisionPadding * 0.82;
 
             if (err <= collectAngle) {
               runtime.collected += 1;
@@ -1218,8 +1313,16 @@ function KnotHop() {
 
               runtime.score += gain;
               event.flash = 1;
-              runtime.shake = Math.min(1.2, runtime.shake + 0.09);
+              runtime.shake = Math.min(1.2, runtime.shake + 0.12);
               runtime.flash = Math.max(runtime.flash, 0.22);
+              runtime.collectFlash = Math.max(
+                runtime.collectFlash,
+                collectibleVariant === 'purple'
+                  ? 1
+                  : collectibleVariant === 'green'
+                    ? 0.86
+                    : 0.72
+              );
               playTone(
                 collectibleVariant === 'purple'
                   ? 1210
@@ -1230,15 +1333,13 @@ function KnotHop() {
                 0.022
               );
 
-              const cx = Math.cos(currentTheta) * ORBIT_RADIUS;
-              const cy = Math.sin(currentTheta) * ORBIT_RADIUS;
-              const absorbX = Math.cos(runtime.theta) * ORBIT_RADIUS;
-              const absorbY = Math.sin(runtime.theta) * ORBIT_RADIUS;
+              const absorbX = Math.cos(playerThetaAtCross) * ORBIT_RADIUS;
+              const absorbY = Math.sin(playerThetaAtCross) * ORBIT_RADIUS;
               spawnCollectionEffect(
                 runtime,
-                cx,
-                cy,
-                event.z,
+                impactX,
+                impactY,
+                impactZ,
                 collectibleVariant,
                 absorbX,
                 absorbY
@@ -1284,6 +1385,8 @@ function KnotHop() {
 
     runtime.flash = Math.max(0, runtime.flash - dt * 2.9);
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
+    runtime.painFlash = Math.max(0, runtime.painFlash - dt * 2.35);
+    runtime.collectFlash = Math.max(0, runtime.collectFlash - dt * 3.2);
     const orbitNow = ORBIT_RADIUS + runtime.hopPulse * 0.13;
     const px = Math.cos(runtime.theta) * orbitNow;
     const py = Math.sin(runtime.theta) * orbitNow;
@@ -1338,10 +1441,31 @@ function KnotHop() {
     if (bgMatRef.current) {
       bgMatRef.current.uniforms.uTime.value += dt;
       bgMatRef.current.uniforms.uFlash.value = runtime.flash;
+      bgMatRef.current.uniforms.uCollect.value = runtime.collectFlash;
     }
 
     if (coreMatRef.current) {
-      coreMatRef.current.emissiveIntensity = 0.25 + runtime.shake * 0.24 + runtime.flash * 0.28;
+      coreMatRef.current.emissiveIntensity =
+        0.25 +
+        runtime.shake * 0.24 +
+        runtime.flash * 0.28 +
+        runtime.collectFlash * 0.16;
+    }
+
+    const chromaTrauma = runtime.painFlash * 0.0038 + runtime.collectFlash * 0.0014;
+    chromaOffset.set(0.00025 + chromaTrauma, 0.0001 + chromaTrauma * 0.56);
+
+    if (painOverlayMatRef.current) {
+      const painWeight = clamp(runtime.painFlash, 0, 1);
+      const collectWeight = clamp(runtime.collectFlash * 0.75, 0, 1);
+      painOverlayMatRef.current.color
+        .copy(painOverlayColor)
+        .lerp(collectOverlayColor, collectWeight);
+      painOverlayMatRef.current.opacity = clamp(
+        painWeight * 0.58 + collectWeight * 0.2,
+        0,
+        0.8
+      );
     }
 
     if (playerGroupRef.current) {
@@ -1651,7 +1775,20 @@ function KnotHop() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 2.95, 7.15]} fov={47} />
+      <PerspectiveCamera makeDefault position={[0, 2.95, 7.15]} fov={47}>
+        <mesh position={[0, 0, -1.1]} renderOrder={1200} frustumCulled={false}>
+          <planeGeometry args={[4.2, 2.6]} />
+          <meshBasicMaterial
+            ref={painOverlayMatRef}
+            color="#ff2d58"
+            transparent
+            opacity={0}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+      </PerspectiveCamera>
       <color attach="background" args={['#04070f']} />
       <fog attach="fog" args={['#04070f', 8, 54]} />
 
@@ -1677,7 +1814,7 @@ function KnotHop() {
         <planeGeometry args={[34, 20]} />
         <shaderMaterial
           ref={bgMatRef}
-          uniforms={{ uTime: { value: 0 }, uFlash: { value: 0 } }}
+          uniforms={{ uTime: { value: 0 }, uFlash: { value: 0 }, uCollect: { value: 0 } }}
           vertexShader={`
             varying vec2 vUv;
             void main() {
@@ -1688,6 +1825,7 @@ function KnotHop() {
           fragmentShader={`
             uniform float uTime;
             uniform float uFlash;
+            uniform float uCollect;
             varying vec2 vUv;
 
             float hash(vec2 p) {
@@ -1712,6 +1850,7 @@ function KnotHop() {
               col = mix(col, accentA, (1.0 - grad) * 0.25 + wave * 0.08);
               col = mix(col, accentB, (cloud - 0.35) * 0.18);
               col += vec3(0.4, 0.15, 0.12) * uFlash * 0.18;
+              col += vec3(0.12, 0.3, 0.34) * uCollect * 0.18;
 
               gl_FragColor = vec4(col, 1.0);
             }
