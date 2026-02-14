@@ -204,7 +204,7 @@ export function PrismJumpUI() {
                 Score: {snap.score} | Best: {snap.best}
               </p>
               <p style={{ margin: '0 0 12px', fontSize: 14, opacity: 0.84 }}>
-                Run Cubes: +{snap.runCubes} | Total Cubes: {snap.totalCubes}
+                Run Cubes: +{snap.lastRunCubes} | Total Cubes: {snap.totalCubes}
               </p>
 
               <div

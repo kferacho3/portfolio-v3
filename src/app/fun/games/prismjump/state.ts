@@ -12,6 +12,7 @@ export const prismJumpState = proxy({
   furthestRowIndex: 0,
 
   runCubes: 0,
+  lastRunCubes: 0,
   totalCubes: 0,
 
   edgeSafe: 1,
@@ -44,6 +45,7 @@ export const prismJumpState = proxy({
     prismJumpState.score = 0;
     prismJumpState.furthestRowIndex = 0;
     prismJumpState.runCubes = 0;
+    prismJumpState.lastRunCubes = 0;
     prismJumpState.edgeSafe = 1;
     prismJumpState.phase = 'playing';
   },
@@ -59,6 +61,7 @@ export const prismJumpState = proxy({
 
   end: () => {
     if (prismJumpState.phase !== 'playing') return;
+    prismJumpState.lastRunCubes = prismJumpState.runCubes;
     prismJumpState.best = Math.max(prismJumpState.best, prismJumpState.score);
     prismJumpState.totalCubes += prismJumpState.runCubes;
     prismJumpState.runCubes = 0;
@@ -74,6 +77,7 @@ export const prismJumpState = proxy({
     prismJumpState.score = 0;
     prismJumpState.furthestRowIndex = 0;
     prismJumpState.runCubes = 0;
+    prismJumpState.lastRunCubes = 0;
     prismJumpState.edgeSafe = 1;
     prismJumpState.phase = 'menu';
     prismJumpState.worldSeed = randomSeed();

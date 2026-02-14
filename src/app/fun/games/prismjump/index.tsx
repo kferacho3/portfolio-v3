@@ -390,7 +390,8 @@ export default function PrismJump() {
     if (grounded) {
       player.setLinvel(
         {
-          x: THREE.MathUtils.damp(playerVel.x, moveAxis * 1.6, 8, d),
+          // Keep contact-derived platform carry; only damp Z drift on ground.
+          x: playerVel.x,
           y: playerVel.y,
           z: THREE.MathUtils.damp(playerVel.z, 0, GAME.groundedZDamp, d),
         },
