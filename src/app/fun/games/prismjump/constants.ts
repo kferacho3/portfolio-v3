@@ -13,7 +13,7 @@ export const GAME = {
   // World sizing
   rowSpacing: 2.0,
   xLimit: 7.5, // player dies if carried beyond this
-  xWrap: 15, // platforms wrap beyond this; keep lanes clear
+  xWrap: 7.8,
   spawnHalfWidth: 6.8,
 
   // Platform sizing - single prism per platform (bright colored block on thin dark base)
@@ -41,11 +41,16 @@ export const GAME = {
   gapFarMin: 1.0,
   gapFarMax: 2.7,
 
-  // Movement / difficulty - PLATFORMS ALWAYS MOVE!
+  // Movement / difficulty - all rows sway + continuous downward flow
   baseSpeed: 1.8,
   speedIncreasePerRow: 0.018,
   maxSpeed: 5.5,
+  rowSwayAmplitude: 1.55,
+  rowSwaySecondary: 0.55,
   rowSpeedVariance: 0.16,
+  baseScrollSpeed: 1.22,
+  scrollIncreasePerRow: 0.01,
+  maxScrollSpeed: 3.7,
   lateralGroundSpeed: 4.1,
   lateralAirSpeed: 2.5,
   pointerLateralDeadZone: 0.2,
@@ -71,9 +76,11 @@ export const GAME = {
   // Camera
   cameraX: 10,
   cameraY: 10,
-  cameraLookAhead: 3,
+  cameraLookAhead: 2.8,
   cameraZOffset: -6,
-  cameraDamping: 0.18,
+  cameraDamping: 0.2,
+  chaseLineZ: -4.4,
+  chaseWarningSpan: 6.2,
 };
 
 export type PrismPalette = {

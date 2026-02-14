@@ -24,6 +24,7 @@ export type PlatformData = {
 
   // Visuals
   color: string;
+  baseColor: string;
 
   // Moving hazard on this platform (normal platforms only); player loses if they overlap it
   slidingHazard?: SlidingHazard;
@@ -33,6 +34,8 @@ export type RowData = {
   rowIndex: number;
   dir: 1 | -1;
   speedMul: number;
+  phase: number;
+  sway: number;
   platforms: PlatformData[];
 };
 
