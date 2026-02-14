@@ -1,518 +1,276 @@
 'use client';
 
 import { Html } from '@react-three/drei';
-import { useMemo } from 'react';
-import type { CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
-
-import { CHARACTERS, GAME, PRISM_JUMP_TITLE } from '../constants';
+import { PRISM_JUMP_TITLE } from '../constants';
 import { prismJumpState } from '../state';
-
-function cubeIconStyle(size = 12): CSSProperties {
-  return {
-    width: size,
-    height: size,
-    display: 'inline-block',
-    transform: 'rotate(45deg)',
-    borderRadius: 2,
-    background:
-      'linear-gradient(135deg, #67E8F9 0%, #22D3EE 55%, #0EA5E9 100%)',
-    boxShadow: '0 0 10px rgba(34,211,238,0.35)',
-    marginLeft: 6,
-  };
-}
-
-function buttonStyle(primary = false): CSSProperties {
-  return {
-    padding: '10px 14px',
-    borderRadius: 12,
-    border: '1px solid rgba(255,255,255,0.18)',
-    background: primary
-      ? 'linear-gradient(180deg, rgba(99,102,241,0.92) 0%, rgba(14,165,233,0.82) 100%)'
-      : 'rgba(255,255,255,0.06)',
-    color: 'white',
-    fontWeight: 700,
-    letterSpacing: 0.2,
-    cursor: 'pointer',
-    userSelect: 'none',
-  };
-}
-
-function pillStyle(): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '8px 12px',
-    borderRadius: 999,
-    border: '1px solid rgba(255,255,255,0.14)',
-    background: 'rgba(0,0,0,0.35)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    color: 'rgba(255,255,255,0.92)',
-    fontWeight: 700,
-  };
-}
 
 export function PrismJumpUI() {
   const snap = useSnapshot(prismJumpState);
-
-  const selectedDef = useMemo(
-    () => CHARACTERS.find((c) => c.id === snap.selected) ?? CHARACTERS[0],
-    [snap.selected]
-  );
-
-  const unlocked = snap.unlocked;
-  const selectedIdx = Math.max(0, unlocked.indexOf(snap.selected));
-  const prevId =
-    unlocked[(selectedIdx - 1 + unlocked.length) % unlocked.length] ??
-    unlocked[0];
-  const nextId = unlocked[(selectedIdx + 1) % unlocked.length] ?? unlocked[0];
-
-  const cubesDisplay = snap.totalCubes + snap.runCubes;
-
-  const canUnlock =
-    snap.totalCubes >= 100 && unlocked.length < CHARACTERS.length;
-
   const toastVisible = snap.toastUntil > Date.now() && snap.toast.length > 0;
+  const cubesTotal = snap.totalCubes + snap.runCubes;
 
   return (
     <Html fullscreen>
-      <style>{`
-        @keyframes prismjump-popup {
-          0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
-          100% { transform: translate3d(0, -32px, 0) scale(1.06); opacity: 0; }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.05); }
-        }
-      `}</style>
-      {/* HUD */}
-      {snap.phase === 'playing' && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            fontFamily:
-              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
-          }}
-        >
-          {/* Thin progress bar at very top (reference style) */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 6,
-              background: 'rgba(255,255,255,0.18)',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${Math.max(0, Math.min(1, snap.edgeSafe)) * 100}%`,
-                background:
-                  snap.edgeSafe < 0.4
-                    ? 'linear-gradient(90deg, #FB7185 0%, #F43F5E 100%)'
-                    : snap.edgeSafe < 0.7
-                      ? 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)'
-                      : 'linear-gradient(90deg, #34D399 0%, #10B981 100%)',
-                transition: 'width 0.15s ease, background 0.2s ease',
-              }}
-            />
-          </div>
-
-          {/* Danger vignette when close to edge */}
-          {snap.edgeSafe < 0.6 && (
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          fontFamily:
+            'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+          color: '#ffffff',
+        }}
+      >
+        {snap.phase === 'playing' && (
+          <>
             <div
               style={{
                 position: 'absolute',
-                inset: 0,
-                background: `radial-gradient(circle at center, transparent 20%, rgba(251,113,133,${(0.6 - snap.edgeSafe) * 0.7}) 100%)`,
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-          {/* top-left edge timer bar */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 22,
-              left: 18,
-              width: 180,
-              height: 10,
-              borderRadius: 999,
-              background: 'rgba(255,255,255,0.22)',
-              overflow: 'hidden',
-              border:
-                snap.edgeSafe < 0.4
-                  ? '2px solid rgba(251,113,133,0.8)'
-                  : '1px solid rgba(255,255,255,0.12)',
-              boxShadow:
-                snap.edgeSafe < 0.4 ? '0 0 20px rgba(251,113,133,0.6)' : 'none',
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${Math.max(0, Math.min(1, snap.edgeSafe)) * 100}%`,
-                background:
-                  snap.edgeSafe < 0.4
-                    ? 'linear-gradient(90deg, #FB7185 0%, #F43F5E 100%)'
-                    : snap.edgeSafe < 0.7
-                      ? 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)'
-                      : 'linear-gradient(90deg, #34D399 0%, #10B981 100%)',
-                borderRadius: 999,
-                transition: 'background 0.2s ease',
-              }}
-            />
-          </div>
-
-          {/* Edge warning text */}
-          {snap.edgeSafe < 0.5 && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 40,
+                top: 18,
                 left: 18,
-                fontSize: 12,
-                fontWeight: 700,
-                color: '#FB7185',
-                textShadow: '0 2px 8px rgba(251,113,133,0.6)',
-                animation: 'pulse 0.5s ease-in-out infinite',
-              }}
-            >
-              ⚠ JUMP NOW!
-            </div>
-          )}
-
-          {/* score */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 64,
-              left: 0,
-              right: 0,
-              textAlign: 'center',
-              fontSize: 64,
-              fontWeight: 900,
-              letterSpacing: 1,
-              color: 'rgba(255,255,255,0.92)',
-              textShadow: '0 6px 18px rgba(0,0,0,0.5)',
-            }}
-          >
-            {snap.score}
-          </div>
-
-          {/* cubes */}
-          <div style={{ position: 'absolute', top: 22, right: 18 }}>
-            <div style={pillStyle()}>
-              <span style={{ fontSize: 14 }}>{cubesDisplay}</span>
-              <span style={cubeIconStyle(14)} />
-            </div>
-          </div>
-
-          {toastVisible && (
-            <div
-              style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                bottom: 60,
                 display: 'flex',
-                justifyContent: 'center',
-              }}
-            >
-              <div
-                style={{
-                  ...pillStyle(),
-                  fontSize: 14,
-                  padding: '10px 14px',
-                  background: 'rgba(0,0,0,0.55)',
-                }}
-              >
-                {snap.toast}
-              </div>
-            </div>
-          )}
-
-          {/* Minimap - bottom right */}
-          {snap.minimapRows.length > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 18,
-                right: 18,
-                width: 100,
-                height: 64,
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.2)',
-                background: 'rgba(0,0,0,0.45)',
-                overflow: 'hidden',
+                gap: 10,
+                alignItems: 'center',
+                padding: '8px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.22)',
+                background: 'rgba(0,0,0,0.35)',
                 backdropFilter: 'blur(8px)',
               }}
             >
-              <svg
-                width="100%"
-                height="100%"
-                viewBox="0 0 100 64"
-                preserveAspectRatio="none"
-                style={{ display: 'block' }}
-              >
-                {(() => {
-                  const zRange = 12;
-                  const minZ = snap.minimapPlayerZ - 4;
-                  const maxZ = snap.minimapPlayerZ + zRange;
-                  const xScale = 100 / (2 * GAME.xWrap);
-                  const xOff = 50;
-                  const zToY = (z: number) =>
-                    64 *
-                    (1 - Math.max(0, Math.min(1, (z - minZ) / (maxZ - minZ))));
-                  return (
-                    <>
-                      {snap.minimapRows.map((row, ri) =>
-                        row.platforms.map((plat, pi) => (
-                          <rect
-                            key={`${ri}-${pi}`}
-                            x={xOff + plat.x * xScale - 4}
-                            y={zToY(row.z)}
-                            width={8}
-                            height={2}
-                            fill="rgba(255,255,255,0.35)"
-                            rx={1}
-                          />
-                        ))
-                      )}
-                      <circle
-                        cx={xOff + snap.minimapPlayerX * xScale}
-                        cy={zToY(snap.minimapPlayerZ)}
-                        r={3}
-                        fill="rgba(255,255,255,0.95)"
-                        stroke="rgba(0,0,0,0.5)"
-                        strokeWidth={1}
-                      />
-                    </>
-                  );
-                })()}
-              </svg>
+              <span style={{ opacity: 0.75, fontSize: 12 }}>Best</span>
+              <span style={{ fontWeight: 800 }}>{snap.best}</span>
             </div>
-          )}
 
-          {/* hint */}
-          {snap.score < 5 && (
             <div
               style={{
                 position: 'absolute',
-                bottom: 22,
-                left: 0,
-                right: 0,
-                textAlign: 'center',
-                fontSize: 13,
-                color: 'rgba(255,255,255,0.75)',
-                padding: '0 20px',
+                top: 18,
+                right: 18,
+                display: 'flex',
+                gap: 10,
+                alignItems: 'center',
+                padding: '8px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.22)',
+                background: 'rgba(0,0,0,0.35)',
+                backdropFilter: 'blur(8px)',
+                fontWeight: 800,
               }}
             >
-              Tap / Space / W / ↑ to jump. Use A/D or ←/→ to move left/right on
-              each row and line up safer landings.
+              <span>{cubesTotal}</span>
+              <span style={{ opacity: 0.8 }}>Cubes</span>
             </div>
-          )}
-        </div>
-      )}
 
-      {/* MENU / GAME OVER */}
-      {snap.phase !== 'playing' && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            pointerEvents: 'auto',
-            fontFamily:
-              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
-            color: 'white',
-          }}
-        >
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: 42,
+                textAlign: 'center',
+                fontWeight: 900,
+                fontSize: 'clamp(36px, 8vw, 72px)',
+                letterSpacing: 1,
+                textShadow: '0 10px 24px rgba(0,0,0,0.45)',
+              }}
+            >
+              {snap.score}
+            </div>
+
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                bottom: 20,
+                width: 240,
+                height: 8,
+                borderRadius: 999,
+                overflow: 'hidden',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(255,255,255,0.2)',
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.max(0, Math.min(1, snap.edgeSafe)) * 100}%`,
+                  height: '100%',
+                  borderRadius: 999,
+                  background:
+                    snap.edgeSafe < 0.4
+                      ? 'linear-gradient(90deg, #ff6a88 0%, #f94144 100%)'
+                      : snap.edgeSafe < 0.7
+                        ? 'linear-gradient(90deg, #ffd166 0%, #f8961e 100%)'
+                        : 'linear-gradient(90deg, #80ff72 0%, #2ec4b6 100%)',
+                }}
+              />
+            </div>
+          </>
+        )}
+
+        {snap.phase === 'menu' && (
           <div
             style={{
-              width: 'min(520px, calc(100% - 28px))',
-              borderRadius: 18,
-              padding: 18,
-              background: 'rgba(0,0,0,0.62)',
-              border: '1px solid rgba(255,255,255,0.16)',
-              backdropFilter: 'blur(14px)',
-              WebkitBackdropFilter: 'blur(14px)',
-              boxShadow: '0 18px 60px rgba(0,0,0,0.55)',
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
             }}
           >
             <div
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
+                width: 'min(560px, 92vw)',
+                borderRadius: 20,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(0,0,0,0.5)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+                padding: '24px 22px',
+                textAlign: 'center',
+                pointerEvents: 'auto',
               }}
             >
-              <div>
-                <div
-                  style={{ fontSize: 34, fontWeight: 900, letterSpacing: 0.6 }}
-                >
-                  {PRISM_JUMP_TITLE}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: 'rgba(255,255,255,0.75)',
-                    marginTop: 4,
-                  }}
-                >
-                  Cube Jump style flow: tap to jump forward across moving rows.
-                  Land near center for Perfect bonuses, collect cubes, and
-                  survive the speed ramp. A fresh color palette is loaded each
-                  new run.
-                </div>
-              </div>
-
-              <div style={pillStyle()}>
-                <span style={{ fontSize: 14 }}>{snap.totalCubes}</span>
-                <span style={cubeIconStyle(14)} />
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 10,
-                marginTop: 14,
-                flexWrap: 'wrap',
-              }}
-            >
-              <div style={{ ...pillStyle(), gap: 10 }}>
-                <span style={{ opacity: 0.8 }}>Best</span>
-                <span style={{ fontSize: 16 }}>{snap.best}</span>
-              </div>
-
-              {snap.phase === 'gameover' && (
-                <div style={{ ...pillStyle(), gap: 10 }}>
-                  <span style={{ opacity: 0.8 }}>Score</span>
-                  <span style={{ fontSize: 16 }}>{snap.score}</span>
-                </div>
-              )}
-
-              <div style={{ ...pillStyle(), gap: 10 }}>
-                <span style={{ opacity: 0.8 }}>Unlocked</span>
-                <span style={{ fontSize: 16 }}>
-                  {unlocked.length}/{CHARACTERS.length}
-                </span>
-              </div>
-            </div>
-
-            {/* character */}
-            <div
-              style={{
-                marginTop: 16,
-                padding: 14,
-                borderRadius: 14,
-                border: '1px solid rgba(255,255,255,0.14)',
-                background: 'rgba(255,255,255,0.04)',
-              }}
-            >
-              <div
+              <h1
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 10,
+                  margin: 0,
+                  fontSize: 'clamp(28px, 6vw, 44px)',
+                  letterSpacing: 0.5,
                 }}
               >
-                <div>
-                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>
-                    Character
-                  </div>
-                  <div style={{ fontSize: 18, fontWeight: 900 }}>
-                    {selectedDef.name}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <button
-                    style={buttonStyle(false)}
-                    onClick={() => prismJumpState.setSelected(prevId)}
-                    aria-label="Previous character"
-                  >
-                    ◀
-                  </button>
-                  <button
-                    style={buttonStyle(false)}
-                    onClick={() => prismJumpState.setSelected(nextId)}
-                    aria-label="Next character"
-                  >
-                    ▶
-                  </button>
-                </div>
+                {PRISM_JUMP_TITLE}
+              </h1>
+              <p style={{ margin: '10px 0 0', opacity: 0.88 }}>
+                Cube Jump remake with alternating kinematic lanes.
+              </p>
+              <p style={{ margin: '10px 0 0', opacity: 0.76, fontSize: 14 }}>
+                Tap/Space to jump. A/D or Left/Right to strafe.
+              </p>
+              <button
+                type="button"
+                onClick={() => prismJumpState.startGame()}
+                style={{
+                  marginTop: 18,
+                  padding: '10px 16px',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.26)',
+                  background:
+                    'linear-gradient(135deg, rgba(36,224,200,0.92), rgba(99,102,241,0.92))',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                Start Run
+              </button>
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+                Best: {snap.best} | Cubes: {snap.totalCubes}
               </div>
+            </div>
+          </div>
+        )}
+
+        {snap.phase === 'gameover' && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 'min(560px, 92vw)',
+                borderRadius: 20,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(0,0,0,0.56)',
+                boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+                padding: '24px 22px',
+                textAlign: 'center',
+                pointerEvents: 'auto',
+              }}
+            >
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 'clamp(24px, 5vw, 38px)',
+                  letterSpacing: 0.5,
+                }}
+              >
+                Run Over
+              </h2>
+              <p style={{ margin: '12px 0 2px', fontSize: 14, opacity: 0.84 }}>
+                Score: {snap.score} | Best: {snap.best}
+              </p>
+              <p style={{ margin: '0 0 12px', fontSize: 14, opacity: 0.84 }}>
+                Run Cubes: +{snap.runCubes} | Total Cubes: {snap.totalCubes}
+              </p>
 
               <div
                 style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  marginTop: 12,
+                  justifyContent: 'center',
+                  gap: 10,
                   flexWrap: 'wrap',
                 }}
               >
                 <button
-                  style={{
-                    ...buttonStyle(false),
-                    opacity: canUnlock ? 1 : 0.55,
-                  }}
-                  onClick={() => prismJumpState.unlockRandom()}
-                  disabled={!canUnlock}
-                >
-                  Unlock random • 100 cubes
-                </button>
-
-                <button
-                  style={buttonStyle(true)}
+                  type="button"
                   onClick={() => prismJumpState.startGame()}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background:
+                      'linear-gradient(135deg, rgba(36,224,200,0.92), rgba(99,102,241,0.92))',
+                    color: '#fff',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                  }}
                 >
-                  {snap.phase === 'gameover' ? 'Play again' : 'Play'}
+                  Retry
                 </button>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 12,
-                  color: 'rgba(255,255,255,0.68)',
-                }}
-              >
-                <strong>How to play:</strong> Tap (or press Space / W / ↑) to
-                jump to the next row. Use A/D or ←/→ to move across each row.
-                Rows alternate left/right motion, so time alignment and chain
-                clean landings. Perfect center landings build combo and
-                multiplier.
+                <button
+                  type="button"
+                  onClick={() => prismJumpState.backToMenu()}
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.26)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Menu
+                </button>
               </div>
             </div>
-
-            {toastVisible && (
-              <div
-                style={{
-                  marginTop: 12,
-                  ...pillStyle(),
-                  justifyContent: 'center',
-                }}
-              >
-                {snap.toast}
-              </div>
-            )}
           </div>
-        </div>
-      )}
+        )}
+
+        {toastVisible && snap.phase === 'playing' && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bottom: 52,
+              padding: '8px 14px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.2)',
+              background: 'rgba(0,0,0,0.45)',
+              boxShadow: '0 10px 18px rgba(0,0,0,0.35)',
+              fontWeight: 700,
+              fontSize: 13,
+            }}
+          >
+            {snap.toast}
+          </div>
+        )}
+      </div>
     </Html>
   );
 }

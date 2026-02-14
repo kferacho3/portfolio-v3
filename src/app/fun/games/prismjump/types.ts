@@ -1,75 +1,40 @@
 export type PrismJumpPhase = 'menu' | 'playing' | 'gameover';
 
-export type PlatformType = 'normal' | 'danger' | 'bonus';
+export type LaneDirection = 1 | -1;
 
-export type SlidingHazard = {
-  phase: number;
-  range: number;
-};
-
-export type PlatformData = {
-  // World-space center position
+export type LanePlatform = {
+  baseX: number;
   x: number;
   z: number;
-  baseOffsetX: number;
+  active: boolean;
+  hasCube: boolean;
+  cubeTaken: boolean;
+};
 
-  // Platform dimensions
-  length: number; // along X
-  depth: number; // along Z
-
-  type: PlatformType;
-
-  // Collectible cube value (0 means none)
-  cubeValue: number;
-
-  // Visuals
+export type LaneRow = {
+  slot: number;
+  logicalIndex: number;
+  direction: LaneDirection;
+  speed: number;
+  offset: number;
   color: string;
-  baseColor: string;
-
-  // Moving hazard on this platform (normal platforms only); player loses if they overlap it
-  slidingHazard?: SlidingHazard;
+  platforms: LanePlatform[];
 };
 
-export type RowData = {
-  rowIndex: number;
-  dir: 1 | -1;
-  speedMul: number;
-  platforms: PlatformData[];
-};
-
-export type Popup = {
-  id: number;
-  text: string;
-  x: number;
-  y: number;
-  z: number;
-  life: number;
-};
-
-export type CharacterDef = {
+export type CubePalette = {
   id: string;
   name: string;
-  kind:
-    | 'box'
-    | 'sphere'
-    | 'octa'
-    | 'tetra'
-    | 'icosa'
-    | 'dodeca'
-    | 'capsule'
-    | 'cone'
-    | 'cylinder'
-    | 'torus'
-    | 'torusKnot'
-    | 'triPrism'
-    | 'robot'
-    | 'ufo'
-    | 'rocket';
-  color: string;
-  emissive?: string;
-  roughness?: number;
-  metalness?: number;
-  scale?: number;
-  transparent?: boolean;
-  opacity?: number;
+  background: string;
+  fog: string;
+  laneColors: string[];
+  cubeColor: string;
+  cubeEmissive: string;
+  playerColor: string;
+  playerEmissive: string;
+  ambientLight: string;
+  keyLight: string;
+  fillLightA: string;
+  fillLightB: string;
+  waterTop: string;
+  waterBottom: string;
 };
