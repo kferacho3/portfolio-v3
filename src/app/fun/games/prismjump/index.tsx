@@ -14,14 +14,20 @@ import { useSnapshot } from 'valtio';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { useGameUIState } from '../../store/selectors';
-import { CUBE_PALETTES, GAME } from './constants';
+import { CUBE_PALETTES, GAME, PRISM_CHARACTER_SKINS } from './constants';
 import { PrismJumpUI } from './_components/PrismJumpUI';
 import { prismJumpState } from './state';
-import type { CubePalette, LaneRow } from './types';
+import type {
+  CollectibleKind,
+  CubePalette,
+  LaneRow,
+  PrismCharacterGeometry,
+} from './types';
 
 export { prismJumpState } from './state';
 
 const TOTAL_PLATFORMS = GAME.rowPoolSize * GAME.platformsPerRow;
+const MAX_GEM_SPARKS_PER_SHAPE = 360;
 const PLATFORM_HALF_Y = GAME.platformSize[1] * 0.5;
 const PLAYER_HALF = GAME.playerSize * 0.5;
 const PLAYER_START_Y = GAME.platformY + PLATFORM_HALF_Y + PLAYER_HALF + 0.04;
@@ -94,6 +100,9 @@ const makeEmptyRow = (slot: number): LaneRow => ({
     active: true,
     hasCube: false,
     cubeTaken: false,
+    collectibleKind: 'none',
+    collectibleValue: 0,
+    collectibleColor: '#ffffff',
     color: '#ffffff',
   })),
 });
@@ -175,12 +184,45 @@ const configureRow = (
     difficulty <= 0
       ? GAME.spawnChanceEasy
       : lerp(GAME.spawnChanceEasy, GAME.spawnChanceHard, difficulty);
+  const collectibleChance = GAME.cubeChance * (1 - difficulty * 0.45);
   const targetMinActive = Math.round(
     difficulty <= 0
       ? GAME.minActiveEasy
       : lerp(GAME.minActiveEasy, GAME.minActiveHard, difficulty)
   );
   const jitter = GAME.rowJitterBase + GAME.rowJitterHardBonus * difficulty;
+
+  const assignCollectible = (p: LaneRow['platforms'][number], slotIndex: number) => {
+    p.hasCube = false;
+    p.cubeTaken = false;
+    p.collectibleKind = 'none';
+    p.collectibleValue = 0;
+    p.collectibleColor = palette.cubeColor;
+    if (!p.active || rand() >= collectibleChance) return;
+
+    const roll = rand();
+    if (roll < GAME.collectibleNovaChance) {
+      p.collectibleKind = 'nova';
+      p.collectibleValue = GAME.gemNovaPoints;
+      p.collectibleColor = brightenHex(
+        rowColors[(logicalIndex + slotIndex + 2) % rowColors.length] ?? palette.cubeColor,
+        0.34
+      );
+    } else if (roll < GAME.collectibleNovaChance + GAME.collectiblePrismChance) {
+      p.collectibleKind = 'prism';
+      p.collectibleValue = GAME.gemPrismPoints;
+      p.collectibleColor = brightenHex(
+        rowColors[(logicalIndex + slotIndex + 1) % rowColors.length] ?? palette.cubeColor,
+        0.3
+      );
+    } else {
+      p.collectibleKind = 'cube';
+      p.collectibleValue = GAME.gemCubePoints;
+      p.collectibleColor = brightenHex(palette.cubeColor, 0.14);
+    }
+
+    p.hasCube = true;
+  };
 
   row.logicalIndex = logicalIndex;
   row.direction = laneDirectionFor(logicalIndex);
@@ -207,8 +249,7 @@ const configureRow = (
       (logicalIndex + i + Math.floor(rand() * rowColors.length)) %
       rowColors.length;
     p.color = brightenHex(rowColors[paletteIdx] ?? rowColors[0], 0.18);
-    p.hasCube = p.active && rand() < GAME.cubeChance * (1 - difficulty * 0.45);
-    p.cubeTaken = false;
+    assignCollectible(p, i);
   }
 
   // Fairness guardrail: never allow a row to become fully empty.
@@ -221,7 +262,7 @@ const configureRow = (
         rowColors[(logicalIndex + idx) % rowColors.length] ?? rowColors[0],
         0.18
       );
-      p.hasCube = rand() < GAME.cubeChance;
+      assignCollectible(p, idx);
       activeSlots.push(idx);
     }
     if (activeSlots.length >= GAME.platformsPerRow) break;
@@ -274,6 +315,118 @@ const configureRow = (
   }
 };
 
+type GemSpark = {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  size: number;
+  life: number;
+  age: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  vrx: number;
+  vry: number;
+  vrz: number;
+  color: string;
+  shape: CollectibleKind;
+};
+
+const collectibleScaleForKind = (kind: CollectibleKind) => {
+  if (kind === 'prism') return GAME.cubeSize * 1.05;
+  if (kind === 'nova') return GAME.cubeSize * 1.16;
+  return GAME.cubeSize;
+};
+
+const collectibleSpinForKind = (kind: CollectibleKind) => {
+  if (kind === 'prism') return 3.8;
+  if (kind === 'nova') return 4.6;
+  return 2.8;
+};
+
+const particleCountForValue = (value: number) => {
+  if (value >= GAME.gemNovaPoints) return 34;
+  if (value >= GAME.gemPrismPoints) return 24;
+  return 14;
+};
+
+const spawnGemDissolve = (
+  runtime: Runtime,
+  x: number,
+  y: number,
+  z: number,
+  value: number,
+  color: string,
+  kind: CollectibleKind
+) => {
+  const count = particleCountForValue(value);
+  for (let i = 0; i < count; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const spread = 0.55 + Math.random() * 0.9 + value * 0.05;
+    const lift = 1.7 + Math.random() * 1.8 + value * 0.12;
+    runtime.gemSparks.push({
+      x: x + (Math.random() - 0.5) * 0.12,
+      y: y + (Math.random() - 0.5) * 0.12,
+      z: z + (Math.random() - 0.5) * 0.12,
+      vx: Math.cos(angle) * spread,
+      vy: lift,
+      vz: Math.sin(angle) * spread,
+      size: 0.08 + Math.random() * 0.12 + value * 0.01,
+      life: 0.36 + Math.random() * 0.42 + value * 0.03,
+      age: 0,
+      rx: Math.random() * Math.PI * 2,
+      ry: Math.random() * Math.PI * 2,
+      rz: Math.random() * Math.PI * 2,
+      vrx: (Math.random() - 0.5) * 11,
+      vry: (Math.random() - 0.5) * 11,
+      vrz: (Math.random() - 0.5) * 11,
+      color,
+      shape:
+        kind === 'cube'
+          ? Math.random() < 0.8
+            ? 'cube'
+            : 'prism'
+          : kind === 'prism'
+            ? Math.random() < 0.62
+              ? 'prism'
+              : Math.random() < 0.82
+                ? 'cube'
+                : 'nova'
+            : Math.random() < 0.58
+              ? 'nova'
+              : Math.random() < 0.82
+                ? 'prism'
+                : 'cube',
+    });
+  }
+  if (runtime.gemSparks.length > MAX_GEM_SPARKS_PER_SHAPE * 3) {
+    runtime.gemSparks.splice(
+      0,
+      runtime.gemSparks.length - MAX_GEM_SPARKS_PER_SHAPE * 3
+    );
+  }
+};
+
+const playerGeometry = (geometry: PrismCharacterGeometry) => {
+  switch (geometry) {
+    case 'octa':
+      return <octahedronGeometry args={[GAME.playerSize * 0.66, 0]} />;
+    case 'tetra':
+      return <tetrahedronGeometry args={[GAME.playerSize * 0.75, 0]} />;
+    case 'icosa':
+      return <icosahedronGeometry args={[GAME.playerSize * 0.67, 0]} />;
+    case 'dodeca':
+      return <dodecahedronGeometry args={[GAME.playerSize * 0.67, 0]} />;
+    case 'diamond':
+      return <octahedronGeometry args={[GAME.playerSize * 0.72, 0]} />;
+    default:
+      return <boxGeometry args={[GAME.playerSize, GAME.playerSize, GAME.playerSize]} />;
+  }
+};
+
 type Runtime = {
   seed: number;
   paletteIndex: number;
@@ -293,8 +446,10 @@ type Runtime = {
   tempA: THREE.Vector3;
   tempB: THREE.Vector3;
   cubeColor: THREE.Color;
+  sparkColor: THREE.Color;
   dummy: THREE.Object3D;
   hiddenMatrix: THREE.Matrix4;
+  gemSparks: GemSpark[];
 };
 
 export default function PrismJump() {
