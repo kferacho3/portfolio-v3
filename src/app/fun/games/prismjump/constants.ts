@@ -23,7 +23,9 @@ export const GAME = {
   // Keep platform top-face depth constant (roughly player width, slightly wider).
   platformScaleZMin: 1,
   platformScaleZMax: 1,
-  gapWeightPower: 0.48,
+  gapWeightPower: 2.15,
+  minInterPlatformGapEasy: 0.48,
+  minInterPlatformGapHard: 0.92,
 
   cubeSize: 0.45,
   cubeHeightOffset: 0.86,
@@ -49,9 +51,9 @@ export const GAME = {
   // Difficulty pacing (time based): no widening-gap pressure until 150s.
   gapDifficultyStartSec: 150,
   gapDifficultyRampSec: 180,
-  spawnChanceEasy: 1,
-  spawnChanceHard: 0.32,
-  minActiveEasy: 5,
+  spawnChanceEasy: 0.84,
+  spawnChanceHard: 0.2,
+  minActiveEasy: 3,
   minActiveHard: 1,
   rowWidthMinFactor: 0.62,
   rowWidthMaxFactor: 1,
