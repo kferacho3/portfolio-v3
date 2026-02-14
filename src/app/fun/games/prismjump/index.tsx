@@ -484,13 +484,6 @@ export default function PrismJump() {
     let strafeAxis = 0;
     if (moveLeft && !moveRight) strafeAxis = -1;
     if (moveRight && !moveLeft) strafeAxis = 1;
-    if (
-      strafeAxis === 0 &&
-      input.pointerDown &&
-      Math.abs(input.pointerX) > GAME.lateralPointerDeadZone
-    ) {
-      strafeAxis = Math.sign(input.pointerX);
-    }
     const wantsJump = jumpForward;
 
     if (snap.phase !== 'playing') {
@@ -541,20 +534,17 @@ export default function PrismJump() {
     if (grounded) w.coyoteMs = GAME.coyoteMs;
 
     const playerVel = player.linvel();
-    const desiredVX =
-      strafeAxis === 0
-        ? grounded
-          ? 0
-          : playerVel.x
-        : strafeAxis * GAME.maxLateralSpeed;
+    const desiredVX = strafeAxis * GAME.maxLateralSpeed;
     const controlRate = grounded
       ? GAME.groundControlImpulse
       : GAME.airControlImpulse;
-    const controlledVX = clamp(
+    const controlledVXDamped = clamp(
       THREE.MathUtils.damp(playerVel.x, desiredVX, controlRate, d),
       -GAME.maxLateralSpeed,
       GAME.maxLateralSpeed
     );
+    const controlledVX =
+      Math.abs(controlledVXDamped) < 0.035 ? 0 : controlledVXDamped;
 
     if (grounded) {
       const groundedRow = Math.max(
@@ -773,7 +763,7 @@ export default function PrismJump() {
             type="kinematicPosition"
             position={[0, -80, 0]}
             colliders={false}
-            friction={0.42}
+            friction={0.06}
             restitution={0.02}
             canSleep={false}
             userData={{ kind: 'platform' }}
@@ -835,7 +825,11 @@ export default function PrismJump() {
           angularDamping={3.5}
           ccd
         >
-          <CuboidCollider args={[PLAYER_HALF, PLAYER_HALF, PLAYER_HALF]} />
+          <CuboidCollider
+            args={[PLAYER_HALF, PLAYER_HALF, PLAYER_HALF]}
+            friction={0.02}
+            restitution={0}
+          />
           <CuboidCollider
             sensor
             args={[PLAYER_HALF * 0.68, 0.075, PLAYER_HALF * 0.68]}

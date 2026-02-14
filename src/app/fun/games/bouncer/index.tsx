@@ -597,6 +597,18 @@ export default function Bouncer() {
                     className="mt-3 text-sm"
                     style={{ color: palette.spikes }}
                   >
+                    Score:{' '}
+                    <span className="font-semibold">{snap.score}</span>{' '}
+                    · Best:{' '}
+                    <span className="font-semibold">{snap.bestScore}</span>
+                  </div>
+                )}
+
+                {snap.phase === 'menu' && (
+                  <div
+                    className="mt-3 text-sm"
+                    style={{ color: palette.spikes }}
+                  >
                     Best:{' '}
                     <span className="font-semibold">{snap.bestScore}</span>
                   </div>
