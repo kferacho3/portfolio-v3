@@ -1,19 +1,21 @@
 import { useFrame, useLoader } from '@react-three/fiber';
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { MAX_FRAME_DELTA, UFO_GROUND_TEXTURE_URLS } from '../constants';
+import {
+  MAX_FRAME_DELTA,
+  UFO_BASE_FORWARD_SPEED,
+  UFO_GROUND_TEXTURE_URLS,
+} from '../constants';
 
-const UfoGround: React.FC = () => {
+const UfoGround: React.FC<{
+  forwardSpeedRef?: React.MutableRefObject<number>;
+}> = ({ forwardSpeedRef }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const textureUrl = useMemo(
-    () => UFO_GROUND_TEXTURE_URLS[Math.floor(Math.random() * UFO_GROUND_TEXTURE_URLS.length)],
-    []
-  );
-  const texture = useLoader(
-    THREE.TextureLoader,
-    textureUrl
-  );
+  const floorMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const textureIndexRef = useRef(0);
+  const textureUrls = useMemo(() => [...UFO_GROUND_TEXTURE_URLS], []);
+  const floorTextures = useLoader(THREE.TextureLoader, textureUrls);
 
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -72,27 +74,51 @@ const UfoGround: React.FC = () => {
     return tex;
   }, []);
 
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(100, 100);
-  texture.offset.set(0, 0);
-  texture.anisotropy = 8;
+  useEffect(() => {
+    for (const texture of floorTextures) {
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(100, 100);
+      texture.offset.set(0, 0);
+      texture.anisotropy = 8;
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+    }
+  }, [floorTextures]);
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera, clock }, delta) => {
     const dt = Math.min(delta, MAX_FRAME_DELTA);
-    texture.offset.y -= dt * 0.35;
-    texture.offset.x += dt * 0.08;
+    const speedScale = THREE.MathUtils.clamp(
+      (forwardSpeedRef?.current ?? UFO_BASE_FORWARD_SPEED) /
+        UFO_BASE_FORWARD_SPEED,
+      0.6,
+      2.5
+    );
+    const nextIndex =
+      Math.floor(clock.getElapsedTime() / 14) % floorTextures.length;
+    if (nextIndex !== textureIndexRef.current) {
+      textureIndexRef.current = nextIndex;
+      if (floorMaterialRef.current) {
+        floorMaterialRef.current.map = floorTextures[nextIndex];
+        floorMaterialRef.current.needsUpdate = true;
+      }
+    }
+
+    const activeTexture = floorTextures[textureIndexRef.current];
+    activeTexture.offset.y -= dt * (0.2 + speedScale * 0.32);
+    activeTexture.offset.x += dt * (0.04 + speedScale * 0.07);
+
     if (glowTexture) {
-      glowTexture.offset.y -= dt * 0.5;
-      glowTexture.offset.x += dt * 0.12;
+      glowTexture.offset.y -= dt * (0.28 + speedScale * 0.36);
+      glowTexture.offset.x += dt * (0.05 + speedScale * 0.09);
     }
     if (meshRef.current) {
       meshRef.current.position.x = camera.position.x;
-      meshRef.current.position.z = camera.position.z - 50;
+      meshRef.current.position.z = camera.position.z - 64;
     }
     if (glowRef.current) {
       glowRef.current.position.x = camera.position.x;
-      glowRef.current.position.z = camera.position.z - 50;
+      glowRef.current.position.z = camera.position.z - 64;
     }
   });
 
@@ -106,7 +132,8 @@ const UfoGround: React.FC = () => {
       >
         <planeGeometry args={[1000, 1000]} />
         <meshStandardMaterial
-          map={texture}
+          ref={floorMaterialRef}
+          map={floorTextures[0]}
           color="#8ab4ff"
           emissive="#0f1e46"
           emissiveIntensity={0.22}

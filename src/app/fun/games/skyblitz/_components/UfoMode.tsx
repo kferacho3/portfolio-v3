@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import {
+  ALIEN_GROUND_Y,
   ALIEN_MODEL_YAW_OFFSET,
   ALIEN_TRACKING_STRENGTH,
   ALIEN_COLLISION_RADIUS,
@@ -59,6 +60,9 @@ const UfoMode: React.FC = () => {
   const forwardSpeedRef = useRef(UFO_BASE_FORWARD_SPEED);
 
   const aimRaycaster = useRef(new THREE.Raycaster());
+  const aimGroundPlane = useRef(
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), -ALIEN_GROUND_Y)
+  );
   const tmpDir = useRef(new THREE.Vector3());
   const tmpPos = useRef(new THREE.Vector3());
   const tmpTarget = useRef(new THREE.Vector3());
@@ -75,9 +79,9 @@ const UfoMode: React.FC = () => {
     const pos = generateRandomPosition(z);
     alien.position.set(...pos);
     alien.baseX = pos[0];
-    alien.baseY = pos[1];
-    alien.driftAmpX = 0.6 + Math.random() * 1.8;
-    alien.driftAmpY = 0.25 + Math.random() * 1.1;
+    alien.baseY = ALIEN_GROUND_Y;
+    alien.driftAmpX = 0.45 + Math.random() * 1.15;
+    alien.driftAmpY = 0;
     alien.driftSpeed = 0.55 + Math.random() * 0.9;
     alien.driftPhase = Math.random() * Math.PI * 2;
 
@@ -107,9 +111,9 @@ const UfoMode: React.FC = () => {
         deathStart: 0,
         respawnAt: 0,
         baseX: pos[0],
-        baseY: pos[1],
-        driftAmpX: 0.8 + Math.random() * 1.2,
-        driftAmpY: 0.25 + Math.random() * 0.8,
+        baseY: ALIEN_GROUND_Y,
+        driftAmpX: 0.45 + Math.random() * 1.15,
+        driftAmpY: 0,
         driftSpeed: 0.55 + Math.random() * 0.9,
         driftPhase: Math.random() * Math.PI * 2,
       };
@@ -152,12 +156,22 @@ const UfoMode: React.FC = () => {
       // Shoot through the crosshair (camera ray) while spawning from the ship.
       aimRaycaster.current.setFromCamera(pointer, camera);
       tmpDir.current.copy(aimRaycaster.current.ray.direction).normalize();
-      tmpTarget.current
-        .copy(aimRaycaster.current.ray.origin)
-        .addScaledVector(tmpDir.current, UFO_AIM_DISTANCE);
+
+      const targetOnGround = aimRaycaster.current.ray.intersectPlane(
+        aimGroundPlane.current,
+        tmpTarget.current
+      );
+      if (!targetOnGround) {
+        tmpTarget.current
+          .copy(aimRaycaster.current.ray.origin)
+          .addScaledVector(tmpDir.current, UFO_AIM_DISTANCE);
+      }
 
       tmpPos.current.copy(playerRef.current.position);
       tmpPos.current.y += 0.25;
+      if (tmpTarget.current.z > tmpPos.current.z - 4) {
+        tmpTarget.current.z = tmpPos.current.z - 4;
+      }
       tmpDir.current.subVectors(tmpTarget.current, tmpPos.current).normalize();
       tmpPos.current.addScaledVector(tmpDir.current, PROJECTILE_SPAWN_OFFSET);
 
@@ -312,19 +326,12 @@ const UfoMode: React.FC = () => {
           playerPos.x,
           chase * ALIEN_TRACKING_STRENGTH
         );
-        alien.baseY = THREE.MathUtils.lerp(
-          alien.baseY,
-          playerPos.y,
-          chase * (ALIEN_TRACKING_STRENGTH * 0.78)
-        );
         alien.baseX = THREE.MathUtils.clamp(alien.baseX, -7.2, 7.2);
-        alien.baseY = THREE.MathUtils.clamp(alien.baseY, 0, 5.6);
 
         const driftT = t * alien.driftSpeed + alien.driftPhase;
         alien.position.x = alien.baseX + Math.sin(driftT) * alien.driftAmpX;
-        alien.position.y = alien.baseY + Math.cos(driftT * 1.1) * alien.driftAmpY;
+        alien.position.y = ALIEN_GROUND_Y;
         alien.position.x = THREE.MathUtils.clamp(alien.position.x, -7.5, 7.5);
-        alien.position.y = THREE.MathUtils.clamp(alien.position.y, 0, 6);
 
         if (alien.position.z - playerPos.z > DESPAWN_BEHIND) {
           const z =
@@ -355,7 +362,7 @@ const UfoMode: React.FC = () => {
         mesh.position.copy(alien.position);
         mesh.scale.setScalar(alien.scale);
         if (alien.alive) {
-          tmpLookTarget.current.set(playerPos.x, alien.position.y, playerPos.z);
+          tmpLookTarget.current.set(playerPos.x, ALIEN_GROUND_Y, playerPos.z);
           mesh.lookAt(tmpLookTarget.current);
           mesh.rotateY(ALIEN_MODEL_YAW_OFFSET);
         }
@@ -413,7 +420,7 @@ const UfoMode: React.FC = () => {
         color="indianred"
       />
 
-      <UfoGround />
+      <UfoGround forwardSpeedRef={forwardSpeedRef} />
       <UfoPlayer playerRef={playerRef} forwardSpeedRef={forwardSpeedRef} />
 
       {initialized &&

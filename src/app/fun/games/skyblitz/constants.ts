@@ -8,9 +8,9 @@ export const UFO_FORWARD_ACCEL = 0.85;
 export const UFO_LATERAL_STIFFNESS = 58;
 export const UFO_LATERAL_DAMPING = 15;
 export const UFO_AIM_DISTANCE = 260;
-export const UFO_PLAYER_MIN_Y = 0.35;
-export const UFO_PLAYER_MAX_Y = 1.55;
-export const UFO_PLAYER_POINTER_Y_SCALE = 1.2;
+export const UFO_PLAYER_MIN_Y = 0.05;
+export const UFO_PLAYER_MAX_Y = 1.15;
+export const UFO_PLAYER_POINTER_Y_SCALE = 0.95;
 export const PROJECTILE_SPEED = 140;
 export const PROJECTILE_RADIUS = 0.18;
 export const PROJECTILE_SPAWN_OFFSET = 1.8;
@@ -25,11 +25,11 @@ export const PLAYER_HIT_COOLDOWN = 600;
 export const PLAYER_FIRE_COOLDOWN = 120;
 export const MAX_FRAME_DELTA = 1 / 20;
 export const ALIEN_DESPAWN_Z = 18;
-export const ALIEN_GROUND_Y = 0.5;
+export const ALIEN_GROUND_Y = 0;
 export const ALIEN_DRIFT_Y = 0;
 
-export const ALIEN_MODEL_YAW_OFFSET = Math.PI * 0.5;
-export const ALIEN_TRACKING_STRENGTH = 0.28;
+export const ALIEN_MODEL_YAW_OFFSET = -Math.PI * 0.5;
+export const ALIEN_TRACKING_STRENGTH = 0.24;
 
 export const RUNNER_BASE_FORWARD_SPEED = 11.5;
 export const RUNNER_MAX_FORWARD_SPEED = 22;

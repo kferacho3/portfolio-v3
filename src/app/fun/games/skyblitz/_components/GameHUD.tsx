@@ -8,12 +8,13 @@ const GameHUD: React.FC = () => {
   const snap = useSnapshot(skyBlitzState);
   const crosshairRef = useRef<HTMLDivElement | null>(null);
 
-  useFrame(({ pointer, size }) => {
+  useFrame(({ pointer, gl }) => {
     if (!crosshairRef.current) return;
     if (snap.mode !== 'UfoMode' || snap.phase !== 'playing') return;
 
-    const x = (pointer.x * 0.5 + 0.5) * size.width;
-    const y = (-pointer.y * 0.5 + 0.5) * size.height;
+    const rect = gl.domElement.getBoundingClientRect();
+    const x = rect.left + (pointer.x * 0.5 + 0.5) * rect.width;
+    const y = rect.top + (-pointer.y * 0.5 + 0.5) * rect.height;
     crosshairRef.current.style.left = `${x}px`;
     crosshairRef.current.style.top = `${y}px`;
   });
