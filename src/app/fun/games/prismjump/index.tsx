@@ -279,6 +279,7 @@ type Runtime = {
   paletteIndex: number;
   rows: LaneRow[];
   maxLogicalIndex: number;
+  lastGroundedRowIndex: number;
   elapsed: number;
   laneTime: number;
   chaseZ: number;
@@ -336,6 +337,7 @@ export default function PrismJump() {
     paletteIndex: 0,
     rows: Array.from({ length: GAME.rowPoolSize }, (_, slot) => makeEmptyRow(slot)),
     maxLogicalIndex: GAME.rowPoolSize - 1,
+    lastGroundedRowIndex: 0,
     elapsed: 0,
     laneTime: 0,
     chaseZ: -GAME.rowSpacing * 2.2,
@@ -394,6 +396,7 @@ export default function PrismJump() {
     w.chaseZ = -GAME.rowSpacing * 2.2;
     w.runSeconds = 0;
     w.maxLogicalIndex = GAME.rowPoolSize - 1;
+    w.lastGroundedRowIndex = 0;
     w.jumpBufferMs = 0;
     w.coyoteMs = 0;
     w.camZ = GAME.cameraZOffset;
@@ -423,6 +426,7 @@ export default function PrismJump() {
     const startPlatform = row0.platforms[bestPlatformIndex];
     w.spawnX = rowPlatformX(row0, startPlatform.baseX, 0);
     w.spawnZ = 0;
+    w.lastGroundedRowIndex = 0;
     w.chaseZ = w.spawnZ - GAME.rowSpacing * 2.2;
 
     prismJumpState.score = 0;
@@ -556,6 +560,11 @@ export default function PrismJump() {
     }
 
     if (grounded) {
+      const groundedRow = Math.max(
+        0,
+        Math.round(player.translation().z / GAME.rowSpacing)
+      );
+      w.lastGroundedRowIndex = groundedRow;
       player.setLinvel(
         {
           // Keep contact-derived platform carry; only damp Z drift on ground.
@@ -572,11 +581,7 @@ export default function PrismJump() {
       const gAbs = Math.abs(GAME.gravity[1]);
       const vy0 = (gAbs * jumpTime) / 2;
       const now = player.translation();
-      const currentRowIndex = Math.max(
-        0,
-        Math.floor((now.z + GAME.rowSpacing * 0.22) / GAME.rowSpacing)
-      );
-      const nextRowIndex = currentRowIndex + 1;
+      const nextRowIndex = Math.max(0, w.lastGroundedRowIndex + 1);
       const targetZ = nextRowIndex * GAME.rowSpacing;
       const targetX = now.x + jumpDirection * GAME.jumpLateralStep;
       const vx = clamp(
