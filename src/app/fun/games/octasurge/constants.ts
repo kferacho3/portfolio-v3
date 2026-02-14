@@ -90,7 +90,7 @@ export const GAME = {
 
   stageFlashDuration: 1.1,
   comboWindow: 0.8,
-  nearMissMargin: 0.24,
+  nearMissMargin: 0.32,
 
   classicTargetScore: 12000,
   dailyTargetScore: 9000,
@@ -106,17 +106,82 @@ export const GAME = {
 } as const;
 
 export const FIBER_COLORS = {
-  bg: '#050506',
-  fog: '#0d1117',
-  shell: '#8bb8ff',
-  shell2: '#1d3252',
-  wire: '#65efff',
-  lane: '#1a2e45',
-  laneHot: '#45f6ff',
-  obstacle: '#ff6438',
-  obstacleHot: '#ffb56d',
+  bg: '#07182b',
+  fog: '#17395f',
+  shell: '#9ce6ff',
+  shell2: '#325787',
+  wire: '#89f7ff',
+  lane: '#2a5688',
+  laneHot: '#76f6ff',
+  obstacle: '#ff7a63',
+  obstacleHot: '#ffd08f',
   player: '#fefefe',
-  playerGlow: '#69f0ff',
-  danger: '#ff5a4f',
-  accent: '#ffa94d',
+  playerGlow: '#7af5ff',
+  danger: '#ff6a63',
+  accent: '#ffbc8b',
 } as const;
+
+export const STAGE_AESTHETICS: Record<
+  number,
+  {
+    bg: string;
+    fog: string;
+    lane: string;
+    laneHot: string;
+    wire: string;
+    shell: string;
+    shell2: string;
+    obstacle: string;
+    obstacleHot: string;
+    accent: string;
+  }
+> = {
+  1: {
+    bg: '#07182b',
+    fog: '#17395f',
+    lane: '#2a5688',
+    laneHot: '#76f6ff',
+    wire: '#89f7ff',
+    shell: '#9ce6ff',
+    shell2: '#325787',
+    obstacle: '#ff7a63',
+    obstacleHot: '#ffd08f',
+    accent: '#ffbc8b',
+  },
+  2: {
+    bg: '#0d1833',
+    fog: '#2f3f78',
+    lane: '#4c56a7',
+    laneHot: '#8ec0ff',
+    wire: '#9df2ff',
+    shell: '#9cc7ff',
+    shell2: '#434f9b',
+    obstacle: '#ff7aa8',
+    obstacleHot: '#ffc2e0',
+    accent: '#ffa4db',
+  },
+  3: {
+    bg: '#101533',
+    fog: '#3f3583',
+    lane: '#6351bd',
+    laneHot: '#b497ff',
+    wire: '#aef6ff',
+    shell: '#b8a6ff',
+    shell2: '#5f47a6',
+    obstacle: '#ff6c93',
+    obstacleHot: '#ffb17f',
+    accent: '#ffad7a',
+  },
+  4: {
+    bg: '#151228',
+    fog: '#5a2f68',
+    lane: '#8346a3',
+    laneHot: '#f58bff',
+    wire: '#b8f7ff',
+    shell: '#f2a3ff',
+    shell2: '#7f4084',
+    obstacle: '#ff6f72',
+    obstacleHot: '#ffd679',
+    accent: '#ffc379',
+  },
+};
