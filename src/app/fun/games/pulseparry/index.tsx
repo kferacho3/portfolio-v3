@@ -21,6 +21,8 @@ import {
 import { pulseParryState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
+type GameDifficulty = 'easy' | 'medium' | 'hard';
+type ScoreFxTone = 'normal' | 'perfect' | 'streak';
 
 type Pulse = {
   slot: number;
@@ -35,6 +37,8 @@ type Pulse = {
   colorIndex: number;
   life: number;
   flash: number;
+  requestWeight: number;
+  hitFx: number;
 };
 
 type Shard = {
@@ -53,6 +57,7 @@ type Shard = {
 };
 
 type Runtime = {
+  mode: GameDifficulty;
   elapsed: number;
   score: number;
   lives: number;
@@ -60,6 +65,7 @@ type Runtime = {
   tapMisses: number;
   phase: number;
   targetLanes: number;
+  streak: number;
   laneMask: number;
   perfectCombo: number;
   multiplier: number;
@@ -105,6 +111,7 @@ type Runtime = {
 
 type PulseParryStore = {
   status: GameStatus;
+  mode: GameDifficulty;
   score: number;
   best: number;
   lives: number;
@@ -117,11 +124,16 @@ type PulseParryStore = {
   failMessage: string;
   tapNonce: number;
   perfectNonce: number;
+  scoreFxNonce: number;
+  scoreFxText: string;
+  scoreFxTone: ScoreFxTone;
   startRun: () => void;
   resetToStart: () => void;
+  setMode: (mode: GameDifficulty) => void;
   setLives: (lives: number) => void;
   onTapFx: () => void;
   onPerfectFx: () => void;
+  onScoreFx: (text: string, tone?: ScoreFxTone) => void;
   updateHud: (
     score: number,
     lives: number,
