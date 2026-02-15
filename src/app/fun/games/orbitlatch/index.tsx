@@ -1319,7 +1319,6 @@ function OrbitLatchScene({
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
-      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
