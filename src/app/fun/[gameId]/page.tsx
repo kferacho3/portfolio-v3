@@ -307,6 +307,12 @@ export default function GamePage({ params }: GamePageProps) {
       : health;
   const showModeSelection = gameId === 'skyblitz' || gameId === 'reactpong';
   const pauseDisabled = gameId === 'reactpong' && reactPongMode === 'WallMode';
+  const showFallbackScoreOverlay =
+    !!gameEntry?.getScore &&
+    !showHud &&
+    gameId !== 'prismjump' &&
+    gameId !== 'octasurge' &&
+    gameId !== 'orbitlatch';
   const modeOptions =
     gameId === 'skyblitz'
       ? ['UfoMode', 'RunnerManMode']
@@ -356,6 +362,17 @@ export default function GamePage({ params }: GamePageProps) {
             octaSurgeState.setCameraMode(mode);
           }}
         />
+      )}
+
+      {showFallbackScoreOverlay && (
+        <div className="pointer-events-none fixed left-4 top-4 z-[1400] rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white backdrop-blur-md">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-white/70">
+            Score
+          </div>
+          <div className="text-lg font-black leading-none tabular-nums">
+            {Math.floor(currentScore)}
+          </div>
+        </div>
       )}
 
       {/* Game Control Panel */}
