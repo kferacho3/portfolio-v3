@@ -185,7 +185,7 @@ const SCATTERED_TIME_LIMIT = 80;
 const CLASSIC_MIN_FORWARD_TARGETS = 4;
 const SCATTERED_MIN_FORWARD_TARGETS = 6;
 const RECYCLE_HIDDEN_MARGIN = 9.8;
-const MIN_RESPAWN_LEAD = 10.6;
+const MIN_RESPAWN_LEAD = 7.4;
 
 const FIELD_HALF_X = 4.2;
 const SAFE_FALL_BACK = 10.5;
@@ -262,8 +262,8 @@ const buildSwatch = (
     const color = shiftHexColor(seed, wobble, sat, lit);
     const hsl = { h: 0, s: 0, l: 0 };
     color.getHSL(hsl);
-    if (hsl.l < 0.44) {
-      color.setHSL(hsl.h, clamp(hsl.s * 0.92, 0, 1), 0.44 + hsl.l * 0.12);
+    if (hsl.l < 0.58) {
+      color.setHSL(hsl.h, clamp(hsl.s * 0.94, 0, 1), 0.58 + hsl.l * 0.08);
     }
     out.push(color);
   }
@@ -296,22 +296,22 @@ const buildOrbitPalette = (base: CubePalette, index: number): OrbitVisualPalette
   return {
     id: base.id,
     name: base.name,
-    background: shiftHexColor(base.background, 0.008, 1.05, 0.85),
-    fog: shiftHexColor(base.fog, 0.006, 1.04, 0.95),
-    ambient: shiftHexColor(base.ambientLight, 0, 0.92, 0.98),
-    key: shiftHexColor(base.keyLight, 0, 0.88, 1.04),
-    fillA: shiftHexColor(base.fillLightA, 0, 0.98, 1.03),
-    fillB: shiftHexColor(base.fillLightB, 0, 1.02, 1.02),
-    hemiSky: shiftHexColor(base.fillLightA, 0.01, 0.9, 1.04),
-    hemiGround: shiftHexColor(base.waterBottom, 0, 0.88, 0.92),
+    background: shiftHexColor(base.background, 0.008, 1.08, 1.04),
+    fog: shiftHexColor(base.fog, 0.006, 1.06, 1.08),
+    ambient: shiftHexColor(base.ambientLight, 0, 0.96, 1.14),
+    key: shiftHexColor(base.keyLight, 0, 0.9, 1.08),
+    fillA: shiftHexColor(base.fillLightA, 0, 1, 1.12),
+    fillB: shiftHexColor(base.fillLightB, 0, 1.04, 1.12),
+    hemiSky: shiftHexColor(base.fillLightA, 0.01, 0.94, 1.14),
+    hemiGround: shiftHexColor(base.waterBottom, 0, 0.92, 1.05),
     planets,
     stars,
     hazards,
     ringCue: shiftHexColor(base.cubeColor, 0.012, 1.12, 1.15),
     trail: shiftHexColor(base.fillLightA, -0.01, 1.06, 1.02),
     trailGlow: shiftHexColor(base.fillLightB, 0.01, 1.1, 1.08),
-    player: shiftHexColor(base.playerColor, 0, 0.88, 1.1),
-    playerEmissive: shiftHexColor(base.playerEmissive, 0, 1.04, 1.14),
+    player: shiftHexColor(base.playerColor, 0, 0.9, 1.2),
+    playerEmissive: shiftHexColor(base.playerEmissive, 0, 1.06, 1.24),
     bloomBase: 0.54 + (index % 4) * 0.03,
     bloomMax: 1.2 + (index % 3) * 0.16,
     vignetteDarkness: 0.22 + (index % 5) * 0.04,
@@ -638,13 +638,13 @@ const nextSpacing = (runtime: Runtime, tier: number) => {
   const d = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
   if (runtime.mode === 'scattered') {
     return clamp(
-      lerp(2.15, 1.45, d) + (3 - tier) * 0.09 + (runtime.elapsed < 12 ? 0.18 : 0) + Math.random() * 0.24,
-      1.05,
-      2.45
+      lerp(1.68, 1.16, d) + (3 - tier) * 0.06 + (runtime.elapsed < 12 ? 0.1 : 0) + Math.random() * 0.16,
+      0.9,
+      1.95
     );
   }
-  const earlySlow = runtime.elapsed < 12 ? 0.55 : runtime.elapsed < 22 ? 0.3 : 0;
-  return clamp(lerp(3.4, 2.1, d) + (3 - tier) * 0.12 + earlySlow + Math.random() * 0.32, 1.9, 4.25);
+  const earlySlow = runtime.elapsed < 12 ? 0.28 : runtime.elapsed < 22 ? 0.16 : 0;
+  return clamp(lerp(2.28, 1.46, d) + (3 - tier) * 0.08 + earlySlow + Math.random() * 0.2, 1.2, 2.9);
 };
 
 const acquireStar = (runtime: Runtime) => {
@@ -1355,6 +1355,7 @@ function OrbitLatchScene({
 
       if (planetMaterialRef.current) {
         planetMaterialRef.current.emissive.copy(palette.hemiGround).multiplyScalar(0.7);
+        planetMaterialRef.current.emissiveIntensity = 1.6;
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.45);
@@ -1877,31 +1878,36 @@ function OrbitLatchScene({
     }
     runtime.cuePulseT = Math.max(0, runtime.cuePulseT - dt * 2.6);
 
-    const shakeAmp = runtime.shake * 0.09;
+    const latchedPlanet = runtime.latched
+      ? runtime.planets.find((p) => p.slot === runtime.latchedPlanet) ?? null
+      : null;
+    const focusPlanet = runtime.latched ? latchedPlanet : latchCuePlanet;
+
+    const shakeAmp = runtime.shake * 0.075;
     const shakeTime = runtime.elapsed * 21;
     const drifting = !runtime.latched;
-    const scatteredCamLift = runtime.mode === 'scattered' ? 1.35 : 0.68;
-    const scatteredCamPull = runtime.mode === 'scattered' ? 3.35 : 2.85;
-    const focusY = latchCuePlanet
-      ? lerp(runtime.playerY, latchCuePlanet.y, drifting ? 0.69 : 0.57)
-      : runtime.playerY + (runtime.latched ? 2.24 : 1.62);
-    const focusX = latchCuePlanet
-      ? lerp(runtime.playerX, latchCuePlanet.x, drifting ? 0.44 : 0.3)
+    const scatteredCamLift = runtime.mode === 'scattered' ? 0.76 : 0.38;
+    const scatteredCamPull = runtime.mode === 'scattered' ? 1.92 : 1.64;
+    const focusY = focusPlanet
+      ? lerp(runtime.playerY, focusPlanet.y, drifting ? 0.58 : 0.42)
+      : runtime.playerY + (runtime.latched ? 1.52 : 1.28);
+    const focusX = focusPlanet
+      ? lerp(runtime.playerX, focusPlanet.x, drifting ? 0.34 : 0.24)
       : runtime.playerX;
     camTarget.set(
-      focusX * 0.24 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
-      7.6 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.3,
-      -focusY + 7.15 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
+      focusX * 0.2 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
+      5.92 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.22,
+      -focusY + 4.58 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
-    camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
+    camera.position.lerp(camTarget, 1 - Math.exp(-10 * step.renderDt));
     lookTarget.set(
-      focusX * 0.16,
+      focusX * 0.12,
       0,
-      -focusY - (runtime.mode === 'scattered' ? 7.25 : 6.75)
+      -focusY - (runtime.mode === 'scattered' ? 5.32 : 4.92)
     );
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
-      const baseFov = runtime.mode === 'scattered' ? 58 : 56;
+      const baseFov = runtime.mode === 'scattered' ? 61 : 59;
       camera.fov = lerp(camera.fov, baseFov - runtime.coreGlow * 1.8, 1 - Math.exp(-6 * dt));
       camera.updateProjectionMatrix();
     }
@@ -2136,21 +2142,21 @@ function OrbitLatchScene({
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 7.2, 6.2]} fov={52} near={0.1} far={240} />
-      <color attach="background" args={['#1a2d4c']} />
-      <fog attach="fog" args={['#32507a', 20, 154]} />
+      <PerspectiveCamera makeDefault position={[0, 6.2, 4.8]} fov={59} near={0.1} far={220} />
+      <color attach="background" args={['#2a3f66']} />
+      <fog attach="fog" args={['#4a6c98', 18, 142]} />
 
-      <ambientLight ref={ambientLightRef} intensity={1.1} color="#f3f9ff" />
+      <ambientLight ref={ambientLightRef} intensity={1.28} color="#f7fbff" />
       <directionalLight
         ref={directionalLightRef}
         position={[6, 9, 3]}
-        intensity={1.18}
+        intensity={1.34}
         color="#f7fbff"
       />
-      <hemisphereLight ref={hemiLightRef} args={['#9de4ff', '#21335a', 0.82]} />
-      <pointLight ref={fillLightARef} position={[0, 4.1, 2]} intensity={1.35} color="#65efff" />
-      <pointLight ref={fillLightBRef} position={[2.2, 2.8, -3.2]} intensity={1.08} color="#ff8ce5" />
-      <pointLight ref={fillLightCRef} position={[-2.6, 2.6, -1.6]} intensity={0.95} color="#ffd27d" />
+      <hemisphereLight ref={hemiLightRef} args={['#b3ebff', '#324f7a', 0.98]} />
+      <pointLight ref={fillLightARef} position={[0, 3.7, 1.7]} intensity={1.5} color="#65efff" />
+      <pointLight ref={fillLightBRef} position={[2.2, 2.6, -2.4]} intensity={1.2} color="#ff8ce5" />
+      <pointLight ref={fillLightCRef} position={[-2.6, 2.5, -1.2]} intensity={1.1} color="#ffd27d" />
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
@@ -2161,7 +2167,7 @@ function OrbitLatchScene({
           roughness={0.18}
           metalness={0.12}
           emissive="#23355c"
-          emissiveIntensity={1.26}
+          emissiveIntensity={1.62}
           toneMapped={false}
         />
       </instancedMesh>
@@ -2178,7 +2184,7 @@ function OrbitLatchScene({
           color="#ffffff"
           vertexColors
           transparent
-          opacity={0.68}
+          opacity={0.76}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
