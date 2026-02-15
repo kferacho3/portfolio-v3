@@ -811,58 +811,16 @@ const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) =
   }
   if (reachable) return;
 
-  const recycle = runtime.planets
-    .filter(
-      (planet) => planet.slot !== fromPlanet.slot && planet.y <= runtime.playerY - RECYCLE_HIDDEN_MARGIN
-    )
-    .sort((a, b) => a.y - b.y)[0];
-  if (!recycle) return;
+  const candidate = findNearestAheadPlanet(runtime, px, py, fromPlanet.slot);
+  if (!candidate) return;
 
-  recycle.radius = clamp(
-    recycle.radius + (Math.random() * 2 - 1) * 0.03,
-    runtime.mode === 'scattered' ? 0.42 : 0.48,
-    runtime.mode === 'scattered' ? 0.76 : 0.88
+  const targetRadius = Math.hypot(predictX - candidate.x, predictY - candidate.y);
+  candidate.orbitRadius = clamp(
+    lerp(candidate.orbitRadius, targetRadius, 0.68),
+    candidate.radius + 0.5,
+    candidate.radius + 1.26
   );
-  recycle.orbitRadius = clamp(
-    recycle.radius + (runtime.mode === 'scattered' ? 0.74 : 0.86) + Math.random() * 0.22,
-    recycle.radius + 0.5,
-    recycle.radius + 1.22
-  );
-  const dir = runtime.velX >= 0 ? 1 : -1;
-  recycle.orbitAngularVel = dir * (1.5 + Math.random() * 1.2);
-  recycle.colorIndex = Math.floor(Math.random() * PLANET_COLORS.length);
-  recycle.glow = 0.45;
-  recycle.pulse = Math.random() * Math.PI * 2;
-  let nextX = clamp(
-    predictX + (Math.random() * 2 - 1) * 0.48,
-    -FIELD_HALF_X + 0.7,
-    FIELD_HALF_X - 0.7
-  );
-  let nextY = Math.max(py + 1.35, predictY + 0.85 + Math.random() * 0.75);
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    let crowded = false;
-    for (const other of runtime.planets) {
-      if (other.slot === fromPlanet.slot || other.slot === recycle.slot) continue;
-      if (other.y < py - 1.2 || other.y > py + 7.4) continue;
-      const minDist = recycle.radius + other.radius * 0.55 + (runtime.mode === 'scattered' ? 0.52 : 0.66);
-      if (Math.hypot(nextX - other.x, nextY - other.y) < minDist) {
-        crowded = true;
-        break;
-      }
-    }
-    if (!crowded) break;
-    nextX = clamp(
-      nextX + (Math.random() < 0.5 ? -1 : 1) * (0.54 + Math.random() * 0.44),
-      -FIELD_HALF_X + 0.7,
-      FIELD_HALF_X - 0.7
-    );
-    nextY += 0.34 + Math.random() * 0.32;
-  }
-  recycle.x = nextX;
-  recycle.y = nextY;
-  runtime.spawnCursorY = Math.max(runtime.spawnCursorY, recycle.y + 0.24);
-  runtime.lastSpawnX = recycle.x;
-  runtime.lastSpawnY = recycle.y;
+  candidate.glow = Math.max(candidate.glow, 0.9);
 };
 
 const acquireShard = (runtime: Runtime) => {
@@ -1851,7 +1809,7 @@ function OrbitLatchScene() {
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 6.9, 5.4]} fov={46} near={0.1} far={240} />
+      <PerspectiveCamera makeDefault position={[0, 7.2, 6.2]} fov={52} near={0.1} far={240} />
       <color attach="background" args={['#1a2747']} />
       <fog attach="fog" args={['#24365b', 24, 172]} />
 
