@@ -196,12 +196,18 @@ const STAR_COLORS = [
   new THREE.Color('#ffb0c0'),
 ] as const;
 const PLANET_COLORS = [
-  new THREE.Color('#76f2ff'),
-  new THREE.Color('#91cbff'),
-  new THREE.Color('#bea8ff'),
-  new THREE.Color('#ff93e2'),
-  new THREE.Color('#95ffd6'),
-  new THREE.Color('#ffe5a4'),
+  new THREE.Color('#43f7ff'),
+  new THREE.Color('#65ceff'),
+  new THREE.Color('#84a8ff'),
+  new THREE.Color('#b987ff'),
+  new THREE.Color('#ff82dd'),
+  new THREE.Color('#ff97a7'),
+  new THREE.Color('#ffc57a'),
+  new THREE.Color('#ffe985'),
+  new THREE.Color('#9eff8b'),
+  new THREE.Color('#7fffd2'),
+  new THREE.Color('#b7f8ff'),
+  new THREE.Color('#ffc7fb'),
 ] as const;
 const HAZARD_COLORS = [
   new THREE.Color('#ff6c8f'),
@@ -1034,6 +1040,7 @@ function OrbitLatchScene() {
   const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const impactOverlayRef = useRef<HTMLDivElement>(null);
   const planetRef = useRef<THREE.InstancedMesh>(null);
+  const planetGlowRef = useRef<THREE.InstancedMesh>(null);
   const ringRef = useRef<THREE.InstancedMesh>(null);
   const starRef = useRef<THREE.InstancedMesh>(null);
   const hazardRef = useRef<THREE.InstancedMesh>(null);
