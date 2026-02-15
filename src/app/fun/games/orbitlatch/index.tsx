@@ -1470,39 +1470,54 @@ function OrbitLatchScene({
       } else {
         const dNorm = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
         const speed = Math.hypot(runtime.velX, runtime.velY);
-        const speedAssist = clamp(speed * 0.05, 0, runtime.mode === 'scattered' ? 0.1 : 0.08);
-        const modeAssist = runtime.mode === 'scattered' ? 0.02 : 0.01;
+        const speedAssist = clamp(speed * 0.07, 0, runtime.mode === 'scattered' ? 0.14 : 0.12);
+        const modeAssist = runtime.mode === 'scattered' ? 0.03 : 0.02;
         const lookAhead = clamp(
-          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.38 + modeAssist * 0.22,
+          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.44 + modeAssist * 0.26,
           RELATCH_LOOKAHEAD_BASE,
-          runtime.mode === 'scattered' ? 0.26 : 0.22
+          runtime.mode === 'scattered' ? 0.32 : 0.28
         );
         const predictX = runtime.playerX + runtime.velX * lookAhead;
         const predictY = runtime.playerY + runtime.velY * lookAhead;
         const latchDistance = clamp(
-          LATCH_BASE_DISTANCE - 0.08 + speedAssist - dNorm * 0.06 + modeAssist,
-          0.16,
-          runtime.mode === 'scattered' ? 0.34 : 0.3
+          LATCH_BASE_DISTANCE - 0.01 + speedAssist - dNorm * 0.05 + modeAssist,
+          0.24,
+          runtime.mode === 'scattered' ? 0.52 : 0.46
         );
-        const nextPlanet = findNearestAheadPlanet(
-          runtime,
-          runtime.playerX,
-          runtime.playerY,
-          undefined
-        );
-        if (nextPlanet) {
-          const dx = runtime.playerX - nextPlanet.x;
-          const dy = runtime.playerY - nextPlanet.y;
-          const dist = Math.hypot(dx, dy);
-          const pdx = predictX - nextPlanet.x;
-          const pdy = predictY - nextPlanet.y;
-          const predictDist = Math.hypot(pdx, pdy);
-          const deltaRing = Math.min(
-            Math.abs(dist - nextPlanet.orbitRadius),
-            Math.abs(predictDist - nextPlanet.orbitRadius)
-          );
+        let nextPlanet: Planet | null = null;
+        let nextDelta = Infinity;
+        let nextScore = Infinity;
+        const vx = runtime.velX;
+        const vy = runtime.velY;
+        const vLen = Math.hypot(vx, vy) || 1;
+        for (const planet of runtime.planets) {
+          const toX = planet.x - runtime.playerX;
+          const toY = planet.y - runtime.playerY;
+          if (toY < -0.75) continue;
 
-          if (deltaRing > latchDistance) {
+          const forward = (toX * vx + toY * vy) / vLen;
+          if (forward < -0.45) continue;
+
+          const dist = Math.hypot(runtime.playerX - planet.x, runtime.playerY - planet.y);
+          const predictDist = Math.hypot(predictX - planet.x, predictY - planet.y);
+          const deltaRing = Math.min(
+            Math.abs(dist - planet.orbitRadius),
+            Math.abs(predictDist - planet.orbitRadius)
+          );
+          const score =
+            deltaRing * 1.7 +
+            Math.max(0, -forward) * 0.8 +
+            Math.max(0, -toY) * 0.35 +
+            Math.abs(toX) * 0.08;
+
+          if (score < nextScore) {
+            nextScore = score;
+            nextDelta = deltaRing;
+            nextPlanet = planet;
+          }
+        }
+        if (nextPlanet) {
+          if (nextDelta > latchDistance) {
             runtime.streak = 0;
             runtime.multiplier = Math.max(1, runtime.multiplier - 0.06);
           } else {
