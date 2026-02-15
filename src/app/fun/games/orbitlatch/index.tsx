@@ -127,6 +127,10 @@ type Runtime = {
   nextStarSlot: number;
   nextHazardSlot: number;
   paletteIndex: number;
+  startNonceSeen: number;
+  cuePulseT: number;
+  cuePulseCooldown: number;
+  cuePulseSlot: number;
 
   planets: Planet[];
   starsPool: StarPickup[];
@@ -148,7 +152,9 @@ type OrbitStore = {
   latched: boolean;
   failMessage: string;
   tapNonce: number;
+  startNonce: number;
   setMode: (mode: OrbitMode) => void;
+  requestStart: () => void;
   startRun: (mode?: OrbitMode) => void;
   resetToStart: () => void;
   onTapFx: () => void;
@@ -510,6 +516,10 @@ const createRuntime = (): Runtime => ({
   nextStarSlot: 0,
   nextHazardSlot: 0,
   paletteIndex: 0,
+  startNonceSeen: 0,
+  cuePulseT: 0,
+  cuePulseCooldown: 0,
+  cuePulseSlot: -1,
 
   planets: Array.from({ length: PLANET_POOL }, (_, idx) => makePlanet(idx)),
   starsPool: Array.from({ length: STAR_POOL }, (_, idx) => makeStar(idx)),
@@ -537,6 +547,7 @@ const useOrbitStore = create<OrbitStore>((set, get) => ({
   latched: false,
   failMessage: '',
   tapNonce: 0,
+  startNonce: 0,
   setMode: (mode) =>
     set((state) => {
       if (state.mode === mode) return {};
@@ -547,6 +558,7 @@ const useOrbitStore = create<OrbitStore>((set, get) => ({
         timeRemaining: mode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
       };
     }),
+  requestStart: () => set((state) => ({ startNonce: state.startNonce + 1 })),
   startRun: (mode) => {
     const nextMode = mode ?? get().mode;
     writeMode(nextMode);
@@ -990,6 +1002,7 @@ function OrbitLatchOverlay() {
   const multiplier = useOrbitStore((state) => state.multiplier);
   const latched = useOrbitStore((state) => state.latched);
   const failMessage = useOrbitStore((state) => state.failMessage);
+  const requestStart = useOrbitStore((state) => state.requestStart);
   const timerText = `${Math.max(0, timeRemaining).toFixed(1)}s`;
 
   return (
@@ -1083,8 +1096,22 @@ function OrbitLatchOverlay() {
               </button>
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">
-              Tap anywhere outside the mode buttons to start.
+              Latch when the orbit cue blooms. Release to slingshot.
             </div>
+            <div className="pointer-events-auto mt-4 flex items-center justify-center">
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  requestStart();
+                }}
+                className="rounded-lg border border-cyan-100/80 bg-gradient-to-r from-cyan-400/35 via-sky-400/28 to-fuchsia-400/28 px-5 py-2 text-sm font-bold tracking-[0.12em] text-cyan-50 shadow-[0_0_26px_rgba(56,219,255,0.35)] transition hover:brightness-110"
+              >
+                START RUN
+              </button>
+            </div>
+            <div className="mt-2 text-[11px] text-white/70">Tap, Space, or Enter to launch</div>
           </div>
         </div>
       )}
@@ -1101,6 +1128,19 @@ function OrbitLatchOverlay() {
               Best {best} • {mode === 'classic' ? 'Classic' : 'Scattered'}
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
+            <div className="pointer-events-auto mt-3 flex items-center justify-center">
+              <button
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  requestStart();
+                }}
+                className="rounded-md border border-cyan-100/80 bg-cyan-400/24 px-4 py-2 text-xs font-bold tracking-[0.12em] text-cyan-100 transition hover:brightness-110"
+              >
+                PLAY AGAIN
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1235,6 +1275,9 @@ function OrbitLatchScene({
     runtime.scatterBandSize = 0;
     runtime.nextStarSlot = 0;
     runtime.nextHazardSlot = 0;
+    runtime.cuePulseT = 0;
+    runtime.cuePulseCooldown = 0;
+    runtime.cuePulseSlot = -1;
 
     for (const star of runtime.starsPool) {
       star.active = false;
@@ -1321,6 +1364,7 @@ function OrbitLatchScene({
     const input = inputRef.current;
     const store = useOrbitStore.getState();
     const palette = getRuntimePalette(runtime);
+    let status = store.status;
 
     try {
 
@@ -1387,6 +1431,13 @@ function OrbitLatchScene({
       fillLightCRef.current.intensity = lerp(0.72, 1.04, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
     }
 
+    if (store.startNonce !== runtime.startNonceSeen && store.status !== 'PLAYING') {
+      runtime.startNonceSeen = store.startNonce;
+      resetRuntime(runtime, store.mode);
+      useOrbitStore.getState().startRun(store.mode);
+      status = 'PLAYING';
+    }
+
     const tap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
@@ -1396,7 +1447,7 @@ function OrbitLatchScene({
 
     if (tap) {
       runtime.lastTapAt = runtime.elapsed;
-      if (store.status !== 'PLAYING') {
+      if (status !== 'PLAYING') {
         resetRuntime(runtime, store.mode);
         useOrbitStore.getState().startRun(store.mode);
       } else if (runtime.latched) {
@@ -1575,7 +1626,7 @@ function OrbitLatchScene({
       useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
     };
 
-    if (store.status === 'PLAYING') {
+    if (status === 'PLAYING') {
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('orbit-chain', runtime.elapsed);
@@ -1862,30 +1913,55 @@ function OrbitLatchScene({
         )[0] ??
       null;
 
+    let cueRingDelta = Infinity;
+    if (latchCuePlanet) {
+      const cueDx = runtime.playerX - latchCuePlanet.x;
+      const cueDy = runtime.playerY - latchCuePlanet.y;
+      cueRingDelta = Math.abs(Math.hypot(cueDx, cueDy) - latchCuePlanet.orbitRadius);
+    }
+
+    runtime.cuePulseCooldown = Math.max(0, runtime.cuePulseCooldown - dt);
+    if (latchCuePlanet && !runtime.latched) {
+      if (runtime.cuePulseSlot !== latchCuePlanet.slot) {
+        runtime.cuePulseSlot = latchCuePlanet.slot;
+        runtime.cuePulseT = Math.max(runtime.cuePulseT, 0.14);
+        runtime.cuePulseCooldown = Math.max(runtime.cuePulseCooldown, 0.08);
+      }
+      const triggerWindow = runtime.mode === 'scattered' ? 0.25 : 0.21;
+      if (cueRingDelta <= triggerWindow && runtime.cuePulseCooldown <= 0) {
+        runtime.cuePulseT = 1;
+        runtime.cuePulseCooldown = 0.44 + Math.random() * 0.2;
+      }
+    } else {
+      runtime.cuePulseSlot = -1;
+    }
+    runtime.cuePulseT = Math.max(0, runtime.cuePulseT - dt * 2.6);
+
     const shakeAmp = runtime.shake * 0.09;
     const shakeTime = runtime.elapsed * 21;
-    const scatteredCamLift = runtime.mode === 'scattered' ? 0.98 : 0.24;
-    const scatteredCamPull = runtime.mode === 'scattered' ? 2.35 : 1.96;
+    const drifting = !runtime.latched;
+    const scatteredCamLift = runtime.mode === 'scattered' ? 1.35 : 0.68;
+    const scatteredCamPull = runtime.mode === 'scattered' ? 3.35 : 2.85;
     const focusY = latchCuePlanet
-      ? lerp(runtime.playerY, latchCuePlanet.y, runtime.latched ? 0.52 : 0.62)
-      : runtime.playerY + (runtime.latched ? 1.95 : 1.42);
+      ? lerp(runtime.playerY, latchCuePlanet.y, drifting ? 0.69 : 0.57)
+      : runtime.playerY + (runtime.latched ? 2.24 : 1.62);
     const focusX = latchCuePlanet
-      ? lerp(runtime.playerX, latchCuePlanet.x, runtime.latched ? 0.25 : 0.4)
+      ? lerp(runtime.playerX, latchCuePlanet.x, drifting ? 0.44 : 0.3)
       : runtime.playerX;
     camTarget.set(
-      focusX * 0.27 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
-      6.95 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
-      -focusY + 6.15 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
+      focusX * 0.24 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
+      7.6 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.3,
+      -focusY + 7.15 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     lookTarget.set(
-      focusX * 0.18,
+      focusX * 0.16,
       0,
-      -focusY - (runtime.mode === 'scattered' ? 6.55 : 6.05)
+      -focusY - (runtime.mode === 'scattered' ? 7.25 : 6.75)
     );
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
-      const baseFov = runtime.mode === 'scattered' ? 55 : 52;
+      const baseFov = runtime.mode === 'scattered' ? 58 : 56;
       camera.fov = lerp(camera.fov, baseFov - runtime.coreGlow * 1.8, 1 - Math.exp(-6 * dt));
       camera.updateProjectionMatrix();
     }
@@ -1926,38 +2002,39 @@ function OrbitLatchScene({
         const ringDelta = Math.abs(distToCue - latchCuePlanet.orbitRadius);
         const timingWindow = clamp(1 - ringDelta / 0.45, 0, 1);
         const coreWindow = clamp(1 - ringDelta / 0.72, 0, 1);
-        const phaseA = mod(runtime.elapsed * 1.55 + latchCuePlanet.pulse * 0.2, 1);
-        const phaseB = mod(runtime.elapsed * 1.55 + 0.45 + latchCuePlanet.pulse * 0.2, 1);
-        const minScale = latchCuePlanet.radius * 0.34;
-        const maxScale = latchCuePlanet.orbitRadius * (runtime.latched ? 1.2 : 1.35);
+        const phaseA = 1 - runtime.cuePulseT;
+        const phaseB = clamp(phaseA - 0.2, 0, 1);
+        const minScale = latchCuePlanet.radius * 0.58;
+        const maxScale = latchCuePlanet.orbitRadius * (runtime.latched ? 1.04 : 1.18);
         const scaleA = lerp(minScale, maxScale, phaseA);
         const scaleB = lerp(minScale, maxScale, phaseB);
+        const pulseActive = !runtime.latched && runtime.cuePulseT > 0.001;
 
-        latchCuePulseRef.current.visible = true;
+        latchCuePulseRef.current.visible = pulseActive;
         latchCuePulseRef.current.position.set(cueWorld.x, 0.045, cueWorld.z);
         latchCuePulseRef.current.scale.set(scaleA, scaleA, 1);
         latchCuePulseRef.current.rotation.set(-Math.PI * 0.5, 0, 0);
-        const pulseOpacity = clamp((1 - phaseA) * (0.18 + timingWindow * 0.7), 0.06, 0.95);
+        const pulseOpacity = clamp(runtime.cuePulseT * (0.11 + timingWindow * 0.42), 0.04, 0.56);
         if (latchCuePulseMaterialRef.current) {
           latchCuePulseMaterialRef.current.opacity = pulseOpacity;
           latchCuePulseMaterialRef.current.color
             .copy(palette.ringCue)
-            .lerp(palette.trailGlow, clamp(0.24 + timingWindow * 0.52, 0, 0.92));
+            .lerp(palette.trailGlow, clamp(0.18 + timingWindow * 0.4, 0, 0.84));
         }
 
-        latchCuePulseRefSecondary.current.visible = true;
+        latchCuePulseRefSecondary.current.visible = pulseActive;
         latchCuePulseRefSecondary.current.position.set(cueWorld.x, 0.044, cueWorld.z);
         latchCuePulseRefSecondary.current.scale.set(scaleB, scaleB, 1);
         latchCuePulseRefSecondary.current.rotation.set(-Math.PI * 0.5, 0, 0);
         if (latchCuePulseSecondaryMaterialRef.current) {
           latchCuePulseSecondaryMaterialRef.current.opacity = clamp(
-            (1 - phaseB) * (0.08 + coreWindow * 0.38),
-            0.04,
-            0.44
+            runtime.cuePulseT * (0.04 + coreWindow * 0.18),
+            0.02,
+            0.22
           );
           latchCuePulseSecondaryMaterialRef.current.color
             .copy(palette.trailGlow)
-            .lerp(WHITE, clamp(coreWindow * 0.35, 0, 0.5));
+            .lerp(WHITE, clamp(coreWindow * 0.22, 0, 0.4));
         }
       } else {
         latchCuePulseRef.current.visible = false;
@@ -1970,11 +2047,9 @@ function OrbitLatchScene({
       for (let i = 0; i < runtime.planets.length; i += 1) {
         const planet = runtime.planets[i];
         const world = simToWorld(planet.x, planet.y, trailWorld);
-        const pulsing = 0.5 + 0.5 * Math.sin(runtime.elapsed * 1.5 + planet.pulse);
+        const pulsing = 0;
         const cuePulse =
-          planet.slot === latchCueSlot
-            ? 0.5 + 0.5 * Math.sin(runtime.elapsed * 6.2 + planet.pulse)
-            : 0;
+          planet.slot === latchCueSlot ? runtime.cuePulseT : 0;
         const isCuePlanet = planet.slot === latchCueSlot;
 
         dummy.position.set(world.x, 0, world.z);
