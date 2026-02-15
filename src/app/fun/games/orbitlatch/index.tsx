@@ -1860,13 +1860,16 @@ function OrbitLatchOverlay() {
   const requestStart = useOrbitStore((state) => state.requestStart);
   const timerText = `${Math.max(0, timeRemaining).toFixed(1)}s`;
   const multiplierMeter = clamp((multiplier - 1) / 1.8, 0, 1);
+  const navSafeTop = 76;
+  const hudTop = navSafeTop + 8;
+  const statusTop = hudTop + 96;
   const statusPanelBackground = 'rgba(10, 14, 28, 0.94)';
   const scorePanelBackground = 'rgba(10, 14, 28, 0.94)';
   const overlayBackground = 'rgba(8, 12, 24, 0.95)';
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
+      <div className="absolute inset-x-4 flex items-start justify-between gap-3" style={{ top: hudTop }}>
         <div
           className="rounded-2xl border px-4 py-3"
           style={{
@@ -1927,8 +1930,9 @@ function OrbitLatchOverlay() {
 
       {status === 'PLAYING' && (
         <div
-          className="absolute left-4 top-[108px] w-[min(340px,calc(100%-2rem))] rounded-xl border px-3 py-2 text-xs"
+          className="absolute left-4 w-[min(340px,calc(100%-2rem))] rounded-xl border px-3 py-2 text-xs"
           style={{
+            top: statusTop,
             borderColor: `${hudAccent}7a`,
             background: 'rgba(6, 10, 20, 0.9)',
           }}
@@ -2106,8 +2110,8 @@ function OrbitLatchScene({
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
-  const planetRef = useRef<THREE.InstancedMesh>(null);
-  const planetGlowRef = useRef<THREE.InstancedMesh>(null);
+  const planetCoreRefs = useRef<Array<THREE.Mesh | null>>([]);
+  const planetGlowRefs = useRef<Array<THREE.Mesh | null>>([]);
   const ringRef = useRef<THREE.InstancedMesh>(null);
   const starRef = useRef<THREE.InstancedMesh>(null);
   const habitatRef = useRef<THREE.InstancedMesh>(null);
@@ -2127,8 +2131,6 @@ function OrbitLatchScene({
   const fillLightARef = useRef<THREE.PointLight>(null);
   const fillLightBRef = useRef<THREE.PointLight>(null);
   const fillLightCRef = useRef<THREE.PointLight>(null);
-  const planetMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
-  const planetGlowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const starMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const habitatMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -2380,8 +2382,6 @@ function OrbitLatchScene({
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     };
 
-    prime(planetRef.current, PLANET_POOL, new THREE.Color('#f6fbff'));
-    prime(planetGlowRef.current, PLANET_POOL, new THREE.Color('#d9f6ff'));
     prime(ringRef.current, PLANET_POOL, new THREE.Color('#9ee9ff'));
     prime(starRef.current, STAR_POOL, new THREE.Color('#fff6cd'));
     prime(habitatRef.current, HABITAT_POOL, new THREE.Color('#92f3ff'));
@@ -2390,7 +2390,6 @@ function OrbitLatchScene({
     prime(ringPulseRef.current, RING_PULSE_POOL, new THREE.Color('#9ff6ff'));
     prime(shardRef.current, SHARD_POOL, new THREE.Color('#ffffff'));
 
-    if (planetMaterialRef.current) planetMaterialRef.current.needsUpdate = true;
     if (hazardMaterialRef.current) hazardMaterialRef.current.needsUpdate = true;
     if (habitatMaterialRef.current) habitatMaterialRef.current.needsUpdate = true;
     if (meteorMaterialRef.current) meteorMaterialRef.current.needsUpdate = true;
@@ -2437,12 +2436,6 @@ function OrbitLatchScene({
       if (directionalLightRef.current) directionalLightRef.current.intensity = 1.28;
       if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
-      if (planetMaterialRef.current) {
-        planetMaterialRef.current.color.copy(WHITE);
-        planetMaterialRef.current.toneMapped = false;
-        planetMaterialRef.current.opacity = 1;
-        planetMaterialRef.current.needsUpdate = true;
-      }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
         hazardMaterialRef.current.emissiveIntensity = 0.76;
@@ -3272,21 +3265,14 @@ function OrbitLatchScene({
       }
     }
 
-    if (planetRef.current && ringRef.current) {
+    if (ringRef.current) {
       const latchCueSlot = latchCuePlanet?.slot ?? -1;
       for (let i = 0; i < runtime.planets.length; i += 1) {
         const planet = runtime.planets[i];
         const world = simToWorld(planet.x, planet.y, trailWorld);
-        const pulsing = 0;
         const cuePulse =
           planet.slot === latchCueSlot ? runtime.cuePulseT : 0;
         const isCuePlanet = planet.slot === latchCueSlot;
-
-        dummy.position.set(world.x, 0, world.z);
-        dummy.scale.setScalar(planet.radius);
-        dummy.rotation.set(0, 0, 0);
-        dummy.updateMatrix();
-        planetRef.current.setMatrixAt(i, dummy.matrix);
 
         const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
         normalizePlanetColor(planetBaseColor, colorScratch, {
@@ -3297,14 +3283,19 @@ function OrbitLatchScene({
         })
           .lerp(WHITE, clamp(0.08 + cuePulse * 0.1, 0.06, 0.16))
           .multiplyScalar(1.2 + planet.glow * 0.24 + cuePulse * 0.14);
-        planetRef.current.setColorAt(i, colorScratch);
 
-        if (planetGlowRef.current) {
-          dummy.position.set(world.x, 0.01, world.z);
-          dummy.scale.setScalar(planet.radius * (1.1 + pulsing * 0.09 + cuePulse * 0.21 + planet.glow * 0.11));
-          dummy.rotation.set(0, 0, 0);
-          dummy.updateMatrix();
-          planetGlowRef.current.setMatrixAt(i, dummy.matrix);
+        const planetCoreMesh = planetCoreRefs.current[i];
+        if (planetCoreMesh) {
+          planetCoreMesh.position.set(world.x, 0, world.z);
+          planetCoreMesh.scale.setScalar(planet.radius);
+          const coreMat = planetCoreMesh.material as THREE.MeshBasicMaterial;
+          coreMat.color.copy(colorScratch);
+        }
+
+        const planetGlowMesh = planetGlowRefs.current[i];
+        if (planetGlowMesh) {
+          planetGlowMesh.position.set(world.x, 0.01, world.z);
+          planetGlowMesh.scale.setScalar(planet.radius * (1.1 + cuePulse * 0.21 + planet.glow * 0.11));
 
           colorScratch
             .copy(normalizePlanetColor(planetBaseColor, colorScratch, {
@@ -3315,7 +3306,8 @@ function OrbitLatchScene({
             }))
             .lerp(palette.ringCue, clamp(0.08 + cuePulse * 0.2 + planet.glow * 0.1, 0.08, 0.26))
             .multiplyScalar(1.08 + planet.glow * 0.42 + cuePulse * 0.2);
-          planetGlowRef.current.setColorAt(i, colorScratch);
+          const glowMat = planetGlowMesh.material as THREE.MeshBasicMaterial;
+          glowMat.color.copy(colorScratch);
         }
 
         dummy.position.set(world.x, 0.015, world.z);
@@ -3347,12 +3339,6 @@ function OrbitLatchScene({
           )
           .multiplyScalar(isCuePlanet ? 1.62 : 0.86);
         ringRef.current.setColorAt(i, colorScratch);
-      }
-      planetRef.current.instanceMatrix.needsUpdate = true;
-      if (planetRef.current.instanceColor) planetRef.current.instanceColor.needsUpdate = true;
-      if (planetGlowRef.current) {
-        planetGlowRef.current.instanceMatrix.needsUpdate = true;
-        if (planetGlowRef.current.instanceColor) planetGlowRef.current.instanceColor.needsUpdate = true;
       }
       ringRef.current.instanceMatrix.needsUpdate = true;
       if (ringRef.current.instanceColor) ringRef.current.instanceColor.needsUpdate = true;
@@ -3609,34 +3595,42 @@ function OrbitLatchScene({
       <pointLight ref={fillLightBRef} position={[2.2, 2.6, -2.4]} intensity={1.04} color="#ff8ce5" />
       <pointLight ref={fillLightCRef} position={[-2.6, 2.5, -1.2]} intensity={0.92} color="#ffd27d" />
 
-      <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
-        <icosahedronGeometry args={[1, 2]} />
-        <meshBasicMaterial
-          ref={planetMaterialRef}
-          color="#ffffff"
-          vertexColors
-          toneMapped={false}
-        />
-      </instancedMesh>
+      <group>
+        {Array.from({ length: PLANET_POOL }, (_, i) => (
+          <mesh
+            key={`planet-core-${i}`}
+            ref={(mesh) => {
+              planetCoreRefs.current[i] = mesh;
+            }}
+            frustumCulled={false}
+          >
+            <icosahedronGeometry args={[1, 2]} />
+            <meshBasicMaterial color="#ffffff" toneMapped={false} />
+          </mesh>
+        ))}
+      </group>
 
-      <instancedMesh
-        ref={planetGlowRef}
-        args={[undefined, undefined, PLANET_POOL]}
-        frustumCulled={false}
-        renderOrder={3}
-      >
-        <icosahedronGeometry args={[1, 1]} />
-        <meshBasicMaterial
-          ref={planetGlowMaterialRef}
-          color="#ffffff"
-          vertexColors
-          transparent
-          opacity={0.76}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </instancedMesh>
+      <group renderOrder={3}>
+        {Array.from({ length: PLANET_POOL }, (_, i) => (
+          <mesh
+            key={`planet-glow-${i}`}
+            ref={(mesh) => {
+              planetGlowRefs.current[i] = mesh;
+            }}
+            frustumCulled={false}
+          >
+            <icosahedronGeometry args={[1, 1]} />
+            <meshBasicMaterial
+              color="#ffffff"
+              transparent
+              opacity={0.76}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+        ))}
+      </group>
 
       <instancedMesh ref={ringRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <torusGeometry args={[1, 0.05, 14, 96]} />
