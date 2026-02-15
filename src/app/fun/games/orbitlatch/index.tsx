@@ -111,7 +111,6 @@ type Runtime = {
   trailHead: number;
   nextOrbitDirection: number;
   lastTapAt: number;
-  lastAssistAt: number;
 
   difficulty: DifficultySample;
   chunkLibrary: GameChunkPatternTemplate[];
@@ -185,7 +184,6 @@ const TRAIL_POINTS = 54;
 const SCATTERED_TIME_LIMIT = 80;
 const CLASSIC_MIN_FORWARD_TARGETS = 4;
 const SCATTERED_MIN_FORWARD_TARGETS = 6;
-const ASSIST_REPOSITION_COOLDOWN = 0.42;
 const RECYCLE_HIDDEN_MARGIN = 9.8;
 const MIN_RESPAWN_LEAD = 10.6;
 
@@ -500,7 +498,6 @@ const createRuntime = (): Runtime => ({
   trailHead: 0,
   nextOrbitDirection: 1,
   lastTapAt: -99,
-  lastAssistAt: -99,
 
   difficulty: sampleDifficulty('orbit-chain', 0),
   chunkLibrary: buildPatternLibraryTemplate('orbitlatch'),
@@ -925,39 +922,6 @@ const ensureForwardTargets = (runtime: Runtime) => {
   }
 };
 
-const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) => {
-  const px = runtime.playerX;
-  const py = runtime.playerY;
-  const lookTime = runtime.mode === 'scattered' ? 0.72 : 0.84;
-  const predictX = px + runtime.velX * lookTime;
-  const predictY = py + runtime.velY * lookTime;
-  const reachDelta = runtime.mode === 'scattered' ? 0.92 : 0.78;
-
-  let reachable = false;
-  for (const planet of runtime.planets) {
-    if (planet.slot === fromPlanet.slot) continue;
-    const dy = planet.y - py;
-    if (dy < 0.25 || dy > 4.8) continue;
-    const d = Math.hypot(predictX - planet.x, predictY - planet.y);
-    if (Math.abs(d - planet.orbitRadius) <= reachDelta) {
-      reachable = true;
-      break;
-    }
-  }
-  if (reachable) return;
-
-  const candidate = findNearestAheadPlanet(runtime, px, py, fromPlanet.slot);
-  if (!candidate) return;
-
-  const targetRadius = Math.hypot(predictX - candidate.x, predictY - candidate.y);
-  candidate.orbitRadius = clamp(
-    lerp(candidate.orbitRadius, targetRadius, 0.36),
-    candidate.radius + 0.5,
-    candidate.radius + 1.26
-  );
-  candidate.glow = Math.max(candidate.glow, 0.6);
-};
-
 const acquireShard = (runtime: Runtime) => {
   for (const shard of runtime.shards) {
     if (!shard.active) return shard;
@@ -1261,7 +1225,6 @@ function OrbitLatchScene({
     runtime.trailHead = 0;
     runtime.nextOrbitDirection = 1;
     runtime.lastTapAt = -99;
-    runtime.lastAssistAt = -99;
 
     runtime.difficulty = sampleDifficulty('orbit-chain', 0);
     runtime.currentChunk = null;
