@@ -292,6 +292,90 @@ type OrbitVisualPalette = {
   vignetteDarkness: number;
 };
 
+type OrbitColorGrade = {
+  id: string;
+  name: string;
+  hueRange: number;
+  satMin: number;
+  satMax: number;
+  lightMin: number;
+  lightMax: number;
+  bgMinLight: number;
+  fogMinLight: number;
+  planetMinLight: number;
+  starMinLight: number;
+  hazardMinLight: number;
+  bloomBoost: number;
+  vignetteScale: number;
+};
+
+const ORBIT_COLOR_GRADES: readonly OrbitColorGrade[] = [
+  {
+    id: 'solar-pop',
+    name: 'Solar Pop',
+    hueRange: 0.14,
+    satMin: 1.02,
+    satMax: 1.28,
+    lightMin: 1.06,
+    lightMax: 1.32,
+    bgMinLight: 0.19,
+    fogMinLight: 0.28,
+    planetMinLight: 0.62,
+    starMinLight: 0.7,
+    hazardMinLight: 0.56,
+    bloomBoost: 1.16,
+    vignetteScale: 0.72,
+  },
+  {
+    id: 'apex-arcade',
+    name: 'Apex Arcade',
+    hueRange: 0.2,
+    satMin: 1.08,
+    satMax: 1.35,
+    lightMin: 1.04,
+    lightMax: 1.26,
+    bgMinLight: 0.16,
+    fogMinLight: 0.24,
+    planetMinLight: 0.58,
+    starMinLight: 0.66,
+    hazardMinLight: 0.52,
+    bloomBoost: 1.12,
+    vignetteScale: 0.74,
+  },
+  {
+    id: 'prism-luxe',
+    name: 'Prism Luxe',
+    hueRange: 0.17,
+    satMin: 1.04,
+    satMax: 1.24,
+    lightMin: 1.08,
+    lightMax: 1.34,
+    bgMinLight: 0.2,
+    fogMinLight: 0.3,
+    planetMinLight: 0.63,
+    starMinLight: 0.72,
+    hazardMinLight: 0.55,
+    bloomBoost: 1.18,
+    vignetteScale: 0.66,
+  },
+  {
+    id: 'tropic-neon',
+    name: 'Tropic Neon',
+    hueRange: 0.22,
+    satMin: 1.14,
+    satMax: 1.4,
+    lightMin: 1.02,
+    lightMax: 1.24,
+    bgMinLight: 0.17,
+    fogMinLight: 0.27,
+    planetMinLight: 0.6,
+    starMinLight: 0.7,
+    hazardMinLight: 0.54,
+    bloomBoost: 1.1,
+    vignetteScale: 0.76,
+  },
+];
+
 const shiftHexColor = (
   hex: string,
   hueShift = 0,
@@ -439,38 +523,145 @@ const mutateSwatch = (
     )
   );
 
+const enforceLightFloor = (
+  source: THREE.Color,
+  minLight: number,
+  saturationMul = 1,
+  maxLight = 0.9
+) => {
+  const hsl = { h: 0, s: 0, l: 0 };
+  const color = source.clone();
+  color.getHSL(hsl);
+  const liftedLight = clamp(hsl.l < minLight ? minLight + (hsl.l * 0.12) : hsl.l, 0, maxLight);
+  color.setHSL(
+    hsl.h,
+    clamp(hsl.s * saturationMul, 0, 1),
+    liftedLight
+  );
+  return color;
+};
+
+const boostSwatchLightness = (
+  source: readonly THREE.Color[],
+  minLight: number,
+  satMul = 1
+) =>
+  source.map((color, idx) =>
+    enforceLightFloor(
+      color,
+      minLight + ((idx % 3) - 1) * 0.015,
+      satMul * (0.95 + (idx % 4) * 0.03),
+      0.92
+    )
+  );
+
 const randomizePaletteForRun = (base: OrbitVisualPalette): OrbitVisualPalette => {
-  const hueShift = (Math.random() * 2 - 1) * 0.07;
-  const satMul = 0.94 + Math.random() * 0.25;
-  const lightMul = 0.93 + Math.random() * 0.28;
-  const accentShift = (Math.random() * 2 - 1) * 0.03;
+  const grade =
+    ORBIT_COLOR_GRADES[Math.floor(Math.random() * ORBIT_COLOR_GRADES.length)] ??
+    ORBIT_COLOR_GRADES[0];
+  const hueShift = (Math.random() * 2 - 1) * grade.hueRange;
+  const satMul = grade.satMin + Math.random() * (grade.satMax - grade.satMin);
+  const lightMul = grade.lightMin + Math.random() * (grade.lightMax - grade.lightMin);
+  const accentShift = (Math.random() * 2 - 1) * (grade.hueRange * 0.44);
   const output = cloneOrbitPalette(base);
 
-  output.background = tintColor(output.background, hueShift * 0.7, satMul * 0.95, lightMul * 0.95);
-  output.fog = tintColor(output.fog, hueShift * 0.62, satMul * 0.92, lightMul * 1.02);
-  output.ambient = tintColor(output.ambient, hueShift * 0.48, satMul * 0.9, lightMul * 1.04);
-  output.key = tintColor(output.key, hueShift * 0.36, satMul * 0.92, lightMul * 1.05);
-  output.fillA = tintColor(output.fillA, hueShift + accentShift, satMul * 1.04, lightMul * 1.06);
-  output.fillB = tintColor(output.fillB, hueShift - accentShift * 0.7, satMul * 1.06, lightMul * 1.07);
-  output.hemiSky = tintColor(output.hemiSky, hueShift * 0.62, satMul * 0.95, lightMul * 1.04);
-  output.hemiGround = tintColor(output.hemiGround, hueShift * 0.42, satMul * 0.88, lightMul * 1.03);
-  output.planets = mutateSwatch(output.planets, hueShift * 0.78, satMul * 1.08, lightMul * 1.02);
-  output.stars = mutateSwatch(output.stars, hueShift + accentShift, satMul * 1.1, lightMul * 1.12);
-  output.hazards = mutateSwatch(output.hazards, hueShift - accentShift * 1.2, satMul * 1.08, lightMul * 0.94);
-  output.ringCue = tintColor(output.ringCue, hueShift + accentShift * 1.3, satMul * 1.1, lightMul * 1.08);
-  output.trail = tintColor(output.trail, hueShift * 0.92, satMul * 1.06, lightMul * 1.04);
-  output.trailGlow = tintColor(output.trailGlow, hueShift + accentShift * 0.8, satMul * 1.08, lightMul * 1.1);
-  output.player = tintColor(output.player, hueShift * 0.4, satMul * 0.96, lightMul * 1.12);
+  output.background = enforceLightFloor(
+    tintColor(output.background, hueShift * 0.7, satMul * 1.02, lightMul * 1.03),
+    grade.bgMinLight,
+    1.03,
+    0.44
+  );
+  output.fog = enforceLightFloor(
+    tintColor(output.fog, hueShift * 0.62, satMul, lightMul * 1.11),
+    grade.fogMinLight,
+    1.02,
+    0.58
+  );
+  output.ambient = enforceLightFloor(
+    tintColor(output.ambient, hueShift * 0.48, satMul * 0.92, lightMul * 1.2),
+    0.52,
+    0.94,
+    0.9
+  );
+  output.key = enforceLightFloor(
+    tintColor(output.key, hueShift * 0.36, satMul * 0.9, lightMul * 1.24),
+    0.76,
+    0.9,
+    0.98
+  );
+  output.fillA = enforceLightFloor(
+    tintColor(output.fillA, hueShift + accentShift, satMul * 1.08, lightMul * 1.18),
+    0.64,
+    1.08,
+    0.95
+  );
+  output.fillB = enforceLightFloor(
+    tintColor(output.fillB, hueShift - accentShift * 0.7, satMul * 1.12, lightMul * 1.2),
+    0.64,
+    1.08,
+    0.95
+  );
+  output.hemiSky = enforceLightFloor(
+    tintColor(output.hemiSky, hueShift * 0.62, satMul * 0.98, lightMul * 1.2),
+    0.58,
+    1.04,
+    0.95
+  );
+  output.hemiGround = enforceLightFloor(
+    tintColor(output.hemiGround, hueShift * 0.42, satMul * 0.92, lightMul * 1.16),
+    0.42,
+    0.96,
+    0.84
+  );
+  output.planets = boostSwatchLightness(
+    mutateSwatch(output.planets, hueShift * 0.78, satMul * 1.12, lightMul * 1.1),
+    grade.planetMinLight,
+    1.1
+  );
+  output.stars = boostSwatchLightness(
+    mutateSwatch(output.stars, hueShift + accentShift, satMul * 1.16, lightMul * 1.2),
+    grade.starMinLight,
+    1.12
+  );
+  output.hazards = boostSwatchLightness(
+    mutateSwatch(output.hazards, hueShift - accentShift * 1.2, satMul * 1.1, lightMul * 1.04),
+    grade.hazardMinLight,
+    1.08
+  );
+  output.ringCue = enforceLightFloor(
+    tintColor(output.ringCue, hueShift + accentShift * 1.3, satMul * 1.14, lightMul * 1.16),
+    0.68,
+    1.12,
+    0.96
+  );
+  output.trail = enforceLightFloor(
+    tintColor(output.trail, hueShift * 0.92, satMul * 1.08, lightMul * 1.16),
+    0.56,
+    1.08,
+    0.95
+  );
+  output.trailGlow = enforceLightFloor(
+    tintColor(output.trailGlow, hueShift + accentShift * 0.8, satMul * 1.1, lightMul * 1.2),
+    0.62,
+    1.12,
+    0.97
+  );
+  output.player = enforceLightFloor(
+    tintColor(output.player, hueShift * 0.4, satMul, lightMul * 1.18),
+    0.78,
+    0.9,
+    0.98
+  );
   output.playerEmissive = tintColor(
     output.playerEmissive,
     hueShift + accentShift * 0.3,
-    satMul * 1.04,
-    lightMul * 1.2
+    satMul * 1.08,
+    lightMul * 1.32
   );
-  output.bloomBase = clamp(output.bloomBase * (0.92 + Math.random() * 0.18), 0.45, 1.24);
-  output.bloomMax = clamp(output.bloomMax * (0.94 + Math.random() * 0.2), 0.98, 1.95);
-  output.vignetteDarkness = clamp(output.vignetteDarkness * (0.94 + Math.random() * 0.18), 0.18, 0.56);
-  output.name = `${base.name} Pulse`;
+  output.bloomBase = clamp(output.bloomBase * (1 + (grade.bloomBoost - 1) * 0.75), 0.62, 1.44);
+  output.bloomMax = clamp(output.bloomMax * grade.bloomBoost, 1.24, 2.2);
+  output.vignetteDarkness = clamp(output.vignetteDarkness * grade.vignetteScale, 0.12, 0.34);
+  output.name = `${base.name} • ${grade.name}`;
 
   return output;
 };
@@ -484,6 +675,117 @@ const getRuntimePalette = (runtime: Pick<Runtime, 'activePalette' | 'paletteInde
 
 const getPaletteColor = (colors: readonly THREE.Color[], index: number) =>
   colors[mod(index, colors.length)] ?? WHITE;
+
+type OrbitStylizedUniforms = {
+  uOrbitRimColor: { value: THREE.Color };
+  uOrbitRimPower: { value: number };
+  uOrbitRimStrength: { value: number };
+  uOrbitSheenStrength: { value: number };
+};
+
+type OrbitStylizedData = {
+  uniforms?: OrbitStylizedUniforms;
+};
+
+const applyStylizedStandardShader = (
+  material: THREE.MeshStandardMaterial,
+  defaults?: {
+    rimPower?: number;
+    rimStrength?: number;
+    sheenStrength?: number;
+  }
+) => {
+  if (material.userData.orbitStylized) return;
+  const rimPower = defaults?.rimPower ?? 2.35;
+  const rimStrength = defaults?.rimStrength ?? 0.42;
+  const sheenStrength = defaults?.sheenStrength ?? 0.14;
+  material.userData.orbitStylized = true;
+  material.userData.orbitStylizedData = {
+    uniforms: undefined,
+  } as OrbitStylizedData;
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uOrbitRimColor = { value: new THREE.Color('#ffffff') };
+    shader.uniforms.uOrbitRimPower = { value: rimPower };
+    shader.uniforms.uOrbitRimStrength = { value: rimStrength };
+    shader.uniforms.uOrbitSheenStrength = { value: sheenStrength };
+
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `
+        #include <common>
+        varying vec3 vOrbitWorldPos;
+        varying vec3 vOrbitWorldNormal;
+      `
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <beginnormal_vertex>',
+      `
+        #include <beginnormal_vertex>
+        vec3 orbitObjectNormal = normalize(objectNormal);
+        vOrbitWorldNormal = normalize(mat3(modelMatrix) * orbitObjectNormal);
+      `
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `
+        #include <begin_vertex>
+        vec4 orbitWorldPosition = modelMatrix * vec4(transformed, 1.0);
+        vOrbitWorldPos = orbitWorldPosition.xyz;
+      `
+    );
+
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `
+        #include <common>
+        varying vec3 vOrbitWorldPos;
+        varying vec3 vOrbitWorldNormal;
+        uniform vec3 uOrbitRimColor;
+        uniform float uOrbitRimPower;
+        uniform float uOrbitRimStrength;
+        uniform float uOrbitSheenStrength;
+      `
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `
+        vec3 orbitViewDir = normalize(cameraPosition - vOrbitWorldPos);
+        float orbitRim = pow(
+          clamp(1.0 - max(dot(normalize(vOrbitWorldNormal), orbitViewDir), 0.0), 0.0, 1.0),
+          uOrbitRimPower
+        );
+        float orbitSheen = pow(clamp(vOrbitWorldNormal.y * 0.5 + 0.5, 0.0, 1.0), 2.0);
+        gl_FragColor.rgb += uOrbitRimColor * orbitRim * uOrbitRimStrength;
+        gl_FragColor.rgb += uOrbitRimColor * orbitSheen * uOrbitSheenStrength;
+        #include <dithering_fragment>
+      `
+    );
+
+    (material.userData.orbitStylizedData as OrbitStylizedData).uniforms =
+      shader.uniforms as OrbitStylizedUniforms;
+  };
+
+  material.customProgramCacheKey = () => 'orbit-stylized-v2';
+  material.needsUpdate = true;
+};
+
+const updateStylizedRimColor = (
+  material: THREE.MeshStandardMaterial | null,
+  color: THREE.Color,
+  power?: number,
+  strength?: number,
+  sheen?: number
+) => {
+  if (!material) return;
+  const stylized = material.userData.orbitStylizedData as OrbitStylizedData | undefined;
+  const uniforms = stylized?.uniforms;
+  if (!uniforms) return;
+  uniforms.uOrbitRimColor.value.copy(color);
+  if (power !== undefined) uniforms.uOrbitRimPower.value = power;
+  if (strength !== undefined) uniforms.uOrbitRimStrength.value = strength;
+  if (sheen !== undefined) uniforms.uOrbitSheenStrength.value = sheen;
+};
 
 const distanceToSegmentSq = (
   px: number,
@@ -1641,6 +1943,8 @@ function OrbitLatchScene({
   const latchCuePulseMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const latchCuePulseSecondaryMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const shardMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const skyMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const skyTimeRef = useRef(0);
   const fixedStepRef = useRef(createFixedStepState());
   const paletteAppliedRef = useRef<number>(-1);
 
@@ -1829,6 +2133,44 @@ function OrbitLatchScene({
     [trailGeometry, trailMaterial]
   );
 
+  useEffect(() => {
+    if (planetMaterialRef.current) {
+      applyStylizedStandardShader(planetMaterialRef.current, {
+        rimPower: 2.25,
+        rimStrength: 0.52,
+        sheenStrength: 0.2,
+      });
+    }
+    if (hazardMaterialRef.current) {
+      applyStylizedStandardShader(hazardMaterialRef.current, {
+        rimPower: 2.45,
+        rimStrength: 0.48,
+        sheenStrength: 0.18,
+      });
+    }
+    if (habitatMaterialRef.current) {
+      applyStylizedStandardShader(habitatMaterialRef.current, {
+        rimPower: 2.2,
+        rimStrength: 0.56,
+        sheenStrength: 0.24,
+      });
+    }
+    if (meteorMaterialRef.current) {
+      applyStylizedStandardShader(meteorMaterialRef.current, {
+        rimPower: 2.55,
+        rimStrength: 0.44,
+        sheenStrength: 0.14,
+      });
+    }
+    if (satMaterialRef.current) {
+      applyStylizedStandardShader(satMaterialRef.current, {
+        rimPower: 2.05,
+        rimStrength: 0.62,
+        sheenStrength: 0.22,
+      });
+    }
+  }, []);
+
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
@@ -1839,6 +2181,7 @@ function OrbitLatchScene({
     const input = inputRef.current;
     const store = useOrbitStore.getState();
     const palette = getRuntimePalette(runtime);
+    skyTimeRef.current += dt;
     let status = store.status;
 
     try {
@@ -1848,13 +2191,13 @@ function OrbitLatchScene({
       scene.background = palette.background.clone();
       if (scene.fog instanceof THREE.Fog) {
         scene.fog.color.copy(palette.fog);
-        scene.fog.near = 18;
-        scene.fog.far = runtime.mode === 'scattered' ? 132 : 144;
+        scene.fog.near = 24;
+        scene.fog.far = runtime.mode === 'scattered' ? 170 : 186;
       } else {
         scene.fog = new THREE.Fog(
           palette.fog.clone(),
-          18,
-          runtime.mode === 'scattered' ? 132 : 144
+          24,
+          runtime.mode === 'scattered' ? 170 : 186
         );
       }
 
@@ -1865,21 +2208,39 @@ function OrbitLatchScene({
       fillLightARef.current?.color.copy(palette.fillA);
       fillLightBRef.current?.color.copy(palette.fillB);
       fillLightCRef.current?.color.copy(palette.ringCue);
+      if (ambientLightRef.current) ambientLightRef.current.intensity = 1.5;
+      if (directionalLightRef.current) directionalLightRef.current.intensity = 1.7;
+      if (hemiLightRef.current) hemiLightRef.current.intensity = 1.2;
 
       if (planetMaterialRef.current) {
-        planetMaterialRef.current.emissive.copy(palette.hemiGround).multiplyScalar(0.7);
-        planetMaterialRef.current.emissiveIntensity = 1.6;
+        planetMaterialRef.current.emissive.copy(palette.fillA).multiplyScalar(0.34);
+        planetMaterialRef.current.emissiveIntensity = 1.34;
+        planetMaterialRef.current.roughness = 0.16;
+        planetMaterialRef.current.metalness = 0.24;
+        updateStylizedRimColor(planetMaterialRef.current, palette.trailGlow, 2.22, 0.56, 0.24);
       }
       if (hazardMaterialRef.current) {
-        hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.45);
+        hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
+        hazardMaterialRef.current.emissiveIntensity = 0.92;
+        hazardMaterialRef.current.roughness = 0.18;
+        hazardMaterialRef.current.metalness = 0.46;
+        updateStylizedRimColor(hazardMaterialRef.current, palette.hazards[1] ?? palette.hazards[0] ?? DANGER, 2.5, 0.5, 0.18);
       }
       if (habitatMaterialRef.current) {
         habitatMaterialRef.current.color.copy(palette.trailGlow);
         habitatMaterialRef.current.emissive.copy(palette.stars[0] ?? WHITE);
+        habitatMaterialRef.current.emissiveIntensity = 1.12;
+        habitatMaterialRef.current.roughness = 0.22;
+        habitatMaterialRef.current.metalness = 0.5;
+        updateStylizedRimColor(habitatMaterialRef.current, palette.ringCue, 2.12, 0.62, 0.28);
       }
       if (meteorMaterialRef.current) {
         meteorMaterialRef.current.color.copy(palette.hazards[0] ?? DANGER);
         meteorMaterialRef.current.emissive.copy(palette.hazards[1] ?? palette.hazards[0] ?? DANGER);
+        meteorMaterialRef.current.emissiveIntensity = 1.04;
+        meteorMaterialRef.current.roughness = 0.12;
+        meteorMaterialRef.current.metalness = 0.62;
+        updateStylizedRimColor(meteorMaterialRef.current, palette.hazards[2] ?? palette.hazards[0] ?? DANGER, 2.62, 0.48, 0.14);
       }
       if (ringPulseMaterialRef.current) {
         ringPulseMaterialRef.current.color.copy(palette.ringCue);
@@ -1887,6 +2248,9 @@ function OrbitLatchScene({
       if (satMaterialRef.current) {
         satMaterialRef.current.color.copy(palette.player);
         satMaterialRef.current.emissive.copy(palette.playerEmissive);
+        satMaterialRef.current.roughness = 0.08;
+        satMaterialRef.current.metalness = 0.32;
+        updateStylizedRimColor(satMaterialRef.current, palette.trailGlow, 1.98, 0.68, 0.24);
       }
       if (latchSparkMaterialRef.current) {
         latchSparkMaterialRef.current.color.copy(palette.ringCue);
@@ -1907,18 +2271,40 @@ function OrbitLatchScene({
       if (vignetteRef.current) {
         vignetteRef.current.darkness = palette.vignetteDarkness;
       }
+      const skyUniforms = skyMaterialRef.current?.uniforms;
+      if (skyUniforms) {
+        (skyUniforms.uTopColor as { value: THREE.Color }).value.copy(
+          palette.fillA.clone().lerp(WHITE, 0.24)
+        );
+        (skyUniforms.uMidColor as { value: THREE.Color }).value.copy(
+          palette.trailGlow.clone().lerp(palette.fillB, 0.26)
+        );
+        (skyUniforms.uBottomColor as { value: THREE.Color }).value.copy(
+          palette.background.clone().lerp(palette.fog, 0.64)
+        );
+        (skyUniforms.uAccentA as { value: THREE.Color }).value.copy(
+          palette.ringCue.clone().lerp(WHITE, 0.18)
+        );
+        (skyUniforms.uAccentB as { value: THREE.Color }).value.copy(
+          palette.fillB.clone().lerp(WHITE, 0.12)
+        );
+      }
     }
     if (scene.fog instanceof THREE.Fog) {
-      scene.fog.far = runtime.mode === 'scattered' ? 132 : 144;
+      scene.fog.far = runtime.mode === 'scattered' ? 170 : 186;
     }
     if (fillLightARef.current) {
-      fillLightARef.current.intensity = lerp(1.0, 1.5, clamp(runtime.coreGlow * 0.7, 0, 1));
+      fillLightARef.current.intensity = lerp(1.2, 1.95, clamp(runtime.coreGlow * 0.7, 0, 1));
     }
     if (fillLightBRef.current) {
-      fillLightBRef.current.intensity = lerp(0.85, 1.2, clamp(runtime.latchFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1));
+      fillLightBRef.current.intensity = lerp(1.08, 1.72, clamp(runtime.latchFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1));
     }
     if (fillLightCRef.current) {
-      fillLightCRef.current.intensity = lerp(0.72, 1.04, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
+      fillLightCRef.current.intensity = lerp(0.94, 1.48, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
+    }
+    const skyUniforms = skyMaterialRef.current?.uniforms;
+    if (skyUniforms) {
+      (skyUniforms.uTime as { value: number }).value = skyTimeRef.current;
     }
 
     let startedFromOverlay = false;
@@ -2256,7 +2642,16 @@ function OrbitLatchScene({
 
       runtime.maxYReached = Math.max(runtime.maxYReached, runtime.playerY);
 
-      if (Math.abs(runtime.playerX) > FIELD_HALF_X + 0.05) {
+      const latchedPlanetBounds = runtime.latched
+        ? runtime.planets.find((planet) => planet.slot === runtime.latchedPlanet) ?? null
+        : null;
+      const latchedEdgeAllowance = latchedPlanetBounds
+        ? latchedPlanetBounds.orbitRadius + latchedPlanetBounds.radius * 0.24 + 0.18
+        : 0;
+      const outOfDriftBounds = Math.abs(runtime.playerX) > FIELD_HALF_X + 0.05;
+      const outOfLatchedBounds =
+        Math.abs(runtime.playerX) > FIELD_HALF_X + latchedEdgeAllowance;
+      if ((!runtime.latched && outOfDriftBounds) || (runtime.latched && outOfLatchedBounds)) {
         failRun('Satellite escaped lateral bounds.', getPaletteColor(palette.hazards, 0), 1.35);
       } else if (runtime.playerY < runtime.maxYReached - SAFE_FALL_BACK) {
         failRun('Signal lost below relay field.', getPaletteColor(palette.hazards, 1), 1.2);
@@ -2889,20 +3284,85 @@ function OrbitLatchScene({
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 6.2, 4.8]} fov={59} near={0.1} far={220} />
-      <color attach="background" args={['#2a3f66']} />
-      <fog attach="fog" args={['#4a6c98', 18, 142]} />
+      <color attach="background" args={['#38547a']} />
+      <fog attach="fog" args={['#5c7ea5', 24, 182]} />
+
+      <mesh frustumCulled={false} renderOrder={-10}>
+        <sphereGeometry args={[130, 48, 48]} />
+        <shaderMaterial
+          ref={skyMaterialRef}
+          side={THREE.BackSide}
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+          uniforms={{
+            uTime: { value: 0 },
+            uTopColor: { value: new THREE.Color('#8de5ff') },
+            uMidColor: { value: new THREE.Color('#77b9ff') },
+            uBottomColor: { value: new THREE.Color('#203454') },
+            uAccentA: { value: new THREE.Color('#ff7bc8') },
+            uAccentB: { value: new THREE.Color('#ffd46b') },
+          }}
+          vertexShader={`
+            varying vec3 vWorldPos;
+            void main() {
+              vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+              vWorldPos = worldPosition.xyz;
+              gl_Position = projectionMatrix * viewMatrix * worldPosition;
+            }
+          `}
+          fragmentShader={`
+            uniform float uTime;
+            uniform vec3 uTopColor;
+            uniform vec3 uMidColor;
+            uniform vec3 uBottomColor;
+            uniform vec3 uAccentA;
+            uniform vec3 uAccentB;
+            varying vec3 vWorldPos;
+
+            float hash(vec2 p) {
+              p = fract(p * vec2(123.34, 456.21));
+              p += dot(p, p + 45.32);
+              return fract(p.x * p.y);
+            }
+
+            void main() {
+              vec3 dir = normalize(vWorldPos);
+              float h = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+              float gradientA = smoothstep(0.02, 0.96, h);
+              float gradientB = smoothstep(0.22, 0.78, 1.0 - abs(h - 0.45) * 2.0);
+              vec3 color = mix(uBottomColor, uTopColor, gradientA);
+              color = mix(color, uMidColor, gradientB * 0.52);
+
+              float waveA = sin(dir.x * 6.2 + uTime * 0.11 + sin(dir.z * 3.2 - uTime * 0.07));
+              float waveB = sin(dir.z * 7.4 - uTime * 0.09 + sin(dir.x * 4.1 + uTime * 0.06));
+              float swirl = 0.5 + 0.5 * (waveA * 0.6 + waveB * 0.4);
+              float horizon = pow(clamp(1.0 - abs(h - 0.52) * 2.2, 0.0, 1.0), 2.2);
+              color += mix(uAccentA, uAccentB, swirl) * (0.08 + horizon * 0.14);
+
+              vec2 starUv = dir.xz * 36.0 + vec2(uTime * 0.02, -uTime * 0.03);
+              float starSeed = hash(floor(starUv));
+              float star = step(0.992, starSeed);
+              float twinkle = 0.4 + 0.6 * sin(uTime * 3.0 + starSeed * 17.0);
+              color += vec3(star * twinkle * (0.14 + h * 0.18));
+
+              gl_FragColor = vec4(color, 1.0);
+            }
+          `}
+        />
+      </mesh>
 
       <ambientLight ref={ambientLightRef} intensity={1.28} color="#f7fbff" />
       <directionalLight
         ref={directionalLightRef}
         position={[6, 9, 3]}
-        intensity={1.34}
+        intensity={1.7}
         color="#f7fbff"
       />
-      <hemisphereLight ref={hemiLightRef} args={['#b3ebff', '#324f7a', 0.98]} />
-      <pointLight ref={fillLightARef} position={[0, 3.7, 1.7]} intensity={1.5} color="#65efff" />
-      <pointLight ref={fillLightBRef} position={[2.2, 2.6, -2.4]} intensity={1.2} color="#ff8ce5" />
-      <pointLight ref={fillLightCRef} position={[-2.6, 2.5, -1.2]} intensity={1.1} color="#ffd27d" />
+      <hemisphereLight ref={hemiLightRef} args={['#b3ebff', '#324f7a', 1.2]} />
+      <pointLight ref={fillLightARef} position={[0, 3.7, 1.7]} intensity={1.95} color="#65efff" />
+      <pointLight ref={fillLightBRef} position={[2.2, 2.6, -2.4]} intensity={1.72} color="#ff8ce5" />
+      <pointLight ref={fillLightCRef} position={[-2.6, 2.5, -1.2]} intensity={1.48} color="#ffd27d" />
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
@@ -3110,9 +3570,14 @@ const OrbitLatch: React.FC<{ soundsOn?: boolean }> = () => {
     <div className="relative h-full w-full">
       <Canvas
         dpr={[1, 1.6]}
-        gl={{ antialias: false, powerPreference: 'high-performance' }}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
         className="absolute inset-0 h-full w-full"
         onContextMenu={(event) => event.preventDefault()}
+        onCreated={({ gl }) => {
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.18;
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+        }}
       >
         <OrbitLatchScene impactOverlayRef={impactOverlayRef} />
       </Canvas>
