@@ -20,6 +20,8 @@ import {
   shakeNoiseSigned,
   withinGraceWindow,
 } from '../_shared/hyperUpgradeKit';
+import { CUBE_PALETTES } from '../prismjump/constants';
+import type { CubePalette } from '../prismjump/types';
 import { orbitLatchState } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -124,6 +126,7 @@ type Runtime = {
   scatterBandSize: number;
   nextStarSlot: number;
   nextHazardSlot: number;
+  paletteIndex: number;
 
   planets: Planet[];
   starsPool: StarPickup[];
@@ -177,8 +180,8 @@ const SCATTERED_TIME_LIMIT = 80;
 const CLASSIC_MIN_FORWARD_TARGETS = 4;
 const SCATTERED_MIN_FORWARD_TARGETS = 6;
 const ASSIST_REPOSITION_COOLDOWN = 0.42;
-const RECYCLE_HIDDEN_MARGIN = 8.2;
-const MIN_RESPAWN_LEAD = 7.4;
+const RECYCLE_HIDDEN_MARGIN = 9.8;
+const MIN_RESPAWN_LEAD = 10.6;
 
 const FIELD_HALF_X = 4.2;
 const SAFE_FALL_BACK = 10.5;
@@ -189,39 +192,129 @@ const COLLECT_RADIUS = 0.28;
 const PLAYER_RADIUS = 0.12;
 const RELATCH_LOOKAHEAD_BASE = 0.12;
 
-const STAR_COLORS = [
-  new THREE.Color('#7df9ff'),
-  new THREE.Color('#ff9ae5'),
-  new THREE.Color('#ffd27d'),
-  new THREE.Color('#b8a9ff'),
-  new THREE.Color('#9dffd8'),
-  new THREE.Color('#ffb0c0'),
-] as const;
-const PLANET_COLORS = [
-  new THREE.Color('#43f7ff'),
-  new THREE.Color('#65ceff'),
-  new THREE.Color('#84a8ff'),
-  new THREE.Color('#b987ff'),
-  new THREE.Color('#ff82dd'),
-  new THREE.Color('#ff97a7'),
-  new THREE.Color('#ffc57a'),
-  new THREE.Color('#ffe985'),
-  new THREE.Color('#9eff8b'),
-  new THREE.Color('#7fffd2'),
-  new THREE.Color('#b7f8ff'),
-  new THREE.Color('#ffc7fb'),
-] as const;
-const HAZARD_COLORS = [
-  new THREE.Color('#ff6c8f'),
-  new THREE.Color('#ff8aa7'),
-  new THREE.Color('#ff9f66'),
-  new THREE.Color('#ff5f86'),
-] as const;
 const WHITE = new THREE.Color('#fdffff');
 const DANGER = new THREE.Color('#ff4d74');
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const mod = (value: number, length: number) => ((value % length) + length) % length;
+
+type OrbitVisualPalette = {
+  id: string;
+  name: string;
+  background: THREE.Color;
+  fog: THREE.Color;
+  ambient: THREE.Color;
+  key: THREE.Color;
+  fillA: THREE.Color;
+  fillB: THREE.Color;
+  hemiSky: THREE.Color;
+  hemiGround: THREE.Color;
+  planets: readonly THREE.Color[];
+  stars: readonly THREE.Color[];
+  hazards: readonly THREE.Color[];
+  ringCue: THREE.Color;
+  trail: THREE.Color;
+  trailGlow: THREE.Color;
+  player: THREE.Color;
+  playerEmissive: THREE.Color;
+  bloomBase: number;
+  bloomMax: number;
+  vignetteDarkness: number;
+};
+
+const shiftHexColor = (
+  hex: string,
+  hueShift = 0,
+  satMul = 1,
+  lightMul = 1
+) => {
+  const color = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  color.getHSL(hsl);
+  color.setHSL(
+    mod(hsl.h + hueShift, 1),
+    clamp(hsl.s * satMul, 0, 1),
+    clamp(hsl.l * lightMul, 0, 1)
+  );
+  return color;
+};
+
+const buildSwatch = (
+  sourceHex: readonly string[],
+  count: number,
+  options?: { satMul?: number; lightMul?: number; hueJitter?: number }
+) => {
+  const satMul = options?.satMul ?? 1;
+  const lightMul = options?.lightMul ?? 1;
+  const hueJitter = options?.hueJitter ?? 0.02;
+  const seeds = sourceHex.length > 0 ? sourceHex : ['#7df9ff'];
+  const out: THREE.Color[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const seed = seeds[i % seeds.length] ?? seeds[0];
+    const wobble = ((i % 5) - 2) * hueJitter;
+    const sat = satMul * (0.94 + ((i % 3) - 1) * 0.07);
+    const lit = lightMul * (0.92 + ((i % 4) - 1.5) * 0.06);
+    out.push(shiftHexColor(seed, wobble, sat, lit));
+  }
+  return out;
+};
+
+const buildOrbitPalette = (base: CubePalette, index: number): OrbitVisualPalette => {
+  const lane = base.laneColors.length > 0 ? base.laneColors : [base.cubeColor, base.playerColor];
+  const planets = buildSwatch(
+    [
+      ...lane,
+      base.playerColor,
+      base.fillLightA,
+      base.fillLightB,
+    ],
+    14,
+    { satMul: 1.08, lightMul: 1.06, hueJitter: 0.022 }
+  );
+  const stars = buildSwatch(
+    [base.cubeColor, base.playerColor, base.fillLightB, '#ffffff'],
+    10,
+    { satMul: 1.12, lightMul: 1.14, hueJitter: 0.026 }
+  );
+  const hazards = buildSwatch(
+    [base.cubeEmissive, '#ff4d74', '#ff9d5c', base.fillLightB],
+    8,
+    { satMul: 1.1, lightMul: 0.86, hueJitter: 0.03 }
+  );
+
+  return {
+    id: base.id,
+    name: base.name,
+    background: shiftHexColor(base.background, 0.008, 1.05, 0.85),
+    fog: shiftHexColor(base.fog, 0.006, 1.04, 0.95),
+    ambient: shiftHexColor(base.ambientLight, 0, 0.92, 0.98),
+    key: shiftHexColor(base.keyLight, 0, 0.88, 1.04),
+    fillA: shiftHexColor(base.fillLightA, 0, 0.98, 1.03),
+    fillB: shiftHexColor(base.fillLightB, 0, 1.02, 1.02),
+    hemiSky: shiftHexColor(base.fillLightA, 0.01, 0.9, 1.04),
+    hemiGround: shiftHexColor(base.waterBottom, 0, 0.88, 0.92),
+    planets,
+    stars,
+    hazards,
+    ringCue: shiftHexColor(base.cubeColor, 0.012, 1.12, 1.15),
+    trail: shiftHexColor(base.fillLightA, -0.01, 1.06, 1.02),
+    trailGlow: shiftHexColor(base.fillLightB, 0.01, 1.1, 1.08),
+    player: shiftHexColor(base.playerColor, 0, 0.88, 1.1),
+    playerEmissive: shiftHexColor(base.playerEmissive, 0, 1.04, 1.14),
+    bloomBase: 0.54 + (index % 4) * 0.03,
+    bloomMax: 1.2 + (index % 3) * 0.16,
+    vignetteDarkness: 0.22 + (index % 5) * 0.04,
+  };
+};
+
+const ORBIT_PALETTES: OrbitVisualPalette[] = CUBE_PALETTES.map(buildOrbitPalette);
+
+const getRuntimePalette = (runtime: Pick<Runtime, 'paletteIndex'>) =>
+  ORBIT_PALETTES[mod(runtime.paletteIndex, ORBIT_PALETTES.length)] ?? ORBIT_PALETTES[0];
+
+const getPaletteColor = (colors: readonly THREE.Color[], index: number) =>
+  colors[mod(index, colors.length)] ?? WHITE;
 
 let audioContextRef: AudioContext | null = null;
 
@@ -290,7 +383,7 @@ const makePlanet = (slot: number): Planet => ({
   radius: 0.62,
   orbitRadius: 1.24,
   orbitAngularVel: 1.65,
-  colorIndex: slot % PLANET_COLORS.length,
+  colorIndex: slot % 12,
   glow: 0,
   pulse: Math.random() * Math.PI * 2,
 });
@@ -302,7 +395,7 @@ const makeStar = (slot: number): StarPickup => ({
   y: 0,
   value: 1,
   spin: Math.random() * Math.PI * 2,
-  colorIndex: slot % STAR_COLORS.length,
+  colorIndex: slot % 8,
   glow: 0,
 });
 
@@ -329,7 +422,7 @@ const makeHazard = (slot: number): Hazard => ({
   spinVel: 1.1 + Math.random() * 1.8,
   phase: Math.random() * Math.PI * 2,
   drift: 0.1 + Math.random() * 0.28,
-  colorIndex: slot % HAZARD_COLORS.length,
+  colorIndex: slot % 6,
   glow: 0,
 });
 
@@ -382,6 +475,7 @@ const createRuntime = (): Runtime => ({
   scatterBandSize: 0,
   nextStarSlot: 0,
   nextHazardSlot: 0,
+  paletteIndex: 0,
 
   planets: Array.from({ length: PLANET_POOL }, (_, idx) => makePlanet(idx)),
   starsPool: Array.from({ length: STAR_POOL }, (_, idx) => makeStar(idx)),
@@ -546,6 +640,7 @@ const spawnStarBetween = (
   toY: number,
   tier: number
 ) => {
+  const palette = getRuntimePalette(runtime);
   const star = acquireStar(runtime);
   const t = 0.4 + Math.random() * 0.26;
   const mx = lerp(fromX, toX, t);
@@ -562,7 +657,9 @@ const spawnStarBetween = (
   star.y = my + py * offset;
   star.spin = Math.random() * Math.PI * 2;
   star.value = Math.random() < clamp(0.03 + tier * 0.03, 0, 0.16) ? 2 : 1;
-  star.colorIndex = (Math.floor(Math.random() * STAR_COLORS.length) + tier) % STAR_COLORS.length;
+  star.colorIndex =
+    (Math.floor(Math.random() * palette.stars.length) + tier) %
+    Math.max(1, palette.stars.length);
   star.glow = 0;
 };
 
@@ -574,6 +671,7 @@ const spawnHazardBetween = (
   toY: number,
   tier: number
 ) => {
+  const palette = getRuntimePalette(runtime);
   if (runtime.mode !== 'scattered') return;
   const chance = clamp(0.26 + tier * 0.08 + runtime.elapsed * 0.0015, 0.24, 0.58);
   if (Math.random() > chance) return;
@@ -598,11 +696,12 @@ const spawnHazardBetween = (
   hazard.spinVel = 1.1 + Math.random() * 2.3;
   hazard.phase = Math.random() * Math.PI * 2;
   hazard.drift = 0.08 + Math.random() * 0.26;
-  hazard.colorIndex = Math.floor(Math.random() * HAZARD_COLORS.length);
+  hazard.colorIndex = Math.floor(Math.random() * Math.max(1, palette.hazards.length));
   hazard.glow = 0;
 };
 
 const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
+  const palette = getRuntimePalette(runtime);
   if (!initial) {
     if (!runtime.currentChunk || runtime.chunkPlanetsLeft <= 0) chooseChunk(runtime);
     runtime.chunkPlanetsLeft -= 1;
@@ -693,7 +792,7 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
   planet.radius = radius;
   planet.orbitRadius = orbitRadius;
   planet.orbitAngularVel = orbitAngularVel;
-  planet.colorIndex = Math.floor(Math.random() * PLANET_COLORS.length);
+  planet.colorIndex = Math.floor(Math.random() * Math.max(1, palette.planets.length));
   planet.glow = 0;
   planet.pulse = Math.random() * Math.PI * 2;
 
@@ -1063,7 +1162,14 @@ function OrbitLatchScene({
   const { camera } = useThree();
 
   const resetRuntime = (runtime: Runtime, mode: OrbitMode) => {
+    const previousPalette = runtime.paletteIndex;
+    let nextPalette = Math.floor(Math.random() * ORBIT_PALETTES.length);
+    if (ORBIT_PALETTES.length > 1 && nextPalette === previousPalette) {
+      nextPalette = (nextPalette + 1) % ORBIT_PALETTES.length;
+    }
+
     runtime.mode = mode;
+    runtime.paletteIndex = nextPalette;
     runtime.elapsed = 0;
     runtime.score = 0;
     runtime.latches = 0;
