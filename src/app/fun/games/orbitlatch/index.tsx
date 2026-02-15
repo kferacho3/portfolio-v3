@@ -737,7 +737,7 @@ const randomizePaletteForRun = (base: OrbitVisualPalette): OrbitVisualPalette =>
   return output;
 };
 
-const buildPlanetRunPalette = (base: OrbitVisualPalette) => {
+const buildPlanetRunPalette = () => {
   const useSolid = PLANET_SOLID_RUN_CHANCE > 0 && Math.random() < PLANET_SOLID_RUN_CHANCE;
   const source = useSolid ? PLANET_SOLID_COLOR_PALETTES : PLANET_MULTI_COLOR_PALETTES;
   const preset =
@@ -748,13 +748,13 @@ const buildPlanetRunPalette = (base: OrbitVisualPalette) => {
 
   if (preset.solid) {
     const solidSource = presetColors[0] ?? WHITE;
-    const mixedSolid = solidSource.clone().lerp(base.planets[0] ?? WHITE, 0.18);
+    const mixedSolid = solidSource.clone();
     const hsl = { h: 0, s: 0, l: 0 };
     mixedSolid.getHSL(hsl);
     mixedSolid.setHSL(
       hsl.h,
-      clamp(hsl.s * 1.14, 0.45, 1),
-      clamp(hsl.l, 0.4, 0.62)
+      clamp(hsl.s * 1.2, 0.58, 1),
+      clamp(hsl.l, 0.36, 0.66)
     );
     return {
       id: preset.id,
@@ -764,20 +764,19 @@ const buildPlanetRunPalette = (base: OrbitVisualPalette) => {
 
   const mixed: THREE.Color[] = [];
   for (let i = 0; i < presetColors.length; i += 1) {
-    const baseColor = base.planets[i % base.planets.length] ?? WHITE;
     const presetColor = presetColors[i % presetColors.length] ?? presetColors[0] ?? WHITE;
     const color = tintColor(
-      presetColor.clone().lerp(baseColor, 0.16),
-      ((i % 6) - 2.5) * 0.008,
-      1.14,
+      presetColor.clone(),
+      ((i % 6) - 2.5) * 0.01,
+      1.18,
       1.02
     );
     const hsl = { h: 0, s: 0, l: 0 };
     color.getHSL(hsl);
     color.setHSL(
       hsl.h,
-      clamp(hsl.s * 1.16, 0.5, 1),
-      clamp(hsl.l, 0.4, 0.64)
+      clamp(hsl.s * 1.22, 0.62, 1),
+      clamp(hsl.l, 0.34, 0.7)
     );
     mixed.push(color);
   }
@@ -2121,7 +2120,7 @@ function OrbitLatchScene({
     runtime.mode = mode;
     runtime.paletteIndex = nextPalette;
     runtime.activePalette = randomizePaletteForRun(basePalette);
-    const planetRunPalette = buildPlanetRunPalette(runtime.activePalette);
+    const planetRunPalette = buildPlanetRunPalette();
     runtime.planetPaletteId = planetRunPalette.id;
     runtime.planetRunColors = planetRunPalette.colors;
     runtime.planetColorCursor = Math.floor(
@@ -2351,11 +2350,11 @@ function OrbitLatchScene({
       if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
       if (planetMaterialRef.current) {
-        planetMaterialRef.current.emissive.copy(palette.ringCue).multiplyScalar(0.24);
-        planetMaterialRef.current.emissiveIntensity = 0.68;
-        planetMaterialRef.current.roughness = 0.22;
-        planetMaterialRef.current.metalness = 0.08;
-        updateStylizedRimColor(planetMaterialRef.current, palette.trailGlow, 2.08, 0.5, 0.24);
+        planetMaterialRef.current.emissive.copy(palette.hemiGround).multiplyScalar(0.08);
+        planetMaterialRef.current.emissiveIntensity = 0.24;
+        planetMaterialRef.current.roughness = 0.3;
+        planetMaterialRef.current.metalness = 0.04;
+        updateStylizedRimColor(planetMaterialRef.current, palette.ringCue, 2.26, 0.26, 0.14);
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
@@ -3202,10 +3201,10 @@ function OrbitLatchScene({
         dummy.updateMatrix();
         planetRef.current.setMatrixAt(i, dummy.matrix);
 
+        const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
         colorScratch
-          .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
-          .lerp(WHITE, clamp(planet.glow * 0.24 + pulsing * 0.08 + cuePulse * 0.14, 0, 0.42))
-          .multiplyScalar(1.52);
+          .copy(planetBaseColor)
+          .multiplyScalar(0.92 + planet.glow * 0.24 + cuePulse * 0.14);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
@@ -3216,9 +3215,9 @@ function OrbitLatchScene({
           planetGlowRef.current.setMatrixAt(i, dummy.matrix);
 
           colorScratch
-            .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
-            .lerp(WHITE, clamp(0.18 + pulsing * 0.22 + planet.glow * 0.4 + cuePulse * 0.28, 0, 0.78))
-            .multiplyScalar(1.46);
+            .copy(planetBaseColor)
+            .lerp(palette.ringCue, clamp(0.08 + cuePulse * 0.24 + planet.glow * 0.12, 0.08, 0.34))
+            .multiplyScalar(1.02 + planet.glow * 0.42 + cuePulse * 0.18);
           planetGlowRef.current.setColorAt(i, colorScratch);
         }
 
