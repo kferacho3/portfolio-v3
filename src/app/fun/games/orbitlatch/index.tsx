@@ -658,8 +658,8 @@ const randomizePaletteForRun = (base: OrbitVisualPalette): OrbitVisualPalette =>
     satMul * 1.08,
     lightMul * 1.32
   );
-  output.bloomBase = clamp(output.bloomBase * (1 + (grade.bloomBoost - 1) * 0.75), 0.62, 1.44);
-  output.bloomMax = clamp(output.bloomMax * grade.bloomBoost, 1.24, 2.2);
+  output.bloomBase = clamp(output.bloomBase * (0.64 + (grade.bloomBoost - 1) * 0.3), 0.24, 0.58);
+  output.bloomMax = clamp(output.bloomMax * (0.74 + (grade.bloomBoost - 1) * 0.48), 0.68, 1.16);
   output.vignetteDarkness = clamp(output.vignetteDarkness * grade.vignetteScale, 0.12, 0.34);
   output.name = `${base.name} • ${grade.name}`;
 
@@ -2208,20 +2208,20 @@ function OrbitLatchScene({
       fillLightARef.current?.color.copy(palette.fillA);
       fillLightBRef.current?.color.copy(palette.fillB);
       fillLightCRef.current?.color.copy(palette.ringCue);
-      if (ambientLightRef.current) ambientLightRef.current.intensity = 1.5;
-      if (directionalLightRef.current) directionalLightRef.current.intensity = 1.7;
-      if (hemiLightRef.current) hemiLightRef.current.intensity = 1.2;
+      if (ambientLightRef.current) ambientLightRef.current.intensity = 1.02;
+      if (directionalLightRef.current) directionalLightRef.current.intensity = 1.28;
+      if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
       if (planetMaterialRef.current) {
         planetMaterialRef.current.emissive.copy(palette.fillA).multiplyScalar(0.34);
-        planetMaterialRef.current.emissiveIntensity = 1.34;
+        planetMaterialRef.current.emissiveIntensity = 1.16;
         planetMaterialRef.current.roughness = 0.16;
         planetMaterialRef.current.metalness = 0.24;
-        updateStylizedRimColor(planetMaterialRef.current, palette.trailGlow, 2.22, 0.56, 0.24);
+        updateStylizedRimColor(planetMaterialRef.current, palette.trailGlow, 2.08, 0.72, 0.32);
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
-        hazardMaterialRef.current.emissiveIntensity = 0.92;
+        hazardMaterialRef.current.emissiveIntensity = 0.76;
         hazardMaterialRef.current.roughness = 0.18;
         hazardMaterialRef.current.metalness = 0.46;
         updateStylizedRimColor(hazardMaterialRef.current, palette.hazards[1] ?? palette.hazards[0] ?? DANGER, 2.5, 0.5, 0.18);
@@ -2229,7 +2229,7 @@ function OrbitLatchScene({
       if (habitatMaterialRef.current) {
         habitatMaterialRef.current.color.copy(palette.trailGlow);
         habitatMaterialRef.current.emissive.copy(palette.stars[0] ?? WHITE);
-        habitatMaterialRef.current.emissiveIntensity = 1.12;
+        habitatMaterialRef.current.emissiveIntensity = 0.84;
         habitatMaterialRef.current.roughness = 0.22;
         habitatMaterialRef.current.metalness = 0.5;
         updateStylizedRimColor(habitatMaterialRef.current, palette.ringCue, 2.12, 0.62, 0.28);
@@ -2237,7 +2237,7 @@ function OrbitLatchScene({
       if (meteorMaterialRef.current) {
         meteorMaterialRef.current.color.copy(palette.hazards[0] ?? DANGER);
         meteorMaterialRef.current.emissive.copy(palette.hazards[1] ?? palette.hazards[0] ?? DANGER);
-        meteorMaterialRef.current.emissiveIntensity = 1.04;
+        meteorMaterialRef.current.emissiveIntensity = 0.78;
         meteorMaterialRef.current.roughness = 0.12;
         meteorMaterialRef.current.metalness = 0.62;
         updateStylizedRimColor(meteorMaterialRef.current, palette.hazards[2] ?? palette.hazards[0] ?? DANGER, 2.62, 0.48, 0.14);
@@ -2266,7 +2266,7 @@ function OrbitLatchScene({
         const c0 = `#${palette.trailGlow.getHexString()}`;
         const c1 = `#${palette.ringCue.getHexString()}`;
         const c2 = `#${palette.hemiGround.getHexString()}`;
-        impactOverlayRef.current.style.background = `radial-gradient(circle at center, ${c0}88, ${c1}66, ${c2}00)`;
+        impactOverlayRef.current.style.background = `radial-gradient(circle at center, ${c0}2e, ${c1}1f, ${c2}00)`;
       }
       if (vignetteRef.current) {
         vignetteRef.current.darkness = palette.vignetteDarkness;
@@ -2294,13 +2294,13 @@ function OrbitLatchScene({
       scene.fog.far = runtime.mode === 'scattered' ? 170 : 186;
     }
     if (fillLightARef.current) {
-      fillLightARef.current.intensity = lerp(1.2, 1.95, clamp(runtime.coreGlow * 0.7, 0, 1));
+      fillLightARef.current.intensity = lerp(0.82, 1.2, clamp(runtime.coreGlow * 0.7, 0, 1));
     }
     if (fillLightBRef.current) {
-      fillLightBRef.current.intensity = lerp(1.08, 1.72, clamp(runtime.latchFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1));
+      fillLightBRef.current.intensity = lerp(0.74, 1.06, clamp(runtime.latchFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1));
     }
     if (fillLightCRef.current) {
-      fillLightCRef.current.intensity = lerp(0.94, 1.48, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
+      fillLightCRef.current.intensity = lerp(0.58, 0.94, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
     }
     const skyUniforms = skyMaterialRef.current?.uniforms;
     if (skyUniforms) {
@@ -2976,7 +2976,7 @@ function OrbitLatchScene({
       satRef.current.position.set(worldPos.x, 0.03, worldPos.z);
       satRef.current.scale.setScalar(1 + runtime.coreGlow * 0.12);
       const satMat = satRef.current.material as THREE.MeshStandardMaterial;
-      satMat.emissiveIntensity = 0.6 + runtime.coreGlow * 0.9;
+      satMat.emissiveIntensity = 0.42 + runtime.coreGlow * 0.48;
     }
 
     if (latchSparkRef.current) {
@@ -3020,7 +3020,7 @@ function OrbitLatchScene({
         latchCuePulseRef.current.position.set(cueWorld.x, 0.045, cueWorld.z);
         latchCuePulseRef.current.scale.set(scaleA, scaleA, 1);
         latchCuePulseRef.current.rotation.set(-Math.PI * 0.5, 0, 0);
-        const pulseOpacity = clamp(runtime.cuePulseT * (0.11 + timingWindow * 0.42), 0.04, 0.56);
+        const pulseOpacity = clamp(runtime.cuePulseT * (0.15 + timingWindow * 0.5), 0.06, 0.72);
         if (latchCuePulseMaterialRef.current) {
           latchCuePulseMaterialRef.current.opacity = pulseOpacity;
           latchCuePulseMaterialRef.current.color
@@ -3034,9 +3034,9 @@ function OrbitLatchScene({
         latchCuePulseRefSecondary.current.rotation.set(-Math.PI * 0.5, 0, 0);
         if (latchCuePulseSecondaryMaterialRef.current) {
           latchCuePulseSecondaryMaterialRef.current.opacity = clamp(
-            runtime.cuePulseT * (0.04 + coreWindow * 0.18),
-            0.02,
-            0.22
+            runtime.cuePulseT * (0.06 + coreWindow * 0.24),
+            0.03,
+            0.3
           );
           latchCuePulseSecondaryMaterialRef.current.color
             .copy(palette.trailGlow)
@@ -3066,21 +3066,21 @@ function OrbitLatchScene({
 
         colorScratch
           .copy(getPaletteColor(palette.planets, planet.colorIndex))
-          .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16 + cuePulse * 0.28, 0, 0.82))
-          .multiplyScalar(1.68);
+          .lerp(WHITE, clamp(planet.glow * 0.56 + pulsing * 0.18 + cuePulse * 0.3, 0, 0.9))
+          .multiplyScalar(1.96);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
           dummy.position.set(world.x, 0.01, world.z);
-          dummy.scale.setScalar(planet.radius * (1.08 + pulsing * 0.09 + cuePulse * 0.22 + planet.glow * 0.08));
+          dummy.scale.setScalar(planet.radius * (1.12 + pulsing * 0.11 + cuePulse * 0.24 + planet.glow * 0.14));
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           planetGlowRef.current.setMatrixAt(i, dummy.matrix);
 
           colorScratch
             .copy(getPaletteColor(palette.planets, planet.colorIndex))
-            .lerp(WHITE, clamp(0.34 + pulsing * 0.34 + planet.glow * 0.44 + cuePulse * 0.45, 0, 0.99))
-            .multiplyScalar(1.52);
+            .lerp(WHITE, clamp(0.42 + pulsing * 0.34 + planet.glow * 0.64 + cuePulse * 0.5, 0, 1))
+            .multiplyScalar(1.92);
           planetGlowRef.current.setColorAt(i, colorScratch);
         }
 
@@ -3097,10 +3097,10 @@ function OrbitLatchScene({
           .lerp(
             WHITE,
             isCuePlanet
-              ? clamp(0.26 + planet.glow * 0.58 + runtime.latchFlash * 0.18 + cuePulse * 0.44, 0, 0.95)
-              : clamp(0.02 + planet.glow * 0.09, 0, 0.12)
+              ? clamp(0.34 + planet.glow * 0.66 + runtime.latchFlash * 0.24 + cuePulse * 0.5, 0, 0.98)
+              : clamp(0.11 + planet.glow * 0.3, 0.1, 0.42)
           )
-          .multiplyScalar(isCuePlanet ? 1.36 : 0.28);
+          .multiplyScalar(isCuePlanet ? 1.56 : 0.56);
         ringRef.current.setColorAt(i, colorScratch);
       }
       planetRef.current.instanceMatrix.needsUpdate = true;
@@ -3240,7 +3240,7 @@ function OrbitLatchScene({
       ringPulseRef.current.instanceMatrix.needsUpdate = true;
       if (ringPulseRef.current.instanceColor) ringPulseRef.current.instanceColor.needsUpdate = true;
       if (ringPulseMaterialRef.current) {
-        ringPulseMaterialRef.current.opacity = clamp(0.52 + runtime.impactFlash * 0.2, 0.38, 0.72);
+        ringPulseMaterialRef.current.opacity = clamp(0.34 + runtime.impactFlash * 0.16, 0.22, 0.52);
       }
     }
 
@@ -3270,11 +3270,11 @@ function OrbitLatchScene({
       bloomRef.current.intensity = lerp(
         palette.bloomBase,
         palette.bloomMax,
-        clamp(runtime.coreGlow * 0.7 + runtime.latchFlash * 0.42 + (runtime.mode === 'scattered' ? 0.12 : 0), 0, 1)
+        clamp(runtime.coreGlow * 0.34 + runtime.latchFlash * 0.16 + (runtime.mode === 'scattered' ? 0.03 : 0), 0, 1)
       );
     }
     if (impactOverlayRef.current) {
-      impactOverlayRef.current.style.opacity = `${clamp(runtime.impactFlash * 0.74, 0, 0.74)}`;
+      impactOverlayRef.current.style.opacity = `${clamp(runtime.impactFlash * 0.2, 0, 0.2)}`;
     }
     } finally {
       clearFrameInput(inputRef);
@@ -3338,13 +3338,13 @@ function OrbitLatchScene({
               float waveB = sin(dir.z * 7.4 - uTime * 0.09 + sin(dir.x * 4.1 + uTime * 0.06));
               float swirl = 0.5 + 0.5 * (waveA * 0.6 + waveB * 0.4);
               float horizon = pow(clamp(1.0 - abs(h - 0.52) * 2.2, 0.0, 1.0), 2.2);
-              color += mix(uAccentA, uAccentB, swirl) * (0.08 + horizon * 0.14);
+              color += mix(uAccentA, uAccentB, swirl) * (0.03 + horizon * 0.06);
 
               vec2 starUv = dir.xz * 36.0 + vec2(uTime * 0.02, -uTime * 0.03);
               float starSeed = hash(floor(starUv));
               float star = step(0.992, starSeed);
               float twinkle = 0.4 + 0.6 * sin(uTime * 3.0 + starSeed * 17.0);
-              color += vec3(star * twinkle * (0.14 + h * 0.18));
+              color += vec3(star * twinkle * (0.04 + h * 0.06));
 
               gl_FragColor = vec4(color, 1.0);
             }
@@ -3352,17 +3352,17 @@ function OrbitLatchScene({
         />
       </mesh>
 
-      <ambientLight ref={ambientLightRef} intensity={1.28} color="#f7fbff" />
+      <ambientLight ref={ambientLightRef} intensity={0.96} color="#f7fbff" />
       <directionalLight
         ref={directionalLightRef}
         position={[6, 9, 3]}
-        intensity={1.7}
+        intensity={1.22}
         color="#f7fbff"
       />
-      <hemisphereLight ref={hemiLightRef} args={['#b3ebff', '#324f7a', 1.2]} />
-      <pointLight ref={fillLightARef} position={[0, 3.7, 1.7]} intensity={1.95} color="#65efff" />
-      <pointLight ref={fillLightBRef} position={[2.2, 2.6, -2.4]} intensity={1.72} color="#ff8ce5" />
-      <pointLight ref={fillLightCRef} position={[-2.6, 2.5, -1.2]} intensity={1.48} color="#ffd27d" />
+      <hemisphereLight ref={hemiLightRef} args={['#b3ebff', '#324f7a', 0.96]} />
+      <pointLight ref={fillLightARef} position={[0, 3.7, 1.7]} intensity={1.2} color="#65efff" />
+      <pointLight ref={fillLightBRef} position={[2.2, 2.6, -2.4]} intensity={1.04} color="#ff8ce5" />
+      <pointLight ref={fillLightCRef} position={[-2.6, 2.5, -1.2]} intensity={0.92} color="#ffd27d" />
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
@@ -3403,7 +3403,7 @@ function OrbitLatchScene({
           ref={ringMaterialRef}
           vertexColors
           transparent
-          opacity={0.34}
+          opacity={0.44}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
@@ -3532,7 +3532,7 @@ function OrbitLatchScene({
           ref={ringPulseMaterialRef}
           vertexColors
           transparent
-          opacity={0.56}
+          opacity={0.34}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -3554,9 +3554,9 @@ function OrbitLatchScene({
       </instancedMesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
+        <Bloom ref={bloomRef} intensity={0.22} luminanceThreshold={0.56} luminanceSmoothing={0.28} mipmapBlur />
         <Vignette ref={vignetteRef} eskil={false} offset={0.16} darkness={0.26} />
-        <Noise premultiply opacity={0.022} />
+        <Noise premultiply opacity={0.008} />
       </EffectComposer>
 
     </>
@@ -3575,7 +3575,7 @@ const OrbitLatch: React.FC<{ soundsOn?: boolean }> = () => {
         onContextMenu={(event) => event.preventDefault()}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.18;
+          gl.toneMappingExposure = 0.9;
           gl.outputColorSpace = THREE.SRGBColorSpace;
         }}
       >
