@@ -177,6 +177,8 @@ const SCATTERED_TIME_LIMIT = 80;
 const CLASSIC_MIN_FORWARD_TARGETS = 4;
 const SCATTERED_MIN_FORWARD_TARGETS = 6;
 const ASSIST_REPOSITION_COOLDOWN = 0.42;
+const RECYCLE_HIDDEN_MARGIN = 8.2;
+const MIN_RESPAWN_LEAD = 7.4;
 
 const FIELD_HALF_X = 4.2;
 const SAFE_FALL_BACK = 10.5;
@@ -659,6 +661,10 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
     }
   }
 
+  if (!initial) {
+    nextY = Math.max(nextY, runtime.playerY + MIN_RESPAWN_LEAD + Math.random() * 1.15);
+  }
+
   const radius =
     runtime.mode === 'scattered'
       ? clamp(lerp(0.46, 0.66, d) + (Math.random() * 2 - 1) * 0.07, 0.4, 0.78)
@@ -741,8 +747,23 @@ const ensureForwardTargets = (runtime: Runtime) => {
 
   let needed = minTargets - ahead;
   const recycle = runtime.planets
-    .filter((planet) => planet.y <= runtime.playerY + 0.45 && (!runtime.latched || planet.slot !== runtime.latchedPlanet))
+    .filter(
+      (planet) =>
+        planet.y <= runtime.playerY - RECYCLE_HIDDEN_MARGIN &&
+        (!runtime.latched || planet.slot !== runtime.latchedPlanet)
+    )
     .sort((a, b) => a.y - b.y);
+  if (recycle.length === 0) {
+    recycle.push(
+      ...runtime.planets
+        .filter(
+          (planet) =>
+            planet.y <= runtime.playerY - RECYCLE_HIDDEN_MARGIN * 0.5 &&
+            (!runtime.latched || planet.slot !== runtime.latchedPlanet)
+        )
+        .sort((a, b) => a.y - b.y)
+    );
+  }
   let anchorY = furthestY;
   let anchorX = furthestX;
 
@@ -791,7 +812,9 @@ const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) =
   if (reachable) return;
 
   const recycle = runtime.planets
-    .filter((planet) => planet.slot !== fromPlanet.slot)
+    .filter(
+      (planet) => planet.slot !== fromPlanet.slot && planet.y <= runtime.playerY - RECYCLE_HIDDEN_MARGIN
+    )
     .sort((a, b) => a.y - b.y)[0];
   if (!recycle) return;
 
@@ -1036,8 +1059,6 @@ function OrbitLatchScene() {
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
-  const bgPlaneRef = useRef<THREE.Mesh>(null);
-  const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const impactOverlayRef = useRef<HTMLDivElement>(null);
   const planetRef = useRef<THREE.InstancedMesh>(null);
   const planetGlowRef = useRef<THREE.InstancedMesh>(null);
@@ -1556,7 +1577,7 @@ function OrbitLatchScene() {
 
       for (const planet of runtime.planets) {
         if (planet.slot === runtime.latchedPlanet && runtime.latched) continue;
-        if (planet.y < runtime.playerY - (runtime.mode === 'scattered' ? 10.5 : 12)) {
+        if (planet.y < runtime.playerY - (runtime.mode === 'scattered' ? 13.5 : 15.2)) {
           seedPlanet(runtime, planet, false);
         }
       }
@@ -1613,34 +1634,47 @@ function OrbitLatchScene() {
     ).needsUpdate = true;
     trailGeometry.computeBoundingSphere();
 
+    const latchCuePlanet =
+      findNearestAheadPlanet(
+        runtime,
+        runtime.playerX,
+        runtime.playerY,
+        runtime.latched ? runtime.latchedPlanet : undefined
+      ) ??
+      runtime.planets
+        .filter((planet) => !runtime.latched || planet.slot !== runtime.latchedPlanet)
+        .sort(
+          (a, b) =>
+            Math.abs(a.y - (runtime.playerY + 1.8)) - Math.abs(b.y - (runtime.playerY + 1.8))
+        )[0] ??
+      null;
+
     const shakeAmp = runtime.shake * 0.09;
     const shakeTime = runtime.elapsed * 21;
     const scatteredCamLift = runtime.mode === 'scattered' ? 0.72 : 0;
-    const scatteredCamPull = runtime.mode === 'scattered' ? 1.62 : 1.28;
+    const scatteredCamPull = runtime.mode === 'scattered' ? 1.95 : 1.48;
+    const focusY = latchCuePlanet
+      ? lerp(runtime.playerY, latchCuePlanet.y, runtime.latched ? 0.44 : 0.54)
+      : runtime.playerY + (runtime.latched ? 1.7 : 1.25);
+    const focusX = latchCuePlanet
+      ? lerp(runtime.playerX, latchCuePlanet.x, runtime.latched ? 0.22 : 0.36)
+      : runtime.playerX;
     camTarget.set(
-      runtime.playerX * 0.26 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
+      focusX * 0.27 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
       6.55 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
-      -runtime.playerY + 5.1 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
+      -focusY + 5.36 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     lookTarget.set(
-      runtime.playerX * 0.17,
+      focusX * 0.18,
       0,
-      -runtime.playerY - (runtime.mode === 'scattered' ? 5.6 : 4.8)
+      -focusY - (runtime.mode === 'scattered' ? 5.95 : 5.32)
     );
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
-      const baseFov = runtime.mode === 'scattered' ? 50 : 46;
+      const baseFov = runtime.mode === 'scattered' ? 55 : 52;
       camera.fov = lerp(camera.fov, baseFov - runtime.coreGlow * 1.8, 1 - Math.exp(-6 * dt));
       camera.updateProjectionMatrix();
-    }
-
-    if (bgMaterialRef.current) {
-      bgMaterialRef.current.uniforms.uTime.value += dt;
-      bgMaterialRef.current.uniforms.uGlow.value = runtime.coreGlow + runtime.latchFlash;
-    }
-    if (bgPlaneRef.current) {
-      bgPlaneRef.current.position.set(camera.position.x * 0.18, -0.85, camera.position.z - 34);
     }
 
     if (satRef.current) {
@@ -1670,10 +1704,15 @@ function OrbitLatchScene() {
     }
 
     if (planetRef.current && ringRef.current) {
+      const latchCueSlot = latchCuePlanet?.slot ?? -1;
       for (let i = 0; i < runtime.planets.length; i += 1) {
         const planet = runtime.planets[i];
         const world = simToWorld(planet.x, planet.y, trailWorld);
         const pulsing = 0.5 + 0.5 * Math.sin(runtime.elapsed * 1.5 + planet.pulse);
+        const cuePulse =
+          planet.slot === latchCueSlot
+            ? 0.5 + 0.5 * Math.sin(runtime.elapsed * 6.2 + planet.pulse)
+            : 0;
 
         dummy.position.set(world.x, 0, world.z);
         dummy.scale.setScalar(planet.radius);
@@ -1683,33 +1722,34 @@ function OrbitLatchScene() {
 
         colorScratch
           .copy(PLANET_COLORS[planet.colorIndex])
-          .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16, 0, 0.7))
+          .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16 + cuePulse * 0.28, 0, 0.82))
           .multiplyScalar(1.22);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
           dummy.position.set(world.x, 0.01, world.z);
-          dummy.scale.setScalar(planet.radius * (1.11 + planet.glow * 0.08));
+          dummy.scale.setScalar(planet.radius * (1.08 + pulsing * 0.09 + cuePulse * 0.22 + planet.glow * 0.08));
           dummy.rotation.set(0, 0, 0);
           dummy.updateMatrix();
           planetGlowRef.current.setMatrixAt(i, dummy.matrix);
 
           colorScratch
             .copy(PLANET_COLORS[planet.colorIndex])
-            .lerp(WHITE, clamp(0.36 + pulsing * 0.34 + planet.glow * 0.44, 0, 0.95))
+            .lerp(WHITE, clamp(0.34 + pulsing * 0.34 + planet.glow * 0.44 + cuePulse * 0.45, 0, 0.99))
             .multiplyScalar(1.24);
           planetGlowRef.current.setColorAt(i, colorScratch);
         }
 
         dummy.position.set(world.x, 0.015, world.z);
-        dummy.scale.set(planet.orbitRadius, planet.orbitRadius, planet.orbitRadius);
+        const ringScale = planet.orbitRadius * (1 + cuePulse * 0.12);
+        dummy.scale.set(ringScale, ringScale, ringScale);
         dummy.rotation.set(-Math.PI * 0.5, 0, 0);
         dummy.updateMatrix();
         ringRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
           .copy(PLANET_COLORS[planet.colorIndex])
-          .lerp(WHITE, clamp(0.28 + planet.glow * 0.66 + runtime.latchFlash * 0.22, 0, 0.96))
+          .lerp(WHITE, clamp(0.28 + planet.glow * 0.66 + runtime.latchFlash * 0.22 + cuePulse * 0.52, 0, 0.99))
           .multiplyScalar(1.32);
         ringRef.current.setColorAt(i, colorScratch);
       }
@@ -1821,49 +1861,6 @@ function OrbitLatchScene() {
       <pointLight position={[0, 4.1, 2]} intensity={1.16} color="#6cf2ff" />
       <pointLight position={[2.2, 2.8, -3.2]} intensity={0.92} color="#ff8ce5" />
       <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.76} color="#ffd27d" />
-
-      <mesh ref={bgPlaneRef} position={[0, -0.85, -30]} frustumCulled={false} renderOrder={-1000}>
-        <planeGeometry args={[42, 34]} />
-        <shaderMaterial
-          ref={bgMaterialRef}
-          uniforms={{ uTime: { value: 0 }, uGlow: { value: 0 } }}
-          vertexShader={`
-            varying vec2 vUv;
-            void main() {
-              vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `}
-          fragmentShader={`
-            uniform float uTime;
-            uniform float uGlow;
-            varying vec2 vUv;
-            void main() {
-              vec2 p = vUv * 2.0 - 1.0;
-              float r = length(p);
-              vec3 deep = vec3(0.11, 0.16, 0.32);
-              vec3 cyan = vec3(0.33, 0.73, 0.92);
-              vec3 magenta = vec3(0.69, 0.36, 0.86);
-              vec3 amber = vec3(0.95, 0.72, 0.36);
-              float grad = smoothstep(-0.25, 1.2, vUv.y);
-              float waveA = sin((vUv.x * 2.8 + uTime * 0.18) * 6.2831853) * 0.5 + 0.5;
-              float waveB = sin((vUv.y * 3.7 - uTime * 0.23) * 6.2831853) * 0.5 + 0.5;
-              float rim = smoothstep(1.42, 0.22, r);
-              float grain = fract(sin(dot(vUv * (uTime + 3.17), vec2(12.9898, 78.233))) * 43758.5453);
-              vec3 col = mix(deep, magenta, grad * 0.72);
-              col = mix(col, cyan, waveA * 0.35);
-              col += amber * (waveB * 0.12 + uGlow * 0.24);
-              col += (grain - 0.5) * 0.016;
-              col *= rim;
-              gl_FragColor = vec4(col, 1.0);
-            }
-          `}
-          depthWrite={false}
-          depthTest={false}
-          side={THREE.DoubleSide}
-          toneMapped={false}
-        />
-      </mesh>
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
