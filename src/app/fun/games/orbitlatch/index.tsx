@@ -255,7 +255,13 @@ const buildSwatch = (
     const wobble = ((i % 5) - 2) * hueJitter;
     const sat = satMul * (0.94 + ((i % 3) - 1) * 0.07);
     const lit = lightMul * (0.92 + ((i % 4) - 1.5) * 0.06);
-    out.push(shiftHexColor(seed, wobble, sat, lit));
+    const color = shiftHexColor(seed, wobble, sat, lit);
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    if (hsl.l < 0.44) {
+      color.setHSL(hsl.h, clamp(hsl.s * 0.92, 0, 1), 0.44 + hsl.l * 0.12);
+    }
+    out.push(color);
   }
   return out;
 };
@@ -1124,7 +1130,6 @@ function OrbitLatchScene({
   const latchCuePulseRef = useRef<THREE.Mesh>(null);
   const latchCuePulseRefSecondary = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
-  const vignetteRef = useRef<any>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   const directionalLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiLightRef = useRef<THREE.HemisphereLight>(null);
@@ -1981,7 +1986,7 @@ function OrbitLatchScene({
         colorScratch
           .copy(getPaletteColor(palette.planets, planet.colorIndex))
           .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16 + cuePulse * 0.28, 0, 0.82))
-          .multiplyScalar(1.22);
+          .multiplyScalar(1.68);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
@@ -1994,7 +1999,7 @@ function OrbitLatchScene({
           colorScratch
             .copy(getPaletteColor(palette.planets, planet.colorIndex))
             .lerp(WHITE, clamp(0.34 + pulsing * 0.34 + planet.glow * 0.44 + cuePulse * 0.45, 0, 0.99))
-            .multiplyScalar(1.24);
+            .multiplyScalar(1.52);
           planetGlowRef.current.setColorAt(i, colorScratch);
         }
 
@@ -2106,27 +2111,6 @@ function OrbitLatchScene({
         clamp(runtime.coreGlow * 0.7 + runtime.latchFlash * 0.42 + (runtime.mode === 'scattered' ? 0.12 : 0), 0, 1)
       );
     }
-    if (vignetteRef.current) {
-      const targetDarkness = lerp(
-        palette.vignetteDarkness,
-        palette.vignetteDarkness + 0.22,
-        clamp(runtime.impactFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1)
-      );
-      const vignette = vignetteRef.current as {
-        darkness?: number;
-        uniforms?: { darkness?: { value?: number }; get?: (key: string) => { value?: number } | undefined };
-      };
-      if (vignette.uniforms?.darkness?.value !== undefined) {
-        vignette.uniforms.darkness.value = targetDarkness;
-      } else if (typeof vignette.uniforms?.get === 'function') {
-        const darknessUniform = vignette.uniforms.get('darkness');
-        if (darknessUniform && darknessUniform.value !== undefined) {
-          darknessUniform.value = targetDarkness;
-        }
-      } else if (typeof vignette.darkness === 'number') {
-        vignette.darkness = targetDarkness;
-      }
-    }
     if (impactOverlayRef.current) {
       impactOverlayRef.current.style.opacity = `${clamp(runtime.impactFlash * 0.74, 0, 0.74)}`;
     }
@@ -2138,30 +2122,31 @@ function OrbitLatchScene({
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.2, 6.2]} fov={52} near={0.1} far={240} />
-      <color attach="background" args={['#121a33']} />
-      <fog attach="fog" args={['#1d2c4a', 18, 142]} />
+      <color attach="background" args={['#1a2d4c']} />
+      <fog attach="fog" args={['#32507a', 20, 154]} />
 
-      <ambientLight ref={ambientLightRef} intensity={0.94} color="#ecf5ff" />
+      <ambientLight ref={ambientLightRef} intensity={1.1} color="#f3f9ff" />
       <directionalLight
         ref={directionalLightRef}
         position={[6, 9, 3]}
-        intensity={1.08}
+        intensity={1.18}
         color="#f7fbff"
       />
-      <hemisphereLight ref={hemiLightRef} args={['#95ddff', '#1a294a', 0.72]} />
-      <pointLight ref={fillLightARef} position={[0, 4.1, 2]} intensity={1.2} color="#65efff" />
-      <pointLight ref={fillLightBRef} position={[2.2, 2.8, -3.2]} intensity={0.98} color="#ff8ce5" />
-      <pointLight ref={fillLightCRef} position={[-2.6, 2.6, -1.6]} intensity={0.82} color="#ffd27d" />
+      <hemisphereLight ref={hemiLightRef} args={['#9de4ff', '#21335a', 0.82]} />
+      <pointLight ref={fillLightARef} position={[0, 4.1, 2]} intensity={1.35} color="#65efff" />
+      <pointLight ref={fillLightBRef} position={[2.2, 2.8, -3.2]} intensity={1.08} color="#ff8ce5" />
+      <pointLight ref={fillLightCRef} position={[-2.6, 2.6, -1.6]} intensity={0.95} color="#ffd27d" />
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
         <meshStandardMaterial
           ref={planetMaterialRef}
+          color="#ffffff"
           vertexColors
-          roughness={0.22}
-          metalness={0.08}
+          roughness={0.18}
+          metalness={0.12}
           emissive="#23355c"
-          emissiveIntensity={1.02}
+          emissiveIntensity={1.26}
           toneMapped={false}
         />
       </instancedMesh>
@@ -2175,9 +2160,10 @@ function OrbitLatchScene({
         <icosahedronGeometry args={[1, 1]} />
         <meshBasicMaterial
           ref={planetGlowMaterialRef}
+          color="#ffffff"
           vertexColors
           transparent
-          opacity={0.62}
+          opacity={0.68}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -2215,11 +2201,12 @@ function OrbitLatchScene({
         <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
           ref={hazardMaterialRef}
+          color="#ffffff"
           vertexColors
-          roughness={0.22}
-          metalness={0.38}
+          roughness={0.2}
+          metalness={0.4}
           emissive="#5b1a33"
-          emissiveIntensity={0.42}
+          emissiveIntensity={0.56}
           toneMapped={false}
         />
       </instancedMesh>
@@ -2299,7 +2286,7 @@ function OrbitLatchScene({
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
         <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
-        <Vignette ref={vignetteRef} eskil={false} offset={0.16} darkness={0.34} />
+        <Vignette eskil={false} offset={0.16} darkness={0.26} />
         <Noise premultiply opacity={0.022} />
       </EffectComposer>
 
