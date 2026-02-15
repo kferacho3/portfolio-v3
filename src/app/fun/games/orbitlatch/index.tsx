@@ -375,7 +375,10 @@ const PLANET_SOLID_COLOR_PALETTES: readonly PlanetColorPreset[] = [
 ];
 
 const hslToHex = (h: number, s: number, l: number) =>
-  `#${new THREE.Color().setHSL(mod(h, 1), clamp(s, 0, 1), clamp(l, 0, 1)).getHexString()}`;
+  `#${new THREE.Color()
+    .setHSL(mod(h, 1), clamp(s, 0, 1), clamp(l, 0, 1))
+    .convertLinearToSRGB()
+    .getHexString()}`;
 
 const createGeneratedMultiPalettes = (count: number): PlanetColorPreset[] => {
   const generated: PlanetColorPreset[] = [];
@@ -430,7 +433,7 @@ const PLANET_COLOR_PRESETS: readonly PlanetColorPreset[] = [
   ...PLANET_MULTI_COLOR_BANK,
   ...PLANET_SOLID_COLOR_BANK,
 ];
-const PLANET_SOLID_RUN_CHANCE = 0;
+const PLANET_SOLID_RUN_CHANCE = 0.22;
 
 const ORBIT_COLOR_GRADES: readonly OrbitColorGrade[] = [
   {
@@ -800,9 +803,12 @@ const buildPlanetRunPalette = () => {
 
   if (preset.solid) {
     const solidSource = presetColors[0]?.clone() ?? WHITE.clone();
+    const mixedSolid = solidSource
+      .lerp(WHITE, 0.14 + Math.random() * 0.08)
+      .multiplyScalar(1.08);
     return {
       id: preset.id,
-      colors: [solidSource],
+      colors: [mixedSolid],
     };
   }
 
@@ -812,7 +818,9 @@ const buildPlanetRunPalette = () => {
   for (let i = 0; i < targetCount; i += 1) {
     const presetColor =
       presetColors[(startOffset + i) % presetColors.length] ?? presetColors[0] ?? WHITE;
-    mixed.push(presetColor.clone());
+    const color = presetColor.clone();
+    color.lerp(WHITE, 0.08 + (i % 3) * 0.05 + Math.random() * 0.03).multiplyScalar(1.04);
+    mixed.push(color);
   }
   return {
     id: preset.id,
@@ -2095,7 +2103,7 @@ function OrbitLatchScene({
   const fillLightARef = useRef<THREE.PointLight>(null);
   const fillLightBRef = useRef<THREE.PointLight>(null);
   const fillLightCRef = useRef<THREE.PointLight>(null);
-  const planetMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const planetMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const planetGlowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const starMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -2305,6 +2313,13 @@ function OrbitLatchScene({
   );
 
   useEffect(() => {
+    if (planetMaterialRef.current) {
+      applyStylizedStandardShader(planetMaterialRef.current, {
+        rimPower: 2.25,
+        rimStrength: 0.52,
+        sheenStrength: 0.2,
+      });
+    }
     if (hazardMaterialRef.current) {
       applyStylizedStandardShader(hazardMaterialRef.current, {
         rimPower: 2.45,
@@ -2406,12 +2421,11 @@ function OrbitLatchScene({
       if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
       if (planetMaterialRef.current) {
-        planetMaterialRef.current.onBeforeCompile = () => {};
-        planetMaterialRef.current.customProgramCacheKey = () => 'orbit-planet-basic-v2';
-        planetMaterialRef.current.color.copy(WHITE);
-        planetMaterialRef.current.toneMapped = false;
-        planetMaterialRef.current.opacity = 1;
-        planetMaterialRef.current.needsUpdate = true;
+        planetMaterialRef.current.emissive.copy(WHITE).multiplyScalar(0.14);
+        planetMaterialRef.current.emissiveIntensity = 0.56;
+        planetMaterialRef.current.roughness = 0.28;
+        planetMaterialRef.current.metalness = 0.02;
+        updateStylizedRimColor(planetMaterialRef.current, palette.ringCue, 2.1, 0.14, 0.08);
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
@@ -3261,7 +3275,8 @@ function OrbitLatchScene({
         const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
         colorScratch
           .copy(planetBaseColor)
-          .multiplyScalar(1.12 + planet.glow * 0.28 + cuePulse * 0.16);
+          .lerp(WHITE, clamp(0.1 + cuePulse * 0.12, 0.08, 0.2))
+          .multiplyScalar(1.34 + planet.glow * 0.3 + cuePulse * 0.16);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
@@ -3321,7 +3336,7 @@ function OrbitLatchScene({
 
         colorScratch
           .copy(getPaletteColor(palette.stars, star.colorIndex))
-          .lerp(WHITE, clamp(0.32 + star.glow * 0.46, 0, 0.82));
+          .lerp(WHITE, clamp(0.18 + star.glow * 0.34, 0, 0.68));
         starRef.current.setColorAt(count, colorScratch);
         count += 1;
       }
@@ -3350,7 +3365,7 @@ function OrbitLatchScene({
         colorScratch
           .copy(getPaletteColor(palette.stars, habitat.colorIndex))
           .lerp(palette.trailGlow, 0.26)
-          .lerp(WHITE, clamp(0.3 + habitat.glow * 0.6, 0, 0.88));
+          .lerp(WHITE, clamp(0.14 + habitat.glow * 0.42, 0, 0.74));
         habitatRef.current.setColorAt(habitatCount, colorScratch);
         habitatCount += 1;
       }
@@ -3377,7 +3392,7 @@ function OrbitLatchScene({
 
         colorScratch
           .copy(getPaletteColor(palette.hazards, hazard.colorIndex))
-          .lerp(WHITE, clamp(0.16 + hazard.glow * 0.58 + pulse * 0.16, 0, 0.9));
+          .lerp(WHITE, clamp(0.08 + hazard.glow * 0.42 + pulse * 0.1, 0, 0.74));
         hazardRef.current.setColorAt(hazardCount, colorScratch);
         hazardCount += 1;
       }
@@ -3403,7 +3418,7 @@ function OrbitLatchScene({
 
         colorScratch
           .copy(getPaletteColor(palette.hazards, meteor.colorIndex))
-          .lerp(WHITE, clamp(0.2 + meteor.glow * 0.64, 0, 0.9));
+          .lerp(WHITE, clamp(0.1 + meteor.glow * 0.46, 0, 0.76));
         meteorRef.current.setColorAt(meteorCount, colorScratch);
         meteorCount += 1;
       }
@@ -3560,11 +3575,15 @@ function OrbitLatchScene({
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
-        <meshBasicMaterial
+        <meshStandardMaterial
           ref={planetMaterialRef}
           color="#ffffff"
           vertexColors
-          toneMapped={false}
+          roughness={0.18}
+          metalness={0.12}
+          emissive="#23355c"
+          emissiveIntensity={1.62}
+          toneMapped
         />
       </instancedMesh>
 
