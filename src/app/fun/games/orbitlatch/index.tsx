@@ -792,39 +792,48 @@ const randomizePaletteForRun = (base: OrbitVisualPalette): OrbitVisualPalette =>
   return output;
 };
 
-const buildPlanetRunPalette = () => {
-  const useSolid = PLANET_SOLID_RUN_CHANCE > 0 && Math.random() < PLANET_SOLID_RUN_CHANCE;
-  const source = useSolid ? PLANET_SOLID_COLOR_BANK : PLANET_MULTI_COLOR_BANK;
-  const preset =
-    source[Math.floor(Math.random() * source.length)] ??
-    PLANET_COLOR_PRESETS[0] ??
-    PLANET_MULTI_COLOR_BANK[0];
-  const presetColors = preset.colors.map((hex) => new THREE.Color(hex));
+const shuffleHexColors = (colors: string[]) => {
+  const out = colors.slice();
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j] as string, out[i] as string];
+  }
+  return out;
+};
 
-  if (preset.solid) {
-    const solidSource = presetColors[0]?.clone() ?? WHITE.clone();
-    const mixedSolid = solidSource
-      .lerp(WHITE, 0.14 + Math.random() * 0.08)
-      .multiplyScalar(1.08);
+const buildPlanetRunPalette = (cubePalette: CubePalette) => {
+  const laneColors = cubePalette.laneColors.length > 0 ? cubePalette.laneColors : [cubePalette.cubeColor];
+  const seedHex = [
+    ...laneColors,
+    cubePalette.cubeColor,
+    cubePalette.fillLightA,
+    cubePalette.fillLightB,
+    cubePalette.playerColor,
+  ].map((hex) => hex.toLowerCase());
+  const uniqueHex = Array.from(new Set(seedHex));
+
+  const fallbackPreset =
+    PLANET_MULTI_COLOR_BANK[Math.floor(Math.random() * PLANET_MULTI_COLOR_BANK.length)] ??
+    PLANET_COLOR_PRESETS[0];
+  const baseHex = uniqueHex.length > 0 ? uniqueHex : [...(fallbackPreset?.colors ?? ['#7df9ff'])];
+  const shuffled = shuffleHexColors(baseHex);
+
+  const useSolid = Math.random() < PLANET_SOLID_RUN_CHANCE;
+  if (useSolid) {
     return {
-      id: preset.id,
-      colors: [mixedSolid],
+      id: `${cubePalette.id}-solid`,
+      colors: [new THREE.Color(shuffled[0] ?? '#7df9ff')],
     };
   }
 
-  const targetCount = clamp(presetColors.length + (Math.random() < 0.5 ? 1 : 0), 3, 6);
-  const startOffset = Math.floor(Math.random() * Math.max(1, presetColors.length));
-  const mixed: THREE.Color[] = [];
-  for (let i = 0; i < targetCount; i += 1) {
-    const presetColor =
-      presetColors[(startOffset + i) % presetColors.length] ?? presetColors[0] ?? WHITE;
-    const color = presetColor.clone();
-    color.lerp(WHITE, 0.08 + (i % 3) * 0.05 + Math.random() * 0.03).multiplyScalar(1.04);
-    mixed.push(color);
-  }
+  const targetCount = clamp(3 + Math.floor(Math.random() * 3), 3, 6);
+  const colors = Array.from({ length: targetCount }, (_, i) =>
+    new THREE.Color(shuffled[i % shuffled.length] ?? shuffled[0] ?? '#7df9ff')
+  );
+
   return {
-    id: preset.id,
-    colors: mixed,
+    id: `${cubePalette.id}-shuffle-${targetCount}`,
+    colors,
   };
 };
 
@@ -837,30 +846,6 @@ const getRuntimePalette = (runtime: Pick<Runtime, 'activePalette' | 'paletteInde
 
 const getPaletteColor = (colors: readonly THREE.Color[], index: number) =>
   colors[mod(index, colors.length)] ?? WHITE;
-
-const normalizePlanetColor = (
-  source: THREE.Color,
-  target: THREE.Color,
-  options?: {
-    minS?: number;
-    minL?: number;
-    satBoost?: number;
-    lightBoost?: number;
-  }
-) => {
-  const minS = options?.minS ?? 0.74;
-  const minL = options?.minL ?? 0.54;
-  const satBoost = options?.satBoost ?? 1.08;
-  const lightBoost = options?.lightBoost ?? 1.04;
-  const hsl = { h: 0, s: 0, l: 0 };
-  source.getHSL(hsl);
-  target.setHSL(
-    hsl.h,
-    clamp(Math.max(hsl.s * satBoost, minS), 0, 1),
-    clamp(Math.max(hsl.l * lightBoost, minL), 0, 0.82)
-  );
-  return target;
-};
 
 type OrbitStylizedUniforms = {
   uOrbitRimColor: { value: THREE.Color };
@@ -1212,8 +1197,8 @@ const createRuntime = (): Runtime => ({
   paletteIndex: 0,
   activePalette: cloneOrbitPalette(ORBIT_PALETTES[0] ?? buildOrbitPalette(CUBE_PALETTES[0], 0)),
   planetPaletteId: 'seed',
-  planetRunColors: (ORBIT_PALETTES[0]?.planets ?? [new THREE.Color('#8de5ff')]).map((color) =>
-    color.clone()
+  planetRunColors: buildPlanetRunPalette(CUBE_PALETTES[0] ?? CUBE_PALETTES[1] ?? CUBE_PALETTES[2]).colors.map(
+    (color) => color.clone()
   ),
   planetColorCursor: 0,
   startNonceSeen: 0,
@@ -2188,7 +2173,8 @@ function OrbitLatchScene({
     runtime.mode = mode;
     runtime.paletteIndex = nextPalette;
     runtime.activePalette = randomizePaletteForRun(basePalette);
-    const planetRunPalette = buildPlanetRunPalette();
+    const cubePalette = CUBE_PALETTES[nextPalette] ?? CUBE_PALETTES[0];
+    const planetRunPalette = buildPlanetRunPalette(cubePalette);
     runtime.planetPaletteId = planetRunPalette.id;
     runtime.planetRunColors = planetRunPalette.colors;
     runtime.planetColorCursor = Math.floor(
@@ -2415,13 +2401,13 @@ function OrbitLatchScene({
       scene.background = palette.background.clone();
       if (scene.fog instanceof THREE.Fog) {
         scene.fog.color.copy(palette.fog);
-        scene.fog.near = 24;
-        scene.fog.far = runtime.mode === 'scattered' ? 170 : 186;
+        scene.fog.near = 36;
+        scene.fog.far = runtime.mode === 'scattered' ? 205 : 224;
       } else {
         scene.fog = new THREE.Fog(
           palette.fog.clone(),
-          24,
-          runtime.mode === 'scattered' ? 170 : 186
+          36,
+          runtime.mode === 'scattered' ? 205 : 224
         );
       }
 
@@ -2508,7 +2494,7 @@ function OrbitLatchScene({
       }
     }
     if (scene.fog instanceof THREE.Fog) {
-      scene.fog.far = runtime.mode === 'scattered' ? 170 : 186;
+      scene.fog.far = runtime.mode === 'scattered' ? 205 : 224;
     }
     if (fillLightARef.current) {
       fillLightARef.current.intensity = lerp(0.82, 1.2, clamp(runtime.coreGlow * 0.7, 0, 1));
@@ -3275,14 +3261,9 @@ function OrbitLatchScene({
         const isCuePlanet = planet.slot === latchCueSlot;
 
         const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
-        normalizePlanetColor(planetBaseColor, colorScratch, {
-          minS: 0.78,
-          minL: 0.56,
-          satBoost: 1.14,
-          lightBoost: 1.08,
-        })
-          .lerp(WHITE, clamp(0.08 + cuePulse * 0.1, 0.06, 0.16))
-          .multiplyScalar(1.2 + planet.glow * 0.24 + cuePulse * 0.14);
+        colorScratch
+          .copy(planetBaseColor)
+          .multiplyScalar(0.96 + planet.glow * 0.18 + cuePulse * 0.12);
 
         const planetCoreMesh = planetCoreRefs.current[i];
         if (planetCoreMesh) {
@@ -3298,14 +3279,9 @@ function OrbitLatchScene({
           planetGlowMesh.scale.setScalar(planet.radius * (1.1 + cuePulse * 0.21 + planet.glow * 0.11));
 
           colorScratch
-            .copy(normalizePlanetColor(planetBaseColor, colorScratch, {
-              minS: 0.74,
-              minL: 0.54,
-              satBoost: 1.08,
-              lightBoost: 1.05,
-            }))
-            .lerp(palette.ringCue, clamp(0.08 + cuePulse * 0.2 + planet.glow * 0.1, 0.08, 0.26))
-            .multiplyScalar(1.08 + planet.glow * 0.42 + cuePulse * 0.2);
+            .copy(planetBaseColor)
+            .lerp(palette.ringCue, clamp(0.14 + cuePulse * 0.24 + planet.glow * 0.12, 0.14, 0.38))
+            .multiplyScalar(0.92 + planet.glow * 0.26 + cuePulse * 0.16);
           const glowMat = planetGlowMesh.material as THREE.MeshBasicMaterial;
           glowMat.color.copy(colorScratch);
         }
@@ -3318,18 +3294,7 @@ function OrbitLatchScene({
         ringRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(
-            normalizePlanetColor(
-              getPaletteColor(runtime.planetRunColors, planet.colorIndex),
-              colorScratch,
-              {
-                minS: 0.72,
-                minL: 0.5,
-                satBoost: 1.06,
-                lightBoost: 1.03,
-              }
-            )
-          )
+          .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
           .lerp(palette.ringCue, clamp(cuePulse * 0.72 + runtime.latchFlash * 0.18, 0, 0.82))
           .lerp(
             WHITE,
@@ -3337,7 +3302,7 @@ function OrbitLatchScene({
               ? clamp(0.26 + planet.glow * 0.54 + runtime.latchFlash * 0.2 + cuePulse * 0.42, 0, 0.82)
               : clamp(0.04 + planet.glow * 0.2, 0.04, 0.18)
           )
-          .multiplyScalar(isCuePlanet ? 1.62 : 0.86);
+          .multiplyScalar(isCuePlanet ? 1.38 : 0.78);
         ringRef.current.setColorAt(i, colorScratch);
       }
       ringRef.current.instanceMatrix.needsUpdate = true;
@@ -3499,8 +3464,8 @@ function OrbitLatchScene({
 
     if (bloomRef.current) {
       bloomRef.current.intensity = lerp(
-        palette.bloomBase,
-        palette.bloomMax,
+        palette.bloomBase * 0.36,
+        palette.bloomMax * 0.42,
         clamp(runtime.coreGlow * 0.34 + runtime.latchFlash * 0.16 + (runtime.mode === 'scattered' ? 0.03 : 0), 0, 1)
       );
     }
@@ -3516,7 +3481,7 @@ function OrbitLatchScene({
     <>
       <PerspectiveCamera makeDefault position={[0, 6.2, 4.8]} fov={59} near={0.1} far={220} />
       <color attach="background" args={['#38547a']} />
-      <fog attach="fog" args={['#5c7ea5', 24, 182]} />
+      <fog attach="fog" args={['#5c7ea5', 36, 224]} />
 
       <mesh frustumCulled={false} renderOrder={-10}>
         <sphereGeometry args={[130, 48, 48]} />
@@ -3789,9 +3754,9 @@ function OrbitLatchScene({
       </instancedMesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom ref={bloomRef} intensity={0.22} luminanceThreshold={0.56} luminanceSmoothing={0.28} mipmapBlur />
+        <Bloom ref={bloomRef} intensity={0.12} luminanceThreshold={0.72} luminanceSmoothing={0.14} />
         <Vignette ref={vignetteRef} eskil={false} offset={0.16} darkness={0.26} />
-        <Noise premultiply opacity={0.008} />
+        <Noise premultiply opacity={0.004} />
       </EffectComposer>
 
     </>
