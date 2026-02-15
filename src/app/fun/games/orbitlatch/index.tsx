@@ -1684,8 +1684,22 @@ function OrbitLatchScene() {
         colorScratch
           .copy(PLANET_COLORS[planet.colorIndex])
           .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16, 0, 0.7))
-          .multiplyScalar(1.08);
+          .multiplyScalar(1.22);
         planetRef.current.setColorAt(i, colorScratch);
+
+        if (planetGlowRef.current) {
+          dummy.position.set(world.x, 0.01, world.z);
+          dummy.scale.setScalar(planet.radius * (1.11 + planet.glow * 0.08));
+          dummy.rotation.set(0, 0, 0);
+          dummy.updateMatrix();
+          planetGlowRef.current.setMatrixAt(i, dummy.matrix);
+
+          colorScratch
+            .copy(PLANET_COLORS[planet.colorIndex])
+            .lerp(WHITE, clamp(0.36 + pulsing * 0.34 + planet.glow * 0.44, 0, 0.95))
+            .multiplyScalar(1.24);
+          planetGlowRef.current.setColorAt(i, colorScratch);
+        }
 
         dummy.position.set(world.x, 0.015, world.z);
         dummy.scale.set(planet.orbitRadius, planet.orbitRadius, planet.orbitRadius);
@@ -1696,11 +1710,15 @@ function OrbitLatchScene() {
         colorScratch
           .copy(PLANET_COLORS[planet.colorIndex])
           .lerp(WHITE, clamp(0.28 + planet.glow * 0.66 + runtime.latchFlash * 0.22, 0, 0.96))
-          .multiplyScalar(1.14);
+          .multiplyScalar(1.32);
         ringRef.current.setColorAt(i, colorScratch);
       }
       planetRef.current.instanceMatrix.needsUpdate = true;
       if (planetRef.current.instanceColor) planetRef.current.instanceColor.needsUpdate = true;
+      if (planetGlowRef.current) {
+        planetGlowRef.current.instanceMatrix.needsUpdate = true;
+        if (planetGlowRef.current.instanceColor) planetGlowRef.current.instanceColor.needsUpdate = true;
+      }
       ringRef.current.instanceMatrix.needsUpdate = true;
       if (ringRef.current.instanceColor) ringRef.current.instanceColor.needsUpdate = true;
     }
@@ -1794,15 +1812,15 @@ function OrbitLatchScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 6.9, 5.4]} fov={46} near={0.1} far={240} />
-      <color attach="background" args={['#131d34']} />
-      <fog attach="fog" args={['#1b2744', 26, 168]} />
+      <color attach="background" args={['#1a2747']} />
+      <fog attach="fog" args={['#24365b', 24, 172]} />
 
-      <ambientLight intensity={0.64} color="#dbe8ff" />
-      <directionalLight position={[6, 9, 3]} intensity={0.86} color="#e6f4ff" />
-      <hemisphereLight args={['#b7e6ff', '#2a315f', 0.58]} />
-      <pointLight position={[0, 4.1, 2]} intensity={0.98} color="#6cf2ff" />
-      <pointLight position={[2.2, 2.8, -3.2]} intensity={0.72} color="#ff8ce5" />
-      <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.56} color="#ffd27d" />
+      <ambientLight intensity={0.9} color="#edf4ff" />
+      <directionalLight position={[6, 9, 3]} intensity={1.02} color="#e9f7ff" />
+      <hemisphereLight args={['#b7e6ff', '#33467f', 0.66]} />
+      <pointLight position={[0, 4.1, 2]} intensity={1.16} color="#6cf2ff" />
+      <pointLight position={[2.2, 2.8, -3.2]} intensity={0.92} color="#ff8ce5" />
+      <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.76} color="#ffd27d" />
 
       <mesh ref={bgPlaneRef} position={[0, -0.85, -30]} frustumCulled={false} renderOrder={-1000}>
         <planeGeometry args={[42, 34]} />
@@ -1851,10 +1869,27 @@ function OrbitLatchScene() {
         <icosahedronGeometry args={[1, 2]} />
         <meshStandardMaterial
           vertexColors
-          roughness={0.16}
-          metalness={0.22}
-          emissive="#29426d"
-          emissiveIntensity={0.6}
+          roughness={0.26}
+          metalness={0.04}
+          emissive="#253a63"
+          emissiveIntensity={1.18}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh
+        ref={planetGlowRef}
+        args={[undefined, undefined, PLANET_POOL]}
+        frustumCulled={false}
+        renderOrder={3}
+      >
+        <icosahedronGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.52}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
           toneMapped={false}
         />
       </instancedMesh>
@@ -1864,7 +1899,7 @@ function OrbitLatchScene() {
         <meshBasicMaterial
           vertexColors
           transparent
-          opacity={0.92}
+          opacity={0.98}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
@@ -1935,7 +1970,7 @@ function OrbitLatchScene() {
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
         <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
-        <Vignette eskil={false} offset={0.2} darkness={0.42} />
+        <Vignette eskil={false} offset={0.2} darkness={0.26} />
         <Noise premultiply opacity={0.024} />
       </EffectComposer>
 
