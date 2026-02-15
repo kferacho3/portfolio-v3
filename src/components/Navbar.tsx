@@ -88,7 +88,7 @@ const Navbar: React.FC = () => {
   return (
     <>
       <motion.nav
-        className={`fixed top-0 left-0 right-0 z-50 bg-opacity-80 ${
+        className={`fixed top-0 left-0 right-0 z-[2147483647] bg-opacity-80 ${
           theme === 'dark' ? 'bg-black' : 'bg-white'
         } backdrop-blur`}
         initial={{ y: 0 }}
