@@ -1937,15 +1937,27 @@ function OrbitLatchScene({
 }
 
 const OrbitLatch: React.FC<{ soundsOn?: boolean }> = () => {
+  const impactOverlayRef = useRef<HTMLDivElement>(null);
+
   return (
-    <Canvas
-      dpr={[1, 1.6]}
-      gl={{ antialias: false, powerPreference: 'high-performance' }}
-      className="absolute inset-0 h-full w-full"
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      <OrbitLatchScene />
-    </Canvas>
+    <div className="relative h-full w-full">
+      <Canvas
+        dpr={[1, 1.6]}
+        gl={{ antialias: false, powerPreference: 'high-performance' }}
+        className="absolute inset-0 h-full w-full"
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        <OrbitLatchScene impactOverlayRef={impactOverlayRef} />
+      </Canvas>
+
+      <div
+        ref={impactOverlayRef}
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,68,235,0.42),rgba(34,211,238,0.26),rgba(10,10,21,0))]"
+        style={{ opacity: 0, mixBlendMode: 'screen' }}
+      />
+
+      <OrbitLatchOverlay />
+    </div>
   );
 };
 

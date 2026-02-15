@@ -26,6 +26,11 @@ import { shouldShowHUD } from '../config/games';
 import type { GameId } from '../store/types';
 import { proxy, useSnapshot } from 'valtio';
 import type { LoadedGame } from '../games/registry';
+import { PrismJumpUI } from '../games/prismjump/_components/PrismJumpUI';
+import { OctaSurgeUI } from '../games/octasurge/_components/OctaSurgeUI';
+import { octaSurgeState } from '../games/octasurge/state';
+import { useOctaRuntimeStore } from '../games/octasurge/runtime';
+import type { OctaCameraMode, OctaSurgeMode } from '../games/octasurge/types';
 
 // Valid game IDs for static generation
 const VALID_GAME_IDS: GameId[] = [
@@ -82,6 +87,12 @@ const VALID_GAME_IDS: GameId[] = [
 ];
 
 const EMPTY_PROXY = proxy({});
+
+const nextOctaCameraMode = (mode: OctaCameraMode): OctaCameraMode => {
+  if (mode === 'chase') return 'firstPerson';
+  if (mode === 'firstPerson') return 'topDown';
+  return 'chase';
+};
 
 /** Loaded with ssr: false to avoid @react-three vendor-chunk errors during page generation */
 const SharedCanvasContent = dynamic(
@@ -321,6 +332,29 @@ export default function GamePage({ params }: GamePageProps) {
           restartSeed={restartSeed}
           soundsOn={soundsOn}
           gameId={gameId}
+        />
+      )}
+
+      {gameId === 'prismjump' && <PrismJumpUI />}
+
+      {gameId === 'octasurge' && (
+        <OctaSurgeUI
+          onStart={handleStart}
+          onSelectMode={(mode: OctaSurgeMode) => octaSurgeState.setMode(mode)}
+          onCycleFxLevel={() => {
+            octaSurgeState.cycleFxLevel();
+            octaSurgeState.save();
+          }}
+          onCycleCamera={() => {
+            const runtime = useOctaRuntimeStore.getState();
+            const next = nextOctaCameraMode(runtime.cameraMode);
+            useOctaRuntimeStore.setState({ cameraMode: next });
+            octaSurgeState.setCameraMode(next);
+          }}
+          onSelectCamera={(mode: OctaCameraMode) => {
+            useOctaRuntimeStore.setState({ cameraMode: mode });
+            octaSurgeState.setCameraMode(mode);
+          }}
         />
       )}
 
