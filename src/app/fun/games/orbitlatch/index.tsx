@@ -176,6 +176,8 @@ type Runtime = {
   meteorCooldown: number;
   paletteIndex: number;
   activePalette: OrbitVisualPalette;
+  planetPaletteId: string;
+  planetRunColors: THREE.Color[];
   startNonceSeen: number;
   cuePulseT: number;
   cuePulseCooldown: number;
@@ -308,6 +310,73 @@ type OrbitColorGrade = {
   bloomBoost: number;
   vignetteScale: number;
 };
+
+type PlanetColorPreset = {
+  id: string;
+  colors: readonly string[];
+  solid: boolean;
+};
+
+const PLANET_MULTI_COLOR_PALETTES: readonly PlanetColorPreset[] = [
+  { id: 'aurora-cascade', colors: ['#4cf1ff', '#7f97ff', '#ff7ed9', '#ffd36b'], solid: false },
+  { id: 'sunset-drive', colors: ['#ff8a5b', '#ffce6e', '#ff5da8', '#8f6bff'], solid: false },
+  { id: 'mint-lagoon', colors: ['#7fffd8', '#58d7ff', '#8ca9ff', '#e4ff9f'], solid: false },
+  { id: 'electric-bloom', colors: ['#6ef8ff', '#ff7bd8', '#ffa96d', '#a38dff', '#c9ff7c'], solid: false },
+  { id: 'candy-atlas', colors: ['#ff9fcb', '#ffd98a', '#86c8ff', '#9fffd3'], solid: false },
+  { id: 'opal-arc', colors: ['#8ef6ff', '#9bc3ff', '#f8a4ff', '#ffe58b'], solid: false },
+  { id: 'rio-neon', colors: ['#40f4d8', '#52b7ff', '#ff6ba9', '#ffb35f', '#9f8cff'], solid: false },
+  { id: 'bubble-glass', colors: ['#b4fff5', '#90d6ff', '#d1b0ff', '#ffb8ea'], solid: false },
+  { id: 'nova-citrus', colors: ['#ffec7f', '#ff9f5e', '#ff6fbe', '#8ab2ff', '#73ffe0'], solid: false },
+  { id: 'teal-rose', colors: ['#6fffe0', '#58c3ff', '#ff86ca', '#ffd2a3'], solid: false },
+  { id: 'coastline-pop', colors: ['#70f5ff', '#8aa1ff', '#ff8b8b', '#ffd98a', '#a5ffb8'], solid: false },
+  { id: 'stellar-gelato', colors: ['#a7f0ff', '#b7a6ff', '#ff9cd7', '#ffe4a6'], solid: false },
+  { id: 'plasma-wave', colors: ['#56f0ff', '#5f8dff', '#b66dff', '#ff67b8', '#ffca73'], solid: false },
+  { id: 'mango-dream', colors: ['#ffd775', '#ffaf64', '#ff88b9', '#8cc7ff', '#89ffd1'], solid: false },
+  { id: 'flamingo-bay', colors: ['#ff78b0', '#ffb48b', '#ffe08e', '#84dcff'], solid: false },
+  { id: 'orchid-rush', colors: ['#9f7eff', '#d273ff', '#ff79cc', '#ffb36d', '#b6ff8a'], solid: false },
+  { id: 'pastel-radar', colors: ['#ffd1e9', '#ffe7b0', '#c6dcff', '#c7fff0'], solid: false },
+  { id: 'cosmic-peach', colors: ['#ff9f7a', '#ffc18a', '#ff8fd9', '#98b0ff'], solid: false },
+  { id: 'pool-party', colors: ['#6cf5ff', '#57c8ff', '#74ffce', '#ffe27c', '#ff96be'], solid: false },
+  { id: 'electro-fruit', colors: ['#ff7e70', '#ffb362', '#ffe66b', '#8dff95', '#69d1ff'], solid: false },
+  { id: 'chroma-petal', colors: ['#ff95d6', '#ffa77e', '#ffd38f', '#9dd1ff', '#b5a0ff'], solid: false },
+  { id: 'vapor-surf', colors: ['#8fe8ff', '#8aa0ff', '#ff8ad9', '#ffd26e'], solid: false },
+  { id: 'solar-sherbet', colors: ['#ffd96f', '#ffad68', '#ff7eb9', '#8cb0ff', '#71ffd5'], solid: false },
+  { id: 'twilight-lime', colors: ['#a0ff8c', '#6fffd7', '#63b8ff', '#9b8cff', '#ff84d0'], solid: false },
+  { id: 'celestial-koi', colors: ['#ff9f8b', '#ffd7a0', '#b6f2ff', '#8ea8ff'], solid: false },
+  { id: 'hyper-coral', colors: ['#ff7f8f', '#ffa37b', '#ffd078', '#80e9ff', '#9f9dff'], solid: false },
+  { id: 'prism-frappe', colors: ['#ffe3ae', '#ffb6cb', '#b1c8ff', '#b9fff2'], solid: false },
+  { id: 'aquapop-sky', colors: ['#66efff', '#69beff', '#90a2ff', '#ff8bcb', '#ffe07f'], solid: false },
+  { id: 'pearl-flux', colors: ['#b7fff2', '#9bd7ff', '#c4b0ff', '#ffbde8', '#ffe3b2'], solid: false },
+  { id: 'neon-garden', colors: ['#7bffad', '#5de6ff', '#7c9cff', '#c779ff', '#ff82c3'], solid: false },
+];
+
+const PLANET_SOLID_COLOR_PALETTES: readonly PlanetColorPreset[] = [
+  { id: 'solid-aqua', colors: ['#63ecff'], solid: true },
+  { id: 'solid-cobalt', colors: ['#6d8dff'], solid: true },
+  { id: 'solid-coral', colors: ['#ff8678'], solid: true },
+  { id: 'solid-lime', colors: ['#a8ff7f'], solid: true },
+  { id: 'solid-amber', colors: ['#ffd172'], solid: true },
+  { id: 'solid-fuchsia', colors: ['#ff79d1'], solid: true },
+  { id: 'solid-violet', colors: ['#a178ff'], solid: true },
+  { id: 'solid-mint', colors: ['#7fffd3'], solid: true },
+  { id: 'solid-sky', colors: ['#82cbff'], solid: true },
+  { id: 'solid-rose', colors: ['#ff8ea8'], solid: true },
+  { id: 'solid-turquoise', colors: ['#54e3d2'], solid: true },
+  { id: 'solid-saffron', colors: ['#ffc068'], solid: true },
+  { id: 'solid-orchid', colors: ['#c47eff'], solid: true },
+  { id: 'solid-peach', colors: ['#ffb084'], solid: true },
+  { id: 'solid-seafoam', colors: ['#9dffd9'], solid: true },
+  { id: 'solid-periwinkle', colors: ['#93a6ff'], solid: true },
+  { id: 'solid-petal', colors: ['#ffb4df'], solid: true },
+  { id: 'solid-neon-yellow', colors: ['#f2ff7a'], solid: true },
+  { id: 'solid-crystal', colors: ['#b7f4ff'], solid: true },
+  { id: 'solid-lavender', colors: ['#d0b0ff'], solid: true },
+];
+
+const PLANET_COLOR_PRESETS: readonly PlanetColorPreset[] = [
+  ...PLANET_MULTI_COLOR_PALETTES,
+  ...PLANET_SOLID_COLOR_PALETTES,
+];
 
 const ORBIT_COLOR_GRADES: readonly OrbitColorGrade[] = [
   {
@@ -664,6 +733,50 @@ const randomizePaletteForRun = (base: OrbitVisualPalette): OrbitVisualPalette =>
   output.name = `${base.name} • ${grade.name}`;
 
   return output;
+};
+
+const buildPlanetRunPalette = (base: OrbitVisualPalette) => {
+  const preset =
+    PLANET_COLOR_PRESETS[Math.floor(Math.random() * PLANET_COLOR_PRESETS.length)] ??
+    PLANET_MULTI_COLOR_PALETTES[0];
+  const targetCount = Math.max(14, base.planets.length);
+  const presetColors = preset.colors.map((hex) => new THREE.Color(hex));
+
+  if (preset.solid) {
+    const solidSource = presetColors[0] ?? WHITE;
+    const mixedSolid = enforceLightFloor(
+      (base.planets[0] ?? WHITE).clone().lerp(solidSource, 0.68),
+      0.58,
+      1.06,
+      0.96
+    );
+    return {
+      id: preset.id,
+      colors: Array.from({ length: targetCount }, () => mixedSolid.clone()),
+    };
+  }
+
+  const mixed: THREE.Color[] = [];
+  for (let i = 0; i < targetCount; i += 1) {
+    const baseColor = base.planets[i % base.planets.length] ?? WHITE;
+    const presetColor = presetColors[i % presetColors.length] ?? presetColors[0] ?? WHITE;
+    const color = enforceLightFloor(
+      tintColor(
+        baseColor.clone().lerp(presetColor, 0.74),
+        ((i % 6) - 2.5) * 0.01,
+        1.08,
+        1.08
+      ),
+      0.6,
+      1.08,
+      0.97
+    );
+    mixed.push(color);
+  }
+  return {
+    id: preset.id,
+    colors: mixed,
+  };
 };
 
 const colorToHex = (color: THREE.Color) => `#${color.getHexString()}`;
@@ -1024,6 +1137,10 @@ const createRuntime = (): Runtime => ({
   meteorCooldown: 0.8,
   paletteIndex: 0,
   activePalette: cloneOrbitPalette(ORBIT_PALETTES[0] ?? buildOrbitPalette(CUBE_PALETTES[0], 0)),
+  planetPaletteId: 'seed',
+  planetRunColors: (ORBIT_PALETTES[0]?.planets ?? [new THREE.Color('#8de5ff')]).map((color) =>
+    color.clone()
+  ),
   startNonceSeen: 0,
   cuePulseT: 0,
   cuePulseCooldown: 0,
@@ -1473,7 +1590,7 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
   planet.radius = radius;
   planet.orbitRadius = orbitRadius;
   planet.orbitAngularVel = orbitAngularVel;
-  planet.colorIndex = Math.floor(Math.random() * Math.max(1, palette.planets.length));
+  planet.colorIndex = Math.floor(Math.random() * Math.max(1, runtime.planetRunColors.length));
   planet.glow = 0;
   planet.pulse = Math.random() * Math.PI * 2;
 
@@ -1989,6 +2106,9 @@ function OrbitLatchScene({
     runtime.mode = mode;
     runtime.paletteIndex = nextPalette;
     runtime.activePalette = randomizePaletteForRun(basePalette);
+    const planetRunPalette = buildPlanetRunPalette(runtime.activePalette);
+    runtime.planetPaletteId = planetRunPalette.id;
+    runtime.planetRunColors = planetRunPalette.colors;
     useOrbitStore.getState().setPaletteUi(runtime.activePalette);
     paletteAppliedRef.current = -1;
     runtime.elapsed = 0;
@@ -2464,7 +2584,7 @@ function OrbitLatchScene({
               runtime,
               runtime.playerX,
               runtime.playerY,
-              getPaletteColor(palette.planets, nextPlanet.colorIndex),
+              getPaletteColor(runtime.planetRunColors, nextPlanet.colorIndex),
               1.1
             );
             maybeVibrate(10);
@@ -2630,7 +2750,7 @@ function OrbitLatchScene({
         if (impactedCore || (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS))) {
           failRun(
             'Satellite impacted a planet core.',
-            nearest ? getPaletteColor(palette.planets, nearest.colorIndex) : DANGER,
+            nearest ? getPaletteColor(runtime.planetRunColors, nearest.colorIndex) : DANGER,
             1.5
           );
         } else if (runtime.driftTimer > driftFail) {
@@ -3065,7 +3185,7 @@ function OrbitLatchScene({
         planetRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(getPaletteColor(palette.planets, planet.colorIndex))
+          .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
           .lerp(WHITE, clamp(planet.glow * 0.56 + pulsing * 0.18 + cuePulse * 0.3, 0, 0.9))
           .multiplyScalar(1.96);
         planetRef.current.setColorAt(i, colorScratch);
@@ -3078,7 +3198,7 @@ function OrbitLatchScene({
           planetGlowRef.current.setMatrixAt(i, dummy.matrix);
 
           colorScratch
-            .copy(getPaletteColor(palette.planets, planet.colorIndex))
+            .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
             .lerp(WHITE, clamp(0.42 + pulsing * 0.34 + planet.glow * 0.64 + cuePulse * 0.5, 0, 1))
             .multiplyScalar(1.92);
           planetGlowRef.current.setColorAt(i, colorScratch);
@@ -3092,7 +3212,7 @@ function OrbitLatchScene({
         ringRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(getPaletteColor(palette.planets, planet.colorIndex))
+          .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
           .lerp(palette.ringCue, clamp(cuePulse * 0.86 + runtime.latchFlash * 0.22, 0, 0.9))
           .lerp(
             WHITE,
