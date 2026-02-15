@@ -1380,6 +1380,24 @@ function OrbitLatchScene({
         latchCuePulseSecondaryMaterialRef.current.color.copy(palette.trailGlow);
       }
       trailMaterial.color.copy(palette.trail);
+      if (impactOverlayRef.current) {
+        const c0 = `#${palette.trailGlow.getHexString()}`;
+        const c1 = `#${palette.ringCue.getHexString()}`;
+        const c2 = `#${palette.hemiGround.getHexString()}`;
+        impactOverlayRef.current.style.background = `radial-gradient(circle at center, ${c0}88, ${c1}66, ${c2}00)`;
+      }
+    }
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.far = runtime.mode === 'scattered' ? 132 : 144;
+    }
+    if (fillLightARef.current) {
+      fillLightARef.current.intensity = lerp(1.0, 1.5, clamp(runtime.coreGlow * 0.7, 0, 1));
+    }
+    if (fillLightBRef.current) {
+      fillLightBRef.current.intensity = lerp(0.85, 1.2, clamp(runtime.latchFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1));
+    }
+    if (fillLightCRef.current) {
+      fillLightCRef.current.intensity = lerp(0.72, 1.04, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
     }
 
     const tap =
@@ -1859,24 +1877,24 @@ function OrbitLatchScene({
 
     const shakeAmp = runtime.shake * 0.09;
     const shakeTime = runtime.elapsed * 21;
-    const scatteredCamLift = runtime.mode === 'scattered' ? 0.72 : 0;
-    const scatteredCamPull = runtime.mode === 'scattered' ? 1.95 : 1.48;
+    const scatteredCamLift = runtime.mode === 'scattered' ? 0.98 : 0.24;
+    const scatteredCamPull = runtime.mode === 'scattered' ? 2.35 : 1.96;
     const focusY = latchCuePlanet
-      ? lerp(runtime.playerY, latchCuePlanet.y, runtime.latched ? 0.44 : 0.54)
-      : runtime.playerY + (runtime.latched ? 1.7 : 1.25);
+      ? lerp(runtime.playerY, latchCuePlanet.y, runtime.latched ? 0.52 : 0.62)
+      : runtime.playerY + (runtime.latched ? 1.95 : 1.42);
     const focusX = latchCuePlanet
-      ? lerp(runtime.playerX, latchCuePlanet.x, runtime.latched ? 0.22 : 0.36)
+      ? lerp(runtime.playerX, latchCuePlanet.x, runtime.latched ? 0.25 : 0.4)
       : runtime.playerX;
     camTarget.set(
       focusX * 0.27 + shakeNoiseSigned(shakeTime, 2.9) * shakeAmp,
-      6.55 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
-      -focusY + 5.36 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
+      6.95 + scatteredCamLift + shakeNoiseSigned(shakeTime, 7.5) * shakeAmp * 0.32,
+      -focusY + 6.15 + scatteredCamPull + shakeNoiseSigned(shakeTime, 15.1) * shakeAmp
     );
     camera.position.lerp(camTarget, 1 - Math.exp(-8 * step.renderDt));
     lookTarget.set(
       focusX * 0.18,
       0,
-      -focusY - (runtime.mode === 'scattered' ? 5.95 : 5.32)
+      -focusY - (runtime.mode === 'scattered' ? 6.55 : 6.05)
     );
     camera.lookAt(lookTarget);
     if (camera instanceof THREE.PerspectiveCamera) {
@@ -2095,9 +2113,16 @@ function OrbitLatchScene({
 
     if (bloomRef.current) {
       bloomRef.current.intensity = lerp(
-        0.52,
-        1.24,
+        palette.bloomBase,
+        palette.bloomMax,
         clamp(runtime.coreGlow * 0.7 + runtime.latchFlash * 0.42 + (runtime.mode === 'scattered' ? 0.12 : 0), 0, 1)
+      );
+    }
+    if (vignetteRef.current) {
+      vignetteRef.current.uniforms.darkness.value = lerp(
+        palette.vignetteDarkness,
+        palette.vignetteDarkness + 0.22,
+        clamp(runtime.impactFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1)
       );
     }
     if (impactOverlayRef.current) {
@@ -2110,24 +2135,30 @@ function OrbitLatchScene({
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 7.2, 6.2]} fov={52} near={0.1} far={240} />
-      <color attach="background" args={['#1a2747']} />
-      <fog attach="fog" args={['#24365b', 24, 172]} />
+      <color attach="background" args={['#121a33']} />
+      <fog attach="fog" args={['#1d2c4a', 18, 142]} />
 
-      <ambientLight intensity={0.9} color="#edf4ff" />
-      <directionalLight position={[6, 9, 3]} intensity={1.02} color="#e9f7ff" />
-      <hemisphereLight args={['#b7e6ff', '#33467f', 0.66]} />
-      <pointLight position={[0, 4.1, 2]} intensity={1.16} color="#6cf2ff" />
-      <pointLight position={[2.2, 2.8, -3.2]} intensity={0.92} color="#ff8ce5" />
-      <pointLight position={[-2.6, 2.6, -1.6]} intensity={0.76} color="#ffd27d" />
+      <ambientLight ref={ambientLightRef} intensity={0.94} color="#ecf5ff" />
+      <directionalLight
+        ref={directionalLightRef}
+        position={[6, 9, 3]}
+        intensity={1.08}
+        color="#f7fbff"
+      />
+      <hemisphereLight ref={hemiLightRef} args={['#95ddff', '#1a294a', 0.72]} />
+      <pointLight ref={fillLightARef} position={[0, 4.1, 2]} intensity={1.2} color="#65efff" />
+      <pointLight ref={fillLightBRef} position={[2.2, 2.8, -3.2]} intensity={0.98} color="#ff8ce5" />
+      <pointLight ref={fillLightCRef} position={[-2.6, 2.6, -1.6]} intensity={0.82} color="#ffd27d" />
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
         <meshStandardMaterial
+          ref={planetMaterialRef}
           vertexColors
-          roughness={0.26}
-          metalness={0.04}
-          emissive="#253a63"
-          emissiveIntensity={1.18}
+          roughness={0.22}
+          metalness={0.08}
+          emissive="#23355c"
+          emissiveIntensity={1.02}
           toneMapped={false}
         />
       </instancedMesh>
@@ -2140,9 +2171,10 @@ function OrbitLatchScene({
       >
         <icosahedronGeometry args={[1, 1]} />
         <meshBasicMaterial
+          ref={planetGlowMaterialRef}
           vertexColors
           transparent
-          opacity={0.52}
+          opacity={0.62}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -2152,9 +2184,10 @@ function OrbitLatchScene({
       <instancedMesh ref={ringRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <torusGeometry args={[1, 0.05, 14, 96]} />
         <meshBasicMaterial
+          ref={ringMaterialRef}
           vertexColors
           transparent
-          opacity={0.98}
+          opacity={0.94}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
@@ -2165,9 +2198,10 @@ function OrbitLatchScene({
       <instancedMesh ref={starRef} args={[undefined, undefined, STAR_POOL]} frustumCulled={false}>
         <octahedronGeometry args={[1, 0]} />
         <meshBasicMaterial
+          ref={starMaterialRef}
           vertexColors
           transparent
-          opacity={0.98}
+          opacity={0.95}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
           toneMapped={false}
@@ -2177,11 +2211,12 @@ function OrbitLatchScene({
       <instancedMesh ref={hazardRef} args={[undefined, undefined, HAZARD_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
+          ref={hazardMaterialRef}
           vertexColors
-          roughness={0.16}
-          metalness={0.42}
+          roughness={0.22}
+          metalness={0.38}
           emissive="#5b1a33"
-          emissiveIntensity={0.52}
+          emissiveIntensity={0.42}
           toneMapped={false}
         />
       </instancedMesh>
@@ -2191,6 +2226,7 @@ function OrbitLatchScene({
       <mesh ref={satRef} position={[0, 0.03, 0]}>
         <sphereGeometry args={[PLAYER_RADIUS, 18, 18]} />
         <meshStandardMaterial
+          ref={satMaterialRef}
           color="#f8fdff"
           emissive="#34d9ff"
           emissiveIntensity={0.72}
@@ -2202,6 +2238,7 @@ function OrbitLatchScene({
       <mesh ref={latchSparkRef} visible={false} position={[0, 0.04, 0]}>
         <sphereGeometry args={[1, 12, 12]} />
         <meshBasicMaterial
+          ref={latchSparkMaterialRef}
           color="#ffffff"
           transparent
           opacity={0.9}
@@ -2211,9 +2248,43 @@ function OrbitLatchScene({
         />
       </mesh>
 
+      <mesh ref={latchCuePulseRef} visible={false} position={[0, 0.044, 0]} renderOrder={4}>
+        <ringGeometry args={[0.78, 0.9, 64]} />
+        <meshBasicMaterial
+          ref={latchCuePulseMaterialRef}
+          color="#9fffff"
+          transparent
+          opacity={0.65}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      <mesh
+        ref={latchCuePulseRefSecondary}
+        visible={false}
+        position={[0, 0.0435, 0]}
+        renderOrder={4}
+      >
+        <ringGeometry args={[0.52, 0.62, 64]} />
+        <meshBasicMaterial
+          ref={latchCuePulseSecondaryMaterialRef}
+          color="#ff95d8"
+          transparent
+          opacity={0.3}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
       <instancedMesh ref={shardRef} args={[undefined, undefined, SHARD_POOL]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
+          ref={shardMaterialRef}
           vertexColors
           transparent
           opacity={0.88}
@@ -2225,8 +2296,8 @@ function OrbitLatchScene({
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
         <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
-        <Vignette eskil={false} offset={0.2} darkness={0.26} />
-        <Noise premultiply opacity={0.024} />
+        <Vignette ref={vignetteRef} eskil={false} offset={0.16} darkness={0.34} />
+        <Noise premultiply opacity={0.022} />
       </EffectComposer>
 
     </>
