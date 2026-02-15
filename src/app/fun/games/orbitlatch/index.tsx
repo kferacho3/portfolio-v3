@@ -375,7 +375,10 @@ const PLANET_SOLID_COLOR_PALETTES: readonly PlanetColorPreset[] = [
 ];
 
 const hslToHex = (h: number, s: number, l: number) =>
-  `#${new THREE.Color().setHSL(mod(h, 1), clamp(s, 0, 1), clamp(l, 0, 1)).getHexString()}`;
+  `#${new THREE.Color()
+    .setHSL(mod(h, 1), clamp(s, 0, 1), clamp(l, 0, 1))
+    .convertLinearToSRGB()
+    .getHexString()}`;
 
 const createGeneratedMultiPalettes = (count: number): PlanetColorPreset[] => {
   const generated: PlanetColorPreset[] = [];
@@ -799,45 +802,24 @@ const buildPlanetRunPalette = () => {
   const presetColors = preset.colors.map((hex) => new THREE.Color(hex));
 
   if (preset.solid) {
-    const solidSource = presetColors[0] ?? WHITE;
-    const mixedSolid = solidSource.clone();
-    const hsl = { h: 0, s: 0, l: 0 };
-    mixedSolid.getHSL(hsl);
-    mixedSolid.setHSL(
-      hsl.h,
-      clamp(hsl.s * 1.2, 0.58, 1),
-      clamp(hsl.l, 0.36, 0.66)
-    );
+    const solidSource = presetColors[0]?.clone() ?? WHITE.clone();
+    const mixedSolid = solidSource
+      .lerp(WHITE, 0.14 + Math.random() * 0.08)
+      .multiplyScalar(1.08);
     return {
       id: preset.id,
       colors: [mixedSolid],
     };
   }
 
-  const targetCount = clamp(
-    presetColors.length + (Math.random() < 0.64 ? 1 : 0),
-    3,
-    6
-  );
-  const runHueShift = (Math.random() * 2 - 1) * 0.028;
-  const runSatMul = 1.16 + Math.random() * 0.16;
-  const runLightMul = 0.92 + Math.random() * 0.14;
+  const targetCount = clamp(presetColors.length + (Math.random() < 0.5 ? 1 : 0), 3, 6);
+  const startOffset = Math.floor(Math.random() * Math.max(1, presetColors.length));
   const mixed: THREE.Color[] = [];
   for (let i = 0; i < targetCount; i += 1) {
-    const presetColor = presetColors[i % presetColors.length] ?? presetColors[0] ?? WHITE;
-    const color = tintColor(
-      presetColor.clone(),
-      runHueShift + ((i % 6) - 2.5) * 0.014,
-      runSatMul * (0.95 + (i % 3) * 0.04),
-      runLightMul * (0.94 + (i % 4) * 0.04)
-    );
-    const hsl = { h: 0, s: 0, l: 0 };
-    color.getHSL(hsl);
-    color.setHSL(
-      hsl.h,
-      clamp(hsl.s * 1.18, 0.7, 1),
-      clamp(hsl.l, 0.4, 0.74)
-    );
+    const presetColor =
+      presetColors[(startOffset + i) % presetColors.length] ?? presetColors[0] ?? WHITE;
+    const color = presetColor.clone();
+    color.lerp(WHITE, 0.08 + (i % 3) * 0.05 + Math.random() * 0.03).multiplyScalar(1.04);
     mixed.push(color);
   }
   return {
@@ -2410,11 +2392,11 @@ function OrbitLatchScene({
       if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
       if (planetMaterialRef.current) {
-        planetMaterialRef.current.emissive.copy(palette.ringCue).multiplyScalar(0.04);
-        planetMaterialRef.current.emissiveIntensity = 0.16;
-        planetMaterialRef.current.roughness = 0.38;
+        planetMaterialRef.current.emissive.copy(WHITE).multiplyScalar(0.14);
+        planetMaterialRef.current.emissiveIntensity = 0.56;
+        planetMaterialRef.current.roughness = 0.28;
         planetMaterialRef.current.metalness = 0.02;
-        updateStylizedRimColor(planetMaterialRef.current, palette.ringCue, 2.2, 0.16, 0.1);
+        updateStylizedRimColor(planetMaterialRef.current, palette.ringCue, 2.1, 0.14, 0.08);
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
@@ -3264,8 +3246,8 @@ function OrbitLatchScene({
         const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
         colorScratch
           .copy(planetBaseColor)
-          .lerp(WHITE, clamp(0.04 + cuePulse * 0.08, 0.02, 0.14))
-          .multiplyScalar(1.02 + planet.glow * 0.2 + cuePulse * 0.12);
+          .lerp(WHITE, clamp(0.1 + cuePulse * 0.12, 0.08, 0.2))
+          .multiplyScalar(1.34 + planet.glow * 0.3 + cuePulse * 0.16);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
@@ -3277,8 +3259,8 @@ function OrbitLatchScene({
 
           colorScratch
             .copy(planetBaseColor)
-            .lerp(palette.ringCue, clamp(0.04 + cuePulse * 0.16 + planet.glow * 0.08, 0.04, 0.22))
-            .multiplyScalar(0.94 + planet.glow * 0.34 + cuePulse * 0.16);
+            .lerp(palette.ringCue, clamp(0.08 + cuePulse * 0.2 + planet.glow * 0.1, 0.08, 0.26))
+            .multiplyScalar(1.08 + planet.glow * 0.42 + cuePulse * 0.2);
           planetGlowRef.current.setColorAt(i, colorScratch);
         }
 
