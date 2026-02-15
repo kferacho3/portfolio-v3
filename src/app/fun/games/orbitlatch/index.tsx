@@ -838,6 +838,30 @@ const getRuntimePalette = (runtime: Pick<Runtime, 'activePalette' | 'paletteInde
 const getPaletteColor = (colors: readonly THREE.Color[], index: number) =>
   colors[mod(index, colors.length)] ?? WHITE;
 
+const normalizePlanetColor = (
+  source: THREE.Color,
+  target: THREE.Color,
+  options?: {
+    minS?: number;
+    minL?: number;
+    satBoost?: number;
+    lightBoost?: number;
+  }
+) => {
+  const minS = options?.minS ?? 0.74;
+  const minL = options?.minL ?? 0.54;
+  const satBoost = options?.satBoost ?? 1.08;
+  const lightBoost = options?.lightBoost ?? 1.04;
+  const hsl = { h: 0, s: 0, l: 0 };
+  source.getHSL(hsl);
+  target.setHSL(
+    hsl.h,
+    clamp(Math.max(hsl.s * satBoost, minS), 0, 1),
+    clamp(Math.max(hsl.l * lightBoost, minL), 0, 0.82)
+  );
+  return target;
+};
+
 type OrbitStylizedUniforms = {
   uOrbitRimColor: { value: THREE.Color };
   uOrbitRimPower: { value: number };
@@ -1836,15 +1860,15 @@ function OrbitLatchOverlay() {
   const requestStart = useOrbitStore((state) => state.requestStart);
   const timerText = `${Math.max(0, timeRemaining).toFixed(1)}s`;
   const multiplierMeter = clamp((multiplier - 1) / 1.8, 0, 1);
-  const statusPanelBackground = `linear-gradient(150deg, ${hudPrimary}2e, ${hudSecondary}18 45%, ${hudAccent}24)`;
-  const scorePanelBackground = `linear-gradient(135deg, ${hudSecondary}30, ${hudPrimary}16 45%, ${hudAccent}28)`;
-  const overlayBackground = `linear-gradient(145deg, ${hudPrimary}22, rgba(8,10,20,0.84) 42%, ${hudSecondary}2f)`;
+  const statusPanelBackground = 'rgba(10, 14, 28, 0.94)';
+  const scorePanelBackground = 'rgba(10, 14, 28, 0.94)';
+  const overlayBackground = 'rgba(8, 12, 24, 0.95)';
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
       <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
         <div
-          className="rounded-2xl border px-4 py-3 backdrop-blur-sm"
+          className="rounded-2xl border px-4 py-3"
           style={{
             borderColor: `${hudPrimary}80`,
             background: statusPanelBackground,
@@ -1868,7 +1892,7 @@ function OrbitLatchOverlay() {
         </div>
 
         <div
-          className="min-w-[230px] rounded-2xl border px-4 py-3 text-right backdrop-blur-sm"
+          className="min-w-[230px] rounded-2xl border px-4 py-3 text-right"
           style={{
             borderColor: `${hudSecondary}8a`,
             background: scorePanelBackground,
@@ -1903,10 +1927,10 @@ function OrbitLatchOverlay() {
 
       {status === 'PLAYING' && (
         <div
-          className="absolute left-4 top-[108px] w-[min(340px,calc(100%-2rem))] rounded-xl border px-3 py-2 text-xs backdrop-blur-sm"
+          className="absolute left-4 top-[108px] w-[min(340px,calc(100%-2rem))] rounded-xl border px-3 py-2 text-xs"
           style={{
             borderColor: `${hudAccent}7a`,
-            background: `linear-gradient(155deg, rgba(5,8,20,0.82), ${hudAccent}1e, rgba(5,8,20,0.64))`,
+            background: 'rgba(6, 10, 20, 0.9)',
           }}
         >
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
@@ -1952,7 +1976,7 @@ function OrbitLatchOverlay() {
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
           <div
-            className="rounded-xl border px-6 py-5 text-center backdrop-blur-md"
+            className="rounded-xl border px-6 py-5 text-center"
             style={{
               borderColor: `${hudPrimary}88`,
               background: overlayBackground,
@@ -2014,7 +2038,7 @@ function OrbitLatchOverlay() {
                 className="rounded-lg border px-5 py-2 text-sm font-bold tracking-[0.12em] text-cyan-50 transition hover:brightness-110"
                 style={{
                   borderColor: `${hudPrimary}cc`,
-                  background: `linear-gradient(90deg, ${hudPrimary}66, ${hudSecondary}55, ${hudAccent}5d)`,
+                  background: `${hudPrimary}66`,
                   boxShadow: `0 0 26px ${hudPrimary}5f`,
                 }}
               >
@@ -2029,10 +2053,10 @@ function OrbitLatchOverlay() {
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
           <div
-            className="rounded-xl border px-6 py-5 text-center backdrop-blur-md"
+            className="rounded-xl border px-6 py-5 text-center"
             style={{
               borderColor: `${hudDanger}94`,
-              background: `linear-gradient(140deg, rgba(6,8,16,0.86), ${hudDanger}36 45%, ${hudSecondary}28)`,
+              background: 'rgba(8, 12, 24, 0.95)',
               boxShadow: `0 18px 46px ${hudDanger}35`,
             }}
           >
@@ -2059,7 +2083,7 @@ function OrbitLatchOverlay() {
                 className="rounded-md border px-4 py-2 text-xs font-bold tracking-[0.12em] text-cyan-100 transition hover:brightness-110"
                 style={{
                   borderColor: `${hudPrimary}cc`,
-                  background: `linear-gradient(90deg, ${hudPrimary}3f, ${hudSecondary}31)`,
+                  background: `${hudPrimary}3f`,
                 }}
               >
                 PLAY AGAIN
@@ -2103,7 +2127,7 @@ function OrbitLatchScene({
   const fillLightARef = useRef<THREE.PointLight>(null);
   const fillLightBRef = useRef<THREE.PointLight>(null);
   const fillLightCRef = useRef<THREE.PointLight>(null);
-  const planetMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const planetMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const planetGlowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const starMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -2313,13 +2337,6 @@ function OrbitLatchScene({
   );
 
   useEffect(() => {
-    if (planetMaterialRef.current) {
-      applyStylizedStandardShader(planetMaterialRef.current, {
-        rimPower: 2.25,
-        rimStrength: 0.52,
-        sheenStrength: 0.2,
-      });
-    }
     if (hazardMaterialRef.current) {
       applyStylizedStandardShader(hazardMaterialRef.current, {
         rimPower: 2.45,
@@ -2421,11 +2438,10 @@ function OrbitLatchScene({
       if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
       if (planetMaterialRef.current) {
-        planetMaterialRef.current.emissive.copy(WHITE).multiplyScalar(0.14);
-        planetMaterialRef.current.emissiveIntensity = 0.56;
-        planetMaterialRef.current.roughness = 0.28;
-        planetMaterialRef.current.metalness = 0.02;
-        updateStylizedRimColor(planetMaterialRef.current, palette.ringCue, 2.1, 0.14, 0.08);
+        planetMaterialRef.current.color.copy(WHITE);
+        planetMaterialRef.current.toneMapped = false;
+        planetMaterialRef.current.opacity = 1;
+        planetMaterialRef.current.needsUpdate = true;
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
@@ -3273,10 +3289,14 @@ function OrbitLatchScene({
         planetRef.current.setMatrixAt(i, dummy.matrix);
 
         const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
-        colorScratch
-          .copy(planetBaseColor)
-          .lerp(WHITE, clamp(0.1 + cuePulse * 0.12, 0.08, 0.2))
-          .multiplyScalar(1.34 + planet.glow * 0.3 + cuePulse * 0.16);
+        normalizePlanetColor(planetBaseColor, colorScratch, {
+          minS: 0.78,
+          minL: 0.56,
+          satBoost: 1.14,
+          lightBoost: 1.08,
+        })
+          .lerp(WHITE, clamp(0.08 + cuePulse * 0.1, 0.06, 0.16))
+          .multiplyScalar(1.2 + planet.glow * 0.24 + cuePulse * 0.14);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
@@ -3287,7 +3307,12 @@ function OrbitLatchScene({
           planetGlowRef.current.setMatrixAt(i, dummy.matrix);
 
           colorScratch
-            .copy(planetBaseColor)
+            .copy(normalizePlanetColor(planetBaseColor, colorScratch, {
+              minS: 0.74,
+              minL: 0.54,
+              satBoost: 1.08,
+              lightBoost: 1.05,
+            }))
             .lerp(palette.ringCue, clamp(0.08 + cuePulse * 0.2 + planet.glow * 0.1, 0.08, 0.26))
             .multiplyScalar(1.08 + planet.glow * 0.42 + cuePulse * 0.2);
           planetGlowRef.current.setColorAt(i, colorScratch);
@@ -3301,7 +3326,18 @@ function OrbitLatchScene({
         ringRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(getPaletteColor(runtime.planetRunColors, planet.colorIndex))
+          .copy(
+            normalizePlanetColor(
+              getPaletteColor(runtime.planetRunColors, planet.colorIndex),
+              colorScratch,
+              {
+                minS: 0.72,
+                minL: 0.5,
+                satBoost: 1.06,
+                lightBoost: 1.03,
+              }
+            )
+          )
           .lerp(palette.ringCue, clamp(cuePulse * 0.72 + runtime.latchFlash * 0.18, 0, 0.82))
           .lerp(
             WHITE,
@@ -3575,15 +3611,11 @@ function OrbitLatchScene({
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
-        <meshStandardMaterial
+        <meshBasicMaterial
           ref={planetMaterialRef}
           color="#ffffff"
           vertexColors
-          roughness={0.18}
-          metalness={0.12}
-          emissive="#23355c"
-          emissiveIntensity={1.62}
-          toneMapped
+          toneMapped={false}
         />
       </instancedMesh>
 
