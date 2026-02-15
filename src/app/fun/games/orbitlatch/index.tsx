@@ -433,7 +433,7 @@ const PLANET_COLOR_PRESETS: readonly PlanetColorPreset[] = [
   ...PLANET_MULTI_COLOR_BANK,
   ...PLANET_SOLID_COLOR_BANK,
 ];
-const PLANET_SOLID_RUN_CHANCE = 0.22;
+const PLANET_SOLID_RUN_CHANCE = 0;
 
 const ORBIT_COLOR_GRADES: readonly OrbitColorGrade[] = [
   {
@@ -806,9 +806,6 @@ const buildPlanetRunPalette = (cubePalette: CubePalette) => {
   const seedHex = [
     ...laneColors,
     cubePalette.cubeColor,
-    cubePalette.fillLightA,
-    cubePalette.fillLightB,
-    cubePalette.playerColor,
   ].map((hex) => hex.toLowerCase());
   const uniqueHex = Array.from(new Set(seedHex));
 
@@ -2134,6 +2131,7 @@ function OrbitLatchScene({
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
+  const hslScratch = useMemo(() => ({ h: 0, s: 0, l: 0 }), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
   const lookTarget = useMemo(() => new THREE.Vector3(), []);
   const trailWorld = useMemo(() => new THREE.Vector3(), []);
@@ -2401,13 +2399,13 @@ function OrbitLatchScene({
       scene.background = palette.background.clone();
       if (scene.fog instanceof THREE.Fog) {
         scene.fog.color.copy(palette.fog);
-        scene.fog.near = 36;
-        scene.fog.far = runtime.mode === 'scattered' ? 205 : 224;
+        scene.fog.near = 52;
+        scene.fog.far = runtime.mode === 'scattered' ? 248 : 270;
       } else {
         scene.fog = new THREE.Fog(
           palette.fog.clone(),
-          36,
-          runtime.mode === 'scattered' ? 205 : 224
+          52,
+          runtime.mode === 'scattered' ? 248 : 270
         );
       }
 
@@ -2494,7 +2492,7 @@ function OrbitLatchScene({
       }
     }
     if (scene.fog instanceof THREE.Fog) {
-      scene.fog.far = runtime.mode === 'scattered' ? 205 : 224;
+      scene.fog.far = runtime.mode === 'scattered' ? 248 : 270;
     }
     if (fillLightARef.current) {
       fillLightARef.current.intensity = lerp(0.82, 1.2, clamp(runtime.coreGlow * 0.7, 0, 1));
@@ -3260,7 +3258,11 @@ function OrbitLatchScene({
           planet.slot === latchCueSlot ? runtime.cuePulseT : 0;
         const isCuePlanet = planet.slot === latchCueSlot;
 
-        const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
+        let planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
+        planetBaseColor.getHSL(hslScratch);
+        if (hslScratch.s < 0.22 || hslScratch.l > 0.9) {
+          planetBaseColor = getPaletteColor(palette.planets, planet.colorIndex);
+        }
         colorScratch
           .copy(planetBaseColor)
           .multiplyScalar(0.96 + planet.glow * 0.18 + cuePulse * 0.12);
@@ -3276,12 +3278,12 @@ function OrbitLatchScene({
         const planetGlowMesh = planetGlowRefs.current[i];
         if (planetGlowMesh) {
           planetGlowMesh.position.set(world.x, 0.01, world.z);
-          planetGlowMesh.scale.setScalar(planet.radius * (1.1 + cuePulse * 0.21 + planet.glow * 0.11));
+          planetGlowMesh.scale.setScalar(planet.radius * (1.03 + cuePulse * 0.12 + planet.glow * 0.07));
 
           colorScratch
             .copy(planetBaseColor)
-            .lerp(palette.ringCue, clamp(0.14 + cuePulse * 0.24 + planet.glow * 0.12, 0.14, 0.38))
-            .multiplyScalar(0.92 + planet.glow * 0.26 + cuePulse * 0.16);
+            .lerp(palette.ringCue, clamp(0.1 + cuePulse * 0.18 + planet.glow * 0.08, 0.1, 0.28))
+            .multiplyScalar(0.54 + planet.glow * 0.14 + cuePulse * 0.08);
           const glowMat = planetGlowMesh.material as THREE.MeshBasicMaterial;
           glowMat.color.copy(colorScratch);
         }
@@ -3464,8 +3466,8 @@ function OrbitLatchScene({
 
     if (bloomRef.current) {
       bloomRef.current.intensity = lerp(
-        palette.bloomBase * 0.36,
-        palette.bloomMax * 0.42,
+        palette.bloomBase * 0.12,
+        palette.bloomMax * 0.18,
         clamp(runtime.coreGlow * 0.34 + runtime.latchFlash * 0.16 + (runtime.mode === 'scattered' ? 0.03 : 0), 0, 1)
       );
     }
@@ -3481,7 +3483,7 @@ function OrbitLatchScene({
     <>
       <PerspectiveCamera makeDefault position={[0, 6.2, 4.8]} fov={59} near={0.1} far={220} />
       <color attach="background" args={['#38547a']} />
-      <fog attach="fog" args={['#5c7ea5', 36, 224]} />
+      <fog attach="fog" args={['#5c7ea5', 52, 270]} />
 
       <mesh frustumCulled={false} renderOrder={-10}>
         <sphereGeometry args={[130, 48, 48]} />
@@ -3588,7 +3590,7 @@ function OrbitLatchScene({
             <meshBasicMaterial
               color="#ffffff"
               transparent
-              opacity={0.76}
+              opacity={0.22}
               blending={THREE.AdditiveBlending}
               depthWrite={false}
               toneMapped={false}
@@ -3754,9 +3756,9 @@ function OrbitLatchScene({
       </instancedMesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom ref={bloomRef} intensity={0.12} luminanceThreshold={0.72} luminanceSmoothing={0.14} />
+        <Bloom ref={bloomRef} intensity={0.04} luminanceThreshold={0.9} luminanceSmoothing={0.08} />
         <Vignette ref={vignetteRef} eskil={false} offset={0.16} darkness={0.26} />
-        <Noise premultiply opacity={0.004} />
+        <Noise premultiply opacity={0.002} />
       </EffectComposer>
 
     </>
@@ -3775,7 +3777,7 @@ const OrbitLatch: React.FC<{ soundsOn?: boolean }> = () => {
         onContextMenu={(event) => event.preventDefault()}
         onCreated={({ gl }) => {
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 0.9;
+          gl.toneMappingExposure = 0.74;
           gl.outputColorSpace = THREE.SRGBColorSpace;
         }}
       >
