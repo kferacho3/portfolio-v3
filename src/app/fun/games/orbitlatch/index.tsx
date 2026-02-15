@@ -1431,19 +1431,22 @@ function OrbitLatchScene({
       fillLightCRef.current.intensity = lerp(0.72, 1.04, clamp(runtime.impactFlash * 0.7 + runtime.coreGlow * 0.2, 0, 1));
     }
 
+    let startedFromOverlay = false;
     if (store.startNonce !== runtime.startNonceSeen && store.status !== 'PLAYING') {
       runtime.startNonceSeen = store.startNonce;
       resetRuntime(runtime, store.mode);
       useOrbitStore.getState().startRun(store.mode);
       status = 'PLAYING';
+      startedFromOverlay = true;
     }
 
-    const tap =
+    const rawTap =
       input.pointerJustDown ||
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('spacebar') ||
       input.justPressed.has('enter');
+    const tap = rawTap && !startedFromOverlay;
 
     if (tap) {
       runtime.lastTapAt = runtime.elapsed;
@@ -1465,28 +1468,16 @@ function OrbitLatchScene({
 
           runtime.releaseCount += 1;
           ensureForwardTargets(runtime);
-          const nearestAhead = findNearestAheadPlanet(runtime, runtime.playerX, runtime.playerY, planet.slot);
-          if (nearestAhead) {
-            const ax = nearestAhead.x - runtime.playerX;
-            const ay = nearestAhead.y - runtime.playerY;
-            const len = Math.hypot(ax, ay) || 1;
-            const firstRelease = runtime.releaseCount === 1;
-            runtime.velX += (ax / len) * (firstRelease ? 0.22 : 0.12);
-            runtime.velY += Math.max(0, ay / len) * (firstRelease ? 0.28 : 0.16);
-          }
           if (runtime.releaseCount === 1) {
             runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.78 : 0.9);
             runtime.velX *= 0.97;
             runtime.velX = clamp(runtime.velX, -2.4, 2.4);
           }
           runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.46 : 0.38);
-
-          if (runtime.releaseCount === 1) {
-            ensureImmediateLatchOpportunity(runtime, planet);
-            runtime.lastAssistAt = runtime.elapsed;
-          }
           runtime.latched = false;
           runtime.driftTimer = runtime.releaseCount === 1 ? -0.18 : 0;
+          runtime.cuePulseT = Math.max(runtime.cuePulseT, 0.48);
+          runtime.cuePulseCooldown = 0.1;
           runtime.coreGlow = Math.min(1.2, runtime.coreGlow + 0.15);
           runtime.shake = Math.min(1.2, runtime.shake + 0.2);
           useOrbitStore.getState().onTapFx();
@@ -1515,96 +1506,82 @@ function OrbitLatchScene({
           }
         }
       } else {
-        let bestPlanet: Planet | null = null;
-        let bestDelta = Infinity;
-        let fallbackPlanet: Planet | null = null;
-        let fallbackDelta = Infinity;
         const dNorm = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
         const speed = Math.hypot(runtime.velX, runtime.velY);
-        const speedAssist = clamp(speed * 0.06, 0, runtime.mode === 'scattered' ? 0.14 : 0.11);
-        const firstLatchAssist = runtime.latches === 0 ? 0.04 : 0;
-        const modeAssist = runtime.mode === 'scattered' ? 0.02 : 0;
+        const speedAssist = clamp(speed * 0.05, 0, runtime.mode === 'scattered' ? 0.1 : 0.08);
+        const modeAssist = runtime.mode === 'scattered' ? 0.02 : 0.01;
         const lookAhead = clamp(
-          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.45 + firstLatchAssist * 0.22 + modeAssist * 0.25,
+          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.38 + modeAssist * 0.22,
           RELATCH_LOOKAHEAD_BASE,
-          runtime.mode === 'scattered' ? 0.29 : 0.24
+          runtime.mode === 'scattered' ? 0.26 : 0.22
         );
         const predictX = runtime.playerX + runtime.velX * lookAhead;
         const predictY = runtime.playerY + runtime.velY * lookAhead;
         const latchDistance = clamp(
-          LATCH_BASE_DISTANCE - 0.03 + speedAssist - dNorm * 0.07 + firstLatchAssist + modeAssist,
-          0.18,
-          runtime.mode === 'scattered' ? 0.48 : 0.42
+          LATCH_BASE_DISTANCE - 0.08 + speedAssist - dNorm * 0.06 + modeAssist,
+          0.16,
+          runtime.mode === 'scattered' ? 0.34 : 0.3
         );
-
-        for (const planet of runtime.planets) {
-          const dx = runtime.playerX - planet.x;
-          const dy = runtime.playerY - planet.y;
+        const nextPlanet = findNearestAheadPlanet(
+          runtime,
+          runtime.playerX,
+          runtime.playerY,
+          undefined
+        );
+        if (nextPlanet) {
+          const dx = runtime.playerX - nextPlanet.x;
+          const dy = runtime.playerY - nextPlanet.y;
           const dist = Math.hypot(dx, dy);
-          const pdx = predictX - planet.x;
-          const pdy = predictY - planet.y;
+          const pdx = predictX - nextPlanet.x;
+          const pdy = predictY - nextPlanet.y;
           const predictDist = Math.hypot(pdx, pdy);
-          if (
-            dist <= planet.radius + PLAYER_RADIUS * 0.9 &&
-            predictDist <= planet.radius + PLAYER_RADIUS * 0.9
-          ) {
-            continue;
-          }
           const deltaRing = Math.min(
-            Math.abs(dist - planet.orbitRadius),
-            Math.abs(predictDist - planet.orbitRadius)
+            Math.abs(dist - nextPlanet.orbitRadius),
+            Math.abs(predictDist - nextPlanet.orbitRadius)
           );
-          if (deltaRing < fallbackDelta) {
-            fallbackDelta = deltaRing;
-            fallbackPlanet = planet;
-          }
-          if (deltaRing <= latchDistance && deltaRing < bestDelta) {
-            bestDelta = deltaRing;
-            bestPlanet = planet;
-          }
-        }
-        if (!bestPlanet && fallbackPlanet) {
-          const fallbackSlack = runtime.latches === 0 ? 0.09 : 0.05;
-          if (fallbackDelta <= latchDistance + fallbackSlack) {
-            bestPlanet = fallbackPlanet;
-          }
-        }
 
-        if (bestPlanet) {
-          runtime.latched = true;
-          runtime.latchedPlanet = bestPlanet.slot;
-          runtime.orbitRadius = bestPlanet.orbitRadius;
-          runtime.orbitAngularVel = bestPlanet.orbitAngularVel;
-          runtime.orbitAngle = Math.atan2(
-            runtime.playerY - bestPlanet.y,
-            runtime.playerX - bestPlanet.x
-          );
-          runtime.playerX = bestPlanet.x + Math.cos(runtime.orbitAngle) * runtime.orbitRadius;
-          runtime.playerY = bestPlanet.y + Math.sin(runtime.orbitAngle) * runtime.orbitRadius;
-          runtime.velX = 0;
-          runtime.velY = 0;
-          runtime.driftTimer = 0;
+          if (deltaRing > latchDistance) {
+            runtime.streak = 0;
+            runtime.multiplier = Math.max(1, runtime.multiplier - 0.06);
+          } else {
+            runtime.latched = true;
+            runtime.latchedPlanet = nextPlanet.slot;
+            runtime.orbitRadius = nextPlanet.orbitRadius;
+            runtime.orbitAngularVel = nextPlanet.orbitAngularVel;
+            runtime.orbitAngle = Math.atan2(
+              runtime.playerY - nextPlanet.y,
+              runtime.playerX - nextPlanet.x
+            );
+            runtime.playerX = nextPlanet.x + Math.cos(runtime.orbitAngle) * runtime.orbitRadius;
+            runtime.playerY = nextPlanet.y + Math.sin(runtime.orbitAngle) * runtime.orbitRadius;
+            runtime.velX = 0;
+            runtime.velY = 0;
+            runtime.driftTimer = 0;
 
-          runtime.latches += 1;
-          runtime.streak += 1;
-          runtime.multiplier = 1 + Math.min(runtime.streak, 18) * 0.09;
-          runtime.score += runtime.multiplier;
-          runtime.coreGlow = Math.min(1.6, runtime.coreGlow + 0.24);
-          runtime.shake = Math.min(1.2, runtime.shake + 0.24);
-          runtime.latchFlash = 1;
+            runtime.latches += 1;
+            runtime.streak += 1;
+            runtime.multiplier = 1 + Math.min(runtime.streak, 18) * 0.09;
+            runtime.score += runtime.multiplier;
+            runtime.coreGlow = Math.min(1.6, runtime.coreGlow + 0.24);
+            runtime.shake = Math.min(1.2, runtime.shake + 0.24);
+            runtime.latchFlash = 1;
+            runtime.cuePulseT = 0;
+            runtime.cuePulseCooldown = 0.12;
+            runtime.cuePulseSlot = nextPlanet.slot;
 
-          bestPlanet.glow = 1.2;
-          spawnBurst(
-            runtime,
-            runtime.playerX,
-            runtime.playerY,
-            getPaletteColor(palette.planets, bestPlanet.colorIndex),
-            8,
-            2.2
-          );
-          maybeVibrate(10);
-          playTone(760, 0.05, 0.03);
-          useOrbitStore.getState().onTapFx();
+            nextPlanet.glow = 1.2;
+            spawnBurst(
+              runtime,
+              runtime.playerX,
+              runtime.playerY,
+              getPaletteColor(palette.planets, nextPlanet.colorIndex),
+              8,
+              2.2
+            );
+            maybeVibrate(10);
+            playTone(760, 0.05, 0.03);
+            useOrbitStore.getState().onTapFx();
+          }
         } else {
           runtime.streak = 0;
           runtime.multiplier = Math.max(1, runtime.multiplier - 0.06);
@@ -1720,20 +1697,6 @@ function OrbitLatchScene({
           runtime.playerY = 0;
           runtime.velX = 0;
           runtime.velY = 0;
-        }
-
-        if (
-          runtime.releaseCount === 1 &&
-          runtime.latches === 0 &&
-          runtime.driftTimer > 0.35 &&
-          runtime.elapsed - runtime.lastAssistAt >= ASSIST_REPOSITION_COOLDOWN
-        ) {
-          ensureImmediateLatchOpportunity(
-            runtime,
-            runtime.planets.find((p) => p.slot === runtime.latchedPlanet) ??
-              runtime.planets[0]
-          );
-          runtime.lastAssistAt = runtime.elapsed;
         }
 
         let impactedCore = false;
