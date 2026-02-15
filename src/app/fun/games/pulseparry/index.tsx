@@ -23,6 +23,14 @@ import { pulseParryState } from './state';
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
 type GameDifficulty = 'easy' | 'medium' | 'hard';
 type ScoreFxTone = 'normal' | 'perfect' | 'streak';
+type DifficultyTuning = {
+  label: string;
+  timingScale: number;
+  speedScale: number;
+  spawnScale: number;
+  perfectScale: number;
+  hint: string;
+};
 
 type Pulse = {
   slot: number;
@@ -171,6 +179,34 @@ const DANGER = new THREE.Color('#ff607e');
 const PULSE_COLORS = [CYAN, MAGENTA, ACID] as const;
 const LANE_SHAPE_NAMES = ['Right: Orb', 'Up: Block', 'Left: Spike', 'Down: Diamond'] as const;
 const LANE_INPUT_NAMES = ['Right', 'Up', 'Left', 'Down'] as const;
+const MODE_OPTIONS = ['easy', 'medium', 'hard'] as const satisfies readonly GameDifficulty[];
+const DEFAULT_MODE: GameDifficulty = 'medium';
+const DIFFICULTY_TUNING: Record<GameDifficulty, DifficultyTuning> = {
+  easy: {
+    label: 'Easy',
+    timingScale: 2,
+    speedScale: 0.88,
+    spawnScale: 1.12,
+    perfectScale: 1.12,
+    hint: 'Timing +2.0x',
+  },
+  medium: {
+    label: 'Medium',
+    timingScale: 1.5,
+    speedScale: 0.94,
+    spawnScale: 1.06,
+    perfectScale: 1.04,
+    hint: 'Timing +1.5x',
+  },
+  hard: {
+    label: 'Hard',
+    timingScale: 1,
+    speedScale: 1,
+    spawnScale: 1,
+    perfectScale: 0.92,
+    hint: 'Timing +1.0x',
+  },
+};
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -189,6 +225,12 @@ const normalizeAngle = (angle: number) => {
 const angleDiff = (a: number, b: number) => {
   const d = Math.abs(normalizeAngle(a) - normalizeAngle(b));
   return Math.min(d, TAU - d);
+};
+const modeForPressedKey = (keys: Set<string>): GameDifficulty | null => {
+  if (keys.has('1')) return 'easy';
+  if (keys.has('2')) return 'medium';
+  if (keys.has('3')) return 'hard';
+  return null;
 };
 
 let audioCtx: AudioContext | null = null;
@@ -242,6 +284,8 @@ const createPulse = (slot: number): Pulse => ({
   colorIndex: 0,
   life: 0,
   flash: 0,
+  requestWeight: 0,
+  hitFx: 0,
 });
 
 const createShard = (slot: number): Shard => ({
@@ -260,6 +304,7 @@ const createShard = (slot: number): Shard => ({
 });
 
 const createRuntime = (): Runtime => ({
+  mode: DEFAULT_MODE,
   elapsed: 0,
   score: 0,
   lives: 3,
@@ -267,6 +312,7 @@ const createRuntime = (): Runtime => ({
   tapMisses: 0,
   phase: 1,
   targetLanes: 4,
+  streak: 0,
   laneMask: PHASE_LANE_MASKS[0],
   perfectCombo: 0,
   multiplier: 1,
@@ -310,7 +356,8 @@ const createRuntime = (): Runtime => ({
   shards: Array.from({ length: SHARD_POOL }, (_, idx) => createShard(idx)),
 });
 
-const resetRuntime = (runtime: Runtime) => {
+const resetRuntime = (runtime: Runtime, mode: GameDifficulty) => {
+  runtime.mode = mode;
   runtime.elapsed = 0;
   runtime.score = 0;
   runtime.lives = 3;
@@ -318,6 +365,7 @@ const resetRuntime = (runtime: Runtime) => {
   runtime.tapMisses = 0;
   runtime.phase = 1;
   runtime.targetLanes = 4;
+  runtime.streak = 0;
   runtime.laneMask = PHASE_LANE_MASKS[0];
   runtime.perfectCombo = 0;
   runtime.multiplier = 1;
@@ -367,6 +415,8 @@ const resetRuntime = (runtime: Runtime) => {
     pulse.colorIndex = 0;
     pulse.life = 0;
     pulse.flash = 0;
+    pulse.requestWeight = 0;
+    pulse.hitFx = 0;
   }
 
   for (const shard of runtime.shards) {
@@ -377,6 +427,7 @@ const resetRuntime = (runtime: Runtime) => {
 
 const usePulseParryStore = create<PulseParryStore>((set) => ({
   status: 'START',
+  mode: DEFAULT_MODE,
   score: 0,
   best: readBest(),
   lives: 3,
@@ -389,8 +440,11 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
   failMessage: '',
   tapNonce: 0,
   perfectNonce: 0,
+  scoreFxNonce: 0,
+  scoreFxText: '+1',
+  scoreFxTone: 'normal',
   startRun: () =>
-    set({
+    set((state) => ({
       status: 'PLAYING',
       score: 0,
       lives: 3,
@@ -401,9 +455,10 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       combo: 0,
       multiplier: 1,
       failMessage: '',
-    }),
+      mode: state.mode,
+    })),
   resetToStart: () =>
-    set({
+    set((state) => ({
       status: 'START',
       score: 0,
       lives: 3,
@@ -414,10 +469,18 @@ const usePulseParryStore = create<PulseParryStore>((set) => ({
       combo: 0,
       multiplier: 1,
       failMessage: '',
-    }),
+      mode: state.mode,
+    })),
+  setMode: (mode) => set({ mode }),
   setLives: (lives) => set({ lives }),
   onTapFx: () => set((state) => ({ tapNonce: state.tapNonce + 1 })),
   onPerfectFx: () => set((state) => ({ perfectNonce: state.perfectNonce + 1 })),
+  onScoreFx: (text, tone = 'normal') =>
+    set((state) => ({
+      scoreFxNonce: state.scoreFxNonce + 1,
+      scoreFxText: text,
+      scoreFxTone: tone,
+    })),
   updateHud: (score, lives, parries, phase, targetLanes, tapMisses, combo, multiplier) =>
     set({
       score: Math.floor(score),
@@ -496,8 +559,10 @@ const findOverlapCandidate = (runtime: Runtime, slack = 1): OverlapCandidate | n
   return best;
 };
 
-const spawnInterval = (runtime: Runtime) =>
-  clamp(1.1 - Math.min(0.58, runtime.elapsed * 0.008), 0.52, 1.1);
+const spawnInterval = (runtime: Runtime) => {
+  const tuning = DIFFICULTY_TUNING[runtime.mode];
+  return clamp(1.1 - Math.min(0.58, runtime.elapsed * 0.008), 0.52, 1.1) * tuning.spawnScale;
+};
 
 const acquirePulse = (runtime: Runtime) => {
   for (let i = 0; i < runtime.pulses.length; i += 1) {
@@ -521,6 +586,7 @@ const spawnPulseSet = (runtime: Runtime) => {
   if (lanes.length === 0) return;
   const lane = lanes[Math.floor(Math.random() * lanes.length)];
   const pulse = acquirePulse(runtime);
+  const tuning = DIFFICULTY_TUNING[runtime.mode];
   const speedRamp = Math.min(1.05, runtime.elapsed * 0.018);
   pulse.active = true;
   pulse.parried = false;
@@ -528,11 +594,13 @@ const spawnPulseSet = (runtime: Runtime) => {
   pulse.angle = CARDINAL_ANGLES[lane];
   pulse.radius = SPAWN_RADIUS_BASE;
   pulse.velocity = 0;
-  pulse.speed = 1.08 + speedRamp + Math.random() * 0.16;
+  pulse.speed = (1.08 + speedRamp + Math.random() * 0.16) * tuning.speedScale;
   pulse.thickness = 0.24 + Math.random() * 0.06;
   pulse.colorIndex = runtime.nextColor;
   pulse.life = 0;
   pulse.flash = 0;
+  pulse.requestWeight = 0;
+  pulse.hitFx = 0;
   runtime.nextColor = (runtime.nextColor + 1) % PULSE_COLORS.length;
 };
 
@@ -614,23 +682,41 @@ const syncPulseLaneMesh = (
     }
 
     const appear = clamp(pulse.life / 0.14, 0, 1);
+    const requestW = clamp(pulse.requestWeight, 0, 1);
+    const hitW = clamp(pulse.hitFx, 0, 1);
     const organic = 0.9 + 0.1 * Math.sin((runtime.elapsed + pulse.slot * 0.037) * 6.4);
+    const wiggle =
+      Math.sin(runtime.elapsed * 16 + pulse.slot * 0.9) * (requestW * 0.036 + hitW * 0.026);
+    const bob = Math.cos(runtime.elapsed * 13 + pulse.slot * 0.7) * (requestW * 0.012 + hitW * 0.02);
+    const radialX = Math.cos(pulse.angle) * pulse.radius;
+    const radialZ = Math.sin(pulse.angle) * pulse.radius;
+    const tangentX = -Math.sin(pulse.angle);
+    const tangentZ = Math.cos(pulse.angle);
     dummy.position.set(
-      Math.cos(pulse.angle) * pulse.radius,
-      0.022 + (1 - appear) * 0.06 + Math.sin((pulse.life + pulse.slot) * 7) * 0.006,
-      Math.sin(pulse.angle) * pulse.radius
+      radialX + tangentX * wiggle,
+      0.022 + (1 - appear) * 0.06 + Math.sin((pulse.life + pulse.slot) * 7) * 0.006 + bob,
+      radialZ + tangentZ * wiggle
     );
-    const s = Math.max(0.001, pulse.thickness * (0.35 + 0.65 * appear) * organic);
+    const s = Math.max(
+      0.001,
+      pulse.thickness * (0.35 + 0.65 * appear) * organic * (1 + requestW * 0.22 + hitW * 0.28)
+    );
     dummy.scale.setScalar(s * 1.08);
     dummy.rotation.set(
-      pulse.life * 3.4 + lane * 0.3,
+      pulse.life * 3.4 + lane * 0.3 + Math.sin(runtime.elapsed * 18 + pulse.slot) * requestW * 0.45,
       runtime.elapsed * 0.55 + pulse.slot * 0.1,
-      pulse.life * 2.8
+      pulse.life * 2.8 + Math.cos(runtime.elapsed * 13 + pulse.slot) * (requestW * 0.42 + hitW * 0.34)
     );
     dummy.updateMatrix();
     mesh.setMatrixAt(i, dummy.matrix);
 
-    colorScratch.copy(PULSE_COLORS[pulse.colorIndex]).lerp(WHITE, (1 - appear) * 0.45);
+    if (pulse.parried) {
+      colorScratch.copy(PULSE_COLORS[pulse.colorIndex]).lerp(WHITE, 0.14 + hitW * 0.2);
+    } else {
+      colorScratch
+        .copy(PULSE_COLORS[pulse.colorIndex])
+        .lerp(WHITE, clamp((1 - appear) * 0.35 + requestW * 0.65, 0, 0.82));
+    }
     if (pulse.flash > 0) colorScratch.lerp(WHITE, clamp(pulse.flash, 0, 0.8));
     mesh.setColorAt(i, colorScratch);
   }
@@ -640,39 +726,92 @@ const syncPulseLaneMesh = (
 
 function PulseParryOverlay() {
   const status = usePulseParryStore((state) => state.status);
+  const mode = usePulseParryStore((state) => state.mode);
   const score = usePulseParryStore((state) => state.score);
   const best = usePulseParryStore((state) => state.best);
   const lives = usePulseParryStore((state) => state.lives);
   const hits = usePulseParryStore((state) => state.parries);
+  const combo = usePulseParryStore((state) => state.combo);
+  const multiplier = usePulseParryStore((state) => state.multiplier);
   const failMessage = usePulseParryStore((state) => state.failMessage);
   const tapNonce = usePulseParryStore((state) => state.tapNonce);
   const perfectNonce = usePulseParryStore((state) => state.perfectNonce);
+  const scoreFxNonce = usePulseParryStore((state) => state.scoreFxNonce);
+  const scoreFxText = usePulseParryStore((state) => state.scoreFxText);
+  const scoreFxTone = usePulseParryStore((state) => state.scoreFxTone);
+  const setMode = usePulseParryStore((state) => state.setMode);
   const outs = 3 - lives;
+  const modeMeta = DIFFICULTY_TUNING[mode];
+  const scoreFxColor =
+    scoreFxTone === 'streak' ? '#fef08a' : scoreFxTone === 'perfect' ? '#9ae6ff' : '#ffffff';
+  const modeAccentClass: Record<GameDifficulty, string> = {
+    easy: 'border-emerald-300/80 bg-emerald-500/30 text-emerald-50',
+    medium: 'border-amber-300/80 bg-amber-500/28 text-amber-50',
+    hard: 'border-rose-300/80 bg-rose-500/30 text-rose-50',
+  };
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-5 top-5 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
+      <div className="absolute left-5 top-4 rounded-md border border-emerald-100/55 bg-gradient-to-br from-emerald-500/22 via-cyan-500/16 to-lime-500/22 px-3 py-2 backdrop-blur-[2px]">
         <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Pulse Parry</div>
         <div className="text-[11px] text-cyan-50/85">
           Send shapes from center to targets. Press the matching direction when they touch.
         </div>
         <div className="text-[10px] text-cyan-100/70">
-          W/↑ Top • A/← Left • S/↓ Bottom • D/→ Right • Swipe on mobile
+          W/↑ Top • A/← Left • S/↓ Bottom • D/→ Right • 1/2/3 Difficulty • Swipe on mobile
+        </div>
+        <div className="mt-2 pointer-events-auto flex gap-1">
+          {MODE_OPTIONS.map((entry) => (
+            <button
+              key={entry}
+              type="button"
+              disabled={status === 'PLAYING'}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (status !== 'PLAYING') setMode(entry);
+              }}
+              className={`rounded border px-2 py-1 text-[10px] uppercase tracking-[0.16em] transition ${
+                entry === mode
+                  ? modeAccentClass[entry]
+                  : 'border-white/22 bg-black/25 text-white/70 hover:text-white/90'
+              } ${status === 'PLAYING' ? 'cursor-not-allowed opacity-55' : ''}`}
+            >
+              {DIFFICULTY_TUNING[entry].label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-1 text-[10px] text-cyan-100/75">
+          {modeMeta.label}: {modeMeta.hint}
         </div>
       </div>
 
-      <div className="absolute right-5 top-5 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
+      <div className="absolute right-5 top-4 rounded-md border border-fuchsia-100/55 bg-gradient-to-br from-fuchsia-500/22 via-violet-500/15 to-emerald-500/18 px-3 py-2 text-right backdrop-blur-[2px]">
         <div className="text-2xl font-black tabular-nums">{score}</div>
         <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
+        <div className="text-[10px] uppercase tracking-[0.17em] text-cyan-100/80">{modeMeta.label}</div>
+        {status === 'PLAYING' && (
+          <div className="text-[10px] text-white/80">
+            Streak {combo} • x{multiplier.toFixed(2)}
+          </div>
+        )}
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-5 top-[102px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
+        <div className="absolute left-5 top-[132px] rounded-md border border-emerald-100/35 bg-gradient-to-br from-slate-950/72 via-emerald-900/30 to-fuchsia-900/26 px-3 py-2 text-xs">
           <div>
             Hits <span className="font-semibold text-cyan-200">{hits}</span>
           </div>
           <div>
             Outs <span className="font-semibold text-rose-200">{outs}/3</span>
+          </div>
+          <div>
+            Flow <span className="font-semibold text-emerald-200">{combo}</span> • x
+            <span className="font-semibold text-amber-100">{multiplier.toFixed(2)}</span>
           </div>
           <div>
             Correct touch timing only. Wrong key or late input = out.
@@ -694,6 +833,10 @@ function PulseParryOverlay() {
             <div className="mt-1 text-xs text-white/70">
               Target order: {LANE_SHAPE_NAMES.join(' • ')}
             </div>
+            <div className="mt-2 text-xs text-white/75">
+              Difficulty: <span className="font-semibold text-cyan-100">{modeMeta.label}</span> (
+              {modeMeta.hint})
+            </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap anywhere to start.</div>
           </div>
         </div>
@@ -706,7 +849,26 @@ function PulseParryOverlay() {
             <div className="mt-2 text-sm text-white/82">{failMessage}</div>
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>
+            <div className="mt-1 text-xs text-white/70">
+              Difficulty: {modeMeta.label} ({modeMeta.hint})
+            </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap or press R to retry.</div>
+          </div>
+        </div>
+      )}
+
+      {status === 'PLAYING' && (
+        <div key={scoreFxNonce}>
+          <div
+            className="absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2 text-3xl font-black tracking-[0.08em]"
+            style={{
+              color: scoreFxColor,
+              textShadow: `0 0 20px ${scoreFxColor}`,
+              animation: 'pulseparry-scorefx 460ms cubic-bezier(0.2, 0.8, 0.25, 1) forwards',
+              opacity: 0,
+            }}
+          >
+            {scoreFxText}
           </div>
         </div>
       )}
@@ -756,6 +918,20 @@ function PulseParryOverlay() {
             opacity: 0;
           }
         }
+        @keyframes pulseparry-scorefx {
+          0% {
+            transform: translate(-50%, -50%) scale(0.7);
+            opacity: 0.05;
+          }
+          25% {
+            transform: translate(-50%, -50%) scale(1.04);
+            opacity: 0.96;
+          }
+          100% {
+            transform: translate(-50%, -112%) scale(0.92);
+            opacity: 0;
+          }
+        }
       `}</style>
     </div>
   );
@@ -791,6 +967,12 @@ function PulseParryScene() {
       'D',
       'r',
       'R',
+      '1',
+      '2',
+      '3',
+      'Digit1',
+      'Digit2',
+      'Digit3',
     ],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
