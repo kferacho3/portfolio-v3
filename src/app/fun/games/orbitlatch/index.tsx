@@ -77,12 +77,57 @@ type Hazard = {
   glow: number;
 };
 
+type HabitatPickup = {
+  slot: number;
+  active: boolean;
+  x: number;
+  y: number;
+  planetSlot: number;
+  orbitRadius: number;
+  orbitAngle: number;
+  orbitVel: number;
+  size: number;
+  value: number;
+  colorIndex: number;
+  glow: number;
+};
+
+type Meteor = {
+  slot: number;
+  active: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  spin: number;
+  spinVel: number;
+  wobblePhase: number;
+  wobbleAmp: number;
+  life: number;
+  glow: number;
+  colorIndex: number;
+};
+
+type RingPulse = {
+  slot: number;
+  active: boolean;
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  startScale: number;
+  endScale: number;
+  color: THREE.Color;
+};
+
 type Runtime = {
   mode: OrbitMode;
   elapsed: number;
   score: number;
   latches: number;
   stars: number;
+  habitats: number;
   timeRemaining: number;
   releaseCount: number;
   tightReleases: number;
@@ -124,8 +169,13 @@ type Runtime = {
   scatterBandCursor: number;
   scatterBandSize: number;
   nextStarSlot: number;
+  nextHabitatSlot: number;
   nextHazardSlot: number;
+  nextMeteorSlot: number;
+  nextRingPulseSlot: number;
+  meteorCooldown: number;
   paletteIndex: number;
+  activePalette: OrbitVisualPalette;
   startNonceSeen: number;
   cuePulseT: number;
   cuePulseCooldown: number;
@@ -133,8 +183,11 @@ type Runtime = {
 
   planets: Planet[];
   starsPool: StarPickup[];
+  habitatsPool: HabitatPickup[];
   hazardsPool: Hazard[];
+  meteorsPool: Meteor[];
   shards: Shard[];
+  ringPulses: RingPulse[];
 };
 
 type OrbitStore = {
@@ -145,22 +198,30 @@ type OrbitStore = {
   bestByMode: Record<OrbitMode, number>;
   latches: number;
   stars: number;
+  habitats: number;
   timeRemaining: number;
   tightReleases: number;
   multiplier: number;
   latched: boolean;
   failMessage: string;
+  paletteName: string;
+  hudPrimary: string;
+  hudSecondary: string;
+  hudAccent: string;
+  hudDanger: string;
   tapNonce: number;
   startNonce: number;
   setMode: (mode: OrbitMode) => void;
   requestStart: () => void;
   startRun: (mode?: OrbitMode) => void;
   resetToStart: () => void;
+  setPaletteUi: (palette: OrbitVisualPalette) => void;
   onTapFx: () => void;
   updateHud: (
     score: number,
     latches: number,
     stars: number,
+    habitats: number,
     timeRemaining: number,
     tightReleases: number,
     multiplier: number,
@@ -177,8 +238,11 @@ const MODE_KEY = 'orbitlatch_hyper_mode_v1';
 
 const PLANET_POOL = 24;
 const STAR_POOL = 42;
+const HABITAT_POOL = 32;
 const HAZARD_POOL = 30;
+const METEOR_POOL = 24;
 const SHARD_POOL = 120;
+const RING_PULSE_POOL = 44;
 const TRAIL_POINTS = 54;
 
 const SCATTERED_TIME_LIMIT = 80;
@@ -193,6 +257,7 @@ const DRIFT_FAIL_BASE = 5.4;
 
 const LATCH_BASE_DISTANCE = 0.3;
 const COLLECT_RADIUS = 0.28;
+const HABITAT_COLLECT_RADIUS = 0.3;
 const PLAYER_RADIUS = 0.12;
 const RELATCH_LOOKAHEAD_BASE = 0.12;
 
@@ -320,8 +385,102 @@ const buildOrbitPalette = (base: CubePalette, index: number): OrbitVisualPalette
 
 const ORBIT_PALETTES: OrbitVisualPalette[] = CUBE_PALETTES.map(buildOrbitPalette);
 
-const getRuntimePalette = (runtime: Pick<Runtime, 'paletteIndex'>) =>
-  ORBIT_PALETTES[mod(runtime.paletteIndex, ORBIT_PALETTES.length)] ?? ORBIT_PALETTES[0];
+const cloneOrbitPalette = (palette: OrbitVisualPalette): OrbitVisualPalette => ({
+  ...palette,
+  background: palette.background.clone(),
+  fog: palette.fog.clone(),
+  ambient: palette.ambient.clone(),
+  key: palette.key.clone(),
+  fillA: palette.fillA.clone(),
+  fillB: palette.fillB.clone(),
+  hemiSky: palette.hemiSky.clone(),
+  hemiGround: palette.hemiGround.clone(),
+  planets: palette.planets.map((color) => color.clone()),
+  stars: palette.stars.map((color) => color.clone()),
+  hazards: palette.hazards.map((color) => color.clone()),
+  ringCue: palette.ringCue.clone(),
+  trail: palette.trail.clone(),
+  trailGlow: palette.trailGlow.clone(),
+  player: palette.player.clone(),
+  playerEmissive: palette.playerEmissive.clone(),
+});
+
+const tintColor = (
+  source: THREE.Color,
+  hueShift: number,
+  satMul: number,
+  lightMul: number,
+  indexShift = 0
+) => {
+  const hsl = { h: 0, s: 0, l: 0 };
+  const color = source.clone();
+  color.getHSL(hsl);
+  color.setHSL(
+    mod(hsl.h + hueShift + indexShift, 1),
+    clamp(hsl.s * satMul, 0, 1),
+    clamp(hsl.l * lightMul, 0, 1)
+  );
+  return color;
+};
+
+const mutateSwatch = (
+  source: readonly THREE.Color[],
+  hueShift: number,
+  satMul: number,
+  lightMul: number
+) =>
+  source.map((color, idx) =>
+    tintColor(
+      color,
+      hueShift,
+      satMul * (0.96 + ((idx % 4) - 1.5) * 0.06),
+      lightMul * (0.96 + ((idx % 5) - 2) * 0.05),
+      ((idx % 5) - 2) * 0.006
+    )
+  );
+
+const randomizePaletteForRun = (base: OrbitVisualPalette): OrbitVisualPalette => {
+  const hueShift = (Math.random() * 2 - 1) * 0.07;
+  const satMul = 0.94 + Math.random() * 0.25;
+  const lightMul = 0.93 + Math.random() * 0.28;
+  const accentShift = (Math.random() * 2 - 1) * 0.03;
+  const output = cloneOrbitPalette(base);
+
+  output.background = tintColor(output.background, hueShift * 0.7, satMul * 0.95, lightMul * 0.95);
+  output.fog = tintColor(output.fog, hueShift * 0.62, satMul * 0.92, lightMul * 1.02);
+  output.ambient = tintColor(output.ambient, hueShift * 0.48, satMul * 0.9, lightMul * 1.04);
+  output.key = tintColor(output.key, hueShift * 0.36, satMul * 0.92, lightMul * 1.05);
+  output.fillA = tintColor(output.fillA, hueShift + accentShift, satMul * 1.04, lightMul * 1.06);
+  output.fillB = tintColor(output.fillB, hueShift - accentShift * 0.7, satMul * 1.06, lightMul * 1.07);
+  output.hemiSky = tintColor(output.hemiSky, hueShift * 0.62, satMul * 0.95, lightMul * 1.04);
+  output.hemiGround = tintColor(output.hemiGround, hueShift * 0.42, satMul * 0.88, lightMul * 1.03);
+  output.planets = mutateSwatch(output.planets, hueShift * 0.78, satMul * 1.08, lightMul * 1.02);
+  output.stars = mutateSwatch(output.stars, hueShift + accentShift, satMul * 1.1, lightMul * 1.12);
+  output.hazards = mutateSwatch(output.hazards, hueShift - accentShift * 1.2, satMul * 1.08, lightMul * 0.94);
+  output.ringCue = tintColor(output.ringCue, hueShift + accentShift * 1.3, satMul * 1.1, lightMul * 1.08);
+  output.trail = tintColor(output.trail, hueShift * 0.92, satMul * 1.06, lightMul * 1.04);
+  output.trailGlow = tintColor(output.trailGlow, hueShift + accentShift * 0.8, satMul * 1.08, lightMul * 1.1);
+  output.player = tintColor(output.player, hueShift * 0.4, satMul * 0.96, lightMul * 1.12);
+  output.playerEmissive = tintColor(
+    output.playerEmissive,
+    hueShift + accentShift * 0.3,
+    satMul * 1.04,
+    lightMul * 1.2
+  );
+  output.bloomBase = clamp(output.bloomBase * (0.92 + Math.random() * 0.18), 0.45, 1.24);
+  output.bloomMax = clamp(output.bloomMax * (0.94 + Math.random() * 0.2), 0.98, 1.95);
+  output.vignetteDarkness = clamp(output.vignetteDarkness * (0.94 + Math.random() * 0.18), 0.18, 0.56);
+  output.name = `${base.name} Pulse`;
+
+  return output;
+};
+
+const colorToHex = (color: THREE.Color) => `#${color.getHexString()}`;
+
+const getRuntimePalette = (runtime: Pick<Runtime, 'activePalette' | 'paletteIndex'>) =>
+  runtime.activePalette ??
+  ORBIT_PALETTES[mod(runtime.paletteIndex, ORBIT_PALETTES.length)] ??
+  ORBIT_PALETTES[0];
 
 const getPaletteColor = (colors: readonly THREE.Color[], index: number) =>
   colors[mod(index, colors.length)] ?? WHITE;
@@ -437,6 +596,21 @@ const makeStar = (slot: number): StarPickup => ({
   glow: 0,
 });
 
+const makeHabitat = (slot: number): HabitatPickup => ({
+  slot,
+  active: false,
+  x: 0,
+  y: 0,
+  planetSlot: -1,
+  orbitRadius: 0.7,
+  orbitAngle: Math.random() * Math.PI * 2,
+  orbitVel: 0.9,
+  size: 0.11,
+  value: 2,
+  colorIndex: slot % 10,
+  glow: 0,
+});
+
 const makeShard = (slot: number): Shard => ({
   slot,
   active: false,
@@ -464,12 +638,42 @@ const makeHazard = (slot: number): Hazard => ({
   glow: 0,
 });
 
+const makeMeteor = (slot: number): Meteor => ({
+  slot,
+  active: false,
+  x: 0,
+  y: 0,
+  vx: 0,
+  vy: 0,
+  radius: 0.18,
+  spin: Math.random() * Math.PI * 2,
+  spinVel: 1.6 + Math.random() * 1.4,
+  wobblePhase: Math.random() * Math.PI * 2,
+  wobbleAmp: 0.22 + Math.random() * 0.2,
+  life: 0,
+  glow: 0,
+  colorIndex: slot % 8,
+});
+
+const makeRingPulse = (slot: number): RingPulse => ({
+  slot,
+  active: false,
+  x: 0,
+  y: 0,
+  life: 0,
+  maxLife: 1,
+  startScale: 0.2,
+  endScale: 1,
+  color: new THREE.Color('#ffffff'),
+});
+
 const createRuntime = (): Runtime => ({
   mode: 'classic',
   elapsed: 0,
   score: 0,
   latches: 0,
   stars: 0,
+  habitats: 0,
   timeRemaining: 0,
   releaseCount: 0,
   tightReleases: 0,
@@ -511,8 +715,13 @@ const createRuntime = (): Runtime => ({
   scatterBandCursor: 0,
   scatterBandSize: 0,
   nextStarSlot: 0,
+  nextHabitatSlot: 0,
   nextHazardSlot: 0,
+  nextMeteorSlot: 0,
+  nextRingPulseSlot: 0,
+  meteorCooldown: 0.8,
   paletteIndex: 0,
+  activePalette: cloneOrbitPalette(ORBIT_PALETTES[0] ?? buildOrbitPalette(CUBE_PALETTES[0], 0)),
   startNonceSeen: 0,
   cuePulseT: 0,
   cuePulseCooldown: 0,
@@ -520,8 +729,11 @@ const createRuntime = (): Runtime => ({
 
   planets: Array.from({ length: PLANET_POOL }, (_, idx) => makePlanet(idx)),
   starsPool: Array.from({ length: STAR_POOL }, (_, idx) => makeStar(idx)),
+  habitatsPool: Array.from({ length: HABITAT_POOL }, (_, idx) => makeHabitat(idx)),
   hazardsPool: Array.from({ length: HAZARD_POOL }, (_, idx) => makeHazard(idx)),
+  meteorsPool: Array.from({ length: METEOR_POOL }, (_, idx) => makeMeteor(idx)),
   shards: Array.from({ length: SHARD_POOL }, (_, idx) => makeShard(idx)),
+  ringPulses: Array.from({ length: RING_PULSE_POOL }, (_, idx) => makeRingPulse(idx)),
 });
 
 const initialMode = readMode();
@@ -529,6 +741,8 @@ const initialBestByMode: Record<OrbitMode, number> = {
   classic: readBest('classic'),
   scattered: readBest('scattered'),
 };
+const fallbackPalette =
+  ORBIT_PALETTES[0] ?? buildOrbitPalette(CUBE_PALETTES[0], 0);
 
 const useOrbitStore = create<OrbitStore>((set, get) => ({
   status: 'START',
@@ -538,11 +752,17 @@ const useOrbitStore = create<OrbitStore>((set, get) => ({
   bestByMode: initialBestByMode,
   latches: 0,
   stars: 0,
+  habitats: 0,
   timeRemaining: initialMode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
   tightReleases: 0,
   multiplier: 1,
   latched: false,
   failMessage: '',
+  paletteName: fallbackPalette.name,
+  hudPrimary: colorToHex(fallbackPalette.ringCue),
+  hudSecondary: colorToHex(fallbackPalette.trailGlow),
+  hudAccent: colorToHex(fallbackPalette.fillA),
+  hudDanger: colorToHex(fallbackPalette.hazards[0] ?? DANGER),
   tapNonce: 0,
   startNonce: 0,
   setMode: (mode) =>
@@ -566,6 +786,7 @@ const useOrbitStore = create<OrbitStore>((set, get) => ({
       score: 0,
       latches: 0,
       stars: 0,
+      habitats: 0,
       tightReleases: 0,
       timeRemaining: nextMode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
       multiplier: 1,
@@ -579,6 +800,7 @@ const useOrbitStore = create<OrbitStore>((set, get) => ({
       score: 0,
       latches: 0,
       stars: 0,
+      habitats: 0,
       tightReleases: 0,
       timeRemaining: state.mode === 'scattered' ? SCATTERED_TIME_LIMIT : 0,
       multiplier: 1,
@@ -586,12 +808,30 @@ const useOrbitStore = create<OrbitStore>((set, get) => ({
       failMessage: '',
       best: state.bestByMode[state.mode],
     })),
+  setPaletteUi: (palette) =>
+    set({
+      paletteName: palette.name,
+      hudPrimary: colorToHex(palette.ringCue),
+      hudSecondary: colorToHex(palette.trailGlow),
+      hudAccent: colorToHex(palette.fillA),
+      hudDanger: colorToHex(palette.hazards[0] ?? DANGER),
+    }),
   onTapFx: () => set((state) => ({ tapNonce: state.tapNonce + 1 })),
-  updateHud: (score, latches, stars, timeRemaining, tightReleases, multiplier, latched) =>
+  updateHud: (
+    score,
+    latches,
+    stars,
+    habitats,
+    timeRemaining,
+    tightReleases,
+    multiplier,
+    latched
+  ) =>
     set({
       score: Math.floor(score),
       latches,
       stars,
+      habitats,
       timeRemaining,
       tightReleases,
       multiplier,
@@ -675,6 +915,48 @@ const acquireHazard = (runtime: Runtime) => {
   return fallback;
 };
 
+const acquireHabitat = (runtime: Runtime) => {
+  for (let i = 0; i < runtime.habitatsPool.length; i += 1) {
+    const idx = (runtime.nextHabitatSlot + i) % runtime.habitatsPool.length;
+    const habitat = runtime.habitatsPool[idx];
+    if (!habitat.active) {
+      runtime.nextHabitatSlot = (idx + 1) % runtime.habitatsPool.length;
+      return habitat;
+    }
+  }
+  const fallback = runtime.habitatsPool[runtime.nextHabitatSlot];
+  runtime.nextHabitatSlot = (runtime.nextHabitatSlot + 1) % runtime.habitatsPool.length;
+  return fallback;
+};
+
+const acquireMeteor = (runtime: Runtime) => {
+  for (let i = 0; i < runtime.meteorsPool.length; i += 1) {
+    const idx = (runtime.nextMeteorSlot + i) % runtime.meteorsPool.length;
+    const meteor = runtime.meteorsPool[idx];
+    if (!meteor.active) {
+      runtime.nextMeteorSlot = (idx + 1) % runtime.meteorsPool.length;
+      return meteor;
+    }
+  }
+  const fallback = runtime.meteorsPool[runtime.nextMeteorSlot];
+  runtime.nextMeteorSlot = (runtime.nextMeteorSlot + 1) % runtime.meteorsPool.length;
+  return fallback;
+};
+
+const acquireRingPulse = (runtime: Runtime) => {
+  for (let i = 0; i < runtime.ringPulses.length; i += 1) {
+    const idx = (runtime.nextRingPulseSlot + i) % runtime.ringPulses.length;
+    const pulse = runtime.ringPulses[idx];
+    if (!pulse.active) {
+      runtime.nextRingPulseSlot = (idx + 1) % runtime.ringPulses.length;
+      return pulse;
+    }
+  }
+  const fallback = runtime.ringPulses[runtime.nextRingPulseSlot];
+  runtime.nextRingPulseSlot = (runtime.nextRingPulseSlot + 1) % runtime.ringPulses.length;
+  return fallback;
+};
+
 const spawnStarBetween = (
   runtime: Runtime,
   fromX: number,
@@ -743,8 +1025,62 @@ const spawnHazardBetween = (
   hazard.glow = 0;
 };
 
+const spawnHabitatForPlanet = (runtime: Runtime, planet: Planet, tier: number) => {
+  const palette = getRuntimePalette(runtime);
+  const spawnChance =
+    runtime.mode === 'scattered'
+      ? clamp(0.28 + tier * 0.06, 0.2, 0.52)
+      : clamp(0.17 + tier * 0.05, 0.13, 0.4);
+  if (Math.random() > spawnChance) return;
+  const habitat = acquireHabitat(runtime);
+  habitat.active = true;
+  habitat.planetSlot = planet.slot;
+  habitat.orbitRadius = planet.radius + 0.38 + Math.random() * 0.52;
+  habitat.orbitAngle = Math.random() * Math.PI * 2;
+  habitat.orbitVel = (Math.random() < 0.5 ? -1 : 1) * (0.48 + Math.random() * 1.25);
+  habitat.size = 0.095 + Math.random() * 0.06;
+  habitat.value = Math.random() < clamp(0.12 + tier * 0.04, 0.1, 0.35) ? 3 : 2;
+  habitat.colorIndex = Math.floor(Math.random() * Math.max(1, palette.stars.length));
+  habitat.glow = 0;
+  habitat.x = planet.x + Math.cos(habitat.orbitAngle) * habitat.orbitRadius;
+  habitat.y = planet.y + Math.sin(habitat.orbitAngle) * habitat.orbitRadius;
+};
+
+const spawnMeteor = (runtime: Runtime, tier: number) => {
+  const palette = getRuntimePalette(runtime);
+  const meteor = acquireMeteor(runtime);
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const startX = side * (FIELD_HALF_X + 1.1 + Math.random() * 1.3);
+  const startY = runtime.playerY + 4.2 + Math.random() * (runtime.mode === 'scattered' ? 8.8 : 7.2);
+  const targetX = -side * (Math.random() * (FIELD_HALF_X - 0.7));
+  const targetY = startY - (0.7 + Math.random() * 2.6);
+  const dx = targetX - startX;
+  const dy = targetY - startY;
+  const len = Math.hypot(dx, dy) || 1;
+  const speed = (runtime.mode === 'scattered' ? 2.3 : 1.75) + tier * 0.18 + Math.random() * 1.4;
+
+  meteor.active = true;
+  meteor.x = startX;
+  meteor.y = startY;
+  meteor.vx = (dx / len) * speed;
+  meteor.vy = (dy / len) * speed;
+  meteor.radius = 0.14 + Math.random() * 0.14 + tier * 0.01;
+  meteor.spin = Math.random() * Math.PI * 2;
+  meteor.spinVel = (1.2 + Math.random() * 2.2) * (Math.random() < 0.5 ? -1 : 1);
+  meteor.wobblePhase = Math.random() * Math.PI * 2;
+  meteor.wobbleAmp = 0.14 + Math.random() * 0.26;
+  meteor.life = 5.8 + Math.random() * 2.4;
+  meteor.glow = 0;
+  meteor.colorIndex = Math.floor(Math.random() * Math.max(1, palette.hazards.length));
+};
+
 const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
   const palette = getRuntimePalette(runtime);
+  for (const habitat of runtime.habitatsPool) {
+    if (habitat.active && habitat.planetSlot === planet.slot) {
+      habitat.active = false;
+    }
+  }
   if (!initial) {
     if (!runtime.currentChunk || runtime.chunkPlanetsLeft <= 0) chooseChunk(runtime);
     runtime.chunkPlanetsLeft -= 1;
@@ -850,6 +1186,9 @@ const seedPlanet = (runtime: Runtime, planet: Planet, initial: boolean) => {
     );
     spawnHazardBetween(runtime, runtime.lastSpawnX, runtime.lastSpawnY, nextX, nextY, tier);
   }
+  if (!initial || hadAnchor) {
+    spawnHabitatForPlanet(runtime, planet, tier);
+  }
 
   runtime.spawnCursorY = Math.max(runtime.spawnCursorY, nextY);
   runtime.lastSpawnX = nextX;
@@ -953,6 +1292,53 @@ const spawnBurst = (
   }
 };
 
+const spawnRingPulse = (
+  runtime: Runtime,
+  x: number,
+  y: number,
+  color: THREE.Color,
+  startScale: number,
+  endScale: number,
+  life: number
+) => {
+  const pulse = acquireRingPulse(runtime);
+  pulse.active = true;
+  pulse.x = x;
+  pulse.y = y;
+  pulse.life = life;
+  pulse.maxLife = life;
+  pulse.startScale = startScale;
+  pulse.endScale = endScale;
+  pulse.color.copy(color);
+};
+
+const spawnCollectFx = (
+  runtime: Runtime,
+  x: number,
+  y: number,
+  color: THREE.Color,
+  intensity = 1
+) => {
+  const pulseColor = color.clone().lerp(WHITE, 0.2);
+  spawnBurst(runtime, x, y, color, Math.round(5 + intensity * 3.5), 2 + intensity * 0.5);
+  spawnBurst(runtime, x, y, WHITE, Math.round(3 + intensity * 2), 1.8 + intensity * 0.4);
+  spawnRingPulse(runtime, x, y, pulseColor, 0.18, 0.72 + intensity * 0.4, 0.28 + intensity * 0.05);
+};
+
+const spawnDeathFx = (
+  runtime: Runtime,
+  x: number,
+  y: number,
+  color: THREE.Color,
+  intensity = 1
+) => {
+  const shardCount = Math.round(14 + intensity * 8);
+  spawnBurst(runtime, x, y, color, shardCount, 2.8 + intensity * 0.9);
+  spawnBurst(runtime, x, y, WHITE, Math.round(10 + intensity * 6), 2.2 + intensity * 0.65);
+  spawnRingPulse(runtime, x, y, color.clone().lerp(WHITE, 0.28), 0.26, 1.3 + intensity * 0.8, 0.48);
+  spawnRingPulse(runtime, x, y, color.clone().lerp(WHITE, 0.1), 0.12, 2.05 + intensity * 1.2, 0.62);
+};
+
 function OrbitLatchOverlay() {
   const status = useOrbitStore((state) => state.status);
   const mode = useOrbitStore((state) => state.mode);
@@ -961,69 +1347,149 @@ function OrbitLatchOverlay() {
   const best = useOrbitStore((state) => state.best);
   const latches = useOrbitStore((state) => state.latches);
   const stars = useOrbitStore((state) => state.stars);
+  const habitats = useOrbitStore((state) => state.habitats);
   const timeRemaining = useOrbitStore((state) => state.timeRemaining);
   const tightReleases = useOrbitStore((state) => state.tightReleases);
   const multiplier = useOrbitStore((state) => state.multiplier);
   const latched = useOrbitStore((state) => state.latched);
   const failMessage = useOrbitStore((state) => state.failMessage);
+  const paletteName = useOrbitStore((state) => state.paletteName);
+  const hudPrimary = useOrbitStore((state) => state.hudPrimary);
+  const hudSecondary = useOrbitStore((state) => state.hudSecondary);
+  const hudAccent = useOrbitStore((state) => state.hudAccent);
+  const hudDanger = useOrbitStore((state) => state.hudDanger);
   const requestStart = useOrbitStore((state) => state.requestStart);
   const timerText = `${Math.max(0, timeRemaining).toFixed(1)}s`;
+  const multiplierMeter = clamp((multiplier - 1) / 1.8, 0, 1);
+  const statusPanelBackground = `linear-gradient(150deg, ${hudPrimary}2e, ${hudSecondary}18 45%, ${hudAccent}24)`;
+  const scorePanelBackground = `linear-gradient(135deg, ${hudSecondary}30, ${hudPrimary}16 45%, ${hudAccent}28)`;
+  const overlayBackground = `linear-gradient(145deg, ${hudPrimary}22, rgba(8,10,20,0.84) 42%, ${hudSecondary}2f)`;
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/55 bg-gradient-to-br from-cyan-500/22 via-sky-500/18 to-fuchsia-500/20 px-3 py-2 backdrop-blur-[2px]">
-        <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Orbit Latch</div>
-        <div className="text-[11px] text-cyan-50/85">Tap to latch near orbit rings. Tap again to slingshot.</div>
-      </div>
+      <div className="absolute inset-x-4 top-4 flex items-start justify-between gap-3">
+        <div
+          className="rounded-2xl border px-4 py-3 backdrop-blur-sm"
+          style={{
+            borderColor: `${hudPrimary}80`,
+            background: statusPanelBackground,
+            boxShadow: `0 10px 36px ${hudPrimary}22`,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/85">
+              Orbit Latch
+            </div>
+            <div
+              className="rounded-full px-2 py-[2px] text-[9px] font-semibold uppercase tracking-[0.18em] text-white/90"
+              style={{ background: `${hudSecondary}44` }}
+            >
+              {paletteName}
+            </div>
+          </div>
+          <div className="mt-1 text-[11px] text-white/85">
+            Latch on ring bloom, release to sling, avoid meteor streams.
+          </div>
+        </div>
 
-      <div className="absolute right-4 top-4 rounded-md border border-fuchsia-100/50 bg-gradient-to-br from-fuchsia-500/22 via-cyan-500/16 to-amber-500/20 px-3 py-2 text-right backdrop-blur-[2px]">
-        <div className="text-2xl font-black tabular-nums">{score}</div>
-        <div className="text-[11px] uppercase tracking-[0.2em] text-white/75">Best {best}</div>
+        <div
+          className="min-w-[230px] rounded-2xl border px-4 py-3 text-right backdrop-blur-sm"
+          style={{
+            borderColor: `${hudSecondary}8a`,
+            background: scorePanelBackground,
+            boxShadow: `0 12px 34px ${hudSecondary}22`,
+          }}
+        >
+          <div className="flex items-end justify-end gap-5">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-white/72">Score</div>
+              <div className="text-4xl font-black leading-none tabular-nums">{score}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.22em] text-white/72">High</div>
+              <div className="text-2xl font-black leading-none tabular-nums text-white/88">{best}</div>
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] text-white/70">
+            <span>Flow</span>
+            <div className="h-1.5 flex-1 rounded-full bg-white/12">
+              <div
+                className="h-full rounded-full transition-all duration-300"
+                style={{
+                  width: `${Math.round(multiplierMeter * 100)}%`,
+                  background: `linear-gradient(90deg, ${hudPrimary}, ${hudAccent})`,
+                }}
+              />
+            </div>
+            <span className="font-semibold text-white/85">x{multiplier.toFixed(2)}</span>
+          </div>
+        </div>
       </div>
 
       {status === 'PLAYING' && (
-        <div className="absolute left-4 top-[92px] rounded-md border border-cyan-100/35 bg-gradient-to-br from-slate-950/78 via-cyan-900/30 to-fuchsia-900/22 px-3 py-2 text-xs">
-          <div>
-            Mode{' '}
-            <span className="font-semibold uppercase tracking-[0.12em] text-sky-200">
-              {mode === 'classic' ? 'Classic' : 'Scattered'}
-            </span>
-          </div>
-          <div>
-            State{' '}
-            <span className={`font-semibold ${latched ? 'text-cyan-200' : 'text-fuchsia-200'}`}>
-              {latched ? 'Latched' : 'Drifting'}
-            </span>
-          </div>
-          <div>
-            Transfers <span className="font-semibold text-cyan-200">{latches}</span>
-          </div>
-          <div>
-            Stars <span className="font-semibold text-amber-200">{stars}</span>
-          </div>
-          <div>
-            Tight Releases <span className="font-semibold text-emerald-200">{tightReleases}</span>
-          </div>
-          <div>
-            Multiplier <span className="font-semibold text-violet-200">x{multiplier.toFixed(2)}</span>
-          </div>
-          {mode === 'scattered' && (
+        <div
+          className="absolute left-4 top-[108px] w-[min(340px,calc(100%-2rem))] rounded-xl border px-3 py-2 text-xs backdrop-blur-sm"
+          style={{
+            borderColor: `${hudAccent}7a`,
+            background: `linear-gradient(155deg, rgba(5,8,20,0.82), ${hudAccent}1e, rgba(5,8,20,0.64))`,
+          }}
+        >
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
             <div>
-              Time <span className="font-semibold text-rose-200">{timerText}</span>
+              Mode{' '}
+              <span className="font-semibold uppercase tracking-[0.12em] text-white">
+                {mode === 'classic' ? 'Classic' : 'Scattered'}
+              </span>
             </div>
-          )}
+            <div>
+              State{' '}
+              <span
+                className={`font-semibold ${latched ? 'text-emerald-200' : 'text-rose-200'}`}
+                style={{ textShadow: `0 0 12px ${latched ? hudPrimary : hudDanger}` }}
+              >
+                {latched ? 'Latched' : 'Drifting'}
+              </span>
+            </div>
+            <div>
+              Transfers <span className="font-semibold text-cyan-200">{latches}</span>
+            </div>
+            <div>
+              Fragments <span className="font-semibold text-amber-200">{stars}</span>
+            </div>
+            <div>
+              Habitats <span className="font-semibold text-violet-200">{habitats}</span>
+            </div>
+            <div>
+              Tight Releases <span className="font-semibold text-emerald-200">{tightReleases}</span>
+            </div>
+            {mode === 'scattered' && (
+              <div>
+                Time <span className="font-semibold text-rose-200">{timerText}</span>
+              </div>
+            )}
+            <div>
+              Multiplier <span className="font-semibold text-cyan-100">x{multiplier.toFixed(2)}</span>
+            </div>
+          </div>
         </div>
       )}
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-cyan-100/42 bg-gradient-to-br from-slate-950/85 via-indigo-950/45 to-fuchsia-950/30 px-6 py-5 text-center backdrop-blur-md">
+          <div
+            className="rounded-xl border px-6 py-5 text-center backdrop-blur-md"
+            style={{
+              borderColor: `${hudPrimary}88`,
+              background: overlayBackground,
+              boxShadow: `0 20px 46px ${hudSecondary}24`,
+            }}
+          >
             <div className="text-2xl font-black tracking-wide text-transparent bg-gradient-to-r from-cyan-300 via-fuchsia-300 to-amber-300 bg-clip-text">
               ORBIT LATCH
             </div>
             <div className="mt-2 text-sm text-white/88">Tap to latch when crossing an orbit ring.</div>
             <div className="mt-1 text-sm text-white/82">
-              Tap again to release and steer into your next orbit.
+              Tap again to release and steer into your next orbit chain.
             </div>
             <div className="pointer-events-auto mt-4 grid grid-cols-2 gap-2">
               <button
@@ -1035,7 +1501,7 @@ function OrbitLatchOverlay() {
                 }}
                 className={`rounded-md border px-3 py-2 text-left transition ${
                   mode === 'classic'
-                    ? 'border-cyan-100/80 bg-cyan-400/22'
+                    ? 'border-cyan-100/80 bg-cyan-400/22 shadow-[0_0_22px_rgba(99,220,255,0.32)]'
                     : 'border-white/20 bg-white/5 hover:border-cyan-100/50'
                 }`}
               >
@@ -1051,16 +1517,16 @@ function OrbitLatchOverlay() {
                 }}
                 className={`rounded-md border px-3 py-2 text-left transition ${
                   mode === 'scattered'
-                    ? 'border-fuchsia-100/80 bg-fuchsia-400/22'
+                    ? 'border-fuchsia-100/80 bg-fuchsia-400/22 shadow-[0_0_22px_rgba(255,130,226,0.28)]'
                     : 'border-white/20 bg-white/5 hover:border-fuchsia-100/50'
                 }`}
               >
                 <div className="text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-100">Scattered</div>
-                <div className="mt-1 text-[11px] text-white/75">Dense orbit fields, hazards, and a timer.</div>
+                <div className="mt-1 text-[11px] text-white/75">Meteors, hazards, habitats, and a timer.</div>
               </button>
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">
-              Latch when the orbit cue blooms. Release to slingshot.
+              Latch on cue bloom. Snag fragments and habitat cores for bonus score.
             </div>
             <div className="pointer-events-auto mt-4 flex items-center justify-center">
               <button
@@ -1070,7 +1536,12 @@ function OrbitLatchOverlay() {
                   event.stopPropagation();
                   requestStart();
                 }}
-                className="rounded-lg border border-cyan-100/80 bg-gradient-to-r from-cyan-400/35 via-sky-400/28 to-fuchsia-400/28 px-5 py-2 text-sm font-bold tracking-[0.12em] text-cyan-50 shadow-[0_0_26px_rgba(56,219,255,0.35)] transition hover:brightness-110"
+                className="rounded-lg border px-5 py-2 text-sm font-bold tracking-[0.12em] text-cyan-50 transition hover:brightness-110"
+                style={{
+                  borderColor: `${hudPrimary}cc`,
+                  background: `linear-gradient(90deg, ${hudPrimary}66, ${hudSecondary}55, ${hudAccent}5d)`,
+                  boxShadow: `0 0 26px ${hudPrimary}5f`,
+                }}
               >
                 START RUN
               </button>
@@ -1082,7 +1553,14 @@ function OrbitLatchOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/45 to-indigo-950/30 px-6 py-5 text-center backdrop-blur-md">
+          <div
+            className="rounded-xl border px-6 py-5 text-center backdrop-blur-md"
+            style={{
+              borderColor: `${hudDanger}94`,
+              background: `linear-gradient(140deg, rgba(6,8,16,0.86), ${hudDanger}36 45%, ${hudSecondary}28)`,
+              boxShadow: `0 18px 46px ${hudDanger}35`,
+            }}
+          >
             <div className="text-2xl font-black text-rose-200">
               {mode === 'scattered' ? 'Window Closed' : 'Orbit Lost'}
             </div>
@@ -1090,6 +1568,9 @@ function OrbitLatchOverlay() {
             <div className="mt-2 text-sm text-white/82">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">
               Best {best} • {mode === 'classic' ? 'Classic' : 'Scattered'}
+            </div>
+            <div className="mt-1 text-[12px] text-white/65">
+              Transfers {latches} • Fragments {stars} • Habitats {habitats}
             </div>
             <div className="mt-3 text-sm text-cyan-200/90">Tap instantly to retry.</div>
             <div className="pointer-events-auto mt-3 flex items-center justify-center">
@@ -1100,7 +1581,11 @@ function OrbitLatchOverlay() {
                   event.stopPropagation();
                   requestStart();
                 }}
-                className="rounded-md border border-cyan-100/80 bg-cyan-400/24 px-4 py-2 text-xs font-bold tracking-[0.12em] text-cyan-100 transition hover:brightness-110"
+                className="rounded-md border px-4 py-2 text-xs font-bold tracking-[0.12em] text-cyan-100 transition hover:brightness-110"
+                style={{
+                  borderColor: `${hudPrimary}cc`,
+                  background: `linear-gradient(90deg, ${hudPrimary}3f, ${hudSecondary}31)`,
+                }}
               >
                 PLAY AGAIN
               </button>
@@ -1108,7 +1593,6 @@ function OrbitLatchOverlay() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
@@ -1127,13 +1611,17 @@ function OrbitLatchScene({
   const planetGlowRef = useRef<THREE.InstancedMesh>(null);
   const ringRef = useRef<THREE.InstancedMesh>(null);
   const starRef = useRef<THREE.InstancedMesh>(null);
+  const habitatRef = useRef<THREE.InstancedMesh>(null);
   const hazardRef = useRef<THREE.InstancedMesh>(null);
+  const meteorRef = useRef<THREE.InstancedMesh>(null);
+  const ringPulseRef = useRef<THREE.InstancedMesh>(null);
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const satRef = useRef<THREE.Mesh>(null);
   const latchSparkRef = useRef<THREE.Mesh>(null);
   const latchCuePulseRef = useRef<THREE.Mesh>(null);
   const latchCuePulseRefSecondary = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
+  const vignetteRef = useRef<any>(null);
   const ambientLightRef = useRef<THREE.AmbientLight>(null);
   const directionalLightRef = useRef<THREE.DirectionalLight>(null);
   const hemiLightRef = useRef<THREE.HemisphereLight>(null);
@@ -1144,7 +1632,10 @@ function OrbitLatchScene({
   const planetGlowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const starMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const habitatMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const hazardMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const meteorMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const ringPulseMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const satMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const latchSparkMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const latchCuePulseMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -1189,14 +1680,18 @@ function OrbitLatchScene({
     if (ORBIT_PALETTES.length > 1 && nextPalette === previousPalette) {
       nextPalette = (nextPalette + 1) % ORBIT_PALETTES.length;
     }
+    const basePalette = ORBIT_PALETTES[nextPalette] ?? fallbackPalette;
 
     runtime.mode = mode;
     runtime.paletteIndex = nextPalette;
+    runtime.activePalette = randomizePaletteForRun(basePalette);
+    useOrbitStore.getState().setPaletteUi(runtime.activePalette);
     paletteAppliedRef.current = -1;
     runtime.elapsed = 0;
     runtime.score = 0;
     runtime.latches = 0;
     runtime.stars = 0;
+    runtime.habitats = 0;
     runtime.timeRemaining = mode === 'scattered' ? SCATTERED_TIME_LIMIT : 0;
     runtime.releaseCount = 0;
     runtime.tightReleases = 0;
@@ -1237,7 +1732,11 @@ function OrbitLatchScene({
     runtime.scatterBandCursor = 0;
     runtime.scatterBandSize = 0;
     runtime.nextStarSlot = 0;
+    runtime.nextHabitatSlot = 0;
     runtime.nextHazardSlot = 0;
+    runtime.nextMeteorSlot = 0;
+    runtime.nextRingPulseSlot = 0;
+    runtime.meteorCooldown = 1 + Math.random() * 1.4;
     runtime.cuePulseT = 0;
     runtime.cuePulseCooldown = 0;
     runtime.cuePulseSlot = -1;
@@ -1250,9 +1749,23 @@ function OrbitLatchScene({
       hazard.active = false;
       hazard.glow = 0;
     }
+    for (const habitat of runtime.habitatsPool) {
+      habitat.active = false;
+      habitat.glow = 0;
+      habitat.planetSlot = -1;
+    }
+    for (const meteor of runtime.meteorsPool) {
+      meteor.active = false;
+      meteor.life = 0;
+      meteor.glow = 0;
+    }
     for (const shard of runtime.shards) {
       shard.active = false;
       shard.life = 0;
+    }
+    for (const pulse of runtime.ringPulses) {
+      pulse.active = false;
+      pulse.life = 0;
     }
 
     for (let i = 0; i < runtime.planets.length; i += 1) {
@@ -1360,6 +1873,17 @@ function OrbitLatchScene({
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.45);
       }
+      if (habitatMaterialRef.current) {
+        habitatMaterialRef.current.color.copy(palette.trailGlow);
+        habitatMaterialRef.current.emissive.copy(palette.stars[0] ?? WHITE);
+      }
+      if (meteorMaterialRef.current) {
+        meteorMaterialRef.current.color.copy(palette.hazards[0] ?? DANGER);
+        meteorMaterialRef.current.emissive.copy(palette.hazards[1] ?? palette.hazards[0] ?? DANGER);
+      }
+      if (ringPulseMaterialRef.current) {
+        ringPulseMaterialRef.current.color.copy(palette.ringCue);
+      }
       if (satMaterialRef.current) {
         satMaterialRef.current.color.copy(palette.player);
         satMaterialRef.current.emissive.copy(palette.playerEmissive);
@@ -1379,6 +1903,9 @@ function OrbitLatchScene({
         const c1 = `#${palette.ringCue.getHexString()}`;
         const c2 = `#${palette.hemiGround.getHexString()}`;
         impactOverlayRef.current.style.background = `radial-gradient(circle at center, ${c0}88, ${c1}66, ${c2}00)`;
+      }
+      if (vignetteRef.current) {
+        vignetteRef.current.darkness = palette.vignetteDarkness;
       }
     }
     if (scene.fog instanceof THREE.Fog) {
@@ -1458,13 +1985,12 @@ function OrbitLatchScene({
             runtime.tightReleases += 1;
             runtime.score += 1;
             runtime.coreGlow = Math.min(1.45, runtime.coreGlow + 0.22);
-            spawnBurst(
+            spawnCollectFx(
               runtime,
               runtime.playerX,
               runtime.playerY,
               getPaletteColor(palette.stars, 0),
-              7,
-              2.4
+              1.2
             );
           }
         }
@@ -1548,13 +2074,12 @@ function OrbitLatchScene({
             runtime.cuePulseSlot = nextPlanet.slot;
 
             nextPlanet.glow = 1.2;
-            spawnBurst(
+            spawnCollectFx(
               runtime,
               runtime.playerX,
               runtime.playerY,
               getPaletteColor(palette.planets, nextPlanet.colorIndex),
-              8,
-              2.2
+              1.1
             );
             maybeVibrate(10);
             playTone(760, 0.05, 0.03);
@@ -1567,7 +2092,7 @@ function OrbitLatchScene({
       }
     }
 
-    const failRun = (reason: string, color: THREE.Color = DANGER) => {
+    const failRun = (reason: string, color: THREE.Color = DANGER, intensity = 1.2) => {
       const latest = useOrbitStore.getState();
       if (latest.status !== 'PLAYING') return;
       runtime.failMessage = reason;
@@ -1575,9 +2100,21 @@ function OrbitLatchScene({
       runtime.shake = Math.max(runtime.shake, 1.25);
       runtime.coreGlow = Math.max(runtime.coreGlow, 1.2);
       runtime.latchFlash = Math.max(runtime.latchFlash, 0.7);
-      spawnBurst(runtime, runtime.playerX, runtime.playerY, color, 16, 3.4);
+      spawnDeathFx(runtime, runtime.playerX, runtime.playerY, color, intensity);
       maybeVibrate(16);
       playTone(190, 0.09, 0.042);
+      useOrbitStore
+        .getState()
+        .updateHud(
+          runtime.score,
+          runtime.latches,
+          runtime.stars,
+          runtime.habitats,
+          runtime.timeRemaining,
+          runtime.tightReleases,
+          runtime.multiplier,
+          runtime.latched
+        );
       useOrbitStore.getState().endRun(runtime.score, runtime.failMessage);
     };
 
@@ -1598,6 +2135,14 @@ function OrbitLatchScene({
       const gravityScale = lerp(0.34, 0.68, d) * (runtime.mode === 'scattered' ? 1.12 : 1);
       const driftFail =
         runtime.mode === 'scattered' ? lerp(DRIFT_FAIL_BASE - 1.1, 3.5, d) : lerp(DRIFT_FAIL_BASE, 3.9, d);
+      runtime.meteorCooldown -= dt;
+      if (runtime.meteorCooldown <= 0) {
+        const spawnChance = runtime.mode === 'scattered' ? 0.84 : 0.58;
+        if (Math.random() < spawnChance) {
+          spawnMeteor(runtime, runtime.currentChunk?.tier ?? 0);
+        }
+        runtime.meteorCooldown = lerp(2.7, 1.15, d) + (runtime.mode === 'scattered' ? 0.1 : 0.46) + Math.random() * 1.2;
+      }
 
       for (const planet of runtime.planets) {
         planet.glow = Math.max(0, planet.glow - dt * 2.2);
@@ -1697,10 +2242,14 @@ function OrbitLatchScene({
         }
 
         if (impactedCore || (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS))) {
-          failRun('Satellite impacted a planet core.');
+          failRun(
+            'Satellite impacted a planet core.',
+            nearest ? getPaletteColor(palette.planets, nearest.colorIndex) : DANGER,
+            1.5
+          );
         } else if (runtime.driftTimer > driftFail) {
           if (!withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1)) {
-            failRun('Drift window expired before relatch.');
+            failRun('Drift window expired before relatch.', palette.ringCue, 1.2);
           }
         }
       }
@@ -1708,9 +2257,60 @@ function OrbitLatchScene({
       runtime.maxYReached = Math.max(runtime.maxYReached, runtime.playerY);
 
       if (Math.abs(runtime.playerX) > FIELD_HALF_X + 0.05) {
-        failRun('Satellite escaped lateral bounds.');
+        failRun('Satellite escaped lateral bounds.', getPaletteColor(palette.hazards, 0), 1.35);
       } else if (runtime.playerY < runtime.maxYReached - SAFE_FALL_BACK) {
-        failRun('Signal lost below relay field.');
+        failRun('Signal lost below relay field.', getPaletteColor(palette.hazards, 1), 1.2);
+      }
+
+      for (const habitat of runtime.habitatsPool) {
+        if (!habitat.active) continue;
+        const planet = runtime.planets.find((candidate) => candidate.slot === habitat.planetSlot);
+        if (!planet) {
+          habitat.active = false;
+          continue;
+        }
+        habitat.orbitAngle += habitat.orbitVel * dt;
+        habitat.glow = Math.max(0, habitat.glow - dt * 3);
+        habitat.x = planet.x + Math.cos(habitat.orbitAngle) * habitat.orbitRadius;
+        habitat.y = planet.y + Math.sin(habitat.orbitAngle) * habitat.orbitRadius;
+
+        const captureRadius = HABITAT_COLLECT_RADIUS + habitat.size * 0.34;
+        const dx = runtime.playerX - habitat.x;
+        const dy = runtime.playerY - habitat.y;
+        if (dx * dx + dy * dy < 2.2) {
+          habitat.glow = Math.min(1.25, habitat.glow + dt * 3.4);
+        }
+        const segDistSq = distanceToSegmentSq(
+          habitat.x,
+          habitat.y,
+          segmentStartX,
+          segmentStartY,
+          runtime.playerX,
+          runtime.playerY
+        );
+        if (dx * dx + dy * dy <= captureRadius * captureRadius || segDistSq <= captureRadius * captureRadius) {
+          habitat.active = false;
+          runtime.habitats += 1;
+          runtime.score += habitat.value * 2.3;
+          runtime.coreGlow = Math.min(1.7, runtime.coreGlow + 0.32);
+          runtime.latchFlash = Math.min(1, runtime.latchFlash + 0.3);
+          if (runtime.mode === 'scattered') {
+            runtime.timeRemaining = Math.min(
+              SCATTERED_TIME_LIMIT,
+              runtime.timeRemaining + 0.75 + habitat.value * 0.35
+            );
+          }
+          spawnCollectFx(
+            runtime,
+            habitat.x,
+            habitat.y,
+            getPaletteColor(palette.stars, habitat.colorIndex),
+            1.65
+          );
+          playTone(1120, 0.05, 0.02);
+        } else if (habitat.y < runtime.playerY - 10.5) {
+          habitat.active = false;
+        }
       }
 
       for (const star of runtime.starsPool) {
@@ -1733,13 +2333,12 @@ function OrbitLatchScene({
           runtime.stars += star.value;
           runtime.score += star.value * 1.25;
           runtime.coreGlow = Math.min(1.55, runtime.coreGlow + 0.2);
-          spawnBurst(
+          spawnCollectFx(
             runtime,
             star.x,
             star.y,
             getPaletteColor(palette.stars, star.colorIndex),
-            7,
-            2.1
+            1 + star.value * 0.28
           );
           playTone(980, 0.045, 0.022);
         } else if (star.y < runtime.playerY - 9) {
@@ -1771,12 +2370,69 @@ function OrbitLatchScene({
         if (dx * dx + dy * dy <= hitRadius * hitRadius || segDistSq <= hitRadius * hitRadius) {
           failRun(
             'Satellite shattered on a hazard shard.',
-            getPaletteColor(palette.hazards, hazard.colorIndex)
+            getPaletteColor(palette.hazards, hazard.colorIndex),
+            1.45
           );
           break;
         }
         if (hazard.y < runtime.playerY - 10) {
           hazard.active = false;
+        }
+      }
+
+      for (const meteor of runtime.meteorsPool) {
+        if (!meteor.active) continue;
+        meteor.life -= dt;
+        if (meteor.life <= 0) {
+          meteor.active = false;
+          continue;
+        }
+        meteor.spin += dt * meteor.spinVel;
+        meteor.glow = Math.max(0, meteor.glow - dt * 2.3);
+        const speed = Math.hypot(meteor.vx, meteor.vy) || 1;
+        const nx = -meteor.vy / speed;
+        const ny = meteor.vx / speed;
+        const wobble = Math.sin(runtime.elapsed * 3.8 + meteor.wobblePhase) * meteor.wobbleAmp;
+        const prevX = meteor.x;
+        const prevY = meteor.y;
+        meteor.x += (meteor.vx + nx * wobble * 0.5) * dt;
+        meteor.y += (meteor.vy + ny * wobble * 0.5) * dt;
+        const dx = runtime.playerX - meteor.x;
+        const dy = runtime.playerY - meteor.y;
+        const hitRadius = meteor.radius + PLAYER_RADIUS * 0.84;
+        const segDistSq = distanceToSegmentSq(
+          meteor.x,
+          meteor.y,
+          segmentStartX,
+          segmentStartY,
+          runtime.playerX,
+          runtime.playerY
+        );
+        if (dx * dx + dy * dy < 2.6) {
+          meteor.glow = Math.min(1.3, meteor.glow + dt * 2.8);
+        }
+        if (dx * dx + dy * dy <= hitRadius * hitRadius || segDistSq <= hitRadius * hitRadius) {
+          failRun(
+            'Meteor impact shredded the relay shell.',
+            getPaletteColor(palette.hazards, meteor.colorIndex),
+            1.7
+          );
+          break;
+        }
+        if (
+          (meteor.x < -FIELD_HALF_X - 2.4 || meteor.x > FIELD_HALF_X + 2.4) &&
+          (meteor.y < runtime.playerY - 4 || meteor.y > runtime.playerY + 16)
+        ) {
+          meteor.active = false;
+        } else if (Math.random() < dt * 8) {
+          spawnBurst(
+            runtime,
+            lerp(prevX, meteor.x, 0.45),
+            lerp(prevY, meteor.y, 0.45),
+            getPaletteColor(palette.hazards, meteor.colorIndex),
+            1,
+            0.6
+          );
         }
       }
 
@@ -1796,6 +2452,7 @@ function OrbitLatchScene({
             runtime.score,
             runtime.latches,
             runtime.stars,
+            runtime.habitats,
             runtime.timeRemaining,
             runtime.tightReleases,
             runtime.multiplier,
@@ -1808,6 +2465,14 @@ function OrbitLatchScene({
     runtime.latchFlash = Math.max(0, runtime.latchFlash - dt * 3.6);
     runtime.impactFlash = Math.max(0, runtime.impactFlash - dt * 2.9);
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
+
+    for (const pulse of runtime.ringPulses) {
+      if (!pulse.active) continue;
+      pulse.life -= dt;
+      if (pulse.life <= 0) {
+        pulse.active = false;
+      }
+    }
 
     for (const shard of runtime.shards) {
       if (!shard.active) continue;
@@ -2076,6 +2741,35 @@ function OrbitLatchScene({
       if (starRef.current.instanceColor) starRef.current.instanceColor.needsUpdate = true;
     }
 
+    if (habitatRef.current) {
+      let habitatCount = 0;
+      for (const habitat of runtime.habitatsPool) {
+        if (!habitat.active) continue;
+        const world = simToWorld(habitat.x, habitat.y, trailWorld);
+        const bob = Math.sin(runtime.elapsed * 3.4 + habitat.slot * 0.7) * 0.035;
+        dummy.position.set(world.x, 0.07 + bob, world.z);
+        const s = habitat.size * (1 + habitat.glow * 0.2);
+        dummy.scale.setScalar(s);
+        dummy.rotation.set(
+          runtime.elapsed * 0.9 + habitat.orbitAngle * 0.4,
+          runtime.elapsed * 1.25 + habitat.slot * 0.3,
+          runtime.elapsed * 0.7
+        );
+        dummy.updateMatrix();
+        habitatRef.current.setMatrixAt(habitatCount, dummy.matrix);
+
+        colorScratch
+          .copy(getPaletteColor(palette.stars, habitat.colorIndex))
+          .lerp(palette.trailGlow, 0.26)
+          .lerp(WHITE, clamp(0.3 + habitat.glow * 0.6, 0, 0.88));
+        habitatRef.current.setColorAt(habitatCount, colorScratch);
+        habitatCount += 1;
+      }
+      habitatRef.current.count = habitatCount;
+      habitatRef.current.instanceMatrix.needsUpdate = true;
+      if (habitatRef.current.instanceColor) habitatRef.current.instanceColor.needsUpdate = true;
+    }
+
     if (hazardRef.current) {
       let hazardCount = 0;
       for (const hazard of runtime.hazardsPool) {
@@ -2101,6 +2795,58 @@ function OrbitLatchScene({
       hazardRef.current.count = hazardCount;
       hazardRef.current.instanceMatrix.needsUpdate = true;
       if (hazardRef.current.instanceColor) hazardRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (meteorRef.current) {
+      let meteorCount = 0;
+      for (const meteor of runtime.meteorsPool) {
+        if (!meteor.active) continue;
+        const world = simToWorld(meteor.x, meteor.y, trailWorld);
+        dummy.position.set(world.x, 0.075 + meteor.glow * 0.05, world.z);
+        dummy.scale.set(meteor.radius * 1.45, meteor.radius * 0.88, meteor.radius * 0.88);
+        dummy.rotation.set(
+          meteor.spin * 0.85,
+          Math.atan2(meteor.vy, meteor.vx) + Math.PI * 0.5,
+          meteor.spin * 0.35
+        );
+        dummy.updateMatrix();
+        meteorRef.current.setMatrixAt(meteorCount, dummy.matrix);
+
+        colorScratch
+          .copy(getPaletteColor(palette.hazards, meteor.colorIndex))
+          .lerp(WHITE, clamp(0.2 + meteor.glow * 0.64, 0, 0.9));
+        meteorRef.current.setColorAt(meteorCount, colorScratch);
+        meteorCount += 1;
+      }
+      meteorRef.current.count = meteorCount;
+      meteorRef.current.instanceMatrix.needsUpdate = true;
+      if (meteorRef.current.instanceColor) meteorRef.current.instanceColor.needsUpdate = true;
+    }
+
+    if (ringPulseRef.current) {
+      let pulseCount = 0;
+      for (const pulse of runtime.ringPulses) {
+        if (!pulse.active) continue;
+        const lifeT = clamp(pulse.life / pulse.maxLife, 0, 1);
+        const waveT = 1 - lifeT;
+        const world = simToWorld(pulse.x, pulse.y, trailWorld);
+        const scale = lerp(pulse.startScale, pulse.endScale, waveT);
+        dummy.position.set(world.x, 0.042 + waveT * 0.02, world.z);
+        dummy.scale.set(scale, scale, scale);
+        dummy.rotation.set(-Math.PI * 0.5, 0, 0);
+        dummy.updateMatrix();
+        ringPulseRef.current.setMatrixAt(pulseCount, dummy.matrix);
+
+        colorScratch.copy(pulse.color).lerp(WHITE, 0.18 + (1 - lifeT) * 0.28);
+        ringPulseRef.current.setColorAt(pulseCount, colorScratch);
+        pulseCount += 1;
+      }
+      ringPulseRef.current.count = pulseCount;
+      ringPulseRef.current.instanceMatrix.needsUpdate = true;
+      if (ringPulseRef.current.instanceColor) ringPulseRef.current.instanceColor.needsUpdate = true;
+      if (ringPulseMaterialRef.current) {
+        ringPulseMaterialRef.current.opacity = clamp(0.52 + runtime.impactFlash * 0.2, 0.38, 0.72);
+      }
     }
 
     if (shardRef.current) {
@@ -2218,6 +2964,20 @@ function OrbitLatchScene({
         />
       </instancedMesh>
 
+      <instancedMesh ref={habitatRef} args={[undefined, undefined, HABITAT_POOL]} frustumCulled={false}>
+        <dodecahedronGeometry args={[1, 0]} />
+        <meshStandardMaterial
+          ref={habitatMaterialRef}
+          color="#ffffff"
+          vertexColors
+          roughness={0.24}
+          metalness={0.42}
+          emissive="#4f9bb4"
+          emissiveIntensity={0.82}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
       <instancedMesh ref={hazardRef} args={[undefined, undefined, HAZARD_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
@@ -2228,6 +2988,20 @@ function OrbitLatchScene({
           metalness={0.4}
           emissive="#5b1a33"
           emissiveIntensity={0.56}
+          toneMapped={false}
+        />
+      </instancedMesh>
+
+      <instancedMesh ref={meteorRef} args={[undefined, undefined, METEOR_POOL]} frustumCulled={false}>
+        <icosahedronGeometry args={[1, 1]} />
+        <meshStandardMaterial
+          ref={meteorMaterialRef}
+          color="#ffffff"
+          vertexColors
+          roughness={0.14}
+          metalness={0.54}
+          emissive="#74223d"
+          emissiveIntensity={0.68}
           toneMapped={false}
         />
       </instancedMesh>
@@ -2292,6 +3066,20 @@ function OrbitLatchScene({
         />
       </mesh>
 
+      <instancedMesh ref={ringPulseRef} args={[undefined, undefined, RING_PULSE_POOL]} frustumCulled={false}>
+        <torusGeometry args={[1, 0.07, 10, 54]} />
+        <meshBasicMaterial
+          ref={ringPulseMaterialRef}
+          vertexColors
+          transparent
+          opacity={0.56}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+        />
+      </instancedMesh>
+
       <instancedMesh ref={shardRef} args={[undefined, undefined, SHARD_POOL]} frustumCulled={false}>
         <boxGeometry args={[1, 1, 1]} />
         <meshBasicMaterial
@@ -2307,7 +3095,7 @@ function OrbitLatchScene({
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
         <Bloom ref={bloomRef} intensity={0.64} luminanceThreshold={0.36} luminanceSmoothing={0.21} mipmapBlur />
-        <Vignette eskil={false} offset={0.16} darkness={0.26} />
+        <Vignette ref={vignetteRef} eskil={false} offset={0.16} darkness={0.26} />
         <Noise premultiply opacity={0.022} />
       </EffectComposer>
 
