@@ -857,7 +857,7 @@ function PulseParryOverlay() {
         </div>
       )}
 
-      {status === 'PLAYING' && (
+      {status === 'PLAYING' && scoreFxNonce > 0 && (
         <div key={scoreFxNonce}>
           <div
             className="absolute left-1/2 top-[46%] -translate-x-1/2 -translate-y-1/2 text-3xl font-black tracking-[0.08em]"
@@ -1013,7 +1013,8 @@ function PulseParryScene() {
   const { camera } = useThree();
 
   useEffect(() => {
-    resetRuntime(runtimeRef.current);
+    const mode = usePulseParryStore.getState().mode;
+    resetRuntime(runtimeRef.current, mode);
     usePulseParryStore.getState().resetToStart();
     pulseParryState.status = 'menu';
     pulseParryState.score = 0;
@@ -1059,6 +1060,7 @@ function PulseParryScene() {
       input.justPressed.has('space') ||
       input.justPressed.has('enter');
     const keyLane = laneForDirectionalKey(input.justPressed);
+    const modeInput = modeForPressedKey(input.justPressed);
 
     if (input.pointerJustDown) {
       swipeStartRef.current = { x: input.pointerX, y: input.pointerY };
@@ -1074,26 +1076,43 @@ function PulseParryScene() {
     const laneInput = keyLane ?? swipeLane;
     const restart = input.justPressed.has('r');
 
+    if (modeInput && store.status !== 'PLAYING') {
+      usePulseParryStore.getState().setMode(modeInput);
+      runtime.mode = modeInput;
+    } else if (store.status !== 'PLAYING') {
+      runtime.mode = store.mode;
+    }
+
     if (restart) {
-      resetRuntime(runtime);
+      resetRuntime(runtime, store.mode);
       usePulseParryStore.getState().startRun();
     }
 
     if (startTap && !restart && store.status !== 'PLAYING') {
-      resetRuntime(runtime);
+      resetRuntime(runtime, store.mode);
       usePulseParryStore.getState().startRun();
     }
 
     if (store.status === 'PLAYING') {
       let failed = false;
+      runtime.mode = store.mode;
+      const tuning = DIFFICULTY_TUNING[runtime.mode];
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.phase = 1;
       runtime.targetLanes = 4;
       runtime.laneMask = PHASE_LANE_MASKS[0];
       runtime.parryWindowLeft = Math.max(0, runtime.parryWindowLeft - dt);
-      runtime.hitThreshold = clamp(0.07 - Math.min(0.02, runtime.elapsed * 0.00042), 0.05, 0.07);
-      runtime.perfectThreshold = runtime.hitThreshold * 0.6;
+      runtime.hitThreshold = clamp(
+        clamp(0.07 - Math.min(0.02, runtime.elapsed * 0.00042), 0.05, 0.07) * tuning.timingScale,
+        0.05,
+        0.2
+      );
+      runtime.perfectThreshold = clamp(
+        runtime.hitThreshold * (0.44 + (tuning.perfectScale - 1) * 0.32),
+        0.03,
+        runtime.hitThreshold * 0.74
+      );
       runtime.parryRadius = PARRY_RADIUS_BASE;
       runtime.tapCooldown = Math.max(0, runtime.tapCooldown - dt);
       const overlapCandidate = findOverlapCandidate(runtime, 1.05);
@@ -1110,6 +1129,7 @@ function PulseParryScene() {
         if (failed) return;
         runtime.lives -= 1;
         runtime.tapMisses = 3 - runtime.lives;
+        runtime.streak = 0;
         runtime.multiplier = 1;
         runtime.perfectCombo = 0;
         runtime.resonance = Math.max(0, runtime.resonance - 0.8);
@@ -1139,13 +1159,27 @@ function PulseParryScene() {
         const contact = findOverlapCandidate(runtime, 1);
         if (contact && contact.pulse.lane === laneInput) {
           const pulse = contact.pulse;
-          pulse.active = false;
           pulse.parried = true;
           pulse.flash = 1;
+          pulse.hitFx = 1;
+          pulse.requestWeight = Math.max(0, pulse.requestWeight - 0.65);
           runtime.parryAngle = pulse.angle;
           runtime.parryWindowLeft = runtime.parryWindow;
           runtime.parries += 1;
-          runtime.score += 1;
+          runtime.streak += 1;
+          const perfect = contact.diff <= runtime.perfectThreshold + contact.contactRadius * 0.4;
+          runtime.perfectCombo = perfect ? runtime.perfectCombo + 1 : 0;
+          runtime.multiplier = clamp(
+            1 + Math.floor(runtime.streak / 6) * 0.2 + runtime.perfectCombo * 0.05,
+            1,
+            3.2
+          );
+          const streakBonus = runtime.streak > 0 && runtime.streak % 8 === 0;
+          let scoreGain = 1;
+          if (perfect) scoreGain += 1;
+          if (streakBonus) scoreGain += 1;
+          scoreGain = Math.max(1, Math.round(scoreGain * (0.75 + runtime.multiplier * 0.25)));
+          runtime.score += scoreGain;
           runtime.resonance = clamp(runtime.resonance + 0.48, 0, 12);
           runtime.coreGlow = Math.min(1.65, runtime.coreGlow + 0.3);
           runtime.shake = Math.min(1.2, runtime.shake + 0.18);
@@ -1159,8 +1193,19 @@ function PulseParryScene() {
             pulse.lane
           );
           runtime.perfectFlash = 1;
-          playClick(true);
-          usePulseParryStore.getState().onPerfectFx();
+          const scoreFxTone: ScoreFxTone = streakBonus ? 'streak' : perfect ? 'perfect' : 'normal';
+          const scoreFxText = streakBonus
+            ? `+${scoreGain} STREAK`
+            : perfect
+              ? `+${scoreGain} PERFECT`
+              : `+${scoreGain}`;
+          usePulseParryStore.getState().onScoreFx(scoreFxText, scoreFxTone);
+          if (perfect) {
+            playClick(true);
+            usePulseParryStore.getState().onPerfectFx();
+          } else {
+            playClick(false);
+          }
         } else if (contact) {
           const missedLane = contact.pulse.lane;
           contact.pulse.active = false;
@@ -1191,7 +1236,19 @@ function PulseParryScene() {
         if (failed) break;
         if (!pulse.active) continue;
         pulse.flash = Math.max(0, pulse.flash - dt * 4.5);
+        pulse.hitFx = Math.max(0, pulse.hitFx - dt * 4.6);
         pulse.life += dt;
+
+        if (pulse.parried) {
+          pulse.requestWeight = Math.max(0, pulse.requestWeight - dt * 6);
+          pulse.radius += dt * (0.95 + pulse.speed * 0.32);
+          if (pulse.hitFx <= 0.02 || pulse.radius >= MISS_RADIUS + pulse.thickness * 0.8) {
+            pulse.active = false;
+            pulse.parried = false;
+          }
+          continue;
+        }
+
         const targetVelocity = pulse.speed * (0.55 + Math.min(0.7, pulse.life * 0.9));
         const accel = (targetVelocity - pulse.velocity) * (5.4 - Math.min(2.5, pulse.life * 1.4));
         pulse.velocity += accel * dt;
@@ -1199,14 +1256,27 @@ function PulseParryScene() {
         pulse.radius += pulse.velocity * dt;
 
         const contactRadius = TARGET_NODE_RADIUS + pulse.thickness * 0.52;
+        const requestBand = runtime.hitThreshold + contactRadius;
+        const proximity = clamp(
+          1 - Math.abs(pulse.radius - runtime.parryRadius) / Math.max(0.0001, requestBand * 1.18),
+          0,
+          1
+        );
+        pulse.requestWeight = clamp(
+          lerp(pulse.requestWeight, proximity, 1 - Math.exp(-dt * 10.5)),
+          0,
+          1
+        );
         if (pulse.radius > runtime.parryRadius + contactRadius + runtime.hitThreshold) {
           pulse.active = false;
+          pulse.requestWeight = 0;
           registerOut(`Out: missed ${LANE_INPUT_NAMES[pulse.lane]} touch window.`, pulse.lane);
           continue;
         }
 
         if (pulse.radius >= MISS_RADIUS + pulse.thickness * 0.6) {
           pulse.active = false;
+          pulse.requestWeight = 0;
         }
       }
 
@@ -1218,11 +1288,11 @@ function PulseParryScene() {
             runtime.score,
             runtime.lives,
             runtime.parries,
-            1,
-            4,
+            runtime.phase,
+            runtime.targetLanes,
             runtime.tapMisses,
-            0,
-            1
+            runtime.streak,
+            runtime.multiplier
           );
       }
     }
@@ -1437,7 +1507,11 @@ function PulseParryScene() {
     }
 
     if (bloomRef.current) {
-      bloomRef.current.intensity = lerp(0.4, 0.96, clamp(runtime.coreGlow * 0.7 + runtime.perfectCombo * 0.05, 0, 1));
+      bloomRef.current.intensity = lerp(
+        0.24,
+        0.62,
+        clamp(runtime.coreGlow * 0.6 + runtime.perfectCombo * 0.05, 0, 1)
+      );
     }
 
     clearFrameInput(inputRef);
@@ -1446,13 +1520,13 @@ function PulseParryScene() {
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, CAMERA_BASE_Y, 0.002]} fov={34} near={0.1} far={50} />
-      <color attach="background" args={['#0c1b2b']} />
-      <fog attach="fog" args={['#0c1b2b', 8, 24]} />
+      <color attach="background" args={['#102337']} />
+      <fog attach="fog" args={['#102337', 11, 34]} />
 
-      <ambientLight intensity={0.58} />
-      <hemisphereLight args={['#6ee7ff', '#1a2842', 0.42]} />
-      <pointLight position={[0, 3.8, 0]} intensity={0.58} color="#6cffb9" />
-      <pointLight position={[0, 1.5, 0]} intensity={0.5} color="#ffd166" />
+      <ambientLight intensity={0.66} />
+      <hemisphereLight args={['#8aefff', '#22304b', 0.5]} />
+      <pointLight position={[0, 3.8, 0]} intensity={0.66} color="#6cffb9" />
+      <pointLight position={[0, 1.5, 0]} intensity={0.58} color="#ffd166" />
 
       <mesh position={[0, -0.72, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
         <planeGeometry args={[18, 18]} />
@@ -1473,13 +1547,13 @@ function PulseParryScene() {
             void main() {
               vec2 p = vUv * 2.0 - 1.0;
               float r = length(p);
-              vec3 deep = vec3(0.02, 0.07, 0.05);
-              vec3 edge = vec3(0.10, 0.18, 0.08);
+              vec3 deep = vec3(0.04, 0.10, 0.15);
+              vec3 edge = vec3(0.16, 0.22, 0.16);
               float halo = smoothstep(1.1, 0.15, r);
               float stars = fract(sin(dot(vUv * (uTime + 1.6), vec2(12.9898, 78.233))) * 43758.5453);
               stars = smoothstep(0.9945, 1.0, stars);
               vec3 col = mix(deep, edge, halo * 0.35);
-              col += vec3(stars) * 0.24;
+              col += vec3(stars) * 0.2;
               col += vec3(0.36, 0.42, 0.22) * uFlash * 0.12;
               gl_FragColor = vec4(col, 1.0);
             }
@@ -1491,10 +1565,10 @@ function PulseParryScene() {
       <points geometry={starsGeometry}>
         <pointsMaterial
           color="#b7ffd2"
-          size={0.028}
+          size={0.022}
           sizeAttenuation
           transparent
-          opacity={0.42}
+          opacity={0.32}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           toneMapped={false}
@@ -1672,9 +1746,9 @@ function PulseParryScene() {
       </instancedMesh>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
-        <Bloom ref={bloomRef} intensity={0.42} luminanceThreshold={0.52} luminanceSmoothing={0.25} mipmapBlur />
-        <Vignette eskil={false} offset={0.14} darkness={0.68} />
-        <Noise premultiply opacity={0.02} />
+        <Bloom ref={bloomRef} intensity={0.28} luminanceThreshold={0.68} luminanceSmoothing={0.34} />
+        <Vignette eskil={false} offset={0.1} darkness={0.4} />
+        <Noise premultiply opacity={0.008} />
       </EffectComposer>
 
       <Html fullscreen>
@@ -1687,8 +1761,8 @@ function PulseParryScene() {
 const PulseParry: React.FC<{ soundsOn?: boolean }> = () => {
   return (
     <Canvas
-      dpr={[1, 1.45]}
-      gl={{ antialias: false, powerPreference: 'high-performance' }}
+      dpr={[1, 1.8]}
+      gl={{ antialias: true, powerPreference: 'high-performance' }}
       className="absolute inset-x-4 bottom-4 top-20 sm:top-16"
       style={{
         touchAction: 'none',
