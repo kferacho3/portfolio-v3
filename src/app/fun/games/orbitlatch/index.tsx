@@ -1329,6 +1329,7 @@ function OrbitLatchScene({
   useFrame((_, delta) => {
     const step = consumeFixedStep(fixedStepRef.current, delta);
     if (step.steps <= 0) {
+      clearFrameInput(inputRef);
       return;
     }
     const dt = step.dt;
@@ -1336,6 +1337,8 @@ function OrbitLatchScene({
     const input = inputRef.current;
     const store = useOrbitStore.getState();
     const palette = getRuntimePalette(runtime);
+
+    try {
 
     if (paletteAppliedRef.current !== runtime.paletteIndex) {
       paletteAppliedRef.current = runtime.paletteIndex;
@@ -2119,17 +2122,32 @@ function OrbitLatchScene({
       );
     }
     if (vignetteRef.current) {
-      vignetteRef.current.uniforms.darkness.value = lerp(
+      const targetDarkness = lerp(
         palette.vignetteDarkness,
         palette.vignetteDarkness + 0.22,
         clamp(runtime.impactFlash * 0.8 + runtime.coreGlow * 0.2, 0, 1)
       );
+      const vignette = vignetteRef.current as {
+        darkness?: number;
+        uniforms?: { darkness?: { value?: number }; get?: (key: string) => { value?: number } | undefined };
+      };
+      if (vignette.uniforms?.darkness?.value !== undefined) {
+        vignette.uniforms.darkness.value = targetDarkness;
+      } else if (typeof vignette.uniforms?.get === 'function') {
+        const darknessUniform = vignette.uniforms.get('darkness');
+        if (darknessUniform && darknessUniform.value !== undefined) {
+          darknessUniform.value = targetDarkness;
+        }
+      } else if (typeof vignette.darkness === 'number') {
+        vignette.darkness = targetDarkness;
+      }
     }
     if (impactOverlayRef.current) {
       impactOverlayRef.current.style.opacity = `${clamp(runtime.impactFlash * 0.74, 0, 0.74)}`;
     }
-
-    clearFrameInput(inputRef);
+    } finally {
+      clearFrameInput(inputRef);
+    }
   });
 
   return (
