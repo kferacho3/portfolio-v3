@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { PerspectiveCamera } from '@react-three/drei';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
@@ -375,10 +375,7 @@ const PLANET_SOLID_COLOR_PALETTES: readonly PlanetColorPreset[] = [
 ];
 
 const hslToHex = (h: number, s: number, l: number) =>
-  `#${new THREE.Color()
-    .setHSL(mod(h, 1), clamp(s, 0, 1), clamp(l, 0, 1))
-    .convertLinearToSRGB()
-    .getHexString()}`;
+  `#${new THREE.Color().setHSL(mod(h, 1), clamp(s, 0, 1), clamp(l, 0, 1)).getHexString()}`;
 
 const createGeneratedMultiPalettes = (count: number): PlanetColorPreset[] => {
   const generated: PlanetColorPreset[] = [];
@@ -386,13 +383,13 @@ const createGeneratedMultiPalettes = (count: number): PlanetColorPreset[] => {
     const colorCount = 3 + (i % 4);
     const hueBase = mod(0.07 + i * 0.137, 1);
     const hueSpan = 0.34 + (i % 5) * 0.08;
-    const satBase = 0.74 + ((i * 11) % 17) / 100;
-    const lightBase = 0.5 + ((i * 7) % 19) / 100;
+    const satBase = 0.84 + ((i * 11) % 14) / 100;
+    const lightBase = 0.58 + ((i * 7) % 8) / 100;
     const colors: string[] = [];
     for (let c = 0; c < colorCount; c += 1) {
       const hue = mod(hueBase + (c / colorCount) * hueSpan + ((c % 2) - 0.5) * 0.04, 1);
-      const sat = clamp(satBase + ((c % 3) - 1) * 0.08, 0.68, 0.98);
-      const light = clamp(lightBase + ((c % 4) - 1.5) * 0.09, 0.38, 0.72);
+      const sat = clamp(satBase + ((c % 3) - 1) * 0.06, 0.8, 1);
+      const light = clamp(lightBase + ((c % 4) - 1.5) * 0.05, 0.54, 0.74);
       colors.push(hslToHex(hue, sat, light));
     }
     generated.push({
@@ -408,8 +405,8 @@ const createGeneratedSolidPalettes = (count: number): PlanetColorPreset[] => {
   const generated: PlanetColorPreset[] = [];
   for (let i = 0; i < count; i += 1) {
     const hue = mod(0.11 + i * 0.173, 1);
-    const sat = 0.74 + ((i * 9) % 19) / 100;
-    const light = 0.5 + ((i * 5) % 13) / 100;
+    const sat = 0.86 + ((i * 9) % 12) / 100;
+    const light = 0.58 + ((i * 5) % 10) / 100;
     generated.push({
       id: `mono-${String(i + 1).padStart(2, '0')}`,
       colors: [hslToHex(hue, sat, light)],
@@ -803,12 +800,9 @@ const buildPlanetRunPalette = () => {
 
   if (preset.solid) {
     const solidSource = presetColors[0]?.clone() ?? WHITE.clone();
-    const mixedSolid = solidSource
-      .lerp(WHITE, 0.14 + Math.random() * 0.08)
-      .multiplyScalar(1.08);
     return {
       id: preset.id,
-      colors: [mixedSolid],
+      colors: [solidSource],
     };
   }
 
@@ -818,9 +812,7 @@ const buildPlanetRunPalette = () => {
   for (let i = 0; i < targetCount; i += 1) {
     const presetColor =
       presetColors[(startOffset + i) % presetColors.length] ?? presetColors[0] ?? WHITE;
-    const color = presetColor.clone();
-    color.lerp(WHITE, 0.08 + (i % 3) * 0.05 + Math.random() * 0.03).multiplyScalar(1.04);
-    mixed.push(color);
+    mixed.push(presetColor.clone());
   }
   return {
     id: preset.id,
@@ -2103,7 +2095,7 @@ function OrbitLatchScene({
   const fillLightARef = useRef<THREE.PointLight>(null);
   const fillLightBRef = useRef<THREE.PointLight>(null);
   const fillLightCRef = useRef<THREE.PointLight>(null);
-  const planetMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const planetMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const planetGlowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const starMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
@@ -2313,13 +2305,6 @@ function OrbitLatchScene({
   );
 
   useEffect(() => {
-    if (planetMaterialRef.current) {
-      applyStylizedStandardShader(planetMaterialRef.current, {
-        rimPower: 2.25,
-        rimStrength: 0.52,
-        sheenStrength: 0.2,
-      });
-    }
     if (hazardMaterialRef.current) {
       applyStylizedStandardShader(hazardMaterialRef.current, {
         rimPower: 2.45,
@@ -2348,6 +2333,35 @@ function OrbitLatchScene({
         sheenStrength: 0.22,
       });
     }
+  }, []);
+
+  useLayoutEffect(() => {
+    const prime = (
+      mesh: THREE.InstancedMesh | null,
+      count: number,
+      seedColor: THREE.Color = WHITE
+    ) => {
+      if (!mesh) return;
+      for (let i = 0; i < count; i += 1) {
+        mesh.setColorAt(i, seedColor);
+      }
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    };
+
+    prime(planetRef.current, PLANET_POOL, new THREE.Color('#f6fbff'));
+    prime(planetGlowRef.current, PLANET_POOL, new THREE.Color('#d9f6ff'));
+    prime(ringRef.current, PLANET_POOL, new THREE.Color('#9ee9ff'));
+    prime(starRef.current, STAR_POOL, new THREE.Color('#fff6cd'));
+    prime(habitatRef.current, HABITAT_POOL, new THREE.Color('#92f3ff'));
+    prime(hazardRef.current, HAZARD_POOL, new THREE.Color('#ff7a94'));
+    prime(meteorRef.current, METEOR_POOL, new THREE.Color('#ff8f9d'));
+    prime(ringPulseRef.current, RING_PULSE_POOL, new THREE.Color('#9ff6ff'));
+    prime(shardRef.current, SHARD_POOL, new THREE.Color('#ffffff'));
+
+    if (planetMaterialRef.current) planetMaterialRef.current.needsUpdate = true;
+    if (hazardMaterialRef.current) hazardMaterialRef.current.needsUpdate = true;
+    if (habitatMaterialRef.current) habitatMaterialRef.current.needsUpdate = true;
+    if (meteorMaterialRef.current) meteorMaterialRef.current.needsUpdate = true;
   }, []);
 
   useFrame((_, delta) => {
@@ -2392,11 +2406,12 @@ function OrbitLatchScene({
       if (hemiLightRef.current) hemiLightRef.current.intensity = 1.02;
 
       if (planetMaterialRef.current) {
-        planetMaterialRef.current.emissive.copy(WHITE).multiplyScalar(0.14);
-        planetMaterialRef.current.emissiveIntensity = 0.56;
-        planetMaterialRef.current.roughness = 0.28;
-        planetMaterialRef.current.metalness = 0.02;
-        updateStylizedRimColor(planetMaterialRef.current, palette.ringCue, 2.1, 0.14, 0.08);
+        planetMaterialRef.current.onBeforeCompile = () => {};
+        planetMaterialRef.current.customProgramCacheKey = () => 'orbit-planet-basic-v2';
+        planetMaterialRef.current.color.copy(WHITE);
+        planetMaterialRef.current.toneMapped = false;
+        planetMaterialRef.current.opacity = 1;
+        planetMaterialRef.current.needsUpdate = true;
       }
       if (hazardMaterialRef.current) {
         hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.58);
@@ -3246,8 +3261,7 @@ function OrbitLatchScene({
         const planetBaseColor = getPaletteColor(runtime.planetRunColors, planet.colorIndex);
         colorScratch
           .copy(planetBaseColor)
-          .lerp(WHITE, clamp(0.1 + cuePulse * 0.12, 0.08, 0.2))
-          .multiplyScalar(1.34 + planet.glow * 0.3 + cuePulse * 0.16);
+          .multiplyScalar(1.12 + planet.glow * 0.28 + cuePulse * 0.16);
         planetRef.current.setColorAt(i, colorScratch);
 
         if (planetGlowRef.current) {
@@ -3546,15 +3560,11 @@ function OrbitLatchScene({
 
       <instancedMesh ref={planetRef} args={[undefined, undefined, PLANET_POOL]} frustumCulled={false}>
         <icosahedronGeometry args={[1, 2]} />
-        <meshStandardMaterial
+        <meshBasicMaterial
           ref={planetMaterialRef}
           color="#ffffff"
           vertexColors
-          roughness={0.18}
-          metalness={0.12}
-          emissive="#23355c"
-          emissiveIntensity={1.62}
-          toneMapped
+          toneMapped={false}
         />
       </instancedMesh>
 
