@@ -876,17 +876,7 @@ const ensureForwardTargets = (runtime: Runtime) => {
         (!runtime.latched || planet.slot !== runtime.latchedPlanet)
     )
     .sort((a, b) => a.y - b.y);
-  if (recycle.length === 0) {
-    recycle.push(
-      ...runtime.planets
-        .filter(
-          (planet) =>
-            planet.y <= runtime.playerY - RECYCLE_HIDDEN_MARGIN * 0.5 &&
-            (!runtime.latched || planet.slot !== runtime.latchedPlanet)
-        )
-        .sort((a, b) => a.y - b.y)
-    );
-  }
+  if (recycle.length === 0) return;
   let anchorY = furthestY;
   let anchorX = furthestX;
 
@@ -896,9 +886,9 @@ const ensureForwardTargets = (runtime: Runtime) => {
     seedPlanet(runtime, planet, false);
     const minYStep = runtime.mode === 'scattered' ? 0.56 : 0.86;
     const yJitter = runtime.mode === 'scattered' ? 0.34 : 0.52;
-    if (planet.y <= anchorY + minYStep) {
-      planet.y = anchorY + minYStep + Math.random() * yJitter;
-    }
+    const minSafeRespawnY = runtime.playerY + MIN_RESPAWN_LEAD + 1.6 + Math.random() * 1.9;
+    const targetY = Math.max(anchorY + minYStep + Math.random() * yJitter, minSafeRespawnY);
+    if (planet.y <= targetY) planet.y = targetY;
     const minXStep = runtime.mode === 'scattered' ? 0.42 : 0.62;
     if (Math.abs(planet.x - anchorX) < minXStep) {
       planet.x = clamp(
@@ -939,11 +929,11 @@ const ensureImmediateLatchOpportunity = (runtime: Runtime, fromPlanet: Planet) =
 
   const targetRadius = Math.hypot(predictX - candidate.x, predictY - candidate.y);
   candidate.orbitRadius = clamp(
-    lerp(candidate.orbitRadius, targetRadius, 0.68),
+    lerp(candidate.orbitRadius, targetRadius, 0.36),
     candidate.radius + 0.5,
     candidate.radius + 1.26
   );
-  candidate.glow = Math.max(candidate.glow, 0.9);
+  candidate.glow = Math.max(candidate.glow, 0.6);
 };
 
 const acquireShard = (runtime: Runtime) => {
@@ -1152,8 +1142,28 @@ function OrbitLatchScene({
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const satRef = useRef<THREE.Mesh>(null);
   const latchSparkRef = useRef<THREE.Mesh>(null);
+  const latchCuePulseRef = useRef<THREE.Mesh>(null);
+  const latchCuePulseRefSecondary = useRef<THREE.Mesh>(null);
   const bloomRef = useRef<any>(null);
+  const vignetteRef = useRef<any>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight>(null);
+  const directionalLightRef = useRef<THREE.DirectionalLight>(null);
+  const hemiLightRef = useRef<THREE.HemisphereLight>(null);
+  const fillLightARef = useRef<THREE.PointLight>(null);
+  const fillLightBRef = useRef<THREE.PointLight>(null);
+  const fillLightCRef = useRef<THREE.PointLight>(null);
+  const planetMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const planetGlowMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const starMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const hazardMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const satMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const latchSparkMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const latchCuePulseMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const latchCuePulseSecondaryMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+  const shardMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const fixedStepRef = useRef(createFixedStepState());
+  const paletteAppliedRef = useRef<number>(-1);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
@@ -1170,9 +1180,9 @@ function OrbitLatchScene({
   const trailMaterial = useMemo(
     () =>
       new THREE.LineBasicMaterial({
-        color: '#74f5ff',
+        color: '#7df9ff',
         transparent: true,
-        opacity: 0.74,
+        opacity: 0.82,
         blending: THREE.AdditiveBlending,
         toneMapped: false,
       }),
@@ -1183,7 +1193,7 @@ function OrbitLatchScene({
     [trailGeometry, trailMaterial]
   );
 
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
 
   const resetRuntime = (runtime: Runtime, mode: OrbitMode) => {
     const previousPalette = runtime.paletteIndex;
@@ -1194,6 +1204,7 @@ function OrbitLatchScene({
 
     runtime.mode = mode;
     runtime.paletteIndex = nextPalette;
+    paletteAppliedRef.current = -1;
     runtime.elapsed = 0;
     runtime.score = 0;
     runtime.latches = 0;
@@ -1324,6 +1335,52 @@ function OrbitLatchScene({
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = useOrbitStore.getState();
+    const palette = getRuntimePalette(runtime);
+
+    if (paletteAppliedRef.current !== runtime.paletteIndex) {
+      paletteAppliedRef.current = runtime.paletteIndex;
+      scene.background = palette.background.clone();
+      if (scene.fog instanceof THREE.Fog) {
+        scene.fog.color.copy(palette.fog);
+        scene.fog.near = 18;
+        scene.fog.far = runtime.mode === 'scattered' ? 132 : 144;
+      } else {
+        scene.fog = new THREE.Fog(
+          palette.fog.clone(),
+          18,
+          runtime.mode === 'scattered' ? 132 : 144
+        );
+      }
+
+      ambientLightRef.current?.color.copy(palette.ambient);
+      directionalLightRef.current?.color.copy(palette.key);
+      hemiLightRef.current?.color.copy(palette.hemiSky);
+      if (hemiLightRef.current) hemiLightRef.current.groundColor.copy(palette.hemiGround);
+      fillLightARef.current?.color.copy(palette.fillA);
+      fillLightBRef.current?.color.copy(palette.fillB);
+      fillLightCRef.current?.color.copy(palette.ringCue);
+
+      if (planetMaterialRef.current) {
+        planetMaterialRef.current.emissive.copy(palette.hemiGround).multiplyScalar(0.7);
+      }
+      if (hazardMaterialRef.current) {
+        hazardMaterialRef.current.emissive.copy(palette.hazards[0] ?? DANGER).multiplyScalar(0.45);
+      }
+      if (satMaterialRef.current) {
+        satMaterialRef.current.color.copy(palette.player);
+        satMaterialRef.current.emissive.copy(palette.playerEmissive);
+      }
+      if (latchSparkMaterialRef.current) {
+        latchSparkMaterialRef.current.color.copy(palette.ringCue);
+      }
+      if (latchCuePulseMaterialRef.current) {
+        latchCuePulseMaterialRef.current.color.copy(palette.ringCue);
+      }
+      if (latchCuePulseSecondaryMaterialRef.current) {
+        latchCuePulseSecondaryMaterialRef.current.color.copy(palette.trailGlow);
+      }
+      trailMaterial.color.copy(palette.trail);
+    }
 
     const tap =
       input.pointerJustDown ||
@@ -1346,9 +1403,9 @@ function OrbitLatchScene({
           const radialX = Math.cos(runtime.orbitAngle);
           const radialY = Math.sin(runtime.orbitAngle);
           const orbitalLinear = Math.abs(runtime.orbitAngularVel) * runtime.orbitRadius;
-          const launchScale = 1.06;
-          runtime.velX = tangentX * orbitalLinear * launchScale + radialX * 0.22;
-          runtime.velY = tangentY * orbitalLinear * launchScale + radialY * 0.22 + 0.38;
+          const launchScale = 0.98 + clamp(runtime.coreGlow * 0.05, 0, 0.08);
+          runtime.velX = tangentX * orbitalLinear * launchScale + radialX * 0.14;
+          runtime.velY = tangentY * orbitalLinear * launchScale + radialY * 0.14 + 0.24;
 
           runtime.releaseCount += 1;
           ensureForwardTargets(runtime);
@@ -1358,15 +1415,15 @@ function OrbitLatchScene({
             const ay = nearestAhead.y - runtime.playerY;
             const len = Math.hypot(ax, ay) || 1;
             const firstRelease = runtime.releaseCount === 1;
-            runtime.velX += (ax / len) * (firstRelease ? 0.46 : 0.26);
-          runtime.velY += Math.max(0, ay / len) * (firstRelease ? 0.68 : 0.42);
+            runtime.velX += (ax / len) * (firstRelease ? 0.22 : 0.12);
+            runtime.velY += Math.max(0, ay / len) * (firstRelease ? 0.28 : 0.16);
           }
           if (runtime.releaseCount === 1) {
-            runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.86 : 0.94);
-            runtime.velX *= 0.95;
-            runtime.velX = clamp(runtime.velX, -2.2, 2.2);
+            runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.78 : 0.9);
+            runtime.velX *= 0.97;
+            runtime.velX = clamp(runtime.velX, -2.4, 2.4);
           }
-          runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.52 : 0.42);
+          runtime.velY = Math.max(runtime.velY, runtime.mode === 'scattered' ? 0.46 : 0.38);
 
           if (runtime.releaseCount === 1) {
             ensureImmediateLatchOpportunity(runtime, planet);
@@ -1391,7 +1448,14 @@ function OrbitLatchScene({
             runtime.tightReleases += 1;
             runtime.score += 1;
             runtime.coreGlow = Math.min(1.45, runtime.coreGlow + 0.22);
-            spawnBurst(runtime, runtime.playerX, runtime.playerY, STAR_COLORS[0], 7, 2.4);
+            spawnBurst(
+              runtime,
+              runtime.playerX,
+              runtime.playerY,
+              getPaletteColor(palette.stars, 0),
+              7,
+              2.4
+            );
           }
         }
       } else {
@@ -1401,20 +1465,20 @@ function OrbitLatchScene({
         let fallbackDelta = Infinity;
         const dNorm = clamp((runtime.difficulty.speed - 4.2) / 3.6, 0, 1);
         const speed = Math.hypot(runtime.velX, runtime.velY);
-        const speedAssist = clamp(speed * 0.08, 0, runtime.mode === 'scattered' ? 0.22 : 0.16);
-        const firstLatchAssist = runtime.latches === 0 ? 0.09 : 0;
-        const modeAssist = runtime.mode === 'scattered' ? 0.05 : 0;
+        const speedAssist = clamp(speed * 0.06, 0, runtime.mode === 'scattered' ? 0.14 : 0.11);
+        const firstLatchAssist = runtime.latches === 0 ? 0.04 : 0;
+        const modeAssist = runtime.mode === 'scattered' ? 0.02 : 0;
         const lookAhead = clamp(
-          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.55 + firstLatchAssist * 0.35 + modeAssist * 0.4,
+          RELATCH_LOOKAHEAD_BASE + speedAssist * 0.45 + firstLatchAssist * 0.22 + modeAssist * 0.25,
           RELATCH_LOOKAHEAD_BASE,
-          runtime.mode === 'scattered' ? 0.34 : 0.3
+          runtime.mode === 'scattered' ? 0.29 : 0.24
         );
         const predictX = runtime.playerX + runtime.velX * lookAhead;
         const predictY = runtime.playerY + runtime.velY * lookAhead;
         const latchDistance = clamp(
-          LATCH_BASE_DISTANCE + 0.04 + speedAssist - dNorm * 0.08 + firstLatchAssist + modeAssist,
-          0.22,
-          runtime.mode === 'scattered' ? 0.62 : 0.56
+          LATCH_BASE_DISTANCE - 0.03 + speedAssist - dNorm * 0.07 + firstLatchAssist + modeAssist,
+          0.18,
+          runtime.mode === 'scattered' ? 0.48 : 0.42
         );
 
         for (const planet of runtime.planets) {
@@ -1444,7 +1508,7 @@ function OrbitLatchScene({
           }
         }
         if (!bestPlanet && fallbackPlanet) {
-          const fallbackSlack = runtime.latches === 0 ? 0.22 : 0.14;
+          const fallbackSlack = runtime.latches === 0 ? 0.09 : 0.05;
           if (fallbackDelta <= latchDistance + fallbackSlack) {
             bestPlanet = fallbackPlanet;
           }
@@ -1478,7 +1542,7 @@ function OrbitLatchScene({
             runtime,
             runtime.playerX,
             runtime.playerY,
-            PLANET_COLORS[bestPlanet.colorIndex],
+            getPaletteColor(palette.planets, bestPlanet.colorIndex),
             8,
             2.2
           );
@@ -1510,10 +1574,12 @@ function OrbitLatchScene({
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.difficulty = sampleDifficulty('orbit-chain', runtime.elapsed);
+      let segmentStartX = runtime.playerX;
+      let segmentStartY = runtime.playerY;
       if (runtime.mode === 'scattered') {
         runtime.timeRemaining = Math.max(0, runtime.timeRemaining - dt);
         if (runtime.timeRemaining <= 0) {
-          failRun('Time limit reached before extraction.', STAR_COLORS[2]);
+          failRun('Time limit reached before extraction.', getPaletteColor(palette.stars, 2));
         }
       }
 
@@ -1531,6 +1597,8 @@ function OrbitLatchScene({
         if (!planet) {
           failRun('Orbit source collapsed.');
         } else {
+          segmentStartX = runtime.playerX;
+          segmentStartY = runtime.playerY;
           runtime.orbitAngularVel = planet.orbitAngularVel;
           runtime.orbitRadius = planet.orbitRadius;
           runtime.orbitAngle += runtime.orbitAngularVel * dt;
@@ -1576,8 +1644,12 @@ function OrbitLatchScene({
           runtime.velY *= inv;
         }
 
-        runtime.velX *= 1 - dt * 0.05;
-        runtime.velY *= 1 - dt * 0.035;
+        runtime.velX *= 1 - dt * 0.06;
+        runtime.velY *= 1 - dt * 0.045;
+        const prevX = runtime.playerX;
+        const prevY = runtime.playerY;
+        segmentStartX = prevX;
+        segmentStartY = prevY;
         runtime.playerX += runtime.velX * dt;
         runtime.playerY += runtime.velY * dt;
 
@@ -1608,7 +1680,26 @@ function OrbitLatchScene({
           runtime.lastAssistAt = runtime.elapsed;
         }
 
-        if (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS)) {
+        let impactedCore = false;
+        for (const planet of runtime.planets) {
+          if (runtime.latched && planet.slot === runtime.latchedPlanet) continue;
+          const hitRadius = planet.radius + PLAYER_RADIUS * 0.82;
+          const hitRadiusSq = hitRadius * hitRadius;
+          const segDistSq = distanceToSegmentSq(
+            planet.x,
+            planet.y,
+            prevX,
+            prevY,
+            runtime.playerX,
+            runtime.playerY
+          );
+          if (segDistSq <= hitRadiusSq) {
+            impactedCore = true;
+            break;
+          }
+        }
+
+        if (impactedCore || (nearest && nearestDistSq < (nearest.radius + PLAYER_RADIUS) * (nearest.radius + PLAYER_RADIUS))) {
           failRun('Satellite impacted a planet core.');
         } else if (runtime.driftTimer > driftFail) {
           if (!withinGraceWindow(runtime.elapsed, runtime.lastTapAt, 0.1)) {
@@ -1632,12 +1723,27 @@ function OrbitLatchScene({
 
         const dx = runtime.playerX - star.x;
         const dy = runtime.playerY - star.y;
-        if (dx * dx + dy * dy <= COLLECT_RADIUS * COLLECT_RADIUS) {
+        const segDistSq = distanceToSegmentSq(
+          star.x,
+          star.y,
+          segmentStartX,
+          segmentStartY,
+          runtime.playerX,
+          runtime.playerY
+        );
+        if (dx * dx + dy * dy <= COLLECT_RADIUS * COLLECT_RADIUS || segDistSq <= COLLECT_RADIUS * COLLECT_RADIUS) {
           star.active = false;
           runtime.stars += star.value;
           runtime.score += star.value * 1.25;
           runtime.coreGlow = Math.min(1.55, runtime.coreGlow + 0.2);
-          spawnBurst(runtime, star.x, star.y, STAR_COLORS[star.colorIndex], 7, 2.1);
+          spawnBurst(
+            runtime,
+            star.x,
+            star.y,
+            getPaletteColor(palette.stars, star.colorIndex),
+            7,
+            2.1
+          );
           playTone(980, 0.045, 0.022);
         } else if (star.y < runtime.playerY - 9) {
           star.active = false;
@@ -1654,11 +1760,22 @@ function OrbitLatchScene({
         const dx = runtime.playerX - hazard.x;
         const dy = runtime.playerY - hazard.y;
         const hitRadius = hazard.radius + PLAYER_RADIUS * 0.82;
+        const segDistSq = distanceToSegmentSq(
+          hazard.x,
+          hazard.y,
+          segmentStartX,
+          segmentStartY,
+          runtime.playerX,
+          runtime.playerY
+        );
         if (dx * dx + dy * dy < 2.2) {
           hazard.glow = Math.min(1.2, hazard.glow + dt * 2.9);
         }
-        if (dx * dx + dy * dy <= hitRadius * hitRadius) {
-          failRun('Satellite shattered on a hazard shard.', HAZARD_COLORS[hazard.colorIndex]);
+        if (dx * dx + dy * dy <= hitRadius * hitRadius || segDistSq <= hitRadius * hitRadius) {
+          failRun(
+            'Satellite shattered on a hazard shard.',
+            getPaletteColor(palette.hazards, hazard.colorIndex)
+          );
           break;
         }
         if (hazard.y < runtime.playerY - 10) {
@@ -1794,6 +1911,55 @@ function OrbitLatchScene({
       }
     }
 
+    if (latchCuePulseRef.current && latchCuePulseRefSecondary.current) {
+      if (latchCuePlanet) {
+        const cueWorld = simToWorld(latchCuePlanet.x, latchCuePlanet.y, trailWorld);
+        const distToCue = Math.hypot(
+          runtime.playerX - latchCuePlanet.x,
+          runtime.playerY - latchCuePlanet.y
+        );
+        const ringDelta = Math.abs(distToCue - latchCuePlanet.orbitRadius);
+        const timingWindow = clamp(1 - ringDelta / 0.45, 0, 1);
+        const coreWindow = clamp(1 - ringDelta / 0.72, 0, 1);
+        const phaseA = mod(runtime.elapsed * 1.55 + latchCuePlanet.pulse * 0.2, 1);
+        const phaseB = mod(runtime.elapsed * 1.55 + 0.45 + latchCuePlanet.pulse * 0.2, 1);
+        const minScale = latchCuePlanet.radius * 0.34;
+        const maxScale = latchCuePlanet.orbitRadius * (runtime.latched ? 1.2 : 1.35);
+        const scaleA = lerp(minScale, maxScale, phaseA);
+        const scaleB = lerp(minScale, maxScale, phaseB);
+
+        latchCuePulseRef.current.visible = true;
+        latchCuePulseRef.current.position.set(cueWorld.x, 0.045, cueWorld.z);
+        latchCuePulseRef.current.scale.set(scaleA, scaleA, 1);
+        latchCuePulseRef.current.rotation.set(-Math.PI * 0.5, 0, 0);
+        const pulseOpacity = clamp((1 - phaseA) * (0.18 + timingWindow * 0.7), 0.06, 0.95);
+        if (latchCuePulseMaterialRef.current) {
+          latchCuePulseMaterialRef.current.opacity = pulseOpacity;
+          latchCuePulseMaterialRef.current.color
+            .copy(palette.ringCue)
+            .lerp(palette.trailGlow, clamp(0.24 + timingWindow * 0.52, 0, 0.92));
+        }
+
+        latchCuePulseRefSecondary.current.visible = true;
+        latchCuePulseRefSecondary.current.position.set(cueWorld.x, 0.044, cueWorld.z);
+        latchCuePulseRefSecondary.current.scale.set(scaleB, scaleB, 1);
+        latchCuePulseRefSecondary.current.rotation.set(-Math.PI * 0.5, 0, 0);
+        if (latchCuePulseSecondaryMaterialRef.current) {
+          latchCuePulseSecondaryMaterialRef.current.opacity = clamp(
+            (1 - phaseB) * (0.08 + coreWindow * 0.38),
+            0.04,
+            0.44
+          );
+          latchCuePulseSecondaryMaterialRef.current.color
+            .copy(palette.trailGlow)
+            .lerp(WHITE, clamp(coreWindow * 0.35, 0, 0.5));
+        }
+      } else {
+        latchCuePulseRef.current.visible = false;
+        latchCuePulseRefSecondary.current.visible = false;
+      }
+    }
+
     if (planetRef.current && ringRef.current) {
       const latchCueSlot = latchCuePlanet?.slot ?? -1;
       for (let i = 0; i < runtime.planets.length; i += 1) {
@@ -1812,7 +1978,7 @@ function OrbitLatchScene({
         planetRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(PLANET_COLORS[planet.colorIndex])
+          .copy(getPaletteColor(palette.planets, planet.colorIndex))
           .lerp(WHITE, clamp(planet.glow * 0.4 + pulsing * 0.16 + cuePulse * 0.28, 0, 0.82))
           .multiplyScalar(1.22);
         planetRef.current.setColorAt(i, colorScratch);
@@ -1825,7 +1991,7 @@ function OrbitLatchScene({
           planetGlowRef.current.setMatrixAt(i, dummy.matrix);
 
           colorScratch
-            .copy(PLANET_COLORS[planet.colorIndex])
+            .copy(getPaletteColor(palette.planets, planet.colorIndex))
             .lerp(WHITE, clamp(0.34 + pulsing * 0.34 + planet.glow * 0.44 + cuePulse * 0.45, 0, 0.99))
             .multiplyScalar(1.24);
           planetGlowRef.current.setColorAt(i, colorScratch);
@@ -1839,8 +2005,9 @@ function OrbitLatchScene({
         ringRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(PLANET_COLORS[planet.colorIndex])
-          .lerp(WHITE, clamp(0.28 + planet.glow * 0.66 + runtime.latchFlash * 0.22 + cuePulse * 0.52, 0, 0.99))
+          .copy(getPaletteColor(palette.planets, planet.colorIndex))
+          .lerp(palette.ringCue, clamp(cuePulse * 0.82 + runtime.latchFlash * 0.22, 0, 0.9))
+          .lerp(WHITE, clamp(0.22 + planet.glow * 0.58 + runtime.latchFlash * 0.18 + cuePulse * 0.44, 0, 0.95))
           .multiplyScalar(1.32);
         ringRef.current.setColorAt(i, colorScratch);
       }
@@ -1867,7 +2034,7 @@ function OrbitLatchScene({
         starRef.current.setMatrixAt(count, dummy.matrix);
 
         colorScratch
-          .copy(STAR_COLORS[star.colorIndex])
+          .copy(getPaletteColor(palette.stars, star.colorIndex))
           .lerp(WHITE, clamp(0.32 + star.glow * 0.46, 0, 0.82));
         starRef.current.setColorAt(count, colorScratch);
         count += 1;
@@ -1894,7 +2061,7 @@ function OrbitLatchScene({
         hazardRef.current.setMatrixAt(hazardCount, dummy.matrix);
 
         colorScratch
-          .copy(HAZARD_COLORS[hazard.colorIndex])
+          .copy(getPaletteColor(palette.hazards, hazard.colorIndex))
           .lerp(WHITE, clamp(0.16 + hazard.glow * 0.58 + pulse * 0.16, 0, 0.9));
         hazardRef.current.setColorAt(hazardCount, colorScratch);
         hazardCount += 1;
