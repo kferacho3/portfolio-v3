@@ -1,6 +1,5 @@
 'use client';
 
-import { Html } from '@react-three/drei';
 import { useSnapshot } from 'valtio';
 import { PRISM_CHARACTER_SKINS, PRISM_JUMP_TITLE } from '../constants';
 import { prismJumpState } from '../state';
@@ -13,18 +12,17 @@ export function PrismJumpUI() {
     PRISM_CHARACTER_SKINS[snap.selectedSkin] ?? PRISM_CHARACTER_SKINS[0];
 
   return (
-    <Html fullscreen>
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 2147483600,
-          pointerEvents: 'none',
-          fontFamily:
-            'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
-          color: '#ffffff',
-        }}
-      >
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 2147483600,
+        pointerEvents: 'none',
+        fontFamily:
+          'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+        color: '#ffffff',
+      }}
+    >
         <div
           style={{
             position: 'absolute',
@@ -423,7 +421,6 @@ export function PrismJumpUI() {
             {snap.toast}
           </div>
         )}
-      </div>
-    </Html>
+    </div>
   );
 }

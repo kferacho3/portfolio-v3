@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Html, PerspectiveCamera } from '@react-three/drei';
+import { PerspectiveCamera } from '@react-three/drei';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { create } from 'zustand';
@@ -1011,13 +1011,16 @@ function OrbitLatchOverlay() {
   );
 }
 
-function OrbitLatchScene() {
+function OrbitLatchScene({
+  impactOverlayRef,
+}: {
+  impactOverlayRef: React.RefObject<HTMLDivElement | null>;
+}) {
   const inputRef = useInputRef({
     preventDefault: [' ', 'Space', 'space', 'enter', 'Enter'],
   });
   const runtimeRef = useRef<Runtime>(createRuntime());
 
-  const impactOverlayRef = useRef<HTMLDivElement>(null);
   const planetRef = useRef<THREE.InstancedMesh>(null);
   const planetGlowRef = useRef<THREE.InstancedMesh>(null);
   const ringRef = useRef<THREE.InstancedMesh>(null);

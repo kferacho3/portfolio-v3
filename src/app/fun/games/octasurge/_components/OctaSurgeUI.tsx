@@ -1,6 +1,5 @@
 'use client';
 
-import { Html } from '@react-three/drei';
 import type { CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
 
@@ -65,20 +64,19 @@ export function OctaSurgeUI({
     snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
 
   return (
-    <Html fullscreen>
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100vw',
-          height: '100vh',
-          overflow: 'hidden',
-          zIndex: 1400,
-          pointerEvents: 'none',
-          fontFamily: uiFont,
-          color: 'rgba(246,250,255,0.98)',
-        }}
-      >
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        zIndex: 1400,
+        pointerEvents: 'none',
+        fontFamily: uiFont,
+        color: 'rgba(246,250,255,0.98)',
+      }}
+    >
         {snap.phase !== 'playing' && (
           <div
             style={{
@@ -492,7 +490,6 @@ export function OctaSurgeUI({
             </div>
           </div>
         )}
-      </div>
-    </Html>
+    </div>
   );
 }

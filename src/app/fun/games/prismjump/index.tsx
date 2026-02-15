@@ -15,7 +15,6 @@ import { useSnapshot } from 'valtio';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { useGameUIState } from '../../store/selectors';
 import { CUBE_PALETTES, GAME, PRISM_CHARACTER_SKINS } from './constants';
-import { PrismJumpUI } from './_components/PrismJumpUI';
 import { prismJumpState } from './state';
 import type {
   CollectibleKind,
@@ -1394,8 +1393,6 @@ export default function PrismJump() {
           opacity={0.95}
         />
       </instancedMesh>
-
-      <PrismJumpUI />
     </group>
   );
 }

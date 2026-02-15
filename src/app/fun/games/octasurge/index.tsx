@@ -27,13 +27,11 @@ import {
   STAGE_AESTHETICS,
   STAGE_PROFILES,
 } from './constants';
-import { OctaSurgeUI } from './_components/OctaSurgeUI';
 import { laneBit, normalizeLane, useLevelGen } from './generator';
 import { useOctaRuntimeStore } from './runtime';
 import { octaSurgeState } from './state';
 import type {
   OctaCameraMode,
-  OctaSurgeMode,
   SegmentPattern,
   StageProfile,
 } from './types';
@@ -1729,25 +1727,6 @@ export default function OctaSurge() {
 
   return (
     <group>
-      <OctaSurgeUI
-        onStart={startRun}
-        onSelectMode={(mode: OctaSurgeMode) => octaSurgeState.setMode(mode)}
-        onCycleFxLevel={() => {
-          octaSurgeState.cycleFxLevel();
-          octaSurgeState.save();
-        }}
-        onCycleCamera={() => {
-          const runtime = useOctaRuntimeStore.getState();
-          const next = nextCameraMode(runtime.cameraMode);
-          useOctaRuntimeStore.setState({ cameraMode: next });
-          octaSurgeState.setCameraMode(next);
-        }}
-        onSelectCamera={(mode: OctaCameraMode) => {
-          useOctaRuntimeStore.setState({ cameraMode: mode });
-          octaSurgeState.setCameraMode(mode);
-        }}
-      />
-
       <ambientLight
         ref={ambientRef}
         intensity={0.52}
