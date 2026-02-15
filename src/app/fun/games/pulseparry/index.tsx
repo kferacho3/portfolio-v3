@@ -166,7 +166,7 @@ const SPAWN_RADIUS_BASE = 0;
 const PARRY_RADIUS_BASE = 2.8;
 const MISS_RADIUS = 4.05;
 const TARGET_NODE_RADIUS = 0.16;
-const CAMERA_BASE_Y = 9.8;
+const CAMERA_BASE_Y = 11.6;
 const SWIPE_THRESHOLD = 0.16;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
@@ -232,6 +232,12 @@ const modeForPressedKey = (keys: Set<string>): GameDifficulty | null => {
   if (keys.has('3')) return 'hard';
   return null;
 };
+const normalizeMode = (mode: unknown): GameDifficulty => {
+  if (mode === 'easy' || mode === 'medium' || mode === 'hard') return mode;
+  return DEFAULT_MODE;
+};
+const getDifficultyTuning = (mode: unknown): DifficultyTuning =>
+  DIFFICULTY_TUNING[normalizeMode(mode)];
 
 let audioCtx: AudioContext | null = null;
 
@@ -560,7 +566,7 @@ const findOverlapCandidate = (runtime: Runtime, slack = 1): OverlapCandidate | n
 };
 
 const spawnInterval = (runtime: Runtime) => {
-  const tuning = DIFFICULTY_TUNING[runtime.mode];
+  const tuning = getDifficultyTuning(runtime.mode);
   return clamp(1.1 - Math.min(0.58, runtime.elapsed * 0.008), 0.52, 1.1) * tuning.spawnScale;
 };
 
@@ -586,7 +592,7 @@ const spawnPulseSet = (runtime: Runtime) => {
   if (lanes.length === 0) return;
   const lane = lanes[Math.floor(Math.random() * lanes.length)];
   const pulse = acquirePulse(runtime);
-  const tuning = DIFFICULTY_TUNING[runtime.mode];
+  const tuning = getDifficultyTuning(runtime.mode);
   const speedRamp = Math.min(1.05, runtime.elapsed * 0.018);
   pulse.active = true;
   pulse.parried = false;
@@ -741,7 +747,8 @@ function PulseParryOverlay() {
   const scoreFxTone = usePulseParryStore((state) => state.scoreFxTone);
   const setMode = usePulseParryStore((state) => state.setMode);
   const outs = 3 - lives;
-  const modeMeta = DIFFICULTY_TUNING[mode];
+  const safeMode = normalizeMode(mode);
+  const modeMeta = getDifficultyTuning(mode);
   const scoreFxColor =
     scoreFxTone === 'streak' ? '#fef08a' : scoreFxTone === 'perfect' ? '#9ae6ff' : '#ffffff';
   const modeAccentClass: Record<GameDifficulty, string> = {
@@ -776,7 +783,7 @@ function PulseParryOverlay() {
                 if (status !== 'PLAYING') setMode(entry);
               }}
               className={`rounded border px-2 py-1 text-[10px] uppercase tracking-[0.16em] transition ${
-                entry === mode
+                entry === safeMode
                   ? modeAccentClass[entry]
                   : 'border-white/22 bg-black/25 text-white/70 hover:text-white/90'
               } ${status === 'PLAYING' ? 'cursor-not-allowed opacity-55' : ''}`}
@@ -1013,7 +1020,8 @@ function PulseParryScene() {
   const { camera } = useThree();
 
   useEffect(() => {
-    const mode = usePulseParryStore.getState().mode;
+    const mode = normalizeMode(usePulseParryStore.getState().mode);
+    usePulseParryStore.getState().setMode(mode);
     resetRuntime(runtimeRef.current, mode);
     usePulseParryStore.getState().resetToStart();
     pulseParryState.status = 'menu';
@@ -1053,6 +1061,7 @@ function PulseParryScene() {
     const runtime = runtimeRef.current;
     const input = inputRef.current;
     const store = usePulseParryStore.getState();
+    const activeMode = normalizeMode(store.mode);
 
     const startTap =
       input.pointerJustDown ||
@@ -1080,23 +1089,26 @@ function PulseParryScene() {
       usePulseParryStore.getState().setMode(modeInput);
       runtime.mode = modeInput;
     } else if (store.status !== 'PLAYING') {
-      runtime.mode = store.mode;
+      runtime.mode = activeMode;
+      if (store.mode !== activeMode) {
+        usePulseParryStore.getState().setMode(activeMode);
+      }
     }
 
     if (restart) {
-      resetRuntime(runtime, store.mode);
+      resetRuntime(runtime, activeMode);
       usePulseParryStore.getState().startRun();
     }
 
     if (startTap && !restart && store.status !== 'PLAYING') {
-      resetRuntime(runtime, store.mode);
+      resetRuntime(runtime, activeMode);
       usePulseParryStore.getState().startRun();
     }
 
     if (store.status === 'PLAYING') {
       let failed = false;
-      runtime.mode = store.mode;
-      const tuning = DIFFICULTY_TUNING[runtime.mode];
+      runtime.mode = activeMode;
+      const tuning = getDifficultyTuning(runtime.mode);
       runtime.elapsed += dt;
       runtime.hudCommit += dt;
       runtime.phase = 1;
@@ -1315,7 +1327,7 @@ function PulseParryScene() {
     }
 
     runtime.shake = Math.max(0, runtime.shake - dt * 5.4);
-    const shakeAmp = runtime.shake * 0.07;
+    const shakeAmp = runtime.shake * 0.055;
     const shakeTime = runtime.elapsed * 24;
     camTarget.set(
       shakeNoiseSigned(shakeTime, 1.7) * shakeAmp,
