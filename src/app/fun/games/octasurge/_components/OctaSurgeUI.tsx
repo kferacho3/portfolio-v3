@@ -79,6 +79,54 @@ export function OctaSurgeUI({
           color: 'rgba(246,250,255,0.98)',
         }}
       >
+        {snap.phase !== 'playing' && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 8,
+              right: 8,
+              minWidth: 156,
+              padding: '7px 9px',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              backdropFilter: 'blur(8px)',
+              background: 'rgba(8,13,20,0.42)',
+              boxShadow: '0 6px 12px rgba(1,4,10,0.26)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9,
+                letterSpacing: 1.4,
+                opacity: 0.66,
+              }}
+            >
+              SCORE
+            </div>
+            <div
+              style={{
+                marginTop: 2,
+                fontFamily: monoFont,
+                fontSize: 20,
+                lineHeight: 1,
+                fontWeight: 800,
+              }}
+            >
+              {Math.floor(snap.score).toString().padStart(6, '0')}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                fontFamily: monoFont,
+                fontSize: 10,
+                opacity: 0.82,
+              }}
+            >
+              Best {Math.floor(snap.bestScore)}
+            </div>
+          </div>
+        )}
+
         {snap.phase === 'playing' && (
           <>
             <div

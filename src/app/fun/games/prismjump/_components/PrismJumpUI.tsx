@@ -1,39 +1,53 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Html } from '@react-three/drei';
 import { useSnapshot } from 'valtio';
 import { PRISM_CHARACTER_SKINS, PRISM_JUMP_TITLE } from '../constants';
 import { prismJumpState } from '../state';
 
 export function PrismJumpUI() {
   const snap = useSnapshot(prismJumpState);
-  const [mounted, setMounted] = useState(false);
   const toastVisible = snap.toastUntil > Date.now() && snap.toast.length > 0;
   const cubesTotal = snap.totalCubes + snap.runCubes;
   const currentSkin =
     PRISM_CHARACTER_SKINS[snap.selectedSkin] ?? PRISM_CHARACTER_SKINS[0];
 
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
-
-  if (!mounted || typeof document === 'undefined') return null;
-
-  return createPortal(
-    <>
+  return (
+    <Html fullscreen>
       <div
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 2147483000,
+          zIndex: 2147483600,
           pointerEvents: 'none',
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
           color: '#ffffff',
         }}
       >
+        <div
+          style={{
+            position: 'absolute',
+            top: 18,
+            right: 18,
+            display: 'flex',
+            gap: 10,
+            alignItems: 'center',
+            padding: '8px 12px',
+            borderRadius: 999,
+            border: '1px solid rgba(255,255,255,0.22)',
+            background: 'rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(8px)',
+            fontWeight: 800,
+          }}
+        >
+          <span style={{ opacity: 0.78 }}>Score</span>
+          <span>{snap.score}</span>
+          <span style={{ opacity: 0.55 }}>|</span>
+          <span style={{ opacity: 0.75, fontSize: 12 }}>Best</span>
+          <span>{snap.best}</span>
+        </div>
+
         {snap.phase === 'playing' && (
           <>
             <div
@@ -58,7 +72,7 @@ export function PrismJumpUI() {
             <div
               style={{
                 position: 'absolute',
-                top: 18,
+                top: 64,
                 right: 18,
                 display: 'flex',
                 gap: 10,
@@ -406,11 +420,10 @@ export function PrismJumpUI() {
               fontSize: 13,
             }}
           >
-              {snap.toast}
-            </div>
-          )}
+            {snap.toast}
+          </div>
+        )}
       </div>
-    </>,
-    document.body
+    </Html>
   );
 }
