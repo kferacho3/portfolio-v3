@@ -316,6 +316,30 @@ const getRuntimePalette = (runtime: Pick<Runtime, 'paletteIndex'>) =>
 const getPaletteColor = (colors: readonly THREE.Color[], index: number) =>
   colors[mod(index, colors.length)] ?? WHITE;
 
+const distanceToSegmentSq = (
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+) => {
+  const vx = x2 - x1;
+  const vy = y2 - y1;
+  const lenSq = vx * vx + vy * vy;
+  if (lenSq <= 1e-7) {
+    const dx = px - x1;
+    const dy = py - y1;
+    return dx * dx + dy * dy;
+  }
+  const t = clamp(((px - x1) * vx + (py - y1) * vy) / lenSq, 0, 1);
+  const sx = x1 + vx * t;
+  const sy = y1 + vy * t;
+  const dx = px - sx;
+  const dy = py - sy;
+  return dx * dx + dy * dy;
+};
+
 let audioContextRef: AudioContext | null = null;
 
 const readMode = (): OrbitMode => {
