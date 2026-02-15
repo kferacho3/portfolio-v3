@@ -341,6 +341,7 @@ const distanceToSegmentSq = (
 };
 
 let audioContextRef: AudioContext | null = null;
+let lastToneAt = 0;
 
 const readMode = (): OrbitMode => {
   if (typeof window === 'undefined') return 'classic';
@@ -372,6 +373,9 @@ const maybeVibrate = (ms: number) => {
 
 const playTone = (freq: number, duration = 0.05, volume = 0.03) => {
   if (typeof window === 'undefined') return;
+  const now = performance.now();
+  if (now - lastToneAt < 34) return;
+  lastToneAt = now;
   const Context =
     window.AudioContext ||
     (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
@@ -980,7 +984,6 @@ function OrbitLatchOverlay() {
   const multiplier = useOrbitStore((state) => state.multiplier);
   const latched = useOrbitStore((state) => state.latched);
   const failMessage = useOrbitStore((state) => state.failMessage);
-  const tapNonce = useOrbitStore((state) => state.tapNonce);
   const timerText = `${Math.max(0, timeRemaining).toFixed(1)}s`;
 
   return (
@@ -1096,30 +1099,6 @@ function OrbitLatchOverlay() {
         </div>
       )}
 
-      {status === 'PLAYING' && (
-        <div key={tapNonce}>
-          <div
-            className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-100/70"
-            style={{
-              animation: 'orbitlatch-pulse 260ms ease-out forwards',
-              opacity: 0,
-            }}
-          />
-        </div>
-      )}
-
-      <style jsx global>{`
-        @keyframes orbitlatch-pulse {
-          0% {
-            transform: translate(-50%, -50%) scale(0.62);
-            opacity: 0.7;
-          }
-          100% {
-            transform: translate(-50%, -50%) scale(1.3);
-            opacity: 0;
-          }
-        }
-      `}</style>
     </div>
   );
 }
@@ -1991,6 +1970,7 @@ function OrbitLatchScene({
           planet.slot === latchCueSlot
             ? 0.5 + 0.5 * Math.sin(runtime.elapsed * 6.2 + planet.pulse)
             : 0;
+        const isCuePlanet = planet.slot === latchCueSlot;
 
         dummy.position.set(world.x, 0, world.z);
         dummy.scale.setScalar(planet.radius);
@@ -2019,7 +1999,7 @@ function OrbitLatchScene({
         }
 
         dummy.position.set(world.x, 0.015, world.z);
-        const ringScale = planet.orbitRadius * (1 + cuePulse * 0.12);
+        const ringScale = planet.orbitRadius * (isCuePlanet ? 1 + cuePulse * 0.12 : 1);
         dummy.scale.set(ringScale, ringScale, ringScale);
         dummy.rotation.set(-Math.PI * 0.5, 0, 0);
         dummy.updateMatrix();
@@ -2027,9 +2007,14 @@ function OrbitLatchScene({
 
         colorScratch
           .copy(getPaletteColor(palette.planets, planet.colorIndex))
-          .lerp(palette.ringCue, clamp(cuePulse * 0.82 + runtime.latchFlash * 0.22, 0, 0.9))
-          .lerp(WHITE, clamp(0.22 + planet.glow * 0.58 + runtime.latchFlash * 0.18 + cuePulse * 0.44, 0, 0.95))
-          .multiplyScalar(1.32);
+          .lerp(palette.ringCue, clamp(cuePulse * 0.86 + runtime.latchFlash * 0.22, 0, 0.9))
+          .lerp(
+            WHITE,
+            isCuePlanet
+              ? clamp(0.26 + planet.glow * 0.58 + runtime.latchFlash * 0.18 + cuePulse * 0.44, 0, 0.95)
+              : clamp(0.02 + planet.glow * 0.09, 0, 0.12)
+          )
+          .multiplyScalar(isCuePlanet ? 1.36 : 0.28);
         ringRef.current.setColorAt(i, colorScratch);
       }
       planetRef.current.instanceMatrix.needsUpdate = true;
@@ -2205,7 +2190,7 @@ function OrbitLatchScene({
           ref={ringMaterialRef}
           vertexColors
           transparent
-          opacity={0.94}
+          opacity={0.34}
           side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
           depthWrite={false}
