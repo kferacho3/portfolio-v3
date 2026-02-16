@@ -5,9 +5,7 @@ import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import {
-  BallCollider,
   CuboidCollider,
-  CylinderCollider,
   Physics,
   RigidBody,
   type RapierRigidBody,
@@ -18,7 +16,7 @@ import { useSnapshot } from 'valtio';
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 
-import { BIOMES, biomeForDistance, difficultyForDistance } from './biomes';
+import { BIOMES, difficultyForDistance } from './biomes';
 import { buildChunk, CHUNK_LENGTH } from './generator';
 import { parseGhost, sampleGhostFrame, serializeGhost } from './ghost';
 import { dailySeedForDate, getActiveSeason, seasonBiome } from './liveOps';
@@ -1447,7 +1445,7 @@ function Steps() {
       <pointLight position={[-5, 5, -8]} intensity={0.45} color="#6ee7ff" />
       <pointLight position={[5, 3, -2]} intensity={0.34} color="#ff7f9f" />
 
-      <Physics gravity={[0, -23 * BIOMES[snap.biome].gravityScale, 0]} timeStep="fixed" paused={paused || snap.phase !== 'playing'}>
+      <Physics gravity={[0, -23 * BIOMES[snap.biome].gravityScale, 0]} timeStep={1 / 60} paused={paused || snap.phase !== 'playing'}>
         <RigidBody
           ref={playerBodyRef}
           name={PLAYER_NAME}
