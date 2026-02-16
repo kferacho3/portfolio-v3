@@ -204,6 +204,15 @@ export function useArcadeKeyboard() {
           e.preventDefault();
           launchRandomGame();
         }
+        // B = Open bug report in new tab
+        if (key === 'b') {
+          e.preventDefault();
+          window.open(
+            `/fun/bug-report?game=${encodeURIComponent(currentGame)}`,
+            '_blank',
+            'noopener,noreferrer'
+          );
+        }
         // P = Pause/resume
         if (key === 'p') {
           e.preventDefault();

@@ -16,26 +16,38 @@ export interface GameControlPanelProps {
   gameId: GameId;
   showGameRules: boolean;
   showPauseHints?: boolean;
+  modeOptions?: string[];
+  currentMode?: string;
   musicOn: boolean;
   soundsOn: boolean;
   onToggleGameRules: () => void;
+  onModeSwitch?: (mode: string) => void;
   onToggleMusic: () => void;
   onToggleSounds: () => void;
   onGoHome: () => void;
   onRestart: () => void;
+  onOpenGameMenu?: () => void;
+  gameMenuLabel?: string;
+  disableGameMenu?: boolean;
 }
 
 export const GameControlPanel: React.FC<GameControlPanelProps> = ({
   gameId,
   showGameRules,
   showPauseHints = true,
+  modeOptions = [],
+  currentMode,
   musicOn,
   soundsOn,
   onToggleGameRules,
+  onModeSwitch,
   onToggleMusic,
   onToggleSounds,
   onGoHome,
   onRestart,
+  onOpenGameMenu,
+  gameMenuLabel = 'Menu',
+  disableGameMenu = false,
 }) => {
   const PIN_KEY = 'arcade_panel_pinned_v1';
   const gameCard = getGameCard(gameId);
@@ -58,11 +70,19 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
   }, [isPinned]);
 
   const isExpanded = isPinned || isHovering || isManualOpen;
+  const hasModeMenu = modeOptions.length > 0 && !!onModeSwitch;
+  const canOpenGameMenu = !!onOpenGameMenu && !disableGameMenu;
 
   const openPanel = () => setIsManualOpen(true);
   const closePanel = () => {
     setIsManualOpen(false);
     setIsHovering(false);
+  };
+
+  const handleOpenBugReport = () => {
+    if (typeof window === 'undefined') return;
+    const route = `/fun/bug-report?game=${encodeURIComponent(gameId)}`;
+    window.open(route, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -166,9 +186,31 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
               />
             )}
 
+            {hasModeMenu && (
+              <GameModePanel
+                options={modeOptions}
+                currentMode={currentMode}
+                onSelectMode={onModeSwitch}
+              />
+            )}
+
             <div className="mt-4 grid grid-cols-2 gap-2">
               <ControlButton onClick={onGoHome} label="Home" hotkey="H" />
               <ControlButton onClick={onRestart} label="Restart" hotkey="R" />
+            </div>
+
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {canOpenGameMenu && (
+                <ControlButton
+                  onClick={onOpenGameMenu}
+                  label={gameMenuLabel}
+                  hotkey="P"
+                />
+              )}
+              <BugReportButton
+                onClick={handleOpenBugReport}
+                className={canOpenGameMenu ? '' : 'col-span-2'}
+              />
             </div>
 
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -188,6 +230,7 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
               <div className="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-white/40">
                 <KeyboardHint hotkey="I" label="Info" />
                 <KeyboardHint hotkey="G" label="Random" />
+                <KeyboardHint hotkey="B" label="Bug" />
                 {showPauseHints && (
                   <>
                     <KeyboardHint hotkey="P" label="Pause" />
@@ -266,6 +309,53 @@ const GameRulesPanel: React.FC<{ rules: GameRules; tutorial?: string }> = ({
   </div>
 );
 
+const formatModeLabel = (mode: string) =>
+  mode.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ');
+
+const GameModePanel: React.FC<{
+  options: string[];
+  currentMode?: string;
+  onSelectMode?: (mode: string) => void;
+}> = ({ options, currentMode, onSelectMode }) => (
+  <div
+    className="mt-3 border px-3 py-2.5 text-xs"
+    style={{
+      borderColor: 'var(--arcade-stroke)',
+      background: 'rgba(10, 12, 18, 0.55)',
+      borderRadius: 'var(--arcade-radius-sm)',
+    }}
+  >
+    <div className="text-[10px] uppercase tracking-wider text-white/40">
+      Game Menu
+    </div>
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {options.map((mode) => {
+        const isActive = mode === currentMode;
+        return (
+          <button
+            key={mode}
+            onClick={() => onSelectMode?.(mode)}
+            className={`border px-2 py-1 text-[10px] uppercase tracking-[0.14em] transition-all duration-300 hover:-translate-y-0.5 ${
+              isActive
+                ? 'border-[var(--arcade-accent)] bg-[var(--arcade-accent)]/10 text-[var(--arcade-accent)]'
+                : 'border-white/20 text-white/60 hover:border-white/40 hover:text-white/90'
+            }`}
+            style={{
+              borderRadius: 'var(--arcade-radius-sm)',
+              fontFamily: 'var(--arcade-mono)',
+            }}
+          >
+            {formatModeLabel(mode)}
+          </button>
+        );
+      })}
+    </div>
+    <div className="mt-2 text-[10px] text-white/50">
+      Use this deck plus in-game menus for mode, character, and level options.
+    </div>
+  </div>
+);
+
 /**
  * Control button with keyboard hotkey hint
  */
@@ -316,6 +406,35 @@ const AudioToggleButton: React.FC<{
   >
     {label} {isOn ? 'On' : 'Off'}
   </button>
+);
+
+const BugReportButton: React.FC<{
+  onClick: () => void;
+  className?: string;
+}> = ({ onClick, className = '' }) => (
+  <button
+    onClick={onClick}
+    className={`border px-2 py-2 text-[10px] uppercase tracking-[0.22em] text-white/80 transition-all duration-300 hover:-translate-y-0.5 hover:text-white hover:bg-white/5 active:translate-y-0 active:scale-95 flex items-center justify-center gap-1.5 ${className}`}
+    style={{
+      borderColor: 'var(--arcade-stroke)',
+      borderRadius: 'var(--arcade-radius-sm)',
+      fontFamily: 'var(--arcade-mono)',
+    }}
+  >
+    <span>Bug Report</span>
+    <BugGlyph />
+  </button>
+);
+
+const BugGlyph: React.FC = () => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 24 24"
+    className="h-3.5 w-3.5 fill-none stroke-current stroke-2"
+  >
+    <path d="M12 7c3 0 5 2.2 5 5v3.5c0 1.9-1.6 3.5-3.5 3.5h-3c-1.9 0-3.5-1.6-3.5-3.5V12c0-2.8 2-5 5-5Z" />
+    <path d="M12 7V4m-5.5 8H4m3.2-4.2L5.4 6m10.4 1.8L17.6 6M17.5 12H20m-3.2 3.8 1.8 1.8m-10.4-1.8-1.8 1.8" />
+  </svg>
 );
 
 /**

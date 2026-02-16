@@ -453,13 +453,19 @@ export default function GamePage({ params }: GamePageProps) {
         gameId={gameId}
         showGameRules={showGameRules}
         showPauseHints={!pauseDisabled}
+        modeOptions={modeOptions}
+        currentMode={currentMode}
         musicOn={musicOn}
         soundsOn={soundsOn}
         onToggleGameRules={toggleGameRules}
+        onModeSwitch={handleModeSwitch}
         onToggleMusic={toggleMusic}
         onToggleSounds={toggleSounds}
         onGoHome={handleGoHome}
         onRestart={handleRestart}
+        onOpenGameMenu={() => setPaused(true)}
+        gameMenuLabel="Game Menu"
+        disableGameMenu={pauseDisabled}
       />
 
       {/* HUD Overlay */}
