@@ -13,9 +13,26 @@ export type StepsTileVariant =
   | 'sunken'
   | 'ripple';
 
+export type StepsRunnerShape =
+  | 'cube'
+  | 'rounded_cube'
+  | 'tri_prism'
+  | 'hex_prism'
+  | 'pyramid'
+  | 'tetra'
+  | 'octa'
+  | 'dodeca'
+  | 'icosa'
+  | 'star_prism'
+  | 'fortress'
+  | 'rhombic'
+  | 'pillar'
+  | 'wide_box';
+
 const BEST_KEY = 'rachos-fun-steps-best';
 const GEMS_KEY = 'rachos-fun-steps-gems';
 const STYLE_KEY = 'rachos-fun-steps-style';
+const RUNNER_SHAPE_KEY = 'rachos-fun-steps-runner-shape-v1';
 const UNLOCKED_KEY = 'rachos-fun-steps-unlocked-variants';
 const UNLOCK_TIER_KEY = 'rachos-fun-steps-unlock-tier';
 
@@ -31,6 +48,40 @@ const TILE_VARIANTS: StepsTileVariant[] = [
   'ripple',
 ];
 
+const RUNNER_SHAPES: StepsRunnerShape[] = [
+  'cube',
+  'rounded_cube',
+  'tri_prism',
+  'hex_prism',
+  'pyramid',
+  'tetra',
+  'octa',
+  'dodeca',
+  'icosa',
+  'star_prism',
+  'fortress',
+  'rhombic',
+  'pillar',
+  'wide_box',
+];
+
+export const stepsRunnerShapeLabels: Record<StepsRunnerShape, string> = {
+  cube: 'Cube',
+  rounded_cube: 'Rounded Cube',
+  tri_prism: 'Tri Prism',
+  hex_prism: 'Hex Prism',
+  pyramid: 'Pyramid',
+  tetra: 'Tetra',
+  octa: 'Octa',
+  dodeca: 'Dodeca',
+  icosa: 'Icosa',
+  star_prism: 'Star Prism',
+  fortress: 'Fortress',
+  rhombic: 'Rhombic',
+  pillar: 'Pillar',
+  wide_box: 'Wide Box',
+};
+
 const UNLOCK_THRESHOLDS = [15, 35, 60, 90, 130, 175] as const;
 
 const isVariant = (value: unknown): value is StepsTileVariant =>
@@ -43,6 +94,22 @@ const isVariant = (value: unknown): value is StepsTileVariant =>
   value === 'diamond' ||
   value === 'sunken' ||
   value === 'ripple';
+
+const isRunnerShape = (value: unknown): value is StepsRunnerShape =>
+  value === 'cube' ||
+  value === 'rounded_cube' ||
+  value === 'tri_prism' ||
+  value === 'hex_prism' ||
+  value === 'pyramid' ||
+  value === 'tetra' ||
+  value === 'octa' ||
+  value === 'dodeca' ||
+  value === 'icosa' ||
+  value === 'star_prism' ||
+  value === 'fortress' ||
+  value === 'rhombic' ||
+  value === 'pillar' ||
+  value === 'wide_box';
 
 function persistUnlocked() {
   if (typeof window === 'undefined') return;
@@ -75,6 +142,7 @@ export const stepsState = proxy({
   unlockedVariants: ['classic', 'voxel', 'carved'] as StepsTileVariant[],
   variantUnlockTier: 0,
   lastUnlockedVariant: '' as '' | StepsTileVariant,
+  runnerShape: 'cube' as StepsRunnerShape,
 
   worldSeed: Math.floor(Math.random() * 1_000_000_000),
 
@@ -94,6 +162,11 @@ export const stepsState = proxy({
     const rawStyle = window.localStorage.getItem(STYLE_KEY);
     if (isVariant(rawStyle)) {
       stepsState.tileVariant = rawStyle;
+    }
+
+    const rawRunnerShape = window.localStorage.getItem(RUNNER_SHAPE_KEY);
+    if (isRunnerShape(rawRunnerShape)) {
+      stepsState.runnerShape = rawRunnerShape;
     }
 
     const rawUnlocked = window.localStorage.getItem(UNLOCKED_KEY);
@@ -196,6 +269,25 @@ export const stepsState = proxy({
       window.localStorage.setItem(STYLE_KEY, next);
     }
   },
+
+  setRunnerShape: (shape: StepsRunnerShape) => {
+    if (!isRunnerShape(shape)) return;
+    stepsState.runnerShape = shape;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(RUNNER_SHAPE_KEY, shape);
+    }
+  },
+
+  cycleRunnerShape: (direction = 1) => {
+    const currentIndex = Math.max(0, RUNNER_SHAPES.indexOf(stepsState.runnerShape));
+    const nextIndex = (currentIndex + direction + RUNNER_SHAPES.length) % RUNNER_SHAPES.length;
+    const next = RUNNER_SHAPES[nextIndex] ?? 'cube';
+    stepsState.runnerShape = next;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(RUNNER_SHAPE_KEY, next);
+    }
+  },
 });
 
 export const stepsTileVariants = TILE_VARIANTS;
+export const stepsRunnerShapes = RUNNER_SHAPES;

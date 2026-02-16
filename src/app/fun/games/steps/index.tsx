@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
@@ -11,7 +11,14 @@ import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { SeededRandom } from '../../utils/seededRandom';
 
-import { stepsState, stepsTileVariants, type StepsTileVariant } from './state';
+import {
+  stepsRunnerShapeLabels,
+  stepsRunnerShapes,
+  stepsState,
+  stepsTileVariants,
+  type StepsRunnerShape,
+  type StepsTileVariant,
+} from './state';
 
 export { stepsState } from './state';
 
@@ -134,7 +141,7 @@ const MAX_RENDER_TILES = 520;
 const PATH_AHEAD = 320;
 const KEEP_BEHIND = 120;
 const HAZARD_SEQUENCE_STEPS = 6;
-const TRAIL_DETAIL_SLOTS = 3;
+const TRAIL_DETAIL_SLOTS = 10;
 const MAX_TRAIL_DETAIL = MAX_RENDER_TILES * TRAIL_DETAIL_SLOTS;
 
 const INITIAL_PATH_TILES = 280;
@@ -148,11 +155,11 @@ const RELIEF_WINDOW_MIN_GAP = 8;
 const RELIEF_WINDOW_CHANCE = 0.035;
 
 const FIXED_STEP = 1 / 120;
-const MAX_SIM_STEPS = 8;
+const MAX_SIM_STEPS = 10;
 
-const GRAVITY = -24;
-const STEP_DURATION_BASE = 0.2;
-const STEP_DURATION_MIN = 0.11;
+const GRAVITY = -22;
+const STEP_DURATION_BASE = 0.185;
+const STEP_DURATION_MIN = 0.1;
 
 const IDLE_LIMIT_BASE = 1.0;
 const IDLE_LIMIT_MIN = 0.4;
@@ -189,6 +196,7 @@ const HIDDEN_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const TILE_STYLES = stepsTileVariants;
+const RUNNER_SHAPES = stepsRunnerShapes;
 
 const HAZARD_POOL: Exclude<HazardKind, 'none'>[] = [
   'mirror_maze_platform',
