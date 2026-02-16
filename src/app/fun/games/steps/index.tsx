@@ -1,1320 +1,1500 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import {
+  BallCollider,
+  CuboidCollider,
+  CylinderCollider,
+  Physics,
+  RigidBody,
+  type RapierRigidBody,
+} from '@react-three/rapier';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
-import { SeededRandom } from '../../utils/seededRandom';
 
-import { stepsState, type StepsTrailStyle } from './state';
+import { BIOMES, biomeForDistance, difficultyForDistance } from './biomes';
+import { buildChunk, CHUNK_LENGTH } from './generator';
+import { parseGhost, sampleGhostFrame, serializeGhost } from './ghost';
+import { dailySeedForDate, getActiveSeason, seasonBiome } from './liveOps';
+import { decayCombo, applySkillEvent, scoreBreakdown } from './scoring';
+import { createRunChecksum, estimateLeaderboard, queueLeaderboardSubmission, requestRewardedAd } from './services';
+import { stepsState, stepsStorageKeys } from './state';
+import type {
+  BiomeId,
+  ChunkDefinition,
+  GhostFrame,
+  ObstacleSpawn,
+  ObstacleType,
+  PlatformSpawn,
+  RunGhost,
+  SkillEventKind,
+  Vec3Tuple,
+} from './types';
 
 export { stepsState } from './state';
 
-type Dir = 'x' | 'z';
-type HazardKind = 'none' | 'spike' | 'saw' | 'clamp' | 'swing';
+type EffectCommand =
+  | { type: 'invert_controls'; duration: number }
+  | { type: 'slow_time'; duration: number; scale: number }
+  | { type: 'anti_gravity'; duration: number; force: number }
+  | { type: 'lock_rotation'; duration: number }
+  | { type: 'sticky'; duration: number }
+  | { type: 'size_shift'; duration: number; scale: number }
+  | { type: 'teleport'; position: Vec3Tuple }
+  | { type: 'impulse'; value: Vec3Tuple }
+  | { type: 'speed_boost'; duration: number; multiplier: number }
+  | { type: 'gravity_flip'; duration: number }
+  | { type: 'wind'; duration: number; force: Vec3Tuple }
+  | { type: 'checkpoint'; position: Vec3Tuple };
 
-type Tile = {
-  key: string;
-  ix: number;
-  iz: number;
-  index: number;
-  instanceId: number;
-  painted: boolean;
-  hasGem: boolean;
-  gemTaken: boolean;
-  hazard: HazardKind;
-  hazardPhase: number;
-  hazardCycle: number;
-  hazardOpenWindow: number;
-  hazardWindowStart: number;
-  hazardOffset: number;
-  hazardMotion: number;
-  fallStart: number;
-  drop: number;
-  spawnPulse: number;
-  bonus: boolean;
+type ActorCallbacks = {
+  onKill: (reason: string) => void;
+  onSkill: (kind: SkillEventKind) => void;
+  onEffect: (effect: EffectCommand) => void;
+  getPlayer: () => RapierRigidBody | null;
+  getTime: () => number;
 };
 
-type Debris = {
-  active: boolean;
-  pos: THREE.Vector3;
-  vel: THREE.Vector3;
-  rot: THREE.Vector3;
-  spin: THREE.Vector3;
-  life: number;
-  size: number;
+type RuntimeRef = {
+  elapsed: number;
+  runTime: number;
+  score: number;
+
+  comboScore: number;
+  obstacleScore: number;
+  comboMultiplier: number;
+  comboChain: number;
+  comboTimer: number;
+  comboPeak: number;
+
+  lastChunkIndex: number;
+  chunkWindowCenter: number;
+
+  cameraShake: number;
+
+  invertUntil: number;
+  slowUntil: number;
+  slowScale: number;
+  antiGravityUntil: number;
+  antiGravityForce: number;
+  lockRotationUntil: number;
+  stickyUntil: number;
+  sizeUntil: number;
+  sizeScale: number;
+  speedBoostUntil: number;
+  speedBoostMultiplier: number;
+  gravityFlipUntil: number;
+  windUntil: number;
+  windForce: THREE.Vector3;
+
+  checkpoint: THREE.Vector3;
+
+  pauseForRevive: boolean;
+  reviveConsumed: boolean;
+  pendingDeathReason: string;
+
+  ghostRecordTimer: number;
+  ghostFrames: GhostFrame[];
+  loadedGhost: RunGhost | null;
+
+  hudCommit: number;
+  rotationLocked: boolean;
+  nearMissScore: number;
 };
 
-const TILE_SIZE = 1;
-const TILE_HEIGHT = 0.24;
+const PLAYER_NAME = 'steps-player';
 
-const PLAYER_SIZE: [number, number, number] = [0.72, 0.42, 0.72];
-const PLAYER_BASE_Y = TILE_HEIGHT / 2 + PLAYER_SIZE[1] / 2;
+const START_POSITION = new THREE.Vector3(0, 1.8, 3);
+const BASE_FOG_NEAR = 10;
+const BASE_FOG_FAR = 78;
 
-const MAX_RENDER_TILES = 520;
-const PATH_AHEAD = 320;
-const KEEP_BEHIND = 120;
-const HAZARD_SEQUENCE_STEPS = 6;
-const TRAIL_DETAIL_SLOTS = 3;
-const MAX_TRAIL_DETAIL = MAX_RENDER_TILES * TRAIL_DETAIL_SLOTS;
+const PLAYER_SIZE: Vec3Tuple = [0.78, 0.62, 0.78];
+const BASE_FORWARD_SPEED = 11;
+const TAP_FORWARD_IMPULSE = 1.6;
+const TAP_UP_IMPULSE = 5.8;
+const SIDE_IMPULSE = 5.4;
 
-const INITIAL_PATH_TILES = 280;
-const CHUNK_MIN = 4;
-const CHUNK_MAX = 9;
+const CHUNKS_AHEAD = 6;
+const CHUNKS_BEHIND = 2;
 
-const FIXED_STEP = 1 / 120;
-const MAX_SIM_STEPS = 8;
-
-const GRAVITY = -24;
-const STEP_DURATION_BASE = 0.2;
-const STEP_DURATION_MIN = 0.11;
-
-const IDLE_LIMIT_BASE = 1.0;
-const IDLE_LIMIT_MIN = 0.4;
-
-const FALL_DELAY_BASE = 1.25;
-const FALL_DELAY_MIN = 0.28;
-const FALL_HIDE_Y = 7.5;
-const DEBRIS_POOL = 120;
-
-const COLOR_SKY_A = new THREE.Color('#58c8ff');
-const COLOR_PATH = new THREE.Color('#f7d66f');
-const COLOR_TRAIL = new THREE.Color('#ef57be');
-const COLOR_FALL = new THREE.Color('#ae4a9d');
-const COLOR_BONUS = new THREE.Color('#ffef9b');
-const COLOR_SPIKE = new THREE.Color('#ff2d55');
-const COLOR_SAW = new THREE.Color('#ff4d4f');
-const COLOR_CLAMP = new THREE.Color('#ff3f7f');
-const COLOR_SWING = new THREE.Color('#ff8a00');
-const COLOR_GEM = new THREE.Color('#22e3b3');
-const COLOR_GEM_BRIGHT = new THREE.Color('#7affde');
-const COLOR_WHITE = new THREE.Color('#ffffff');
-const COLOR_HAZARD_SAFE = new THREE.Color('#6af0cf');
-const COLOR_HAZARD_DANGER = new THREE.Color('#ff1f4d');
-const COLOR_WARNING = new THREE.Color('#ff1744');
-
-const HIDDEN_POS = new THREE.Vector3(0, -9999, 0);
-const HIDDEN_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
+const HUD_COMMIT_INTERVAL = 0.05;
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-const TRAIL_STYLES: StepsTrailStyle[] = ['classic', 'voxel', 'carved'];
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-function trailStyleLabel(style: StepsTrailStyle) {
-  if (style === 'classic') return 'Classic';
-  if (style === 'voxel') return 'Voxel';
-  return 'Carved';
+function readNum(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function keyFor(ix: number, iz: number) {
-  return `${ix}|${iz}`;
-}
-
-function easingLerp(current: number, target: number, dt: number, lambda = 10) {
-  const t = 1 - Math.exp(-lambda * dt);
-  return current + (target - current) * t;
-}
-
-function smoothStep01(t: number) {
-  const x = clamp(t, 0, 1);
-  return x * x * (3 - 2 * x);
-}
-
-function holdLimitForScore(score: number) {
-  return clamp(IDLE_LIMIT_BASE - score * 0.003, IDLE_LIMIT_MIN, IDLE_LIMIT_BASE);
-}
-
-function fallDelayForScore(score: number) {
-  return clamp(FALL_DELAY_BASE - score * 0.0045, FALL_DELAY_MIN, FALL_DELAY_BASE);
-}
-
-function stepDurationForScore(score: number) {
-  return clamp(STEP_DURATION_BASE - score * 0.00065, STEP_DURATION_MIN, STEP_DURATION_BASE);
-}
-
-function positiveMod(v: number, mod: number) {
-  if (mod <= 0) return 0;
-  return ((v % mod) + mod) % mod;
-}
-
-function wrappedWindowContains(value: number, start: number, end: number, size: number) {
-  if (size <= 0) return true;
-  const s = positiveMod(start, size);
-  const e = positiveMod(end, size);
-  if (s <= e) return value >= s && value <= e;
-  return value >= s || value <= e;
-}
-
-function wrappedDistance(a: number, b: number, size: number) {
-  const raw = Math.abs(a - b);
-  return Math.min(raw, Math.max(0, size - raw));
-}
-
-function pickHazard(index: number, rng: SeededRandom, streak: number): HazardKind {
-  if (index < 12) return 'none';
-  if (streak >= 1) return 'none';
-
-  const difficulty = Math.floor(index / 38);
-  const hazardChance = clamp(0.1 + difficulty * 0.02, 0.1, 0.24);
-  if (!rng.bool(hazardChance)) return 'none';
-
-  const r = rng.random();
-  if (r < 0.3) return 'spike';
-  if (r < 0.56) return 'saw';
-  if (r < 0.8) return 'clamp';
-  return 'swing';
-}
-
-function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, sequence: number) {
-  if (kind === 'none') {
-    return {
-      cycle: 1.6,
-      openWindow: 1.0,
-      windowStart: 0,
-      offset: 0,
+function isPlayerPayload(payload: unknown) {
+  const p = payload as {
+    other?: {
+      rigidBodyObject?: { name?: string; userData?: Record<string, unknown> };
+      rigidBody?: RapierRigidBody | null;
     };
-  }
-
-  const difficulty = clamp(index / 320, 0, 1);
-  const baseCycle =
-    kind === 'spike'
-      ? THREE.MathUtils.lerp(1.95, 1.45, difficulty)
-      : kind === 'saw'
-        ? THREE.MathUtils.lerp(2.1, 1.55, difficulty)
-        : kind === 'clamp'
-          ? THREE.MathUtils.lerp(2.2, 1.6, difficulty)
-          : THREE.MathUtils.lerp(2.35, 1.7, difficulty);
-  const cycle = clamp(baseCycle + rng.float(-0.1, 0.1), 1.25, 2.35);
-
-  const openRatio = kind === 'spike' ? 0.76 : kind === 'saw' ? 0.72 : kind === 'clamp' ? 0.7 : 0.72;
-  const openWindow = clamp(cycle * openRatio, 0.85, cycle - 0.28);
-
-  const sequenceStep = sequence % HAZARD_SEQUENCE_STEPS;
-  const stride = cycle / HAZARD_SEQUENCE_STEPS;
-  const windowStart = positiveMod(sequenceStep * stride + rng.float(-0.05, 0.05), cycle);
-
-  return {
-    cycle,
-    openWindow,
-    windowStart,
-    offset: rng.float(-0.12, 0.12),
   };
+
+  const fromName = p?.other?.rigidBodyObject?.name === PLAYER_NAME;
+  const fromTag = p?.other?.rigidBodyObject?.userData?.stepsTag === 'player';
+  if (fromName || fromTag) return true;
+
+  return Boolean(p?.other?.rigidBody);
 }
 
-function hazardStateAt(tile: Tile, simTime: number) {
-  if (tile.hazard === 'none') {
-    return {
-      open: true,
-      openBlend: 1,
-      closedBlend: 0,
-      phase01: 0,
-    };
-  }
-
-  const cycle = Math.max(0.8, tile.hazardCycle);
-  const local = positiveMod(simTime + tile.hazardOffset, cycle);
-  const openStart = positiveMod(tile.hazardWindowStart, cycle);
-  const openEnd = openStart + tile.hazardOpenWindow;
-  const open = wrappedWindowContains(local, openStart, openEnd, cycle);
-
-  const center = positiveMod(openStart + tile.hazardOpenWindow * 0.5, cycle);
-  const dist = wrappedDistance(local, center, cycle);
-  const radius = tile.hazardOpenWindow * 0.5;
-  const feather = Math.max(0.08, cycle * 0.16);
-  const openBlend = clamp(1 - (dist - radius) / feather, 0, 1);
-
-  return {
-    open,
-    openBlend,
-    closedBlend: 1 - openBlend,
-    phase01: local / cycle,
-  };
+function platformColor(type: PlatformSpawn['type']) {
+  if (type === 'slippery_ice' || type === 'icy_half_pipe') return '#8ddcff';
+  if (type === 'bouncer' || type === 'trampoline') return '#ffb347';
+  if (type === 'conveyor_belt' || type === 'reverse_conveyor' || type === 'treadmill_switch') return '#8f9bb3';
+  if (type === 'sticky_glue') return '#a855f7';
+  if (type === 'sinking_sand') return '#c89f6a';
+  if (type === 'ghost_platform') return '#b2fff5';
+  if (type === 'crushing_ceiling') return '#ff7f7f';
+  if (type === 'teleporter') return '#8b5cf6';
+  if (type === 'size_shifter_pad') return '#34d399';
+  if (type === 'gravity_flip_zone') return '#60a5fa';
+  if (type === 'wind_tunnel') return '#a7f3d0';
+  return '#f9d57b';
 }
 
-function hazardIsDangerous(tile: Tile) {
-  if (tile.hazard === 'none') return false;
-  const threshold =
-    tile.hazard === 'spike' ? 0.44 : tile.hazard === 'saw' ? 0.5 : tile.hazard === 'clamp' ? 0.48 : 0.5;
-  return tile.hazardMotion > threshold;
+function obstacleColor(type: ObstacleType) {
+  if (type === 'laser_grid' || type === 'lightning_striker') return '#ff2d55';
+  if (type === 'gravity_well' || type === 'magnetic_field') return '#7c3aed';
+  if (type === 'mirror_maze_platform' || type === 'telefrag_portal') return '#22d3ee';
+  if (type === 'bomb_tile' || type === 'rising_lava') return '#ff7b2d';
+  if (type === 'rolling_boulder' || type === 'meat_grinder') return '#9ca3af';
+  if (type === 'flicker_bridge') return '#86efac';
+  return '#ff5f8f';
 }
 
-function failReasonForHazard(kind: HazardKind) {
-  if (kind === 'spike') return 'Spike wave caught the cube.';
-  if (kind === 'saw') return 'Saw timing was off.';
-  if (kind === 'clamp') return 'Clamp snapped shut.';
-  if (kind === 'swing') return 'Swinging ball clipped the cube.';
-  return 'Trap timing was off.';
+function obstacleReason(type: ObstacleType) {
+  if (type === 'laser_grid') return 'Timed laser grid burned the run.';
+  if (type === 'rising_lava') return 'Lava line caught up.';
+  if (type === 'rolling_boulder') return 'Rolling boulder impact.';
+  if (type === 'meat_grinder') return 'Caught in the grinder.';
+  if (type === 'lightning_striker') return 'Lightning strike connected.';
+  if (type === 'spike_wave' || type === 'rising_spike_columns') return 'Spike timing was off.';
+  if (type === 'trapdoor_row' || type === 'fragile_glass' || type === 'snap_trap') return 'The floor gave out.';
+  return 'Obstacle hit.';
+}
+
+function PlatformActor({
+  spawn,
+  biome,
+  callbacks,
+}: {
+  spawn: PlatformSpawn;
+  biome: BiomeId;
+  callbacks: ActorCallbacks;
+}) {
+  const rb = useRef<RapierRigidBody | null>(null);
+  const meshRef = useRef<THREE.Mesh | null>(null);
+
+  const origin = useMemo(() => new THREE.Vector3(...spawn.position), [spawn.position]);
+  const fallingStart = useRef<number | null>(null);
+  const bridgeStressStart = useRef<number | null>(null);
+
+  const isKinematic =
+    spawn.type === 'moving_platform' ||
+    spawn.type === 'falling_platform' ||
+    spawn.type === 'ghost_platform' ||
+    spawn.type === 'weight_sensitive_bridge' ||
+    spawn.type === 'crushing_ceiling' ||
+    spawn.type === 'icy_half_pipe';
+
+  const type = isKinematic ? 'kinematicPosition' : 'fixed';
+
+  const friction =
+    spawn.type === 'slippery_ice' || biome === 'ice'
+      ? 0.08
+      : spawn.type === 'sticky_glue'
+        ? 1.2
+        : 0.82;
+
+  const restitution =
+    spawn.type === 'bouncer'
+      ? 2.2
+      : spawn.type === 'trampoline'
+        ? 1.6
+        : spawn.type === 'speed_ramp'
+          ? 0.32
+          : 0.14;
+
+  const handleCollisionEnter = useCallback(
+    (payload: unknown) => {
+      if (!isPlayerPayload(payload)) return;
+
+      if (spawn.type === 'falling_platform') {
+        if (fallingStart.current === null) {
+          fallingStart.current = callbacks.getTime();
+        }
+      }
+
+      if (spawn.type === 'weight_sensitive_bridge') {
+        bridgeStressStart.current = callbacks.getTime();
+      }
+
+      if (spawn.type === 'bouncer') {
+        callbacks.onEffect({ type: 'impulse', value: [0, 6.8, 0] });
+        callbacks.onSkill('super_bounce');
+      }
+
+      if (spawn.type === 'trampoline') {
+        callbacks.onEffect({ type: 'impulse', value: [0, 9.2, -0.6] });
+        callbacks.onSkill('super_bounce');
+      }
+
+      if (spawn.type === 'speed_ramp') {
+        callbacks.onEffect({ type: 'speed_boost', duration: 1.4, multiplier: 1.34 });
+        callbacks.onEffect({ type: 'impulse', value: [0, 1.4, -5.6] });
+      }
+
+      if (spawn.type === 'sticky_glue') {
+        callbacks.onEffect({ type: 'sticky', duration: 1.2 });
+      }
+
+      if (spawn.type === 'sinking_sand') {
+        callbacks.onEffect({ type: 'sticky', duration: 1.7 });
+        callbacks.onEffect({ type: 'impulse', value: [0, -1.4, 0] });
+      }
+
+      if (spawn.type === 'teleporter') {
+        callbacks.onEffect({
+          type: 'teleport',
+          position: [
+            readNum(spawn.props?.targetX, spawn.position[0]),
+            readNum(spawn.props?.targetY, 1.9),
+            readNum(spawn.props?.targetZ, spawn.position[2] - 8),
+          ],
+        });
+      }
+
+      if (spawn.type === 'size_shifter_pad') {
+        callbacks.onEffect({ type: 'size_shift', duration: 2.8, scale: 0.64 });
+      }
+
+      if (spawn.type === 'gravity_flip_zone') {
+        callbacks.onEffect({ type: 'gravity_flip', duration: 1.2 });
+      }
+
+      if (spawn.type === 'wind_tunnel') {
+        callbacks.onEffect({ type: 'wind', duration: 0.9, force: [0.6, 4.2, -0.2] });
+      }
+
+      if (spawn.type === 'reverse_conveyor') {
+        callbacks.onEffect({ type: 'impulse', value: [0, 0, 2.6] });
+      }
+
+      callbacks.onEffect({ type: 'checkpoint', position: [spawn.position[0], 2, spawn.position[2] + 1.2] });
+    },
+    [callbacks, spawn.position, spawn.props, spawn.type]
+  );
+
+  useFrame((state, delta) => {
+    const body = rb.current;
+    if (!body) return;
+
+    const t = state.clock.elapsedTime;
+    const speed = readNum(spawn.props?.speed, 1);
+    const amp = readNum(spawn.props?.amplitude, 1);
+
+    let x = origin.x;
+    let y = origin.y;
+    let z = origin.z;
+
+    if (spawn.type === 'moving_platform') {
+      x += Math.sin(t * speed + readNum(spawn.props?.shift, 0)) * (0.8 + amp * 0.35);
+    }
+
+    if (spawn.type === 'icy_half_pipe') {
+      x += Math.sin(t * speed * 0.8) * 0.28;
+    }
+
+    if (spawn.type === 'ghost_platform') {
+      const active = Math.floor(t * 1.5) % 2 === 0;
+      y = active ? origin.y : origin.y - 18;
+      if (meshRef.current) meshRef.current.visible = active;
+    }
+
+    if (spawn.type === 'falling_platform' && fallingStart.current !== null) {
+      const elapsed = t - fallingStart.current;
+      if (elapsed > readNum(spawn.props?.triggerDelay, 0.45)) {
+        y -= Math.min(16, (elapsed - 0.4) * 4.6);
+      }
+    }
+
+    if (spawn.type === 'weight_sensitive_bridge' && bridgeStressStart.current !== null) {
+      const elapsed = t - bridgeStressStart.current;
+      if (elapsed > 1.05) {
+        y -= Math.min(14, (elapsed - 1.05) * 5.2);
+      }
+    }
+
+    body.setNextKinematicTranslation({ x, y, z });
+
+    if (spawn.type === 'crushing_ceiling') {
+      const crush = 1.3 + Math.abs(Math.sin(t * speed * 2.4));
+      if (meshRef.current) {
+        meshRef.current.scale.set(1, 1, 1);
+        meshRef.current.position.y = -0.2;
+      }
+      const player = callbacks.getPlayer();
+      if (player) {
+        const p = player.translation();
+        if (Math.abs(p.x - origin.x) < spawn.size[0] * 0.48 && Math.abs(p.z - origin.z) < spawn.size[2] * 0.48) {
+          if (p.y < crush && p.y > -0.5) {
+            callbacks.onKill('Crushing ceiling closed in.');
+          }
+        }
+      }
+    }
+
+    if (spawn.type === 'conveyor_belt' || spawn.type === 'reverse_conveyor' || spawn.type === 'treadmill_switch') {
+      const player = callbacks.getPlayer();
+      if (!player) return;
+      const p = player.translation();
+      if (Math.abs(p.x - x) <= spawn.size[0] * 0.58 && Math.abs(p.z - z) <= spawn.size[2] * 0.58 && p.y <= 2.2) {
+        let conveyor = spawn.type === 'reverse_conveyor' ? 2.4 : -2.2;
+        if (spawn.type === 'treadmill_switch') {
+          conveyor = Math.sin(t * speed * 1.6) > 0 ? -2.6 : 2.6;
+        }
+        player.applyImpulse({ x: conveyor * delta, y: 0, z: 0 }, true);
+      }
+    }
+  });
+
+  return (
+    <RigidBody
+      ref={rb}
+      type={type}
+      colliders={false}
+      position={spawn.position}
+      friction={friction}
+      restitution={restitution}
+      onCollisionEnter={handleCollisionEnter}
+    >
+      <CuboidCollider
+        args={[spawn.size[0] * 0.5, spawn.size[1] * 0.5, spawn.size[2] * 0.5]}
+        restitution={restitution}
+        friction={friction}
+      />
+      <mesh ref={meshRef} castShadow receiveShadow>
+        <boxGeometry args={spawn.size} />
+        <meshStandardMaterial
+          color={platformColor(spawn.type)}
+          metalness={spawn.type === 'conveyor_belt' || spawn.type === 'reverse_conveyor' ? 0.28 : 0.08}
+          roughness={spawn.type === 'slippery_ice' || spawn.type === 'icy_half_pipe' ? 0.12 : 0.48}
+          emissive={spawn.type === 'teleporter' ? '#8b5cf6' : '#000000'}
+          emissiveIntensity={spawn.type === 'teleporter' ? 0.28 : 0}
+        />
+      </mesh>
+    </RigidBody>
+  );
+}
+
+function ObstacleActor({
+  spawn,
+  callbacks,
+}: {
+  spawn: ObstacleSpawn;
+  callbacks: ActorCallbacks;
+}) {
+  const rb = useRef<RapierRigidBody | null>(null);
+  const meshRef = useRef<THREE.Mesh | null>(null);
+  const auxMeshRef = useRef<THREE.Mesh | null>(null);
+
+  const origin = useMemo(() => new THREE.Vector3(...spawn.position), [spawn.position]);
+
+  const activeRef = useRef(true);
+  const triggeredRef = useRef(false);
+  const triggerTimeRef = useRef<number>(0);
+
+  const isKinematic =
+    spawn.type === 'rotating_floor_disk' ||
+    spawn.type === 'rotating_cross_blades' ||
+    spawn.type === 'pendulum_axes' ||
+    spawn.type === 'shifting_tiles' ||
+    spawn.type === 'rolling_boulder' ||
+    spawn.type === 'trapdoor_row' ||
+    spawn.type === 'rising_spike_columns' ||
+    spawn.type === 'flicker_bridge' ||
+    spawn.type === 'expand_o_matic' ||
+    spawn.type === 'fragile_glass' ||
+    spawn.type === 'meat_grinder' ||
+    spawn.type === 'rising_lava' ||
+    spawn.type === 'bomb_tile' ||
+    spawn.type === 'snap_trap';
+
+  const bodyType = isKinematic ? 'kinematicPosition' : 'fixed';
+
+  const onKillHit = useCallback(
+    (payload: unknown) => {
+      if (!isPlayerPayload(payload)) return;
+      if (!activeRef.current) return;
+      callbacks.onKill(obstacleReason(spawn.type));
+    },
+    [callbacks, spawn.type]
+  );
+
+  const onEffectHit = useCallback(
+    (payload: unknown) => {
+      if (!isPlayerPayload(payload)) return;
+
+      if (spawn.type === 'mirror_maze_platform') {
+        callbacks.onEffect({ type: 'invert_controls', duration: 2.2 });
+      }
+
+      if (spawn.type === 'time_slow_zone') {
+        callbacks.onEffect({ type: 'slow_time', duration: 1.1, scale: 0.55 });
+      }
+
+      if (spawn.type === 'anti_gravity_jump_pad') {
+        callbacks.onEffect({ type: 'impulse', value: [0, 10.8, -0.8] });
+        callbacks.onEffect({ type: 'anti_gravity', duration: 1.05, force: 12.8 });
+        callbacks.onSkill('super_bounce');
+      }
+
+      if (spawn.type === 'telefrag_portal') {
+        callbacks.onEffect({
+          type: 'teleport',
+          position: [spawn.position[0], 2.2, spawn.position[2] - 12],
+        });
+        callbacks.onEffect({ type: 'size_shift', duration: 2.8, scale: 0.65 });
+      }
+
+      if (spawn.type === 'magnetic_field') {
+        callbacks.onEffect({ type: 'lock_rotation', duration: 1.4 });
+      }
+
+      if (spawn.type === 'bomb_tile') {
+        if (!triggeredRef.current) {
+          triggeredRef.current = true;
+          triggerTimeRef.current = callbacks.getTime();
+        }
+      }
+
+      if (spawn.type === 'snap_trap') {
+        triggeredRef.current = true;
+        triggerTimeRef.current = callbacks.getTime();
+      }
+
+      if (spawn.type === 'fragile_glass') {
+        triggeredRef.current = true;
+        triggerTimeRef.current = callbacks.getTime();
+      }
+
+      if (spawn.type === 'split_path_bridge') {
+        const player = callbacks.getPlayer();
+        const safeLane = readNum(spawn.props?.safeLane, 1);
+        if (player) {
+          const p = player.translation();
+          const lane = p.x < -1 ? 0 : p.x > 1 ? 2 : 1;
+          if (lane !== safeLane) {
+            callbacks.onKill('Wrong side of split path bridge.');
+          }
+        }
+      }
+    },
+    [callbacks, spawn.position, spawn.props?.safeLane, spawn.type]
+  );
+
+  useFrame((state, delta) => {
+    const body = rb.current;
+    if (!body) return;
+
+    const t = state.clock.elapsedTime;
+    const speed = readNum(spawn.props?.speed, 1);
+    const amp = readNum(spawn.props?.amplitude, 1);
+    const phase = readNum(spawn.props?.phase, 0);
+
+    let x = origin.x;
+    let y = origin.y;
+    let z = origin.z;
+
+    if (spawn.type === 'pulse_expander') {
+      const pulse = 1 + Math.abs(Math.sin(t * speed + phase)) * (0.35 + amp * 0.22);
+      if (meshRef.current) meshRef.current.scale.set(pulse, 1, pulse);
+
+      const player = callbacks.getPlayer();
+      if (player) {
+        const p = player.translation();
+        const dx = p.x - x;
+        const dz = p.z - z;
+        const distSq = dx * dx + dz * dz;
+        if (distSq < 3.2) {
+          const inv = 1 / Math.max(0.3, Math.sqrt(distSq));
+          player.applyImpulse({ x: dx * inv * delta * 1.7, y: 0.12 * delta, z: dz * inv * delta * 1.7 }, true);
+        }
+      }
+    }
+
+    if (spawn.type === 'gravity_well') {
+      const player = callbacks.getPlayer();
+      if (player) {
+        const p = player.translation();
+        const dx = x - p.x;
+        const dz = z - p.z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 4.2) {
+          const pull = clamp((4.2 - d) / 4.2, 0, 1) * (2.6 + amp);
+          const nx = dx / Math.max(0.001, d);
+          const nz = dz / Math.max(0.001, d);
+          player.applyImpulse({ x: nx * pull * delta, y: 0, z: nz * pull * delta }, true);
+        }
+      }
+      if (meshRef.current) {
+        meshRef.current.rotation.y += delta * (0.4 + speed * 0.4);
+      }
+    }
+
+    if (spawn.type === 'laser_grid') {
+      const interval = readNum(spawn.props?.interval, 1.4);
+      activeRef.current = Math.floor((t + phase) / interval) % 2 === 0;
+      if (meshRef.current) {
+        meshRef.current.visible = activeRef.current;
+      }
+    }
+
+    if (spawn.type === 'rotating_floor_disk') {
+      if (meshRef.current) {
+        meshRef.current.rotation.y += delta * speed * 1.7;
+      }
+    }
+
+    if (spawn.type === 'spike_wave') {
+      y += Math.sin(t * (speed * 2.2) + phase) * 0.7;
+      activeRef.current = y > origin.y + 0.2;
+    }
+
+    if (spawn.type === 'bomb_tile' && triggeredRef.current) {
+      const elapsed = t - triggerTimeRef.current;
+      const pre = elapsed < 0.3;
+      if (meshRef.current) {
+        meshRef.current.scale.setScalar(pre ? 1 + elapsed * 0.75 : 0.001);
+      }
+      if (elapsed >= 0.3 && activeRef.current) {
+        activeRef.current = false;
+        const player = callbacks.getPlayer();
+        if (player) {
+          const p = player.translation();
+          const dx = p.x - x;
+          const dz = p.z - z;
+          const inv = 1 / Math.max(0.4, Math.sqrt(dx * dx + dz * dz));
+          player.applyImpulse({ x: dx * inv * 7.4, y: 3.1, z: dz * inv * 7.4 }, true);
+        }
+      }
+    }
+
+    if (spawn.type === 'shifting_tiles') {
+      x += Math.sin(t * speed * 1.6 + phase) * 1.2;
+    }
+
+    if (spawn.type === 'rolling_boulder') {
+      z += ((t * speed * 4.6 + phase) % 18) - 9;
+      if (meshRef.current) {
+        meshRef.current.rotation.x += delta * speed * 4;
+      }
+    }
+
+    if (spawn.type === 'trapdoor_row') {
+      const wave = Math.floor((t + phase) * 2.3) % 3;
+      if (meshRef.current) {
+        meshRef.current.scale.set(wave === 0 ? 1 : 0.82, wave === 1 ? 0.4 : 1, wave === 2 ? 0.62 : 1);
+      }
+      activeRef.current = wave !== 1;
+    }
+
+    if (spawn.type === 'rotating_cross_blades') {
+      if (meshRef.current) {
+        meshRef.current.rotation.y += delta * speed * 2.5;
+      }
+    }
+
+    if (spawn.type === 'flicker_bridge') {
+      activeRef.current = Math.floor((t + phase) * 1.8) % 2 === 0;
+      if (meshRef.current) meshRef.current.visible = activeRef.current;
+      y = activeRef.current ? origin.y : origin.y - 12;
+    }
+
+    if (spawn.type === 'rising_spike_columns') {
+      y += Math.abs(Math.sin(t * speed * 2.1 + phase)) * 1.2;
+      activeRef.current = y > origin.y + 0.55;
+    }
+
+    if (spawn.type === 'meat_grinder') {
+      if (meshRef.current) meshRef.current.rotation.x += delta * speed * 4;
+      if (auxMeshRef.current) auxMeshRef.current.rotation.x -= delta * speed * 4;
+    }
+
+    if (spawn.type === 'homing_mine') {
+      const player = callbacks.getPlayer();
+      if (player) {
+        const p = player.translation();
+        const dx = p.x - x;
+        const dz = p.z - z;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d < 14) {
+          const track = 1.25 * delta;
+          x += (dx / Math.max(0.001, d)) * track;
+          z += (dz / Math.max(0.001, d)) * track;
+        }
+      }
+      if (meshRef.current) meshRef.current.rotation.y += delta * speed * 6;
+    }
+
+    if (spawn.type === 'expand_o_matic') {
+      const scale = 1 + Math.abs(Math.sin(t * speed + phase)) * 2.4;
+      if (meshRef.current) {
+        meshRef.current.scale.set(scale, 1, scale);
+      }
+    }
+
+    if (spawn.type === 'pendulum_axes') {
+      const swing = Math.sin(t * speed + phase) * 1.1;
+      if (meshRef.current) meshRef.current.rotation.z = swing;
+    }
+
+    if (spawn.type === 'rising_lava') {
+      y = -2.8 + ((t * 0.2 + phase * 0.05) % 7.5);
+      const player = callbacks.getPlayer();
+      if (player) {
+        const p = player.translation();
+        if (p.y < y + 0.2) {
+          callbacks.onKill('Rising lava reached the cube.');
+        }
+      }
+    }
+
+    if (spawn.type === 'fragile_glass' && triggeredRef.current) {
+      const elapsed = t - triggerTimeRef.current;
+      y -= Math.min(9, elapsed * 5.3);
+      if (meshRef.current) {
+        meshRef.current.rotation.x += delta * 4;
+        meshRef.current.rotation.z += delta * 3;
+      }
+      activeRef.current = elapsed < 0.22;
+    }
+
+    if (spawn.type === 'lightning_striker') {
+      const cycle = 1.6;
+      const local = (t + phase) % cycle;
+      const warning = local < 0.75;
+      activeRef.current = !warning && local < 1.02;
+      if (meshRef.current) {
+        meshRef.current.visible = true;
+        (meshRef.current.material as THREE.MeshStandardMaterial).emissiveIntensity = warning ? 0.18 : 0.8;
+      }
+    }
+
+    if (spawn.type === 'snap_trap' && triggeredRef.current) {
+      const elapsed = t - triggerTimeRef.current;
+      if (meshRef.current) {
+        meshRef.current.scale.set(Math.max(0.01, 1 - elapsed * 1.6), 1, 1);
+      }
+      activeRef.current = elapsed < 0.22;
+    }
+
+    body.setNextKinematicTranslation({ x, y, z });
+  });
+
+  const obstacleMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: obstacleColor(spawn.type),
+        roughness: 0.34,
+        metalness: 0.2,
+        emissive: obstacleColor(spawn.type),
+        emissiveIntensity: 0.2,
+      }),
+    [spawn.type]
+  );
+
+  return (
+    <RigidBody ref={rb} type={bodyType} colliders={false} position={spawn.position}>
+      <CuboidCollider
+        args={[spawn.size[0] * 0.4, spawn.size[1] * 0.4, spawn.size[2] * 0.4]}
+        sensor
+        onIntersectionEnter={onEffectHit}
+      />
+      <CuboidCollider
+        args={[spawn.size[0] * 0.45, spawn.size[1] * 0.45, spawn.size[2] * 0.45]}
+        sensor
+        onIntersectionEnter={onKillHit}
+      />
+
+      {spawn.type === 'meat_grinder' ? (
+        <group>
+          <mesh ref={meshRef} position={[0, 0.35, 0.8]} material={obstacleMaterial}>
+            <cylinderGeometry args={[0.3, 0.3, 2.2, 14]} />
+          </mesh>
+          <mesh ref={auxMeshRef} position={[0, 0.35, -0.8]} material={obstacleMaterial}>
+            <cylinderGeometry args={[0.3, 0.3, 2.2, 14]} />
+          </mesh>
+        </group>
+      ) : spawn.type === 'rotating_cross_blades' ? (
+        <group ref={meshRef as React.RefObject<THREE.Group>}>
+          <mesh material={obstacleMaterial}>
+            <boxGeometry args={[4.4, 0.22, 0.32]} />
+          </mesh>
+          <mesh rotation-y={Math.PI * 0.5} material={obstacleMaterial}>
+            <boxGeometry args={[4.4, 0.22, 0.32]} />
+          </mesh>
+        </group>
+      ) : spawn.type === 'pendulum_axes' ? (
+        <group ref={meshRef as React.RefObject<THREE.Group>}>
+          <mesh position={[0, 0.95, 0]} material={obstacleMaterial}>
+            <boxGeometry args={[0.16, 2.2, 0.16]} />
+          </mesh>
+          <mesh position={[0, -0.1, 0]} material={obstacleMaterial}>
+            <boxGeometry args={[2.3, 0.24, 0.24]} />
+          </mesh>
+        </group>
+      ) : spawn.type === 'laser_grid' ? (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <cylinderGeometry args={[0.1, 0.1, 5.4, 12]} />
+        </mesh>
+      ) : spawn.type === 'gravity_well' ? (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <torusGeometry args={[1.05, 0.16, 16, 40]} />
+        </mesh>
+      ) : spawn.type === 'rolling_boulder' || spawn.type === 'homing_mine' ? (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <sphereGeometry args={[0.56, 18, 18]} />
+        </mesh>
+      ) : spawn.type === 'rising_lava' ? (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <boxGeometry args={[6.8, 0.34, 6.8]} />
+        </mesh>
+      ) : spawn.type === 'spike_wave' || spawn.type === 'rising_spike_columns' ? (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <coneGeometry args={[0.5, 1.2, 12]} />
+        </mesh>
+      ) : spawn.type === 'rotating_floor_disk' ? (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <cylinderGeometry args={[1.6, 1.6, 0.22, 30]} />
+        </mesh>
+      ) : (
+        <mesh ref={meshRef} material={obstacleMaterial}>
+          <boxGeometry args={[1.5, 0.5, 1.5]} />
+        </mesh>
+      )}
+    </RigidBody>
+  );
+}
+
+function ChunkActor({
+  chunk,
+  callbacks,
+}: {
+  chunk: ChunkDefinition;
+  callbacks: ActorCallbacks;
+}) {
+  return (
+    <group>
+      {chunk.platforms.map((platform) => (
+        <PlatformActor key={platform.id} spawn={platform} biome={chunk.biome} callbacks={callbacks} />
+      ))}
+      {chunk.obstacles.map((obstacle) => (
+        <ObstacleActor key={obstacle.id} spawn={obstacle} callbacks={callbacks} />
+      ))}
+    </group>
+  );
 }
 
 function Steps() {
   const snap = useSnapshot(stepsState);
   const { paused } = useGameUIState();
-  const input = useInputRef({
-    preventDefault: [' ', 'Space', 'space', 'enter', 'Enter', 'r', 'R'],
-  });
   const { camera, scene } = useThree();
 
-  const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const input = useInputRef({
+    preventDefault: [' ', 'space', 'enter', 'r', 'arrowleft', 'arrowright', 'a', 'd'],
+  });
 
-  const tileMeshRef = useRef<THREE.InstancedMesh>(null);
-  const trailDetailMeshRef = useRef<THREE.InstancedMesh>(null);
-  const spikeMeshRef = useRef<THREE.InstancedMesh>(null);
-  const sawMeshRef = useRef<THREE.InstancedMesh>(null);
-  const clampMeshRef = useRef<THREE.InstancedMesh>(null);
-  const swingMeshRef = useRef<THREE.InstancedMesh>(null);
-  const warningMeshRef = useRef<THREE.InstancedMesh>(null);
-  const gemMeshRef = useRef<THREE.InstancedMesh>(null);
-  const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
-  const playerRef = useRef<THREE.Mesh>(null);
+  const playerBodyRef = useRef<RapierRigidBody | null>(null);
+  const playerMeshRef = useRef<THREE.Mesh | null>(null);
+  const ghostMeshRef = useRef<THREE.Mesh | null>(null);
 
-  const world = useRef({
-    rng: new SeededRandom(1),
+  const chunkCacheRef = useRef<Map<number, ChunkDefinition>>(new Map());
+  const [chunks, setChunks] = useState<ChunkDefinition[]>([]);
 
-    accumulator: 0,
-    simTime: 0,
+  const [revivePrompt, setRevivePrompt] = useState(false);
+  const [hudNotice, setHudNotice] = useState('');
 
-    genIx: 0,
-    genIz: 0,
-    genDir: 'x' as Dir,
-    chunkTilesLeft: 0,
-    bonusTilesLeft: 0,
-    nextIndex: 0,
-    hazardStreak: 0,
-    hazardSequence: 0,
+  const runtime = useRef<RuntimeRef>({
+    elapsed: 0,
+    runTime: 0,
+    score: 0,
 
-    tilesByKey: new Map<string, Tile>(),
-    tilesByIndex: new Map<number, Tile>(),
-    instanceToTile: Array<Tile | null>(MAX_RENDER_TILES).fill(null),
+    comboScore: 0,
+    obstacleScore: 0,
+    comboMultiplier: 1,
+    comboChain: 0,
+    comboTimer: 0,
+    comboPeak: 1,
 
-    currentTileIndex: 0,
-
-    px: 0,
-    py: PLAYER_BASE_Y,
-    pz: 0,
-    playerYaw: 0,
-
-    moving: false,
-    moveFromX: 0,
-    moveFromZ: 0,
-    moveToX: 0,
-    moveToZ: 0,
-    moveTargetIndex: 0,
-    moveT: 0,
-    moveDuration: STEP_DURATION_BASE,
-    stepQueued: false,
-
-    falling: false,
-    vy: 0,
-    deathSpin: 0,
-
-    idleOnTile: 0,
+    lastChunkIndex: 0,
+    chunkWindowCenter: -999,
 
     cameraShake: 0,
 
+    invertUntil: 0,
+    slowUntil: 0,
+    slowScale: 1,
+    antiGravityUntil: 0,
+    antiGravityForce: 0,
+    lockRotationUntil: 0,
+    stickyUntil: 0,
+    sizeUntil: 0,
+    sizeScale: 1,
+    speedBoostUntil: 0,
+    speedBoostMultiplier: 1,
+    gravityFlipUntil: 0,
+    windUntil: 0,
+    windForce: new THREE.Vector3(),
+
+    checkpoint: START_POSITION.clone(),
+
+    pauseForRevive: false,
+    reviveConsumed: false,
+    pendingDeathReason: '',
+
+    ghostRecordTimer: 0,
+    ghostFrames: [],
+    loadedGhost: null,
+
     hudCommit: 0,
-    pressure: 0,
-
-    spaceWasDown: false,
-
-    debris: Array.from(
-      { length: DEBRIS_POOL },
-      (): Debris => ({
-        active: false,
-        pos: new THREE.Vector3(),
-        vel: new THREE.Vector3(),
-        rot: new THREE.Vector3(),
-        spin: new THREE.Vector3(),
-        life: 0,
-        size: 0.08,
-      })
-    ),
-    debrisCursor: 0,
-
-    dummy: new THREE.Object3D(),
-    tempColorA: new THREE.Color(),
-    tempColorB: new THREE.Color(),
-    tempColorC: new THREE.Color(),
-    camTarget: new THREE.Vector3(),
+    rotationLocked: false,
+    nearMissScore: 0,
   });
 
-  const hideInstance = (mesh: THREE.InstancedMesh, index: number) => {
-    const w = world.current;
-    w.dummy.position.copy(HIDDEN_POS);
-    w.dummy.scale.copy(HIDDEN_SCALE);
-    w.dummy.rotation.set(0, 0, 0);
-    w.dummy.updateMatrix();
-    mesh.setMatrixAt(index, w.dummy.matrix);
-  };
+  const backgroundColorRef = useRef(new THREE.Color(BIOMES.ice.skyColor));
+  const fogColorRef = useRef(new THREE.Color(BIOMES.ice.fogColor));
+  const cameraTargetRef = useRef(new THREE.Vector3(6, 6, 10));
 
-  const hideTrailDetails = (mesh: THREE.InstancedMesh, tileSlot: number) => {
-    const base = tileSlot * TRAIL_DETAIL_SLOTS;
-    for (let i = 0; i < TRAIL_DETAIL_SLOTS; i += 1) {
-      hideInstance(mesh, base + i);
-    }
-  };
+  const season = useMemo(() => getActiveSeason(), []);
 
-  const removeTile = (tile: Tile | null | undefined) => {
-    if (!tile) return;
-    const w = world.current;
-    w.tilesByKey.delete(tile.key);
-    w.tilesByIndex.delete(tile.index);
-    w.instanceToTile[tile.instanceId] = null;
-  };
+  const ensureChunkWindow = useCallback(
+    (centerChunk: number) => {
+      if (centerChunk === runtime.current.chunkWindowCenter) return;
 
-  const getTileAt = (ix: number, iz: number) => {
-    const w = world.current;
-    return w.tilesByKey.get(keyFor(ix, iz));
-  };
+      const start = Math.max(0, centerChunk - CHUNKS_BEHIND);
+      const end = centerChunk + CHUNKS_AHEAD;
 
-  const getTileAtPlayer = () => {
-    const w = world.current;
-    const ix = Math.round(w.px / TILE_SIZE);
-    const iz = Math.round(w.pz / TILE_SIZE);
-    return getTileAt(ix, iz);
-  };
-
-  const addNextTile = () => {
-    const w = world.current;
-
-    if (w.nextIndex > 0) {
-      if (w.chunkTilesLeft <= 0) {
-        const shouldTurn = w.nextIndex > 6 && w.rng.bool(clamp(0.24 + w.nextIndex * 0.0009, 0.24, 0.5));
-        if (shouldTurn) {
-          w.genDir = w.genDir === 'x' ? 'z' : 'x';
-        }
-        w.chunkTilesLeft = w.rng.int(CHUNK_MIN, CHUNK_MAX);
+      for (let i = start; i <= end; i += 1) {
+        if (chunkCacheRef.current.has(i)) continue;
+        const distance = i * CHUNK_LENGTH;
+        const biome = seasonBiome(distance, season.id);
+        const difficulty = difficultyForDistance(distance);
+        const chunk = buildChunk(
+          snap.worldSeed,
+          i,
+          biome,
+          difficulty,
+          BIOMES[biome].obstacleWeightBoost
+        );
+        chunkCacheRef.current.set(i, chunk);
       }
 
-      if (w.genDir === 'x') w.genIx += 1;
-      else w.genIz += 1;
-      w.chunkTilesLeft -= 1;
-    }
+      for (const key of Array.from(chunkCacheRef.current.keys())) {
+        if (key < start - 2 || key > end + 2) {
+          chunkCacheRef.current.delete(key);
+        }
+      }
 
-    if (w.bonusTilesLeft <= 0 && w.nextIndex > 28 && w.nextIndex % 70 === 0 && w.rng.bool(0.5)) {
-      w.bonusTilesLeft = w.rng.int(10, 16);
-    }
+      const nextChunks: ChunkDefinition[] = [];
+      for (let i = start; i <= end; i += 1) {
+        const chunk = chunkCacheRef.current.get(i);
+        if (chunk) nextChunks.push(chunk);
+      }
 
-    const ix = w.genIx;
-    const iz = w.genIz;
-    const index = w.nextIndex;
-    const instanceId = index % MAX_RENDER_TILES;
-    const key = keyFor(ix, iz);
+      runtime.current.chunkWindowCenter = centerChunk;
+      setChunks(nextChunks);
+      const activeChunk = nextChunks.find((chunk) => chunk.index === centerChunk);
+      stepsState.setBossActive(Boolean(activeChunk?.isBoss));
+    },
+    [season.id, snap.worldSeed]
+  );
 
-    const old = w.instanceToTile[instanceId];
-    if (old) removeTile(old);
+  const registerSkill = useCallback((kind: SkillEventKind) => {
+    const r = runtime.current;
+    const scored = applySkillEvent(kind, r.comboMultiplier, r.comboChain);
+    r.comboScore += scored.comboScore;
+    r.comboMultiplier = scored.nextMultiplier;
+    r.comboChain = scored.nextChain;
+    r.comboTimer = scored.comboTimer;
+    if (r.comboMultiplier > r.comboPeak) r.comboPeak = r.comboMultiplier;
+    r.cameraShake = Math.max(r.cameraShake, 0.14);
+  }, []);
 
-    const inBonus = w.bonusTilesLeft > 0;
-    if (inBonus) w.bonusTilesLeft -= 1;
+  const applyEffect = useCallback((effect: EffectCommand) => {
+    const r = runtime.current;
+    const now = r.elapsed;
+    const player = playerBodyRef.current;
 
-    const hazard = inBonus ? 'none' : pickHazard(index, w.rng, w.hazardStreak);
-    if (hazard === 'none') {
-      w.hazardStreak = 0;
-    } else {
-      w.hazardStreak += 1;
-    }
-    const hazardTiming = buildHazardTiming(hazard, index, w.rng, w.hazardSequence);
-    if (hazard !== 'none') w.hazardSequence += 1;
-
-    const difficulty = Math.floor(index / 20);
-    const gemChanceBase = clamp(0.16 + difficulty * 0.01, 0.16, 0.35);
-    const gemChance = inBonus ? 0.95 : hazard === 'none' ? gemChanceBase : gemChanceBase * 0.52;
-
-    const tile: Tile = {
-      key,
-      ix,
-      iz,
-      index,
-      instanceId,
-      painted: false,
-      hasGem: index > 6 && w.rng.bool(gemChance),
-      gemTaken: false,
-      hazard,
-      hazardPhase: w.rng.float(0, Math.PI * 2),
-      hazardCycle: hazardTiming.cycle,
-      hazardOpenWindow: hazardTiming.openWindow,
-      hazardWindowStart: hazardTiming.windowStart,
-      hazardOffset: hazardTiming.offset,
-      hazardMotion: 0,
-      fallStart: Number.POSITIVE_INFINITY,
-      drop: 0,
-      spawnPulse: 1,
-      bonus: inBonus,
-    };
-
-    w.tilesByKey.set(tile.key, tile);
-    w.tilesByIndex.set(tile.index, tile);
-    w.instanceToTile[instanceId] = tile;
-
-    w.nextIndex += 1;
-  };
-
-  const ensurePathAhead = (currentIndex: number) => {
-    const w = world.current;
-    const needed = currentIndex + PATH_AHEAD;
-    while (w.nextIndex <= needed) addNextTile();
-  };
-
-  const paintTile = (tile: Tile) => {
-    if (tile.painted) return;
-    tile.painted = true;
-  };
-
-  const spawnDebrisBurst = (x: number, y: number, z: number, count = 28) => {
-    const w = world.current;
-    for (let i = 0; i < count; i += 1) {
-      const d = w.debris[w.debrisCursor % DEBRIS_POOL];
-      w.debrisCursor += 1;
-      d.active = true;
-      d.life = 0.42 + w.rng.random() * 0.42;
-      d.pos.set(x, y, z);
-      d.vel.set(w.rng.float(-4.5, 4.5), w.rng.float(2.2, 7.2), w.rng.float(-4.5, 4.5));
-      d.rot.set(w.rng.float(0, Math.PI), w.rng.float(0, Math.PI), w.rng.float(0, Math.PI));
-      d.spin.set(w.rng.float(-10, 10), w.rng.float(-10, 10), w.rng.float(-10, 10));
-      d.size = 0.045 + w.rng.random() * 0.08;
-    }
-  };
-
-  const triggerDeath = (reason: string) => {
-    const w = world.current;
-    if (stepsState.phase === 'gameover') return;
-
-    stepsState.endGame(reason);
-    w.falling = true;
-    w.moving = false;
-    w.stepQueued = false;
-    w.vy = -2.2;
-    w.deathSpin = (w.rng.bool(0.5) ? 1 : -1) * 7.8;
-    w.cameraShake = Math.max(w.cameraShake, 0.38);
-    spawnDebrisBurst(w.px, w.py, w.pz, 36);
-    stepsState.setPressure(0);
-  };
-
-  const tryStepForward = () => {
-    const w = world.current;
-    if (stepsState.phase !== 'playing') return;
-    if (w.moving || w.falling) return;
-    w.stepQueued = false;
-
-    const current = w.tilesByIndex.get(w.currentTileIndex);
-    const next = w.tilesByIndex.get(w.currentTileIndex + 1);
-    if (!current || !next) {
-      triggerDeath('No step ahead.');
+    if (effect.type === 'invert_controls') {
+      r.invertUntil = Math.max(r.invertUntil, now + effect.duration);
       return;
     }
 
-    if (!Number.isFinite(current.fallStart)) {
-      current.fallStart = w.simTime + fallDelayForScore(stepsState.score);
+    if (effect.type === 'slow_time') {
+      r.slowUntil = Math.max(r.slowUntil, now + effect.duration);
+      r.slowScale = effect.scale;
+      return;
     }
 
-    w.moving = true;
-    w.moveFromX = w.px;
-    w.moveFromZ = w.pz;
-    w.moveToX = next.ix * TILE_SIZE;
-    w.moveToZ = next.iz * TILE_SIZE;
-    w.moveTargetIndex = next.index;
-    w.moveT = 0;
-    w.moveDuration = stepDurationForScore(stepsState.score);
-    w.idleOnTile = 0;
-    w.cameraShake = Math.max(w.cameraShake, 0.07);
-
-    const dx = w.moveToX - w.moveFromX;
-    const dz = w.moveToZ - w.moveFromZ;
-    w.playerYaw = Math.atan2(dx, dz);
-  };
-
-  const cleanupBehind = () => {
-    const w = world.current;
-    const cutoff = w.currentTileIndex - KEEP_BEHIND;
-    if (cutoff <= 0) return;
-
-    for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
-      const tile = w.instanceToTile[i];
-      if (!tile) continue;
-      if (tile.index >= cutoff) continue;
-      if (tile.drop < FALL_HIDE_Y) continue;
-      removeTile(tile);
-    }
-  };
-
-  const resetWorld = () => {
-    const w = world.current;
-
-    w.rng.reset(snap.worldSeed);
-
-    w.accumulator = 0;
-    w.simTime = 0;
-
-    w.genIx = 0;
-    w.genIz = 0;
-    w.genDir = 'x';
-    w.chunkTilesLeft = 0;
-    w.bonusTilesLeft = 0;
-    w.nextIndex = 0;
-    w.hazardStreak = 0;
-    w.hazardSequence = 0;
-
-    w.tilesByKey.clear();
-    w.tilesByIndex.clear();
-    w.instanceToTile.fill(null);
-
-    w.currentTileIndex = 0;
-
-    w.px = 0;
-    w.py = PLAYER_BASE_Y;
-    w.pz = 0;
-    w.playerYaw = 0;
-
-    w.moving = false;
-    w.moveFromX = 0;
-    w.moveFromZ = 0;
-    w.moveToX = 0;
-    w.moveToZ = 0;
-    w.moveTargetIndex = 0;
-    w.moveT = 0;
-    w.moveDuration = STEP_DURATION_BASE;
-    w.stepQueued = false;
-
-    w.falling = false;
-    w.vy = 0;
-    w.deathSpin = 0;
-
-    w.idleOnTile = 0;
-    w.cameraShake = 0;
-
-    w.hudCommit = 0;
-    w.pressure = 0;
-
-    w.spaceWasDown = false;
-
-    w.debrisCursor = 0;
-    for (let i = 0; i < DEBRIS_POOL; i += 1) {
-      const d = w.debris[i];
-      d.active = false;
-      d.pos.set(0, 0, 0);
-      d.vel.set(0, 0, 0);
-      d.rot.set(0, 0, 0);
-      d.spin.set(0, 0, 0);
-      d.life = 0;
-      d.size = 0.08;
+    if (effect.type === 'anti_gravity') {
+      r.antiGravityUntil = Math.max(r.antiGravityUntil, now + effect.duration);
+      r.antiGravityForce = effect.force;
+      return;
     }
 
-    for (let i = 0; i < INITIAL_PATH_TILES; i += 1) addNextTile();
-
-    const startTile = w.tilesByIndex.get(0);
-    if (startTile) {
-      paintTile(startTile);
-      startTile.spawnPulse = 0;
+    if (effect.type === 'lock_rotation') {
+      r.lockRotationUntil = Math.max(r.lockRotationUntil, now + effect.duration);
+      return;
     }
 
-    ensurePathAhead(0);
+    if (effect.type === 'sticky') {
+      r.stickyUntil = Math.max(r.stickyUntil, now + effect.duration);
+      return;
+    }
 
-    scene.background = COLOR_SKY_A.clone();
-    scene.fog = new THREE.Fog('#68ccff', 11, 78);
+    if (effect.type === 'size_shift') {
+      r.sizeUntil = Math.max(r.sizeUntil, now + effect.duration);
+      r.sizeScale = effect.scale;
+      return;
+    }
 
-    camera.position.set(6.8, 7.4, 6.8);
-    camera.lookAt(0, 0.25, 0);
+    if (effect.type === 'teleport') {
+      if (player) {
+        player.setTranslation({ x: effect.position[0], y: effect.position[1], z: effect.position[2] }, true);
+        player.setLinvel({ x: 0, y: 0, z: -BASE_FORWARD_SPEED }, true);
+        player.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+      return;
+    }
+
+    if (effect.type === 'impulse') {
+      if (player) {
+        player.applyImpulse(
+          {
+            x: effect.value[0],
+            y: effect.value[1],
+            z: effect.value[2],
+          },
+          true
+        );
+      }
+      return;
+    }
+
+    if (effect.type === 'speed_boost') {
+      r.speedBoostUntil = Math.max(r.speedBoostUntil, now + effect.duration);
+      r.speedBoostMultiplier = Math.max(r.speedBoostMultiplier, effect.multiplier);
+      return;
+    }
+
+    if (effect.type === 'gravity_flip') {
+      r.gravityFlipUntil = Math.max(r.gravityFlipUntil, now + effect.duration);
+      return;
+    }
+
+    if (effect.type === 'wind') {
+      r.windUntil = Math.max(r.windUntil, now + effect.duration);
+      r.windForce.set(effect.force[0], effect.force[1], effect.force[2]);
+      return;
+    }
+
+    if (effect.type === 'checkpoint') {
+      r.checkpoint.set(effect.position[0], effect.position[1], effect.position[2]);
+    }
+  }, []);
+
+  const finalizeRun = useCallback((reason: string) => {
+    const r = runtime.current;
+    if (stepsState.phase === 'gameover') return;
+
+    const difficulty = difficultyForDistance(stepsState.distance);
+    const checksum = createRunChecksum(r.score, snap.worldSeed, r.runTime, r.comboPeak);
+
+    queueLeaderboardSubmission({
+      score: r.score,
+      distance: stepsState.distance,
+      seed: snap.worldSeed,
+      runDuration: r.runTime,
+      checksum,
+      comboPeak: r.comboPeak,
+      timestamp: Date.now(),
+    });
+
+    const estimate = estimateLeaderboard(r.score);
+    stepsState.setLeaderboardSnapshot(estimate.rank, estimate.percentile);
+
+    const existingBest = stepsState.best;
+    if (r.score >= existingBest && r.ghostFrames.length > 20) {
+      const ghost: RunGhost = {
+        seed: snap.worldSeed,
+        score: r.score,
+        duration: r.runTime,
+        frames: r.ghostFrames,
+      };
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(stepsStorageKeys.bestGhost, serializeGhost(ghost));
+      }
+      stepsState.setGhostReady(true);
+      r.loadedGhost = ghost;
+    }
+
+    if (difficulty >= 6) {
+      setHudNotice('Hard tier run complete. Leaderboard payload queued.');
+    }
+
+    stepsState.endGame(reason);
+  }, [snap.worldSeed]);
+
+  const triggerKill = useCallback(
+    (reason: string) => {
+      if (stepsState.phase !== 'playing') return;
+      const r = runtime.current;
+      if (!r.reviveConsumed && stepsState.reviveAvailable && stepsState.rewardedReady) {
+        r.reviveConsumed = true;
+        r.pauseForRevive = true;
+        r.pendingDeathReason = reason;
+        stepsState.consumeRevive();
+        const player = playerBodyRef.current;
+        if (player) {
+          player.setLinvel({ x: 0, y: 0, z: 0 }, true);
+          player.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        }
+        setRevivePrompt(true);
+        return;
+      }
+
+      finalizeRun(reason);
+    },
+    [finalizeRun]
+  );
+
+  const callbacks = useMemo<ActorCallbacks>(
+    () => ({
+      onKill: triggerKill,
+      onSkill: registerSkill,
+      onEffect: applyEffect,
+      getPlayer: () => playerBodyRef.current,
+      getTime: () => runtime.current.elapsed,
+    }),
+    [applyEffect, registerSkill, triggerKill]
+  );
+
+  const resetRun = useCallback(() => {
+    const r = runtime.current;
+
+    r.elapsed = 0;
+    r.runTime = 0;
+    r.score = 0;
+
+    r.comboScore = 0;
+    r.obstacleScore = 0;
+    r.comboMultiplier = 1;
+    r.comboChain = 0;
+    r.comboTimer = 0;
+    r.comboPeak = 1;
+
+    r.lastChunkIndex = 0;
+    r.chunkWindowCenter = -999;
+
+    r.cameraShake = 0;
+
+    r.invertUntil = 0;
+    r.slowUntil = 0;
+    r.slowScale = 1;
+    r.antiGravityUntil = 0;
+    r.antiGravityForce = 0;
+    r.lockRotationUntil = 0;
+    r.stickyUntil = 0;
+    r.sizeUntil = 0;
+    r.sizeScale = 1;
+    r.speedBoostUntil = 0;
+    r.speedBoostMultiplier = 1;
+    r.gravityFlipUntil = 0;
+    r.windUntil = 0;
+    r.windForce.set(0, 0, 0);
+
+    r.pauseForRevive = false;
+    r.reviveConsumed = false;
+    r.pendingDeathReason = '';
+
+    r.checkpoint.copy(START_POSITION);
+
+    r.ghostRecordTimer = 0;
+    r.ghostFrames = [];
+
+    r.hudCommit = 0;
+    r.rotationLocked = false;
+    r.nearMissScore = 0;
+
+    chunkCacheRef.current.clear();
+    ensureChunkWindow(0);
+
+    const player = playerBodyRef.current;
+    if (player) {
+      player.setTranslation({ x: START_POSITION.x, y: START_POSITION.y, z: START_POSITION.z }, true);
+      player.setLinvel({ x: 0, y: 0, z: -BASE_FORWARD_SPEED }, true);
+      player.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      player.setEnabledRotations(true, true, true, true);
+    }
+
+    if (playerMeshRef.current) {
+      playerMeshRef.current.scale.set(1, 1, 1);
+      playerMeshRef.current.rotation.set(0, 0, 0);
+    }
+
     if ('fov' in camera) {
-      (camera as THREE.PerspectiveCamera).fov = 36;
+      (camera as THREE.PerspectiveCamera).fov = 44;
       camera.updateProjectionMatrix();
     }
 
-    if (
-      tileMeshRef.current &&
-      trailDetailMeshRef.current &&
-      spikeMeshRef.current &&
-      sawMeshRef.current &&
-      clampMeshRef.current &&
-      swingMeshRef.current &&
-      warningMeshRef.current &&
-      gemMeshRef.current &&
-      debrisMeshRef.current
-    ) {
-      for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
-        hideInstance(tileMeshRef.current, i);
-        hideTrailDetails(trailDetailMeshRef.current, i);
-        hideInstance(spikeMeshRef.current, i);
-        hideInstance(sawMeshRef.current, i);
-        hideInstance(clampMeshRef.current, i);
-        hideInstance(swingMeshRef.current, i);
-        hideInstance(warningMeshRef.current, i);
-        hideInstance(gemMeshRef.current, i);
-      }
+    camera.position.set(6, 6.2, 10.4);
+    camera.lookAt(0, 1, 0);
 
-      for (let i = 0; i < DEBRIS_POOL; i += 1) {
-        hideInstance(debrisMeshRef.current, i);
-      }
-
-      tileMeshRef.current.instanceMatrix.needsUpdate = true;
-      trailDetailMeshRef.current.instanceMatrix.needsUpdate = true;
-      spikeMeshRef.current.instanceMatrix.needsUpdate = true;
-      sawMeshRef.current.instanceMatrix.needsUpdate = true;
-      clampMeshRef.current.instanceMatrix.needsUpdate = true;
-      swingMeshRef.current.instanceMatrix.needsUpdate = true;
-      warningMeshRef.current.instanceMatrix.needsUpdate = true;
-      gemMeshRef.current.instanceMatrix.needsUpdate = true;
-      debrisMeshRef.current.instanceMatrix.needsUpdate = true;
-    }
-
-    stepsState.setPressure(0);
-  };
-
-  const onLandOnTile = (tile: Tile) => {
-    const w = world.current;
-
-    w.currentTileIndex = tile.index;
-    paintTile(tile);
-
-    if (tile.index > stepsState.score) {
-      stepsState.score = tile.index;
-    }
-
-    if (tile.hasGem && !tile.gemTaken) {
-      tile.gemTaken = true;
-      stepsState.collectGem(1);
-      w.cameraShake = Math.max(w.cameraShake, 0.2);
-    }
-
-    if (tile.hazard !== 'none' && hazardIsDangerous(tile)) {
-      triggerDeath(failReasonForHazard(tile.hazard));
-      return;
-    }
-
-    ensurePathAhead(w.currentTileIndex);
-    cleanupBehind();
-  };
+    setRevivePrompt(false);
+    setHudNotice('');
+  }, [camera, ensureChunkWindow]);
 
   useEffect(() => {
     stepsState.loadBest();
-  }, []);
+    stepsState.dailySeed = dailySeedForDate();
+    stepsState.setSeason(season.id);
+
+    if (typeof window !== 'undefined') {
+      runtime.current.loadedGhost = parseGhost(window.localStorage.getItem(stepsStorageKeys.bestGhost));
+      stepsState.setGhostReady(Boolean(runtime.current.loadedGhost));
+    }
+  }, [season.id]);
 
   useEffect(() => {
-    resetWorld();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap.worldSeed]);
+    resetRun();
+  }, [resetRun, snap.worldSeed]);
 
-  const simulateFixed = (dt: number) => {
-    const w = world.current;
-    w.simTime += dt;
+  useFrame((state, dt) => {
+    const r = runtime.current;
+    r.elapsed += dt;
 
-    for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
-      const tile = w.instanceToTile[i];
-      if (!tile) continue;
-
-      tile.spawnPulse = Math.max(0, tile.spawnPulse - dt * 2.6);
-      if (Number.isFinite(tile.fallStart)) {
-        const age = w.simTime - tile.fallStart;
-        if (age > 0) {
-          tile.drop = Math.min(FALL_HIDE_Y + 0.6, age * age * 4.6);
-        }
-      }
-
-      if (tile.hazard === 'none') {
-        tile.hazardMotion = easingLerp(tile.hazardMotion, 0, dt, 9);
-      } else {
-        const motionTarget = hazardStateAt(tile, w.simTime).closedBlend;
-        tile.hazardMotion = easingLerp(tile.hazardMotion, motionTarget, dt, 8);
-      }
-    }
-
-    if (stepsState.phase === 'playing') {
-      if (w.moving) {
-        w.moveT += dt / w.moveDuration;
-        const t = smoothStep01(w.moveT);
-
-        w.px = THREE.MathUtils.lerp(w.moveFromX, w.moveToX, t);
-        w.pz = THREE.MathUtils.lerp(w.moveFromZ, w.moveToZ, t);
-        w.py = PLAYER_BASE_Y + Math.sin(Math.PI * t) * 0.25;
-
-        if (w.moveT >= 1) {
-          w.moving = false;
-          w.px = w.moveToX;
-          w.pz = w.moveToZ;
-          w.py = PLAYER_BASE_Y;
-          w.idleOnTile = 0;
-
-          const landedTile = w.tilesByIndex.get(w.moveTargetIndex);
-          if (!landedTile) {
-            triggerDeath('Missed the next step.');
-          } else {
-            onLandOnTile(landedTile);
-            if (w.stepQueued && stepsState.phase === 'playing' && !w.falling) {
-              w.stepQueued = false;
-              tryStepForward();
-            }
-          }
-        }
-      } else if (w.falling) {
-        w.vy += GRAVITY * dt;
-        w.py += w.vy * dt;
-        if (w.py < -7) {
-          stepsState.endGame(stepsState.failReason || 'Fell into the void.');
-        }
-      } else {
-        w.idleOnTile += dt;
-        const holdLimit = holdLimitForScore(stepsState.score);
-        w.pressure = clamp(w.idleOnTile / holdLimit, 0, 1);
-
-        const standingTile = w.tilesByIndex.get(w.currentTileIndex) ?? getTileAtPlayer();
-        if (!standingTile) {
-          triggerDeath('No tile under the cube.');
-        } else {
-          if (w.pressure >= 1 && !Number.isFinite(standingTile.fallStart)) {
-            standingTile.fallStart = w.simTime + 0.01;
-          }
-
-          if (standingTile.drop > 0.25) {
-            triggerDeath('Path collapsed under you.');
-          }
-
-          if (standingTile.hazard !== 'none') {
-            if (hazardIsDangerous(standingTile) && w.idleOnTile > 0.12) {
-              triggerDeath(failReasonForHazard(standingTile.hazard));
-            }
-          }
-        }
-      }
-    } else if (w.falling) {
-      w.vy += GRAVITY * dt;
-      w.py += w.vy * dt;
-      if (w.py < -9) {
-        w.falling = false;
-      }
-    }
-
-    for (let i = 0; i < DEBRIS_POOL; i += 1) {
-      const d = w.debris[i];
-      if (!d.active) continue;
-      d.life -= dt;
-      if (d.life <= 0) {
-        d.active = false;
-        continue;
-      }
-      d.vel.y += -18 * dt;
-      d.vel.multiplyScalar(Math.max(0, 1 - dt * 2.6));
-      d.pos.addScaledVector(d.vel, dt);
-      d.rot.x += d.spin.x * dt;
-      d.rot.y += d.spin.y * dt;
-      d.rot.z += d.spin.z * dt;
-      if (d.pos.y < -8) d.active = false;
-    }
-
-    w.hudCommit += dt;
-    if (w.hudCommit >= 0.04) {
-      w.hudCommit = 0;
-      const pressure = stepsState.phase === 'playing' ? w.pressure : 0;
-      stepsState.setPressure(pressure);
-    }
-  };
-
-  useFrame((_, dtRender) => {
-    const w = world.current;
     const inputState = input.current;
 
-    const spaceDown = inputState.keysDown.has(' ');
-    const enterJustDown = inputState.justPressed.has('enter');
-    const restart = inputState.justPressed.has('r');
-    const spaceJustDown = spaceDown && !w.spaceWasDown;
-    w.spaceWasDown = spaceDown;
+    const leftDown = inputState.keysDown.has('arrowleft') || inputState.keysDown.has('a');
+    const rightDown = inputState.keysDown.has('arrowright') || inputState.keysDown.has('d');
 
-    const tap = inputState.pointerJustDown || spaceJustDown || enterJustDown;
+    const spaceTap = inputState.pointerJustDown || inputState.justPressed.has(' ') || inputState.justPressed.has('enter');
+    const restart = inputState.justPressed.has('r');
 
     if (restart) {
       stepsState.startGame();
-      resetWorld();
-    } else if (tap) {
+      resetRun();
+    }
+
+    if (spaceTap) {
       if (stepsState.phase === 'menu' || stepsState.phase === 'gameover') {
         stepsState.startGame();
-        resetWorld();
-      } else if (stepsState.phase === 'playing') {
-        if (w.moving) {
-          w.stepQueued = true;
-        } else {
-          tryStepForward();
-        }
+        resetRun();
       }
     }
 
     clearFrameInput(input);
 
-    if (!paused) {
-      w.accumulator += Math.min(0.05, dtRender);
-      let simSteps = 0;
-      while (w.accumulator >= FIXED_STEP && simSteps < MAX_SIM_STEPS) {
-        simulateFixed(FIXED_STEP);
-        w.accumulator -= FIXED_STEP;
-        simSteps += 1;
+    if (paused) return;
+
+    const body = playerBodyRef.current;
+
+    if (stepsState.phase === 'playing' && body && !r.pauseForRevive) {
+      r.runTime += dt;
+
+      const pos = body.translation();
+      const vel = body.linvel();
+
+      const distance = Math.max(0, -pos.z);
+      const biomeId = seasonBiome(distance, snap.seasonId || season.id);
+      const biome = BIOMES[biomeId];
+      const difficulty = difficultyForDistance(distance);
+
+      if (stepsState.biome !== biomeId) {
+        stepsState.setBiome(biomeId);
       }
-    }
 
-    if (bgMaterialRef.current) {
-      bgMaterialRef.current.uniforms.uTime.value = w.simTime;
-    }
+      const comboDecay = decayCombo(r.comboTimer, r.comboMultiplier, r.comboChain, dt);
+      r.comboTimer = comboDecay.comboTimer;
+      r.comboMultiplier = comboDecay.comboMultiplier;
+      r.comboChain = comboDecay.chain;
 
-    if (
-      tileMeshRef.current &&
-      trailDetailMeshRef.current &&
-      spikeMeshRef.current &&
-      sawMeshRef.current &&
-      clampMeshRef.current &&
-      swingMeshRef.current &&
-      warningMeshRef.current &&
-      gemMeshRef.current
-    ) {
-      const tileMesh = tileMeshRef.current;
-      const trailDetailMesh = trailDetailMeshRef.current;
-      const spikeMesh = spikeMeshRef.current;
-      const sawMesh = sawMeshRef.current;
-      const clampMesh = clampMeshRef.current;
-      const swingMesh = swingMeshRef.current;
-      const warningMesh = warningMeshRef.current;
-      const gemMesh = gemMeshRef.current;
+      let steer = 0;
+      if (leftDown) steer -= 1;
+      if (rightDown) steer += 1;
+      steer += clamp(inputState.pointerX * 0.35, -0.5, 0.5);
 
-      for (let i = 0; i < MAX_RENDER_TILES; i += 1) {
-        const tile = w.instanceToTile[i];
-        if (!tile) {
-          hideInstance(tileMesh, i);
-          hideTrailDetails(trailDetailMesh, i);
-          hideInstance(spikeMesh, i);
-          hideInstance(sawMesh, i);
-          hideInstance(clampMesh, i);
-          hideInstance(swingMesh, i);
-          hideInstance(warningMesh, i);
-          hideInstance(gemMesh, i);
-          continue;
-        }
+      if (r.elapsed < r.invertUntil) steer *= -1;
 
-        if (tile.drop > FALL_HIDE_Y && tile.index < w.currentTileIndex - 8) {
-          removeTile(tile);
-          hideInstance(tileMesh, i);
-          hideTrailDetails(trailDetailMesh, i);
-          hideInstance(spikeMesh, i);
-          hideInstance(sawMesh, i);
-          hideInstance(clampMesh, i);
-          hideInstance(swingMesh, i);
-          hideInstance(warningMesh, i);
-          hideInstance(gemMesh, i);
-          continue;
-        }
+      const slowScale = r.elapsed < r.slowUntil ? r.slowScale : 1;
+      const boostScale = r.elapsed < r.speedBoostUntil ? r.speedBoostMultiplier : 1;
+      const targetForward = -BASE_FORWARD_SPEED * biome.speedScale * slowScale * boostScale;
+      const nextVz = lerp(vel.z, targetForward, 0.1);
 
-        const x = tile.ix * TILE_SIZE;
-        const z = tile.iz * TILE_SIZE;
-        const wobble = Math.sin(w.simTime * 6 + tile.index * 0.41) * tile.spawnPulse * 0.03;
-        const y = TILE_HEIGHT * 0.5 - tile.drop + wobble;
-        const hazardState = tile.hazard === 'none' ? null : hazardStateAt(tile, w.simTime);
-        const hazardThreat = tile.hazard === 'none' ? 0 : smoothStep01(tile.hazardMotion);
-        const dangerPulse = hazardState
-          ? (0.5 + 0.5 * Math.sin(w.simTime * 8 + tile.hazardPhase * 2.2)) * hazardThreat
-          : 0;
-        const isVoxelTrail = snap.trailStyle === 'voxel';
-        const isCarvedTrail = snap.trailStyle === 'carved';
-        const tileScaleX = isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : 1;
-        const tileScaleY = isVoxelTrail ? 1.06 : isCarvedTrail ? 0.96 : 1;
-        const tileScaleZ = isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : 1;
+      body.setLinvel({ x: vel.x, y: vel.y, z: nextVz }, true);
+      body.applyImpulse({ x: steer * SIDE_IMPULSE * dt, y: 0, z: 0 }, true);
 
-        w.dummy.position.set(x, y, z);
-        w.dummy.rotation.set(0, 0, 0);
-        w.dummy.scale.set(tileScaleX, tileScaleY, tileScaleZ);
-        w.dummy.updateMatrix();
-        tileMesh.setMatrixAt(i, w.dummy.matrix);
+      if (spaceTap) {
+        body.applyImpulse({ x: 0, y: TAP_UP_IMPULSE, z: -TAP_FORWARD_IMPULSE }, true);
+        body.applyImpulseAtPoint(
+          { x: 0.6, y: 0, z: 0 },
+          { x: pos.x + 0.35, y: pos.y, z: pos.z },
+          true
+        );
+        registerSkill('perfect_landing');
+      }
 
-        w.tempColorA.copy(tile.bonus ? COLOR_BONUS : COLOR_PATH).lerp(COLOR_TRAIL, tile.painted ? (tile.bonus ? 0.72 : 1) : 0);
-        if (tile.bonus && !tile.painted) {
-          w.tempColorA.lerp(COLOR_WHITE, 0.12 + Math.sin(w.simTime * 5 + tile.index * 0.3) * 0.06);
-        }
-        if (tile.index === w.currentTileIndex && stepsState.phase === 'playing') {
-          w.tempColorA.lerp(COLOR_WHITE, 0.22 + snap.pressure * 0.2);
-        }
-        if (tile.drop > 0) {
-          w.tempColorA.lerp(COLOR_FALL, clamp(tile.drop / 2.5, 0, 1));
-        }
-        if (hazardState && !tile.bonus) {
-          w.tempColorA.lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.1);
-          w.tempColorA.lerp(COLOR_HAZARD_DANGER, hazardThreat * 0.38 + dangerPulse * 0.08);
-        }
-        tileMesh.setColorAt(i, w.tempColorA);
+      if (r.elapsed < r.antiGravityUntil) {
+        body.applyImpulse({ x: 0, y: r.antiGravityForce * dt, z: 0 }, true);
+      }
 
-        const detailBase = i * TRAIL_DETAIL_SLOTS;
-        if (isVoxelTrail) {
-          const liftA = 0.06 + Math.sin(tile.index * 0.77 + w.simTime * 1.5) * 0.018;
-          const liftB = 0.04 + Math.cos(tile.index * 0.59 + w.simTime * 1.8) * 0.015;
-          const liftC = 0.03 + Math.sin(tile.index * 0.33 + w.simTime * 1.2) * 0.012;
-          const side = tile.index % 2 === 0 ? 1 : -1;
+      if (r.elapsed < r.gravityFlipUntil) {
+        body.applyImpulse({ x: 0, y: 14 * dt, z: 0 }, true);
+      }
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + liftA, z);
-          w.dummy.rotation.set(0, 0, 0);
-          w.dummy.scale.set(0.48, 0.16, 0.48);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.1);
-          trailDetailMesh.setColorAt(detailBase, w.tempColorC);
+      if (r.elapsed < r.windUntil) {
+        body.applyImpulse(
+          {
+            x: r.windForce.x * dt,
+            y: r.windForce.y * dt,
+            z: r.windForce.z * dt,
+          },
+          true
+        );
+      }
 
-          w.dummy.position.set(x + 0.24 * side, y + TILE_HEIGHT * 0.5 + liftB, z - 0.24 * side);
-          w.dummy.scale.set(0.24, 0.12, 0.24);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.05);
-          trailDetailMesh.setColorAt(detailBase + 1, w.tempColorC);
+      if (r.elapsed < r.stickyUntil) {
+        body.setLinvel({ x: vel.x * 0.62, y: vel.y * 0.5, z: vel.z * 0.62 }, true);
+      }
 
-          w.dummy.position.set(x - 0.24 * side, y + TILE_HEIGHT * 0.5 + liftC, z + 0.24 * side);
-          w.dummy.scale.set(0.24, 0.1, 0.24);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.12);
-          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
-        } else if (isCarvedTrail) {
-          const axisX = tile.index % 2 === 0;
-          const carveLift = 0.01;
-          const carveColor = w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.45);
+      const shouldLockRotation = r.elapsed < r.lockRotationUntil;
+      if (shouldLockRotation !== r.rotationLocked) {
+        body.setEnabledRotations(!shouldLockRotation, !shouldLockRotation, !shouldLockRotation, true);
+        r.rotationLocked = shouldLockRotation;
+      }
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift, z);
-          w.dummy.rotation.set(0, axisX ? 0 : Math.PI * 0.5, 0);
-          w.dummy.scale.set(0.72, 0.03, 0.12);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
-          trailDetailMesh.setColorAt(detailBase, carveColor);
+      if (playerMeshRef.current) {
+        const targetScale = r.elapsed < r.sizeUntil ? r.sizeScale : 1;
+        const nextScale = lerp(playerMeshRef.current.scale.x, targetScale, 0.18);
+        playerMeshRef.current.scale.set(nextScale, nextScale, nextScale);
+      }
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift, z);
-          w.dummy.rotation.set(0, axisX ? Math.PI * 0.5 : 0, 0);
-          w.dummy.scale.set(0.42, 0.03, 0.1);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
-          trailDetailMesh.setColorAt(detailBase + 1, carveColor);
+      if (pos.y < -10) {
+        triggerKill('Fell into the void.');
+      }
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift + 0.004, z);
-          w.dummy.rotation.set(0, tile.index * 0.2, 0);
-          w.dummy.scale.set(0.12, 0.02, 0.12);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
-          w.tempColorC.copy(carveColor).lerp(COLOR_WHITE, 0.08);
-          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
-        } else {
-          hideTrailDetails(trailDetailMesh, i);
-        }
+      if (Math.abs(pos.x) > 8.5) {
+        triggerKill('Lost lane control.');
+      }
 
-        if (tile.hazard === 'spike' && hazardState) {
-          const bob = Math.sin(w.simTime * (2.2 + hazardThreat * 2.1) + tile.hazardPhase) * 0.01 * hazardThreat;
-          const yLift = -0.26 * (1 - hazardThreat) + 0.05 + bob;
-          const scaleXZ = THREE.MathUtils.lerp(0.3, 1, hazardThreat);
-          const scaleY = THREE.MathUtils.lerp(0.08, 1.02, hazardThreat);
+      const chunkIndex = Math.max(0, Math.floor(distance / CHUNK_LENGTH));
+      ensureChunkWindow(chunkIndex);
+      if (chunkIndex > r.lastChunkIndex) {
+        registerSkill('chunk_clear');
+        r.lastChunkIndex = chunkIndex;
+      }
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + yLift, z);
-          w.dummy.rotation.set(0, tile.hazardPhase + w.simTime * (0.16 + hazardThreat * 0.48), 0);
-          w.dummy.scale.set(scaleXZ, scaleY, scaleXZ);
-          w.dummy.updateMatrix();
-          spikeMesh.setMatrixAt(i, w.dummy.matrix);
+      const totalScore = scoreBreakdown(
+        distance,
+        r.comboScore,
+        r.obstacleScore + r.nearMissScore,
+        r.runTime,
+        difficulty,
+        season.scoreBonus
+      );
+      r.score = totalScore;
 
-          w.tempColorB
-            .copy(COLOR_SPIKE)
-            .lerp(COLOR_HAZARD_DANGER, 0.45 + hazardThreat * 0.35)
-            .lerp(COLOR_WHITE, 0.05 + dangerPulse * 0.16);
-          spikeMesh.setColorAt(i, w.tempColorB);
-        } else {
-          hideInstance(spikeMesh, i);
-        }
+      const pressure = clamp((Math.abs(pos.x) / 8.5) * 0.5 + (pos.y < 0.8 ? 0.5 : 0), 0, 1);
+      stepsState.setPressure(pressure);
 
-        if (tile.hazard === 'saw' && hazardState) {
-          const driftDirection = tile.index % 2 === 0 ? 1 : -1;
-          const approach = 1 - hazardThreat;
-          const sideOffset = driftDirection * (1.04 * approach + 0.08);
-          const sweep = Math.sin(w.simTime * (1.4 + hazardThreat * 2.8) + tile.hazardPhase) * (0.04 + hazardThreat * 0.12);
-          const yLift = -0.18 * approach + 0.08 + hazardThreat * 0.06;
-          const sawScale = THREE.MathUtils.lerp(0.2, 1.02, hazardThreat);
+      r.hudCommit += dt;
+      if (r.hudCommit >= HUD_COMMIT_INTERVAL) {
+        r.hudCommit = 0;
+        stepsState.setRunMetrics(r.score, distance, r.comboMultiplier, r.comboChain, r.comboTimer);
+      }
 
-          w.dummy.position.set(x + sideOffset, y + TILE_HEIGHT * 0.52 + yLift, z + sweep);
-          w.dummy.rotation.set(0, w.simTime * (1.2 + hazardThreat * 5.6), 0);
-          w.dummy.scale.set(sawScale, 0.2 + hazardThreat * 0.16, sawScale);
-          w.dummy.updateMatrix();
-          sawMesh.setMatrixAt(i, w.dummy.matrix);
+      if (r.runTime > 0.8 && pos.y > 0.2) {
+        r.checkpoint.set(pos.x, Math.max(1.6, pos.y + 0.5), pos.z + 2.2);
+      }
 
-          w.tempColorB
-            .copy(COLOR_SAW)
-            .lerp(COLOR_HAZARD_DANGER, 0.5 + hazardThreat * 0.28)
-            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.15);
-          sawMesh.setColorAt(i, w.tempColorB);
-        } else {
-          hideInstance(sawMesh, i);
-        }
+      r.ghostRecordTimer += dt;
+      if (r.ghostRecordTimer >= 1 / 30) {
+        r.ghostRecordTimer = 0;
+        const rot = body.rotation();
+        r.ghostFrames.push({
+          t: r.runTime,
+          x: Math.round(pos.x * 100) / 100,
+          y: Math.round(pos.y * 100) / 100,
+          z: Math.round(pos.z * 100) / 100,
+          qx: Math.round(rot.x * 1000) / 1000,
+          qy: Math.round(rot.y * 1000) / 1000,
+          qz: Math.round(rot.z * 1000) / 1000,
+          qw: Math.round(rot.w * 1000) / 1000,
+        });
+      }
 
-        if (tile.hazard === 'clamp' && hazardState) {
-          const close = hazardThreat;
-          const approach = 1 - close;
-          const axisX = tile.index % 2 === 0;
-          const slideSign = tile.index % 4 < 2 ? 1 : -1;
-          const slide = slideSign * 0.86 * approach;
-          const jawScale = THREE.MathUtils.lerp(0.2, 1.08, close);
-          const jawHeight = THREE.MathUtils.lerp(0.14, 0.54, close);
-          const sway = Math.sin((hazardState.phase01 * 1.6 + tile.hazardPhase) * Math.PI * 2) * 0.08;
-
-          w.dummy.position.set(
-            x + (axisX ? slide : 0),
-            y + TILE_HEIGHT * 0.52 + (-0.12 * approach + 0.05 + close * 0.08),
-            z + (axisX ? 0 : slide)
-          );
-          w.dummy.rotation.set(0, tile.hazardPhase * 0.32 + sway + slideSign * approach * 0.18, 0);
-          w.dummy.scale.set(jawScale, jawHeight, jawScale);
-          w.dummy.updateMatrix();
-          clampMesh.setMatrixAt(i, w.dummy.matrix);
-
-          w.tempColorB
-            .copy(COLOR_CLAMP)
-            .lerp(COLOR_HAZARD_DANGER, 0.46 + close * 0.32)
-            .lerp(COLOR_WHITE, 0.06 + dangerPulse * 0.14);
-          clampMesh.setColorAt(i, w.tempColorB);
-        } else {
-          hideInstance(clampMesh, i);
-        }
-
-        if (tile.hazard === 'swing' && hazardState) {
-          const swingDir = tile.index % 2 === 0 ? 1 : -1;
-          const anchorOnX = tile.index % 3 !== 0;
-          const approach = 1 - hazardThreat;
-          const anchorOffset = swingDir * (1.02 - hazardThreat * 0.62);
-          const angle = Math.sin(w.simTime * (1.5 + hazardThreat * 1.8) + tile.hazardPhase) * (0.2 + hazardThreat * 1.05);
-          const radius = 0.32 + hazardThreat * 0.26;
-          const arc = Math.sin(angle) * radius;
-          const dropY = Math.cos(angle) * 0.12 - approach * 0.18;
-          const ballScale = THREE.MathUtils.lerp(0.28, 1, hazardThreat);
-          const xPos = anchorOnX ? x + anchorOffset + arc : x + Math.sin(w.simTime * 2.2 + tile.hazardPhase) * 0.03 * hazardThreat;
-          const zPos = anchorOnX ? z + Math.sin(w.simTime * 2.2 + tile.hazardPhase) * 0.03 * hazardThreat : z + anchorOffset + arc;
-
-          w.dummy.position.set(xPos, y + TILE_HEIGHT * 0.52 + 0.3 + dropY, zPos);
-          w.dummy.rotation.set(angle * 0.35, w.simTime * (0.9 + hazardThreat * 3.2) + tile.hazardPhase, -angle * 0.35);
-          w.dummy.scale.set(ballScale, ballScale, ballScale);
-          w.dummy.updateMatrix();
-          swingMesh.setMatrixAt(i, w.dummy.matrix);
-
-          w.tempColorB
-            .copy(COLOR_SWING)
-            .lerp(COLOR_HAZARD_DANGER, 0.38 + hazardThreat * 0.34)
-            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.12);
-          swingMesh.setColorAt(i, w.tempColorB);
-        } else {
-          hideInstance(swingMesh, i);
-        }
-
-        if (tile.hazard !== 'none') {
-          const beaconPulse = 0.5 + 0.5 * Math.sin(w.simTime * 5.2 + tile.hazardPhase * 1.7);
-          const beaconScale = 0.16 + hazardThreat * 0.2 + beaconPulse * 0.08;
-          const beaconY = y + TILE_HEIGHT * 0.52 + 0.3 + beaconPulse * 0.08;
-          w.dummy.position.set(x, beaconY, z);
-          w.dummy.rotation.set(0, w.simTime * 0.8 + tile.hazardPhase, 0);
-          w.dummy.scale.set(beaconScale, beaconScale, beaconScale);
-          w.dummy.updateMatrix();
-          warningMesh.setMatrixAt(i, w.dummy.matrix);
-          w.tempColorB.copy(COLOR_WARNING).lerp(COLOR_WHITE, 0.08 + beaconPulse * 0.2 + hazardThreat * 0.18);
-          warningMesh.setColorAt(i, w.tempColorB);
-        } else {
-          hideInstance(warningMesh, i);
-        }
-
-        if (tile.hasGem && !tile.gemTaken && tile.drop < 1.1) {
-          const gemBob = Math.sin(w.simTime * 6 + tile.hazardPhase * 1.3) * 0.09;
-          const gemScale = 0.54 + Math.sin(w.simTime * 8 + tile.index * 0.22) * 0.06;
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.24 + gemBob, z);
-          w.dummy.rotation.set(w.simTime * 0.4, w.simTime * 1.8, 0);
-          w.dummy.scale.set(gemScale, gemScale, gemScale);
-          w.dummy.updateMatrix();
-          gemMesh.setMatrixAt(i, w.dummy.matrix);
-
-          w.tempColorC.copy(COLOR_GEM).lerp(COLOR_GEM_BRIGHT, 0.5 + gemBob * 0.7);
-          gemMesh.setColorAt(i, w.tempColorC);
-        } else {
-          hideInstance(gemMesh, i);
+      if (r.loadedGhost && ghostMeshRef.current) {
+        const sample = sampleGhostFrame(r.loadedGhost.frames, r.runTime);
+        if (sample) {
+          ghostMeshRef.current.visible = true;
+          ghostMeshRef.current.position.set(sample.x, sample.y, sample.z);
+          ghostMeshRef.current.quaternion.set(sample.qx, sample.qy, sample.qz, sample.qw).normalize();
         }
       }
 
-      tileMesh.instanceMatrix.needsUpdate = true;
-      trailDetailMesh.instanceMatrix.needsUpdate = true;
-      spikeMesh.instanceMatrix.needsUpdate = true;
-      sawMesh.instanceMatrix.needsUpdate = true;
-      clampMesh.instanceMatrix.needsUpdate = true;
-      swingMesh.instanceMatrix.needsUpdate = true;
-      warningMesh.instanceMatrix.needsUpdate = true;
-      gemMesh.instanceMatrix.needsUpdate = true;
-
-      if (tileMesh.instanceColor) tileMesh.instanceColor.needsUpdate = true;
-      if (trailDetailMesh.instanceColor) trailDetailMesh.instanceColor.needsUpdate = true;
-      if (spikeMesh.instanceColor) spikeMesh.instanceColor.needsUpdate = true;
-      if (sawMesh.instanceColor) sawMesh.instanceColor.needsUpdate = true;
-      if (clampMesh.instanceColor) clampMesh.instanceColor.needsUpdate = true;
-      if (swingMesh.instanceColor) swingMesh.instanceColor.needsUpdate = true;
-      if (warningMesh.instanceColor) warningMesh.instanceColor.needsUpdate = true;
-      if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
-    }
-
-    if (debrisMeshRef.current) {
-      const debrisMesh = debrisMeshRef.current;
-      for (let i = 0; i < DEBRIS_POOL; i += 1) {
-        const d = w.debris[i];
-        if (!d.active) {
-          hideInstance(debrisMesh, i);
-          continue;
-        }
-
-        w.dummy.position.copy(d.pos);
-        w.dummy.rotation.set(d.rot.x, d.rot.y, d.rot.z);
-        w.dummy.scale.set(d.size, d.size, d.size);
-        w.dummy.updateMatrix();
-        debrisMesh.setMatrixAt(i, w.dummy.matrix);
+      const nearMiss = Math.abs(pos.x) > 5.8 && Math.abs(pos.x) < 6.3;
+      if (nearMiss) {
+        r.nearMissScore += dt * 18;
       }
-      debrisMesh.instanceMatrix.needsUpdate = true;
-    }
 
-    if (playerRef.current) {
-      const player = playerRef.current;
-      player.position.set(w.px, w.py, w.pz);
+      backgroundColorRef.current.lerp(new THREE.Color(biome.skyColor), 1 - Math.exp(-dt * 2));
+      fogColorRef.current.lerp(new THREE.Color(biome.fogColor), 1 - Math.exp(-dt * 2));
+      scene.background = backgroundColorRef.current;
+      if (!scene.fog) {
+        scene.fog = new THREE.Fog(fogColorRef.current.getHex(), BASE_FOG_NEAR, BASE_FOG_FAR);
+      } else if (scene.fog instanceof THREE.Fog) {
+        scene.fog.color.copy(fogColorRef.current);
+        scene.fog.near = lerp(scene.fog.near, BASE_FOG_NEAR, 1 - Math.exp(-dt * 2));
+        scene.fog.far = lerp(scene.fog.far, BASE_FOG_FAR, 1 - Math.exp(-dt * 2));
+      }
 
-      if (w.falling) {
-        player.rotation.x += dtRender * w.deathSpin;
-        player.rotation.z += dtRender * w.deathSpin * 0.66;
-        player.scale.set(1.04, 0.7, 1.04);
-      } else {
-        player.rotation.x = easingLerp(player.rotation.x, 0, dtRender, 12);
-        player.rotation.z = easingLerp(player.rotation.z, 0, dtRender, 12);
-        player.rotation.y = easingLerp(player.rotation.y, w.playerYaw, dtRender, 14);
+      const targetX = pos.x + 5.6;
+      const targetY = pos.y + 5.9;
+      const targetZ = pos.z + 9.2;
+      cameraTargetRef.current.set(targetX, targetY, targetZ);
 
-        const stride = w.moving ? Math.sin(Math.PI * clamp(w.moveT, 0, 1)) : 0;
-        player.scale.set(1 + stride * 0.12, 1 - stride * 0.17, 1 + stride * 0.12);
+      r.cameraShake = Math.max(0, r.cameraShake - dt * 2.2);
+      const shakeX = Math.sin(r.elapsed * 28) * r.cameraShake * 0.08;
+      const shakeZ = Math.cos(r.elapsed * 24) * r.cameraShake * 0.08;
+
+      camera.position.x = lerp(camera.position.x, cameraTargetRef.current.x + shakeX, 1 - Math.exp(-dt * 5));
+      camera.position.y = lerp(camera.position.y, cameraTargetRef.current.y, 1 - Math.exp(-dt * 5));
+      camera.position.z = lerp(camera.position.z, cameraTargetRef.current.z + shakeZ, 1 - Math.exp(-dt * 5));
+      camera.lookAt(pos.x, pos.y, pos.z - 2.4);
+
+      if ('fov' in camera) {
+        const perspective = camera as THREE.PerspectiveCamera;
+        const targetFov = 44 + r.comboMultiplier * 0.9 + (r.elapsed < r.speedBoostUntil ? 6 : 0) + pressure * 2;
+        perspective.fov = lerp(perspective.fov, targetFov, 1 - Math.exp(-dt * 4));
+        perspective.updateProjectionMatrix();
+      }
+    } else if (stepsState.phase === 'gameover') {
+      const sample = runtime.current.loadedGhost && ghostMeshRef.current
+        ? sampleGhostFrame(runtime.current.loadedGhost.frames, Math.min(runtime.current.runTime, runtime.current.loadedGhost.duration))
+        : null;
+      if (sample && ghostMeshRef.current) {
+        ghostMeshRef.current.visible = true;
+        ghostMeshRef.current.position.set(sample.x, sample.y, sample.z);
+        ghostMeshRef.current.quaternion.set(sample.qx, sample.qy, sample.qz, sample.qw).normalize();
       }
     }
-
-    w.cameraShake = Math.max(0, w.cameraShake - dtRender * 2.8);
-    const shakeX = (Math.sin(w.simTime * 37) + Math.cos(w.simTime * 25)) * 0.02 * w.cameraShake;
-    const shakeZ = (Math.cos(w.simTime * 31) + Math.sin(w.simTime * 21)) * 0.02 * w.cameraShake;
-
-    const focusX = w.moving
-      ? THREE.MathUtils.lerp(w.moveFromX, w.moveToX, clamp(w.moveT + 0.2, 0, 1))
-      : w.px;
-    const focusZ = w.moving
-      ? THREE.MathUtils.lerp(w.moveFromZ, w.moveToZ, clamp(w.moveT + 0.2, 0, 1))
-      : w.pz;
-
-    w.camTarget.set(focusX + 6.5, 7.5, focusZ + 6.5);
-
-    camera.position.x = easingLerp(camera.position.x, w.camTarget.x + shakeX, dtRender, 5.2);
-    camera.position.y = easingLerp(camera.position.y, w.camTarget.y, dtRender, 5.2);
-    camera.position.z = easingLerp(camera.position.z, w.camTarget.z + shakeZ, dtRender, 5.2);
-
-    const targetFov = 35 + snap.pressure * 4 + (w.falling ? 2 : 0);
-    if ('fov' in camera) {
-      const perspective = camera as THREE.PerspectiveCamera;
-      perspective.fov = easingLerp(perspective.fov, targetFov, dtRender, 4.4);
-      perspective.updateProjectionMatrix();
-    }
-    camera.lookAt(focusX, 0.25, focusZ);
   });
 
-  const collapsePct = Math.round(clamp(snap.pressure, 0, 1) * 100);
-  const bonusActive = Boolean(world.current.tilesByIndex.get(world.current.currentTileIndex)?.bonus);
+  const handleRevive = useCallback(async () => {
+    const r = runtime.current;
+    const reward = await requestRewardedAd('revive');
+    if (!reward.granted) {
+      finalizeRun(r.pendingDeathReason || 'Revive unavailable');
+      return;
+    }
+
+    const body = playerBodyRef.current;
+    if (body) {
+      body.setTranslation({ x: r.checkpoint.x, y: r.checkpoint.y, z: r.checkpoint.z }, true);
+      body.setLinvel({ x: 0, y: 0.4, z: -BASE_FORWARD_SPEED }, true);
+      body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
+
+    r.pauseForRevive = false;
+    r.pendingDeathReason = '';
+    setRevivePrompt(false);
+    setHudNotice('Revive active. One last push.');
+  }, [finalizeRun]);
+
+  const handleSkipRevive = useCallback(() => {
+    const r = runtime.current;
+    setRevivePrompt(false);
+    r.pauseForRevive = false;
+    finalizeRun(r.pendingDeathReason || 'Run over');
+  }, [finalizeRun]);
+
+  const holdToBeatText =
+    snap.phase === 'gameover' && snap.nearBestDelta > 0
+      ? `You were ${snap.nearBestDelta} points from your best.`
+      : snap.phase === 'gameover' && snap.nearBestDelta === 0
+        ? 'New personal best.'
+        : '';
 
   return (
     <group>
-      <ambientLight intensity={0.58} />
-      <directionalLight position={[7, 11, 6]} intensity={0.96} castShadow />
-      <pointLight position={[2, 3, 2]} intensity={0.38} color="#8af2ff" />
-      <pointLight position={[8, 2, 8]} intensity={0.32} color="#ff9fdf" />
+      <ambientLight intensity={BIOMES[snap.biome].ambientIntensity} />
+      <directionalLight
+        position={[7, 13, 5]}
+        intensity={BIOMES[snap.biome].directionalIntensity}
+        castShadow
+      />
+      <pointLight position={[-5, 5, -8]} intensity={0.45} color="#6ee7ff" />
+      <pointLight position={[5, 3, -2]} intensity={0.34} color="#ff7f9f" />
 
-      <mesh rotation-x={-Math.PI * 0.5} position={[140, -0.12, 140]}>
-        <planeGeometry args={[620, 620]} />
-        <shaderMaterial
-          ref={bgMaterialRef}
-          uniforms={{ uTime: { value: 0 } }}
-          vertexShader={`
-            varying vec2 vUv;
-            void main() {
-              vUv = uv;
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-          `}
-          fragmentShader={`
-            uniform float uTime;
-            varying vec2 vUv;
-            void main() {
-              vec2 p = vUv * 60.0;
-              vec2 cell = fract(p);
-              vec2 center = cell - 0.5;
-              float diamond = abs(center.x) + abs(center.y);
-              float mask = smoothstep(0.55, 0.43, diamond);
+      <Physics gravity={[0, -23 * BIOMES[snap.biome].gravityScale, 0]} timeStep="fixed" paused={paused || snap.phase !== 'playing'}>
+        <RigidBody
+          ref={playerBodyRef}
+          name={PLAYER_NAME}
+          userData={{ stepsTag: 'player' }}
+          type="dynamic"
+          colliders={false}
+          position={[START_POSITION.x, START_POSITION.y, START_POSITION.z]}
+          ccd
+          friction={0.82 * BIOMES[snap.biome].frictionScale}
+          restitution={0.16}
+          linearDamping={0.16}
+          angularDamping={0.34}
+        >
+          <CuboidCollider args={[PLAYER_SIZE[0] * 0.5, PLAYER_SIZE[1] * 0.5, PLAYER_SIZE[2] * 0.5]} />
+          <mesh ref={playerMeshRef} castShadow>
+            <boxGeometry args={PLAYER_SIZE} />
+            <meshStandardMaterial
+              color="#ff5fb3"
+              emissive="#ff8fd0"
+              emissiveIntensity={0.22}
+              roughness={0.24}
+              metalness={0.08}
+            />
+          </mesh>
+        </RigidBody>
 
-              vec3 a = vec3(0.16, 0.70, 0.96);
-              vec3 b = vec3(0.13, 0.58, 0.92);
-              float wave = 0.5 + 0.5 * sin((vUv.x + vUv.y) * 8.0 - uTime * 0.45);
-              vec3 base = mix(a, b, wave);
-              vec3 high = base + vec3(0.06, 0.08, 0.1);
-              vec3 color = mix(base, high, mask * 0.28);
-              gl_FragColor = vec4(color, 1.0);
-            }
-          `}
-          toneMapped={false}
-        />
-      </mesh>
+        {chunks.map((chunk) => (
+          <ChunkActor key={chunk.id} chunk={chunk} callbacks={callbacks} />
+        ))}
 
-      <instancedMesh ref={tileMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]} castShadow receiveShadow>
-        <boxGeometry args={[TILE_SIZE, TILE_HEIGHT, TILE_SIZE]} />
-        <meshStandardMaterial vertexColors roughness={0.48} metalness={0.05} />
-      </instancedMesh>
-
-      <instancedMesh ref={trailDetailMeshRef} args={[undefined, undefined, MAX_TRAIL_DETAIL]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial vertexColors roughness={0.42} metalness={0.12} />
-      </instancedMesh>
-
-      <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <coneGeometry args={[0.16, 0.34, 12]} />
-        <meshStandardMaterial vertexColors roughness={0.34} metalness={0.14} emissive="#ff2d55" emissiveIntensity={0.12} />
-      </instancedMesh>
-
-      <instancedMesh ref={sawMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <cylinderGeometry args={[0.24, 0.24, 0.12, 14]} />
-        <meshStandardMaterial vertexColors roughness={0.22} metalness={0.6} emissive="#ff1f4d" emissiveIntensity={0.22} />
-      </instancedMesh>
-
-      <instancedMesh ref={clampMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <boxGeometry args={[0.74, 0.18, 0.74]} />
-        <meshStandardMaterial vertexColors roughness={0.3} metalness={0.22} emissive="#ff3f7f" emissiveIntensity={0.18} />
-      </instancedMesh>
-
-      <instancedMesh ref={swingMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <sphereGeometry args={[0.18, 14, 14]} />
-        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.24} emissive="#ff8a00" emissiveIntensity={0.2} />
-      </instancedMesh>
-
-      <instancedMesh ref={warningMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <octahedronGeometry args={[0.14, 0]} />
-        <meshStandardMaterial vertexColors roughness={0.22} metalness={0.18} emissive="#ff1744" emissiveIntensity={0.24} />
-      </instancedMesh>
-
-      <instancedMesh ref={gemMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <octahedronGeometry args={[0.2, 0]} />
-        <meshStandardMaterial
-          vertexColors
-          roughness={0.18}
-          metalness={0.26}
-          emissive="#4cffc9"
-          emissiveIntensity={0.52}
-          toneMapped={false}
-        />
-      </instancedMesh>
-
-      <instancedMesh ref={debrisMeshRef} args={[undefined, undefined, DEBRIS_POOL]}>
-        <boxGeometry args={[0.08, 0.08, 0.08]} />
-        <meshStandardMaterial color={'#ffd9f1'} roughness={0.26} metalness={0.08} />
-      </instancedMesh>
-
-      <mesh ref={playerRef} castShadow>
-        <boxGeometry args={PLAYER_SIZE} />
-        <meshStandardMaterial color={'#f85db6'} roughness={0.34} metalness={0.1} emissive="#ff94d4" emissiveIntensity={0.12} />
-      </mesh>
+        <mesh ref={ghostMeshRef} visible={false}>
+          <boxGeometry args={PLAYER_SIZE} />
+          <meshStandardMaterial
+            color="#7dd3fc"
+            emissive="#a5f3fc"
+            emissiveIntensity={0.42}
+            transparent
+            opacity={0.4}
+            depthWrite={false}
+          />
+        </mesh>
+      </Physics>
 
       <EffectComposer multisampling={0}>
-        <Bloom intensity={0.58} luminanceThreshold={0.42} radius={0.7} mipmapBlur />
-        <Vignette eskil={false} offset={0.17} darkness={0.46} />
-        <Noise opacity={0.018} />
+        <Bloom intensity={0.5} luminanceThreshold={0.46} radius={0.72} mipmapBlur />
+        <Vignette eskil={false} offset={0.2} darkness={0.44} />
+        <Noise opacity={0.014} />
       </EffectComposer>
 
       <Html fullscreen style={{ pointerEvents: 'none' }}>
@@ -1324,17 +1504,20 @@ function Steps() {
             top: 14,
             left: 14,
             color: 'white',
-            fontFamily:
-              'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
             textShadow: '0 2px 12px rgba(0,0,0,0.35)',
+            fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial',
           }}
         >
-          <div style={{ fontSize: 13, opacity: 0.86, letterSpacing: 1.3 }}>STEPS</div>
+          <div style={{ opacity: 0.86, fontSize: 12, letterSpacing: 1.4 }}>STEPS // RAPIER</div>
           <div style={{ fontSize: 30, fontWeight: 900 }}>{snap.score}</div>
-          <div style={{ fontSize: 12, opacity: 0.82 }}>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Distance {Math.floor(snap.distance)}m</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>
+            Combo {snap.comboMultiplier.toFixed(1)}x ({snap.comboChain})
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.8 }}>Best {snap.best}</div>
+          <div style={{ fontSize: 11, opacity: 0.8 }}>
             Gems +{snap.runGems} (Bank {snap.gems})
           </div>
-          <div style={{ fontSize: 11, opacity: 0.68 }}>Best: {snap.best}</div>
         </div>
 
         <div
@@ -1342,43 +1525,22 @@ function Steps() {
             position: 'absolute',
             top: 14,
             right: 14,
-            pointerEvents: 'auto',
-            background: 'rgba(10, 18, 38, 0.56)',
-            border: '1px solid rgba(255,255,255,0.2)',
+            background: 'rgba(8, 16, 34, 0.62)',
+            border: '1px solid rgba(255,255,255,0.22)',
             borderRadius: 12,
-            padding: '8px 10px',
-            backdropFilter: 'blur(6px)',
+            padding: '10px 12px',
             color: 'white',
-            width: 210,
-            zIndex: 40,
+            width: 240,
+            backdropFilter: 'blur(6px)',
           }}
         >
-          <div style={{ fontSize: 11, letterSpacing: 0.8, opacity: 0.84, marginBottom: 7 }}>TRAIL LAYOUT</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {TRAIL_STYLES.map((style) => (
-              <button
-                key={style}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={() => stepsState.setTrailStyle(style)}
-                style={{
-                  cursor: 'pointer',
-                  borderRadius: 999,
-                  border:
-                    snap.trailStyle === style ? '1px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.25)',
-                  background:
-                    snap.trailStyle === style ? 'linear-gradient(180deg, rgba(255,94,158,0.55), rgba(255,50,94,0.38))' : 'rgba(255,255,255,0.08)',
-                  color: 'white',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: '5px 9px',
-                }}
-              >
-                {trailStyleLabel(style)}
-              </button>
-            ))}
+          <div style={{ fontSize: 11, letterSpacing: 1, opacity: 0.82 }}>BIOME</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{BIOMES[snap.biome].name}</div>
+          <div style={{ fontSize: 11, opacity: 0.82, marginTop: 4 }}>Season: {season.label}</div>
+          <div style={{ fontSize: 11, opacity: 0.82 }}>Boss Chunk: {snap.bossActive ? 'Active' : 'Idle'}</div>
+          <div style={{ fontSize: 11, opacity: 0.82 }}>Daily Seed: {snap.dailySeed}</div>
+          <div style={{ fontSize: 11, opacity: 0.82 }}>
+            Leaderboard Est. #{snap.leaderboardRank} ({snap.leaderboardPercentile.toFixed(1)}%)
           </div>
         </div>
 
@@ -1389,58 +1551,42 @@ function Steps() {
               top: 18,
               left: '50%',
               transform: 'translateX(-50%)',
-              width: 260,
+              width: 300,
               pointerEvents: 'none',
+              color: 'white',
             }}
-            >
-            {bonusActive && (
-              <div
-                style={{
-                  marginBottom: 6,
-                  textAlign: 'center',
-                  fontSize: 12,
-                  letterSpacing: 1.6,
-                  fontWeight: 800,
-                  color: '#fff4a3',
-                }}
-              >
-                BONUS STAGE
-              </div>
-            )}
+          >
             <div
               style={{
-                height: 9,
+                height: 8,
                 borderRadius: 999,
-                background: 'rgba(255,255,255,0.24)',
+                border: '1px solid rgba(255,255,255,0.24)',
+                background: 'rgba(255,255,255,0.18)',
                 overflow: 'hidden',
-                border: '1px solid rgba(255,255,255,0.25)',
               }}
             >
               <div
                 style={{
-                  width: `${collapsePct}%`,
+                  width: `${Math.round(clamp(snap.pressure, 0, 1) * 100)}%`,
                   height: '100%',
                   background:
-                    snap.pressure < 0.55
-                      ? 'linear-gradient(90deg, #34d399, #10b981)'
-                      : snap.pressure < 0.82
-                        ? 'linear-gradient(90deg, #f59e0b, #f97316)'
-                        : 'linear-gradient(90deg, #ef4444, #dc2626)',
+                    snap.pressure < 0.5
+                      ? 'linear-gradient(90deg,#34d399,#10b981)'
+                      : snap.pressure < 0.8
+                        ? 'linear-gradient(90deg,#f59e0b,#f97316)'
+                        : 'linear-gradient(90deg,#ef4444,#dc2626)',
                   transition: 'width 80ms linear',
                 }}
               />
             </div>
-            <div
-              style={{
-                marginTop: 4,
-                textAlign: 'center',
-                fontSize: 11,
-                color: 'rgba(255,255,255,0.92)',
-                letterSpacing: 0.4,
-              }}
-            >
-              Collapse Pressure {collapsePct}%
+            <div style={{ textAlign: 'center', marginTop: 4, fontSize: 11, opacity: 0.88 }}>
+              Risk Pressure {Math.round(snap.pressure * 100)}%
             </div>
+            {hudNotice && (
+              <div style={{ textAlign: 'center', marginTop: 6, fontSize: 11, color: '#fef08a', letterSpacing: 0.5 }}>
+                {hudNotice}
+              </div>
+            )}
           </div>
         )}
 
@@ -1457,37 +1603,100 @@ function Steps() {
           >
             <div
               style={{
-                width: 420,
-                padding: 22,
-                borderRadius: 18,
-                background: 'rgba(7, 16, 34, 0.74)',
+                width: 520,
+                padding: 24,
+                borderRadius: 16,
                 border: '1px solid rgba(255,255,255,0.2)',
-                textAlign: 'center',
-                backdropFilter: 'blur(9px)',
+                background: 'rgba(7, 16, 34, 0.74)',
                 color: 'white',
+                textAlign: 'center',
+                backdropFilter: 'blur(8px)',
               }}
             >
-              <div style={{ fontSize: 40, fontWeight: 900, letterSpacing: 1.2 }}>STEPS</div>
-              <div style={{ marginTop: 8, fontSize: 14, opacity: 0.9 }}>
-                Tap to advance one step. Timed traps and collapsing tiles force clean rhythm.
+              <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: 1.2 }}>STEPS</div>
+              <div style={{ fontSize: 14, opacity: 0.9, marginTop: 8 }}>
+                Physics-first endless runner with deterministic chunk seeds, biome progression, boss chunks, and 20+ advanced obstacle families.
               </div>
-              <div style={{ marginTop: 7, fontSize: 12, opacity: 0.82 }}>
-                Spikes, saws, clamps, and swing balls fully disappear on safe beats. Time steps through open windows.
-              </div>
-              <div style={{ marginTop: 5, fontSize: 11, opacity: 0.74 }}>
-                Warning beacons mark danger at distance. Active Trail: {trailStyleLabel(snap.trailStyle)}
+              <div style={{ fontSize: 12, opacity: 0.82, marginTop: 6 }}>
+                Tap for jump-roll. `A/D` or arrows steer lanes. Time obstacles, chain combo events, and survive seasonal world shifts.
               </div>
 
               {snap.phase === 'gameover' && (
                 <div style={{ marginTop: 14, fontSize: 14 }}>
-                  <div style={{ fontWeight: 800 }}>Run over</div>
+                  <div style={{ fontWeight: 800 }}>Run Over</div>
                   <div style={{ opacity: 0.9 }}>Score {snap.score}</div>
-                  <div style={{ opacity: 0.78 }}>{snap.failReason}</div>
+                  <div style={{ opacity: 0.76 }}>{snap.failReason}</div>
+                  {holdToBeatText && <div style={{ marginTop: 5, opacity: 0.85 }}>{holdToBeatText}</div>}
                 </div>
               )}
 
-              <div style={{ marginTop: 14, fontSize: 12, opacity: 0.7 }}>
-                Click / Tap / Space = step  |  Enter = start  |  R = restart
+              <div style={{ marginTop: 14, fontSize: 12, opacity: 0.72 }}>
+                Click/Tap/Space = Jump Roll | Enter = Start | R = Restart
+              </div>
+            </div>
+          </div>
+        )}
+
+        {revivePrompt && snap.phase === 'playing' && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div
+              style={{
+                width: 360,
+                borderRadius: 14,
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'rgba(5, 10, 24, 0.9)',
+                padding: 18,
+                textAlign: 'center',
+                color: 'white',
+              }}
+            >
+              <div style={{ fontSize: 20, fontWeight: 800 }}>Second Chance</div>
+              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.88 }}>
+                {runtime.current.pendingDeathReason || 'Critical hit'}
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.74 }}>
+                Watch rewarded ad hook and continue from the latest checkpoint.
+              </div>
+              <div style={{ marginTop: 14, display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button
+                  onClick={handleRevive}
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.45)',
+                    background: 'linear-gradient(180deg, #22d3ee, #0891b2)',
+                    color: 'white',
+                    fontWeight: 800,
+                    fontSize: 12,
+                    padding: '8px 14px',
+                  }}
+                >
+                  Revive
+                </button>
+                <button
+                  onClick={handleSkipRevive}
+                  style={{
+                    cursor: 'pointer',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.35)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    padding: '8px 14px',
+                  }}
+                >
+                  End Run
+                </button>
               </div>
             </div>
           </div>

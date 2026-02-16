@@ -12,7 +12,6 @@ export const BIOMES: Record<BiomeId, BiomeDefinition> = {
     frictionScale: 0.55,
     speedScale: 1,
     obstacleWeightBoost: {
-      slippery_ice: 0,
       rising_lava: 0.18,
       spike_wave: 0.1,
       gravity_well: 0.12,

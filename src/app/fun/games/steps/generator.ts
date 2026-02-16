@@ -286,7 +286,7 @@ export function buildChunk(
       };
     }
 
-    if (pType === 'split_path_bridge' || pType === 'narrow_bridge') {
+    if (pType === 'narrow_bridge') {
       platform.size = [0.62, 0.4, 3.4];
     }
 
