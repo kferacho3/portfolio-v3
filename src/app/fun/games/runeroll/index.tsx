@@ -1194,3 +1194,5 @@ const RuneRoll: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn }) => 
 
 export default RuneRoll;
 export * from './state';
+export * from './levels';
+export * from './generator';
