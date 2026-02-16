@@ -556,7 +556,7 @@ function platformTierWeight(kind: PlatformKind, tier: SpawnTier) {
   }
 
   if (tier === 'early') {
-    if (kind === 'standard') return 3.3;
+    if (kind === 'standard') return 2.9;
     if (kind === 'moving_platform') return 1.45;
     if (kind === 'conveyor_belt') return 1.02;
     if (kind === 'bouncer') return 1.06;
@@ -576,7 +576,7 @@ function platformTierWeight(kind: PlatformKind, tier: SpawnTier) {
   }
 
   if (tier === 'mid') {
-    if (kind === 'standard') return 2.2;
+    if (kind === 'standard') return 1.9;
     if (kind === 'moving_platform') return 1.34;
     if (kind === 'falling_platform') return 0.82;
     if (kind === 'conveyor_belt') return 0.92;
@@ -601,7 +601,7 @@ function platformTierWeight(kind: PlatformKind, tier: SpawnTier) {
   }
 
   if (tier === 'late') {
-    if (kind === 'standard') return 1.36;
+    if (kind === 'standard') return 1.24;
     if (kind === 'moving_platform') return 1.18;
     if (kind === 'falling_platform') return 0.96;
     if (kind === 'conveyor_belt') return 0.82;
@@ -705,11 +705,12 @@ function pickPlatform(
   if (index < 8) return 'standard';
   if (inBonus) {
     return rng.weighted([
-      { item: 'standard' as PlatformKind, weight: 0.38 },
+      { item: 'standard' as PlatformKind, weight: 0.3 },
       { item: 'speed_ramp' as PlatformKind, weight: 0.24 },
       { item: 'bouncer' as PlatformKind, weight: 0.22 },
       { item: 'trampoline' as PlatformKind, weight: 0.12 },
-      { item: 'conveyor_belt' as PlatformKind, weight: 0.04 },
+      { item: 'conveyor_belt' as PlatformKind, weight: 0.08 },
+      { item: 'moving_platform' as PlatformKind, weight: 0.04 },
     ]);
   }
 
@@ -753,10 +754,10 @@ function pickHazard(
   if (streak >= allowedConsecutive) return 'none';
 
   let hazardChance = 0;
-  if (tier === 'early') hazardChance = clamp(0.1 + (index - 34) * 0.001, 0.1, 0.2);
-  else if (tier === 'mid') hazardChance = clamp(0.22 + (index - 130) * 0.00055, 0.22, 0.32);
-  else if (tier === 'late') hazardChance = clamp(0.34 + (index - 300) * 0.00045, 0.34, 0.44);
-  else if (tier === 'chaos') hazardChance = clamp(0.46 + (index - 520) * 0.00024, 0.46, 0.54);
+  if (tier === 'early') hazardChance = clamp(0.12 + (index - 34) * 0.0013, 0.12, 0.24);
+  else if (tier === 'mid') hazardChance = clamp(0.28 + (index - 130) * 0.00065, 0.28, 0.4);
+  else if (tier === 'late') hazardChance = clamp(0.4 + (index - 300) * 0.0005, 0.4, 0.52);
+  else if (tier === 'chaos') hazardChance = clamp(0.52 + (index - 520) * 0.0003, 0.52, 0.62);
 
   if (hazardChance <= 0 || !rng.bool(hazardChance)) return 'none';
 
