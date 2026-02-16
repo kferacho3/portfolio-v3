@@ -11,6 +11,7 @@ import {
   Vignette,
 } from '@react-three/postprocessing';
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { useSnapshot } from 'valtio';
 import { useGameUIState } from '../../store/selectors';
 import {
@@ -161,6 +162,7 @@ const makePanelMaterial = () =>
       uSpacing: { value: GAME_CONFIG.ringSpacing },
       uRadius: { value: GAME_CONFIG.tunnelRadius },
       uLaneWidthScale: { value: GAME_CONFIG.laneWidthScale },
+      uPanelWidthScale: { value: GAME_CONFIG.platformWidthScale },
       uSpeed: { value: 0 },
       uPulse: { value: 0 },
       uCombo: { value: 0 },
@@ -176,6 +178,7 @@ const makePanelMaterial = () =>
       uniform float uSpacing;
       uniform float uRadius;
       uniform float uLaneWidthScale;
+      uniform float uPanelWidthScale;
 
       varying vec2 vUv;
       varying float vDepth;
@@ -200,7 +203,7 @@ const makePanelMaterial = () =>
         float laneWidth = 2.0 * uRadius * tan(PI / sides) * uLaneWidthScale;
 
         vec3 local = position * mix(0.001, 1.0, visible);
-        vec3 worldPos = base + tangent * (local.x * laneWidth) + inN * local.y + vec3(0.0, 0.0, 1.0) * local.z;
+        vec3 worldPos = base + tangent * (local.x * laneWidth * uPanelWidthScale) + inN * local.y + vec3(0.0, 0.0, 1.0) * local.z;
 
         vUv = uv;
         vDepth = z;
@@ -270,6 +273,7 @@ const makeObstacleMaterial = () =>
       uSpacing: { value: GAME_CONFIG.ringSpacing },
       uRadius: { value: GAME_CONFIG.tunnelRadius },
       uLaneWidthScale: { value: GAME_CONFIG.laneWidthScale },
+      uObstacleWidthScale: { value: GAME_CONFIG.obstacleWidthScale },
       uPulse: { value: 0 },
       uDanger: { value: 0 },
     },
@@ -285,6 +289,7 @@ const makeObstacleMaterial = () =>
       uniform float uSpacing;
       uniform float uRadius;
       uniform float uLaneWidthScale;
+      uniform float uObstacleWidthScale;
       uniform float uPulse;
 
       varying vec2 vUv;
@@ -316,24 +321,24 @@ const makeObstacleMaterial = () =>
         if (style > 5.5 && style < 7.5) {
           // Laser-like bars
           local.y *= 0.26;
-          local.x *= 1.08;
+          local.x *= 0.92;
           local.z *= 0.9;
         } else if (style > 6.5 && style < 8.5) {
           // Cluster shards
-          local.x *= 0.58;
+          local.x *= 0.54;
           local.y *= 1.12;
         } else if (style > 7.5 && style < 9.5) {
           // Split pillars
-          local.x *= 0.42;
+          local.x *= 0.38;
           local.y *= 1.34;
         } else if (style > 8.5) {
           // Helix snare ribs
           local.y *= 0.34;
-          local.x *= 1.18;
+          local.x *= 0.96;
         }
         local *= mix(0.001, 1.0, visible);
 
-        vec3 worldPos = base + tangent * (local.x * laneWidth) + inN * (local.y + 0.18) + vec3(0.0, 0.0, 1.0) * local.z;
+        vec3 worldPos = base + tangent * (local.x * laneWidth * uObstacleWidthScale) + inN * (local.y + 0.18) + vec3(0.0, 0.0, 1.0) * local.z;
 
         vUv = uv;
         vPattern = aPattern;
@@ -472,7 +477,13 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
   );
 
   const panelGeometry = useMemo(() => {
-    const base = new THREE.BoxGeometry(1, 0.06, 0.6);
+    const base = new RoundedBoxGeometry(
+      1,
+      0.06,
+      GAME_CONFIG.platformDepth,
+      3,
+      GAME_CONFIG.platformCornerRadius
+    );
     const geom = new THREE.InstancedBufferGeometry();
     geom.index = base.index;
     geom.attributes = base.attributes;
@@ -486,7 +497,13 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
   }, [buffers]);
 
   const obstacleGeometry = useMemo(() => {
-    const base = new THREE.BoxGeometry(1, 0.32, 0.62);
+    const base = new RoundedBoxGeometry(
+      1,
+      0.32,
+      0.62,
+      3,
+      GAME_CONFIG.platformCornerRadius * 0.9
+    );
     const geom = new THREE.InstancedBufferGeometry();
     geom.index = base.index;
     geom.attributes = base.attributes;
