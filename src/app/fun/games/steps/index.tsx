@@ -16,6 +16,7 @@ import { stepsState, stepsTileVariants, type StepsTileVariant } from './state';
 export { stepsState } from './state';
 
 type Dir = 'x' | 'z';
+type SpawnTier = 'intro' | 'early' | 'mid' | 'late' | 'chaos';
 type PlatformKind =
   | 'standard'
   | 'moving_platform'
@@ -168,7 +169,7 @@ const HIDDEN_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const TILE_STYLES = stepsTileVariants;
 
-const HAZARD_POOL: HazardKind[] = [
+const HAZARD_POOL: Exclude<HazardKind, 'none'>[] = [
   'mirror_maze_platform',
   'pulse_expander',
   'gravity_well',
@@ -275,6 +276,82 @@ const PLATFORM_MOVING_SET = new Set<PlatformKind>([
 ]);
 
 const PLATFORM_BOUNCE_SET = new Set<PlatformKind>(['bouncer', 'trampoline', 'speed_ramp']);
+
+const READABLE_EFFECT_HAZARDS = new Set<HazardKind>([
+  'mirror_maze_platform',
+  'pulse_expander',
+  'gravity_well',
+  'split_path_bridge',
+  'time_slow_zone',
+  'anti_gravity_jump_pad',
+  'shifting_tiles',
+  'flicker_bridge',
+  'expand_o_matic',
+]);
+
+const HEAVY_CHAOS_HAZARDS = new Set<HazardKind>([
+  'rising_lava',
+  'meat_grinder',
+  'lightning_striker',
+  'rotating_cross_blades',
+  'pendulum_axes',
+  'homing_mine',
+  'rolling_boulder',
+]);
+
+const PLATFORM_UNLOCK_AT: Record<PlatformKind, number> = {
+  standard: 0,
+  moving_platform: 10,
+  falling_platform: 30,
+  conveyor_belt: 18,
+  reverse_conveyor: 62,
+  bouncer: 12,
+  trampoline: 20,
+  speed_ramp: 28,
+  sticky_glue: 80,
+  sinking_sand: 130,
+  ghost_platform: 74,
+  narrow_bridge: 40,
+  slippery_ice: 48,
+  teleporter: 90,
+  weight_sensitive_bridge: 116,
+  size_shifter_pad: 150,
+  icy_half_pipe: 104,
+  gravity_flip_zone: 138,
+  treadmill_switch: 120,
+  crushing_ceiling: 178,
+  wind_tunnel: 96,
+};
+
+const HAZARD_UNLOCK_AT: Record<Exclude<HazardKind, 'none'>, number> = {
+  mirror_maze_platform: 42,
+  pulse_expander: 50,
+  gravity_well: 58,
+  snap_trap: 92,
+  laser_grid: 118,
+  rotating_floor_disk: 102,
+  spike_wave: 86,
+  split_path_bridge: 64,
+  time_slow_zone: 54,
+  bomb_tile: 128,
+  rotating_hammer: 98,
+  anti_gravity_jump_pad: 76,
+  shifting_tiles: 84,
+  telefrag_portal: 146,
+  magnetic_field: 134,
+  rolling_boulder: 160,
+  trapdoor_row: 112,
+  rotating_cross_blades: 182,
+  flicker_bridge: 72,
+  rising_spike_columns: 168,
+  meat_grinder: 214,
+  homing_mine: 194,
+  expand_o_matic: 176,
+  pendulum_axes: 206,
+  rising_lava: 228,
+  fragile_glass: 154,
+  lightning_striker: 198,
+};
 
 const HAZARD_REASON: Record<Exclude<HazardKind, 'none'>, string> = {
   mirror_maze_platform: 'Mirror phase disrupted your rhythm.',
@@ -449,58 +526,262 @@ function hazardTint(kind: HazardKind) {
   return COLOR_SWING;
 }
 
-function pickPlatform(index: number, rng: SeededRandom, inBonus: boolean): PlatformKind {
-  if (index < 8) return 'standard';
-  if (inBonus) {
-    return rng.weighted([
-      { item: 'standard' as PlatformKind, weight: 0.46 },
-      { item: 'speed_ramp' as PlatformKind, weight: 0.24 },
-      { item: 'bouncer' as PlatformKind, weight: 0.2 },
-      { item: 'trampoline' as PlatformKind, weight: 0.1 },
-    ]);
-  }
+function spawnTierForIndex(index: number): SpawnTier {
+  if (index < 34) return 'intro';
+  if (index < 130) return 'early';
+  if (index < 300) return 'mid';
+  if (index < 520) return 'late';
+  return 'chaos';
+}
 
-  const difficulty = clamp(index / 320, 0, 1);
-  return rng.weighted(
-    PLATFORM_POOL.map((item) => {
-      const base =
-        item === 'standard'
-          ? 1.05
-          : item === 'moving_platform' || item === 'falling_platform'
-            ? 0.65
-            : item === 'narrow_bridge' || item === 'slippery_ice'
-              ? 0.54
-              : item === 'ghost_platform' || item === 'weight_sensitive_bridge' || item === 'crushing_ceiling'
-                ? 0.44
-                : item === 'bouncer' || item === 'trampoline' || item === 'speed_ramp'
-                  ? 0.36
-                  : 0.3;
-      return { item, weight: base + difficulty * base * 0.22 };
-    })
+function sameHazardFamily(a: HazardKind, b: HazardKind) {
+  if (a === 'none' || b === 'none') return false;
+  return (
+    (SPIKE_HAZARDS.has(a) && SPIKE_HAZARDS.has(b)) ||
+    (SAW_HAZARDS.has(a) && SAW_HAZARDS.has(b)) ||
+    (CLAMP_HAZARDS.has(a) && CLAMP_HAZARDS.has(b)) ||
+    (SWING_HAZARDS.has(a) && SWING_HAZARDS.has(b))
   );
 }
 
-function pickHazard(index: number, rng: SeededRandom, streak: number, inBonus: boolean): HazardKind {
+function platformTierWeight(kind: PlatformKind, tier: SpawnTier) {
+  if (tier === 'intro') {
+    if (kind === 'standard') return 5.2;
+    if (kind === 'moving_platform') return 1.25;
+    if (kind === 'conveyor_belt') return 0.72;
+    if (kind === 'bouncer') return 0.62;
+    if (kind === 'trampoline') return 0.44;
+    if (kind === 'speed_ramp') return 0.36;
+    return 0;
+  }
+
+  if (tier === 'early') {
+    if (kind === 'standard') return 3.3;
+    if (kind === 'moving_platform') return 1.45;
+    if (kind === 'conveyor_belt') return 1.02;
+    if (kind === 'bouncer') return 1.06;
+    if (kind === 'trampoline') return 0.82;
+    if (kind === 'speed_ramp') return 0.78;
+    if (kind === 'narrow_bridge') return 0.56;
+    if (kind === 'slippery_ice') return 0.46;
+    if (kind === 'falling_platform') return 0.32;
+    if (kind === 'reverse_conveyor') return 0.34;
+    if (kind === 'teleporter') return 0.34;
+    if (kind === 'wind_tunnel') return 0.34;
+    if (kind === 'ghost_platform') return 0.22;
+    if (kind === 'sticky_glue') return 0.24;
+    if (kind === 'icy_half_pipe') return 0.22;
+    if (kind === 'treadmill_switch') return 0.2;
+    return 0;
+  }
+
+  if (tier === 'mid') {
+    if (kind === 'standard') return 2.2;
+    if (kind === 'moving_platform') return 1.34;
+    if (kind === 'falling_platform') return 0.82;
+    if (kind === 'conveyor_belt') return 0.92;
+    if (kind === 'reverse_conveyor') return 0.74;
+    if (kind === 'bouncer') return 0.88;
+    if (kind === 'trampoline') return 0.72;
+    if (kind === 'speed_ramp') return 0.74;
+    if (kind === 'sticky_glue') return 0.62;
+    if (kind === 'sinking_sand') return 0.42;
+    if (kind === 'ghost_platform') return 0.62;
+    if (kind === 'narrow_bridge') return 0.72;
+    if (kind === 'slippery_ice') return 0.66;
+    if (kind === 'teleporter') return 0.58;
+    if (kind === 'weight_sensitive_bridge') return 0.46;
+    if (kind === 'size_shifter_pad') return 0.42;
+    if (kind === 'icy_half_pipe') return 0.54;
+    if (kind === 'gravity_flip_zone') return 0.36;
+    if (kind === 'treadmill_switch') return 0.54;
+    if (kind === 'crushing_ceiling') return 0.3;
+    if (kind === 'wind_tunnel') return 0.58;
+    return 0;
+  }
+
+  if (tier === 'late') {
+    if (kind === 'standard') return 1.36;
+    if (kind === 'moving_platform') return 1.18;
+    if (kind === 'falling_platform') return 0.96;
+    if (kind === 'conveyor_belt') return 0.82;
+    if (kind === 'reverse_conveyor') return 0.84;
+    if (kind === 'bouncer') return 0.66;
+    if (kind === 'trampoline') return 0.6;
+    if (kind === 'speed_ramp') return 0.7;
+    if (kind === 'sticky_glue') return 0.76;
+    if (kind === 'sinking_sand') return 0.72;
+    if (kind === 'ghost_platform') return 0.84;
+    if (kind === 'narrow_bridge') return 0.86;
+    if (kind === 'slippery_ice') return 0.84;
+    if (kind === 'teleporter') return 0.84;
+    if (kind === 'weight_sensitive_bridge') return 0.76;
+    if (kind === 'size_shifter_pad') return 0.7;
+    if (kind === 'icy_half_pipe') return 0.76;
+    if (kind === 'gravity_flip_zone') return 0.68;
+    if (kind === 'treadmill_switch') return 0.74;
+    if (kind === 'crushing_ceiling') return 0.64;
+    if (kind === 'wind_tunnel') return 0.74;
+    return 0;
+  }
+
+  if (kind === 'standard') return 1.05;
+  if (kind === 'moving_platform') return 1.02;
+  if (kind === 'falling_platform') return 1.06;
+  if (kind === 'conveyor_belt') return 0.72;
+  if (kind === 'reverse_conveyor') return 0.92;
+  if (kind === 'bouncer') return 0.56;
+  if (kind === 'trampoline') return 0.5;
+  if (kind === 'speed_ramp') return 0.64;
+  if (kind === 'sticky_glue') return 0.84;
+  if (kind === 'sinking_sand') return 0.84;
+  if (kind === 'ghost_platform') return 0.94;
+  if (kind === 'narrow_bridge') return 0.95;
+  if (kind === 'slippery_ice') return 0.9;
+  if (kind === 'teleporter') return 0.96;
+  if (kind === 'weight_sensitive_bridge') return 0.88;
+  if (kind === 'size_shifter_pad') return 0.82;
+  if (kind === 'icy_half_pipe') return 0.84;
+  if (kind === 'gravity_flip_zone') return 0.88;
+  if (kind === 'treadmill_switch') return 0.84;
+  if (kind === 'crushing_ceiling') return 0.92;
+  if (kind === 'wind_tunnel') return 0.84;
+  return 0;
+}
+
+function hazardTierWeight(kind: Exclude<HazardKind, 'none'>, tier: SpawnTier) {
+  if (tier === 'intro') return 0;
+  if (tier === 'early') {
+    if (READABLE_EFFECT_HAZARDS.has(kind)) return 1.06;
+    if (HEAVY_CHAOS_HAZARDS.has(kind)) return 0.14;
+    if (kind === 'snap_trap' || kind === 'trapdoor_row' || kind === 'bomb_tile') return 0.36;
+    return 0.62;
+  }
+  if (tier === 'mid') {
+    if (READABLE_EFFECT_HAZARDS.has(kind)) return 0.94;
+    if (HEAVY_CHAOS_HAZARDS.has(kind)) return 0.48;
+    return 0.82;
+  }
+  if (tier === 'late') {
+    if (READABLE_EFFECT_HAZARDS.has(kind)) return 0.86;
+    if (HEAVY_CHAOS_HAZARDS.has(kind)) return 0.82;
+    return 0.94;
+  }
+  if (READABLE_EFFECT_HAZARDS.has(kind)) return 0.78;
+  if (HEAVY_CHAOS_HAZARDS.has(kind)) return 1.06;
+  return 0.98;
+}
+
+function hazardIndividualBias(kind: Exclude<HazardKind, 'none'>) {
+  if (kind === 'mirror_maze_platform' || kind === 'time_slow_zone' || kind === 'split_path_bridge') return 1.12;
+  if (kind === 'laser_grid' || kind === 'spike_wave' || kind === 'rotating_floor_disk') return 1.04;
+  if (kind === 'rising_lava' || kind === 'meat_grinder' || kind === 'lightning_striker') return 0.72;
+  if (kind === 'homing_mine' || kind === 'pendulum_axes' || kind === 'rotating_cross_blades') return 0.9;
+  return 1;
+}
+
+function isHazardCompatible(platform: PlatformKind, hazard: HazardKind, index: number) {
+  if (hazard === 'none') return true;
+  const tier = spawnTierForIndex(index);
+  const isTrapPlatform =
+    platform === 'ghost_platform' ||
+    platform === 'crushing_ceiling' ||
+    platform === 'falling_platform' ||
+    platform === 'weight_sensitive_bridge';
+
+  if (isTrapPlatform && LETHAL_HAZARDS.has(hazard) && tier !== 'chaos') return false;
+  if (platform === 'narrow_bridge' && (HEAVY_CHAOS_HAZARDS.has(hazard) || hazard === 'laser_grid') && tier !== 'chaos') return false;
+  if (platform === 'sticky_glue' && (hazard === 'gravity_well' || hazard === 'time_slow_zone')) return false;
+  if (platform === 'teleporter' && hazard === 'telefrag_portal' && tier !== 'chaos') return false;
+  return true;
+}
+
+function pickPlatform(
+  index: number,
+  rng: SeededRandom,
+  inBonus: boolean,
+  previousPlatform: PlatformKind | null
+): PlatformKind {
+  if (index < 8) return 'standard';
+  if (inBonus) {
+    return rng.weighted([
+      { item: 'standard' as PlatformKind, weight: 0.38 },
+      { item: 'speed_ramp' as PlatformKind, weight: 0.24 },
+      { item: 'bouncer' as PlatformKind, weight: 0.22 },
+      { item: 'trampoline' as PlatformKind, weight: 0.12 },
+      { item: 'conveyor_belt' as PlatformKind, weight: 0.04 },
+    ]);
+  }
+
+  const tier = spawnTierForIndex(index);
+  const tierDifficulty = clamp(index / 620, 0, 1);
+  const weighted: { item: PlatformKind; weight: number }[] = [];
+
+  for (const item of PLATFORM_POOL) {
+    if (index < PLATFORM_UNLOCK_AT[item]) continue;
+    let weight = platformTierWeight(item, tier);
+    if (weight <= 0) continue;
+
+    if (previousPlatform && previousPlatform === item && item !== 'standard') {
+      weight *= tier === 'intro' || tier === 'early' ? 0.24 : tier === 'mid' ? 0.38 : 0.5;
+    }
+
+    if (PLATFORM_TRAP_SET.has(item) && (tier === 'intro' || tier === 'early')) {
+      weight *= 0.74;
+    }
+
+    weight *= THREE.MathUtils.lerp(0.92, 1.1, tierDifficulty);
+    weighted.push({ item, weight });
+  }
+
+  if (weighted.length === 0) return 'standard';
+  return rng.weighted(weighted);
+}
+
+function pickHazard(
+  index: number,
+  rng: SeededRandom,
+  streak: number,
+  inBonus: boolean,
+  previousHazard: HazardKind
+): HazardKind {
   if (index < 14 || inBonus) return 'none';
-  if (streak >= 1) return 'none';
 
-  const difficulty = clamp(index / 360, 0, 1);
-  const hazardChance = clamp(0.14 + difficulty * 0.24, 0.14, 0.42);
-  if (!rng.bool(hazardChance)) return 'none';
+  const tier = spawnTierForIndex(index);
+  const allowedConsecutive =
+    tier === 'chaos' ? 3 : tier === 'late' ? 2 : tier === 'mid' ? 2 : 1;
+  if (streak >= allowedConsecutive) return 'none';
 
-  return rng.weighted(
-    HAZARD_POOL.map((item) => {
-      const base =
-        item === 'laser_grid' || item === 'rotating_cross_blades' || item === 'spike_wave'
-          ? 0.95
-          : item === 'rising_lava' || item === 'meat_grinder' || item === 'lightning_striker'
-            ? 0.62
-            : item === 'mirror_maze_platform' || item === 'time_slow_zone' || item === 'telefrag_portal'
-              ? 0.68
-              : 0.74;
-      return { item, weight: base + difficulty * base * 0.3 };
-    })
-  );
+  let hazardChance = 0;
+  if (tier === 'early') hazardChance = clamp(0.1 + (index - 34) * 0.001, 0.1, 0.2);
+  else if (tier === 'mid') hazardChance = clamp(0.22 + (index - 130) * 0.00055, 0.22, 0.32);
+  else if (tier === 'late') hazardChance = clamp(0.34 + (index - 300) * 0.00045, 0.34, 0.44);
+  else if (tier === 'chaos') hazardChance = clamp(0.46 + (index - 520) * 0.00024, 0.46, 0.54);
+
+  if (hazardChance <= 0 || !rng.bool(hazardChance)) return 'none';
+
+  const progression = clamp(index / 620, 0, 1);
+  const weighted: { item: HazardKind; weight: number }[] = [];
+  for (const item of HAZARD_POOL) {
+    if (index < HAZARD_UNLOCK_AT[item]) continue;
+
+    let weight = hazardTierWeight(item, tier);
+    if (weight <= 0) continue;
+
+    weight *= hazardIndividualBias(item);
+
+    if (previousHazard !== 'none' && previousHazard === item) {
+      weight *= tier === 'chaos' ? 0.52 : 0.22;
+    } else if (sameHazardFamily(item, previousHazard)) {
+      weight *= tier === 'chaos' ? 0.82 : 0.54;
+    }
+
+    weight *= THREE.MathUtils.lerp(0.94, 1.08, progression);
+    weighted.push({ item, weight });
+  }
+
+  if (weighted.length === 0) return 'none';
+  return rng.weighted(weighted);
 }
 
 function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, sequence: number) {
@@ -513,7 +794,8 @@ function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, s
     };
   }
 
-  const difficulty = clamp(index / 320, 0, 1);
+  const tier = spawnTierForIndex(index);
+  const difficulty = clamp(index / 520, 0, 1);
   const baseCycle = SPIKE_HAZARDS.has(kind)
     ? THREE.MathUtils.lerp(1.9, 1.35, difficulty)
     : SAW_HAZARDS.has(kind)
@@ -521,9 +803,13 @@ function buildHazardTiming(kind: HazardKind, index: number, rng: SeededRandom, s
       : CLAMP_HAZARDS.has(kind)
         ? THREE.MathUtils.lerp(2.25, 1.58, difficulty)
         : THREE.MathUtils.lerp(2.35, 1.7, difficulty);
-  const cycle = clamp(baseCycle + rng.float(-0.1, 0.1), 1.25, 2.35);
+  const tierCycleShift =
+    tier === 'intro' ? 0.22 : tier === 'early' ? 0.18 : tier === 'mid' ? 0.05 : tier === 'late' ? -0.04 : -0.12;
+  const cycle = clamp(baseCycle + tierCycleShift + rng.float(-0.1, 0.1), 1.2, 2.5);
 
-  const openRatio = SPIKE_HAZARDS.has(kind) ? 0.72 : SAW_HAZARDS.has(kind) ? 0.68 : CLAMP_HAZARDS.has(kind) ? 0.64 : 0.67;
+  const openRatioBase = SPIKE_HAZARDS.has(kind) ? 0.72 : SAW_HAZARDS.has(kind) ? 0.68 : CLAMP_HAZARDS.has(kind) ? 0.64 : 0.67;
+  const openShift = tier === 'early' ? 0.08 : tier === 'mid' ? 0.03 : tier === 'chaos' ? -0.05 : tier === 'late' ? -0.02 : 0.1;
+  const openRatio = openRatioBase + openShift;
   const openWindow = clamp(cycle * openRatio, 0.85, cycle - 0.28);
 
   const sequenceStep = sequence % HAZARD_SEQUENCE_STEPS;
@@ -556,9 +842,14 @@ function buildPlatformTiming(kind: PlatformKind, index: number, rng: SeededRando
     };
   }
 
-  const difficulty = clamp(index / 340, 0, 1);
-  const cycle = clamp(THREE.MathUtils.lerp(2.5, 1.55, difficulty) + rng.float(-0.08, 0.08), 1.2, 2.6);
-  const openRatio = kind === 'ghost_platform' ? 0.52 : kind === 'crushing_ceiling' ? 0.58 : 0.66;
+  const tier = spawnTierForIndex(index);
+  const difficulty = clamp(index / 560, 0, 1);
+  const tierCycleShift =
+    tier === 'intro' ? 0.26 : tier === 'early' ? 0.18 : tier === 'mid' ? 0.06 : tier === 'late' ? -0.05 : -0.12;
+  const cycle = clamp(THREE.MathUtils.lerp(2.5, 1.55, difficulty) + tierCycleShift + rng.float(-0.08, 0.08), 1.2, 2.7);
+  const openRatioBase = kind === 'ghost_platform' ? 0.52 : kind === 'crushing_ceiling' ? 0.58 : 0.66;
+  const openShift = tier === 'early' ? 0.08 : tier === 'mid' ? 0.03 : tier === 'chaos' ? -0.05 : tier === 'late' ? -0.02 : 0.1;
+  const openRatio = openRatioBase + openShift;
   const openWindow = clamp(cycle * openRatio, 0.65, cycle - 0.2);
   return {
     cycle,
@@ -841,10 +1132,17 @@ function Steps() {
     const inBonus = w.bonusTilesLeft > 0;
     if (inBonus) w.bonusTilesLeft -= 1;
 
-    const platform = pickPlatform(index, w.rng, inBonus);
+    const previousTile = w.tilesByIndex.get(index - 1);
+    const previousPlatform = previousTile?.platform ?? null;
+    const previousHazard = previousTile?.hazard ?? 'none';
+
+    const platform = pickPlatform(index, w.rng, inBonus, previousPlatform);
     const platformTiming = buildPlatformTiming(platform, index, w.rng);
 
-    const hazard = pickHazard(index, w.rng, w.hazardStreak, inBonus);
+    let hazard = pickHazard(index, w.rng, w.hazardStreak, inBonus, previousHazard);
+    if (!isHazardCompatible(platform, hazard, index)) {
+      hazard = 'none';
+    }
     if (hazard === 'none') {
       w.hazardStreak = 0;
     } else {
