@@ -1208,7 +1208,7 @@ export default function OctaSurge() {
   }, []);
 
   useFrame((state, rawDelta) => {
-    const delta = clamp(rawDelta, 0.001, 0.05);
+    const frameDelta = clamp(rawDelta, 0.001, 0.05);
     const input = inputRef.current;
 
     const wantsStart =
@@ -1221,6 +1221,9 @@ export default function OctaSurge() {
     const runtimeBefore = useOctaRuntimeStore.getState();
 
     if (snap.phase !== 'playing') {
+      fixedStepperRef.current.reset();
+      turnQueueRef.current.length = 0;
+      flipQueueRef.current = 0;
       if (wantsStart) startRun();
 
       if (worldRef.current) {
@@ -1236,21 +1239,25 @@ export default function OctaSurge() {
       }
 
       const cam = camera as THREE.PerspectiveCamera;
-      cam.fov = THREE.MathUtils.lerp(cam.fov, 70, 1 - Math.exp(-delta * 5));
+      cam.fov = THREE.MathUtils.lerp(
+        cam.fov,
+        70,
+        1 - Math.exp(-frameDelta * 5)
+      );
       cam.position.x = THREE.MathUtils.lerp(
         cam.position.x,
         0,
-        1 - Math.exp(-delta * 5)
+        1 - Math.exp(-frameDelta * 5)
       );
       cam.position.y = THREE.MathUtils.lerp(
         cam.position.y,
         -0.32,
-        1 - Math.exp(-delta * 5)
+        1 - Math.exp(-frameDelta * 5)
       );
       cam.position.z = THREE.MathUtils.lerp(
         cam.position.z,
         10.6,
-        1 - Math.exp(-delta * 5)
+        1 - Math.exp(-frameDelta * 5)
       );
       cam.lookAt(0, 0, -38);
       cam.updateProjectionMatrix();
@@ -1261,20 +1268,22 @@ export default function OctaSurge() {
         runtimeBefore.syncTimer,
         snap.tileVariant
       );
-      updateFxParticles(delta);
+      updateFxParticles(frameDelta);
       clearFrameInput(inputRef);
       return;
     }
 
     if (paused) {
-      updateFxParticles(delta);
+      fixedStepperRef.current.reset();
+      updateFxParticles(frameDelta);
       clearFrameInput(inputRef);
       return;
     }
 
     if (deathFxRef.current.active) {
-      const finished = updateDeathFx(delta);
-      updateFxParticles(delta);
+      fixedStepperRef.current.reset();
+      const finished = updateDeathFx(frameDelta);
+      updateFxParticles(frameDelta);
       if (finished) {
         const reason = deathFxRef.current.reason || 'Connection dropped.';
         endRun(reason);
@@ -1342,89 +1351,99 @@ export default function OctaSurge() {
       octaSurgeState.setCameraMode(cameraMode);
     }
 
-    if (leftTap && turnCooldown <= 0) {
-      laneIndex = normalizeLane(laneIndex - 1, sides);
-      targetRotation = rotationForLane(laneIndex, sides);
-      turnCooldown = GAME.turnCooldownMs / 1000;
+    if (leftTap !== rightTap) {
+      const queue = turnQueueRef.current;
+      const direction: -1 | 1 = leftTap ? -1 : 1;
+      if (queue.length < 5) queue.push(direction);
     }
-
-    if (rightTap && turnCooldown <= 0) {
-      laneIndex = normalizeLane(laneIndex + 1, sides);
-      targetRotation = rotationForLane(laneIndex, sides);
-      turnCooldown = GAME.turnCooldownMs / 1000;
-    }
-
-    if (flipTap && flipCooldown <= 0) {
-      laneIndex = normalizeLane(laneIndex + Math.floor(sides / 2), sides);
-      targetRotation = rotationForLane(laneIndex, sides);
-      flipPulse = 1;
-      flipCooldown = GAME.flipCooldownMs / 1000;
-      dangerPulse = Math.max(dangerPulse, 0.2);
-    }
-
-    if (slowTap && slowMoMeter >= 30 && slowMoTime <= 0) {
-      slowMoMeter = clamp(slowMoMeter - 30, 0, 100);
-      slowMoTime = 3;
+    if (flipTap) {
+      flipQueueRef.current = Math.min(3, flipQueueRef.current + 1);
     }
 
     if (stylePrevTap) octaSurgeState.cycleTileVariant(-1);
     if (styleNextTap) octaSurgeState.cycleTileVariant(1);
 
     const sampledAudio = sampleAudioReactive();
-    audioReactive = THREE.MathUtils.lerp(
-      audioReactive,
-      sampledAudio,
-      1 - Math.exp(-delta * 9)
-    );
-
-    runTime += delta;
-
-    turnCooldown = Math.max(0, turnCooldown - delta);
-    flipCooldown = Math.max(0, flipCooldown - delta);
-    flipPulse = Math.max(0, flipPulse - delta * 2.2);
-    dangerPulse = Math.max(0, dangerPulse - delta * 1.9);
-    stageFlash = Math.max(0, stageFlash - delta / GAME.stageFlashDuration);
-    syncTimer = Math.max(0, syncTimer - delta);
-
-    if (slowMoTime > 0) {
-      slowMoTime = Math.max(0, slowMoTime - delta);
-      slowMoMeter = clamp(slowMoMeter - delta * 22, 0, 100);
-    }
-
-    comboTimer = Math.max(0, comboTimer - delta);
-    if (comboTimer <= 0) {
-      combo = 0;
-      multiplier = Math.max(1, multiplier - delta * 0.8);
-    }
-
-    const stage = stageById(stageId);
-    const targetSpeed = clamp(
-      (GAME.baseSpeed + runTime * GAME.speedRamp) *
-        stage.speedMultiplier *
-        (1 + audioReactive * 0.02),
-      GAME.baseSpeed,
-      GAME.maxSpeed
-    );
-
-    speed = THREE.MathUtils.lerp(speed, targetSpeed, 1 - Math.exp(-delta * 2));
-    if (slowMoTime > 0) speed *= 0.58;
-
-    distance += speed * delta;
-
-    const deltaAngle = shortestAngle(rotation, targetRotation);
-    angularVelocity += deltaAngle * GAME.springStiffness * delta;
-    angularVelocity *= Math.exp(-GAME.springDamping * delta);
-    angularVelocity = clamp(
-      angularVelocity,
-      -GAME.maxAngularVelocity,
-      GAME.maxAngularVelocity
-    );
-    rotation += angularVelocity * delta;
-
     let endReason = '';
     let deathType: 'void' | 'obstacle' = 'obstacle';
+    let slowTapPending = slowTap;
 
-    for (let i = 0; i < segmentsRef.current.length; i += 1) {
+    const simulateStep = (delta: number) => {
+      if (flipQueueRef.current > 0 && flipCooldown <= 0) {
+        flipQueueRef.current -= 1;
+        laneIndex = normalizeLane(laneIndex + Math.floor(sides / 2), sides);
+        targetRotation = rotationForLane(laneIndex, sides);
+        flipPulse = 1;
+        flipCooldown = GAME.flipCooldownMs / 1000;
+        dangerPulse = Math.max(dangerPulse, 0.2);
+      }
+
+      if (turnCooldown <= 0 && turnQueueRef.current.length > 0) {
+        const direction = turnQueueRef.current.shift();
+        if (direction) {
+          laneIndex = normalizeLane(laneIndex + direction, sides);
+          targetRotation = rotationForLane(laneIndex, sides);
+          turnCooldown = GAME.turnCooldownMs / 1000;
+        }
+      }
+
+      if (slowTapPending && slowMoMeter >= 30 && slowMoTime <= 0) {
+        slowMoMeter = clamp(slowMoMeter - 30, 0, 100);
+        slowMoTime = 3;
+      }
+      slowTapPending = false;
+
+      audioReactive = THREE.MathUtils.lerp(
+        audioReactive,
+        sampledAudio,
+        1 - Math.exp(-delta * 9)
+      );
+
+      runTime += delta;
+
+      turnCooldown = Math.max(0, turnCooldown - delta);
+      flipCooldown = Math.max(0, flipCooldown - delta);
+      flipPulse = Math.max(0, flipPulse - delta * 2.2);
+      dangerPulse = Math.max(0, dangerPulse - delta * 1.9);
+      stageFlash = Math.max(0, stageFlash - delta / GAME.stageFlashDuration);
+      syncTimer = Math.max(0, syncTimer - delta);
+
+      if (slowMoTime > 0) {
+        slowMoTime = Math.max(0, slowMoTime - delta);
+        slowMoMeter = clamp(slowMoMeter - delta * 22, 0, 100);
+      }
+
+      comboTimer = Math.max(0, comboTimer - delta);
+      if (comboTimer <= 0) {
+        combo = 0;
+        multiplier = Math.max(1, multiplier - delta * 0.8);
+      }
+
+      const stage = stageById(stageId);
+      const targetSpeed = clamp(
+        (GAME.baseSpeed + runTime * GAME.speedRamp) *
+          stage.speedMultiplier *
+          (1 + audioReactive * 0.02),
+        GAME.baseSpeed,
+        GAME.maxSpeed
+      );
+
+      speed = THREE.MathUtils.lerp(speed, targetSpeed, 1 - Math.exp(-delta * 2));
+      if (slowMoTime > 0) speed *= 0.58;
+
+      distance += speed * delta;
+
+      const deltaAngle = shortestAngle(rotation, targetRotation);
+      angularVelocity += deltaAngle * GAME.springStiffness * delta;
+      angularVelocity *= Math.exp(-GAME.springDamping * delta);
+      angularVelocity = clamp(
+        angularVelocity,
+        -GAME.maxAngularVelocity,
+        GAME.maxAngularVelocity
+      );
+      rotation += angularVelocity * delta;
+
+      for (let i = 0; i < segmentsRef.current.length; i += 1) {
       const segment = segmentsRef.current[i];
 
       segment.prevZ = segment.z;
