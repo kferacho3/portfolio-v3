@@ -277,7 +277,7 @@ export const octaSurgeState = proxy({
   distance: 0,
   progress: 0,
 
-  sides: STAGE_PROFILES[0].sides,
+  sides: STAGE_PROFILES[0].sides as number,
   stage: STAGE_PROFILES[0].id,
   stageLabel: STAGE_PROFILES[0].label,
   stageFlash: 0,
