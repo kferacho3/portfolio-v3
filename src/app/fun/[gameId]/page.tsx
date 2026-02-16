@@ -346,6 +346,43 @@ export default function GamePage({ params }: GamePageProps) {
       {gameId === 'octasurge' && (
         <OctaSurgeUI
           onStart={handleStart}
+          onReplayLast={() => {
+            const replay = octaSurgeState.lastReplay;
+            if (!replay) return;
+            octaSurgeState.queueReplayPlayback(replay);
+            octaSurgeState.setMode(replay.mode);
+            useOctaRuntimeStore.setState({ cameraMode: replay.cameraMode });
+            octaSurgeState.setCameraMode(replay.cameraMode);
+            handleStart();
+            octaSurgeState.worldSeed = replay.seed;
+          }}
+          onExportReplay={() => {
+            const payload = octaSurgeState.exportLastReplay();
+            if (!payload) return;
+
+            if (
+              typeof navigator !== 'undefined' &&
+              navigator.clipboard &&
+              typeof navigator.clipboard.writeText === 'function'
+            ) {
+              void navigator.clipboard
+                .writeText(payload)
+                .catch(() => {
+                  window.prompt('Copy replay payload', payload);
+                });
+              return;
+            }
+
+            window.prompt('Copy replay payload', payload);
+          }}
+          onImportReplay={() => {
+            const raw = window.prompt('Paste replay payload');
+            if (!raw) return;
+            const imported = octaSurgeState.importReplay(raw);
+            if (!imported) {
+              window.alert('Replay import failed: payload is invalid.');
+            }
+          }}
           onSelectMode={(mode: OctaSurgeMode) => octaSurgeState.setMode(mode)}
           onCycleFxLevel={() => {
             octaSurgeState.cycleFxLevel();

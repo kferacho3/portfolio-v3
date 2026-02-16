@@ -37,6 +37,7 @@ import type {
   OctaCameraMode,
   OctaObstacleType,
   OctaPlatformType,
+  OctaReplayGhostFrame,
   OctaReplayInputAction,
   OctaReplayInputEvent,
   OctaReplayOutcome,
@@ -56,6 +57,7 @@ const TWO_PI = Math.PI * 2;
 const DEATH_PARTICLE_COUNT = 144;
 const FX_PARTICLE_COUNT = 360;
 const PLAYER_TRAIL_POINTS = 46;
+const GHOST_RECORD_STRIDE = 2;
 const WHITE = new THREE.Color('#ffffff');
 
 const clamp = (value: number, min: number, max: number) =>
@@ -122,6 +124,7 @@ type ReplayRuntime = {
   cameraMode: OctaCameraMode;
   frame: number;
   events: OctaReplayInputEvent[];
+  ghostFrames: OctaReplayGhostFrame[];
   playbackEvents: OctaReplayInputEvent[];
   playbackCursor: number;
 };
@@ -155,6 +158,7 @@ const createReplayRuntime = (): ReplayRuntime => ({
   cameraMode: 'chase',
   frame: 0,
   events: [],
+  ghostFrames: [],
   playbackEvents: [],
   playbackCursor: 0,
 });
@@ -319,6 +323,37 @@ const createFxParticle = (): FxParticle => ({
   color: new THREE.Color('#ffffff'),
 });
 
+const sampleGhostFrame = (
+  frames: readonly OctaReplayGhostFrame[],
+  targetFrame: number
+) => {
+  if (frames.length <= 0) return null;
+  if (targetFrame <= frames[0].frame) return frames[0];
+  if (targetFrame >= frames[frames.length - 1].frame) {
+    return frames[frames.length - 1];
+  }
+
+  let lo = 0;
+  let hi = frames.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid].frame < targetFrame) lo = mid + 1;
+    else hi = mid - 1;
+  }
+
+  const next = frames[Math.min(frames.length - 1, lo)];
+  const prev = frames[Math.max(0, lo - 1)];
+  const span = Math.max(1, next.frame - prev.frame);
+  const alpha = clamp((targetFrame - prev.frame) / span, 0, 1);
+
+  return {
+    frame: Math.floor(targetFrame),
+    x: THREE.MathUtils.lerp(prev.x, next.x, alpha),
+    y: THREE.MathUtils.lerp(prev.y, next.y, alpha),
+    z: THREE.MathUtils.lerp(prev.z, next.z, alpha),
+  };
+};
+
 export default function OctaSurge() {
   const snap = useSnapshot(octaSurgeState);
   const { paused, restartSeed } = useGameUIState();
@@ -353,6 +388,7 @@ export default function OctaSurge() {
 
   const worldRef = useRef<THREE.Group>(null);
   const playerRef = useRef<THREE.Group>(null);
+  const ghostRef = useRef<THREE.Group>(null);
 
   const bloomRef = useRef<any>(null);
   const chromaRef = useRef<any>(null);
@@ -421,6 +457,8 @@ export default function OctaSurge() {
       player10: new THREE.CylinderGeometry(0.44, 0.36, 0.24, 10, 1),
       player12: new THREE.CylinderGeometry(0.36, 0.46, 0.24, 12, 1),
       playerRing: new THREE.TorusGeometry(0.56, 0.05, 10, 56),
+      ghostCore: new THREE.IcosahedronGeometry(0.24, 1),
+      ghostRing: new THREE.TorusGeometry(0.44, 0.034, 12, 40),
       shell: new THREE.CylinderGeometry(
         GAME.tunnelShellRadius,
         GAME.tunnelShellRadius,
@@ -1066,6 +1104,7 @@ export default function OctaSurge() {
         outcome: params.outcome,
         endReason: params.endReason,
         events: replay.events.map((event) => ({ ...event })),
+        ghostFrames: replay.ghostFrames.map((frame) => ({ ...frame })),
       };
       octaSurgeState.setLastReplay(replayRun);
     },
@@ -1075,20 +1114,22 @@ export default function OctaSurge() {
   const initializeRun = useCallback(() => {
     startAudio();
 
+    const queuedReplay =
+      queuedReplayRef.current ?? octaSurgeState.consumeReplayPlayback();
     const state = useOctaRuntimeStore.getState();
     state.resetRun({
-      seed: snap.worldSeed,
-      mode: snap.mode,
-      cameraMode: snap.cameraMode,
+      seed: queuedReplay?.seed ?? snap.worldSeed,
+      mode: queuedReplay?.mode ?? snap.mode,
+      cameraMode: queuedReplay?.cameraMode ?? snap.cameraMode,
     });
 
     const replay = replayRef.current;
-    const queuedReplay = queuedReplayRef.current;
     replay.frame = 0;
-    replay.seed = snap.worldSeed;
-    replay.runMode = snap.mode;
-    replay.cameraMode = snap.cameraMode;
+    replay.seed = queuedReplay?.seed ?? snap.worldSeed;
+    replay.runMode = queuedReplay?.mode ?? snap.mode;
+    replay.cameraMode = queuedReplay?.cameraMode ?? snap.cameraMode;
     replay.events = [];
+    replay.ghostFrames = [];
     replay.playbackCursor = 0;
     if (queuedReplay) {
       replay.mode = 'playback';
@@ -1099,6 +1140,7 @@ export default function OctaSurge() {
       replay.mode = 'record';
       replay.playbackEvents = [];
     }
+    octaSurgeState.setReplayMode(replay.mode);
     queuedReplayRef.current = null;
 
     fixedStepperRef.current.reset();
@@ -1200,6 +1242,17 @@ export default function OctaSurge() {
   ]);
 
   const startRun = useCallback(() => {
+    if (octaSurgeState.phase === 'playing') {
+      const runtime = useOctaRuntimeStore.getState();
+      finalizeReplay({
+        outcome: 'abort',
+        endReason: 'Run aborted.',
+        score: runtime.score,
+        distance: runtime.distance,
+        runTime: runtime.runTime,
+      });
+    }
+
     const replayPlayback = octaSurgeState.consumeReplayPlayback();
     queuedReplayRef.current = replayPlayback;
 
@@ -1212,11 +1265,12 @@ export default function OctaSurge() {
     fixedStepperRef.current.reset();
     turnQueueRef.current.length = 0;
     flipQueueRef.current = 0;
+    octaSurgeState.setReplayMode('off');
     octaSurgeState.start();
     if (replayPlayback) {
       octaSurgeState.worldSeed = replayPlayback.seed;
     }
-  }, []);
+  }, [finalizeReplay]);
 
   const endRun = useCallback(
     (reason: string, outcome: OctaReplayOutcome) => {
@@ -1338,6 +1392,9 @@ export default function OctaSurge() {
       fixedStepperRef.current.reset();
       turnQueueRef.current.length = 0;
       flipQueueRef.current = 0;
+      if (octaSurgeState.replayMode !== 'off') {
+        octaSurgeState.setReplayMode('off');
+      }
       if (replayTap && octaSurgeState.queueReplayPlayback()) {
         startRun();
       } else if (wantsStart) {
@@ -1911,6 +1968,20 @@ export default function OctaSurge() {
       }
 
       simulateStep(fixedDelta);
+
+      if (
+        replayRuntime.mode === 'record' &&
+        replayRuntime.frame % GHOST_RECORD_STRIDE === 0
+      ) {
+        const angle = GAME.playerAngle + rotation;
+        const radius = GAME.radius - 0.58;
+        replayRuntime.ghostFrames.push({
+          frame: replayRuntime.frame,
+          x: Math.cos(angle) * radius,
+          y: Math.sin(angle) * radius,
+          z: GAME.playerZ,
+        });
+      }
     });
 
     const runGoal =
@@ -2114,6 +2185,37 @@ export default function OctaSurge() {
           0.24,
           0.36
         );
+      }
+    }
+
+    if (ghostRef.current) {
+      const ghostReplay = snap.lastReplay;
+      const canShowGhost =
+        snap.phase === 'playing' &&
+        snap.replayMode !== 'playback' &&
+        !!ghostReplay &&
+        ghostReplay.ghostFrames.length > 1;
+
+      if (!canShowGhost || !ghostReplay) {
+        ghostRef.current.visible = false;
+      } else {
+        const ghostFrame = sampleGhostFrame(
+          ghostReplay.ghostFrames,
+          replayRef.current.frame
+        );
+        if (!ghostFrame) {
+          ghostRef.current.visible = false;
+        } else {
+          ghostRef.current.visible = true;
+          ghostRef.current.position.set(
+            ghostFrame.x,
+            ghostFrame.y,
+            ghostFrame.z + 0.02
+          );
+          ghostRef.current.rotation.set(0, 0, runTime * 2.3);
+          const pulse = 1 + Math.sin(runTime * 8 + ghostFrame.frame * 0.08) * 0.05;
+          ghostRef.current.scale.setScalar(pulse);
+        }
       }
     }
 
@@ -2452,6 +2554,31 @@ export default function OctaSurge() {
             color={FIBER_COLORS.playerGlow}
             transparent
             opacity={0.22}
+            toneMapped={false}
+          />
+        </mesh>
+      </group>
+
+      <group ref={ghostRef} visible={false}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <primitive object={geometry.ghostCore} attach="geometry" />
+          <meshBasicMaterial
+            color="#8beeff"
+            transparent
+            opacity={0.44}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </mesh>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <primitive object={geometry.ghostRing} attach="geometry" />
+          <meshBasicMaterial
+            color="#d4f7ff"
+            transparent
+            opacity={0.5}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
             toneMapped={false}
           />
         </mesh>

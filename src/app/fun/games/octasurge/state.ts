@@ -15,6 +15,7 @@ import type {
   OctaObstacleType,
   OctaPathStyle,
   OctaPlatformType,
+  OctaReplayModeState,
   OctaReplayRun,
   OctaSurgeMode,
   OctaSurgePhase,
@@ -34,6 +35,11 @@ const safeFxLevel = (raw: string | null): OctaFxLevel => {
 const safeCameraMode = (raw: string | null): OctaCameraMode => {
   if (raw === 'chase' || raw === 'firstPerson' || raw === 'topDown') return raw;
   return 'chase';
+};
+
+const safeMode = (raw: unknown): OctaSurgeMode => {
+  if (raw === 'classic' || raw === 'endless' || raw === 'daily') return raw;
+  return 'classic';
 };
 
 const safeVariant = (raw: string | null): OctaTileVariant => {
@@ -80,6 +86,116 @@ const dailySeedFromDate = () => {
 
 const randomSeed = () => Math.floor(Math.random() * 1_000_000_000);
 
+const isReplayAction = (
+  action: unknown
+): action is OctaReplayRun['events'][number]['action'] =>
+  action === 'turn_left' ||
+  action === 'turn_right' ||
+  action === 'flip' ||
+  action === 'slow_mo';
+
+const parseReplayRun = (raw: string | null): OctaReplayRun | null => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<OctaReplayRun> & {
+      events?: unknown;
+    };
+    if (parsed.version !== 1) return null;
+
+    const seed = Number(parsed.seed);
+    const recordedAt = Number(parsed.recordedAt);
+    const totalFrames = Number(parsed.totalFrames);
+    const finalScore = Number(parsed.finalScore);
+    const finalDistance = Number(parsed.finalDistance);
+    const finalTime = Number(parsed.finalTime);
+    const mode = safeMode(parsed.mode);
+    const cameraMode =
+      parsed.cameraMode === 'chase' ||
+      parsed.cameraMode === 'firstPerson' ||
+      parsed.cameraMode === 'topDown'
+        ? parsed.cameraMode
+        : 'chase';
+    const outcome =
+      parsed.outcome === 'complete' ||
+      parsed.outcome === 'death' ||
+      parsed.outcome === 'abort'
+        ? parsed.outcome
+        : 'abort';
+    const endReason =
+      typeof parsed.endReason === 'string' ? parsed.endReason : 'Run replay';
+
+    if (!Number.isFinite(seed) || !Number.isFinite(totalFrames)) return null;
+
+    const parsedEvents = Array.isArray(parsed.events) ? parsed.events : [];
+    const events = parsedEvents
+      .map((event) => {
+        const value = event as { frame?: unknown; action?: unknown };
+        const frame = Number(value.frame);
+        if (!Number.isFinite(frame) || frame < 1 || !isReplayAction(value.action)) {
+          return null;
+        }
+        return {
+          frame: Math.floor(frame),
+          action: value.action,
+        };
+      })
+      .filter((event): event is OctaReplayRun['events'][number] => event !== null)
+      .sort((a, b) => a.frame - b.frame);
+
+    const parsedGhostFrames = Array.isArray(parsed.ghostFrames)
+      ? parsed.ghostFrames
+      : [];
+    const ghostFrames = parsedGhostFrames
+      .map((entry) => {
+        const value = entry as {
+          frame?: unknown;
+          x?: unknown;
+          y?: unknown;
+          z?: unknown;
+        };
+        const frame = Number(value.frame);
+        const x = Number(value.x);
+        const y = Number(value.y);
+        const z = Number(value.z);
+        if (
+          !Number.isFinite(frame) ||
+          frame < 0 ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(z)
+        ) {
+          return null;
+        }
+        return {
+          frame: Math.floor(frame),
+          x,
+          y,
+          z,
+        };
+      })
+      .filter((entry): entry is OctaReplayRun['ghostFrames'][number] => entry !== null)
+      .sort((a, b) => a.frame - b.frame);
+
+    return {
+      version: 1,
+      seed: Math.floor(seed),
+      mode,
+      cameraMode,
+      recordedAt: Number.isFinite(recordedAt) ? recordedAt : Date.now(),
+      totalFrames: Math.max(0, Math.floor(totalFrames)),
+      finalScore: Number.isFinite(finalScore) ? Math.floor(finalScore) : 0,
+      finalDistance: Number.isFinite(finalDistance) ? finalDistance : 0,
+      finalTime: Number.isFinite(finalTime) ? finalTime : 0,
+      outcome,
+      endReason,
+      events,
+      ghostFrames,
+    };
+  } catch {
+    return null;
+  }
+};
+
 const persistVariantProgress = () => {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(STORAGE_KEYS.tileVariant, octaSurgeState.tileVariant);
@@ -106,7 +222,18 @@ const unlockNextVariant = () => {
 const cloneReplayRun = (run: OctaReplayRun): OctaReplayRun => ({
   ...run,
   events: run.events.map((event) => ({ ...event })),
+  ghostFrames: run.ghostFrames.map((frame) => ({ ...frame })),
 });
+
+const persistReplay = () => {
+  if (typeof localStorage === 'undefined') return;
+  const replay = octaSurgeState.lastReplay;
+  if (!replay) {
+    localStorage.removeItem(STORAGE_KEYS.lastReplay);
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.lastReplay, JSON.stringify(replay));
+};
 
 export const octaSurgeState = proxy({
   phase: 'menu' as OctaSurgePhase,
@@ -147,6 +274,7 @@ export const octaSurgeState = proxy({
 
   crashReason: '',
   worldSeed: randomSeed(),
+  replayMode: 'off' as OctaReplayModeState,
   lastReplay: null as OctaReplayRun | null,
   replayPlaybackQueue: null as OctaReplayRun | null,
 
@@ -186,8 +314,25 @@ export const octaSurgeState = proxy({
     this.crashReason = reason;
   },
 
+  setReplayMode(mode: OctaReplayModeState) {
+    this.replayMode = mode;
+  },
+
+  exportLastReplay() {
+    if (!this.lastReplay) return '';
+    return JSON.stringify(this.lastReplay);
+  },
+
+  importReplay(raw: string) {
+    const parsed = parseReplayRun(raw);
+    if (!parsed) return false;
+    this.setLastReplay(parsed);
+    return true;
+  },
+
   setLastReplay(replay: OctaReplayRun | null) {
     this.lastReplay = replay ? cloneReplayRun(replay) : null;
+    persistReplay();
   },
 
   queueReplayPlayback(replay?: OctaReplayRun) {
@@ -206,6 +351,7 @@ export const octaSurgeState = proxy({
   start() {
     this.phase = 'playing';
     this.crashReason = '';
+    this.replayMode = 'off';
     this.score = 0;
     this.combo = 0;
     this.multiplier = 1;
@@ -229,6 +375,7 @@ export const octaSurgeState = proxy({
 
   end() {
     this.phase = 'gameover';
+    this.replayMode = 'off';
     if (this.score > this.bestScore) this.bestScore = this.score;
     if (this.mode === 'classic' && this.score > this.bestClassic) {
       this.bestClassic = this.score;
@@ -248,6 +395,7 @@ export const octaSurgeState = proxy({
     this.cameraMode = safeCameraMode(
       localStorage.getItem(STORAGE_KEYS.cameraMode)
     );
+    this.lastReplay = parseReplayRun(localStorage.getItem(STORAGE_KEYS.lastReplay));
 
     this.styleShards = Math.max(
       0,
@@ -295,6 +443,7 @@ export const octaSurgeState = proxy({
     localStorage.setItem(STORAGE_KEYS.fxLevel, this.fxLevel);
     localStorage.setItem(STORAGE_KEYS.cameraMode, this.cameraMode);
     persistVariantProgress();
+    persistReplay();
   },
 
   setTileVariant(variant: OctaTileVariant) {

@@ -57,6 +57,9 @@ const buttonBase: CSSProperties = {
 
 export function OctaSurgeUI({
   onStart,
+  onReplayLast,
+  onExportReplay,
+  onImportReplay,
   onSelectMode,
   onCycleFxLevel,
   onCycleCamera,
@@ -65,6 +68,9 @@ export function OctaSurgeUI({
   onCycleTileVariant,
 }: {
   onStart: () => void;
+  onReplayLast: () => void;
+  onExportReplay: () => void;
+  onImportReplay: () => void;
   onSelectMode: (mode: OctaSurgeMode) => void;
   onCycleFxLevel: () => void;
   onCycleCamera: () => void;
@@ -82,6 +88,7 @@ export function OctaSurgeUI({
   const unlockProgress = nextUnlockTarget
     ? Math.max(0, Math.min(1, snap.styleShards / nextUnlockTarget))
     : 1;
+  const hasReplay = !!snap.lastReplay;
 
   return (
     <div
@@ -267,6 +274,20 @@ export function OctaSurgeUI({
                 Platform {OCTA_PLATFORM_LABEL[snap.currentPlatform]} | Obstacle{' '}
                 {OCTA_OBSTACLE_LABEL[snap.currentObstacle]}
               </div>
+              {snap.replayMode === 'playback' && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontFamily: monoFont,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: 'rgba(145,243,255,0.98)',
+                    letterSpacing: 0.8,
+                  }}
+                >
+                  Replay Playback Active
+                </div>
+              )}
             </div>
 
             {runIsTimed && (
@@ -312,7 +333,7 @@ export function OctaSurgeUI({
                   opacity: 0.72,
                 }}
               >
-                A / D rotate lanes. Space / W flips. Shift slow-mo. Q / E cycles tile style.
+                A / D rotate lanes. Space / W flips. Shift slow-mo. Q / E cycles tile style. R replays last run.
               </div>
             )}
           </>
@@ -643,25 +664,76 @@ export function OctaSurgeUI({
                     portals, trapdoors, and more) and special platforms (conveyors,
                     bouncers, teleports, ghost lanes, sticky zones, crushers) stack on
                     top. Collect style shards to unlock every Apex-inspired tile variant.
+                    {hasReplay && snap.lastReplay && (
+                      <div style={{ marginTop: 8, fontFamily: monoFont, fontSize: 10, opacity: 0.84 }}>
+                        Replay ready: {Math.floor(snap.lastReplay.finalScore)} pts in{' '}
+                        {snap.lastReplay.finalTime.toFixed(1)}s ({snap.lastReplay.events.length} inputs)
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    onClick={onStart}
-                    style={{
-                      ...buttonBase,
-                      borderRadius: 14,
-                      padding: '12px 18px',
-                      fontSize: 13,
-                      background:
-                        'linear-gradient(135deg, rgba(101,239,255,0.48), rgba(255,168,96,0.42))',
-                      color: '#041018',
-                      textShadow: 'none',
-                    }}
-                  >
-                    {snap.phase === 'gameover'
-                      ? 'Re-Initialize Link'
-                      : 'Initialize Link'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {hasReplay && (
+                      <button
+                        onClick={onReplayLast}
+                        style={{
+                          ...buttonBase,
+                          borderRadius: 14,
+                          padding: '12px 16px',
+                          fontSize: 12,
+                          background:
+                            'linear-gradient(135deg, rgba(148,231,255,0.32), rgba(113,199,255,0.28))',
+                        }}
+                      >
+                        Replay Last Run (R)
+                      </button>
+                    )}
+                    {hasReplay && (
+                      <button
+                        onClick={onExportReplay}
+                        style={{
+                          ...buttonBase,
+                          borderRadius: 14,
+                          padding: '12px 16px',
+                          fontSize: 12,
+                          background:
+                            'linear-gradient(135deg, rgba(121,219,255,0.24), rgba(108,174,255,0.22))',
+                        }}
+                      >
+                        Copy Replay
+                      </button>
+                    )}
+                    <button
+                      onClick={onImportReplay}
+                      style={{
+                        ...buttonBase,
+                        borderRadius: 14,
+                        padding: '12px 16px',
+                        fontSize: 12,
+                        background:
+                          'linear-gradient(135deg, rgba(95,188,255,0.22), rgba(88,146,255,0.2))',
+                      }}
+                    >
+                      Import Replay
+                    </button>
+                    <button
+                      onClick={onStart}
+                      style={{
+                        ...buttonBase,
+                        borderRadius: 14,
+                        padding: '12px 18px',
+                        fontSize: 13,
+                        background:
+                          'linear-gradient(135deg, rgba(101,239,255,0.48), rgba(255,168,96,0.42))',
+                        color: '#041018',
+                        textShadow: 'none',
+                      }}
+                    >
+                      {snap.phase === 'gameover'
+                        ? 'Re-Initialize Link'
+                        : 'Initialize Link'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

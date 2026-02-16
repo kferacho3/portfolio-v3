@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
   unlockedVariants: 'rachos-fun-octasurge-unlocked-variants-v1',
   variantUnlockTier: 'rachos-fun-octasurge-variant-tier-v1',
   styleShards: 'rachos-fun-octasurge-style-shards-v1',
+  lastReplay: 'rachos-fun-octasurge-last-replay-v1',
 };
 
 export const CAMERA_MODE_LABEL: Record<OctaCameraMode, string> = {

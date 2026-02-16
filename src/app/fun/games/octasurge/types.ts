@@ -98,7 +98,16 @@ export type OctaReplayInputEvent = {
   action: OctaReplayInputAction;
 };
 
+export type OctaReplayGhostFrame = {
+  frame: number;
+  x: number;
+  y: number;
+  z: number;
+};
+
 export type OctaReplayOutcome = 'complete' | 'death' | 'abort';
+
+export type OctaReplayModeState = 'off' | 'record' | 'playback';
 
 export type OctaReplayRun = {
   version: 1;
@@ -113,4 +122,5 @@ export type OctaReplayRun = {
   outcome: OctaReplayOutcome;
   endReason: string;
   events: OctaReplayInputEvent[];
+  ghostFrames: OctaReplayGhostFrame[];
 };
