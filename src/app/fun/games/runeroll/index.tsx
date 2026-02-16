@@ -465,6 +465,22 @@ const faceColorHex = (faceColor: FaceColor) =>
 const faceEmissiveHex = (faceColor: FaceColor) =>
   faceColor === null ? '#0d1220' : runeEdgeColor(faceColor);
 
+const baseFaceIntensity = (faceColor: FaceColor, faceIndex: number) => {
+  if (faceColor === null) {
+    return 0.08;
+  }
+
+  if (faceIndex === 0) {
+    return 0.8;
+  }
+
+  if (faceIndex === 1) {
+    return 0.82;
+  }
+
+  return 0.76;
+};
+
 const tileColorFor = (
   tile: Tile,
   isCurrent: boolean,
@@ -472,10 +488,6 @@ const tileColorFor = (
 ) => {
   if (isCurrent) {
     return tileCurrentTint;
-  }
-
-  if (consumedPickup) {
-    return tileBaseColor;
   }
 
   if (tile.type === 'start') {
@@ -486,8 +498,12 @@ const tileColorFor = (
     return tileEndColor;
   }
 
-  if (tile.type === 'pickup' || tile.type === 'match') {
-    return new THREE.Color(runeEdgeColor(tile.color)).lerp(tileBaseColor, 0.28);
+  if (tile.type === 'pickup') {
+    return new THREE.Color(tile.color).lerp(tileBaseColor, consumedPickup ? 0.12 : 0.22);
+  }
+
+  if (tile.type === 'match') {
+    return new THREE.Color(runeEdgeColor(tile.color)).lerp(tileBaseColor, 0.24);
   }
 
   if (tile.type === 'wipe') {
@@ -661,15 +677,25 @@ function RuneBoard() {
               </mesh>
             )}
 
-            {tile.type === 'pickup' && !pickupConsumed && (
+            {tile.type === 'pickup' && (
               <>
                 <mesh position={[0, MARKER_Y, 0]} rotation={[-Math.PI * 0.5, 0, 0]}>
                   <ringGeometry args={[0.14, 0.26, 32]} />
-                  <meshBasicMaterial color={tile.color} toneMapped={false} />
+                  <meshBasicMaterial
+                    color={tile.color}
+                    transparent
+                    opacity={pickupConsumed ? 0.46 : 1}
+                    toneMapped={false}
+                  />
                 </mesh>
                 <mesh position={[0, MARKER_Y + 0.02, 0]}>
                   <boxGeometry args={[0.14, 0.04, 0.14]} />
-                  <meshBasicMaterial color={tile.color} toneMapped={false} />
+                  <meshBasicMaterial
+                    color={tile.color}
+                    transparent
+                    opacity={pickupConsumed ? 0.55 : 1}
+                    toneMapped={false}
+                  />
                 </mesh>
               </>
             )}
@@ -726,6 +752,9 @@ function RuneCube() {
 
   const pivotRef = useRef<THREE.Group>(null);
   const cubeRef = useRef<THREE.Group>(null);
+  const faceMaterialRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
+    Array.from({ length: 6 }, () => null)
+  );
   const displayFaces = useMemo<FaceColors>(() => {
     if (
       !animation ||
@@ -750,6 +779,21 @@ function RuneCube() {
     const state = useRuneRollStore.getState();
     const level = RUNE_LEVELS[state.levelIndex];
     const animation = state.animation;
+    const updateFaceGlow = (pulseBoost = 0) => {
+      for (let i = 0; i < 6; i += 1) {
+        const material = faceMaterialRefs.current[i];
+        if (!material) continue;
+
+        const base = baseFaceIntensity(displayFaces[i], i);
+        const boost =
+          animation &&
+          animation.pickupVisualFaceIndex !== null &&
+          animation.pickupVisualFaceIndex === i
+            ? pulseBoost
+            : 0;
+        material.emissiveIntensity = base + boost;
+      }
+    };
 
     if (!animation) {
       const world = gridToWorld(level, state.position);
@@ -757,6 +801,7 @@ function RuneCube() {
       pivot.rotation.set(0, 0, 0);
       cube.position.set(0, CUBE_SIZE * 0.5, 0);
       cube.scale.set(1, 1, 1);
+      updateFaceGlow(0);
       return;
     }
 
@@ -792,6 +837,8 @@ function RuneCube() {
     const stretch = 1 + Math.sin(Math.PI * t) * 0.085;
     const side = 1 / Math.sqrt(stretch);
     cube.scale.set(side, stretch, side);
+    const pickupPulse = Math.sin(Math.PI * t) * 1.15;
+    updateFaceGlow(pickupPulse);
 
     if (t >= 1) {
       finishAnimation();
@@ -817,9 +864,12 @@ function RuneCube() {
         <mesh position={[0, half - FACE_DEPTH * 0.5 - FACE_INSET, 0]}>
           <boxGeometry args={[FACE_SIZE, FACE_DEPTH, FACE_SIZE]} />
           <meshStandardMaterial
+            ref={(material) => {
+              faceMaterialRefs.current[0] = material;
+            }}
             color={faceColorHex(displayFaces[0])}
             emissive={faceEmissiveHex(displayFaces[0])}
-            emissiveIntensity={displayFaces[0] === null ? 0.08 : 0.8}
+            emissiveIntensity={baseFaceIntensity(displayFaces[0], 0)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -828,9 +878,12 @@ function RuneCube() {
         <mesh position={[0, -half + FACE_DEPTH * 0.5 + FACE_INSET, 0]}>
           <boxGeometry args={[FACE_SIZE, FACE_DEPTH, FACE_SIZE]} />
           <meshStandardMaterial
+            ref={(material) => {
+              faceMaterialRefs.current[1] = material;
+            }}
             color={faceColorHex(displayFaces[1])}
             emissive={faceEmissiveHex(displayFaces[1])}
-            emissiveIntensity={displayFaces[1] === null ? 0.08 : 0.82}
+            emissiveIntensity={baseFaceIntensity(displayFaces[1], 1)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -839,9 +892,12 @@ function RuneCube() {
         <mesh position={[0, 0, half - FACE_DEPTH * 0.5 - FACE_INSET]}>
           <boxGeometry args={[FACE_SIZE, FACE_SIZE, FACE_DEPTH]} />
           <meshStandardMaterial
+            ref={(material) => {
+              faceMaterialRefs.current[2] = material;
+            }}
             color={faceColorHex(displayFaces[2])}
             emissive={faceEmissiveHex(displayFaces[2])}
-            emissiveIntensity={displayFaces[2] === null ? 0.08 : 0.76}
+            emissiveIntensity={baseFaceIntensity(displayFaces[2], 2)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -850,9 +906,12 @@ function RuneCube() {
         <mesh position={[0, 0, -half + FACE_DEPTH * 0.5 + FACE_INSET]}>
           <boxGeometry args={[FACE_SIZE, FACE_SIZE, FACE_DEPTH]} />
           <meshStandardMaterial
+            ref={(material) => {
+              faceMaterialRefs.current[3] = material;
+            }}
             color={faceColorHex(displayFaces[3])}
             emissive={faceEmissiveHex(displayFaces[3])}
-            emissiveIntensity={displayFaces[3] === null ? 0.08 : 0.76}
+            emissiveIntensity={baseFaceIntensity(displayFaces[3], 3)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -861,9 +920,12 @@ function RuneCube() {
         <mesh position={[-half + FACE_DEPTH * 0.5 + FACE_INSET, 0, 0]}>
           <boxGeometry args={[FACE_DEPTH, FACE_SIZE, FACE_SIZE]} />
           <meshStandardMaterial
+            ref={(material) => {
+              faceMaterialRefs.current[4] = material;
+            }}
             color={faceColorHex(displayFaces[4])}
             emissive={faceEmissiveHex(displayFaces[4])}
-            emissiveIntensity={displayFaces[4] === null ? 0.08 : 0.76}
+            emissiveIntensity={baseFaceIntensity(displayFaces[4], 4)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -872,9 +934,12 @@ function RuneCube() {
         <mesh position={[half - FACE_DEPTH * 0.5 - FACE_INSET, 0, 0]}>
           <boxGeometry args={[FACE_DEPTH, FACE_SIZE, FACE_SIZE]} />
           <meshStandardMaterial
+            ref={(material) => {
+              faceMaterialRefs.current[5] = material;
+            }}
             color={faceColorHex(displayFaces[5])}
             emissive={faceEmissiveHex(displayFaces[5])}
-            emissiveIntensity={displayFaces[5] === null ? 0.08 : 0.76}
+            emissiveIntensity={baseFaceIntensity(displayFaces[5], 5)}
             roughness={0.3}
             metalness={0.14}
           />
