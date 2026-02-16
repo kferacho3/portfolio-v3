@@ -7,6 +7,16 @@ export const DIRECTION_VECTORS: Record<Direction, GridPos> = {
   right: [1, 0],
 };
 
+export type VectorDirection = readonly [dx: number, dz: number];
+export type Faces<T> = readonly [T, T, T, T, T, T];
+
+export const DIR = {
+  UP: [0, -1] as const,
+  DOWN: [0, 1] as const,
+  LEFT: [-1, 0] as const,
+  RIGHT: [1, 0] as const,
+} as const;
+
 export const HALF_PI = Math.PI * 0.5;
 
 export const clamp = (value: number, min: number, max: number) =>
@@ -35,6 +45,33 @@ export const rotateFaces = (faces: FaceColors, direction: Direction): FaceColors
   }
 
   return [faces[4], faces[5], faces[2], faces[3], faces[1], faces[0]];
+};
+
+export const rotateFacesByVector = (
+  faces: FaceColors,
+  direction: VectorDirection
+): FaceColors => {
+  const [dx, dz] = direction;
+  if (dz === -1) return rotateFaces(faces, 'up');
+  if (dz === 1) return rotateFaces(faces, 'down');
+  if (dx === -1) return rotateFaces(faces, 'left');
+  if (dx === 1) return rotateFaces(faces, 'right');
+  return faces;
+};
+
+// Three.js BoxGeometry material index order:
+// 0:+X (Right), 1:-X (Left), 2:+Y (Top), 3:-Y (Bottom), 4:+Z (Front), 5:-Z (Back)
+// Logical order used by Rune Roll:
+// [Top, Bottom, Front, Back, Left, Right]
+export const LOGICAL_TO_BOX_MAT_INDEX = [2, 3, 4, 5, 1, 0] as const;
+
+export const logicalColorsToBoxOrder = (colors: FaceColors): Array<string | null> => {
+  const out: Array<string | null> = new Array(6).fill(null);
+  for (let logical = 0; logical < 6; logical += 1) {
+    const matIndex = LOGICAL_TO_BOX_MAT_INDEX[logical];
+    out[matIndex] = colors[logical];
+  }
+  return out;
 };
 
 export const starsForMoves = (par: number, moves: number) => {

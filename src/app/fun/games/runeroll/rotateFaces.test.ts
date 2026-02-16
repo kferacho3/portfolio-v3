@@ -1,56 +1,41 @@
 // @ts-nocheck
-import { rotateFaces } from './engine';
+import { describe, expect, test } from 'vitest';
+import { DIR, rotateFacesByVector } from './engine';
 
-const empty = [null, null, null, null, null, null];
+const EMPTY = [null, null, null, null, null, null] as const;
 
-const toDirection = (vector: [number, number]) => {
-  const [dx, dy] = vector;
-  if (dx === 0 && dy === -1) return 'up';
-  if (dx === 0 && dy === 1) return 'down';
-  if (dx === -1 && dy === 0) return 'left';
-  if (dx === 1 && dy === 0) return 'right';
-  throw new Error(`Invalid direction vector [${dx}, ${dy}]`);
-};
-
-const roll = (cube: any[], vector: [number, number]) =>
-  rotateFaces(cube as any, toDirection(vector));
-
-describe('Cube Rotation Integrity', () => {
-  test('UP 4 times returns to original', () => {
-    let cube = [...empty];
-    for (let i = 0; i < 4; i += 1) {
-      cube = roll(cube, [0, -1]);
-    }
-    expect(cube).toEqual(empty);
+describe('rotateFaces invariants', () => {
+  test('UP 4x returns to original', () => {
+    let f = EMPTY as any;
+    for (let i = 0; i < 4; i++) f = rotateFacesByVector(f, DIR.UP);
+    expect(f).toEqual(EMPTY);
   });
 
-  test('RIGHT 4 times returns to original', () => {
-    let cube = [...empty];
-    for (let i = 0; i < 4; i += 1) {
-      cube = roll(cube, [1, 0]);
-    }
-    expect(cube).toEqual(empty);
+  test('RIGHT 4x returns to original', () => {
+    let f = EMPTY as any;
+    for (let i = 0; i < 4; i++) f = rotateFacesByVector(f, DIR.RIGHT);
+    expect(f).toEqual(EMPTY);
   });
 
   test('UP then DOWN cancels', () => {
-    let cube = roll(empty, [0, -1]);
-    cube = roll(cube, [0, 1]);
-    expect(cube).toEqual(empty);
+    const f = rotateFacesByVector(rotateFacesByVector(EMPTY, DIR.UP), DIR.DOWN);
+    expect(f).toEqual(EMPTY);
   });
 
   test('LEFT then RIGHT cancels', () => {
-    let cube = roll(empty, [-1, 0]);
-    cube = roll(cube, [1, 0]);
-    expect(cube).toEqual(empty);
+    const f = rotateFacesByVector(rotateFacesByVector(EMPTY, DIR.LEFT), DIR.RIGHT);
+    expect(f).toEqual(EMPTY);
   });
 
-  test('Complex rotation preserves uniqueness', () => {
-    let cube = ['T', 'B', 'F', 'Ba', 'L', 'R'];
-    cube = roll(cube, [0, -1]);
-    cube = roll(cube, [1, 0]);
-    cube = roll(cube, [0, 1]);
-    cube = roll(cube, [-1, 0]);
-
-    expect(new Set(cube).size).toBe(6);
+  test('rotation is a permutation (no duplication / loss)', () => {
+    const labeled = ['T', 'B', 'F', 'Ba', 'L', 'R'] as const;
+    const f = rotateFacesByVector(
+      rotateFacesByVector(
+        rotateFacesByVector(rotateFacesByVector(labeled, DIR.UP), DIR.RIGHT),
+        DIR.DOWN
+      ),
+      DIR.LEFT
+    );
+    expect(new Set(f).size).toBe(6);
   });
 });

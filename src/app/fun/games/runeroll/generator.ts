@@ -127,10 +127,11 @@ export const replayLevelPath = (level: Level, path: GridPos[]): ReplayResult => 
 
     const interaction = applyTileRules(faces, tile, current, consumedPickups);
     if (!interaction.valid) {
+      const reason = 'reason' in interaction ? interaction.reason : 'Unknown tile interaction failure.';
       return {
         valid: false,
         step: i,
-        reason: interaction.reason,
+        reason,
       };
     }
   }
@@ -194,7 +195,8 @@ export const generateSolvableLevelWithPath = (size: number) => {
 
   const replay = replayLevelPath(level, path);
   if (!replay.valid) {
-    throw new Error(`Generated level failed replay validation at step ${replay.step}: ${replay.reason}`);
+    const { step, reason } = replay as Extract<ReplayResult, { valid: false }>;
+    throw new Error(`Generated level failed replay validation at step ${step}: ${reason}`);
   }
 
   return { level, path };
