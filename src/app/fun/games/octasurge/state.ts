@@ -15,6 +15,7 @@ import type {
   OctaObstacleType,
   OctaPathStyle,
   OctaPlatformType,
+  OctaReplayRun,
   OctaSurgeMode,
   OctaSurgePhase,
   OctaTileVariant,
@@ -102,6 +103,11 @@ const unlockNextVariant = () => {
   octaSurgeState.lastUnlockedVariant = next;
 };
 
+const cloneReplayRun = (run: OctaReplayRun): OctaReplayRun => ({
+  ...run,
+  events: run.events.map((event) => ({ ...event })),
+});
+
 export const octaSurgeState = proxy({
   phase: 'menu' as OctaSurgePhase,
   mode: 'classic' as OctaSurgeMode,
@@ -141,6 +147,8 @@ export const octaSurgeState = proxy({
 
   crashReason: '',
   worldSeed: randomSeed(),
+  lastReplay: null as OctaReplayRun | null,
+  replayPlaybackQueue: null as OctaReplayRun | null,
 
   setMode(mode: OctaSurgeMode) {
     this.mode = mode;
@@ -176,6 +184,23 @@ export const octaSurgeState = proxy({
 
   setCrashReason(reason: string) {
     this.crashReason = reason;
+  },
+
+  setLastReplay(replay: OctaReplayRun | null) {
+    this.lastReplay = replay ? cloneReplayRun(replay) : null;
+  },
+
+  queueReplayPlayback(replay?: OctaReplayRun) {
+    const source = replay ?? this.lastReplay;
+    if (!source) return false;
+    this.replayPlaybackQueue = cloneReplayRun(source);
+    return true;
+  },
+
+  consumeReplayPlayback() {
+    const replay = this.replayPlaybackQueue;
+    this.replayPlaybackQueue = null;
+    return replay ? cloneReplayRun(replay) : null;
   },
 
   start() {

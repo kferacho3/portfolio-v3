@@ -37,6 +37,11 @@ import type {
   OctaCameraMode,
   OctaObstacleType,
   OctaPlatformType,
+  OctaReplayInputAction,
+  OctaReplayInputEvent,
+  OctaReplayOutcome,
+  OctaReplayRun,
+  OctaSurgeMode,
   OctaTileVariant,
   SegmentLanePattern,
   SegmentPattern,
@@ -108,6 +113,19 @@ type DeathFxState = {
   type: 'void' | 'obstacle';
 };
 
+type ReplayMode = 'record' | 'playback';
+
+type ReplayRuntime = {
+  mode: ReplayMode;
+  seed: number;
+  runMode: OctaSurgeMode;
+  cameraMode: OctaCameraMode;
+  frame: number;
+  events: OctaReplayInputEvent[];
+  playbackEvents: OctaReplayInputEvent[];
+  playbackCursor: number;
+};
+
 type FxParticle = {
   active: boolean;
   x: number;
@@ -129,6 +147,17 @@ type FxParticle = {
   spinVelZ: number;
   color: THREE.Color;
 };
+
+const createReplayRuntime = (): ReplayRuntime => ({
+  mode: 'record',
+  seed: 0,
+  runMode: 'classic',
+  cameraMode: 'chase',
+  frame: 0,
+  events: [],
+  playbackEvents: [],
+  playbackCursor: 0,
+});
 
 const collectibleColor = (type: SegmentPattern['collectibleType']) => {
   if (type === 'core') return '#f5b865';
@@ -312,6 +341,7 @@ export default function OctaSurge() {
       'v',
       'q',
       'e',
+      'r',
       'shift',
     ],
   });
@@ -364,6 +394,8 @@ export default function OctaSurge() {
   const fixedStepperRef = useRef(createFixedStepper(1 / 120, 0.05, 8));
   const turnQueueRef = useRef<Array<-1 | 1>>([]);
   const flipQueueRef = useRef(0);
+  const replayRef = useRef<ReplayRuntime>(createReplayRuntime());
+  const queuedReplayRef = useRef<OctaReplayRun | null>(null);
   const trailEmitRef = useRef(0);
   const fxParticlesRef = useRef<FxParticle[]>(
     Array.from({ length: FX_PARTICLE_COUNT }, () => createFxParticle())
@@ -1001,13 +1033,74 @@ export default function OctaSurge() {
     return clamp(bassNorm * 0.7 + midNorm * 0.55, 0, 1);
   }, []);
 
+  const queueReplayInput = useCallback((action: OctaReplayInputAction) => {
+    const replay = replayRef.current;
+    if (replay.mode !== 'record') return;
+    replay.events.push({
+      frame: replay.frame + 1,
+      action,
+    });
+  }, []);
+
+  const finalizeReplay = useCallback(
+    (params: {
+      outcome: OctaReplayOutcome;
+      endReason: string;
+      score: number;
+      distance: number;
+      runTime: number;
+    }) => {
+      const replay = replayRef.current;
+      if (replay.mode !== 'record') return;
+
+      const replayRun: OctaReplayRun = {
+        version: 1,
+        seed: replay.seed,
+        mode: replay.runMode,
+        cameraMode: replay.cameraMode,
+        recordedAt: Date.now(),
+        totalFrames: replay.frame,
+        finalScore: Math.floor(params.score),
+        finalDistance: params.distance,
+        finalTime: params.runTime,
+        outcome: params.outcome,
+        endReason: params.endReason,
+        events: replay.events.map((event) => ({ ...event })),
+      };
+      octaSurgeState.setLastReplay(replayRun);
+    },
+    []
+  );
+
   const initializeRun = useCallback(() => {
+    startAudio();
+
     const state = useOctaRuntimeStore.getState();
     state.resetRun({
       seed: snap.worldSeed,
       mode: snap.mode,
       cameraMode: snap.cameraMode,
     });
+
+    const replay = replayRef.current;
+    const queuedReplay = queuedReplayRef.current;
+    replay.frame = 0;
+    replay.seed = snap.worldSeed;
+    replay.runMode = snap.mode;
+    replay.cameraMode = snap.cameraMode;
+    replay.events = [];
+    replay.playbackCursor = 0;
+    if (queuedReplay) {
+      replay.mode = 'playback';
+      replay.playbackEvents = queuedReplay.events
+        .map((event) => ({ ...event }))
+        .sort((a, b) => a.frame - b.frame);
+    } else {
+      replay.mode = 'record';
+      replay.playbackEvents = [];
+    }
+    queuedReplayRef.current = null;
+
     fixedStepperRef.current.reset();
     turnQueueRef.current.length = 0;
     flipQueueRef.current = 0;
@@ -1097,6 +1190,7 @@ export default function OctaSurge() {
     syncInstances(0, 0, 0, snap.tileVariant);
   }, [
     levelGen,
+    startAudio,
     snap.cameraMode,
     snap.mode,
     snap.worldSeed,
@@ -1106,15 +1200,26 @@ export default function OctaSurge() {
   ]);
 
   const startRun = useCallback(() => {
+    const replayPlayback = octaSurgeState.consumeReplayPlayback();
+    queuedReplayRef.current = replayPlayback;
+
+    if (replayPlayback) {
+      octaSurgeState.setMode(replayPlayback.mode);
+      useOctaRuntimeStore.setState({ cameraMode: replayPlayback.cameraMode });
+      octaSurgeState.setCameraMode(replayPlayback.cameraMode);
+    }
+
     fixedStepperRef.current.reset();
     turnQueueRef.current.length = 0;
     flipQueueRef.current = 0;
-    startAudio();
     octaSurgeState.start();
-  }, [startAudio]);
+    if (replayPlayback) {
+      octaSurgeState.worldSeed = replayPlayback.seed;
+    }
+  }, []);
 
   const endRun = useCallback(
-    (reason: string) => {
+    (reason: string, outcome: OctaReplayOutcome) => {
       const runtime = useOctaRuntimeStore.getState();
       const stage = stageById(runtime.stageId);
       const runGoal =
@@ -1144,10 +1249,18 @@ export default function OctaSurge() {
         currentObstacle: octaSurgeState.currentObstacle,
       });
 
+      finalizeReplay({
+        outcome,
+        endReason: reason,
+        score: runtime.score,
+        distance: runtime.distance,
+        runTime: runtime.runTime,
+      });
+
       octaSurgeState.setCrashReason(reason);
       octaSurgeState.end();
     },
-    [snap.mode]
+    [finalizeReplay, snap.mode]
   );
 
   useEffect(() => {
@@ -1217,6 +1330,7 @@ export default function OctaSurge() {
       input.justPressed.has(' ') ||
       input.justPressed.has('space') ||
       input.justPressed.has('spacebar');
+    const replayTap = input.justPressed.has('r');
 
     const runtimeBefore = useOctaRuntimeStore.getState();
 
@@ -1224,7 +1338,11 @@ export default function OctaSurge() {
       fixedStepperRef.current.reset();
       turnQueueRef.current.length = 0;
       flipQueueRef.current = 0;
-      if (wantsStart) startRun();
+      if (replayTap && octaSurgeState.queueReplayPlayback()) {
+        startRun();
+      } else if (wantsStart) {
+        startRun();
+      }
 
       if (worldRef.current) {
         worldRef.current.rotation.z =
@@ -1290,7 +1408,7 @@ export default function OctaSurge() {
       updateFxParticles(frameDelta);
       if (finished) {
         const reason = deathFxRef.current.reason || 'Connection dropped.';
-        endRun(reason);
+        endRun(reason, 'death');
       }
       clearFrameInput(inputRef);
       return;
@@ -1327,21 +1445,26 @@ export default function OctaSurge() {
     } = runtimeBefore;
     let currentPlatform = octaSurgeState.currentPlatform as OctaPlatformType;
     let currentObstacle = octaSurgeState.currentObstacle as OctaObstacleType;
+    const replayRuntime = replayRef.current;
+    const replayPlayback = replayRuntime.mode === 'playback';
 
     const leftTap =
-      input.justPressed.has('arrowleft') ||
-      input.justPressed.has('a') ||
-      (input.pointerJustDown && input.pointerX < -0.2);
+      !replayPlayback &&
+      (input.justPressed.has('arrowleft') ||
+        input.justPressed.has('a') ||
+        (input.pointerJustDown && input.pointerX < -0.2));
     const rightTap =
-      input.justPressed.has('arrowright') ||
-      input.justPressed.has('d') ||
-      (input.pointerJustDown && input.pointerX > 0.2);
+      !replayPlayback &&
+      (input.justPressed.has('arrowright') ||
+        input.justPressed.has('d') ||
+        (input.pointerJustDown && input.pointerX > 0.2));
     const flipTap =
-      input.justPressed.has('arrowup') ||
-      input.justPressed.has('w') ||
-      input.justPressed.has('space') ||
-      input.justPressed.has('spacebar');
-    const slowTap = input.justPressed.has('shift');
+      !replayPlayback &&
+      (input.justPressed.has('arrowup') ||
+        input.justPressed.has('w') ||
+        input.justPressed.has('space') ||
+        input.justPressed.has('spacebar'));
+    const slowTap = !replayPlayback && input.justPressed.has('shift');
     const stylePrevTap = input.justPressed.has('q');
     const styleNextTap = input.justPressed.has('e');
     const cameraTap =
@@ -1358,11 +1481,17 @@ export default function OctaSurge() {
     if (leftTap !== rightTap) {
       const queue = turnQueueRef.current;
       const direction: -1 | 1 = leftTap ? -1 : 1;
-      if (queue.length < 5) queue.push(direction);
+      if (queue.length < 5) {
+        queue.push(direction);
+        queueReplayInput(direction < 0 ? 'turn_left' : 'turn_right');
+      }
     }
     if (flipTap) {
+      const previous = flipQueueRef.current;
       flipQueueRef.current = Math.min(3, flipQueueRef.current + 1);
+      if (flipQueueRef.current > previous) queueReplayInput('flip');
     }
+    if (slowTap) queueReplayInput('slow_mo');
 
     if (stylePrevTap) octaSurgeState.cycleTileVariant(-1);
     if (styleNextTap) octaSurgeState.cycleTileVariant(1);
@@ -1753,6 +1882,34 @@ export default function OctaSurge() {
 
     fixedStepperRef.current.tick(frameDelta, (fixedDelta) => {
       if (endReason) return;
+      replayRuntime.frame += 1;
+
+      if (replayRuntime.mode === 'playback') {
+        const events = replayRuntime.playbackEvents;
+        while (replayRuntime.playbackCursor < events.length) {
+          const event = events[replayRuntime.playbackCursor];
+          if (event.frame > replayRuntime.frame) break;
+          replayRuntime.playbackCursor += 1;
+          if (event.frame < replayRuntime.frame) continue;
+
+          if (event.action === 'turn_left' || event.action === 'turn_right') {
+            const queue = turnQueueRef.current;
+            const direction: -1 | 1 = event.action === 'turn_left' ? -1 : 1;
+            if (queue.length < 5) queue.push(direction);
+            continue;
+          }
+
+          if (event.action === 'flip') {
+            flipQueueRef.current = Math.min(3, flipQueueRef.current + 1);
+            continue;
+          }
+
+          if (event.action === 'slow_mo') {
+            slowTapPending = true;
+          }
+        }
+      }
+
       simulateStep(fixedDelta);
     });
 
@@ -1917,7 +2074,7 @@ export default function OctaSurge() {
         );
       }
       updateFxParticles(delta);
-      endRun('Run complete. Packet escaped the corrupted fiber core.');
+      endRun('Run complete. Packet escaped the corrupted fiber core.', 'complete');
       clearFrameInput(inputRef);
       return;
     }

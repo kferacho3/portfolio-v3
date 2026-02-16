@@ -86,3 +86,31 @@ export type SegmentPattern = {
   stageId: number;
   checked: boolean;
 };
+
+export type OctaReplayInputAction =
+  | 'turn_left'
+  | 'turn_right'
+  | 'flip'
+  | 'slow_mo';
+
+export type OctaReplayInputEvent = {
+  frame: number;
+  action: OctaReplayInputAction;
+};
+
+export type OctaReplayOutcome = 'complete' | 'death' | 'abort';
+
+export type OctaReplayRun = {
+  version: 1;
+  seed: number;
+  mode: OctaSurgeMode;
+  cameraMode: OctaCameraMode;
+  recordedAt: number;
+  totalFrames: number;
+  finalScore: number;
+  finalDistance: number;
+  finalTime: number;
+  outcome: OctaReplayOutcome;
+  endReason: string;
+  events: OctaReplayInputEvent[];
+};
