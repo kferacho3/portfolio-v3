@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  Environment,
-  MeshTransmissionMaterial,
-  Stars,
-} from '@react-three/drei';
+import { Environment, Stars } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import {
   Bloom,
@@ -30,7 +26,13 @@ import {
   STAGE_PROFILES,
 } from './constants';
 import { createFixedStepper } from './engine/fixedStep';
-import { laneBit, normalizeLane, useLevelGen } from './generator';
+import {
+  createRingRunGenerator,
+  laneBit,
+  normalizeLane,
+} from './level/generator';
+import type { RingData, RingLaneMeta } from './level/types';
+import { TunnelMesh } from './render/TunnelMesh';
 import { useOctaRuntimeStore } from './runtime';
 import { octaSurgeState } from './state';
 import type {
@@ -43,10 +45,6 @@ import type {
   OctaReplayOutcome,
   OctaReplayRun,
   OctaSurgeMode,
-  OctaTileVariant,
-  SegmentLanePattern,
-  SegmentPattern,
-  StageProfile,
 } from './types';
 
 export { octaSurgeState } from './state';
@@ -54,11 +52,11 @@ export * from './types';
 export * from './constants';
 
 const TWO_PI = Math.PI * 2;
-const DEATH_PARTICLE_COUNT = 144;
-const FX_PARTICLE_COUNT = 360;
-const PLAYER_TRAIL_POINTS = 46;
+const RING_SPACING = 0.82;
+const VISIBLE_RING_COUNT = 220;
+const MAX_TURN_QUEUE = 6;
+const MAX_FLIP_QUEUE = 4;
 const GHOST_RECORD_STRIDE = 2;
-const WHITE = new THREE.Color('#ffffff');
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -89,7 +87,7 @@ const rotationForLane = (lane: number, sides: number) =>
 const stageById = (id: number) =>
   STAGE_PROFILES.find((stage) => stage.id === id) ?? STAGE_PROFILES[0];
 
-const stageAestheticById = (id: number) =>
+const stageVisualById = (id: number) =>
   STAGE_AESTHETICS[id] ?? STAGE_AESTHETICS[1];
 
 const nextCameraMode = (mode: OctaCameraMode): OctaCameraMode => {
@@ -107,14 +105,6 @@ type AudioGraph = {
   started: boolean;
 };
 
-type DeathFxState = {
-  active: boolean;
-  elapsed: number;
-  hold: number;
-  reason: string;
-  type: 'void' | 'obstacle';
-};
-
 type ReplayMode = 'record' | 'playback';
 
 type ReplayRuntime = {
@@ -129,26 +119,55 @@ type ReplayRuntime = {
   playbackCursor: number;
 };
 
-type FxParticle = {
-  active: boolean;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  life: number;
-  maxLife: number;
-  size: number;
-  drag: number;
-  gravity: number;
-  spinX: number;
-  spinY: number;
-  spinZ: number;
-  spinVelX: number;
-  spinVelY: number;
-  spinVelZ: number;
-  color: THREE.Color;
+type SimState = {
+  laneIndex: number;
+  laneFloat: number;
+  laneVelocity: number;
+  sides: number;
+  targetRotation: number;
+  rotation: number;
+  angularVelocity: number;
+
+  speed: number;
+  distance: number;
+  runTime: number;
+  score: number;
+
+  combo: number;
+  comboTimer: number;
+  multiplier: number;
+
+  stageId: number;
+  stageFlash: number;
+
+  slowMoMeter: number;
+  slowMoTime: number;
+  shardCount: number;
+  syncTimer: number;
+
+  flipPulse: number;
+  dangerPulse: number;
+  audioReactive: number;
+
+  turnCooldown: number;
+  flipCooldown: number;
+
+  scroll: number;
+  baseRing: number;
+  lastCrossedRing: number;
+
+  currentPlatform: OctaPlatformType;
+  currentObstacle: OctaObstacleType;
+
+  ended: boolean;
+  deathType: 'void' | 'obstacle';
+  endReason: string;
+  deathTimer: number;
+};
+
+type ObstacleState = {
+  closedBlend: number;
+  danger: boolean;
 };
 
 const createReplayRuntime = (): ReplayRuntime => ({
@@ -163,78 +182,100 @@ const createReplayRuntime = (): ReplayRuntime => ({
   playbackCursor: 0,
 });
 
-const collectibleColor = (type: SegmentPattern['collectibleType']) => {
-  if (type === 'core') return '#f5b865';
-  if (type === 'sync') return '#94f3ff';
-  return '#73e6ff';
-};
+const createSimState = (startLane: number, sides: number, stageId: number): SimState => ({
+  laneIndex: startLane,
+  laneFloat: startLane,
+  laneVelocity: 0,
+  sides,
+  targetRotation: rotationForLane(startLane, sides),
+  rotation: rotationForLane(startLane, sides),
+  angularVelocity: 0,
 
-const defaultLanePattern = (lane: number): SegmentLanePattern => ({
-  lane,
-  platform: 'standard',
-  platformPhase: 0,
-  obstacle: 'none',
-  obstaclePhase: 0,
-  obstacleCycle: 2.4,
-  obstacleOpenWindow: 2.4,
-  obstacleWindowStart: 0,
+  speed: GAME.baseSpeed,
+  distance: 0,
+  runTime: 0,
+  score: 0,
+
+  combo: 0,
+  comboTimer: 0,
+  multiplier: 1,
+
+  stageId,
+  stageFlash: 1,
+
+  slowMoMeter: 0,
+  slowMoTime: 0,
+  shardCount: 0,
+  syncTimer: 0,
+
+  flipPulse: 0,
+  dangerPulse: 0,
+  audioReactive: 0,
+
+  turnCooldown: 0,
+  flipCooldown: 0,
+
+  scroll: 0,
+  baseRing: 0,
+  lastCrossedRing: -1,
+
+  currentPlatform: 'standard',
+  currentObstacle: 'none',
+
+  ended: false,
+  deathType: 'void',
+  endReason: '',
+  deathTimer: 0,
 });
 
-const lanePatternFor = (segment: SegmentPattern, lane: number): SegmentLanePattern =>
-  segment.lanePatterns[lane] ?? defaultLanePattern(lane);
+const platformBlend = (platform: OctaPlatformType, phase: number, time: number) => {
+  if (platform === 'ghost_platform') {
+    return 0.5 + 0.5 * Math.sin(time * 1.8 + phase * 1.2);
+  }
+  if (platform === 'crushing_ceiling') {
+    return 0.5 + 0.5 * Math.sin(time * 2.2 + phase * 0.9);
+  }
+  if (platform === 'sticky_glue') {
+    return 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 0.8 + phase));
+  }
+  return 0;
+};
 
-const obstacleSeverity = (
-  pattern: SegmentLanePattern,
-  simTime: number
-): { closedBlend: number; danger: boolean } => {
-  if (pattern.obstacle === 'none') return { closedBlend: 0, danger: false };
+const obstacleState = (meta: RingLaneMeta, time: number): ObstacleState => {
+  if (meta.obstacle === 'none') return { closedBlend: 0, danger: false };
 
-  const cycle = Math.max(0.8, pattern.obstacleCycle);
-  const openWindow = clamp(pattern.obstacleOpenWindow, 0.15, cycle);
-  const local = positiveMod(simTime + pattern.obstaclePhase * 0.1, cycle);
-  const openStart = positiveMod(pattern.obstacleWindowStart, cycle);
-  const openEnd = openStart + openWindow;
+  const cycle = Math.max(0.8, meta.obstacleCycle);
+  const openWindow = clamp(meta.obstacleOpenWindow, 0.15, cycle);
+  const local = positiveMod(time + meta.obstaclePhase * 0.1, cycle);
+  const start = positiveMod(meta.obstacleWindowStart, cycle);
+  const end = start + openWindow;
 
   let open = false;
-  if (openEnd <= cycle) {
-    open = local >= openStart && local <= openEnd;
+  if (end <= cycle) {
+    open = local >= start && local <= end;
   } else {
-    open = local >= openStart || local <= openEnd - cycle;
+    open = local >= start || local <= end - cycle;
   }
 
-  const center = positiveMod(openStart + openWindow * 0.5, cycle);
+  const center = positiveMod(start + openWindow * 0.5, cycle);
   const dist = Math.min(
     positiveMod(local - center, cycle),
     positiveMod(center - local, cycle)
   );
   const openRadius = openWindow * 0.5;
   const blend = clamp(1 - dist / Math.max(0.001, openRadius), 0, 1);
-  const closedBlend = open ? 1 - blend * 0.85 : 1;
+  const closedBlend = open ? 1 - blend * 0.86 : 1;
 
-  const dangerThreshold = (() => {
-    if (
-      pattern.obstacle === 'rotating_cross_blades' ||
-      pattern.obstacle === 'laser_grid' ||
-      pattern.obstacle === 'spike_wave'
-    ) {
-      return 0.36;
-    }
-    if (
-      pattern.obstacle === 'gravity_well' ||
-      pattern.obstacle === 'magnetic_field' ||
-      pattern.obstacle === 'trapdoor_row'
-    ) {
-      return 0.46;
-    }
-    if (
-      pattern.obstacle === 'telefrag_portal' ||
-      pattern.obstacle === 'pulse_expander' ||
-      pattern.obstacle === 'rising_lava'
-    ) {
-      return 0.42;
-    }
-    return 0.5;
-  })();
+  const dangerThreshold =
+    meta.obstacle === 'laser_grid' ||
+    meta.obstacle === 'rotating_cross_blades' ||
+    meta.obstacle === 'spike_wave'
+      ? 0.36
+      : meta.obstacle === 'telefrag_portal' ||
+          meta.obstacle === 'pulse_expander' ||
+          meta.obstacle === 'rising_lava'
+        ? 0.42
+        : 0.48;
 
   return {
     closedBlend,
@@ -242,86 +283,42 @@ const obstacleSeverity = (
   };
 };
 
-const platformClosedBlend = (platform: OctaPlatformType, phase: number, simTime: number) => {
-  if (platform === 'ghost_platform') {
-    return 0.5 + 0.5 * Math.sin(simTime * 1.8 + phase * 1.2);
-  }
-  if (platform === 'crushing_ceiling') {
-    return 0.5 + 0.5 * Math.sin(simTime * 2.2 + phase * 0.9);
-  }
-  if (platform === 'sticky_glue') {
-    return 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(simTime * 0.9 + phase));
-  }
-  return 0;
+const collectibleColor = (type: RingData['collectibleType']) => {
+  if (type === 'core') return '#ffcb8d';
+  if (type === 'sync') return '#9ef4ff';
+  return '#78e6ff';
 };
 
-const platformTint = (platform: OctaPlatformType) => {
-  if (
-    platform === 'conveyor_belt' ||
-    platform === 'reverse_conveyor' ||
-    platform === 'speed_ramp'
-  ) {
-    return '#77e8ff';
+const platformColor = (platform: OctaPlatformType) => {
+  if (platform === 'conveyor_belt' || platform === 'reverse_conveyor' || platform === 'speed_ramp') {
+    return '#75e7ff';
   }
-  if (platform === 'bouncer' || platform === 'trampoline') return '#ffb970';
-  if (platform === 'teleporter' || platform === 'ghost_platform') return '#bb96ff';
-  if (platform === 'sticky_glue') return '#8fe08f';
+  if (platform === 'bouncer' || platform === 'trampoline') return '#ffbf7f';
+  if (platform === 'teleporter' || platform === 'ghost_platform') return '#cb95ff';
+  if (platform === 'sticky_glue') return '#8de08d';
   if (platform === 'crushing_ceiling') return '#ff8f8f';
-  return '#89c8ff';
+  return '#9fd9ff';
 };
 
-const obstacleTint = (obstacle: OctaObstacleType) => {
+const obstacleColor = (obstacle: OctaObstacleType) => {
   if (obstacle === 'none') return '#ffffff';
   if (
     obstacle === 'laser_grid' ||
     obstacle === 'trapdoor_row' ||
     obstacle === 'lightning_striker'
   ) {
-    return '#ff9f6d';
+    return '#ffb37b';
   }
   if (
     obstacle === 'gravity_well' ||
     obstacle === 'magnetic_field' ||
     obstacle === 'telefrag_portal'
   ) {
-    return '#b58eff';
+    return '#be94ff';
   }
-  if (obstacle === 'rising_lava') return '#ff7144';
-  return '#ff8d82';
+  if (obstacle === 'rising_lava') return '#ff7044';
+  return '#ff8e7e';
 };
-
-const variantScaleBias = (variant: OctaTileVariant, lane: number, runTime: number) => {
-  if (variant === 'alloy') return 1 + Math.sin(runTime * 0.9 + lane * 0.35) * 0.025;
-  if (variant === 'prismatic') return 1 + Math.sin(runTime * 1.1 + lane * 0.4) * 0.035;
-  if (variant === 'trailChevron') return 1 + (lane % 2 === 0 ? 0.028 : -0.018);
-  if (variant === 'gridForge') return 1 + Math.sin(runTime * 1.8 + lane * 0.7) * 0.018;
-  if (variant === 'diamondTess') return 1 + Math.cos(runTime * 1.2 + lane * 0.5) * 0.024;
-  if (variant === 'sunkenSteps') return 0.97 + Math.sin(runTime * 0.8 + lane * 0.2) * 0.02;
-  if (variant === 'rippleField') return 1 + Math.sin(runTime * 2.4 + lane * 0.7) * 0.03;
-  return 1;
-};
-
-const createFxParticle = (): FxParticle => ({
-  active: false,
-  x: 0,
-  y: 0,
-  z: 0,
-  vx: 0,
-  vy: 0,
-  vz: 0,
-  life: 0,
-  maxLife: 0,
-  size: 0.1,
-  drag: 2.6,
-  gravity: 1.8,
-  spinX: 0,
-  spinY: 0,
-  spinZ: 0,
-  spinVelX: 0,
-  spinVelY: 0,
-  spinVelZ: 0,
-  color: new THREE.Color('#ffffff'),
-});
 
 const sampleGhostFrame = (
   frames: readonly OctaReplayGhostFrame[],
@@ -354,12 +351,16 @@ const sampleGhostFrame = (
   };
 };
 
+const nextStageTargetLabel = (stageId: number) => {
+  const next = STAGE_PROFILES.find((stage) => stage.id === stageId + 1);
+  return next?.label ?? STAGE_PROFILES[STAGE_PROFILES.length - 1].label;
+};
+
 export default function OctaSurge() {
   const snap = useSnapshot(octaSurgeState);
   const { paused, restartSeed } = useGameUIState();
   const { camera, gl, scene } = useThree();
 
-  const levelGen = useLevelGen(snap.worldSeed, snap.mode);
   const inputRef = useInputRef({
     preventDefault: [
       ' ',
@@ -372,45 +373,45 @@ export default function OctaSurge() {
       'a',
       'd',
       'w',
-      'c',
-      'v',
       'q',
       'e',
+      'c',
+      'v',
+      'tab',
       'r',
       'shift',
     ],
   });
 
-  const laneMeshRef = useRef<THREE.InstancedMesh>(null);
-  const wireMeshRef = useRef<THREE.InstancedMesh>(null);
-  const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
-  const collectibleMeshRef = useRef<THREE.InstancedMesh>(null);
-
   const worldRef = useRef<THREE.Group>(null);
   const playerRef = useRef<THREE.Group>(null);
   const ghostRef = useRef<THREE.Group>(null);
+
+  const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const collectibleMeshRef = useRef<THREE.InstancedMesh>(null);
 
   const bloomRef = useRef<any>(null);
   const chromaRef = useRef<any>(null);
   const vignetteRef = useRef<any>(null);
 
-  const deathPointsRef = useRef<THREE.Points>(null);
-  const deathMaterialRef = useRef<THREE.PointsMaterial>(null);
-  const deathWaveRef = useRef<THREE.Mesh>(null);
-  const deathWaveMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
-  const fxShardMeshRef = useRef<THREE.InstancedMesh>(null);
+  const ringGenRef = useRef(createRingRunGenerator(snap.worldSeed, snap.mode));
+  const simRef = useRef(createSimState(Math.floor(STAGE_PROFILES[0].sides / 2), STAGE_PROFILES[0].sides, STAGE_PROFILES[0].id));
+  const fixedStepperRef = useRef(createFixedStepper(1 / 120, 0.05, 8));
+  const turnQueueRef = useRef<Array<-1 | 1>>([]);
+  const flipQueueRef = useRef(0);
+  const slowTapRef = useRef(false);
 
-  const shellMaterialRef = useRef<any>(null);
-  const shellWireMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
-  const laneMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
-  const obstacleMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
-  const collectibleMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
-  const lightARef = useRef<THREE.PointLight>(null);
-  const lightBRef = useRef<THREE.PointLight>(null);
-  const ambientRef = useRef<THREE.AmbientLight>(null);
-  const directionalRef = useRef<THREE.DirectionalLight>(null);
+  const replayRef = useRef<ReplayRuntime>(createReplayRuntime());
+  const queuedReplayRef = useRef<OctaReplayRun | null>(null);
 
-  const segmentsRef = useRef<SegmentPattern[]>([]);
+  const baseRingRef = useRef(0);
+  const scrollOffsetRef = useRef(0);
+  const speedRef = useRef(GAME.baseSpeed);
+  const comboRef = useRef(0);
+  const audioReactiveRef = useRef(0);
+  const stageFlashRef = useRef(0);
+  const tileVariantRef = useRef(snap.tileVariant);
+
   const audioRef = useRef<AudioGraph>({
     element: null,
     context: null,
@@ -420,607 +421,34 @@ export default function OctaSurge() {
     started: false,
   });
 
-  const deathFxRef = useRef<DeathFxState>({
-    active: false,
-    elapsed: 0,
-    hold: 0.42,
-    reason: '',
-    type: 'void',
-  });
-  const fixedStepperRef = useRef(createFixedStepper(1 / 120, 0.05, 8));
-  const turnQueueRef = useRef<Array<-1 | 1>>([]);
-  const flipQueueRef = useRef(0);
-  const replayRef = useRef<ReplayRuntime>(createReplayRuntime());
-  const queuedReplayRef = useRef<OctaReplayRun | null>(null);
-  const trailEmitRef = useRef(0);
-  const fxParticlesRef = useRef<FxParticle[]>(
-    Array.from({ length: FX_PARTICLE_COUNT }, () => createFxParticle())
-  );
   const sceneBgRef = useRef(new THREE.Color(FIBER_COLORS.bg));
   const sceneFogRef = useRef(new THREE.Color(FIBER_COLORS.fog));
 
-  const laneInstanceCount = GAME.segmentCount * GAME.maxSides;
-  const collectibleInstanceCount = GAME.segmentCount;
-
-  const deathPositions = useMemo(
-    () => new Float32Array(DEATH_PARTICLE_COUNT * 3),
-    []
-  );
-  const deathVelocities = useRef(new Float32Array(DEATH_PARTICLE_COUNT * 3));
+  const obstacleCountMax = VISIBLE_RING_COUNT * GAME.maxSides;
+  const collectibleCountMax = VISIBLE_RING_COUNT;
 
   const geometry = useMemo(
     () => ({
-      lane: new THREE.BoxGeometry(1, 0.16, GAME.segmentLength * 0.98),
-      obstacle: new THREE.BoxGeometry(1, 0.42, 0.9),
-      collectible: new THREE.IcosahedronGeometry(0.34, 0),
-      player8: new THREE.CylinderGeometry(0.42, 0.42, 0.24, 8, 1),
-      player10: new THREE.CylinderGeometry(0.44, 0.36, 0.24, 10, 1),
-      player12: new THREE.CylinderGeometry(0.36, 0.46, 0.24, 12, 1),
-      playerRing: new THREE.TorusGeometry(0.56, 0.05, 10, 56),
-      ghostCore: new THREE.IcosahedronGeometry(0.24, 1),
+      obstacle: new THREE.DodecahedronGeometry(0.36, 0),
+      collectible: new THREE.IcosahedronGeometry(0.25, 0),
+      playerCore: new THREE.IcosahedronGeometry(0.38, 1),
+      playerHalo: new THREE.TorusGeometry(0.6, 0.045, 12, 64),
+      ghostCore: new THREE.IcosahedronGeometry(0.22, 1),
       ghostRing: new THREE.TorusGeometry(0.44, 0.034, 12, 40),
-      shell: new THREE.CylinderGeometry(
-        GAME.tunnelShellRadius,
-        GAME.tunnelShellRadius,
-        GAME.tunnelLength,
-        96,
-        1,
-        true
-      ),
-      shellWire: new THREE.CylinderGeometry(
-        GAME.tunnelShellRadius + 0.03,
-        GAME.tunnelShellRadius + 0.03,
-        GAME.tunnelLength,
-        96,
-        1,
-        true
-      ),
-      death: (() => {
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.BufferAttribute(deathPositions, 3));
-        return g;
-      })(),
-      deathWave: new THREE.TorusGeometry(0.4, 0.08, 16, 64),
-      fxShard: new THREE.DodecahedronGeometry(0.22, 0),
     }),
-    [deathPositions]
+    []
   );
 
   const tempObject = useMemo(() => new THREE.Object3D(), []);
   const tempColorA = useMemo(() => new THREE.Color(), []);
   const tempColorB = useMemo(() => new THREE.Color(), []);
-  const tempColorC = useMemo(() => new THREE.Color(), []);
-  const tempVecA = useMemo(() => new THREE.Vector3(), []);
   const chromaOffset = useMemo(() => new THREE.Vector2(0, 0), []);
   const zeroOffset = useMemo(() => new THREE.Vector2(0, 0), []);
-  const glitchDelay = useMemo(() => new THREE.Vector2(1.2, 2.6), []);
-  const glitchDuration = useMemo(() => new THREE.Vector2(0.08, 0.18), []);
+  const glitchDelay = useMemo(() => new THREE.Vector2(1.4, 3.1), []);
+  const glitchDuration = useMemo(() => new THREE.Vector2(0.08, 0.16), []);
   const glitchStrength = useMemo(() => new THREE.Vector2(0.03, 0.14), []);
-  const trailPositions = useMemo(
-    () => new Float32Array(PLAYER_TRAIL_POINTS * 3),
-    []
-  );
-  const trailGeometry = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
-    return g;
-  }, [trailPositions]);
-  const trailMaterial = useMemo(
-    () =>
-      new THREE.LineBasicMaterial({
-        color: FIBER_COLORS.wire,
-        transparent: true,
-        opacity: 0.34,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false,
-      }),
-    []
-  );
-  const trailLine = useMemo(
-    () => new THREE.Line(trailGeometry, trailMaterial),
-    [trailGeometry, trailMaterial]
-  );
 
-  const hideInstance = useCallback(
-    (mesh: THREE.InstancedMesh | null, id: number) => {
-      if (!mesh) return;
-      tempObject.position.set(0, -9999, 0);
-      tempObject.rotation.set(0, 0, 0);
-      tempObject.scale.set(0.0001, 0.0001, 0.0001);
-      tempObject.updateMatrix();
-      mesh.setMatrixAt(id, tempObject.matrix);
-    },
-    [tempObject]
-  );
-
-  const toWorldPoint = useCallback(
-    (x: number, y: number, z: number) => {
-      tempVecA.set(x, y, z);
-      const world = worldRef.current;
-      if (world) tempVecA.applyQuaternion(world.quaternion);
-      return tempVecA;
-    },
-    [tempVecA]
-  );
-
-  const emitFxBurst = useCallback(
-    (
-      x: number,
-      y: number,
-      z: number,
-      color: string,
-      amount: number,
-      speedMin: number,
-      speedMax: number,
-      lifeMin: number,
-      lifeMax: number,
-      spreadZ = 0.9
-    ) => {
-      const pool = fxParticlesRef.current;
-      let emitted = 0;
-      for (let i = 0; i < pool.length && emitted < amount; i += 1) {
-        const p = pool[i];
-        if (p.active) continue;
-        const theta = Math.random() * TWO_PI;
-        const speed = THREE.MathUtils.lerp(speedMin, speedMax, Math.random());
-        p.active = true;
-        p.x = x + (Math.random() * 2 - 1) * 0.08;
-        p.y = y + (Math.random() * 2 - 1) * 0.08;
-        p.z = z + (Math.random() * 2 - 1) * 0.14;
-        p.vx = Math.cos(theta) * speed;
-        p.vy = Math.sin(theta) * speed;
-        p.vz = (-0.4 + Math.random()) * spreadZ - speed * 0.35;
-        p.life = THREE.MathUtils.lerp(lifeMin, lifeMax, Math.random());
-        p.maxLife = p.life;
-        p.size = THREE.MathUtils.lerp(0.08, 0.22, Math.random());
-        p.drag = THREE.MathUtils.lerp(2.2, 4.2, Math.random());
-        p.gravity = THREE.MathUtils.lerp(0.8, 2.8, Math.random());
-        p.spinX = Math.random() * TWO_PI;
-        p.spinY = Math.random() * TWO_PI;
-        p.spinZ = Math.random() * TWO_PI;
-        p.spinVelX = (Math.random() * 2 - 1) * 3;
-        p.spinVelY = (Math.random() * 2 - 1) * 3;
-        p.spinVelZ = (Math.random() * 2 - 1) * 3;
-        p.color.set(color);
-        emitted += 1;
-      }
-    },
-    []
-  );
-
-  const updateFxParticles = useCallback(
-    (delta: number) => {
-      const mesh = fxShardMeshRef.current;
-      if (!mesh) return;
-      const pool = fxParticlesRef.current;
-      let count = 0;
-      for (let i = 0; i < pool.length; i += 1) {
-        const p = pool[i];
-        if (!p.active) continue;
-        p.life -= delta;
-        if (p.life <= 0) {
-          p.active = false;
-          continue;
-        }
-
-        p.vx *= Math.exp(-p.drag * delta);
-        p.vy *= Math.exp(-p.drag * delta);
-        p.vz *= Math.exp(-p.drag * delta * 0.8);
-        p.vy -= p.gravity * delta;
-
-        p.x += p.vx * delta;
-        p.y += p.vy * delta;
-        p.z += p.vz * delta;
-        p.spinX += p.spinVelX * delta;
-        p.spinY += p.spinVelY * delta;
-        p.spinZ += p.spinVelZ * delta;
-
-        const lifeT = clamp(p.life / p.maxLife, 0, 1);
-        tempObject.position.set(p.x, p.y, p.z);
-        tempObject.rotation.set(p.spinX, p.spinY, p.spinZ);
-        tempObject.scale.setScalar(p.size * (0.45 + lifeT));
-        tempObject.updateMatrix();
-        mesh.setMatrixAt(count, tempObject.matrix);
-
-        tempColorA
-          .copy(p.color)
-          .lerp(WHITE, (1 - lifeT) * 0.55)
-          .multiplyScalar(0.45 + lifeT * 1.25);
-        mesh.setColorAt(count, tempColorA);
-        count += 1;
-      }
-      mesh.count = count;
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    },
-    [tempColorA, tempObject]
-  );
-
-  const pushTrailPoint = useCallback(
-    (x: number, y: number, z: number) => {
-      for (let i = 0; i < PLAYER_TRAIL_POINTS - 1; i += 1) {
-        const dst = i * 3;
-        const src = (i + 1) * 3;
-        trailPositions[dst] = trailPositions[src];
-        trailPositions[dst + 1] = trailPositions[src + 1];
-        trailPositions[dst + 2] = trailPositions[src + 2];
-      }
-      const tail = (PLAYER_TRAIL_POINTS - 1) * 3;
-      trailPositions[tail] = x;
-      trailPositions[tail + 1] = y;
-      trailPositions[tail + 2] = z;
-      const attr = trailGeometry.getAttribute('position') as THREE.BufferAttribute;
-      attr.needsUpdate = true;
-      trailGeometry.computeBoundingSphere();
-    },
-    [trailGeometry, trailPositions]
-  );
-
-  const syncInstances = useCallback(
-    (
-      runTime: number,
-      audioReactive: number,
-      syncTimer: number,
-      tileVariant: OctaTileVariant
-    ) => {
-      const laneMesh = laneMeshRef.current;
-      const wireMesh = wireMeshRef.current;
-      const obstacleMesh = obstacleMeshRef.current;
-      const collectibleMesh = collectibleMeshRef.current;
-
-      if (!laneMesh || !wireMesh || !obstacleMesh || !collectibleMesh) return;
-
-      const variantAccent = OCTA_TILE_VARIANT_ACCENT[tileVariant];
-
-      for (let i = 0; i < segmentsRef.current.length; i += 1) {
-        const segment = segmentsRef.current[i];
-        const stage = stageById(segment.stageId);
-        const stageVisual = stageAestheticById(stage.id);
-        const step = laneStep(segment.sides);
-        const laneWidth =
-          2 * GAME.radius * Math.tan(Math.PI / segment.sides) * 0.88;
-        const warpAmplitude = stage.warpAmplitude * (syncTimer > 0 ? 0.35 : 1);
-        const warp =
-          Math.sin(segment.warpSeed + runTime * 0.6 + segment.index * 0.11) *
-          warpAmplitude;
-
-        for (let lane = 0; lane < GAME.maxSides; lane += 1) {
-          const id = segment.slot * GAME.maxSides + lane;
-
-          if (lane >= segment.sides) {
-            hideInstance(laneMesh, id);
-            hideInstance(wireMesh, id);
-            hideInstance(obstacleMesh, id);
-            continue;
-          }
-
-          const bit = laneBit(lane, segment.sides);
-          const solid = (segment.solidMask & bit) !== 0;
-          if (!solid) {
-            hideInstance(laneMesh, id);
-            hideInstance(wireMesh, id);
-            hideInstance(obstacleMesh, id);
-            continue;
-          }
-
-          const lanePattern = lanePatternFor(segment, lane);
-          const platformClosed = platformClosedBlend(
-            lanePattern.platform,
-            lanePattern.platformPhase,
-            runTime
-          );
-          const angle = lane * step + warp;
-          const cosA = Math.cos(angle);
-          const sinA = Math.sin(angle);
-
-          const platformLift =
-            lanePattern.platform === 'bouncer'
-              ? Math.abs(Math.sin(runTime * 3.6 + lanePattern.platformPhase)) *
-                  0.14
-              : lanePattern.platform === 'trampoline'
-                ? Math.abs(Math.sin(runTime * 2.5 + lanePattern.platformPhase)) *
-                  0.19
-                : lanePattern.platform === 'ghost_platform'
-                  ? -platformClosed * 0.12
-                  : lanePattern.platform === 'crushing_ceiling'
-                    ? -platformClosed * 0.08
-                    : lanePattern.platform === 'teleporter'
-                      ? Math.sin(runTime * 2.1 + lanePattern.platformPhase) * 0.05
-                      : 0;
-
-          const radius = GAME.radius + platformLift;
-          const x = cosA * radius;
-          const y = sinA * radius;
-          const variantBias = variantScaleBias(tileVariant, lane, runTime);
-          const scaleY =
-            lanePattern.platform === 'sticky_glue'
-              ? 0.88
-              : lanePattern.platform === 'crushing_ceiling'
-                ? 1.02 + platformClosed * 0.2
-                : lanePattern.platform === 'ghost_platform'
-                  ? clamp(1 - platformClosed * 0.72, 0.22, 1.04)
-                  : 1;
-
-          tempObject.position.set(x, y, segment.z);
-          tempObject.rotation.set(0, 0, angle + Math.PI / 2);
-          tempObject.scale.set(laneWidth * variantBias, scaleY, 1);
-          tempObject.updateMatrix();
-
-          laneMesh.setMatrixAt(id, tempObject.matrix);
-          wireMesh.setMatrixAt(id, tempObject.matrix);
-
-          const stageHeat = (stage.id - 1) / STAGE_PROFILES.length;
-          tempColorA
-            .set(stageVisual.lane)
-            .lerp(
-              tempColorB.set(stageVisual.laneHot),
-              stageHeat * 0.58 + audioReactive * 0.4
-            )
-            .lerp(tempColorC.set(platformTint(lanePattern.platform)), 0.14)
-            .lerp(
-              tempColorC.set(variantAccent),
-              tileVariant === 'classic' ? 0.08 : 0.22
-            );
-          laneMesh.setColorAt(id, tempColorA);
-
-          const wirePulse =
-            0.72 +
-            audioReactive * 0.3 +
-            (lane / segment.sides) * 0.08 +
-            platformClosed * 0.14;
-          tempColorA
-            .set(stageVisual.wire)
-            .lerp(tempColorB.set(variantAccent), 0.28)
-            .multiplyScalar(wirePulse);
-          wireMesh.setColorAt(id, tempColorA);
-
-          if (lanePattern.obstacle === 'none') {
-            hideInstance(obstacleMesh, id);
-            continue;
-          }
-
-          const obstacleState = obstacleSeverity(lanePattern, runTime);
-          const threat = obstacleState.closedBlend;
-          const obstacleRadius = GAME.radius - 0.52 + threat * 0.08;
-          const ox = cosA * obstacleRadius;
-          const oy = sinA * obstacleRadius;
-
-          let scaleX = laneWidth * 0.5;
-          let scaleYObstacle = 0.76 + threat * 0.65;
-          let scaleZ = 0.92;
-          let obstacleTwist = 0;
-
-          if (lanePattern.obstacle === 'laser_grid') {
-            scaleX = laneWidth * 0.56;
-            scaleYObstacle = 1.28 + threat * 0.44;
-            scaleZ = 0.48;
-          } else if (lanePattern.obstacle === 'rotating_cross_blades') {
-            scaleX = laneWidth * 0.66;
-            scaleYObstacle = 0.62 + threat * 0.38;
-            scaleZ = 1.28;
-            obstacleTwist = runTime * 3.8 + lanePattern.obstaclePhase;
-          } else if (lanePattern.obstacle === 'gravity_well') {
-            scaleX = laneWidth * (0.42 + threat * 0.18);
-            scaleYObstacle = 0.74 + threat * 0.6;
-            scaleZ = 0.74 + threat * 0.28;
-          } else if (lanePattern.obstacle === 'rising_lava') {
-            scaleX = laneWidth * 0.62;
-            scaleYObstacle = 1.52 + threat * 0.72;
-            scaleZ = 0.72;
-          } else if (lanePattern.obstacle === 'telefrag_portal') {
-            scaleX = laneWidth * 0.54;
-            scaleYObstacle = 0.92 + threat * 0.52;
-            scaleZ = 0.62;
-            obstacleTwist = runTime * 2.4 + lanePattern.obstaclePhase * 0.7;
-          } else if (lanePattern.obstacle === 'trapdoor_row') {
-            scaleX = laneWidth * 0.84;
-            scaleYObstacle = 0.5 + threat * 0.36;
-            scaleZ = 0.74;
-          } else if (lanePattern.obstacle === 'lightning_striker') {
-            scaleX = laneWidth * 0.48;
-            scaleYObstacle = 1.18 + threat * 0.62;
-            scaleZ = 0.42;
-          }
-
-          tempObject.position.set(ox, oy, segment.z);
-          tempObject.rotation.set(
-            Math.sin(runTime * 1.3 + lanePattern.obstaclePhase) * 0.12,
-            obstacleTwist,
-            angle + Math.PI / 2
-          );
-          tempObject.scale.set(
-            scaleX,
-            scaleYObstacle * (1 + audioReactive * 0.22),
-            scaleZ
-          );
-          tempObject.updateMatrix();
-          obstacleMesh.setMatrixAt(id, tempObject.matrix);
-
-          tempColorA
-            .set(stageVisual.obstacle)
-            .lerp(tempColorB.set(obstacleTint(lanePattern.obstacle)), 0.45 + threat * 0.2)
-            .lerp(tempColorC.set(stageVisual.obstacleHot), 0.25 + audioReactive * 0.28)
-            .multiplyScalar(0.52 + threat * 0.7);
-          obstacleMesh.setColorAt(id, tempColorA);
-        }
-
-        const collectibleId = segment.slot;
-        if (
-          segment.collectibleLane < 0 ||
-          segment.collectibleType === null ||
-          segment.collected
-        ) {
-          hideInstance(collectibleMesh, collectibleId);
-          continue;
-        }
-
-        const stepCollect = laneStep(segment.sides);
-        const warpCollect =
-          Math.sin(segment.warpSeed + runTime * 0.6 + segment.index * 0.11) *
-          stage.warpAmplitude *
-          (syncTimer > 0 ? 0.35 : 1);
-        const collectAngle = segment.collectibleLane * stepCollect + warpCollect;
-
-        const radius = GAME.radius - 1.32;
-        const cx = Math.cos(collectAngle) * radius;
-        const cy = Math.sin(collectAngle) * radius;
-        const typeScale =
-          segment.collectibleType === 'core'
-            ? 1.24
-            : segment.collectibleType === 'sync'
-              ? 1.05
-              : 0.92;
-
-        tempObject.position.set(cx, cy, segment.z);
-        tempObject.rotation.set(runTime * 1.8, runTime * 2.3, runTime * 1.4);
-        tempObject.scale.setScalar(typeScale * (1 + audioReactive * 0.25));
-        tempObject.updateMatrix();
-        collectibleMesh.setMatrixAt(collectibleId, tempObject.matrix);
-
-        tempColorA
-          .set(collectibleColor(segment.collectibleType))
-          .lerp(tempColorB.set(variantAccent), 0.2);
-        collectibleMesh.setColorAt(collectibleId, tempColorA);
-      }
-
-      laneMesh.instanceMatrix.needsUpdate = true;
-      wireMesh.instanceMatrix.needsUpdate = true;
-      obstacleMesh.instanceMatrix.needsUpdate = true;
-      collectibleMesh.instanceMatrix.needsUpdate = true;
-
-      if (laneMesh.instanceColor) laneMesh.instanceColor.needsUpdate = true;
-      if (wireMesh.instanceColor) wireMesh.instanceColor.needsUpdate = true;
-      if (obstacleMesh.instanceColor) obstacleMesh.instanceColor.needsUpdate = true;
-      if (collectibleMesh.instanceColor) {
-        collectibleMesh.instanceColor.needsUpdate = true;
-      }
-    },
-    [hideInstance, tempColorA, tempColorB, tempColorC, tempObject]
-  );
-
-  const triggerDeathFx = useCallback((reason: string, type: 'void' | 'obstacle') => {
-    const points = deathPointsRef.current;
-    const material = deathMaterialRef.current;
-    if (!points || !material) return;
-    const deathWave = deathWaveRef.current;
-    const deathWaveMaterial = deathWaveMaterialRef.current;
-
-    const origin = playerRef.current?.position ?? new THREE.Vector3(0, 0, GAME.playerZ);
-    const isVoidCross = type === 'void';
-    const stageVisual = stageAestheticById(
-      useOctaRuntimeStore.getState().stageId
-    );
-
-    for (let i = 0; i < DEATH_PARTICLE_COUNT; i += 1) {
-      const i3 = i * 3;
-      deathPositions[i3] = origin.x;
-      deathPositions[i3 + 1] = origin.y;
-      deathPositions[i3 + 2] = origin.z;
-
-      const theta = Math.random() * TWO_PI;
-      const spread = (isVoidCross ? 0.55 : 0.35) + Math.random() * (isVoidCross ? 1.1 : 0.82);
-      deathVelocities.current[i3] = Math.cos(theta) * spread;
-      deathVelocities.current[i3 + 1] = Math.sin(theta) * spread;
-      deathVelocities.current[i3 + 2] = isVoidCross
-        ? -2.4 - Math.random() * 3.8
-        : -1.6 - Math.random() * 2.8;
-    }
-
-    const attr = geometry.death.getAttribute('position') as THREE.BufferAttribute;
-    attr.needsUpdate = true;
-
-    deathFxRef.current.active = true;
-    deathFxRef.current.elapsed = 0;
-    deathFxRef.current.hold = isVoidCross ? 0.62 : 0.44;
-    deathFxRef.current.reason = reason;
-    deathFxRef.current.type = type;
-    material.opacity = 0.98;
-    material.size = isVoidCross ? 0.28 : 0.2;
-    material.color.set(isVoidCross ? stageVisual.obstacle : stageVisual.obstacleHot);
-    points.visible = true;
-
-    if (deathWave && deathWaveMaterial) {
-      deathWave.visible = true;
-      deathWave.position.copy(origin);
-      deathWave.scale.setScalar(1);
-      deathWave.rotation.set(0, 0, 0);
-      deathWaveMaterial.opacity = 0.9;
-      deathWaveMaterial.color.set(
-        isVoidCross ? stageVisual.obstacleHot : stageVisual.accent
-      );
-    }
-
-    emitFxBurst(
-      origin.x,
-      origin.y,
-      origin.z,
-      isVoidCross ? stageVisual.obstacle : stageVisual.obstacleHot,
-      isVoidCross ? 50 : 42,
-      4.4,
-      8.8,
-      0.34,
-      0.78,
-      2.4
-    );
-    emitFxBurst(
-      origin.x,
-      origin.y,
-      origin.z,
-      stageVisual.wire,
-      isVoidCross ? 38 : 24,
-      2.2,
-      5.2,
-      0.2,
-      0.5,
-      1.8
-    );
-  }, [deathPositions, emitFxBurst, geometry.death]);
-
-  const updateDeathFx = useCallback((delta: number) => {
-    const points = deathPointsRef.current;
-    const material = deathMaterialRef.current;
-    const fx = deathFxRef.current;
-    const deathWave = deathWaveRef.current;
-    const deathWaveMaterial = deathWaveMaterialRef.current;
-
-    if (!points || !material || !fx.active) return false;
-
-    fx.elapsed += delta;
-    const t = clamp(fx.elapsed / fx.hold, 0, 1);
-
-    for (let i = 0; i < DEATH_PARTICLE_COUNT; i += 1) {
-      const i3 = i * 3;
-      deathVelocities.current[i3 + 1] -= 2.2 * delta;
-
-      const drift = 1.1 - t * 0.5;
-      deathPositions[i3] += deathVelocities.current[i3] * delta * drift;
-      deathPositions[i3 + 1] += deathVelocities.current[i3 + 1] * delta * drift;
-      deathPositions[i3 + 2] += deathVelocities.current[i3 + 2] * delta * drift;
-    }
-
-    const attr = geometry.death.getAttribute('position') as THREE.BufferAttribute;
-    attr.needsUpdate = true;
-
-    material.opacity = Math.max(0, 0.98 - t * 1.1);
-    material.size = 0.12 + (1 - t) * 0.24;
-
-    if (deathWave && deathWaveMaterial) {
-      const growth = fx.type === 'void' ? 6.5 : 4.4;
-      deathWave.scale.setScalar(1 + t * growth);
-      deathWave.rotation.z += delta * 2.4;
-      deathWaveMaterial.opacity = Math.max(0, 0.9 - t * 1.1);
-    }
-
-    if (t >= 1) {
-      fx.active = false;
-      points.visible = false;
-      if (deathWave) deathWave.visible = false;
-      return true;
-    }
-
-    return false;
-  }, [geometry.death]);
+  const getRing = useCallback((index: number) => ringGenRef.current.getRing(index), []);
 
   const startAudio = useCallback(() => {
     const graph = audioRef.current;
@@ -1032,7 +460,7 @@ export default function OctaSurge() {
     const analyser = context.createAnalyser();
 
     analyser.fftSize = GAME.audioFFTSize;
-    analyser.smoothingTimeConstant = 0.84;
+    analyser.smoothingTimeConstant = 0.82;
 
     source.connect(analyser);
     analyser.connect(context.destination);
@@ -1040,9 +468,7 @@ export default function OctaSurge() {
     graph.context = context;
     graph.source = source;
     graph.analyser = analyser;
-    graph.data = new Uint8Array(
-      new ArrayBuffer(analyser.frequencyBinCount)
-    ) as Uint8Array<ArrayBuffer>;
+    graph.data = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)) as Uint8Array<ArrayBuffer>;
     graph.started = true;
 
     void context.resume().then(() => {
@@ -1057,18 +483,18 @@ export default function OctaSurge() {
     graph.analyser.getByteFrequencyData(graph.data);
 
     let bass = 0;
-    let mids = 0;
+    let high = 0;
 
-    const bassEnd = Math.max(6, Math.floor(graph.data.length * 0.18));
-    const midEnd = Math.max(bassEnd + 1, Math.floor(graph.data.length * 0.55));
+    const bassEnd = Math.max(6, Math.floor(graph.data.length * 0.16));
+    const highStart = Math.max(bassEnd + 1, Math.floor(graph.data.length * 0.52));
 
     for (let i = 0; i < bassEnd; i += 1) bass += graph.data[i];
-    for (let i = bassEnd; i < midEnd; i += 1) mids += graph.data[i];
+    for (let i = highStart; i < graph.data.length; i += 1) high += graph.data[i];
 
     const bassNorm = bass / Math.max(1, bassEnd) / 255;
-    const midNorm = mids / Math.max(1, midEnd - bassEnd) / 255;
+    const highNorm = high / Math.max(1, graph.data.length - highStart) / 255;
 
-    return clamp(bassNorm * 0.7 + midNorm * 0.55, 0, 1);
+    return clamp(bassNorm * 0.74 + highNorm * 0.48, 0, 1);
   }, []);
 
   const queueReplayInput = useCallback((action: OctaReplayInputAction) => {
@@ -1114,99 +540,40 @@ export default function OctaSurge() {
   const initializeRun = useCallback(() => {
     startAudio();
 
-    const queuedReplay =
-      queuedReplayRef.current ?? octaSurgeState.consumeReplayPlayback();
-    const state = useOctaRuntimeStore.getState();
-    state.resetRun({
-      seed: queuedReplay?.seed ?? snap.worldSeed,
-      mode: queuedReplay?.mode ?? snap.mode,
-      cameraMode: queuedReplay?.cameraMode ?? snap.cameraMode,
-    });
+    const queuedReplay = queuedReplayRef.current ?? octaSurgeState.consumeReplayPlayback();
+    ringGenRef.current.reset(queuedReplay?.seed ?? snap.worldSeed, queuedReplay?.mode ?? snap.mode);
 
-    const replay = replayRef.current;
-    replay.frame = 0;
-    replay.seed = queuedReplay?.seed ?? snap.worldSeed;
-    replay.runMode = queuedReplay?.mode ?? snap.mode;
-    replay.cameraMode = queuedReplay?.cameraMode ?? snap.cameraMode;
-    replay.events = [];
-    replay.ghostFrames = [];
-    replay.playbackCursor = 0;
-    if (queuedReplay) {
-      replay.mode = 'playback';
-      replay.playbackEvents = queuedReplay.events
-        .map((event) => ({ ...event }))
-        .sort((a, b) => a.frame - b.frame);
-    } else {
-      replay.mode = 'record';
-      replay.playbackEvents = [];
-    }
-    octaSurgeState.setReplayMode(replay.mode);
+    const firstRing = getRing(0);
+    const sim = createSimState(firstRing.safeLane, firstRing.sides, firstRing.stageId);
+    simRef.current = sim;
+
+    baseRingRef.current = sim.baseRing;
+    scrollOffsetRef.current = 0;
+    speedRef.current = sim.speed;
+    comboRef.current = sim.combo;
+    audioReactiveRef.current = sim.audioReactive;
+    stageFlashRef.current = sim.stageFlash;
+
+    replayRef.current = {
+      mode: queuedReplay ? 'playback' : 'record',
+      seed: queuedReplay?.seed ?? snap.worldSeed,
+      runMode: queuedReplay?.mode ?? snap.mode,
+      cameraMode: queuedReplay?.cameraMode ?? snap.cameraMode,
+      frame: 0,
+      events: [],
+      ghostFrames: [],
+      playbackCursor: 0,
+      playbackEvents: queuedReplay
+        ? queuedReplay.events.map((event) => ({ ...event })).sort((a, b) => a.frame - b.frame)
+        : [],
+    };
+    octaSurgeState.setReplayMode(replayRef.current.mode);
     queuedReplayRef.current = null;
 
-    fixedStepperRef.current.reset();
     turnQueueRef.current.length = 0;
     flipQueueRef.current = 0;
-
-    const initialSegments = levelGen.initialSegments();
-    segmentsRef.current = initialSegments;
-
-    const first = initialSegments[0] ?? null;
-    const last = initialSegments[initialSegments.length - 1] ?? null;
-    const startSides = first?.sides ?? STAGE_PROFILES[0].sides;
-    const startLane = Math.floor(startSides / 2);
-    const startStage = stageById(first?.stageId ?? STAGE_PROFILES[0].id);
-
-    deathFxRef.current.active = false;
-    deathFxRef.current.elapsed = 0;
-    deathFxRef.current.reason = '';
-    deathFxRef.current.type = 'void';
-    if (deathPointsRef.current) deathPointsRef.current.visible = false;
-    if (deathWaveRef.current) deathWaveRef.current.visible = false;
-    for (const p of fxParticlesRef.current) p.active = false;
-    if (fxShardMeshRef.current) {
-      fxShardMeshRef.current.count = 0;
-      fxShardMeshRef.current.instanceMatrix.needsUpdate = true;
-    }
-
-    const trailX = Math.cos(GAME.playerAngle) * (GAME.radius - 0.58);
-    const trailY = Math.sin(GAME.playerAngle) * (GAME.radius - 0.58);
-    for (let i = 0; i < PLAYER_TRAIL_POINTS; i += 1) {
-      const i3 = i * 3;
-      trailPositions[i3] = trailX;
-      trailPositions[i3 + 1] = trailY;
-      trailPositions[i3 + 2] = GAME.playerZ;
-    }
-    (
-      trailGeometry.getAttribute('position') as THREE.BufferAttribute
-    ).needsUpdate = true;
-    trailGeometry.computeBoundingSphere();
-
-    useOctaRuntimeStore.setState({
-      nextSegmentIndex: initialSegments.length,
-      farthestBackZ: last?.z ?? GAME.spawnStartZ,
-      lastSafeLane: last?.safeLane ?? startLane,
-      sides: startSides,
-      laneIndex: startLane,
-      rotation: rotationForLane(startLane, startSides),
-      targetRotation: rotationForLane(startLane, startSides),
-      stageId: startStage.id,
-      stageFlash: 1,
-      speed: GAME.baseSpeed,
-      score: 0,
-      combo: 0,
-      multiplier: 1,
-      runTime: 0,
-      distance: 0,
-      audioReactive: 0,
-      shardCount: 0,
-      slowMoMeter: 0,
-      slowMoTime: 0,
-      syncTimer: 0,
-      flipPulse: 0,
-      dangerPulse: 0,
-      turnCooldown: 0,
-      flipCooldown: 0,
-    });
+    slowTapRef.current = false;
+    fixedStepperRef.current.reset();
 
     octaSurgeState.setCrashReason('');
     octaSurgeState.syncFrame({
@@ -1217,9 +584,9 @@ export default function OctaSurge() {
       time: 0,
       distance: 0,
       progress: 0,
-      sides: startSides,
-      stage: startStage.id,
-      stageLabel: startStage.label,
+      sides: sim.sides,
+      stage: sim.stageId,
+      stageLabel: stageById(sim.stageId).label,
       stageFlash: 1,
       slowMoMeter: 0,
       shardCount: 0,
@@ -1229,27 +596,20 @@ export default function OctaSurge() {
       currentObstacle: 'none',
     });
 
-    syncInstances(0, 0, 0, snap.tileVariant);
-  }, [
-    levelGen,
-    startAudio,
-    snap.cameraMode,
-    snap.mode,
-    snap.worldSeed,
-    syncInstances,
-    trailGeometry,
-    trailPositions,
-  ]);
+    useOctaRuntimeStore.setState({
+      cameraMode: queuedReplay?.cameraMode ?? snap.cameraMode,
+    });
+  }, [getRing, snap.cameraMode, snap.mode, snap.worldSeed, startAudio]);
 
   const startRun = useCallback(() => {
     if (octaSurgeState.phase === 'playing') {
-      const runtime = useOctaRuntimeStore.getState();
+      const sim = simRef.current;
       finalizeReplay({
         outcome: 'abort',
         endReason: 'Run aborted.',
-        score: runtime.score,
-        distance: runtime.distance,
-        runTime: runtime.runTime,
+        score: sim.score,
+        distance: sim.distance,
+        runTime: sim.runTime,
       });
     }
 
@@ -1258,13 +618,14 @@ export default function OctaSurge() {
 
     if (replayPlayback) {
       octaSurgeState.setMode(replayPlayback.mode);
-      useOctaRuntimeStore.setState({ cameraMode: replayPlayback.cameraMode });
       octaSurgeState.setCameraMode(replayPlayback.cameraMode);
+      useOctaRuntimeStore.setState({ cameraMode: replayPlayback.cameraMode });
     }
 
     fixedStepperRef.current.reset();
     turnQueueRef.current.length = 0;
     flipQueueRef.current = 0;
+    slowTapRef.current = false;
     octaSurgeState.setReplayMode('off');
     octaSurgeState.start();
     if (replayPlayback) {
@@ -1274,41 +635,41 @@ export default function OctaSurge() {
 
   const endRun = useCallback(
     (reason: string, outcome: OctaReplayOutcome) => {
-      const runtime = useOctaRuntimeStore.getState();
-      const stage = stageById(runtime.stageId);
+      const sim = simRef.current;
       const runGoal =
         snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
       const progress =
         snap.mode === 'endless'
           ? 0
-          : clamp(runtime.score / Math.max(1, runGoal), 0, 1);
+          : clamp(sim.score / Math.max(1, runGoal), 0, 1);
+      const stage = stageById(sim.stageId);
 
       octaSurgeState.syncFrame({
-        score: Math.floor(runtime.score),
-        combo: runtime.combo,
-        multiplier: runtime.multiplier,
-        speed: runtime.speed,
-        time: runtime.runTime,
-        distance: runtime.distance,
+        score: Math.floor(sim.score),
+        combo: sim.combo,
+        multiplier: sim.multiplier,
+        speed: sim.speed,
+        time: sim.runTime,
+        distance: sim.distance,
         progress,
-        sides: runtime.sides,
+        sides: sim.sides,
         stage: stage.id,
         stageLabel: stage.label,
-        stageFlash: runtime.stageFlash,
-        slowMoMeter: runtime.slowMoMeter,
-        shardCount: runtime.shardCount,
-        hudPulse: Math.max(runtime.dangerPulse, runtime.flipPulse),
-        audioReactive: runtime.audioReactive,
-        currentPlatform: octaSurgeState.currentPlatform,
-        currentObstacle: octaSurgeState.currentObstacle,
+        stageFlash: sim.stageFlash,
+        slowMoMeter: sim.slowMoMeter,
+        shardCount: sim.shardCount,
+        hudPulse: Math.max(sim.flipPulse, sim.dangerPulse, sim.audioReactive * 0.5),
+        audioReactive: sim.audioReactive,
+        currentPlatform: sim.currentPlatform,
+        currentObstacle: sim.currentObstacle,
       });
 
       finalizeReplay({
         outcome,
         endReason: reason,
-        score: runtime.score,
-        distance: runtime.distance,
-        runTime: runtime.runTime,
+        score: sim.score,
+        distance: sim.distance,
+        runTime: sim.runTime,
       });
 
       octaSurgeState.setCrashReason(reason);
@@ -1317,19 +678,140 @@ export default function OctaSurge() {
     [finalizeReplay, snap.mode]
   );
 
+  const updateInstances = useCallback(() => {
+    const obstacleMesh = obstacleMeshRef.current;
+    const collectibleMesh = collectibleMeshRef.current;
+    if (!obstacleMesh || !collectibleMesh) return;
+
+    const sim = simRef.current;
+    const baseRing = sim.baseRing;
+    const scrollOffset = sim.scroll - baseRing * RING_SPACING;
+
+    let obstacleCount = 0;
+    let collectibleCount = 0;
+
+    for (let r = 0; r < VISIBLE_RING_COUNT; r += 1) {
+      const ring = getRing(baseRing + r);
+      const stage = stageById(ring.stageId);
+      const step = laneStep(ring.sides);
+      const warp =
+        Math.sin(ring.warpSeed + sim.runTime * 0.72 + ring.index * 0.11) *
+        stage.warpAmplitude;
+      const z = -r * RING_SPACING + scrollOffset;
+
+      for (let lane = 0; lane < ring.sides; lane += 1) {
+        const bit = laneBit(lane, ring.sides);
+        if ((ring.solidMask & bit) === 0) continue;
+
+        const meta = ring.laneMeta[lane];
+        if (!meta || meta.obstacle === 'none') continue;
+
+        const state = obstacleState(meta, sim.runTime);
+        if (state.closedBlend < 0.08) continue;
+
+        const angle = lane * step + warp;
+        const radius = GAME.radius - 0.9 + state.closedBlend * 0.16;
+        const ox = Math.cos(angle) * radius;
+        const oy = Math.sin(angle) * radius;
+
+        let sx = 0.32;
+        let sy = 0.32;
+        let sz = 0.32;
+        if (meta.obstacle === 'laser_grid') {
+          sx = 0.56;
+          sy = 0.24 + state.closedBlend * 0.22;
+          sz = 0.16;
+        } else if (meta.obstacle === 'rotating_cross_blades') {
+          sx = 0.6;
+          sy = 0.16 + state.closedBlend * 0.12;
+          sz = 0.56;
+        } else if (meta.obstacle === 'rising_lava') {
+          sx = 0.46;
+          sy = 0.48 + state.closedBlend * 0.44;
+          sz = 0.24;
+        } else if (meta.obstacle === 'telefrag_portal') {
+          sx = 0.36;
+          sy = 0.36;
+          sz = 0.22;
+        } else if (meta.obstacle === 'trapdoor_row') {
+          sx = 0.72;
+          sy = 0.12 + state.closedBlend * 0.12;
+          sz = 0.24;
+        }
+
+        tempObject.position.set(ox, oy, z);
+        tempObject.rotation.set(
+          sim.runTime * 1.4 + meta.obstaclePhase * 0.1,
+          sim.runTime * (meta.obstacle === 'rotating_cross_blades' ? 2.8 : 1.1),
+          angle + Math.PI / 2
+        );
+        tempObject.scale.set(sx, sy, sz);
+        tempObject.updateMatrix();
+        obstacleMesh.setMatrixAt(obstacleCount, tempObject.matrix);
+
+        tempColorA
+          .set(obstacleColor(meta.obstacle))
+          .lerp(tempColorB.set(stageVisualById(ring.stageId).obstacleHot), 0.28)
+          .multiplyScalar(0.55 + state.closedBlend * 0.85);
+        obstacleMesh.setColorAt(obstacleCount, tempColorA);
+
+        obstacleCount += 1;
+      }
+
+      if (
+        ring.collectibleLane >= 0 &&
+        ring.collectibleType !== null &&
+        !ring.collected
+      ) {
+        const angle = ring.collectibleLane * step + warp;
+        const radius = GAME.radius - 1.38;
+        const cx = Math.cos(angle) * radius;
+        const cy = Math.sin(angle) * radius;
+
+        tempObject.position.set(cx, cy, z);
+        tempObject.rotation.set(sim.runTime * 2.4, sim.runTime * 1.7, sim.runTime * 2.1);
+        tempObject.scale.setScalar(
+          ring.collectibleType === 'core'
+            ? 1.24
+            : ring.collectibleType === 'sync'
+              ? 1.08
+              : 0.92
+        );
+        tempObject.updateMatrix();
+        collectibleMesh.setMatrixAt(collectibleCount, tempObject.matrix);
+
+        tempColorA
+          .set(collectibleColor(ring.collectibleType))
+          .multiplyScalar(0.85 + sim.audioReactive * 0.4);
+        collectibleMesh.setColorAt(collectibleCount, tempColorA);
+
+        collectibleCount += 1;
+      }
+    }
+
+    obstacleMesh.count = obstacleCount;
+    obstacleMesh.instanceMatrix.needsUpdate = true;
+    if (obstacleMesh.instanceColor) obstacleMesh.instanceColor.needsUpdate = true;
+
+    collectibleMesh.count = collectibleCount;
+    collectibleMesh.instanceMatrix.needsUpdate = true;
+    if (collectibleMesh.instanceColor) collectibleMesh.instanceColor.needsUpdate = true;
+  }, [getRing, tempColorA, tempColorB, tempObject]);
+
   useEffect(() => {
     octaSurgeState.load();
 
     sceneBgRef.current.set(FIBER_COLORS.bg);
     sceneFogRef.current.set(FIBER_COLORS.fog);
+
     scene.background = sceneBgRef.current;
-    scene.fog = new THREE.Fog(sceneFogRef.current.clone(), 10, 190);
+    scene.fog = new THREE.Fog(sceneFogRef.current.clone(), 4, 150);
     gl.setClearColor(sceneBgRef.current, 1);
     gl.domElement.style.touchAction = 'none';
 
     const audio = new Audio(GAME.audioFile);
     audio.loop = true;
-    audio.volume = 0.3;
+    audio.volume = 0.28;
     audio.preload = 'auto';
     audioRef.current.element = audio;
 
@@ -1366,17 +848,15 @@ export default function OctaSurge() {
   }, [initializeRun, snap.phase]);
 
   useEffect(() => {
-    if (!laneMeshRef.current) return;
-    laneMeshRef.current.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    wireMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     obstacleMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     collectibleMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    fxShardMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   }, []);
 
   useFrame((state, rawDelta) => {
     const frameDelta = clamp(rawDelta, 0.001, 0.05);
     const input = inputRef.current;
+
+    tileVariantRef.current = snap.tileVariant;
 
     const wantsStart =
       input.pointerJustDown ||
@@ -1386,15 +866,15 @@ export default function OctaSurge() {
       input.justPressed.has('spacebar');
     const replayTap = input.justPressed.has('r');
 
-    const runtimeBefore = useOctaRuntimeStore.getState();
-
     if (snap.phase !== 'playing') {
       fixedStepperRef.current.reset();
       turnQueueRef.current.length = 0;
       flipQueueRef.current = 0;
+      slowTapRef.current = false;
       if (octaSurgeState.replayMode !== 'off') {
         octaSurgeState.setReplayMode('off');
       }
+
       if (replayTap && octaSurgeState.queueReplayPlayback()) {
         startRun();
       } else if (wantsStart) {
@@ -1402,581 +882,342 @@ export default function OctaSurge() {
       }
 
       if (worldRef.current) {
-        worldRef.current.rotation.z =
-          Math.sin(state.clock.elapsedTime * 0.35) * 0.09;
+        worldRef.current.rotation.z = Math.sin(state.clock.elapsedTime * 0.4) * 0.08;
       }
-
       if (playerRef.current) {
         const px = Math.cos(GAME.playerAngle) * (GAME.radius - 0.58);
         const py = Math.sin(GAME.playerAngle) * (GAME.radius - 0.58);
-        const bob = Math.sin(state.clock.elapsedTime * 3.2) * 0.05;
-        playerRef.current.position.set(px, py, GAME.playerZ + bob);
+        playerRef.current.position.set(px, py, GAME.playerZ + Math.sin(state.clock.elapsedTime * 2.8) * 0.04);
       }
+      if (ghostRef.current) ghostRef.current.visible = false;
 
       const cam = camera as THREE.PerspectiveCamera;
-      cam.fov = THREE.MathUtils.lerp(
-        cam.fov,
-        70,
-        1 - Math.exp(-frameDelta * 5)
-      );
-      cam.position.x = THREE.MathUtils.lerp(
-        cam.position.x,
-        0,
-        1 - Math.exp(-frameDelta * 5)
-      );
-      cam.position.y = THREE.MathUtils.lerp(
-        cam.position.y,
-        -0.32,
-        1 - Math.exp(-frameDelta * 5)
-      );
-      cam.position.z = THREE.MathUtils.lerp(
-        cam.position.z,
-        10.6,
-        1 - Math.exp(-frameDelta * 5)
-      );
-      cam.lookAt(0, 0, -38);
+      cam.fov = THREE.MathUtils.lerp(cam.fov, 66, 1 - Math.exp(-frameDelta * 4));
+      cam.position.x = THREE.MathUtils.lerp(cam.position.x, 0, 1 - Math.exp(-frameDelta * 4));
+      cam.position.y = THREE.MathUtils.lerp(cam.position.y, -0.5, 1 - Math.exp(-frameDelta * 4));
+      cam.position.z = THREE.MathUtils.lerp(cam.position.z, 9.4, 1 - Math.exp(-frameDelta * 4));
+      cam.lookAt(0, 0, -14);
       cam.updateProjectionMatrix();
 
-      syncInstances(
-        runtimeBefore.runTime,
-        runtimeBefore.audioReactive,
-        runtimeBefore.syncTimer,
-        snap.tileVariant
-      );
-      updateFxParticles(frameDelta);
+      updateInstances();
       clearFrameInput(inputRef);
       return;
     }
 
     if (paused) {
       fixedStepperRef.current.reset();
-      turnQueueRef.current.length = 0;
-      flipQueueRef.current = 0;
-      updateFxParticles(frameDelta);
       clearFrameInput(inputRef);
       return;
     }
-
-    if (deathFxRef.current.active) {
-      fixedStepperRef.current.reset();
-      turnQueueRef.current.length = 0;
-      flipQueueRef.current = 0;
-      const finished = updateDeathFx(frameDelta);
-      updateFxParticles(frameDelta);
-      if (finished) {
-        const reason = deathFxRef.current.reason || 'Connection dropped.';
-        endRun(reason, 'death');
-      }
-      clearFrameInput(inputRef);
-      return;
-    }
-
-    let {
-      laneIndex,
-      sides,
-      targetRotation,
-      rotation,
-      angularVelocity,
-      speed,
-      distance,
-      score,
-      runTime,
-      combo,
-      comboTimer,
-      multiplier,
-      stageId,
-      stageFlash,
-      nextSegmentIndex,
-      farthestBackZ,
-      lastSafeLane,
-      slowMoMeter,
-      slowMoTime,
-      shardCount,
-      syncTimer,
-      flipPulse,
-      dangerPulse,
-      audioReactive,
-      turnCooldown,
-      flipCooldown,
-      cameraMode,
-    } = runtimeBefore;
-    let currentPlatform = octaSurgeState.currentPlatform as OctaPlatformType;
-    let currentObstacle = octaSurgeState.currentObstacle as OctaObstacleType;
-    const replayRuntime = replayRef.current;
-    const replayPlayback = replayRuntime.mode === 'playback';
 
     const leftTap =
-      !replayPlayback &&
-      (input.justPressed.has('arrowleft') ||
-        input.justPressed.has('a') ||
-        (input.pointerJustDown && input.pointerX < -0.2));
+      input.justPressed.has('arrowleft') ||
+      input.justPressed.has('a') ||
+      (input.pointerJustDown && input.pointerX < -0.2);
     const rightTap =
-      !replayPlayback &&
-      (input.justPressed.has('arrowright') ||
-        input.justPressed.has('d') ||
-        (input.pointerJustDown && input.pointerX > 0.2));
+      input.justPressed.has('arrowright') ||
+      input.justPressed.has('d') ||
+      (input.pointerJustDown && input.pointerX > 0.2);
     const flipTap =
-      !replayPlayback &&
-      (input.justPressed.has('arrowup') ||
-        input.justPressed.has('w') ||
-        input.justPressed.has('space') ||
-        input.justPressed.has('spacebar'));
-    const slowTap = !replayPlayback && input.justPressed.has('shift');
+      input.justPressed.has('arrowup') ||
+      input.justPressed.has('w') ||
+      input.justPressed.has('space') ||
+      input.justPressed.has('spacebar');
+    const slowTap = input.justPressed.has('shift');
+
     const stylePrevTap = input.justPressed.has('q');
     const styleNextTap = input.justPressed.has('e');
+
     const cameraTap =
       input.justPressed.has('c') ||
       input.justPressed.has('v') ||
       input.justPressed.has('tab');
 
     if (cameraTap) {
-      cameraMode = nextCameraMode(cameraMode);
-      useOctaRuntimeStore.setState({ cameraMode });
-      octaSurgeState.setCameraMode(cameraMode);
+      const mode = nextCameraMode(snap.cameraMode);
+      octaSurgeState.setCameraMode(mode);
+      useOctaRuntimeStore.setState({ cameraMode: mode });
     }
-
-    if (leftTap !== rightTap) {
-      const queue = turnQueueRef.current;
-      const direction: -1 | 1 = leftTap ? -1 : 1;
-      if (queue.length < 5) {
-        queue.push(direction);
-        queueReplayInput(direction < 0 ? 'turn_left' : 'turn_right');
-      }
-    }
-    if (flipTap) {
-      const previous = flipQueueRef.current;
-      flipQueueRef.current = Math.min(3, flipQueueRef.current + 1);
-      if (flipQueueRef.current > previous) queueReplayInput('flip');
-    }
-    if (slowTap) queueReplayInput('slow_mo');
 
     if (stylePrevTap) octaSurgeState.cycleTileVariant(-1);
     if (styleNextTap) octaSurgeState.cycleTileVariant(1);
 
-    const sampledAudio = sampleAudioReactive();
-    let endReason = '';
-    let deathType: 'void' | 'obstacle' = 'obstacle';
-    let slowTapPending = slowTap;
-
-    const simulateStep = (delta: number) => {
-      if (flipQueueRef.current > 0 && flipCooldown <= 0) {
-        flipQueueRef.current -= 1;
-        laneIndex = normalizeLane(laneIndex + Math.floor(sides / 2), sides);
-        targetRotation = rotationForLane(laneIndex, sides);
-        flipPulse = 1;
-        flipCooldown = GAME.flipCooldownMs / 1000;
-        dangerPulse = Math.max(dangerPulse, 0.2);
-      }
-
-      if (turnCooldown <= 0 && turnQueueRef.current.length > 0) {
-        const direction = turnQueueRef.current.shift();
-        if (direction) {
-          laneIndex = normalizeLane(laneIndex + direction, sides);
-          targetRotation = rotationForLane(laneIndex, sides);
-          turnCooldown = GAME.turnCooldownMs / 1000;
-        }
-      }
-
-      if (slowTapPending && slowMoMeter >= 30 && slowMoTime <= 0) {
-        slowMoMeter = clamp(slowMoMeter - 30, 0, 100);
-        slowMoTime = 3;
-      }
-      slowTapPending = false;
-
-      audioReactive = THREE.MathUtils.lerp(
-        audioReactive,
-        sampledAudio,
-        1 - Math.exp(-delta * 9)
-      );
-
-      runTime += delta;
-
-      turnCooldown = Math.max(0, turnCooldown - delta);
-      flipCooldown = Math.max(0, flipCooldown - delta);
-      flipPulse = Math.max(0, flipPulse - delta * 2.2);
-      dangerPulse = Math.max(0, dangerPulse - delta * 1.9);
-      stageFlash = Math.max(0, stageFlash - delta / GAME.stageFlashDuration);
-      syncTimer = Math.max(0, syncTimer - delta);
-
-      if (slowMoTime > 0) {
-        slowMoTime = Math.max(0, slowMoTime - delta);
-        slowMoMeter = clamp(slowMoMeter - delta * 22, 0, 100);
-      }
-
-      comboTimer = Math.max(0, comboTimer - delta);
-      if (comboTimer <= 0) {
-        combo = 0;
-        multiplier = Math.max(1, multiplier - delta * 0.8);
-      }
-
-      const stage = stageById(stageId);
-      const targetSpeed = clamp(
-        (GAME.baseSpeed + runTime * GAME.speedRamp) *
-          stage.speedMultiplier *
-          (1 + audioReactive * 0.02),
-        GAME.baseSpeed,
-        GAME.maxSpeed
-      );
-
-      speed = THREE.MathUtils.lerp(speed, targetSpeed, 1 - Math.exp(-delta * 2));
-      if (slowMoTime > 0) speed *= 0.58;
-
-      distance += speed * delta;
-
-      const deltaAngle = shortestAngle(rotation, targetRotation);
-      angularVelocity += deltaAngle * GAME.springStiffness * delta;
-      angularVelocity *= Math.exp(-GAME.springDamping * delta);
-      angularVelocity = clamp(
-        angularVelocity,
-        -GAME.maxAngularVelocity,
-        GAME.maxAngularVelocity
-      );
-      rotation += angularVelocity * delta;
-
-      for (let i = 0; i < segmentsRef.current.length; i += 1) {
-      const segment = segmentsRef.current[i];
-
-      segment.prevZ = segment.z;
-      segment.z += speed * delta;
-
-      const stageProfile = stageById(segment.stageId);
-      const segmentWarp =
-        Math.sin(segment.warpSeed + runTime * 0.6 + segment.index * 0.11) *
-        stageProfile.warpAmplitude *
-        (syncTimer > 0 ? 0.35 : 1);
-
-      const crossedPlane =
-        !segment.checked &&
-        segment.prevZ <= GAME.collisionThresholdZ &&
-        segment.z >= GAME.collisionThresholdZ;
-
-      if (crossedPlane) {
-        segment.checked = true;
-
-        if (segment.sides !== sides) {
-          const remapAngle = normalizeAngle(GAME.playerAngle - targetRotation);
-          const remapped = normalizeLane(
-            Math.round(remapAngle / laneStep(segment.sides)),
-            segment.sides
-          );
-          sides = segment.sides;
-          laneIndex = remapped;
-          targetRotation = rotationForLane(remapped, sides);
-        }
-
-        if (segment.stageId !== stageId) {
-          stageId = segment.stageId;
-          stageFlash = 1;
-          dangerPulse = Math.max(dangerPulse, 0.22);
-          const stagePulseColor = stageAestheticById(stageId).accent;
-          const playerPos = playerRef.current?.position;
-          if (playerPos) {
-            emitFxBurst(
-              playerPos.x,
-              playerPos.y,
-              playerPos.z,
-              stagePulseColor,
-              16,
-              1.1,
-              3.3,
-              0.16,
-              0.44,
-              0.85
-            );
-          }
-        }
-
-        const step = laneStep(segment.sides);
-        const collisionRotation = THREE.MathUtils.lerp(rotation, targetRotation, 0.72);
-        const laneFloat =
-          normalizeAngle(GAME.playerAngle - (collisionRotation + segmentWarp)) /
-          step;
-        const roundedLane = normalizeLane(
-          Math.round(laneFloat),
-          segment.sides
-        );
-        const floorLane = normalizeLane(Math.floor(laneFloat), segment.sides);
-        const ceilLane = normalizeLane(Math.ceil(laneFloat), segment.sides);
-        const preferredLane = normalizeLane(laneIndex, segment.sides);
-        const laneGrace = 0.5 + GAME.nearMissMargin * 0.26;
-
-        const candidateLanes = [
-          preferredLane,
-          roundedLane,
-          floorLane,
-          ceilLane,
-          normalizeLane(roundedLane - 1, segment.sides),
-          normalizeLane(roundedLane + 1, segment.sides),
-        ];
-
-        let hitLane = roundedLane;
-        let hitDist = Infinity;
-        let seenMask = 0;
-        for (const candidate of candidateLanes) {
-          const bit = laneBit(candidate, segment.sides);
-          if ((seenMask & bit) !== 0) continue;
-          seenMask |= bit;
-          if ((segment.solidMask & bit) === 0) continue;
-          const distRaw = Math.abs(candidate - laneFloat);
-          const laneDist = Math.min(distRaw, segment.sides - distRaw);
-          const scoreDist = laneDist + (candidate === preferredLane ? 0 : 0.06);
-          if (scoreDist < hitDist) {
-            hitDist = scoreDist;
-            hitLane = candidate;
-          }
-        }
-
-        const hitBit = laneBit(hitLane, segment.sides);
-        const onSolid = hitDist <= laneGrace && (segment.solidMask & hitBit) !== 0;
-        const graceSaved = onSolid && hitLane !== roundedLane && hitDist > 0.33;
-
-        if (!onSolid) {
-          endReason = 'Y-lane mismatch: crossed onto a void path.';
-          deathType = 'void';
-          dangerPulse = 1;
-          break;
-        }
-
-        laneIndex = hitLane;
-        const lanePattern = lanePatternFor(segment, hitLane);
-        const obstacleState = obstacleSeverity(lanePattern, runTime);
-        const platformState = platformClosedBlend(
-          lanePattern.platform,
-          lanePattern.platformPhase,
-          runTime
-        );
-        const onObstacle =
-          lanePattern.obstacle !== 'none' && obstacleState.danger;
-
-        currentPlatform = lanePattern.platform;
-        currentObstacle = lanePattern.obstacle;
-
-        if (onObstacle && lanePattern.obstacle !== 'none') {
-          endReason = OCTA_OBSTACLE_FAIL_REASON[lanePattern.obstacle];
-          deathType = 'obstacle';
-          dangerPulse = 1;
-          break;
-        }
-
-        if (lanePattern.platform === 'ghost_platform' && platformState > 0.76) {
-          endReason = 'Ghost platform phase dropped beneath the packet.';
-          deathType = 'void';
-          dangerPulse = 1;
-          break;
-        }
-
-        if (lanePattern.platform === 'crushing_ceiling' && platformState > 0.82) {
-          endReason = 'Crushing ceiling clamped shut.';
-          deathType = 'obstacle';
-          dangerPulse = 1;
-          break;
-        }
-
-        if (graceSaved) {
-          score += GAME.scoreRate * 0.22 * multiplier;
-          dangerPulse = Math.max(dangerPulse, 0.28);
-          const playerPos = playerRef.current?.position;
-          if (playerPos) {
-            const stageVisual = stageAestheticById(segment.stageId);
-            emitFxBurst(
-              playerPos.x,
-              playerPos.y,
-              playerPos.z,
-              stageVisual.wire,
-              6,
-              0.8,
-              1.8,
-              0.1,
-              0.24,
-              0.6
-            );
-          }
-        }
-
-        combo += 1;
-        comboTimer = GAME.comboWindow;
-        multiplier = clamp(1 + combo * 0.16 + shardCount * 0.07, 1, 8);
-        score += GAME.scoreRate * multiplier * (1 + audioReactive * 0.4);
-
-        if (lanePattern.platform === 'conveyor_belt') {
-          laneIndex = normalizeLane(laneIndex + 1, segment.sides);
-          targetRotation = rotationForLane(laneIndex, segment.sides);
-          score += GAME.scoreRate * 0.2 * multiplier;
-          flipPulse = Math.max(flipPulse, 0.16);
-        } else if (lanePattern.platform === 'reverse_conveyor') {
-          laneIndex = normalizeLane(laneIndex - 1, segment.sides);
-          targetRotation = rotationForLane(laneIndex, segment.sides);
-          score += GAME.scoreRate * 0.2 * multiplier;
-          flipPulse = Math.max(flipPulse, 0.16);
-        } else if (lanePattern.platform === 'bouncer') {
-          score += GAME.scoreRate * 0.3 * multiplier;
-          flipPulse = Math.max(flipPulse, 0.32);
-          dangerPulse = Math.max(dangerPulse, 0.26);
-        } else if (lanePattern.platform === 'trampoline') {
-          score += GAME.scoreRate * 0.42 * multiplier;
-          slowMoMeter = clamp(slowMoMeter + 12, 0, 100);
-          flipPulse = Math.max(flipPulse, 0.4);
-        } else if (lanePattern.platform === 'teleporter') {
-          const jump = Math.sin(segment.index * 0.7 + lanePattern.platformPhase) > 0 ? 2 : -2;
-          laneIndex = normalizeLane(laneIndex + jump, segment.sides);
-          targetRotation = rotationForLane(laneIndex, segment.sides);
-          score += GAME.scoreRate * 0.45 * multiplier;
-          dangerPulse = Math.max(dangerPulse, 0.34);
-        } else if (lanePattern.platform === 'sticky_glue') {
-          speed *= 0.91;
-          comboTimer *= 0.84;
-        } else if (lanePattern.platform === 'speed_ramp') {
-          speed *= 1.05;
-          score += GAME.scoreRate * 0.24 * multiplier;
-        }
-
-        const leftPattern = lanePatternFor(
-          segment,
-          normalizeLane(hitLane - 1, segment.sides)
-        );
-        const rightPattern = lanePatternFor(
-          segment,
-          normalizeLane(hitLane + 1, segment.sides)
-        );
-        const leftObstacle =
-          leftPattern.obstacle !== 'none' &&
-          obstacleSeverity(leftPattern, runTime).danger;
-        const rightObstacle =
-          rightPattern.obstacle !== 'none' &&
-          obstacleSeverity(rightPattern, runTime).danger;
-        if (leftObstacle || rightObstacle) {
-          score += GAME.scoreRate * 0.38 * multiplier;
-          dangerPulse = Math.max(dangerPulse, 0.36);
-          const stageVisual = stageAestheticById(segment.stageId);
-          const playerPos = playerRef.current?.position;
-          if (playerPos) {
-            emitFxBurst(
-              playerPos.x,
-              playerPos.y,
-              playerPos.z,
-              stageVisual.obstacleHot,
-              9,
-              1.1,
-              2.6,
-              0.12,
-              0.28,
-              0.7
-            );
-          }
-        }
-
-        if (
-          !segment.collected &&
-          segment.collectibleLane >= 0 &&
-          segment.collectibleType !== null &&
-          hitLane === segment.collectibleLane
-        ) {
-          const canCollectCore =
-            segment.collectibleType !== 'core' || flipPulse > 0.16;
-
-          if (canCollectCore) {
-            segment.collected = true;
-            const collectAngle = segment.collectibleLane * step + segmentWarp;
-            const collectRadius = GAME.radius - 1.32;
-            const collectX = Math.cos(collectAngle) * collectRadius;
-            const collectY = Math.sin(collectAngle) * collectRadius;
-            const collectWorld = toWorldPoint(collectX, collectY, segment.z);
-            const collectFxColor = collectibleColor(segment.collectibleType);
-            emitFxBurst(
-              collectWorld.x,
-              collectWorld.y,
-              collectWorld.z,
-              collectFxColor,
-              segment.collectibleType === 'core'
-                ? 30
-                : segment.collectibleType === 'sync'
-                  ? 24
-                  : 18,
-              1.8,
-              segment.collectibleType === 'core' ? 5 : 4,
-              0.18,
-              0.58,
-              1.05
-            );
-
-            if (segment.collectibleType === 'shard') {
-              shardCount += 1;
-              slowMoMeter = clamp(slowMoMeter + 24, 0, 100);
-              score += 120;
-              octaSurgeState.collectStyleShards(1);
-            } else if (segment.collectibleType === 'core') {
-              multiplier = clamp(multiplier + 0.7, 1, 8);
-              score += 220;
-              octaSurgeState.collectStyleShards(2);
-            } else if (segment.collectibleType === 'sync') {
-              syncTimer = 5;
-              score += 180;
-              octaSurgeState.collectStyleShards(1);
-            }
-
-            dangerPulse = Math.max(dangerPulse, 0.24);
-          }
-        }
-      }
-
-      if (segment.z > GAME.despawnZ) {
-        const nextZ = farthestBackZ - GAME.segmentLength;
-        const nextSegment = levelGen.createSegment({
-          slot: segment.slot,
-          index: nextSegmentIndex,
-          z: nextZ,
-          previousSafeLane: lastSafeLane,
-          scoreHint: score,
-        });
-
-        segmentsRef.current[i] = nextSegment;
-        nextSegmentIndex += 1;
-        farthestBackZ = nextZ;
-        lastSafeLane = nextSegment.safeLane;
+    if (leftTap !== rightTap) {
+      const queue = turnQueueRef.current;
+      const direction: -1 | 1 = leftTap ? -1 : 1;
+      if (queue.length < MAX_TURN_QUEUE) {
+        queue.push(direction);
+        queueReplayInput(direction < 0 ? 'turn_left' : 'turn_right');
       }
     }
-    };
+
+    if (flipTap) {
+      const previous = flipQueueRef.current;
+      flipQueueRef.current = Math.min(MAX_FLIP_QUEUE, flipQueueRef.current + 1);
+      if (flipQueueRef.current > previous) queueReplayInput('flip');
+    }
+
+    if (slowTap) {
+      slowTapRef.current = true;
+      queueReplayInput('slow_mo');
+    }
+
+    const sampledAudio = sampleAudioReactive();
+    const sim = simRef.current;
 
     fixedStepperRef.current.tick(frameDelta, (fixedDelta) => {
-      if (endReason) return;
-      replayRuntime.frame += 1;
+      const replay = replayRef.current;
+      replay.frame += 1;
 
-      if (replayRuntime.mode === 'playback') {
-        const events = replayRuntime.playbackEvents;
-        while (replayRuntime.playbackCursor < events.length) {
-          const event = events[replayRuntime.playbackCursor];
-          if (event.frame > replayRuntime.frame) break;
-          replayRuntime.playbackCursor += 1;
-          if (event.frame < replayRuntime.frame) continue;
+      if (replay.mode === 'playback') {
+        while (replay.playbackCursor < replay.playbackEvents.length) {
+          const event = replay.playbackEvents[replay.playbackCursor];
+          if (event.frame > replay.frame) break;
+          replay.playbackCursor += 1;
+          if (event.frame < replay.frame) continue;
 
           if (event.action === 'turn_left' || event.action === 'turn_right') {
             const queue = turnQueueRef.current;
             const direction: -1 | 1 = event.action === 'turn_left' ? -1 : 1;
-            if (queue.length < 5) queue.push(direction);
+            if (queue.length < MAX_TURN_QUEUE) queue.push(direction);
             continue;
           }
 
           if (event.action === 'flip') {
-            flipQueueRef.current = Math.min(3, flipQueueRef.current + 1);
+            flipQueueRef.current = Math.min(MAX_FLIP_QUEUE, flipQueueRef.current + 1);
             continue;
           }
 
           if (event.action === 'slow_mo') {
-            slowTapPending = true;
+            slowTapRef.current = true;
           }
         }
       }
 
-      simulateStep(fixedDelta);
+      if (sim.ended) {
+        sim.deathTimer += fixedDelta;
+        return;
+      }
 
-      if (
-        replayRuntime.mode === 'record' &&
-        replayRuntime.frame % GHOST_RECORD_STRIDE === 0
-      ) {
-        const angle = GAME.playerAngle + rotation;
+      if (sim.flipCooldown <= 0 && flipQueueRef.current > 0) {
+        flipQueueRef.current -= 1;
+        sim.laneIndex = normalizeLane(sim.laneIndex + Math.floor(sim.sides / 2), sim.sides);
+        sim.flipPulse = 1;
+        sim.flipCooldown = GAME.flipCooldownMs / 1000;
+        sim.targetRotation = rotationForLane(sim.laneIndex, sim.sides);
+      }
+
+      if (sim.turnCooldown <= 0 && turnQueueRef.current.length > 0) {
+        const direction = turnQueueRef.current.shift();
+        if (direction) {
+          sim.laneIndex = normalizeLane(sim.laneIndex + direction, sim.sides);
+          sim.turnCooldown = GAME.turnCooldownMs / 1000;
+          sim.targetRotation = rotationForLane(sim.laneIndex, sim.sides);
+        }
+      }
+
+      if (slowTapRef.current && sim.slowMoMeter >= 28 && sim.slowMoTime <= 0) {
+        sim.slowMoMeter = clamp(sim.slowMoMeter - 28, 0, 100);
+        sim.slowMoTime = 2.6;
+      }
+      slowTapRef.current = false;
+
+      sim.turnCooldown = Math.max(0, sim.turnCooldown - fixedDelta);
+      sim.flipCooldown = Math.max(0, sim.flipCooldown - fixedDelta);
+      sim.comboTimer = Math.max(0, sim.comboTimer - fixedDelta);
+      sim.stageFlash = Math.max(0, sim.stageFlash - fixedDelta / GAME.stageFlashDuration);
+      sim.flipPulse = Math.max(0, sim.flipPulse - fixedDelta * 2.2);
+      sim.dangerPulse = Math.max(0, sim.dangerPulse - fixedDelta * 1.8);
+      sim.syncTimer = Math.max(0, sim.syncTimer - fixedDelta);
+
+      if (sim.slowMoTime > 0) {
+        sim.slowMoTime = Math.max(0, sim.slowMoTime - fixedDelta);
+        sim.slowMoMeter = clamp(sim.slowMoMeter - fixedDelta * 20, 0, 100);
+      }
+
+      if (sim.comboTimer <= 0) {
+        sim.combo = 0;
+        sim.multiplier = Math.max(1, sim.multiplier - fixedDelta * 0.72);
+      }
+
+      sim.audioReactive = THREE.MathUtils.lerp(
+        sim.audioReactive,
+        sampledAudio,
+        1 - Math.exp(-fixedDelta * 8)
+      );
+
+      const stage = stageById(sim.stageId);
+      let targetSpeed = clamp(
+        (GAME.baseSpeed + sim.runTime * GAME.speedRamp) *
+          stage.speedMultiplier *
+          (1 + sim.audioReactive * 0.03),
+        GAME.baseSpeed,
+        GAME.maxSpeed
+      );
+
+      if (sim.slowMoTime > 0) targetSpeed *= 0.58;
+
+      sim.speed = THREE.MathUtils.lerp(sim.speed, targetSpeed, 1 - Math.exp(-fixedDelta * 2.6));
+      sim.distance += sim.speed * fixedDelta;
+      sim.runTime += fixedDelta;
+
+      const laneDelta = sim.laneIndex - sim.laneFloat;
+      const shortestLaneDelta =
+        Math.abs(laneDelta) > sim.sides * 0.5
+          ? laneDelta - Math.sign(laneDelta) * sim.sides
+          : laneDelta;
+      sim.laneVelocity += shortestLaneDelta * fixedDelta * 26;
+      sim.laneVelocity *= Math.exp(-fixedDelta * 11.8);
+      sim.laneFloat = positiveMod(sim.laneFloat + sim.laneVelocity * fixedDelta, sim.sides);
+
+      sim.targetRotation = rotationForLane(sim.laneFloat, sim.sides);
+      const deltaRot = shortestAngle(sim.rotation, sim.targetRotation);
+      sim.angularVelocity += deltaRot * GAME.springStiffness * fixedDelta;
+      sim.angularVelocity *= Math.exp(-GAME.springDamping * fixedDelta);
+      sim.angularVelocity = clamp(sim.angularVelocity, -GAME.maxAngularVelocity, GAME.maxAngularVelocity);
+      sim.rotation += sim.angularVelocity * fixedDelta;
+
+      sim.scroll += sim.speed * fixedDelta;
+      const baseRing = Math.floor(sim.scroll / RING_SPACING);
+      sim.baseRing = baseRing;
+
+      while (sim.lastCrossedRing < baseRing && !sim.ended) {
+        sim.lastCrossedRing += 1;
+        const ring = getRing(sim.lastCrossedRing);
+
+        if (ring.sides !== sim.sides) {
+          const remapAngle = normalizeAngle(GAME.playerAngle - sim.rotation);
+          const remapped = normalizeLane(Math.round(remapAngle / laneStep(ring.sides)), ring.sides);
+          sim.sides = ring.sides;
+          sim.laneIndex = remapped;
+          sim.laneFloat = remapped;
+          sim.targetRotation = rotationForLane(remapped, ring.sides);
+          sim.stageFlash = 1;
+        }
+
+        if (ring.stageId !== sim.stageId) {
+          sim.stageId = ring.stageId;
+          sim.stageFlash = 1;
+          sim.dangerPulse = Math.max(sim.dangerPulse, 0.24);
+        }
+
+        const lane = normalizeLane(Math.round(sim.laneFloat), ring.sides);
+        const bit = laneBit(lane, ring.sides);
+
+        if ((ring.solidMask & bit) === 0) {
+          sim.ended = true;
+          sim.deathType = 'void';
+          sim.endReason = 'Void breach: lane integrity lost.';
+          sim.dangerPulse = 1;
+          break;
+        }
+
+        const meta = ring.laneMeta[lane];
+        sim.currentPlatform = meta?.platform ?? 'standard';
+        sim.currentObstacle = meta?.obstacle ?? 'none';
+
+        if (meta && meta.obstacle !== 'none') {
+          const hazard = obstacleState(meta, sim.runTime);
+          if (hazard.danger) {
+            sim.ended = true;
+            sim.deathType = 'obstacle';
+            sim.endReason = OCTA_OBSTACLE_FAIL_REASON[meta.obstacle];
+            sim.dangerPulse = 1;
+            break;
+          }
+        }
+
+        const platformGate = platformBlend(meta.platform, meta.platformPhase, sim.runTime);
+        if (meta.platform === 'ghost_platform' && platformGate > 0.78) {
+          sim.ended = true;
+          sim.deathType = 'void';
+          sim.endReason = 'Ghost platform phased out beneath the packet.';
+          sim.dangerPulse = 1;
+          break;
+        }
+
+        if (meta.platform === 'crushing_ceiling' && platformGate > 0.84) {
+          sim.ended = true;
+          sim.deathType = 'obstacle';
+          sim.endReason = 'Crushing ceiling impact.';
+          sim.dangerPulse = 1;
+          break;
+        }
+
+        sim.combo += 1;
+        sim.comboTimer = GAME.comboWindow;
+        sim.multiplier = clamp(1 + sim.combo * 0.16 + sim.shardCount * 0.06, 1, 9);
+        sim.score += GAME.scoreRate * sim.multiplier * (1 + sim.audioReactive * 0.42);
+
+        if (meta.platform === 'conveyor_belt') {
+          sim.laneIndex = normalizeLane(sim.laneIndex + 1, ring.sides);
+          sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
+          sim.score += GAME.scoreRate * 0.22 * sim.multiplier;
+        } else if (meta.platform === 'reverse_conveyor') {
+          sim.laneIndex = normalizeLane(sim.laneIndex - 1, ring.sides);
+          sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
+          sim.score += GAME.scoreRate * 0.22 * sim.multiplier;
+        } else if (meta.platform === 'bouncer') {
+          sim.score += GAME.scoreRate * 0.34 * sim.multiplier;
+          sim.flipPulse = Math.max(sim.flipPulse, 0.34);
+        } else if (meta.platform === 'trampoline') {
+          sim.score += GAME.scoreRate * 0.44 * sim.multiplier;
+          sim.flipPulse = Math.max(sim.flipPulse, 0.42);
+          sim.slowMoMeter = clamp(sim.slowMoMeter + 14, 0, 100);
+        } else if (meta.platform === 'teleporter') {
+          const jump = Math.sin(ring.index * 0.7 + meta.platformPhase) > 0 ? 2 : -2;
+          sim.laneIndex = normalizeLane(sim.laneIndex + jump, ring.sides);
+          sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
+          sim.score += GAME.scoreRate * 0.48 * sim.multiplier;
+          sim.dangerPulse = Math.max(sim.dangerPulse, 0.34);
+        } else if (meta.platform === 'sticky_glue') {
+          sim.speed *= 0.9;
+        } else if (meta.platform === 'speed_ramp') {
+          sim.speed *= 1.06;
+          sim.score += GAME.scoreRate * 0.24 * sim.multiplier;
+        }
+
+        const leftMeta = ring.laneMeta[normalizeLane(lane - 1, ring.sides)];
+        const rightMeta = ring.laneMeta[normalizeLane(lane + 1, ring.sides)];
+        const nearHazard =
+          (leftMeta && leftMeta.obstacle !== 'none' && obstacleState(leftMeta, sim.runTime).danger) ||
+          (rightMeta && rightMeta.obstacle !== 'none' && obstacleState(rightMeta, sim.runTime).danger);
+
+        if (nearHazard) {
+          sim.score += GAME.scoreRate * 0.34 * sim.multiplier;
+          sim.dangerPulse = Math.max(sim.dangerPulse, 0.34);
+        }
+
+        if (
+          ring.collectibleLane >= 0 &&
+          ring.collectibleType !== null &&
+          !ring.collected &&
+          lane === ring.collectibleLane
+        ) {
+          ring.collected = true;
+          if (ring.collectibleType === 'shard') {
+            sim.shardCount += 1;
+            sim.slowMoMeter = clamp(sim.slowMoMeter + 22, 0, 100);
+            sim.score += 110;
+            octaSurgeState.collectStyleShards(1);
+          } else if (ring.collectibleType === 'core') {
+            sim.multiplier = clamp(sim.multiplier + 0.6, 1, 9);
+            sim.score += 220;
+            octaSurgeState.collectStyleShards(2);
+          } else if (ring.collectibleType === 'sync') {
+            sim.syncTimer = 5;
+            sim.score += 180;
+            octaSurgeState.collectStyleShards(1);
+          }
+          sim.dangerPulse = Math.max(sim.dangerPulse, 0.22);
+        }
+      }
+
+      if (replay.mode === 'record' && replay.frame % GHOST_RECORD_STRIDE === 0) {
+        const angle = GAME.playerAngle + sim.rotation;
         const radius = GAME.radius - 0.58;
-        replayRuntime.ghostFrames.push({
-          frame: replayRuntime.frame,
+        replay.ghostFrames.push({
+          frame: replay.frame,
           x: Math.cos(angle) * radius,
           y: Math.sin(angle) * radius,
           z: GAME.playerZ,
@@ -1984,208 +1225,49 @@ export default function OctaSurge() {
       }
     });
 
-    const runGoal =
-      snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
-    const runComplete = snap.mode !== 'endless' && score >= runGoal;
+    baseRingRef.current = sim.baseRing;
+    scrollOffsetRef.current = sim.scroll - sim.baseRing * RING_SPACING;
+    speedRef.current = sim.speed;
+    comboRef.current = sim.combo;
+    audioReactiveRef.current = sim.audioReactive;
+    stageFlashRef.current = sim.stageFlash;
 
-    useOctaRuntimeStore.setState({
-      laneIndex,
-      sides,
-      targetRotation,
-      rotation,
-      angularVelocity,
-      speed,
-      distance,
-      score,
-      runTime,
-      combo,
-      comboTimer,
-      multiplier,
-      stageId,
-      stageFlash,
-      nextSegmentIndex,
-      farthestBackZ,
-      lastSafeLane,
-      slowMoMeter,
-      slowMoTime,
-      shardCount,
-      syncTimer,
-      flipPulse,
-      dangerPulse,
-      audioReactive,
-      turnCooldown,
-      flipCooldown,
-      cameraMode,
-    });
+    const runGoal = snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
+    const runComplete = snap.mode !== 'endless' && sim.score >= runGoal;
 
-    const delta = frameDelta;
-    const stageNow = stageById(stageId);
-    const stageVisualNow = stageAestheticById(stageNow.id);
-    const variantAccent = OCTA_TILE_VARIANT_ACCENT[snap.tileVariant];
-    const progress =
-      snap.mode === 'endless' ? 0 : clamp(score / Math.max(1, runGoal), 0, 1);
-
-    const colorLerp = 1 - Math.exp(-delta * 2.6);
-    sceneBgRef.current.lerp(
-      tempColorA.set(stageVisualNow.bg).lerp(tempColorC.set(variantAccent), 0.08),
-      colorLerp
-    );
-    sceneFogRef.current.lerp(
-      tempColorB.set(stageVisualNow.fog).lerp(tempColorC.set(variantAccent), 0.12),
-      colorLerp
-    );
-    gl.setClearColor(sceneBgRef.current, 1);
-    if (scene.fog instanceof THREE.Fog) {
-      scene.fog.color.copy(sceneFogRef.current);
+    if (!sim.ended && runComplete) {
+      sim.ended = true;
+      sim.endReason = `Run complete. ${nextStageTargetLabel(sim.stageId)} breached.`;
+      sim.deathType = 'obstacle';
+      sim.deathTimer = 0;
     }
 
-    if (ambientRef.current) {
-      ambientRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.22),
-        1 - Math.exp(-delta * 2)
-      );
-    }
-    if (directionalRef.current) {
-      directionalRef.current.color.lerp(
-        tempColorA.set('#f8fbff'),
-        1 - Math.exp(-delta * 2)
-      );
-    }
-    if (lightARef.current) {
-      lightARef.current.color.lerp(
-        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.26),
-        1 - Math.exp(-delta * 3)
-      );
-    }
-    if (lightBRef.current) {
-      lightBRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.accent).lerp(tempColorC.set(variantAccent), 0.34),
-        1 - Math.exp(-delta * 3)
-      );
-    }
-    if (shellMaterialRef.current) {
-      shellMaterialRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.shell),
-        1 - Math.exp(-delta * 2.8)
-      );
-      shellMaterialRef.current.attenuationColor.lerp(
-        tempColorB.set(stageVisualNow.shell2),
-        1 - Math.exp(-delta * 2.8)
-      );
-    }
-    if (shellWireMaterialRef.current) {
-      shellWireMaterialRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.24),
-        1 - Math.exp(-delta * 3.2)
-      );
-    }
-    if (laneMaterialRef.current) {
-      laneMaterialRef.current.emissive.lerp(
-        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.22),
-        1 - Math.exp(-delta * 3)
-      );
-    }
-    if (obstacleMaterialRef.current) {
-      obstacleMaterialRef.current.emissive.lerp(
-        tempColorA.set(stageVisualNow.obstacle).lerp(tempColorC.set(variantAccent), 0.16),
-        1 - Math.exp(-delta * 3)
-      );
-    }
-    if (collectibleMaterialRef.current) {
-      collectibleMaterialRef.current.emissive.lerp(
-        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.3),
-        1 - Math.exp(-delta * 3)
-      );
-    }
-    octaSurgeState.syncFrame({
-      score: Math.floor(score),
-      combo,
-      multiplier,
-      speed,
-      time: runTime,
-      distance,
-      progress,
-      sides,
-      stage: stageNow.id,
-      stageLabel: stageNow.label,
-      stageFlash,
-      slowMoMeter,
-      shardCount,
-      hudPulse: Math.max(dangerPulse, flipPulse * 0.8, audioReactive * 0.4),
-      audioReactive,
-      currentPlatform,
-      currentObstacle,
-    });
-
-    if (endReason) {
-      turnQueueRef.current.length = 0;
-      flipQueueRef.current = 0;
-      triggerDeathFx(endReason, deathType);
-      updateFxParticles(delta);
-      clearFrameInput(inputRef);
-      return;
-    }
-
-    if (runComplete) {
-      turnQueueRef.current.length = 0;
-      flipQueueRef.current = 0;
-      const playerPos = playerRef.current?.position;
-      if (playerPos) {
-        emitFxBurst(
-          playerPos.x,
-          playerPos.y,
-          playerPos.z,
-          stageVisualNow.accent,
-          36,
-          2.4,
-          5.4,
-          0.2,
-          0.62,
-          1.2
-        );
+    if (sim.ended) {
+      if (sim.deathTimer >= 0.42) {
+        if (runComplete) {
+          endRun(sim.endReason, 'complete');
+        } else {
+          endRun(sim.endReason, 'death');
+        }
+        clearFrameInput(inputRef);
+        return;
       }
-      updateFxParticles(delta);
-      endRun('Run complete. Packet escaped the corrupted fiber core.', 'complete');
-      clearFrameInput(inputRef);
-      return;
+      sim.deathTimer += frameDelta;
     }
 
     if (worldRef.current) {
-      worldRef.current.rotation.z =
-        rotation + Math.sin(runTime * 0.42) * 0.008 * (syncTimer > 0 ? 0.35 : 1);
+      worldRef.current.rotation.z = sim.rotation + Math.sin(sim.runTime * 0.48) * 0.01;
     }
-
-    const speedRatio = clamp(speed / GAME.maxSpeed, 0, 1);
 
     if (playerRef.current) {
       const radius = GAME.radius - 0.58;
       const px = Math.cos(GAME.playerAngle) * radius;
       const py = Math.sin(GAME.playerAngle) * radius;
-      const bob = Math.sin(runTime * 8.2) * 0.028;
-      const pulse = 1 + audioReactive * 0.08 + flipPulse * 0.1;
+      const bob = Math.sin(sim.runTime * 7.6) * 0.03;
+      const pulse = 1 + sim.audioReactive * 0.08 + sim.flipPulse * 0.1;
       playerRef.current.position.set(px, py, GAME.playerZ + bob);
-      playerRef.current.scale.set(pulse, pulse, pulse);
-      playerRef.current.rotation.set(0, 0, -rotation * 0.1 + flipPulse * 0.16);
-
-      pushTrailPoint(px, py, GAME.playerZ - 0.08);
-
-      trailEmitRef.current +=
-        delta * (16 + speedRatio * 22 + audioReactive * 12 + dangerPulse * 8);
-      while (trailEmitRef.current >= 1) {
-        trailEmitRef.current -= 1;
-        emitFxBurst(
-          px,
-          py,
-          GAME.playerZ - 0.24,
-          stageVisualNow.wire,
-          1,
-          0.45,
-          1.24,
-          0.12,
-          0.24,
-          0.36
-        );
-      }
+      playerRef.current.scale.setScalar(pulse);
+      playerRef.current.rotation.set(0, 0, -sim.rotation * 0.12 + sim.flipPulse * 0.18);
     }
 
     if (ghostRef.current) {
@@ -2199,361 +1281,208 @@ export default function OctaSurge() {
       if (!canShowGhost || !ghostReplay) {
         ghostRef.current.visible = false;
       } else {
-        const ghostFrame = sampleGhostFrame(
-          ghostReplay.ghostFrames,
-          replayRef.current.frame
-        );
-        if (!ghostFrame) {
+        const ghost = sampleGhostFrame(ghostReplay.ghostFrames, replayRef.current.frame);
+        if (!ghost) {
           ghostRef.current.visible = false;
         } else {
           ghostRef.current.visible = true;
-          ghostRef.current.position.set(
-            ghostFrame.x,
-            ghostFrame.y,
-            ghostFrame.z + 0.02
-          );
-          ghostRef.current.rotation.set(0, 0, runTime * 2.3);
-          const pulse = 1 + Math.sin(runTime * 8 + ghostFrame.frame * 0.08) * 0.05;
-          ghostRef.current.scale.setScalar(pulse);
+          ghostRef.current.position.set(ghost.x, ghost.y, ghost.z + 0.02);
+          ghostRef.current.rotation.set(0, 0, sim.runTime * 2.2);
+          ghostRef.current.scale.setScalar(1 + Math.sin(sim.runTime * 7.4) * 0.06);
         }
       }
     }
 
+    const stage = stageById(sim.stageId);
+    const stageVisual = stageVisualById(sim.stageId);
+    const variantAccent = OCTA_TILE_VARIANT_ACCENT[snap.tileVariant];
+    const speedRatio = clamp(sim.speed / GAME.maxSpeed, 0, 1);
+
+    sceneBgRef.current.lerp(
+      tempColorA.set(stageVisual.bg).lerp(tempColorB.set(variantAccent), 0.1),
+      1 - Math.exp(-frameDelta * 2.8)
+    );
+    sceneFogRef.current.lerp(
+      tempColorA.set(stageVisual.fog).lerp(tempColorB.set(variantAccent), 0.16),
+      1 - Math.exp(-frameDelta * 2.8)
+    );
+
+    gl.setClearColor(sceneBgRef.current, 1);
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.copy(sceneFogRef.current);
+    }
+
+    const cameraMode = snap.cameraMode;
     const cam = camera as THREE.PerspectiveCamera;
-    const shake = dangerPulse * 0.03 + audioReactive * 0.009;
+    const shake = sim.dangerPulse * 0.03 + sim.audioReactive * 0.012;
 
     if (cameraMode === 'firstPerson') {
       cam.position.x = THREE.MathUtils.lerp(
         cam.position.x,
-        Math.sin(runTime * 10) * shake,
-        1 - Math.exp(-delta * 8)
+        Math.sin(sim.runTime * 9.6) * shake,
+        1 - Math.exp(-frameDelta * 8)
       );
       cam.position.y = THREE.MathUtils.lerp(
         cam.position.y,
-        Math.sin(GAME.playerAngle) * (GAME.radius - 0.58) +
-          Math.cos(runTime * 10.5) * shake,
-        1 - Math.exp(-delta * 8)
+        Math.sin(GAME.playerAngle) * (GAME.radius - 0.58) + Math.cos(sim.runTime * 10.2) * shake,
+        1 - Math.exp(-frameDelta * 8)
       );
-      cam.position.z = THREE.MathUtils.lerp(
-        cam.position.z,
-        2.1,
-        1 - Math.exp(-delta * 7)
-      );
-      cam.lookAt(
-        0,
-        Math.sin(GAME.playerAngle) * (GAME.radius - 0.58),
-        -34 - speedRatio * 5.5
-      );
-      const fovTarget =
-        76 + speedRatio * 3.6 + flipPulse * (GAME.flipFovBoost * 0.24);
-      cam.fov = THREE.MathUtils.lerp(
-        cam.fov,
-        fovTarget,
-        1 - Math.exp(-delta * 7)
-      );
+      cam.position.z = THREE.MathUtils.lerp(cam.position.z, 2.1, 1 - Math.exp(-frameDelta * 8));
+      cam.lookAt(0, Math.sin(GAME.playerAngle) * (GAME.radius - 0.58), -18 - speedRatio * 5);
+      cam.fov = THREE.MathUtils.lerp(cam.fov, 78 + speedRatio * 4 + sim.flipPulse * 2.2, 1 - Math.exp(-frameDelta * 7));
     } else if (cameraMode === 'topDown') {
-      cam.position.x = THREE.MathUtils.lerp(
-        cam.position.x,
-        Math.sin(runTime * 4.2) * shake * 0.2,
-        1 - Math.exp(-delta * 6)
-      );
-      cam.position.y = THREE.MathUtils.lerp(
-        cam.position.y,
-        15.5 + speedRatio * 1.8,
-        1 - Math.exp(-delta * 6)
-      );
-      cam.position.z = THREE.MathUtils.lerp(
-        cam.position.z,
-        3.2,
-        1 - Math.exp(-delta * 6)
-      );
-      cam.lookAt(0, 0, -36);
-      const fovTarget = 51 + speedRatio * 2.3 + flipPulse * 1;
-      cam.fov = THREE.MathUtils.lerp(
-        cam.fov,
-        fovTarget,
-        1 - Math.exp(-delta * 6)
-      );
+      cam.position.x = THREE.MathUtils.lerp(cam.position.x, Math.sin(sim.runTime * 4.2) * shake * 0.3, 1 - Math.exp(-frameDelta * 6));
+      cam.position.y = THREE.MathUtils.lerp(cam.position.y, 14.2 + speedRatio * 1.9, 1 - Math.exp(-frameDelta * 6));
+      cam.position.z = THREE.MathUtils.lerp(cam.position.z, 2.5, 1 - Math.exp(-frameDelta * 6));
+      cam.lookAt(0, 0, -16);
+      cam.fov = THREE.MathUtils.lerp(cam.fov, 52 + speedRatio * 2.6, 1 - Math.exp(-frameDelta * 6));
     } else {
       cam.position.x = THREE.MathUtils.lerp(
         cam.position.x,
-        Math.sin(rotation * 0.6) * 0.1 + Math.sin(runTime * 7.2) * shake,
-        1 - Math.exp(-delta * 6)
+        Math.sin(sim.rotation * 0.7) * 0.15 + Math.sin(sim.runTime * 7.4) * shake,
+        1 - Math.exp(-frameDelta * 6)
       );
       cam.position.y = THREE.MathUtils.lerp(
         cam.position.y,
-        -0.33 +
-          Math.cos(rotation * 0.5) * 0.05 +
-          Math.cos(runTime * 7.1) * shake * 0.7,
-        1 - Math.exp(-delta * 6)
+        -0.36 + Math.cos(sim.rotation * 0.52) * 0.05 + Math.cos(sim.runTime * 7.2) * shake * 0.7,
+        1 - Math.exp(-frameDelta * 6)
       );
       cam.position.z = THREE.MathUtils.lerp(
         cam.position.z,
-        11.6 - speedRatio * 0.6 - flipPulse * 0.12,
-        1 - Math.exp(-delta * 6)
+        10.4 - speedRatio * 0.8 - sim.flipPulse * 0.18,
+        1 - Math.exp(-frameDelta * 6)
       );
-      cam.lookAt(0, 0, -34 - speedRatio * 6.2);
-      const fovTarget =
-        58 + speedRatio * 3.5 + flipPulse * (GAME.flipFovBoost * 0.22);
-      cam.fov = THREE.MathUtils.lerp(
-        cam.fov,
-        fovTarget,
-        1 - Math.exp(-delta * 6)
-      );
+      cam.lookAt(0, 0, -18 - speedRatio * 6.2);
+      cam.fov = THREE.MathUtils.lerp(cam.fov, 60 + speedRatio * 4 + sim.flipPulse * 1.8, 1 - Math.exp(-frameDelta * 6));
     }
 
     cam.updateProjectionMatrix();
 
-    const fxScale =
-      snap.fxLevel === 'full' ? 1 : snap.fxLevel === 'medium' ? 0.76 : 0.58;
-
+    const fxScale = snap.fxLevel === 'full' ? 1 : snap.fxLevel === 'medium' ? 0.76 : 0.54;
     if (bloomRef.current) {
-      const bloomIntensity =
-        (0.42 + audioReactive * 0.68 + speedRatio * 0.32 + flipPulse * 0.25) *
-        fxScale;
+      const targetBloom =
+        (0.42 + sim.audioReactive * 0.72 + speedRatio * 0.28 + sim.flipPulse * 0.26 + sim.stageFlash * 0.2) * fxScale;
       bloomRef.current.intensity = THREE.MathUtils.lerp(
-        bloomRef.current.intensity ?? bloomIntensity,
-        bloomIntensity,
-        1 - Math.exp(-delta * 10)
+        bloomRef.current.intensity ?? targetBloom,
+        targetBloom,
+        1 - Math.exp(-frameDelta * 8)
       );
     }
 
     if (chromaRef.current && snap.fxLevel !== 'low') {
       const amount =
-        (snap.fxLevel === 'full' ? 0.00022 : 0.00016) +
-        audioReactive * 0.0011 +
-        dangerPulse * 0.0012;
-      chromaOffset.set(amount, amount * 0.42);
+        (snap.fxLevel === 'full' ? 0.00022 : 0.00015) +
+        sim.audioReactive * 0.001 +
+        sim.dangerPulse * 0.0011 +
+        sim.stageFlash * 0.0006;
+      chromaOffset.set(amount, amount * 0.45);
       chromaRef.current.offset = chromaOffset;
     }
 
     if (vignetteRef.current) {
-      const targetDarkness =
-        (snap.fxLevel === 'full' ? 0.72 : snap.fxLevel === 'medium' ? 0.63 : 0.54) +
-        dangerPulse * 0.22;
+      const targetDark =
+        (snap.fxLevel === 'full' ? 0.72 : snap.fxLevel === 'medium' ? 0.64 : 0.56) +
+        sim.dangerPulse * 0.18;
       vignetteRef.current.darkness = THREE.MathUtils.lerp(
-        vignetteRef.current.darkness ?? targetDarkness,
-        targetDarkness,
-        1 - Math.exp(-delta * 10)
+        vignetteRef.current.darkness ?? targetDark,
+        targetDark,
+        1 - Math.exp(-frameDelta * 8)
       );
     }
 
-    if (trailMaterial) {
-      trailMaterial.opacity = THREE.MathUtils.lerp(
-        trailMaterial.opacity,
-        0.22 + speedRatio * 0.34 + audioReactive * 0.22,
-        1 - Math.exp(-delta * 9)
-      );
-      trailMaterial.color.lerp(
-        tempColorC.set(stageVisualNow.wire),
-        1 - Math.exp(-delta * 6)
-      );
-    }
+    updateInstances();
 
-    updateFxParticles(delta);
-    syncInstances(runTime, audioReactive, syncTimer, snap.tileVariant);
+    const progress =
+      snap.mode === 'endless' ? 0 : clamp(sim.score / Math.max(1, runGoal), 0, 1);
+    octaSurgeState.syncFrame({
+      score: Math.floor(sim.score),
+      combo: sim.combo,
+      multiplier: sim.multiplier,
+      speed: sim.speed,
+      time: sim.runTime,
+      distance: sim.distance,
+      progress,
+      sides: sim.sides,
+      stage: stage.id,
+      stageLabel: stage.label,
+      stageFlash: sim.stageFlash,
+      slowMoMeter: sim.slowMoMeter,
+      shardCount: sim.shardCount,
+      hudPulse: Math.max(sim.flipPulse, sim.dangerPulse, sim.audioReactive * 0.4),
+      audioReactive: sim.audioReactive,
+      currentPlatform: sim.currentPlatform,
+      currentObstacle: sim.currentObstacle,
+    });
+
     clearFrameInput(inputRef);
   });
 
   const fxMultisample = snap.fxLevel === 'full' ? 2 : 0;
-  const playerVariant = snap.sides >= 12 ? 2 : snap.sides >= 10 ? 1 : 0;
 
   return (
     <group>
-      <ambientLight
-        ref={ambientRef}
-        intensity={0.52}
-        color={FIBER_COLORS.playerGlow}
-      />
-      <directionalLight
-        ref={directionalRef}
-        position={[8, 10, 6]}
-        intensity={1.18}
-        color="#f7fbff"
-      />
-      <pointLight
-        ref={lightARef}
-        position={[-6, 4, 5]}
-        intensity={0.72}
-        color={FIBER_COLORS.wire}
-      />
-      <pointLight
-        ref={lightBRef}
-        position={[5, -4, 6]}
-        intensity={0.62}
-        color={FIBER_COLORS.accent}
-      />
+      <ambientLight intensity={0.58} color="#cbeeff" />
+      <directionalLight position={[8, 11, 6]} intensity={1.2} color="#f8fcff" />
+      <pointLight position={[-6, 4, 5]} intensity={0.82} color="#8df1ff" />
+      <pointLight position={[5, -4, 6]} intensity={0.66} color="#ffb684" />
 
       <Environment preset="city" background={false} />
-      <Stars
-        radius={210}
-        depth={180}
-        count={3000}
-        factor={4.5}
-        saturation={0}
-        fade
-        speed={0.65}
-      />
-
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -90]}>
-        <primitive object={geometry.shell} attach="geometry" />
-        <MeshTransmissionMaterial
-          ref={shellMaterialRef}
-          thickness={0.5}
-          roughness={0}
-          transmission={1}
-          ior={1.2}
-          chromaticAberration={0.02}
-          anisotropy={0.18}
-          distortion={0.22}
-          distortionScale={0.32}
-          temporalDistortion={0.2}
-          color={FIBER_COLORS.shell}
-          attenuationColor={FIBER_COLORS.shell2}
-          attenuationDistance={2.4}
-          backside
-          backsideThickness={0.2}
-          samples={6}
-          resolution={256}
-        />
-      </mesh>
-
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -90]}>
-        <primitive object={geometry.shellWire} attach="geometry" />
-        <meshBasicMaterial
-          ref={shellWireMaterialRef}
-          color={FIBER_COLORS.wire}
-          wireframe
-          transparent
-          opacity={0.26}
-          toneMapped={false}
-        />
-      </mesh>
+      <Stars radius={220} depth={180} count={3200} factor={4.8} saturation={0} fade speed={0.68} />
 
       <group ref={worldRef}>
-        <instancedMesh ref={laneMeshRef} args={[undefined, undefined, laneInstanceCount]}>
-          <primitive object={geometry.lane} attach="geometry" />
-          <meshStandardMaterial
-            ref={laneMaterialRef}
-            vertexColors
-            metalness={0.84}
-            roughness={0.03}
-            emissive={FIBER_COLORS.wire}
-            emissiveIntensity={0.26}
-          />
-        </instancedMesh>
+        <TunnelMesh
+          ringCount={VISIBLE_RING_COUNT}
+          spacing={RING_SPACING}
+          getRing={getRing}
+          baseRingRef={baseRingRef}
+          scrollOffsetRef={scrollOffsetRef}
+          speedRef={speedRef}
+          audioReactiveRef={audioReactiveRef}
+          comboRef={comboRef}
+          stageFlashRef={stageFlashRef}
+          tileVariantRef={tileVariantRef}
+        />
 
-        <instancedMesh ref={wireMeshRef} args={[undefined, undefined, laneInstanceCount]}>
-          <primitive object={geometry.lane} attach="geometry" />
-          <meshBasicMaterial
-            vertexColors
-            wireframe
-            transparent
-            opacity={0.68}
-            toneMapped={false}
-            blending={THREE.AdditiveBlending}
-          />
-        </instancedMesh>
-
-        <instancedMesh ref={obstacleMeshRef} args={[undefined, undefined, laneInstanceCount]}>
+        <instancedMesh ref={obstacleMeshRef} args={[undefined, undefined, obstacleCountMax]}>
           <primitive object={geometry.obstacle} attach="geometry" />
           <meshStandardMaterial
-            ref={obstacleMaterialRef}
             vertexColors
-            metalness={0.44}
-            roughness={0.08}
+            metalness={0.5}
+            roughness={0.12}
             emissive={FIBER_COLORS.obstacle}
-            emissiveIntensity={0.42}
+            emissiveIntensity={0.44}
           />
         </instancedMesh>
 
-        <instancedMesh
-          ref={collectibleMeshRef}
-          args={[undefined, undefined, collectibleInstanceCount]}
-        >
+        <instancedMesh ref={collectibleMeshRef} args={[undefined, undefined, collectibleCountMax]}>
           <primitive object={geometry.collectible} attach="geometry" />
           <meshStandardMaterial
-            ref={collectibleMaterialRef}
             vertexColors
-            metalness={0.3}
-            roughness={0.04}
+            metalness={0.35}
+            roughness={0.06}
             emissive={FIBER_COLORS.wire}
-            emissiveIntensity={0.62}
+            emissiveIntensity={0.64}
           />
         </instancedMesh>
       </group>
 
-      <primitive object={trailLine} frustumCulled={false} />
-
       <group ref={playerRef}>
-        <mesh castShadow visible={playerVariant === 0} rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={geometry.player8} attach="geometry" />
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <primitive object={geometry.playerCore} attach="geometry" />
           <meshStandardMaterial
             color={FIBER_COLORS.player}
             roughness={0.06}
-            metalness={0.28}
+            metalness={0.32}
             emissive={FIBER_COLORS.playerGlow}
             emissiveIntensity={0.5}
-          />
-        </mesh>
-        <mesh visible={playerVariant === 0} rotation={[Math.PI / 2, 0, 0]} scale={1.08}>
-          <primitive object={geometry.player8} attach="geometry" />
-          <meshBasicMaterial
-            color={FIBER_COLORS.playerGlow}
-            wireframe
-            transparent
-            opacity={0.46}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh castShadow visible={playerVariant === 1} rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={geometry.player10} attach="geometry" />
-          <meshStandardMaterial
-            color={FIBER_COLORS.player}
-            roughness={0.06}
-            metalness={0.28}
-            emissive={FIBER_COLORS.playerGlow}
-            emissiveIntensity={0.5}
-          />
-        </mesh>
-        <mesh visible={playerVariant === 1} rotation={[Math.PI / 2, 0, 0]} scale={1.08}>
-          <primitive object={geometry.player10} attach="geometry" />
-          <meshBasicMaterial
-            color={FIBER_COLORS.playerGlow}
-            wireframe
-            transparent
-            opacity={0.46}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh castShadow visible={playerVariant === 2} rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={geometry.player12} attach="geometry" />
-          <meshStandardMaterial
-            color={FIBER_COLORS.player}
-            roughness={0.06}
-            metalness={0.28}
-            emissive={FIBER_COLORS.playerGlow}
-            emissiveIntensity={0.5}
-          />
-        </mesh>
-        <mesh visible={playerVariant === 2} rotation={[Math.PI / 2, 0, 0]} scale={1.08}>
-          <primitive object={geometry.player12} attach="geometry" />
-          <meshBasicMaterial
-            color={FIBER_COLORS.playerGlow}
-            wireframe
-            transparent
-            opacity={0.46}
-            toneMapped={false}
           />
         </mesh>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <primitive object={geometry.playerRing} attach="geometry" />
+          <primitive object={geometry.playerHalo} attach="geometry" />
           <meshBasicMaterial
             color={FIBER_COLORS.playerGlow}
             transparent
-            opacity={0.22}
+            opacity={0.28}
             toneMapped={false}
           />
         </mesh>
@@ -2584,54 +1513,11 @@ export default function OctaSurge() {
         </mesh>
       </group>
 
-      <points ref={deathPointsRef} visible={false} frustumCulled={false}>
-        <primitive object={geometry.death} attach="geometry" />
-        <pointsMaterial
-          ref={deathMaterialRef}
-          color={FIBER_COLORS.danger}
-          size={0.2}
-          sizeAttenuation
-          transparent
-          opacity={0}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </points>
-
-      <mesh ref={deathWaveRef} visible={false} frustumCulled={false}>
-        <primitive object={geometry.deathWave} attach="geometry" />
-        <meshBasicMaterial
-          ref={deathWaveMaterialRef}
-          color={FIBER_COLORS.danger}
-          transparent
-          opacity={0}
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-
-      <instancedMesh
-        ref={fxShardMeshRef}
-        args={[undefined, undefined, FX_PARTICLE_COUNT]}
-        frustumCulled={false}
-      >
-        <primitive object={geometry.fxShard} attach="geometry" />
-        <meshBasicMaterial
-          vertexColors
-          transparent
-          opacity={0.9}
-          depthWrite={false}
-          toneMapped={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </instancedMesh>
-
       <EffectComposer multisampling={fxMultisample} enableNormalPass={false}>
         <Bloom
           ref={bloomRef}
-          intensity={snap.fxLevel === 'full' ? 0.7 : snap.fxLevel === 'medium' ? 0.5 : 0.3}
-          luminanceThreshold={0.12}
+          intensity={snap.fxLevel === 'full' ? 0.8 : snap.fxLevel === 'medium' ? 0.56 : 0.34}
+          luminanceThreshold={0.08}
           luminanceSmoothing={0.2}
           mipmapBlur
         />
@@ -2639,24 +1525,24 @@ export default function OctaSurge() {
           ref={chromaRef}
           offset={snap.fxLevel === 'low' ? zeroOffset : chromaOffset}
           radialModulation
-          modulationOffset={0.5}
+          modulationOffset={0.52}
         />
         <Glitch
-          active={snap.phase === 'playing' && snap.hudPulse > 0.42}
+          active={snap.phase === 'playing' && snap.hudPulse > 0.48}
           delay={glitchDelay}
           duration={glitchDuration}
           strength={glitchStrength}
-          ratio={0.62}
+          ratio={0.66}
         />
         <Vignette
           ref={vignetteRef}
           eskil={false}
-          offset={0.1}
-          darkness={snap.fxLevel === 'full' ? 0.72 : 0.63}
+          offset={0.12}
+          darkness={snap.fxLevel === 'full' ? 0.72 : 0.64}
         />
         <Noise
           blendFunction={BlendFunction.SOFT_LIGHT}
-          opacity={snap.fxLevel === 'low' ? 0.02 : snap.fxLevel === 'full' ? 0.08 : 0.05}
+          opacity={snap.fxLevel === 'full' ? 0.08 : snap.fxLevel === 'medium' ? 0.05 : 0.025}
         />
       </EffectComposer>
     </group>
