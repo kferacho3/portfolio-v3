@@ -44,8 +44,8 @@ const applyTileRules = (
 
   if (tile.type === 'pickup') {
     const key = keyForGridPos(tilePos);
+    faces[1] = tile.color;
     if (!consumedPickups.has(key)) {
-      faces[1] = tile.color;
       consumedPickups.add(key);
     }
     return { valid: true };

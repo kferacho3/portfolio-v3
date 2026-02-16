@@ -243,12 +243,12 @@ const simulateMove = (
   if (tile.type === 'pickup') {
     const tileKey = keyForGridPos(to);
     const alreadyConsumed = consumedSet.has(tileKey);
+    nextFaces[1] = tile.color;
     if (!alreadyConsumed) {
-      nextFaces[1] = tile.color;
       nextConsumedPickupKeys.push(tileKey);
-      pickupVisualFaceIndex = sourceFaceForBottom(direction);
-      pickupVisualColor = tile.color;
     }
+    pickupVisualFaceIndex = sourceFaceForBottom(direction);
+    pickupVisualColor = tile.color;
   }
 
   if (
@@ -803,6 +803,13 @@ function RuneCube() {
     Array.from({ length: 6 }, () => null)
   );
   const bottomHaloRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const faceTargetColorRefs = useRef(
+    Array.from({ length: 6 }, () => new THREE.Color(character.neutralFaceColor))
+  );
+  const faceTargetEmissiveRefs = useRef(
+    Array.from({ length: 6 }, () => new THREE.Color(character.neutralFaceEmissive))
+  );
+  const haloTargetColorRef = useRef(new THREE.Color(character.neutralFaceColor));
   const displayFaces = useMemo<FaceColors>(() => {
     if (
       !animation ||
@@ -817,7 +824,7 @@ function RuneCube() {
     return nextFaces;
   }, [animation, faces]);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const pivot = pivotRef.current;
     const cube = cubeRef.current;
     if (!pivot || !cube) {
@@ -827,20 +834,34 @@ function RuneCube() {
     const state = useRuneRollStore.getState();
     const level = RUNE_LEVELS[state.levelIndex];
     const animation = state.animation;
+    const colorLerpAlpha = 1 - Math.exp(-delta * 13);
+    const intensityLerpAlpha = 1 - Math.exp(-delta * 11);
     const updateFaceGlow = (pulseBoost = 0) => {
       for (let i = 0; i < 6; i += 1) {
         const material = faceMaterialRefs.current[i];
         if (!material) continue;
+
+        const targetColor = faceTargetColorRefs.current[i];
+        targetColor.set(faceColorHex(displayFaces[i], character));
+        material.color.lerp(targetColor, colorLerpAlpha);
+
+        const targetEmissive = faceTargetEmissiveRefs.current[i];
+        targetEmissive.set(faceEmissiveHex(displayFaces[i], character));
+        material.emissive.lerp(targetEmissive, colorLerpAlpha);
 
         const base = baseFaceIntensity(displayFaces[i], i, character);
         const boost =
           animation &&
           animation.pickupVisualFaceIndex !== null &&
           animation.pickupVisualFaceIndex === i
-            ? pulseBoost
+            ? pulseBoost * 1.1 + 0.16
             : 0;
-        const target = base + boost;
-        material.emissiveIntensity = lerp(material.emissiveIntensity, target, 0.24);
+        const target = Math.min(3.2, base + boost);
+        material.emissiveIntensity = lerp(
+          material.emissiveIntensity,
+          target,
+          intensityLerpAlpha
+        );
       }
     };
     const updateBottomHalo = (pickupBoost = 0) => {
@@ -848,10 +869,11 @@ function RuneCube() {
       if (!halo) return;
 
       const bottomColor = displayFaces[1] ?? character.neutralFaceColor;
-      halo.color.set(bottomColor);
+      haloTargetColorRef.current.set(bottomColor);
+      halo.color.lerp(haloTargetColorRef.current, colorLerpAlpha);
       const targetOpacity =
         displayFaces[1] === null ? 0.24 : Math.min(1, 0.82 + pickupBoost * 0.2);
-      halo.opacity = lerp(halo.opacity, targetOpacity, 0.22);
+      halo.opacity = lerp(halo.opacity, targetOpacity, intensityLerpAlpha);
     };
 
     if (!animation) {
@@ -930,9 +952,9 @@ function RuneCube() {
             ref={(material) => {
               bottomHaloRef.current = material;
             }}
-            color={displayFaces[1] ?? character.neutralFaceColor}
+            color={character.neutralFaceColor}
             transparent
-            opacity={displayFaces[1] === null ? 0.24 : 0.82}
+            opacity={0.24}
             toneMapped={false}
           />
         </mesh>
@@ -943,11 +965,12 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[0] = material;
             }}
-            color={faceColorHex(displayFaces[0], character)}
-            emissive={faceEmissiveHex(displayFaces[0], character)}
-            emissiveIntensity={baseFaceIntensity(displayFaces[0], 0, character)}
+            color={character.neutralFaceColor}
+            emissive={character.neutralFaceEmissive}
+            emissiveIntensity={character.neutralIntensity}
             roughness={0.3}
             metalness={0.14}
+            toneMapped={false}
           />
         </mesh>
 
@@ -957,11 +980,12 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[1] = material;
             }}
-            color={faceColorHex(displayFaces[1], character)}
-            emissive={faceEmissiveHex(displayFaces[1], character)}
-            emissiveIntensity={baseFaceIntensity(displayFaces[1], 1, character)}
+            color={character.neutralFaceColor}
+            emissive={character.neutralFaceEmissive}
+            emissiveIntensity={character.neutralIntensity}
             roughness={0.3}
             metalness={0.14}
+            toneMapped={false}
           />
         </mesh>
 
@@ -971,11 +995,12 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[2] = material;
             }}
-            color={faceColorHex(displayFaces[2], character)}
-            emissive={faceEmissiveHex(displayFaces[2], character)}
-            emissiveIntensity={baseFaceIntensity(displayFaces[2], 2, character)}
+            color={character.neutralFaceColor}
+            emissive={character.neutralFaceEmissive}
+            emissiveIntensity={character.neutralIntensity}
             roughness={0.3}
             metalness={0.14}
+            toneMapped={false}
           />
         </mesh>
 
@@ -985,11 +1010,12 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[3] = material;
             }}
-            color={faceColorHex(displayFaces[3], character)}
-            emissive={faceEmissiveHex(displayFaces[3], character)}
-            emissiveIntensity={baseFaceIntensity(displayFaces[3], 3, character)}
+            color={character.neutralFaceColor}
+            emissive={character.neutralFaceEmissive}
+            emissiveIntensity={character.neutralIntensity}
             roughness={0.3}
             metalness={0.14}
+            toneMapped={false}
           />
         </mesh>
 
@@ -999,11 +1025,12 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[4] = material;
             }}
-            color={faceColorHex(displayFaces[4], character)}
-            emissive={faceEmissiveHex(displayFaces[4], character)}
-            emissiveIntensity={baseFaceIntensity(displayFaces[4], 4, character)}
+            color={character.neutralFaceColor}
+            emissive={character.neutralFaceEmissive}
+            emissiveIntensity={character.neutralIntensity}
             roughness={0.3}
             metalness={0.14}
+            toneMapped={false}
           />
         </mesh>
 
@@ -1013,11 +1040,12 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[5] = material;
             }}
-            color={faceColorHex(displayFaces[5], character)}
-            emissive={faceEmissiveHex(displayFaces[5], character)}
-            emissiveIntensity={baseFaceIntensity(displayFaces[5], 5, character)}
+            color={character.neutralFaceColor}
+            emissive={character.neutralFaceEmissive}
+            emissiveIntensity={character.neutralIntensity}
             roughness={0.3}
             metalness={0.14}
+            toneMapped={false}
           />
         </mesh>
       </group>
@@ -1171,7 +1199,7 @@ function RuneRollOverlay() {
           <div>Restart: R</div>
           <div>Menu: Esc</div>
           <div>Each gate needs the matching bottom face.</div>
-          <div>Pickups imprint once and stay charged.</div>
+          <div>Pickup tiles always imprint the landing face color.</div>
         </div>
       )}
 
