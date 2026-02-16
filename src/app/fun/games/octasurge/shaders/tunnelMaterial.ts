@@ -35,6 +35,7 @@ export const createTunnelMaterial = () =>
       varying float vHazard;
       varying float vPlatform;
       varying float vDepth;
+      varying float vLaneNorm;
 
       const float TAU = 6.283185307179586;
 
@@ -59,8 +60,10 @@ export const createTunnelMaterial = () =>
 
         float visible = step(0.5, aActive);
         vec3 local = position;
-        local.y *= mix(0.02, 1.0, visible);
-        local.z *= mix(0.04, 1.0, visible);
+
+        // Keep holes present as tiny beveled slivers so silhouettes stay readable.
+        local.y *= mix(0.012, 1.0, visible);
+        local.z *= mix(0.02, 1.0, visible);
 
         vec3 worldPos = base
           + tangent * local.x
@@ -68,6 +71,7 @@ export const createTunnelMaterial = () =>
           + forward * local.z;
 
         vDepth = -z;
+        vLaneNorm = lane / sides;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
       }
     `,
@@ -79,6 +83,7 @@ export const createTunnelMaterial = () =>
       varying float vHazard;
       varying float vPlatform;
       varying float vDepth;
+      varying float vLaneNorm;
 
       uniform float uTime;
       uniform float uSpeed;
@@ -87,35 +92,103 @@ export const createTunnelMaterial = () =>
       uniform float uVariant;
       uniform float uStageFlash;
 
+      float hash21(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 34.45);
+        return fract(p.x * p.y);
+      }
+
       vec3 palette(float t) {
-        vec3 a = vec3(0.09, 0.10, 0.14);
-        vec3 b = vec3(0.42, 0.30, 0.58);
-        vec3 c = vec3(0.95, 0.98, 1.0);
-        vec3 d = vec3(0.00, 0.20, 0.40);
+        vec3 a = vec3(0.07, 0.09, 0.14);
+        vec3 b = vec3(0.36, 0.28, 0.58);
+        vec3 c = vec3(1.0, 1.0, 1.0);
+        vec3 d = vec3(0.0, 0.24, 0.62);
         return a + b * cos(6.28318 * (c * t + d));
       }
 
+      vec3 variantPattern(float variant, vec2 uv, float depth, float pulse, vec3 tone) {
+        vec3 col = vec3(0.0);
+
+        if (variant < 0.5) {
+          vec2 gUv = uv * vec2(7.2, 2.6);
+          vec2 g = abs(fract(gUv - 0.5) - 0.5) / fwidth(gUv);
+          float line = 1.0 - min(min(g.x, g.y), 1.0);
+          float rail = 1.0 - smoothstep(0.02, 0.11, abs(uv.x - 0.5));
+          col += tone * (pow(line, 2.2) * 0.9 + rail * 0.35) * pulse;
+        } else if (variant < 1.5) {
+          vec2 gUv = uv * vec2(8.0, 2.0);
+          float seam = smoothstep(0.44, 0.5, max(abs(fract(gUv.x) - 0.5), abs(fract(gUv.y) - 0.5)));
+          float brush = 0.5 + 0.5 * sin(uv.y * 48.0 + depth * 0.08 + uTime * 0.3);
+          col += tone * (seam * 0.9 + brush * 0.45) * pulse;
+        } else if (variant < 2.5) {
+          vec2 gUv = uv * 6.2;
+          float facet = smoothstep(0.18, 0.42, abs(fract(gUv.x + gUv.y) - 0.5));
+          float lattice = smoothstep(0.42, 0.5, max(abs(fract(gUv.x) - 0.5), abs(fract(gUv.y) - 0.5)));
+          col += tone * (facet * 0.9 + lattice * 0.6) * pulse;
+        } else if (variant < 3.5) {
+          vec2 gUv = uv * vec2(2.2, 7.0);
+          float row = floor(gUv.y);
+          float flip = step(0.5, mod(row, 2.0));
+          vec2 fUv = fract(gUv);
+          fUv.x = mix(fUv.x, 1.0 - fUv.x, flip);
+          float chevron = smoothstep(0.5, 0.18, abs(fUv.x - 0.5) + abs(fUv.y - 0.5));
+          float center = 1.0 - smoothstep(0.16, 0.42, abs(uv.x - 0.5));
+          col += tone * chevron * center * (0.6 + pulse * 0.7);
+        } else if (variant < 4.5) {
+          vec2 gUv = uv * 7.0;
+          vec2 cell = abs(fract(gUv) - 0.5);
+          float grid = smoothstep(0.42, 0.5, max(cell.x, cell.y));
+          float inset = smoothstep(0.1, 0.36, min(cell.x, cell.y));
+          col += tone * (grid * 0.95 + inset * 0.65) * pulse;
+        } else if (variant < 5.5) {
+          vec2 dUv = fract(uv * 4.0) - 0.5;
+          float diamond = 1.0 - smoothstep(0.28, 0.45, abs(dUv.x) + abs(dUv.y));
+          float frame = smoothstep(0.46, 0.5, max(abs(dUv.x), abs(dUv.y)));
+          col += tone * (diamond * 0.8 + frame * 0.45) * pulse;
+        } else if (variant < 6.5) {
+          vec2 sUv = uv * 4.0;
+          float stairs = floor((sUv.x + sUv.y) * 1.3) / 4.0;
+          float ridge = smoothstep(0.45, 0.5, abs(fract((sUv.x + sUv.y) * 2.2) - 0.5));
+          col += tone * (0.35 + stairs * 0.6 + ridge * 0.5) * pulse;
+        } else {
+          vec2 wUv = uv - 0.5;
+          float d = length(wUv);
+          float ripple = 0.5 + 0.5 * sin(d * 28.0 - depth * 0.16 - uTime * 1.15);
+          float rings = smoothstep(0.32, 0.92, ripple);
+          col += tone * (rings * 0.9 + ripple * 0.35) * pulse;
+        }
+
+        return col;
+      }
+
       void main() {
-        vec2 gridUv = vUv * vec2(6.0, 2.4);
-        vec2 grid = abs(fract(gridUv - 0.5) - 0.5) / fwidth(gridUv);
-        float line = 1.0 - min(min(grid.x, grid.y), 1.0);
+        float speedPulse = sin(vDepth * 0.18 + uTime * (1.6 + uSpeed * 0.08)) * 0.5 + 0.5;
+        float comboPulse = smoothstep(0.0, 24.0, uCombo) * 0.42;
+        float audioPulse = uAudioReactive * 0.66;
+        float pulse = 0.42 + speedPulse * 0.58 + comboPulse + audioPulse;
 
-        float pulse = sin(vDepth * 0.20 + uTime * (1.7 + uSpeed * 0.08)) * 0.5 + 0.5;
-        pulse += uAudioReactive * 0.65;
-        pulse += smoothstep(0.0, 24.0, uCombo) * 0.4;
+        float stageShift = vStage * 0.38 + vLaneNorm * 0.12;
+        vec3 tone = palette(fract(stageShift + uTime * 0.025 + vDepth * 0.014));
 
-        float stageShift = vStage * 0.42 + uVariant * 0.14;
-        vec3 tone = palette(fract(stageShift + uTime * 0.03 + vDepth * 0.015));
+        float variant = floor(uVariant + 0.5);
+        vec3 base = vec3(0.014, 0.015, 0.02);
+        vec3 tile = variantPattern(variant, vUv, vDepth, pulse, tone);
 
-        vec3 base = vec3(0.02, 0.02, 0.03);
-        vec3 laneGlow = tone * pow(line, 2.0) * pulse;
+        float hazardPulse =
+          (0.4 + 0.6 * sin(vDepth * 0.24 + uTime * 3.2 + vHazard * 14.0)) *
+          smoothstep(0.02, 1.0, vHazard);
+        vec3 hazardCol = vec3(1.0, 0.33, 0.21) * hazardPulse * (0.55 + uAudioReactive * 0.75);
 
-        vec3 hazardCol = vec3(1.0, 0.44, 0.28) * (0.35 + pulse * 0.85) * vHazard;
-        vec3 platformCol = vec3(0.43, 0.94, 1.0) * (0.22 + pulse * 0.58) * vPlatform;
+        float platformPulse =
+          (0.48 + 0.52 * sin(vDepth * 0.16 + uTime * 2.1 + vPlatform * 11.0)) *
+          smoothstep(0.02, 1.0, vPlatform);
+        vec3 platformCol = vec3(0.32, 0.9, 1.0) * platformPulse * 0.7;
 
-        float flash = uStageFlash * 0.35;
-        vec3 finalCol = base + laneGlow + hazardCol + platformCol + tone * flash;
-        finalCol *= mix(0.36, 1.0, step(0.5, vActive));
+        float noise = hash21(vUv + vec2(vDepth * 0.01, uTime * 0.01)) * 0.025;
+        float flash = uStageFlash * 0.28;
+
+        vec3 finalCol = base + tile + hazardCol + platformCol + tone * flash + noise;
+        finalCol *= mix(0.3, 1.0, step(0.5, vActive));
 
         gl_FragColor = vec4(finalCol, 1.0);
       }

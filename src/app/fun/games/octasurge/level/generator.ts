@@ -86,27 +86,30 @@ const platformWeight = (
   );
 
   let weight =
-    platform === 'standard'
-      ? 2.8
-      : platform === 'conveyor_belt' || platform === 'reverse_conveyor'
-        ? 0.92
-        : platform === 'bouncer' || platform === 'trampoline'
-          ? 0.74
-          : platform === 'teleporter'
-            ? 0.54
-            : platform === 'ghost_platform'
-              ? 0.58
-              : platform === 'sticky_glue'
-                ? 0.62
-                : platform === 'crushing_ceiling'
-                  ? 0.56
-                  : 0.78;
+    platform === 'smooth_lane'
+      ? 3.1
+      : platform === 'drift_boost' || platform === 'reverse_drift'
+        ? 1.02
+        : platform === 'pulse_pad' || platform === 'spring_pad'
+          ? 0.82
+          : platform === 'warp_gate'
+            ? 0.58
+            : platform === 'phase_lane'
+              ? 0.54
+              : platform === 'resin_lane'
+                ? 0.7
+                : platform === 'crusher_lane'
+                  ? 0.52
+                  : 0.86;
 
-  weight *= 1 + (stageId - 1) * 0.14;
-  if (distance <= 1 && platform !== 'standard') weight *= 0.72;
-  if (platform === 'standard' && distance <= 1) weight *= 1.35;
-  if (platform === 'crushing_ceiling' && stageId <= 2) weight *= 0.64;
-  if (platform === 'teleporter' && stageId <= 2) weight *= 0.7;
+  weight *= 1 + (stageId - 1) * 0.15;
+
+  if (distance <= 1 && platform !== 'smooth_lane') weight *= 0.68;
+  if (platform === 'smooth_lane' && distance <= 1) weight *= 1.38;
+  if (platform === 'phase_lane' && stageId <= 2) weight *= 0.58;
+  if (platform === 'crusher_lane' && stageId <= 2) weight *= 0.56;
+  if (platform === 'warp_gate' && stageId <= 1) weight *= 0.6;
+
   return weight;
 };
 
@@ -116,37 +119,51 @@ const obstacleWeight = (
   mode: OctaSurgeMode
 ) => {
   let weight =
-    obstacle === 'laser_grid'
-      ? 0.56
-      : obstacle === 'gravity_well'
-        ? 0.5
-        : obstacle === 'rotating_cross_blades'
-          ? 0.54
-          : obstacle === 'homing_mine'
-            ? 0.44
-            : obstacle === 'rising_lava'
-              ? 0.42
-              : obstacle === 'telefrag_portal'
-                ? 0.46
-                : obstacle === 'trapdoor_row'
-                  ? 0.53
-                  : obstacle === 'pulse_expander'
-                    ? 0.45
-                    : obstacle === 'magnetic_field'
-                      ? 0.43
-                      : obstacle === 'spike_wave'
-                        ? 0.5
-                        : 0.44;
+    obstacle === 'arc_blade'
+      ? 0.62
+      : obstacle === 'shutter_gate'
+        ? 0.58
+        : obstacle === 'pulse_laser'
+          ? 0.52
+          : obstacle === 'gravity_orb'
+            ? 0.5
+            : obstacle === 'prism_mine'
+              ? 0.46
+              : obstacle === 'flame_jet'
+                ? 0.42
+                : obstacle === 'phase_portal'
+                  ? 0.46
+                  : obstacle === 'trap_split'
+                    ? 0.56
+                    : obstacle === 'magnetron'
+                      ? 0.44
+                      : obstacle === 'spike_fan'
+                        ? 0.54
+                        : obstacle === 'thunder_column'
+                          ? 0.42
+                          : 0.5;
 
-  weight *= 1 + (stageId - 1) * 0.16;
-  if (mode === 'daily') weight *= 1.08;
+  weight *= 1 + (stageId - 1) * 0.17;
+  if (mode === 'daily') weight *= 1.1;
+
   if (
-    (obstacle === 'rising_lava' || obstacle === 'lightning_striker') &&
+    (obstacle === 'flame_jet' || obstacle === 'thunder_column') &&
     stageId <= 2
   ) {
     weight *= 0.7;
   }
+
   return weight;
+};
+
+const obstacleOpenRatioBias = (
+  obstacle: Exclude<OctaObstacleType, 'none'>
+): number => {
+  if (obstacle === 'arc_blade' || obstacle === 'pulse_laser') return -0.08;
+  if (obstacle === 'vortex_saw' || obstacle === 'spike_fan') return -0.04;
+  if (obstacle === 'flame_jet' || obstacle === 'thunder_column') return 0.06;
+  if (obstacle === 'phase_portal' || obstacle === 'gravity_orb') return 0.03;
+  return 0;
 };
 
 const collectibleKind = (rand: () => number): CollectibleKind => {
@@ -211,30 +228,35 @@ export const createRingRunGenerator = (
 
     const driftRoll = rand();
     let drift = 0;
-    if (driftRoll < 0.22) drift = -1;
-    else if (driftRoll < 0.44) drift = 1;
-    else if (stage.id >= 3 && driftRoll < 0.5) drift = -2;
-    else if (stage.id >= 3 && driftRoll < 0.56) drift = 2;
+    if (driftRoll < 0.2) drift = -1;
+    else if (driftRoll < 0.4) drift = 1;
+    else if (stage.id >= 3 && driftRoll < 0.49) drift = -2;
+    else if (stage.id >= 3 && driftRoll < 0.58) drift = 2;
 
     const safeLane = normalizeLane(previousSafeLane + drift, sides);
 
     let solidMask = (1 << sides) - 1;
     const holeDensity =
-      stage.holeDensity + (mode === 'daily' ? 0.07 : 0) + Math.max(0, (stage.id - 2) * 0.012);
+      stage.holeDensity +
+      (mode === 'daily' ? 0.08 : 0) +
+      Math.max(0, (stage.id - 2) * 0.016);
     const holeTarget = clamp(
-      Math.floor(sides * holeDensity + rand() * 2.2),
+      Math.floor(sides * holeDensity + rand() * 2.3),
       1,
       Math.max(1, sides - 1)
     );
 
     let carved = 0;
     let guard = 0;
-    while (carved < holeTarget && guard < sides * 8) {
+    while (carved < holeTarget && guard < sides * 10) {
       guard += 1;
       const lane = Math.floor(rand() * sides);
       if (lane === safeLane) continue;
-      const dist = Math.min(Math.abs(lane - safeLane), sides - Math.abs(lane - safeLane));
-      if (dist <= 1 && rand() < 0.78) continue;
+      const dist = Math.min(
+        Math.abs(lane - safeLane),
+        sides - Math.abs(lane - safeLane)
+      );
+      if (dist <= 1 && rand() < 0.8) continue;
       const bit = laneBit(lane, sides);
       if ((solidMask & bit) === 0) continue;
       solidMask &= ~bit;
@@ -245,20 +267,20 @@ export const createRingRunGenerator = (
 
     const minSolid =
       stage.id <= 2
-        ? Math.ceil(sides * 0.64)
+        ? Math.ceil(sides * 0.62)
         : stage.id === 3
-          ? Math.ceil(sides * 0.52)
-          : Math.ceil(sides * 0.44);
+          ? Math.ceil(sides * 0.5)
+          : Math.ceil(sides * 0.42);
 
-    let safety = 0;
-    while (bitCount(solidMask) < minSolid && safety < sides * 4) {
-      safety += 1;
+    let fillGuard = 0;
+    while (bitCount(solidMask) < minSolid && fillGuard < sides * 5) {
+      fillGuard += 1;
       solidMask |= laneBit(Math.floor(rand() * sides), sides);
     }
 
     const laneMeta: RingLaneMeta[] = Array.from({ length: sides }, (_, lane) => ({
       lane,
-      platform: 'standard',
+      platform: 'smooth_lane',
       platformPhase: rand() * Math.PI * 2,
       obstacle: 'none',
       obstaclePhase: rand() * Math.PI * 2,
@@ -268,13 +290,13 @@ export const createRingRunGenerator = (
     }));
 
     const obstacleDensity = clamp(
-      stage.obstacleDensity + (mode === 'daily' ? 0.08 : 0),
-      0.05,
-      0.84
+      stage.obstacleDensity + (mode === 'daily' ? 0.09 : 0),
+      0.08,
+      0.9
     );
 
     let obstacleCount = 0;
-    const obstacleCap = Math.max(1, Math.floor(sides * (0.2 + obstacleDensity * 0.9)));
+    const obstacleCap = Math.max(1, Math.floor(sides * (0.34 + obstacleDensity * 0.88)));
 
     for (let lane = 0; lane < sides; lane += 1) {
       const bit = laneBit(lane, sides);
@@ -287,12 +309,15 @@ export const createRingRunGenerator = (
         (platform) => platformWeight(platform, stage.id, lane, safeLane, sides)
       );
 
-      const dist = Math.min(Math.abs(lane - safeLane), sides - Math.abs(lane - safeLane));
-      const nearPenalty = dist <= 1 ? 0.5 : dist === 2 ? 0.74 : 1;
+      const dist = Math.min(
+        Math.abs(lane - safeLane),
+        sides - Math.abs(lane - safeLane)
+      );
+      const nearPenalty = dist <= 1 ? 0.46 : dist === 2 ? 0.78 : 1;
       const platformPenalty =
-        meta.platform === 'ghost_platform' || meta.platform === 'crushing_ceiling'
+        meta.platform === 'phase_lane' || meta.platform === 'crusher_lane'
           ? 0.62
-          : meta.platform === 'sticky_glue'
+          : meta.platform === 'resin_lane'
             ? 0.76
             : 1;
       const chance = obstacleDensity * nearPenalty * platformPenalty;
@@ -307,13 +332,21 @@ export const createRingRunGenerator = (
         (item) => obstacleWeight(item, stage.id, mode)
       );
 
-      const tempo = 1 + stage.id * 0.16;
-      const cycle = clamp((3.0 - stage.id * 0.2 + rand() * 1.08) / tempo, 0.8, 3.6);
-      const openRatio = clamp(0.6 - stage.id * 0.06 + rand() * 0.2, 0.24, 0.84);
+      const tempo = 1 + stage.id * 0.18;
+      const cycle = clamp(
+        (3.05 - stage.id * 0.22 + rand() * 1.14) / tempo,
+        0.72,
+        3.5
+      );
+      const openRatio = clamp(
+        0.58 - stage.id * 0.05 + rand() * 0.18 + obstacleOpenRatioBias(obstacle),
+        0.2,
+        0.82
+      );
 
       meta.obstacle = obstacle;
       meta.obstacleCycle = cycle;
-      meta.obstacleOpenWindow = clamp(cycle * openRatio, 0.18, cycle * 0.9);
+      meta.obstacleOpenWindow = clamp(cycle * openRatio, 0.16, cycle * 0.9);
       meta.obstacleWindowStart = rand() * cycle;
       obstacleCount += 1;
     }
@@ -323,7 +356,7 @@ export const createRingRunGenerator = (
       sides,
       safeLane,
       solidMask,
-      clamp(stage.collectibleChance + (mode === 'daily' ? 0.04 : 0), 0.08, 0.72)
+      clamp(stage.collectibleChance + (mode === 'daily' ? 0.04 : 0), 0.08, 0.74)
     );
 
     previousSafeLane = safeLane;

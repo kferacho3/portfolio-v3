@@ -19,30 +19,31 @@ export type OctaTileVariant =
   | 'rippleField';
 
 export type OctaPlatformType =
-  | 'standard'
-  | 'conveyor_belt'
-  | 'reverse_conveyor'
-  | 'bouncer'
-  | 'trampoline'
-  | 'teleporter'
-  | 'ghost_platform'
-  | 'sticky_glue'
-  | 'crushing_ceiling'
-  | 'speed_ramp';
+  | 'smooth_lane'
+  | 'drift_boost'
+  | 'reverse_drift'
+  | 'pulse_pad'
+  | 'spring_pad'
+  | 'warp_gate'
+  | 'phase_lane'
+  | 'resin_lane'
+  | 'crusher_lane'
+  | 'overdrive_strip';
 
 export type OctaObstacleType =
   | 'none'
-  | 'laser_grid'
-  | 'gravity_well'
-  | 'rotating_cross_blades'
-  | 'homing_mine'
-  | 'rising_lava'
-  | 'telefrag_portal'
-  | 'trapdoor_row'
-  | 'pulse_expander'
-  | 'magnetic_field'
-  | 'spike_wave'
-  | 'lightning_striker';
+  | 'arc_blade'
+  | 'shutter_gate'
+  | 'pulse_laser'
+  | 'gravity_orb'
+  | 'prism_mine'
+  | 'flame_jet'
+  | 'phase_portal'
+  | 'trap_split'
+  | 'magnetron'
+  | 'spike_fan'
+  | 'thunder_column'
+  | 'vortex_saw';
 
 export type CollectibleKind = 'shard' | 'core' | 'sync' | null;
 

@@ -219,7 +219,7 @@ const createSimState = (startLane: number, sides: number, stageId: number): SimS
   baseRing: 0,
   lastCrossedRing: -1,
 
-  currentPlatform: 'standard',
+  currentPlatform: 'smooth_lane',
   currentObstacle: 'none',
 
   ended: false,
@@ -229,14 +229,20 @@ const createSimState = (startLane: number, sides: number, stageId: number): SimS
 });
 
 const platformBlend = (platform: OctaPlatformType, phase: number, time: number) => {
-  if (platform === 'ghost_platform') {
-    return 0.5 + 0.5 * Math.sin(time * 1.8 + phase * 1.2);
+  if (platform === 'phase_lane') {
+    return 0.5 + 0.5 * Math.sin(time * 1.9 + phase * 1.2);
   }
-  if (platform === 'crushing_ceiling') {
-    return 0.5 + 0.5 * Math.sin(time * 2.2 + phase * 0.9);
+  if (platform === 'crusher_lane') {
+    return 0.5 + 0.5 * Math.sin(time * 2.35 + phase * 0.9);
   }
-  if (platform === 'sticky_glue') {
+  if (platform === 'resin_lane') {
     return 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(time * 0.8 + phase));
+  }
+  if (platform === 'pulse_pad') {
+    return 0.5 + 0.5 * Math.sin(time * 3.1 + phase * 1.3);
+  }
+  if (platform === 'overdrive_strip') {
+    return 0.5 + 0.5 * Math.sin(time * 2.8 + phase * 0.6);
   }
   return 0;
 };
@@ -266,20 +272,50 @@ const obstacleState = (meta: RingLaneMeta, time: number): ObstacleState => {
   const blend = clamp(1 - dist / Math.max(0.001, openRadius), 0, 1);
   const closedBlend = open ? 1 - blend * 0.86 : 1;
 
-  const dangerThreshold =
-    meta.obstacle === 'laser_grid' ||
-    meta.obstacle === 'rotating_cross_blades' ||
-    meta.obstacle === 'spike_wave'
-      ? 0.36
-      : meta.obstacle === 'telefrag_portal' ||
-          meta.obstacle === 'pulse_expander' ||
-          meta.obstacle === 'rising_lava'
-        ? 0.42
-        : 0.48;
+  let tunedClosed = closedBlend;
+  let dangerThreshold = 0.46;
+
+  if (meta.obstacle === 'arc_blade') {
+    tunedClosed = clamp(closedBlend * 1.08 + Math.sin(time * 3.4 + meta.obstaclePhase) * 0.08, 0, 1);
+    dangerThreshold = 0.33;
+  } else if (meta.obstacle === 'shutter_gate') {
+    tunedClosed = clamp(closedBlend * 0.94 + 0.06, 0, 1);
+    dangerThreshold = 0.5;
+  } else if (meta.obstacle === 'pulse_laser') {
+    tunedClosed = clamp(closedBlend + Math.sin(time * 7.8 + meta.obstaclePhase * 2.1) * 0.18, 0, 1);
+    dangerThreshold = 0.37;
+  } else if (meta.obstacle === 'gravity_orb') {
+    tunedClosed = clamp(closedBlend * 0.86 + (0.5 + 0.5 * Math.sin(time * 2.2 + meta.obstaclePhase)) * 0.28, 0, 1);
+    dangerThreshold = 0.44;
+  } else if (meta.obstacle === 'prism_mine') {
+    tunedClosed = clamp(closedBlend * 0.9 + (0.5 + 0.5 * Math.sin(time * 5.6 + meta.obstaclePhase * 2.0)) * 0.22, 0, 1);
+    dangerThreshold = 0.41;
+  } else if (meta.obstacle === 'flame_jet') {
+    tunedClosed = clamp(closedBlend * 0.85 + (0.5 + 0.5 * Math.sin(time * 4.5 + meta.obstaclePhase * 1.2)) * 0.24, 0, 1);
+    dangerThreshold = 0.52;
+  } else if (meta.obstacle === 'phase_portal') {
+    tunedClosed = clamp(closedBlend * 0.94 + Math.sin(time * 2.9 + meta.obstaclePhase) * 0.1, 0, 1);
+    dangerThreshold = 0.4;
+  } else if (meta.obstacle === 'trap_split') {
+    tunedClosed = clamp(closedBlend * 1.06, 0, 1);
+    dangerThreshold = 0.35;
+  } else if (meta.obstacle === 'magnetron') {
+    tunedClosed = clamp(closedBlend * 0.9 + (0.5 + 0.5 * Math.sin(time * 1.8 + meta.obstaclePhase)) * 0.18, 0, 1);
+    dangerThreshold = 0.47;
+  } else if (meta.obstacle === 'spike_fan') {
+    tunedClosed = clamp(closedBlend * 1.06 + (0.5 + 0.5 * Math.sin(time * 6.1 + meta.obstaclePhase * 1.4)) * 0.08, 0, 1);
+    dangerThreshold = 0.36;
+  } else if (meta.obstacle === 'thunder_column') {
+    tunedClosed = clamp(closedBlend * 0.84 + (0.5 + 0.5 * Math.sin(time * 8.8 + meta.obstaclePhase * 2.8)) * 0.25, 0, 1);
+    dangerThreshold = 0.5;
+  } else if (meta.obstacle === 'vortex_saw') {
+    tunedClosed = clamp(closedBlend * 1.02 + Math.sin(time * 4.4 + meta.obstaclePhase * 1.7) * 0.12, 0, 1);
+    dangerThreshold = 0.38;
+  }
 
   return {
-    closedBlend,
-    danger: closedBlend >= dangerThreshold,
+    closedBlend: tunedClosed,
+    danger: tunedClosed >= dangerThreshold,
   };
 };
 
@@ -290,33 +326,38 @@ const collectibleColor = (type: RingData['collectibleType']) => {
 };
 
 const platformColor = (platform: OctaPlatformType) => {
-  if (platform === 'conveyor_belt' || platform === 'reverse_conveyor' || platform === 'speed_ramp') {
+  if (
+    platform === 'drift_boost' ||
+    platform === 'reverse_drift' ||
+    platform === 'overdrive_strip'
+  ) {
     return '#75e7ff';
   }
-  if (platform === 'bouncer' || platform === 'trampoline') return '#ffbf7f';
-  if (platform === 'teleporter' || platform === 'ghost_platform') return '#cb95ff';
-  if (platform === 'sticky_glue') return '#8de08d';
-  if (platform === 'crushing_ceiling') return '#ff8f8f';
+  if (platform === 'pulse_pad' || platform === 'spring_pad') return '#ffbf7f';
+  if (platform === 'warp_gate' || platform === 'phase_lane') return '#cb95ff';
+  if (platform === 'resin_lane') return '#8de08d';
+  if (platform === 'crusher_lane') return '#ff8f8f';
   return '#9fd9ff';
 };
 
 const obstacleColor = (obstacle: OctaObstacleType) => {
   if (obstacle === 'none') return '#ffffff';
   if (
-    obstacle === 'laser_grid' ||
-    obstacle === 'trapdoor_row' ||
-    obstacle === 'lightning_striker'
+    obstacle === 'shutter_gate' ||
+    obstacle === 'trap_split' ||
+    obstacle === 'thunder_column'
   ) {
     return '#ffb37b';
   }
   if (
-    obstacle === 'gravity_well' ||
-    obstacle === 'magnetic_field' ||
-    obstacle === 'telefrag_portal'
+    obstacle === 'gravity_orb' ||
+    obstacle === 'magnetron' ||
+    obstacle === 'phase_portal'
   ) {
     return '#be94ff';
   }
-  if (obstacle === 'rising_lava') return '#ff7044';
+  if (obstacle === 'flame_jet') return '#ff7044';
+  if (obstacle === 'pulse_laser') return '#ff7fd8';
   return '#ff8e7e';
 };
 
@@ -387,7 +428,11 @@ export default function OctaSurge() {
   const playerRef = useRef<THREE.Group>(null);
   const ghostRef = useRef<THREE.Group>(null);
 
-  const obstacleMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleBladeMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleGateMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleCoreMeshRef = useRef<THREE.InstancedMesh>(null);
+  const obstacleSpireMeshRef = useRef<THREE.InstancedMesh>(null);
+  const platformMeshRef = useRef<THREE.InstancedMesh>(null);
   const collectibleMeshRef = useRef<THREE.InstancedMesh>(null);
 
   const bloomRef = useRef<any>(null);
@@ -425,11 +470,16 @@ export default function OctaSurge() {
   const sceneFogRef = useRef(new THREE.Color(FIBER_COLORS.fog));
 
   const obstacleCountMax = VISIBLE_RING_COUNT * GAME.maxSides;
+  const platformCountMax = VISIBLE_RING_COUNT * GAME.maxSides;
   const collectibleCountMax = VISIBLE_RING_COUNT;
 
   const geometry = useMemo(
     () => ({
-      obstacle: new THREE.DodecahedronGeometry(0.36, 0),
+      obstacleBlade: new THREE.BoxGeometry(0.82, 0.1, 0.26),
+      obstacleGate: new THREE.TorusGeometry(0.32, 0.09, 10, 24),
+      obstacleCore: new THREE.IcosahedronGeometry(0.34, 0),
+      obstacleSpire: new THREE.ConeGeometry(0.3, 0.8, 6),
+      platformPulse: new THREE.TorusGeometry(0.24, 0.05, 8, 18),
       collectible: new THREE.IcosahedronGeometry(0.25, 0),
       playerCore: new THREE.IcosahedronGeometry(0.38, 1),
       playerHalo: new THREE.TorusGeometry(0.6, 0.045, 12, 64),
@@ -592,7 +642,7 @@ export default function OctaSurge() {
       shardCount: 0,
       hudPulse: 0,
       audioReactive: 0,
-      currentPlatform: 'standard',
+      currentPlatform: 'smooth_lane',
       currentObstacle: 'none',
     });
 
@@ -679,20 +729,45 @@ export default function OctaSurge() {
   );
 
   const updateInstances = useCallback(() => {
-    const obstacleMesh = obstacleMeshRef.current;
+    const bladeMesh = obstacleBladeMeshRef.current;
+    const gateMesh = obstacleGateMeshRef.current;
+    const coreMesh = obstacleCoreMeshRef.current;
+    const spireMesh = obstacleSpireMeshRef.current;
+    const platformMesh = platformMeshRef.current;
     const collectibleMesh = collectibleMeshRef.current;
-    if (!obstacleMesh || !collectibleMesh) return;
+
+    if (
+      !bladeMesh ||
+      !gateMesh ||
+      !coreMesh ||
+      !spireMesh ||
+      !platformMesh ||
+      !collectibleMesh
+    ) {
+      return;
+    }
+
+    const flushMesh = (mesh: THREE.InstancedMesh, count: number) => {
+      mesh.count = count;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    };
 
     const sim = simRef.current;
     const baseRing = sim.baseRing;
     const scrollOffset = sim.scroll - baseRing * RING_SPACING;
 
-    let obstacleCount = 0;
+    let bladeCount = 0;
+    let gateCount = 0;
+    let coreCount = 0;
+    let spireCount = 0;
+    let platformCount = 0;
     let collectibleCount = 0;
 
     for (let r = 0; r < VISIBLE_RING_COUNT; r += 1) {
       const ring = getRing(baseRing + r);
       const stage = stageById(ring.stageId);
+      const stageVisual = stageVisualById(ring.stageId);
       const step = laneStep(ring.sides);
       const warp =
         Math.sin(ring.warpSeed + sim.runTime * 0.72 + ring.index * 0.11) *
@@ -704,58 +779,185 @@ export default function OctaSurge() {
         if ((ring.solidMask & bit) === 0) continue;
 
         const meta = ring.laneMeta[lane];
-        if (!meta || meta.obstacle === 'none') continue;
-
-        const state = obstacleState(meta, sim.runTime);
-        if (state.closedBlend < 0.08) continue;
+        if (!meta) continue;
 
         const angle = lane * step + warp;
-        const radius = GAME.radius - 0.9 + state.closedBlend * 0.16;
-        const ox = Math.cos(angle) * radius;
-        const oy = Math.sin(angle) * radius;
 
-        let sx = 0.32;
-        let sy = 0.32;
-        let sz = 0.32;
-        if (meta.obstacle === 'laser_grid') {
-          sx = 0.56;
-          sy = 0.24 + state.closedBlend * 0.22;
-          sz = 0.16;
-        } else if (meta.obstacle === 'rotating_cross_blades') {
-          sx = 0.6;
-          sy = 0.16 + state.closedBlend * 0.12;
-          sz = 0.56;
-        } else if (meta.obstacle === 'rising_lava') {
-          sx = 0.46;
-          sy = 0.48 + state.closedBlend * 0.44;
+        if (meta.platform !== 'smooth_lane' && platformCount < platformCountMax) {
+          const platformPulse = platformBlend(
+            meta.platform,
+            meta.platformPhase,
+            sim.runTime
+          );
+          const platformRadius = GAME.radius - 1.02 + platformPulse * 0.08;
+          const px = Math.cos(angle) * platformRadius;
+          const py = Math.sin(angle) * platformRadius;
+
+          let psx = 0.86;
+          let psy = 0.86;
+          let psz = 0.86;
+          if (meta.platform === 'drift_boost' || meta.platform === 'reverse_drift') {
+            psx = 1.02;
+            psy = 0.68;
+          } else if (meta.platform === 'pulse_pad') {
+            psx = 0.78 + platformPulse * 0.42;
+            psy = 0.78 + platformPulse * 0.42;
+          } else if (meta.platform === 'spring_pad') {
+            psx = 0.72;
+            psy = 0.72;
+            psz = 1.02;
+          } else if (meta.platform === 'warp_gate' || meta.platform === 'phase_lane') {
+            psx = 0.98;
+            psy = 0.98;
+            psz = 0.74;
+          } else if (meta.platform === 'resin_lane') {
+            psx = 1.08;
+            psy = 0.62;
+            psz = 0.72;
+          } else if (meta.platform === 'crusher_lane') {
+            psx = 0.82;
+            psy = 0.82;
+            psz = 1.08;
+          } else if (meta.platform === 'overdrive_strip') {
+            psx = 1.12;
+            psy = 0.54;
+            psz = 0.68;
+          }
+
+          tempObject.position.set(px, py, z - 0.03);
+          tempObject.rotation.set(
+            platformPulse * 0.6 + sim.runTime * 0.4,
+            sim.runTime * 1.2 + meta.platformPhase * 0.5,
+            angle + Math.PI / 2
+          );
+          tempObject.scale.set(psx, psy, psz);
+          tempObject.updateMatrix();
+          platformMesh.setMatrixAt(platformCount, tempObject.matrix);
+
+          tempColorA
+            .set(platformColor(meta.platform))
+            .lerp(tempColorB.set(stageVisual.laneHot), 0.22)
+            .multiplyScalar(0.56 + platformPulse * 0.62 + sim.audioReactive * 0.22);
+          platformMesh.setColorAt(platformCount, tempColorA);
+          platformCount += 1;
+        }
+
+        if (meta.obstacle === 'none') continue;
+
+        const hazard = obstacleState(meta, sim.runTime);
+        if (hazard.closedBlend < 0.08) continue;
+
+        const obstacleRadius = GAME.radius - 0.94 + hazard.closedBlend * 0.16;
+        const ox = Math.cos(angle) * obstacleRadius;
+        const oy = Math.sin(angle) * obstacleRadius;
+
+        let sx = 0.34;
+        let sy = 0.34;
+        let sz = 0.34;
+        let tiltX = sim.runTime * 1.4 + meta.obstaclePhase * 0.1;
+        let tiltY = sim.runTime * 1.1;
+
+        if (meta.obstacle === 'arc_blade') {
+          sx = 0.84;
+          sy = 0.1 + hazard.closedBlend * 0.2;
           sz = 0.24;
-        } else if (meta.obstacle === 'telefrag_portal') {
-          sx = 0.36;
-          sy = 0.36;
-          sz = 0.22;
-        } else if (meta.obstacle === 'trapdoor_row') {
+          tiltY = sim.runTime * 4.2 + meta.obstaclePhase * 0.8;
+        } else if (meta.obstacle === 'shutter_gate') {
+          sx = 0.62;
+          sy = 0.22 + hazard.closedBlend * 0.32;
+          sz = 0.2;
+        } else if (meta.obstacle === 'pulse_laser') {
+          sx = 0.9;
+          sy = 0.08 + hazard.closedBlend * 0.16;
+          sz = 0.12;
+          tiltY = sim.runTime * 6.0 + meta.obstaclePhase * 0.5;
+        } else if (meta.obstacle === 'gravity_orb') {
+          sx = 0.44 + hazard.closedBlend * 0.14;
+          sy = 0.44 + hazard.closedBlend * 0.14;
+          sz = 0.44 + hazard.closedBlend * 0.14;
+          tiltY = sim.runTime * 2.0 + meta.obstaclePhase * 1.1;
+        } else if (meta.obstacle === 'prism_mine') {
+          sx = 0.38 + hazard.closedBlend * 0.18;
+          sy = 0.38 + hazard.closedBlend * 0.18;
+          sz = 0.38 + hazard.closedBlend * 0.18;
+          tiltY = sim.runTime * 2.8 + meta.obstaclePhase * 1.5;
+        } else if (meta.obstacle === 'flame_jet') {
+          sx = 0.32;
+          sy = 0.62 + hazard.closedBlend * 0.44;
+          sz = 0.24;
+          tiltX = sim.runTime * 2.2 + meta.obstaclePhase;
+        } else if (meta.obstacle === 'phase_portal') {
+          sx = 0.48;
+          sy = 0.48;
+          sz = 0.24 + hazard.closedBlend * 0.12;
+          tiltY = sim.runTime * 3.2;
+        } else if (meta.obstacle === 'trap_split') {
+          sx = 0.78;
+          sy = 0.12 + hazard.closedBlend * 0.16;
+          sz = 0.24;
+        } else if (meta.obstacle === 'magnetron') {
+          sx = 0.52;
+          sy = 0.3;
+          sz = 0.52;
+          tiltY = sim.runTime * 1.8 + meta.obstaclePhase;
+        } else if (meta.obstacle === 'spike_fan') {
+          sx = 0.66;
+          sy = 0.14 + hazard.closedBlend * 0.12;
+          sz = 0.54;
+          tiltY = sim.runTime * 5.4 + meta.obstaclePhase;
+        } else if (meta.obstacle === 'thunder_column') {
+          sx = 0.28;
+          sy = 0.78 + hazard.closedBlend * 0.22;
+          sz = 0.28;
+          tiltY = sim.runTime * 8.2 + meta.obstaclePhase * 1.4;
+        } else if (meta.obstacle === 'vortex_saw') {
           sx = 0.72;
-          sy = 0.12 + state.closedBlend * 0.12;
-          sz = 0.24;
+          sy = 0.11 + hazard.closedBlend * 0.08;
+          sz = 0.72;
+          tiltY = sim.runTime * 6.4 + meta.obstaclePhase * 1.6;
         }
 
         tempObject.position.set(ox, oy, z);
-        tempObject.rotation.set(
-          sim.runTime * 1.4 + meta.obstaclePhase * 0.1,
-          sim.runTime * (meta.obstacle === 'rotating_cross_blades' ? 2.8 : 1.1),
-          angle + Math.PI / 2
-        );
+        tempObject.rotation.set(tiltX, tiltY, angle + Math.PI / 2);
         tempObject.scale.set(sx, sy, sz);
         tempObject.updateMatrix();
-        obstacleMesh.setMatrixAt(obstacleCount, tempObject.matrix);
 
         tempColorA
           .set(obstacleColor(meta.obstacle))
-          .lerp(tempColorB.set(stageVisualById(ring.stageId).obstacleHot), 0.28)
-          .multiplyScalar(0.55 + state.closedBlend * 0.85);
-        obstacleMesh.setColorAt(obstacleCount, tempColorA);
+          .lerp(tempColorB.set(stageVisual.obstacleHot), 0.32)
+          .multiplyScalar(0.58 + hazard.closedBlend * 0.8 + sim.audioReactive * 0.18);
 
-        obstacleCount += 1;
+        const useBlade =
+          meta.obstacle === 'arc_blade' ||
+          meta.obstacle === 'spike_fan' ||
+          meta.obstacle === 'vortex_saw';
+        const useGate =
+          meta.obstacle === 'shutter_gate' ||
+          meta.obstacle === 'pulse_laser' ||
+          meta.obstacle === 'phase_portal' ||
+          meta.obstacle === 'trap_split';
+        const useCore =
+          meta.obstacle === 'gravity_orb' ||
+          meta.obstacle === 'prism_mine' ||
+          meta.obstacle === 'magnetron';
+
+        if (useBlade && bladeCount < obstacleCountMax) {
+          bladeMesh.setMatrixAt(bladeCount, tempObject.matrix);
+          bladeMesh.setColorAt(bladeCount, tempColorA);
+          bladeCount += 1;
+        } else if (useGate && gateCount < obstacleCountMax) {
+          gateMesh.setMatrixAt(gateCount, tempObject.matrix);
+          gateMesh.setColorAt(gateCount, tempColorA);
+          gateCount += 1;
+        } else if (useCore && coreCount < obstacleCountMax) {
+          coreMesh.setMatrixAt(coreCount, tempObject.matrix);
+          coreMesh.setColorAt(coreCount, tempColorA);
+          coreCount += 1;
+        } else if (spireCount < obstacleCountMax) {
+          spireMesh.setMatrixAt(spireCount, tempObject.matrix);
+          spireMesh.setColorAt(spireCount, tempColorA);
+          spireCount += 1;
+        }
       }
 
       if (
@@ -789,14 +991,13 @@ export default function OctaSurge() {
       }
     }
 
-    obstacleMesh.count = obstacleCount;
-    obstacleMesh.instanceMatrix.needsUpdate = true;
-    if (obstacleMesh.instanceColor) obstacleMesh.instanceColor.needsUpdate = true;
-
-    collectibleMesh.count = collectibleCount;
-    collectibleMesh.instanceMatrix.needsUpdate = true;
-    if (collectibleMesh.instanceColor) collectibleMesh.instanceColor.needsUpdate = true;
-  }, [getRing, tempColorA, tempColorB, tempObject]);
+    flushMesh(bladeMesh, bladeCount);
+    flushMesh(gateMesh, gateCount);
+    flushMesh(coreMesh, coreCount);
+    flushMesh(spireMesh, spireCount);
+    flushMesh(platformMesh, platformCount);
+    flushMesh(collectibleMesh, collectibleCount);
+  }, [getRing, platformCountMax, tempColorA, tempColorB, tempObject]);
 
   useEffect(() => {
     octaSurgeState.load();
@@ -848,7 +1049,11 @@ export default function OctaSurge() {
   }, [initializeRun, snap.phase]);
 
   useEffect(() => {
-    obstacleMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    obstacleBladeMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    obstacleGateMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    obstacleCoreMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    obstacleSpireMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    platformMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     collectibleMeshRef.current?.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   }, []);
 
@@ -1113,7 +1318,7 @@ export default function OctaSurge() {
         }
 
         const meta = ring.laneMeta[lane];
-        sim.currentPlatform = meta?.platform ?? 'standard';
+        sim.currentPlatform = meta?.platform ?? 'smooth_lane';
         sim.currentObstacle = meta?.obstacle ?? 'none';
 
         if (meta && meta.obstacle !== 'none') {
@@ -1128,18 +1333,18 @@ export default function OctaSurge() {
         }
 
         const platformGate = platformBlend(meta.platform, meta.platformPhase, sim.runTime);
-        if (meta.platform === 'ghost_platform' && platformGate > 0.78) {
+        if (meta.platform === 'phase_lane' && platformGate > 0.8) {
           sim.ended = true;
           sim.deathType = 'void';
-          sim.endReason = 'Ghost platform phased out beneath the packet.';
+          sim.endReason = 'Phase lane blinked out beneath the packet.';
           sim.dangerPulse = 1;
           break;
         }
 
-        if (meta.platform === 'crushing_ceiling' && platformGate > 0.84) {
+        if (meta.platform === 'crusher_lane' && platformGate > 0.84) {
           sim.ended = true;
           sim.deathType = 'obstacle';
-          sim.endReason = 'Crushing ceiling impact.';
+          sim.endReason = 'Crusher lane clamped shut.';
           sim.dangerPulse = 1;
           break;
         }
@@ -1149,32 +1354,36 @@ export default function OctaSurge() {
         sim.multiplier = clamp(1 + sim.combo * 0.16 + sim.shardCount * 0.06, 1, 9);
         sim.score += GAME.scoreRate * sim.multiplier * (1 + sim.audioReactive * 0.42);
 
-        if (meta.platform === 'conveyor_belt') {
+        if (meta.platform === 'drift_boost') {
           sim.laneIndex = normalizeLane(sim.laneIndex + 1, ring.sides);
           sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
-          sim.score += GAME.scoreRate * 0.22 * sim.multiplier;
-        } else if (meta.platform === 'reverse_conveyor') {
+          sim.score += GAME.scoreRate * 0.26 * sim.multiplier;
+        } else if (meta.platform === 'reverse_drift') {
           sim.laneIndex = normalizeLane(sim.laneIndex - 1, ring.sides);
           sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
-          sim.score += GAME.scoreRate * 0.22 * sim.multiplier;
-        } else if (meta.platform === 'bouncer') {
+          sim.score += GAME.scoreRate * 0.26 * sim.multiplier;
+        } else if (meta.platform === 'pulse_pad') {
           sim.score += GAME.scoreRate * 0.34 * sim.multiplier;
-          sim.flipPulse = Math.max(sim.flipPulse, 0.34);
-        } else if (meta.platform === 'trampoline') {
-          sim.score += GAME.scoreRate * 0.44 * sim.multiplier;
-          sim.flipPulse = Math.max(sim.flipPulse, 0.42);
+          sim.flipPulse = Math.max(sim.flipPulse, 0.32 + platformGate * 0.3);
+          sim.slowMoMeter = clamp(sim.slowMoMeter + 8 + platformGate * 8, 0, 100);
+        } else if (meta.platform === 'spring_pad') {
+          sim.score += GAME.scoreRate * 0.46 * sim.multiplier;
+          sim.flipPulse = Math.max(sim.flipPulse, 0.44);
           sim.slowMoMeter = clamp(sim.slowMoMeter + 14, 0, 100);
-        } else if (meta.platform === 'teleporter') {
+        } else if (meta.platform === 'warp_gate') {
           const jump = Math.sin(ring.index * 0.7 + meta.platformPhase) > 0 ? 2 : -2;
           sim.laneIndex = normalizeLane(sim.laneIndex + jump, ring.sides);
           sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
-          sim.score += GAME.scoreRate * 0.48 * sim.multiplier;
-          sim.dangerPulse = Math.max(sim.dangerPulse, 0.34);
-        } else if (meta.platform === 'sticky_glue') {
-          sim.speed *= 0.9;
-        } else if (meta.platform === 'speed_ramp') {
-          sim.speed *= 1.06;
-          sim.score += GAME.scoreRate * 0.24 * sim.multiplier;
+          sim.score += GAME.scoreRate * 0.52 * sim.multiplier;
+          sim.dangerPulse = Math.max(sim.dangerPulse, 0.36);
+        } else if (meta.platform === 'phase_lane') {
+          sim.score += GAME.scoreRate * 0.12 * sim.multiplier;
+        } else if (meta.platform === 'resin_lane') {
+          sim.speed *= 0.86;
+          sim.multiplier = Math.max(1, sim.multiplier - 0.1);
+        } else if (meta.platform === 'overdrive_strip') {
+          sim.speed *= 1.09;
+          sim.score += GAME.scoreRate * 0.3 * sim.multiplier;
         }
 
         const leftMeta = ring.laneMeta[normalizeLane(lane - 1, ring.sides)];
@@ -1443,14 +1652,73 @@ export default function OctaSurge() {
           tileVariantRef={tileVariantRef}
         />
 
-        <instancedMesh ref={obstacleMeshRef} args={[undefined, undefined, obstacleCountMax]}>
-          <primitive object={geometry.obstacle} attach="geometry" />
+        <instancedMesh
+          ref={platformMeshRef}
+          args={[undefined, undefined, platformCountMax]}
+        >
+          <primitive object={geometry.platformPulse} attach="geometry" />
           <meshStandardMaterial
             vertexColors
-            metalness={0.5}
-            roughness={0.12}
+            metalness={0.35}
+            roughness={0.08}
+            emissive={FIBER_COLORS.wire}
+            emissiveIntensity={0.38}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={obstacleBladeMeshRef}
+          args={[undefined, undefined, obstacleCountMax]}
+        >
+          <primitive object={geometry.obstacleBlade} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            metalness={0.62}
+            roughness={0.1}
             emissive={FIBER_COLORS.obstacle}
-            emissiveIntensity={0.44}
+            emissiveIntensity={0.46}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={obstacleGateMeshRef}
+          args={[undefined, undefined, obstacleCountMax]}
+        >
+          <primitive object={geometry.obstacleGate} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            metalness={0.42}
+            roughness={0.12}
+            emissive={FIBER_COLORS.obstacleHot}
+            emissiveIntensity={0.36}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={obstacleCoreMeshRef}
+          args={[undefined, undefined, obstacleCountMax]}
+        >
+          <primitive object={geometry.obstacleCore} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            metalness={0.22}
+            roughness={0.06}
+            emissive={FIBER_COLORS.accent}
+            emissiveIntensity={0.48}
+          />
+        </instancedMesh>
+
+        <instancedMesh
+          ref={obstacleSpireMeshRef}
+          args={[undefined, undefined, obstacleCountMax]}
+        >
+          <primitive object={geometry.obstacleSpire} attach="geometry" />
+          <meshStandardMaterial
+            vertexColors
+            metalness={0.54}
+            roughness={0.14}
+            emissive={FIBER_COLORS.obstacle}
+            emissiveIntensity={0.42}
           />
         </instancedMesh>
 

@@ -269,7 +269,7 @@ export const octaSurgeState = proxy({
   shardCount: 0,
   hudPulse: 0,
   audioReactive: 0,
-  currentPlatform: 'standard' as OctaPlatformType,
+  currentPlatform: 'smooth_lane' as OctaPlatformType,
   currentObstacle: 'none' as OctaObstacleType,
 
   crashReason: '',
@@ -367,7 +367,7 @@ export const octaSurgeState = proxy({
     this.shardCount = 0;
     this.hudPulse = 0;
     this.audioReactive = 0;
-    this.currentPlatform = 'standard';
+    this.currentPlatform = 'smooth_lane';
     this.currentObstacle = 'none';
     this.lastUnlockedVariant = '';
     this.worldSeed = this.mode === 'daily' ? dailySeedFromDate() : randomSeed();

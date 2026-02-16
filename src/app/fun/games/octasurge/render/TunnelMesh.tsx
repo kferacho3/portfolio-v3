@@ -4,7 +4,7 @@ import * as THREE from 'three';
 
 import { GAME } from '../constants';
 import type { RingData } from '../level/types';
-import type { OctaTileVariant } from '../types';
+import type { OctaObstacleType, OctaPlatformType, OctaTileVariant } from '../types';
 import { createTunnelMaterial } from '../shaders/tunnelMaterial';
 
 type Props = {
@@ -32,6 +32,35 @@ const variantToFloat = (variant: OctaTileVariant) => {
   return 7;
 };
 
+const obstacleToFloat = (obstacle: OctaObstacleType) => {
+  if (obstacle === 'none') return 0;
+  if (obstacle === 'arc_blade') return 1 / 12;
+  if (obstacle === 'shutter_gate') return 2 / 12;
+  if (obstacle === 'pulse_laser') return 3 / 12;
+  if (obstacle === 'gravity_orb') return 4 / 12;
+  if (obstacle === 'prism_mine') return 5 / 12;
+  if (obstacle === 'flame_jet') return 6 / 12;
+  if (obstacle === 'phase_portal') return 7 / 12;
+  if (obstacle === 'trap_split') return 8 / 12;
+  if (obstacle === 'magnetron') return 9 / 12;
+  if (obstacle === 'spike_fan') return 10 / 12;
+  if (obstacle === 'thunder_column') return 11 / 12;
+  return 1;
+};
+
+const platformToFloat = (platform: OctaPlatformType) => {
+  if (platform === 'smooth_lane') return 0;
+  if (platform === 'drift_boost') return 1 / 10;
+  if (platform === 'reverse_drift') return 2 / 10;
+  if (platform === 'pulse_pad') return 3 / 10;
+  if (platform === 'spring_pad') return 4 / 10;
+  if (platform === 'warp_gate') return 5 / 10;
+  if (platform === 'phase_lane') return 6 / 10;
+  if (platform === 'resin_lane') return 7 / 10;
+  if (platform === 'crusher_lane') return 8 / 10;
+  return 9 / 10;
+};
+
 export function TunnelMesh({
   ringCount,
   spacing,
@@ -46,7 +75,6 @@ export function TunnelMesh({
   tileVariantRef,
 }: Props) {
   const lastBaseRef = useRef(Number.NaN);
-  const lastVariantRef = useRef<OctaTileVariant>('classic');
 
   const geometry = useMemo(() => {
     const base = new THREE.BoxGeometry(0.72, 0.1, Math.max(0.42, spacing * 0.82));
@@ -113,10 +141,12 @@ export function TunnelMesh({
           activeAttr.array[ptr] = solid ? 1 : 0;
           sidesAttr.array[ptr] = ring.sides;
           stageAttr.array[ptr] = ring.stageId;
-          hazardAttr.array[ptr] =
-            laneMeta && laneMeta.obstacle !== 'none' ? 1 : 0;
-          platformAttr.array[ptr] =
-            laneMeta && laneMeta.platform !== 'standard' ? 1 : 0;
+          hazardAttr.array[ptr] = laneMeta
+            ? obstacleToFloat(laneMeta.obstacle)
+            : 0;
+          platformAttr.array[ptr] = laneMeta
+            ? platformToFloat(laneMeta.platform)
+            : 0;
         } else {
           activeAttr.array[ptr] = 0;
           sidesAttr.array[ptr] = ring.sides;
@@ -139,13 +169,12 @@ export function TunnelMesh({
     const mat = material;
 
     const baseRing = baseRingRef.current;
-    const variant = tileVariantRef.current;
-    if (baseRing !== lastBaseRef.current || variant !== lastVariantRef.current) {
+    if (baseRing !== lastBaseRef.current) {
       applyRingWindow(baseRing);
       lastBaseRef.current = baseRing;
-      lastVariantRef.current = variant;
     }
 
+    const variant = tileVariantRef.current;
     mat.uniforms.uTime.value = state.clock.elapsedTime;
     mat.uniforms.uRadius.value = GAME.radius;
     mat.uniforms.uSpacing.value = spacing;
