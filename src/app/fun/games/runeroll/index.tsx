@@ -213,23 +213,6 @@ const sourceFaceForBottom = (direction: Direction) => {
   return 5; // right -> bottom
 };
 
-const facesWithPickupPreview = (
-  faces: FaceColors,
-  animation: RollAnimation | null
-): FaceColors => {
-  if (
-    !animation ||
-    animation.pickupVisualFaceIndex === null ||
-    animation.pickupVisualColor === null
-  ) {
-    return faces;
-  }
-
-  const preview = [...faces] as FaceColors;
-  preview[animation.pickupVisualFaceIndex] = animation.pickupVisualColor;
-  return preview;
-};
-
 const simulateMove = (
   level: Level,
   from: GridPos,
@@ -836,7 +819,7 @@ function RuneCube() {
     const state = useRuneRollStore.getState();
     const level = RUNE_LEVELS[state.levelIndex];
     const animation = state.animation;
-    const displayFaces = facesWithPickupPreview(state.faces, animation);
+    const displayFaces = state.faces;
     const colorLerpAlpha = 1 - Math.exp(-delta * 13);
     const intensityLerpAlpha = 1 - Math.exp(-delta * 11);
     const updateFaceGlow = (pulseBoost = 0) => {
@@ -875,6 +858,11 @@ function RuneCube() {
     const updateBottomHalo = (pickupBoost = 0) => {
       const halo = bottomHaloRef.current;
       if (!halo) return;
+
+      if (animation) {
+        halo.opacity = 0;
+        return;
+      }
 
       const bottomColor = displayFaces[1] ?? character.neutralFaceColor;
       haloTargetColorRef.current.set(bottomColor);
@@ -1071,16 +1059,16 @@ function RuneRollOverlay() {
   };
 
   return (
-    <div className="pointer-events-none absolute inset-0 select-none text-white">
+    <div className="pointer-events-none absolute inset-0 overflow-hidden select-none text-white">
       {showHud && (
-        <div className="absolute left-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 backdrop-blur-sm">
+        <div className="absolute left-3 top-3 max-w-[min(62vw,260px)] rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 backdrop-blur-sm md:left-4 md:top-4">
           <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
           <div className="text-[11px] text-cyan-50/80">Reforged Puzzle Chambers</div>
         </div>
       )}
 
       {showHud && (
-        <div className="absolute right-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 text-right backdrop-blur-sm">
+        <div className="absolute right-3 top-3 max-w-[min(62vw,240px)] rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 text-right backdrop-blur-sm md:right-4 md:top-4">
           <div className="text-sm font-semibold">Rune {levelIndex + 1}</div>
           <div className="text-[11px] text-white/75">{level.id}</div>
           <div className="text-[11px] text-cyan-100/80">{selectedCharacter.name}</div>
@@ -1091,7 +1079,7 @@ function RuneRollOverlay() {
       )}
 
       {showHud && (
-        <div className="absolute left-4 top-[98px] rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-xs backdrop-blur-sm">
+        <div className="absolute left-3 top-[84px] max-w-[min(78vw,340px)] rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-xs backdrop-blur-sm md:left-4 md:top-[98px]">
           <div className="flex items-center gap-2">
             <span className="text-white/70">Bottom face</span>
             <span
@@ -1104,7 +1092,7 @@ function RuneRollOverlay() {
             <span className="font-semibold text-cyan-100">{bottomFaceName}</span>
           </div>
           <div className="mt-1 text-[11px] text-white/70">Total stars {totalStars}</div>
-          <div className="mt-1 flex items-center gap-1 text-[10px] text-white/70">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-white/70">
             {RUNE_COLOR_LEGEND.map(({ color, name }) => (
               <span key={color} className="inline-flex items-center gap-1">
                 <span
@@ -1122,7 +1110,7 @@ function RuneRollOverlay() {
       )}
 
       {showHud && (
-        <div className="absolute bottom-4 left-4 rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm">
+        <div className="absolute bottom-3 left-3 hidden max-w-[min(78vw,320px)] rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm sm:block md:bottom-4 md:left-4">
           <div>Move: WASD / Arrow Keys</div>
           <div>Restart: R</div>
           <div>Menu: Esc</div>
@@ -1132,18 +1120,18 @@ function RuneRollOverlay() {
       )}
 
       {phase === 'playing' && message && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md border border-amber-100/35 bg-slate-950/80 px-3 py-1.5 text-xs text-amber-100 backdrop-blur-sm">
+        <div className="absolute bottom-[96px] left-1/2 max-w-[min(90vw,560px)] -translate-x-1/2 rounded-md border border-amber-100/35 bg-slate-950/80 px-3 py-1.5 text-center text-xs text-amber-100 backdrop-blur-sm md:bottom-24">
           {message}
         </div>
       )}
 
       {showHud && (
-        <div className="pointer-events-auto absolute bottom-6 right-6 grid grid-cols-3 gap-2">
+        <div className="pointer-events-auto absolute bottom-3 right-3 grid grid-cols-3 gap-2 md:bottom-6 md:right-6">
           <span />
           <button
             type="button"
             disabled={!canMove}
-            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-2.5 py-1.5 text-base font-semibold transition disabled:opacity-40 md:px-3 md:py-2 md:text-lg"
             onClick={() => attemptMove('up')}
           >
             ↑
@@ -1152,7 +1140,7 @@ function RuneRollOverlay() {
           <button
             type="button"
             disabled={!canMove}
-            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-2.5 py-1.5 text-base font-semibold transition disabled:opacity-40 md:px-3 md:py-2 md:text-lg"
             onClick={() => attemptMove('left')}
           >
             ←
@@ -1160,7 +1148,7 @@ function RuneRollOverlay() {
           <button
             type="button"
             disabled={!canMove}
-            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-2.5 py-1.5 text-base font-semibold transition disabled:opacity-40 md:px-3 md:py-2 md:text-lg"
             onClick={() => attemptMove('down')}
           >
             ↓
@@ -1168,7 +1156,7 @@ function RuneRollOverlay() {
           <button
             type="button"
             disabled={!canMove}
-            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-2.5 py-1.5 text-base font-semibold transition disabled:opacity-40 md:px-3 md:py-2 md:text-lg"
             onClick={() => attemptMove('right')}
           >
             →
@@ -1177,8 +1165,8 @@ function RuneRollOverlay() {
       )}
 
       {phase === 'menu' && (
-        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/36 p-4">
-          <div className="pointer-events-auto w-[min(95vw,980px)] rounded-xl border border-cyan-100/42 bg-slate-950/86 px-5 py-5 backdrop-blur-md">
+        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/36 p-3 md:p-4">
+          <div className="pointer-events-auto max-h-[calc(100dvh-1.5rem)] w-[min(95vw,980px)] overflow-y-auto rounded-xl border border-cyan-100/42 bg-slate-950/86 px-5 py-5 backdrop-blur-md md:max-h-[calc(100dvh-2rem)]">
             <div className="text-center">
               <div className="text-3xl font-black tracking-wide text-cyan-100">RUNE ROLL</div>
               <div className="mt-1 text-sm text-white/85">
@@ -1368,8 +1356,8 @@ function RuneRollOverlay() {
       )}
 
       {phase === 'won' && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto w-[min(92vw,460px)] rounded-xl border border-emerald-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
+        <div className="absolute inset-0 grid place-items-center p-3">
+          <div className="pointer-events-auto max-h-[calc(100dvh-1.5rem)] w-[min(92vw,460px)] overflow-y-auto rounded-xl border border-emerald-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-emerald-200">Rune Cleared</div>
             <div className="mt-2 text-sm text-white/84">{message}</div>
             <div className="mt-2 text-sm text-white/84">Moves {moveCount}</div>
@@ -1402,8 +1390,8 @@ function RuneRollOverlay() {
       )}
 
       {phase === 'failed' && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto w-[min(92vw,460px)] rounded-xl border border-rose-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
+        <div className="absolute inset-0 grid place-items-center p-3">
+          <div className="pointer-events-auto max-h-[calc(100dvh-1.5rem)] w-[min(92vw,460px)] overflow-y-auto rounded-xl border border-rose-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-rose-200">Rune Shattered</div>
             <div className="mt-2 text-sm text-white/84">{message}</div>
             <div className="mt-4 flex items-center justify-center gap-2">
@@ -1427,8 +1415,8 @@ function RuneRollOverlay() {
       )}
 
       {phase === 'complete' && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto w-[min(92vw,480px)] rounded-xl border border-amber-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
+        <div className="absolute inset-0 grid place-items-center p-3">
+          <div className="pointer-events-auto max-h-[calc(100dvh-1.5rem)] w-[min(92vw,480px)] overflow-y-auto rounded-xl border border-amber-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-amber-200">Archive Sealed</div>
             <div className="mt-2 text-sm text-white/84">You cleared all Rune Roll chambers.</div>
             <div className="mt-1 text-sm text-amber-200">Total Stars {totalStars}</div>
