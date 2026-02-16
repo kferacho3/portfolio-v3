@@ -10,6 +10,7 @@ import { create } from 'zustand';
 import {
   HALF_PI,
   DIRECTION_VECTORS,
+  LOGICAL_TO_BOX_MAT_INDEX,
   clamp,
   easeInOutCubic,
   lerp,
@@ -210,6 +211,23 @@ const sourceFaceForBottom = (direction: Direction) => {
   if (direction === 'down') return 2; // front -> bottom
   if (direction === 'left') return 4; // left -> bottom
   return 5; // right -> bottom
+};
+
+const facesWithPickupPreview = (
+  faces: FaceColors,
+  animation: RollAnimation | null
+): FaceColors => {
+  if (
+    !animation ||
+    animation.pickupVisualFaceIndex === null ||
+    animation.pickupVisualColor === null
+  ) {
+    return faces;
+  }
+
+  const preview = [...faces] as FaceColors;
+  preview[animation.pickupVisualFaceIndex] = animation.pickupVisualColor;
+  return preview;
 };
 
 const simulateMove = (
@@ -790,9 +808,6 @@ function RuneBoard() {
 }
 
 function RuneCube() {
-  const faces = useRuneRollStore((state) => state.faces);
-  const animation = useRuneRollStore((state) => state.animation);
-  const levelIndex = useRuneRollStore((state) => state.levelIndex);
   const characterIndex = useRuneRollStore((state) => state.characterIndex);
   const finishAnimation = useRuneRollStore((state) => state.finishAnimation);
   const character = RUNE_CHARACTERS[characterIndex] ?? RUNE_CHARACTERS[DEFAULT_RUNE_CHARACTER_INDEX];
@@ -810,19 +825,6 @@ function RuneCube() {
     Array.from({ length: 6 }, () => new THREE.Color(character.neutralFaceEmissive))
   );
   const haloTargetColorRef = useRef(new THREE.Color(character.neutralFaceColor));
-  const displayFaces = useMemo<FaceColors>(() => {
-    if (
-      !animation ||
-      animation.pickupVisualFaceIndex === null ||
-      animation.pickupVisualColor === null
-    ) {
-      return faces;
-    }
-
-    const nextFaces = [...faces] as FaceColors;
-    nextFaces[animation.pickupVisualFaceIndex] = animation.pickupVisualColor;
-    return nextFaces;
-  }, [animation, faces]);
 
   useFrame((_, delta) => {
     const pivot = pivotRef.current;
@@ -834,26 +836,32 @@ function RuneCube() {
     const state = useRuneRollStore.getState();
     const level = RUNE_LEVELS[state.levelIndex];
     const animation = state.animation;
+    const displayFaces = facesWithPickupPreview(state.faces, animation);
     const colorLerpAlpha = 1 - Math.exp(-delta * 13);
     const intensityLerpAlpha = 1 - Math.exp(-delta * 11);
     const updateFaceGlow = (pulseBoost = 0) => {
-      for (let i = 0; i < 6; i += 1) {
-        const material = faceMaterialRefs.current[i];
+      for (let logicalFaceIndex = 0; logicalFaceIndex < 6; logicalFaceIndex += 1) {
+        const materialIndex = LOGICAL_TO_BOX_MAT_INDEX[logicalFaceIndex];
+        const material = faceMaterialRefs.current[materialIndex];
         if (!material) continue;
 
-        const targetColor = faceTargetColorRefs.current[i];
-        targetColor.set(faceColorHex(displayFaces[i], character));
+        const targetColor = faceTargetColorRefs.current[logicalFaceIndex];
+        targetColor.set(faceColorHex(displayFaces[logicalFaceIndex], character));
         material.color.lerp(targetColor, colorLerpAlpha);
 
-        const targetEmissive = faceTargetEmissiveRefs.current[i];
-        targetEmissive.set(faceEmissiveHex(displayFaces[i], character));
+        const targetEmissive = faceTargetEmissiveRefs.current[logicalFaceIndex];
+        targetEmissive.set(faceEmissiveHex(displayFaces[logicalFaceIndex], character));
         material.emissive.lerp(targetEmissive, colorLerpAlpha);
 
-        const base = baseFaceIntensity(displayFaces[i], i, character);
+        const base = baseFaceIntensity(
+          displayFaces[logicalFaceIndex],
+          logicalFaceIndex,
+          character
+        );
         const boost =
           animation &&
           animation.pickupVisualFaceIndex !== null &&
-          animation.pickupVisualFaceIndex === i
+          animation.pickupVisualFaceIndex === logicalFaceIndex
             ? pulseBoost * 1.1 + 0.16
             : 0;
         const target = Math.min(3.2, base + boost);
@@ -935,13 +943,23 @@ function RuneCube() {
       <group ref={cubeRef}>
         <mesh castShadow receiveShadow>
           <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
-          <meshStandardMaterial
-            color={character.bodyColor}
-            emissive={character.bodyEmissive}
-            emissiveIntensity={0.32}
-            roughness={character.roughness}
-            metalness={character.metalness}
-          />
+          {Array.from({ length: 6 }, (_, materialIndex) => (
+            <meshStandardMaterial
+              // BoxGeometry material order:
+              // 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z, 5:-Z
+              key={materialIndex}
+              attach={`material-${materialIndex}`}
+              ref={(material) => {
+                faceMaterialRefs.current[materialIndex] = material;
+              }}
+              color={character.neutralFaceColor}
+              emissive={character.neutralFaceEmissive}
+              emissiveIntensity={character.neutralIntensity}
+              roughness={character.roughness}
+              metalness={character.metalness}
+              toneMapped={false}
+            />
+          ))}
         </mesh>
         <mesh
           position={[0, -half + FACE_DEPTH * 0.7 + FACE_INSET, 0]}
@@ -955,96 +973,6 @@ function RuneCube() {
             color={character.neutralFaceColor}
             transparent
             opacity={0.24}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh position={[0, half - FACE_DEPTH * 0.5 - FACE_INSET, 0]}>
-          <boxGeometry args={[FACE_SIZE, FACE_DEPTH, FACE_SIZE]} />
-          <meshStandardMaterial
-            ref={(material) => {
-              faceMaterialRefs.current[0] = material;
-            }}
-            color={character.neutralFaceColor}
-            emissive={character.neutralFaceEmissive}
-            emissiveIntensity={character.neutralIntensity}
-            roughness={0.3}
-            metalness={0.14}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh position={[0, -half + FACE_DEPTH * 0.5 + FACE_INSET, 0]}>
-          <boxGeometry args={[FACE_SIZE, FACE_DEPTH, FACE_SIZE]} />
-          <meshStandardMaterial
-            ref={(material) => {
-              faceMaterialRefs.current[1] = material;
-            }}
-            color={character.neutralFaceColor}
-            emissive={character.neutralFaceEmissive}
-            emissiveIntensity={character.neutralIntensity}
-            roughness={0.3}
-            metalness={0.14}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh position={[0, 0, half - FACE_DEPTH * 0.5 - FACE_INSET]}>
-          <boxGeometry args={[FACE_SIZE, FACE_SIZE, FACE_DEPTH]} />
-          <meshStandardMaterial
-            ref={(material) => {
-              faceMaterialRefs.current[2] = material;
-            }}
-            color={character.neutralFaceColor}
-            emissive={character.neutralFaceEmissive}
-            emissiveIntensity={character.neutralIntensity}
-            roughness={0.3}
-            metalness={0.14}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh position={[0, 0, -half + FACE_DEPTH * 0.5 + FACE_INSET]}>
-          <boxGeometry args={[FACE_SIZE, FACE_SIZE, FACE_DEPTH]} />
-          <meshStandardMaterial
-            ref={(material) => {
-              faceMaterialRefs.current[3] = material;
-            }}
-            color={character.neutralFaceColor}
-            emissive={character.neutralFaceEmissive}
-            emissiveIntensity={character.neutralIntensity}
-            roughness={0.3}
-            metalness={0.14}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh position={[-half + FACE_DEPTH * 0.5 + FACE_INSET, 0, 0]}>
-          <boxGeometry args={[FACE_DEPTH, FACE_SIZE, FACE_SIZE]} />
-          <meshStandardMaterial
-            ref={(material) => {
-              faceMaterialRefs.current[4] = material;
-            }}
-            color={character.neutralFaceColor}
-            emissive={character.neutralFaceEmissive}
-            emissiveIntensity={character.neutralIntensity}
-            roughness={0.3}
-            metalness={0.14}
-            toneMapped={false}
-          />
-        </mesh>
-
-        <mesh position={[half - FACE_DEPTH * 0.5 - FACE_INSET, 0, 0]}>
-          <boxGeometry args={[FACE_DEPTH, FACE_SIZE, FACE_SIZE]} />
-          <meshStandardMaterial
-            ref={(material) => {
-              faceMaterialRefs.current[5] = material;
-            }}
-            color={character.neutralFaceColor}
-            emissive={character.neutralFaceEmissive}
-            emissiveIntensity={character.neutralIntensity}
-            roughness={0.3}
-            metalness={0.14}
             toneMapped={false}
           />
         </mesh>
@@ -1558,7 +1486,7 @@ function RuneRollScene() {
       <EffectComposer enableNormalPass={false} multisampling={0}>
         <Bloom
           intensity={0.44}
-          luminanceThreshold={0.57}
+          luminanceThreshold={1}
           luminanceSmoothing={0.26}
           mipmapBlur
         />
