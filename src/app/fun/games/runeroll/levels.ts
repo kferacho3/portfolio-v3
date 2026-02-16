@@ -1,6 +1,4 @@
-export type RuneColorId = 0 | 1 | 2 | 3;
-
-export type FaceColor = RuneColorId | null;
+export type FaceColor = string | null;
 
 export type FaceColors = [
   FaceColor,
@@ -16,263 +14,296 @@ export type GridPos = [number, number];
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
 export type Tile =
-  | {
-      kind: 'start' | 'floor' | 'end';
-    }
-  | {
-      kind: 'pickup' | 'gate';
-      color: RuneColorId;
-    };
+  | { type: 'start'; pos: [number, number] }
+  | { type: 'floor'; pos: [number, number] }
+  | { type: 'pickup'; pos: [number, number]; color: string; consumed?: boolean }
+  | { type: 'match'; pos: [number, number]; color: string }
+  | { type: 'wipe'; pos: [number, number] }
+  | { type: 'end'; pos: [number, number] };
 
-export type RuneLevel = {
+export interface Level {
   id: string;
-  title: string;
-  par: number;
   width: number;
   height: number;
+  parMoves: number;
+  tiles: Tile[];
+}
+
+export const RUNE_COLOR_LEGEND = [
+  { color: '#3399ff', edge: '#235ea8', name: 'Azure' },
+  { color: '#ff0044', edge: '#a8123f', name: 'Rose' },
+  { color: '#00ffaa', edge: '#10906d', name: 'Moss' },
+  { color: '#ffaa00', edge: '#946837', name: 'Amber' },
+  { color: '#00ccff', edge: '#167ea3', name: 'Cyan' },
+] as const;
+
+type LevelBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+type LevelCache = {
   start: GridPos;
-  end: GridPos;
-  bounds: {
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
-  };
-  tiles: Array<{
-    key: string;
-    position: GridPos;
-    tile: Tile;
-  }>;
+  end: GridPos | null;
+  bounds: LevelBounds;
+  renderTiles: Tile[];
   tileMap: Map<string, Tile>;
 };
 
-type RawLevel = {
-  id: string;
-  title: string;
-  par: number;
-  rows: string[];
-};
+const levelCache = new WeakMap<Level, LevelCache>();
+const edgeColorByHex = new Map<string, string>();
+const nameByHex = new Map<string, string>();
 
-export const RUNE_NAMES = ['Azure', 'Rose', 'Moss', 'Amber'] as const;
+for (const rune of RUNE_COLOR_LEGEND) {
+  edgeColorByHex.set(rune.color, rune.edge);
+  nameByHex.set(rune.color, rune.name);
+}
 
-export const RUNE_COLORS = [
-  '#2fd8ff',
-  '#ff64be',
-  '#9af463',
-  '#ffc56f',
-] as const;
+export const normalizeRuneColor = (color: string) => color.trim().toLowerCase();
 
-export const RUNE_EDGE_COLORS = [
-  '#167ea3',
-  '#9b3f79',
-  '#578d37',
-  '#946837',
-] as const;
+export const runeColorName = (color: string) =>
+  nameByHex.get(normalizeRuneColor(color)) ?? color.toUpperCase();
 
-const PICKUP_SYMBOL_TO_COLOR: Record<string, RuneColorId> = {
-  A: 0,
-  R: 1,
-  G: 2,
-  Y: 3,
-};
+export const runeEdgeColor = (color: string) =>
+  edgeColorByHex.get(normalizeRuneColor(color)) ?? normalizeRuneColor(color);
 
-const GATE_SYMBOL_TO_COLOR: Record<string, RuneColorId> = {
-  a: 0,
-  r: 1,
-  g: 2,
-  y: 3,
-};
+export const keyForGridPos = (position: GridPos) => `${position[0]},${position[1]}`;
 
-const keyFor = (x: number, y: number) => `${x},${y}`;
-
-const RAW_LEVELS: RawLevel[] = [
-  {
-    id: 'rune-01',
-    title: 'First Mark',
-    par: 3,
-    rows: ['#######', '#S.AE##', '#######'],
-  },
-  {
-    id: 'rune-02',
-    title: 'Azure Gate',
-    par: 10,
-    rows: ['#######', '#SaE###', '#..####', '#A..###', '#######'],
-  },
-  {
-    id: 'rune-03',
-    title: 'Rose Gate',
-    par: 10,
-    rows: ['#######', '#SrE###', '#..####', '#R..###', '#######'],
-  },
-  {
-    id: 'rune-04',
-    title: 'Moss Gate',
-    par: 10,
-    rows: ['#######', '#SgE###', '#..####', '#G..###', '#######'],
-  },
-  {
-    id: 'rune-05',
-    title: 'Amber Gate',
-    par: 10,
-    rows: ['#######', '#SyE###', '#..####', '#Y..###', '#######'],
-  },
-  {
-    id: 'rune-06',
-    title: 'Twin Azure',
-    par: 18,
-    rows: ['############', '#Sa.aE######', '#..#########', '#A..########', '############'],
-  },
-  {
-    id: 'rune-07',
-    title: 'Dual Sigils',
-    par: 16,
-    rows: ['#########', '#Sa.rE###', '#..#.####', '#A..R.###', '#########'],
-  },
-  {
-    id: 'rune-08',
-    title: 'Verdant Pair',
-    par: 16,
-    rows: ['#########', '#Sg.yE###', '#..#.####', '#G..Y.###', '#########'],
-  },
-  {
-    id: 'rune-09',
-    title: 'Split Keys',
-    par: 16,
-    rows: ['###########', '#Sa.gE#####', '#..#.######', '#A..G.#####', '###########'],
-  },
-  {
-    id: 'rune-10',
-    title: 'Triple Azure',
-    par: 20,
-    rows: ['#############', '#Sa.a.aE#####', '#..##########', '#A..#########', '#############'],
-  },
-  {
-    id: 'rune-11',
-    title: 'Triple Verdant',
-    par: 18,
-    rows: ['##############', '#Sg.y.gE######', '#..#.#########', '#G..Y.########', '##############'],
-  },
-  {
-    id: 'rune-12',
-    title: 'Grand Archive',
-    par: 38,
-    rows: [
-      '###############',
-      '#Sr.y.aE#######',
-      '#..#.##########',
-      '#R..Y..A#######',
-      '###############',
-    ],
-  },
-];
-
-const parseLevel = (raw: RawLevel): RuneLevel => {
-  const width = Math.max(...raw.rows.map((row) => row.length));
-  const height = raw.rows.length;
+const buildLevelCache = (level: Level): LevelCache => {
   const tileMap = new Map<string, Tile>();
-  const tiles: RuneLevel['tiles'] = [];
-
   let start: GridPos | null = null;
   let end: GridPos | null = null;
 
-  let minX = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  const addTile = (x: number, y: number, tile: Tile) => {
-    const key = keyFor(x, y);
+  for (const tile of level.tiles) {
+    const [x, y] = tile.pos;
+    if (x < 0 || x >= level.width || y < 0 || y >= level.height) {
+      throw new Error(`Rune Roll level ${level.id} has out-of-bounds tile at [${x}, ${y}].`);
+    }
+    const key = keyForGridPos(tile.pos);
     tileMap.set(key, tile);
-    tiles.push({
-      key,
-      position: [x, y],
-      tile,
-    });
 
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
-  };
-
-  for (let y = 0; y < raw.rows.length; y += 1) {
-    const row = raw.rows[y] ?? '';
-    for (let x = 0; x < width; x += 1) {
-      const symbol = row[x] ?? '#';
-
-      if (symbol === '#' || symbol === ' ') {
-        continue;
-      }
-
-      if (symbol === '.') {
-        addTile(x, y, { kind: 'floor' });
-        continue;
-      }
-
-      if (symbol === 'S') {
-        start = [x, y];
-        addTile(x, y, { kind: 'start' });
-        continue;
-      }
-
-      if (symbol === 'E') {
-        end = [x, y];
-        addTile(x, y, { kind: 'end' });
-        continue;
-      }
-
-      const pickupColor = PICKUP_SYMBOL_TO_COLOR[symbol];
-      if (pickupColor !== undefined) {
-        addTile(x, y, {
-          kind: 'pickup',
-          color: pickupColor,
-        });
-        continue;
-      }
-
-      const gateColor = GATE_SYMBOL_TO_COLOR[symbol];
-      if (gateColor !== undefined) {
-        addTile(x, y, {
-          kind: 'gate',
-          color: gateColor,
-        });
-        continue;
-      }
-
-      throw new Error(`Unknown Rune Roll tile symbol "${symbol}" in ${raw.id}.`);
+    if (tile.type === 'start') {
+      start = [x, y];
+    } else if (tile.type === 'end') {
+      end = [x, y];
     }
   }
 
   if (!start) {
-    throw new Error(`Rune Roll level ${raw.id} is missing a start tile.`);
+    throw new Error(`Rune Roll level ${level.id} is missing a start tile.`);
   }
 
-  if (!end) {
-    throw new Error(`Rune Roll level ${raw.id} is missing an end tile.`);
+  const renderTiles: Tile[] = [];
+  for (let y = 0; y < level.height; y += 1) {
+    for (let x = 0; x < level.width; x += 1) {
+      const key = keyForGridPos([x, y]);
+      renderTiles.push(tileMap.get(key) ?? { type: 'floor', pos: [x, y] });
+    }
   }
 
   return {
-    id: raw.id,
-    title: raw.title,
-    par: raw.par,
-    width,
-    height,
     start,
     end,
     bounds: {
-      minX,
-      maxX,
-      minY,
-      maxY,
+      minX: 0,
+      maxX: level.width - 1,
+      minY: 0,
+      maxY: level.height - 1,
     },
-    tiles,
+    renderTiles,
     tileMap,
   };
 };
 
-export const RUNE_LEVELS = RAW_LEVELS.map(parseLevel);
+const getLevelCache = (level: Level) => {
+  const cached = levelCache.get(level);
+  if (cached) {
+    return cached;
+  }
 
-export const getTileAt = (level: RuneLevel, position: GridPos): Tile | undefined =>
-  level.tileMap.get(keyFor(position[0], position[1]));
+  const next = buildLevelCache(level);
+  levelCache.set(level, next);
+  return next;
+};
+
+export const getTileAt = (level: Level, position: GridPos): Tile | undefined => {
+  const [x, y] = position;
+  if (x < 0 || x >= level.width || y < 0 || y >= level.height) {
+    return undefined;
+  }
+
+  const cached = getLevelCache(level);
+  return cached.tileMap.get(keyForGridPos(position)) ?? { type: 'floor', pos: [x, y] };
+};
+
+export const getLevelStart = (level: Level): GridPos => getLevelCache(level).start;
+
+export const getLevelEnd = (level: Level): GridPos | null => getLevelCache(level).end;
+
+export const getLevelBounds = (level: Level): LevelBounds => getLevelCache(level).bounds;
+
+export const getLevelTiles = (level: Level): Tile[] => getLevelCache(level).renderTiles;
+
+export const LEVEL_02: Level = {
+  id: 'RUNE_02',
+  width: 4,
+  height: 3,
+  parMoves: 6,
+  tiles: [
+    { type: 'start', pos: [0, 0] },
+    { type: 'floor', pos: [1, 0] },
+    { type: 'pickup', pos: [2, 0], color: '#3399ff' },
+    { type: 'floor', pos: [2, 1] },
+    { type: 'floor', pos: [1, 1] },
+    { type: 'match', pos: [0, 1], color: '#3399ff' },
+    { type: 'end', pos: [0, 2] },
+  ],
+};
+
+export const LEVEL_03: Level = {
+  id: 'RUNE_03',
+  width: 4,
+  height: 3,
+  parMoves: 10,
+  tiles: [
+    { type: 'start', pos: [0, 0] },
+    { type: 'pickup', pos: [1, 0], color: '#ff0044' },
+    { type: 'floor', pos: [2, 0] },
+    { type: 'pickup', pos: [2, 1], color: '#00ffaa' },
+    { type: 'match', pos: [1, 1], color: '#ff0044' },
+    { type: 'match', pos: [0, 1], color: '#00ffaa' },
+    { type: 'end', pos: [0, 2] },
+  ],
+};
+
+export const LEVEL_04: Level = {
+  id: 'RUNE_04',
+  width: 5,
+  height: 3,
+  parMoves: 12,
+  tiles: [
+    { type: 'start', pos: [0, 1] },
+    { type: 'pickup', pos: [1, 1], color: '#ffaa00' },
+    { type: 'floor', pos: [2, 1] },
+    { type: 'pickup', pos: [3, 1], color: '#00ccff' },
+    { type: 'match', pos: [2, 0], color: '#ffaa00' },
+    { type: 'match', pos: [2, 2], color: '#00ccff' },
+    { type: 'end', pos: [4, 1] },
+  ],
+};
+
+export const LEVEL_05: Level = {
+  id: 'RUNE_05',
+  width: 5,
+  height: 5,
+  parMoves: 14,
+  tiles: [
+    { type: 'start', pos: [2, 2] },
+    { type: 'pickup', pos: [2, 0], color: '#ff0044' },
+    { type: 'pickup', pos: [4, 2], color: '#3399ff' },
+    { type: 'match', pos: [2, 4], color: '#ff0044' },
+    { type: 'match', pos: [0, 2], color: '#3399ff' },
+    { type: 'end', pos: [2, 3] },
+  ],
+};
+
+export const LEVEL_06: Level = {
+  id: 'RUNE_06',
+  width: 6,
+  height: 3,
+  parMoves: 16,
+  tiles: [
+    { type: 'start', pos: [0, 1] },
+    { type: 'pickup', pos: [1, 1], color: '#ff0044' },
+    { type: 'pickup', pos: [3, 1], color: '#00ffaa' },
+    { type: 'pickup', pos: [5, 1], color: '#ffaa00' },
+    { type: 'match', pos: [2, 0], color: '#ff0044' },
+    { type: 'match', pos: [4, 2], color: '#00ffaa' },
+    { type: 'end', pos: [5, 0] },
+  ],
+};
+
+export const LEVEL_07: Level = {
+  id: 'RUNE_07',
+  width: 5,
+  height: 4,
+  parMoves: 18,
+  tiles: [
+    { type: 'start', pos: [0, 0] },
+    { type: 'pickup', pos: [1, 0], color: '#ff0044' },
+    { type: 'wipe', pos: [2, 0] },
+    { type: 'pickup', pos: [2, 1], color: '#3399ff' },
+    { type: 'match', pos: [1, 2], color: '#3399ff' },
+    { type: 'match', pos: [0, 2], color: '#ff0044' },
+    { type: 'end', pos: [0, 3] },
+  ],
+};
+
+export const LEVEL_08: Level = {
+  id: 'RUNE_08',
+  width: 6,
+  height: 6,
+  parMoves: 22,
+  tiles: [
+    { type: 'start', pos: [3, 3] },
+    { type: 'pickup', pos: [3, 0], color: '#ff0044' },
+    { type: 'pickup', pos: [5, 3], color: '#00ffaa' },
+    { type: 'pickup', pos: [3, 5], color: '#3399ff' },
+    { type: 'match', pos: [0, 3], color: '#ff0044' },
+    { type: 'match', pos: [2, 2], color: '#00ffaa' },
+    { type: 'match', pos: [4, 4], color: '#3399ff' },
+    { type: 'end', pos: [3, 4] },
+  ],
+};
+
+export const LEVEL_09: Level = {
+  id: 'RUNE_09',
+  width: 7,
+  height: 5,
+  parMoves: 26,
+  tiles: [
+    { type: 'start', pos: [0, 2] },
+    { type: 'pickup', pos: [2, 2], color: '#ff0044' },
+    { type: 'pickup', pos: [4, 2], color: '#00ffaa' },
+    { type: 'match', pos: [3, 0], color: '#ff0044' },
+    { type: 'match', pos: [6, 2], color: '#00ffaa' },
+    { type: 'pickup', pos: [3, 4], color: '#ffaa00' },
+    { type: 'match', pos: [1, 4], color: '#ffaa00' },
+    { type: 'end', pos: [6, 4] },
+  ],
+};
+
+export const LEVEL_10: Level = {
+  id: 'RUNE_10',
+  width: 7,
+  height: 7,
+  parMoves: 32,
+  tiles: [
+    { type: 'start', pos: [3, 3] },
+    { type: 'pickup', pos: [3, 1], color: '#ff0044' },
+    { type: 'pickup', pos: [5, 3], color: '#3399ff' },
+    { type: 'pickup', pos: [3, 5], color: '#00ffaa' },
+    { type: 'match', pos: [1, 3], color: '#ff0044' },
+    { type: 'match', pos: [5, 1], color: '#3399ff' },
+    { type: 'match', pos: [1, 5], color: '#00ffaa' },
+    { type: 'end', pos: [3, 6] },
+  ],
+};
+
+export const LEVELS: Level[] = [
+  LEVEL_02,
+  LEVEL_03,
+  LEVEL_04,
+  LEVEL_05,
+  LEVEL_06,
+  LEVEL_07,
+  LEVEL_08,
+  LEVEL_09,
+  LEVEL_10,
+];
+
+export const RUNE_LEVELS = LEVELS;
 
 export const createInitialFaces = (): FaceColors => [null, null, null, null, null, null];

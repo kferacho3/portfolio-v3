@@ -444,7 +444,7 @@ export const GAME_CARDS: GameCard[] = [
     id: 'runeroll',
     title: 'RuneRoll',
     description:
-      'Roll left, forward, or right and match your cube\'s landing-face color to each tile\'s embedded core.',
+      'Roll a rune cube across handcrafted chambers, imprint colors, and unlock matching gates to reach the white seal.',
     accent: '#a78bfa',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/RuneRoll.webp',
@@ -750,10 +750,12 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Do not overstay high-value lanes when the safe lane is the only clear path.',
   },
   runeroll: {
-    controls: 'A/W/D or ←/↑/→ to roll • S or ↓ to backstep • M toggles Sudden Death • R to restart',
+    controls:
+      'WASD or Arrow keys to roll • R to restart the chamber • Enter starts/advances • Esc returns to menu',
     objective:
-      'Roll onto tiles that match your cube’s landing-face color. Use the direction color map to pick legal moves and avoid illegal strikes.',
-    tips: 'There is always at least one legal forward move. Classic mode allows 3 illegal moves; Sudden Death ends the run on the first illegal move.',
+      'Pickup tiles permanently imprint blank faces. Gate tiles only allow matching bottom-face colors. Reach the white seal tile to clear each chamber.',
+    tips:
+      'Work backward from the exit and plan which cube face must be on the bottom before each gate.',
   },
   pulseparry: {
     controls: 'Tap/Click/Space/Enter on overlap windows • R to restart',
