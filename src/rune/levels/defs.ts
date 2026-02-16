@@ -1,4 +1,5 @@
 import type { LevelDef } from './types';
+import { LEVEL_DEFS_INTRICATE } from './defs_intricate';
 
 export const LEVEL_DEFS: readonly LevelDef[] = [
   {
@@ -472,7 +473,9 @@ export const LEVEL_DEFS: readonly LevelDef[] = [
   },
 ] as const;
 
-export const LEVEL_BY_ID = Object.fromEntries(LEVEL_DEFS.map((l) => [l.id, l])) as Record<
+export const ALL_LEVEL_DEFS: readonly LevelDef[] = [...LEVEL_DEFS, ...LEVEL_DEFS_INTRICATE];
+
+export const LEVEL_BY_ID = Object.fromEntries(ALL_LEVEL_DEFS.map((l) => [l.id, l])) as Record<
   string,
   LevelDef
 >;

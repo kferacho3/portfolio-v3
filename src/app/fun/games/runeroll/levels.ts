@@ -9,6 +9,11 @@
 //  R,G,B,Y = match gate (requires bottom face color)
 //  W = wipe (sets bottom face to null)
 
+import { LEVEL_DEFS } from '../../../../rune/levels/defs';
+import { LEVEL_DEFS_INTRICATE } from '../../../../rune/levels/defs_intricate';
+import type { LevelDef as RuneGridLevelDef } from '../../../../rune/levels/types';
+import { EXPERT_LEVELS, STANDARDIZED_LEVELS } from './levels.authored';
+
 export type FaceColor = string | null;
 
 export type FaceColors = [
@@ -938,7 +943,67 @@ export const LEVELS: Level[] = [
   LEVEL_54
 ];
 
-export const RUNE_LEVELS = LEVELS;
+const RUNE_GRID_PALETTE = {
+  R: PALETTE.r,
+  G: PALETTE.g,
+  B: PALETTE.b,
+  Y: PALETTE.y,
+} as const;
+
+const fromRuneGridLevelDef = (def: RuneGridLevelDef): Level => {
+  const { id, grid, targetParMoves } = def;
+  if (!grid.length) {
+    throw new Error(`Rune grid level ${id} has an empty grid.`);
+  }
+
+  const height = grid.length;
+  const width = grid[0].length;
+  if (!grid.every((row) => row.length === width)) {
+    throw new Error(`Rune grid level ${id} must be rectangular.`);
+  }
+
+  const tiles: Tile[] = [];
+  for (let y = 0; y < height; y += 1) {
+    const row = grid[y];
+    for (let x = 0; x < width; x += 1) {
+      const ch = row[x];
+      if (ch === '#' || ch === ' ') continue;
+
+      if (ch === '.') {
+        tiles.push({ type: 'floor', pos: [x, y] });
+      } else if (ch === 'S') {
+        tiles.push({ type: 'start', pos: [x, y] });
+      } else if (ch === 'E') {
+        tiles.push({ type: 'end', pos: [x, y] });
+      } else if (ch === 'W') {
+        tiles.push({ type: 'wipe', pos: [x, y] });
+      } else if (ch === 'R' || ch === 'G' || ch === 'B' || ch === 'Y') {
+        tiles.push({ type: 'pickup', pos: [x, y], color: RUNE_GRID_PALETTE[ch] });
+      } else if (ch === 'r' || ch === 'g' || ch === 'b' || ch === 'y') {
+        const color = RUNE_GRID_PALETTE[ch.toUpperCase() as keyof typeof RUNE_GRID_PALETTE];
+        tiles.push({ type: 'match', pos: [x, y], color });
+      } else {
+        throw new Error(`Rune grid level ${id} has unknown symbol '${ch}' at [${x}, ${y}].`);
+      }
+    }
+  }
+
+  return {
+    id,
+    width,
+    height,
+    parMoves: targetParMoves ?? Math.max(1, width + height),
+    tiles,
+  };
+};
+
+export const SAT_LEVELS: Level[] = [...LEVEL_DEFS, ...LEVEL_DEFS_INTRICATE].map(
+  fromRuneGridLevelDef
+);
+
+export const AUTHORED_LEVELS: Level[] = [...STANDARDIZED_LEVELS, ...EXPERT_LEVELS];
+
+export const RUNE_LEVELS: Level[] = [...LEVELS, ...AUTHORED_LEVELS, ...SAT_LEVELS];
 
 type LevelBounds = {
   minX: number;

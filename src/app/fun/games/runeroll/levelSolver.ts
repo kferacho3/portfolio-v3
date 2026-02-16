@@ -5,7 +5,7 @@
 // - Pickup tiles: if bottom face is null AND pickup not yet consumed, set bottom face to tile color and mark consumed
 // - Wipe tiles: set bottom face to null
 
-import { rotateFacesByVector } from './engine';
+import { rotateFaces } from './rotateFaces';
 import type { Level, Tile } from './levels';
 
 type Faces = readonly [
@@ -76,7 +76,7 @@ export function solveLevel(level: Level, maxSteps = 2000): number | null {
       const tile = map.get(keyPos(nx, nz));
       if (!tile) continue;
 
-      let nf = rotateFacesByVector(s.faces as any, dir) as Faces;
+      let nf = rotateFaces(s.faces as any, dir) as Faces;
       let nmask = s.mask;
 
       if (tile.type === 'match') {

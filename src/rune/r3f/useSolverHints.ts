@@ -8,12 +8,17 @@ type SolveRes =
 
 export function useSolverHints(level: LevelDef | null) {
   const workerRef = useRef<Worker | null>(null);
+  const levelRef = useRef<LevelDef | null>(null);
   const [parMoves, setParMoves] = useState<number | null>(null);
   const [hintMoves, setHintMoves] = useState<number[] | null>(null);
   const [difficulty, setDifficulty] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const key = level?.id ?? 'none';
+
+  useEffect(() => {
+    levelRef.current = level;
+  }, [level]);
 
   useEffect(() => {
     workerRef.current ??= new Worker(new URL('../solver/worker.ts', import.meta.url), {
@@ -33,14 +38,20 @@ export function useSolverHints(level: LevelDef | null) {
         setHintMoves(ev.data.moves);
         setParMoves(ev.data.parMoves);
         // request score immediately
-        if (level) w.postMessage({ type: 'score', level, moves: ev.data.moves });
+        if (levelRef.current) {
+          w.postMessage({ type: 'score', level: levelRef.current, moves: ev.data.moves });
+        }
       }
       if (ev.data.type === 'score-result') setDifficulty(ev.data.report);
     };
 
     w.addEventListener('message', onMsg);
-    return () => w.removeEventListener('message', onMsg);
-  }, [level]);
+    return () => {
+      w.removeEventListener('message', onMsg);
+      w.terminate();
+      if (workerRef.current === w) workerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     setParMoves(null);

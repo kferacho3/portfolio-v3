@@ -1,4 +1,5 @@
 import type { ParsedLevel } from '../../levels/types';
+import { COLOR_COUNT, FACE_COUNT, ROTATE, type DirIndex } from '../../cubeMath';
 import { CNFBuilder } from './cnf';
 
 export interface SatLayout {
@@ -20,22 +21,8 @@ export interface SatLayout {
   P: number; // pickup count
 }
 
-const FACE_COUNT = 6;
-const COLOR_COUNT = 5; // NONE + R,G,B,Y
 const DIR_COUNT = 4; // U,D,L,R
-const DIR_VALUES = [0, 1, 2, 3] as const;
-
-// DirIndex: 0=U,1=D,2=L,3=R
-const FACE_MAP: ReadonlyArray<ReadonlyArray<number>> = [
-  // U: new = [oldS, oldN, oldT, oldB, oldW, oldE]
-  [3, 2, 0, 1, 4, 5],
-  // D
-  [2, 3, 1, 0, 4, 5],
-  // L
-  [5, 4, 2, 3, 0, 1],
-  // R
-  [4, 5, 2, 3, 1, 0],
-];
+const DIR_VALUES: readonly DirIndex[] = [0, 1, 2, 3];
 
 export function buildSatLayout(level: ParsedLevel, horizon: number): SatLayout {
   const N = level.width * level.height;
@@ -102,7 +89,7 @@ function consVar(L: SatLayout, t: number, p: number) {
   return L.consBase + t * L.P + p;
 }
 
-function neighborIdx(level: ParsedLevel, idx: number, dir: 0 | 1 | 2 | 3) {
+function neighborIdx(level: ParsedLevel, idx: number, dir: DirIndex) {
   const w = level.width;
   const x = idx % w;
   const y = (idx / w) | 0;
@@ -194,7 +181,7 @@ export function encodeLevelToCNF(level: ParsedLevel, horizon: number) {
   // --- Face rotation: faces(t) + dir(t) -> preFaces(t+1)
   for (let t = 0; t < horizon; t++) {
     for (const d of DIR_VALUES) {
-      const map = FACE_MAP[d];
+      const map = ROTATE[d];
       const dirLit = dirVar(L, t, d);
 
       for (let newF = 0; newF < FACE_COUNT; newF++) {

@@ -1,4 +1,5 @@
 import type { ParsedLevel } from '../levels/types';
+import { rotateFaces6, type DirIndex } from '../cubeMath';
 
 // Face indices: 0=Top, 1=Bottom, 2=North(Up), 3=South(Down), 4=West(Left), 5=East(Right)
 // Colors: 0 NONE, 1..4 = R,G,B,Y
@@ -8,13 +9,7 @@ export interface SimState {
   consumed: bigint; // pickup bitset (pickupId => bit)
 }
 
-const FACE_MAP: ReadonlyArray<ReadonlyArray<number>> = [
-  [3, 2, 0, 1, 4, 5], // U
-  [2, 3, 1, 0, 4, 5], // D
-  [5, 4, 2, 3, 0, 1], // L
-  [4, 5, 2, 3, 1, 0], // R
-];
-const DIR_VALUES = [0, 1, 2, 3] as const;
+const DIR_VALUES: readonly DirIndex[] = [0, 1, 2, 3];
 
 export function initialState(level: ParsedLevel): SimState {
   return {
@@ -24,7 +19,7 @@ export function initialState(level: ParsedLevel): SimState {
   };
 }
 
-function neighbor(level: ParsedLevel, idx: number, dir: 0 | 1 | 2 | 3) {
+function neighbor(level: ParsedLevel, idx: number, dir: DirIndex) {
   const w = level.width;
   const x = idx % w;
   const y = (idx / w) | 0;
@@ -34,18 +29,11 @@ function neighbor(level: ParsedLevel, idx: number, dir: 0 | 1 | 2 | 3) {
   return ny * w + nx;
 }
 
-function rotateFaces(faces: Uint8Array, dir: 0 | 1 | 2 | 3) {
-  const map = FACE_MAP[dir];
-  const next = new Uint8Array(6);
-  for (let i = 0; i < 6; i++) next[i] = faces[map[i]];
-  return next;
-}
-
-export function step(level: ParsedLevel, s: SimState, dir: 0 | 1 | 2 | 3): SimState | null {
+export function step(level: ParsedLevel, s: SimState, dir: DirIndex): SimState | null {
   const n = neighbor(level, s.idx, dir);
   if (n < 0 || level.isVoid[n] === 1) return null;
 
-  let faces = rotateFaces(s.faces, dir);
+  let faces = rotateFaces6(s.faces, dir);
   let consumed = s.consumed;
 
   // wipe
@@ -72,7 +60,7 @@ export function step(level: ParsedLevel, s: SimState, dir: 0 | 1 | 2 | 3): SimSt
 }
 
 export function legalMoves(level: ParsedLevel, s: SimState) {
-  const out: (0 | 1 | 2 | 3)[] = [];
+  const out: DirIndex[] = [];
   for (const d of DIR_VALUES) if (step(level, s, d)) out.push(d);
   return out;
 }
@@ -81,7 +69,7 @@ export function runMoves(level: ParsedLevel, moves: number[]) {
   let s = initialState(level);
   const states: SimState[] = [s];
   for (const m of moves) {
-    const ns = step(level, s, m as 0 | 1 | 2 | 3);
+    const ns = step(level, s, m as DirIndex);
     if (!ns) return { ok: false as const, states };
     s = ns;
     states.push(s);

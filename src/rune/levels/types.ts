@@ -49,6 +49,5 @@ export interface ParsedLevel {
   walkable: Uint16Array;         // list of idx that are not void
 }
 
-export const DIRS = ['U', 'D', 'L', 'R'] as const;
-export type Dir = typeof DIRS[number];
-export type DirIndex = 0 | 1 | 2 | 3; // U,D,L,R
+export { DIRS } from '../cubeMath';
+export type { Dir, DirIndex } from '../cubeMath';
