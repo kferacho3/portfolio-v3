@@ -5,10 +5,13 @@ import { useSnapshot } from 'valtio';
 import {
   CAMERA_LABELS,
   FX_LABELS,
+  GENERATED_CHARACTER_COUNT,
   MODE_LABELS,
   MODES,
   PATTERN_LABELS,
-  RUNNER_SHAPES,
+  RUNNER_CHARACTERS,
+  TEST_UNLOCK_ALL_CHARACTERS,
+  getRunnerCharacter,
   SHAPE_LABELS,
   TILE_LABELS,
   TILE_VARIANTS,
@@ -63,10 +66,17 @@ export function OctaSurgeUI({
   onCycleRunnerShape,
 }: Props) {
   const snap = useSnapshot(octaSurgeState);
+  const currentCharacter = getRunnerCharacter(snap.runnerShape);
+  const currentCharacterUnlocked =
+    TEST_UNLOCK_ALL_CHARACTERS ||
+    snap.unlockedRunnerShapes.includes(snap.runnerShape);
+
   const runtime = useOctaRuntimeStore((state) => ({
     speed: state.speed,
     sides: state.sides,
     combo: state.combo,
+    collectibles: state.collectibles,
+    speedTier: state.speedTier,
     patternLabel: state.patternLabel,
   }));
 
@@ -78,6 +88,10 @@ export function OctaSurgeUI({
             <span className={chipClass}>Octa Surge</span>
             <span className={chipClass}>Symmetry-First</span>
             <span className={chipClass}>Obstacle Dense</span>
+            <span className={chipClass}>{RUNNER_CHARACTERS.length} Characters</span>
+            <span className={chipClass}>
+              {GENERATED_CHARACTER_COUNT} New Collectible Characters
+            </span>
           </div>
 
           <h2 className="text-3xl font-black uppercase tracking-[0.14em] text-cyan-50 md:text-4xl">
@@ -138,7 +152,7 @@ export function OctaSurgeUI({
               </div>
             </ControlRow>
 
-            <ControlRow title="Runner" value={SHAPE_LABELS[snap.runnerShape]}>
+            <ControlRow title="Runner" value={SHAPE_LABELS[snap.runnerShape] ?? snap.runnerShape}>
               <div className="flex items-center gap-2">
                 <button
                   className={actionButtonClass}
@@ -153,15 +167,29 @@ export function OctaSurgeUI({
                   Next
                 </button>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {RUNNER_SHAPES.map((shape) => (
-                  <ModeButton
-                    key={shape}
-                    active={shape === snap.runnerShape}
-                    label={SHAPE_LABELS[shape]}
-                    onClick={() => onSelectRunnerShape(shape)}
-                  />
-                ))}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className={chipClass}>
+                  Cost {Math.floor(currentCharacter.cost)} Shards
+                </span>
+                <span className={chipClass}>
+                  {currentCharacterUnlocked ? 'Unlocked' : 'Locked'}
+                </span>
+                <button
+                  className={actionButtonClass}
+                  onClick={() => {
+                    const purchased = octaSurgeState.purchaseRunnerShape(
+                      snap.runnerShape
+                    );
+                    if (purchased) {
+                      onSelectRunnerShape(snap.runnerShape);
+                    }
+                  }}
+                  disabled={currentCharacterUnlocked}
+                >
+                  {TEST_UNLOCK_ALL_CHARACTERS
+                    ? 'Unlocked (Testing)'
+                    : `Unlock (${Math.floor(currentCharacter.cost)})`}
+                </button>
               </div>
             </ControlRow>
           </div>
@@ -186,6 +214,7 @@ export function OctaSurgeUI({
             <button className={actionButtonClass} onClick={onImportReplay}>
               Import Replay
             </button>
+            <span className={chipClass}>Shards: {Math.floor(snap.totalCollectibles)}</span>
           </div>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -211,6 +240,8 @@ export function OctaSurgeUI({
               <span className={chipClass}>{Math.round(runtime.sides)} sides</span>
               <span className={chipClass}>{runtime.speed.toFixed(1)} u/s</span>
               <span className={chipClass}>combo {Math.floor(runtime.combo)}</span>
+              <span className={chipClass}>tier {runtime.speedTier}</span>
+              <span className={chipClass}>shards {runtime.collectibles}</span>
             </div>
           </div>
 
@@ -242,6 +273,8 @@ export function OctaSurgeUI({
             <Stat label="Best" value={Math.floor(snap.best)} />
             <Stat label="Distance" value={`${snap.distance.toFixed(1)}m`} />
             <Stat label="Near Miss" value={snap.nearMisses} />
+            <Stat label="Run Shards" value={Math.floor(snap.lastRunCollectibles)} />
+            <Stat label="Total Shards" value={Math.floor(snap.totalCollectibles)} />
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2">

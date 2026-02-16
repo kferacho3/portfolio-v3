@@ -106,6 +106,7 @@ export type OctaWorld = {
 
   ringIds: Int32Array;
   ringMasks: Uint16Array;
+  ringCollectibles: Uint16Array;
   ringSides: Uint8Array;
   ringPattern: Uint8Array;
   bufferVersion: number;
@@ -129,9 +130,12 @@ export type OctaWorld = {
   difficulty: number;
   combo: number;
   nearMisses: number;
+  collectibles: number;
+  speedTier: number;
   bestCombo: number;
   fxPulse: number;
   hitFlash: number;
+  switchBlur: number;
 
   visualSides: number;
   lastPatternIndex: number;
@@ -170,22 +174,33 @@ const sideForDistance = (mode: OctaSurgeMode, distance: number): ModeSides => {
 const choosePatternIndex = (rand: () => number, difficulty: number) => {
   const p = rand();
   if (difficulty < 0.25) {
-    if (p < 0.36) return 0;
-    if (p < 0.7) return 1;
-    return 2;
+    if (p < 0.22) return 0;
+    if (p < 0.42) return 1;
+    if (p < 0.58) return 2;
+    if (p < 0.72) return 3;
+    if (p < 0.86) return 7;
+    return 8;
   }
   if (difficulty < 0.58) {
-    if (p < 0.2) return 0;
-    if (p < 0.38) return 1;
-    if (p < 0.58) return 2;
-    if (p < 0.79) return 3;
-    return 4;
+    if (p < 0.12) return 0;
+    if (p < 0.24) return 1;
+    if (p < 0.35) return 2;
+    if (p < 0.46) return 3;
+    if (p < 0.58) return 4;
+    if (p < 0.7) return 5;
+    if (p < 0.82) return 6;
+    if (p < 0.92) return 7;
+    return 8;
   }
-  if (p < 0.15) return 1;
-  if (p < 0.31) return 2;
-  if (p < 0.52) return 3;
-  if (p < 0.74) return 4;
-  return 5;
+  if (p < 0.09) return 1;
+  if (p < 0.18) return 2;
+  if (p < 0.29) return 3;
+  if (p < 0.41) return 4;
+  if (p < 0.54) return 5;
+  if (p < 0.68) return 6;
+  if (p < 0.82) return 7;
+  if (p < 0.92) return 8;
+  return 9;
 };
 
 const generatePatternMask = (
@@ -279,6 +294,52 @@ const generatePatternMask = (
       }
       break;
     }
+    case 6: {
+      const sweep = wrapIndex(phase + Math.floor(world.elapsed * (2.2 + difficulty * 2.8)), sides);
+      const mirror = wrapIndex(sweep + half, sides);
+      mask = setSpan(mask, sweep, difficulty > 0.65 ? 1 : 0, sides);
+      mask = setSpan(mask, mirror, difficulty > 0.65 ? 1 : 0, sides);
+      if (difficulty > 0.48) {
+        mask = setLane(mask, sweep + 2, sides);
+        mask = setLane(mask, mirror - 2, sides);
+      }
+      break;
+    }
+    case 7: {
+      const clusterCount = 1 + Math.floor(difficulty * 3);
+      for (let i = 0; i < clusterCount; i += 1) {
+        const lane = wrapIndex(phase + i * quarter, sides);
+        mask = setSpan(mask, lane, 0, sides);
+        if (difficulty > 0.5) mask = setLane(mask, lane + half, sides);
+        if (difficulty > 0.72) {
+          mask = setLane(mask, lane + 1, sides);
+          mask = setLane(mask, lane - 1, sides);
+        }
+      }
+      break;
+    }
+    case 8: {
+      const a = wrapIndex(phase + quarter, sides);
+      const b = wrapIndex(phase - quarter, sides);
+      mask = setSpan(mask, a, difficulty > 0.7 ? 1 : 0, sides);
+      mask = setSpan(mask, b, difficulty > 0.7 ? 1 : 0, sides);
+      mask = setSpan(mask, a + half, difficulty > 0.7 ? 1 : 0, sides);
+      mask = setSpan(mask, b + half, difficulty > 0.7 ? 1 : 0, sides);
+      break;
+    }
+    case 9: {
+      const stride = Math.max(2, Math.floor(sides / 3));
+      const start = wrapIndex(phase, sides);
+      for (let lane = start; lane < start + sides; lane += stride) {
+        mask = setLane(mask, lane, sides);
+      }
+      if (difficulty > 0.66) {
+        for (let lane = start + 1; lane < start + sides; lane += stride) {
+          mask = setLane(mask, lane, sides);
+        }
+      }
+      break;
+    }
   }
 
   return mask & fullMask;
@@ -293,21 +354,27 @@ const ensurePlayableSymmetry = (
   const fullMask = (1 << sides) - 1;
   let mask = maskInput & fullMask;
   const half = sides / 2;
+  const previousSafe = wrapIndex(world.safeLane, sides);
 
-  const turnChance = 0.1 + difficulty * 0.32;
-  let nextSafe = wrapIndex(world.safeLane, sides);
+  const turnChance = 0.04 + difficulty * 0.2;
+  let nextSafe = previousSafe;
   if (world.rng() < turnChance) {
     const step = world.rng() < 0.75 ? 1 : 2;
     const dir = world.rng() < 0.5 ? -1 : 1;
     nextSafe = wrapIndex(nextSafe + step * dir, sides);
   }
 
-  mask = clearLane(mask, world.safeLane, sides);
+  mask = clearLane(mask, previousSafe, sides);
   mask = clearLane(mask, nextSafe, sides);
 
-  if (difficulty < 0.45) {
-    mask = clearLane(mask, world.safeLane + 1, sides);
-    mask = clearLane(mask, world.safeLane - 1, sides);
+  if (difficulty < 0.32) {
+    mask = clearLane(mask, nextSafe + 1, sides);
+    mask = clearLane(mask, nextSafe - 1, sides);
+  }
+
+  if (difficulty < 0.12) {
+    mask = clearLane(mask, previousSafe + 1, sides);
+    mask = clearLane(mask, previousSafe - 1, sides);
   }
 
   if (world.rng() < 0.55) {
@@ -316,8 +383,9 @@ const ensurePlayableSymmetry = (
 
   const blockedMin = Math.min(
     sides - 1,
-    Math.floor(sides * (0.46 + difficulty * 0.35 + MODE_SETTINGS[world.mode].densityBias))
+    Math.floor(sides * (0.32 + difficulty * 0.24 + MODE_SETTINGS[world.mode].densityBias))
   );
+  const blockedMax = Math.max(1, sides - 2);
 
   let guard = 0;
   while (popcount(mask) < blockedMin && guard < sides * 4) {
@@ -325,9 +393,20 @@ const ensurePlayableSymmetry = (
     const candidate = Math.floor(world.rng() * (sides / 2));
     const mirrored = candidate + half;
     if (candidate === nextSafe || mirrored === nextSafe) continue;
-    if (candidate === world.safeLane || mirrored === world.safeLane) continue;
+    if (candidate === previousSafe || mirrored === previousSafe) continue;
     mask = setLane(mask, candidate, sides);
     mask = setLane(mask, mirrored, sides);
+  }
+
+  guard = 0;
+  while (popcount(mask) > blockedMax && guard < sides * 4) {
+    guard += 1;
+    const candidate = Math.floor(world.rng() * (sides / 2));
+    const mirrored = candidate + half;
+    if (candidate === nextSafe || mirrored === nextSafe) continue;
+    if (candidate === previousSafe || mirrored === previousSafe) continue;
+    mask = clearLane(mask, candidate, sides);
+    mask = clearLane(mask, mirrored, sides);
   }
 
   if (mask === fullMask) {
@@ -338,6 +417,44 @@ const ensurePlayableSymmetry = (
   world.safeLane = nextSafe;
 
   return mask;
+};
+
+const createCollectibleMask = (
+  world: OctaWorld,
+  sides: ModeSides,
+  blockedMask: number,
+  difficulty: number
+) => {
+  let collectibleMask = 0;
+
+  const spawnChance = 0.44 - difficulty * 0.2;
+  if (world.rng() > spawnChance) return collectibleMask;
+
+  const options = [
+    wrapIndex(world.safeLane, sides),
+    wrapIndex(world.previousSafeLane, sides),
+    wrapIndex(world.safeLane + 1, sides),
+    wrapIndex(world.safeLane - 1, sides),
+  ];
+
+  for (let i = 0; i < options.length; i += 1) {
+    const lane = options[i];
+    if ((blockedMask & laneBit(lane, sides)) !== 0) continue;
+    collectibleMask = setLane(collectibleMask, lane, sides);
+    break;
+  }
+
+  if (collectibleMask === 0) return collectibleMask;
+
+  if (difficulty > 0.45 && world.rng() < 0.25) {
+    const firstLane = options[0] ?? 0;
+    const mirrorLane = wrapIndex(firstLane + sides / 2, sides);
+    if ((blockedMask & laneBit(mirrorLane, sides)) === 0) {
+      collectibleMask = setLane(collectibleMask, mirrorLane, sides);
+    }
+  }
+
+  return collectibleMask;
 };
 
 const writeRing = (world: OctaWorld, globalRingId: number) => {
@@ -354,9 +471,11 @@ const writeRing = (world: OctaWorld, globalRingId: number) => {
   const phase = Math.floor(world.rng() * sides);
   const baseMask = generatePatternMask(patternIndex, sides, difficulty, world, phase);
   const mask = ensurePlayableSymmetry(baseMask, sides, difficulty, world);
+  const collectibleMask = createCollectibleMask(world, sides, mask, difficulty);
 
   world.ringIds[slot] = globalRingId;
   world.ringMasks[slot] = mask;
+  world.ringCollectibles[slot] = collectibleMask;
   world.ringSides[slot] = sides;
   world.ringPattern[slot] = patternIndex;
   world.bufferVersion += 1;
@@ -383,6 +502,7 @@ export const createWorld = ({
 
     ringIds: new Int32Array(ringCount),
     ringMasks: new Uint16Array(ringCount),
+    ringCollectibles: new Uint16Array(ringCount),
     ringSides: new Uint8Array(ringCount),
     ringPattern: new Uint8Array(ringCount),
     bufferVersion: 0,
@@ -406,9 +526,12 @@ export const createWorld = ({
     difficulty: 0,
     combo: 0,
     nearMisses: 0,
+    collectibles: 0,
+    speedTier: 0,
     bestCombo: 0,
     fxPulse: 0,
     hitFlash: 0,
+    switchBlur: 0,
 
     visualSides: sideForDistance(mode, 0),
     lastPatternIndex: 0,
@@ -465,7 +588,8 @@ export const computeScore = (world: OctaWorld) =>
   Math.floor(
     world.distance * GAME_CONFIG.scoreDistanceFactor +
       world.nearMisses * GAME_CONFIG.scoreNearMissBonus +
-      world.bestCombo * GAME_CONFIG.scoreComboBonus
+      world.bestCombo * GAME_CONFIG.scoreComboBonus +
+      world.collectibles * GAME_CONFIG.collectibleScoreBonus
   );
 
 const consumePlaybackInputs = (world: OctaWorld) => {
@@ -484,27 +608,38 @@ export const stepWorld = (world: OctaWorld, dt: number): StepOutcome => {
   consumePlaybackInputs(world);
 
   const activeSides = getActiveSides(world);
-  if (world.turnQueue.length > 0) {
+  world.lane = wrapIndex(world.lane, activeSides);
+  world.laneTarget = wrapIndex(world.laneTarget, activeSides);
+
+  let processedTurns = 0;
+  while (world.turnQueue.length > 0 && processedTurns < 4) {
     const turn = world.turnQueue.shift();
-    if (turn) {
-      world.laneTarget = wrapIndex(world.laneTarget + turn, activeSides);
-      world.fxPulse = Math.min(1.15, world.fxPulse + 0.1);
-    }
+    if (!turn) break;
+    world.lane = wrapIndex(world.lane + turn, activeSides);
+    world.laneTarget = world.lane;
+    world.fxPulse = Math.min(1.15, world.fxPulse + 0.12);
+    world.switchBlur = Math.min(1.2, world.switchBlur + 0.58);
+    processedTurns += 1;
   }
 
   world.laneFloat = wrapFloat(world.laneFloat, activeSides);
-  const turnForce = shortestLaneDelta(world.laneFloat, world.laneTarget, activeSides);
-  world.laneVelocity += turnForce * 44 * dt;
-  world.laneVelocity *= Math.exp(-12 * dt);
-  world.laneFloat = wrapFloat(world.laneFloat + world.laneVelocity * dt, activeSides);
-  world.lane = wrapIndex(Math.round(world.laneFloat), activeSides);
+  const turnDelta = shortestLaneDelta(world.laneFloat, world.laneTarget, activeSides);
+  const follow = 1 - Math.exp(-58 * dt);
+  world.laneFloat = wrapFloat(world.laneFloat + turnDelta * follow, activeSides);
+  world.laneVelocity = lerp(
+    world.laneVelocity,
+    turnDelta * 26,
+    1 - Math.exp(-24 * dt)
+  );
 
   const settings = MODE_SETTINGS[world.mode];
   world.difficulty = clamp(world.distance / settings.rampDistance, 0, 1);
+  world.speedTier = Math.floor(computeScore(world) / GAME_CONFIG.pointsPerSpeedTier);
   const targetSpeed =
     settings.baseSpeed +
     settings.bonusSpeed * world.difficulty +
-    clamp(world.combo, 0, 24) * 0.11;
+    clamp(world.combo, 0, 24) * 0.05 +
+    world.speedTier * GAME_CONFIG.speedTierBoost;
   world.speed = lerp(world.speed, targetSpeed, 1 - Math.exp(-2.7 * dt));
 
   world.elapsed += dt;
@@ -519,6 +654,7 @@ export const stepWorld = (world: OctaWorld, dt: number): StepOutcome => {
 
   world.fxPulse = Math.max(0, world.fxPulse - dt * 1.95);
   world.hitFlash = Math.max(0, world.hitFlash - dt * 4.7);
+  world.switchBlur = Math.max(0, world.switchBlur - dt * 6.2);
 
   let passed = 0;
   const crossed = Math.floor(world.scroll / world.ringSpacing);
@@ -528,9 +664,10 @@ export const stepWorld = (world: OctaWorld, dt: number): StepOutcome => {
     const slot = getRingSlot(world, ringId);
     const ringSides = world.ringSides[slot] || 8;
     let ringMask = world.ringMasks[slot] || 0;
+    let collectibleMask = world.ringCollectibles[slot] || 0;
     world.lastPatternIndex = world.ringPattern[slot] ?? 0;
 
-    const lane = wrapIndex(Math.round(world.laneFloat), ringSides);
+    const lane = wrapIndex(world.lane, ringSides);
     const hit = laneBlocked(ringMask, lane, ringSides);
 
     if (hit && !world.preview) {
@@ -542,6 +679,15 @@ export const stepWorld = (world: OctaWorld, dt: number): StepOutcome => {
     if (hit && world.preview) {
       ringMask = clearLane(ringMask, lane, ringSides);
       world.ringMasks[slot] = ringMask;
+      world.bufferVersion += 1;
+    }
+
+    if ((collectibleMask & laneBit(lane, ringSides)) !== 0) {
+      collectibleMask = clearLane(collectibleMask, lane, ringSides);
+      world.ringCollectibles[slot] = collectibleMask;
+      world.collectibles += 1;
+      world.fxPulse = Math.min(1.35, world.fxPulse + 0.24);
+      world.switchBlur = Math.min(1.2, world.switchBlur + 0.2);
       world.bufferVersion += 1;
     }
 
@@ -601,6 +747,7 @@ export const buildReplay = (
   score: Math.max(0, Math.floor(score)),
   distance: Number(world.distance.toFixed(2)),
   bestCombo: Math.max(0, Math.floor(world.bestCombo)),
+  collectibles: Math.max(0, Math.floor(world.collectibles)),
   inputs: world.inputLog.slice(),
 });
 

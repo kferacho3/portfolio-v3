@@ -18,6 +18,7 @@ import {
   MODE_SETTINGS,
   OBSTACLE_PATTERNS,
   PATTERN_LABELS,
+  getRunnerCharacter,
 } from './constants';
 import {
   buildReplay,
@@ -32,7 +33,12 @@ import {
 } from './engine';
 import { useOctaRuntimeStore } from './runtime';
 import { octaSurgeState } from './state';
-import type { OctaFxLevel, OctaRunnerShape, OctaTileVariant } from './types';
+import type {
+  OctaFxLevel,
+  OctaRunnerGeometry,
+  OctaRunnerShape,
+  OctaTileVariant,
+} from './types';
 
 export { octaSurgeState } from './state';
 
@@ -53,11 +59,13 @@ type InstanceBuffers = {
   ringArray: Float32Array;
   sidesArray: Float32Array;
   blockedArray: Float32Array;
+  collectibleArray: Float32Array;
   patternArray: Float32Array;
   laneAttr: THREE.InstancedBufferAttribute;
   ringAttr: THREE.InstancedBufferAttribute;
   sidesAttr: THREE.InstancedBufferAttribute;
   blockedAttr: THREE.InstancedBufferAttribute;
+  collectibleAttr: THREE.InstancedBufferAttribute;
   patternAttr: THREE.InstancedBufferAttribute;
 };
 
@@ -67,6 +75,7 @@ const createInstanceBuffers = (ringCount: number, maxSides: number): InstanceBuf
   const ringArray = new Float32Array(count);
   const sidesArray = new Float32Array(count);
   const blockedArray = new Float32Array(count);
+  const collectibleArray = new Float32Array(count);
   const patternArray = new Float32Array(count);
 
   let ptr = 0;
@@ -76,6 +85,7 @@ const createInstanceBuffers = (ringCount: number, maxSides: number): InstanceBuf
       ringArray[ptr] = slot;
       sidesArray[ptr] = 0;
       blockedArray[ptr] = 0;
+      collectibleArray[ptr] = 0;
       patternArray[ptr] = 0;
       ptr += 1;
     }
@@ -85,11 +95,13 @@ const createInstanceBuffers = (ringCount: number, maxSides: number): InstanceBuf
   const ringAttr = new THREE.InstancedBufferAttribute(ringArray, 1);
   const sidesAttr = new THREE.InstancedBufferAttribute(sidesArray, 1);
   const blockedAttr = new THREE.InstancedBufferAttribute(blockedArray, 1);
+  const collectibleAttr = new THREE.InstancedBufferAttribute(collectibleArray, 1);
   const patternAttr = new THREE.InstancedBufferAttribute(patternArray, 1);
 
   ringAttr.setUsage(THREE.DynamicDrawUsage);
   sidesAttr.setUsage(THREE.DynamicDrawUsage);
   blockedAttr.setUsage(THREE.DynamicDrawUsage);
+  collectibleAttr.setUsage(THREE.DynamicDrawUsage);
   patternAttr.setUsage(THREE.DynamicDrawUsage);
 
   return {
@@ -97,11 +109,13 @@ const createInstanceBuffers = (ringCount: number, maxSides: number): InstanceBuf
     ringArray,
     sidesArray,
     blockedArray,
+    collectibleArray,
     patternArray,
     laneAttr,
     ringAttr,
     sidesAttr,
     blockedAttr,
+    collectibleAttr,
     patternAttr,
   };
 };
@@ -114,6 +128,7 @@ const syncInstanceBuffers = (world: OctaWorld, buffers: InstanceBuffers) => {
     const ringId = world.ringIds[slot] ?? slot;
     const sides = world.ringSides[slot] ?? 8;
     const mask = world.ringMasks[slot] ?? 0;
+    const collectibleMask = world.ringCollectibles[slot] ?? 0;
     const pattern = world.ringPattern[slot] ?? 0;
 
     const base = slot * maxSides;
@@ -122,7 +137,9 @@ const syncInstanceBuffers = (world: OctaWorld, buffers: InstanceBuffers) => {
       buffers.ringArray[idx] = ringId;
       buffers.sidesArray[idx] = sides;
       const blocked = lane < sides && (mask & (1 << lane)) !== 0 ? 1 : 0;
+      const collectible = lane < sides && (collectibleMask & (1 << lane)) !== 0 ? 1 : 0;
       buffers.blockedArray[idx] = blocked;
+      buffers.collectibleArray[idx] = collectible;
       buffers.patternArray[idx] = pattern;
     }
   }
@@ -130,6 +147,7 @@ const syncInstanceBuffers = (world: OctaWorld, buffers: InstanceBuffers) => {
   buffers.ringAttr.needsUpdate = true;
   buffers.sidesAttr.needsUpdate = true;
   buffers.blockedAttr.needsUpdate = true;
+  buffers.collectibleAttr.needsUpdate = true;
   buffers.patternAttr.needsUpdate = true;
 };
 
@@ -142,6 +160,7 @@ const makePanelMaterial = () =>
       uScroll: { value: 0 },
       uSpacing: { value: GAME_CONFIG.ringSpacing },
       uRadius: { value: GAME_CONFIG.tunnelRadius },
+      uLaneWidthScale: { value: GAME_CONFIG.laneWidthScale },
       uSpeed: { value: 0 },
       uPulse: { value: 0 },
       uCombo: { value: 0 },
@@ -156,11 +175,13 @@ const makePanelMaterial = () =>
       uniform float uScroll;
       uniform float uSpacing;
       uniform float uRadius;
+      uniform float uLaneWidthScale;
 
       varying vec2 vUv;
       varying float vDepth;
       varying float vSides;
 
+      const float PI = 3.141592653589793;
       const float TAU = 6.283185307179586;
 
       void main() {
@@ -176,9 +197,10 @@ const makePanelMaterial = () =>
 
         float z = -(aRing * uSpacing - uScroll);
         vec3 base = outN * uRadius + vec3(0.0, 0.0, z);
+        float laneWidth = 2.0 * uRadius * tan(PI / sides) * uLaneWidthScale;
 
         vec3 local = position * mix(0.001, 1.0, visible);
-        vec3 worldPos = base + tangent * local.x + inN * local.y + vec3(0.0, 0.0, 1.0) * local.z;
+        vec3 worldPos = base + tangent * (local.x * laneWidth) + inN * local.y + vec3(0.0, 0.0, 1.0) * local.z;
 
         vUv = uv;
         vDepth = z;
@@ -247,6 +269,7 @@ const makeObstacleMaterial = () =>
       uScroll: { value: 0 },
       uSpacing: { value: GAME_CONFIG.ringSpacing },
       uRadius: { value: GAME_CONFIG.tunnelRadius },
+      uLaneWidthScale: { value: GAME_CONFIG.laneWidthScale },
       uPulse: { value: 0 },
       uDanger: { value: 0 },
     },
@@ -261,12 +284,14 @@ const makeObstacleMaterial = () =>
       uniform float uScroll;
       uniform float uSpacing;
       uniform float uRadius;
+      uniform float uLaneWidthScale;
       uniform float uPulse;
 
       varying vec2 vUv;
       varying float vPattern;
       varying float vDepth;
 
+      const float PI = 3.141592653589793;
       const float TAU = 6.283185307179586;
 
       void main() {
@@ -283,12 +308,32 @@ const makeObstacleMaterial = () =>
 
         float z = -(aRing * uSpacing - uScroll);
         vec3 base = outN * uRadius + vec3(0.0, 0.0, z);
+        float laneWidth = 2.0 * uRadius * tan(PI / sides) * uLaneWidthScale;
 
         vec3 local = position;
         local.y += 0.06 + uPulse * 0.02;
+        float style = aPattern;
+        if (style > 5.5 && style < 7.5) {
+          // Laser-like bars
+          local.y *= 0.26;
+          local.x *= 1.08;
+          local.z *= 0.9;
+        } else if (style > 6.5 && style < 8.5) {
+          // Cluster shards
+          local.x *= 0.58;
+          local.y *= 1.12;
+        } else if (style > 7.5 && style < 9.5) {
+          // Split pillars
+          local.x *= 0.42;
+          local.y *= 1.34;
+        } else if (style > 8.5) {
+          // Helix snare ribs
+          local.y *= 0.34;
+          local.x *= 1.18;
+        }
         local *= mix(0.001, 1.0, visible);
 
-        vec3 worldPos = base + tangent * local.x + inN * (local.y + 0.18) + vec3(0.0, 0.0, 1.0) * local.z;
+        vec3 worldPos = base + tangent * (local.x * laneWidth) + inN * (local.y + 0.18) + vec3(0.0, 0.0, 1.0) * local.z;
 
         vUv = uv;
         vPattern = aPattern;
@@ -323,11 +368,92 @@ const makeObstacleMaterial = () =>
 
         float rhythm = 0.5 + 0.5 * sin(uTime * 5.2 + vDepth * 0.22);
         float pulse = clamp(0.25 + rhythm * 0.65 + uPulse * 0.55 + uDanger * 0.4, 0.0, 2.2);
+        float beam = 0.0;
+        if (vPattern > 5.5) {
+          float sweep = abs(fract(vUv.x * 8.0 + uTime * 3.8) - 0.5);
+          beam = smoothstep(0.48, 0.08, sweep) * (0.5 + pulse);
+        }
 
         vec3 base = patternColor(vPattern, uTime);
         vec3 color = base * (0.45 + edge * pulse * 1.25);
+        color += vec3(0.9, 0.96, 1.0) * beam * 0.75;
 
         gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
+
+const makeCollectibleMaterial = () =>
+  new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uScroll: { value: 0 },
+      uSpacing: { value: GAME_CONFIG.ringSpacing },
+      uRadius: { value: GAME_CONFIG.tunnelRadius },
+      uLaneWidthScale: { value: GAME_CONFIG.laneWidthScale },
+      uPulse: { value: 0 },
+    },
+    vertexShader: `
+      precision highp float;
+      attribute float aLane;
+      attribute float aRing;
+      attribute float aSides;
+      attribute float aCollectible;
+
+      uniform float uScroll;
+      uniform float uSpacing;
+      uniform float uRadius;
+      uniform float uLaneWidthScale;
+      uniform float uPulse;
+
+      varying vec2 vUv;
+      varying float vDepth;
+
+      const float PI = 3.141592653589793;
+      const float TAU = 6.283185307179586;
+
+      void main() {
+        float sides = max(aSides, 3.0);
+        float lane = mod(aLane, sides);
+        float visible = step(0.5, aCollectible) * step(aLane, sides - 0.5);
+
+        float angle = (lane / sides) * TAU;
+        vec3 outN = vec3(cos(angle), sin(angle), 0.0);
+        vec3 inN = -outN;
+        vec3 tangent = vec3(-sin(angle), cos(angle), 0.0);
+
+        float z = -(aRing * uSpacing - uScroll);
+        vec3 base = outN * uRadius + vec3(0.0, 0.0, z);
+        float laneWidth = 2.0 * uRadius * tan(PI / sides) * uLaneWidthScale;
+
+        vec3 local = position;
+        local *= 0.26 + uPulse * 0.04;
+        local *= mix(0.001, 1.0, visible);
+
+        vec3 worldPos = base + tangent * (local.x * laneWidth) + inN * (local.y + 0.34) + vec3(0.0, 0.0, 1.0) * local.z;
+
+        vUv = uv;
+        vDepth = z;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      varying vec2 vUv;
+      varying float vDepth;
+      uniform float uTime;
+
+      void main() {
+        float d = length(vUv - 0.5);
+        float core = smoothstep(0.42, 0.08, d);
+        float halo = smoothstep(0.58, 0.16, d) * 0.6;
+        float pulse = 0.65 + 0.35 * sin(uTime * 6.8 + vDepth * 0.23);
+        vec3 color = vec3(1.0, 0.95, 0.64) * core * pulse + vec3(0.72, 0.95, 1.0) * halo;
+        gl_FragColor = vec4(color, core + halo * 0.6);
       }
     `,
   });
@@ -346,7 +472,7 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
   );
 
   const panelGeometry = useMemo(() => {
-    const base = new THREE.BoxGeometry(0.78, 0.06, 0.6);
+    const base = new THREE.BoxGeometry(1, 0.06, 0.6);
     const geom = new THREE.InstancedBufferGeometry();
     geom.index = base.index;
     geom.attributes = base.attributes;
@@ -360,7 +486,7 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
   }, [buffers]);
 
   const obstacleGeometry = useMemo(() => {
-    const base = new THREE.BoxGeometry(0.78, 0.32, 0.62);
+    const base = new THREE.BoxGeometry(1, 0.32, 0.62);
     const geom = new THREE.InstancedBufferGeometry();
     geom.index = base.index;
     geom.attributes = base.attributes;
@@ -375,17 +501,42 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
     return geom;
   }, [buffers]);
 
+  const collectibleGeometry = useMemo(() => {
+    const base = new THREE.IcosahedronGeometry(1, 0);
+    const geom = new THREE.InstancedBufferGeometry();
+    geom.index = base.index;
+    geom.attributes = base.attributes;
+
+    geom.setAttribute('aLane', buffers.laneAttr);
+    geom.setAttribute('aRing', buffers.ringAttr);
+    geom.setAttribute('aSides', buffers.sidesAttr);
+    geom.setAttribute('aCollectible', buffers.collectibleAttr);
+
+    geom.instanceCount = GAME_CONFIG.ringCount * GAME_CONFIG.maxSides;
+    return geom;
+  }, [buffers]);
+
   const panelMaterial = useMemo(() => makePanelMaterial(), []);
   const obstacleMaterial = useMemo(() => makeObstacleMaterial(), []);
+  const collectibleMaterial = useMemo(() => makeCollectibleMaterial(), []);
 
   useEffect(
     () => () => {
       panelGeometry.dispose();
       obstacleGeometry.dispose();
+      collectibleGeometry.dispose();
       panelMaterial.dispose();
       obstacleMaterial.dispose();
+      collectibleMaterial.dispose();
     },
-    [obstacleGeometry, obstacleMaterial, panelGeometry, panelMaterial]
+    [
+      collectibleGeometry,
+      collectibleMaterial,
+      obstacleGeometry,
+      obstacleMaterial,
+      panelGeometry,
+      panelMaterial,
+    ]
   );
 
   useFrame((state) => {
@@ -408,6 +559,10 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
     obstacleMaterial.uniforms.uScroll.value = world.scroll;
     obstacleMaterial.uniforms.uPulse.value = world.fxPulse;
     obstacleMaterial.uniforms.uDanger.value = world.hitFlash;
+
+    collectibleMaterial.uniforms.uTime.value = state.clock.elapsedTime;
+    collectibleMaterial.uniforms.uScroll.value = world.scroll;
+    collectibleMaterial.uniforms.uPulse.value = world.fxPulse;
   });
 
   return (
@@ -418,9 +573,38 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
         material={obstacleMaterial}
         frustumCulled={false}
       />
+      <mesh
+        geometry={collectibleGeometry}
+        material={collectibleMaterial}
+        frustumCulled={false}
+      />
     </>
   );
 }
+
+const createRunnerGeometry = (geometry: OctaRunnerGeometry): THREE.BufferGeometry => {
+  switch (geometry) {
+    case 'kite':
+      return new THREE.ConeGeometry(0.18, 0.5, 4);
+    case 'orb':
+      return new THREE.SphereGeometry(0.22, 24, 16);
+    case 'tetra':
+      return new THREE.TetrahedronGeometry(0.25, 0);
+    case 'icosa':
+      return new THREE.IcosahedronGeometry(0.24, 0);
+    case 'dodeca':
+      return new THREE.DodecahedronGeometry(0.24, 0);
+    case 'diamond':
+      return new THREE.OctahedronGeometry(0.24, 1);
+    case 'capsule':
+      return new THREE.CapsuleGeometry(0.14, 0.34, 8, 12);
+    case 'crystal':
+      return new THREE.ConeGeometry(0.16, 0.46, 6);
+    case 'octa':
+    default:
+      return new THREE.OctahedronGeometry(0.24, 0);
+  }
+};
 
 function PlayerAvatar({
   worldRef,
@@ -431,12 +615,14 @@ function PlayerAvatar({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
+  const blurRef = useRef<THREE.Mesh>(null);
+  const haloRef = useRef<THREE.Mesh>(null);
+
+  const character = useMemo(() => getRunnerCharacter(runnerShape), [runnerShape]);
 
   const geometry = useMemo<THREE.BufferGeometry>(() => {
-    if (runnerShape === 'kite') return new THREE.ConeGeometry(0.18, 0.5, 4);
-    if (runnerShape === 'orb') return new THREE.SphereGeometry(0.22, 20, 16);
-    return new THREE.OctahedronGeometry(0.24, 0);
-  }, [runnerShape]);
+    return createRunnerGeometry(character.geometry);
+  }, [character.geometry]);
 
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -444,7 +630,9 @@ function PlayerAvatar({
     const world = worldRef.current;
     const group = groupRef.current;
     const mesh = meshRef.current;
-    if (!world || !group || !mesh) return;
+    const blurMesh = blurRef.current;
+    const haloMesh = haloRef.current;
+    if (!world || !group || !mesh || !blurMesh || !haloMesh) return;
 
     const angle = getPlayerAngle(world);
     const radius = world.tunnelRadius - 0.7;
@@ -462,11 +650,28 @@ function PlayerAvatar({
     mesh.rotation.y += delta * (1.2 + world.speed * 0.02);
     mesh.rotation.x += delta * (0.8 + world.combo * 0.01);
 
-    const material = mesh.material as THREE.MeshStandardMaterial;
-    material.emissiveIntensity = 0.55 + world.fxPulse * 0.7 + world.combo * 0.015;
-    material.color.setHSL(0.54 + world.fxPulse * 0.06, 0.86, 0.64);
+    const material = mesh.material as THREE.MeshPhysicalMaterial;
+    material.emissiveIntensity = 0.42 + world.fxPulse * 0.85 + world.combo * 0.015;
+    material.color.set(character.color);
+    material.emissive.set(character.emissive);
 
-    if (runnerShape === 'kite') {
+    const blurIntensity = clamp(world.switchBlur, 0, 1.2);
+    const blurMaterial = blurMesh.material as THREE.MeshBasicMaterial;
+    blurMaterial.opacity = blurIntensity * 0.44;
+    blurMaterial.color.set(character.accent);
+    blurMesh.scale.set(
+      1 + blurIntensity * 2.4,
+      1 + blurIntensity * 0.42,
+      1 + blurIntensity * 0.15
+    );
+    blurMesh.rotation.copy(mesh.rotation);
+    haloMesh.scale.setScalar(1 + world.fxPulse * 0.15 + blurIntensity * 0.2);
+    haloMesh.rotation.z -= delta * (1.1 + world.speed * 0.015);
+    const haloMaterial = haloMesh.material as THREE.MeshBasicMaterial;
+    haloMaterial.color.set(character.accent);
+    haloMaterial.opacity = 0.52 + world.fxPulse * 0.26;
+
+    if (character.geometry === 'kite' || character.geometry === 'crystal') {
       mesh.rotation.z = state.clock.elapsedTime * 1.6;
     }
   });
@@ -474,16 +679,40 @@ function PlayerAvatar({
   return (
     <group ref={groupRef}>
       <mesh ref={meshRef} geometry={geometry} castShadow>
-        <meshStandardMaterial
-          color="#84e4ff"
-          emissive="#57c6ff"
-          roughness={0.24}
-          metalness={0.58}
+        <meshPhysicalMaterial
+          color={character.color}
+          emissive={character.emissive}
+          roughness={0.18}
+          metalness={0.6}
+          clearcoat={1}
+          clearcoatRoughness={0.08}
+          reflectivity={1}
+          transmission={0.08}
+          thickness={0.6}
+        />
+      </mesh>
+      <mesh ref={blurRef} geometry={geometry}>
+        <meshBasicMaterial
+          color="#8de7ff"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={haloRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.38, 0.018, 10, 52]} />
+        <meshBasicMaterial
+          color={character.accent}
+          transparent
+          opacity={0.54}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
         />
       </mesh>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0, -0.05]}>
         <torusGeometry args={[0.34, 0.022, 12, 42]} />
-        <meshBasicMaterial color="#7dd9ff" transparent opacity={0.8} />
+        <meshBasicMaterial color={character.accent} transparent opacity={0.8} />
       </mesh>
     </group>
   );
@@ -585,7 +814,11 @@ function OctaPostFX({ fxLevel }: { fxLevel: OctaFxLevel }) {
 
     if (bloomRef.current) {
       const target =
-        (0.18 + runtime.combo * 0.015 + runtime.fxPulse * 0.95 + runtime.hitFlash * 0.45) *
+        (0.16 +
+          runtime.combo * 0.013 +
+          runtime.fxPulse * 0.88 +
+          runtime.hitFlash * 0.42 +
+          runtime.switchBlur * 0.5) *
         fxScale;
       bloomRef.current.intensity = damp(
         bloomRef.current.intensity ?? target,
@@ -595,8 +828,10 @@ function OctaPostFX({ fxLevel }: { fxLevel: OctaFxLevel }) {
       );
     }
 
-    chromaOffset.x = (0.00018 + runtime.hitFlash * 0.0022) * fxScale;
-    chromaOffset.y = (0.0001 + runtime.hitFlash * 0.0016) * fxScale;
+    chromaOffset.x =
+      (0.00012 + runtime.hitFlash * 0.002 + runtime.switchBlur * 0.0014) * fxScale;
+    chromaOffset.y =
+      (0.00008 + runtime.hitFlash * 0.0014 + runtime.switchBlur * 0.001) * fxScale;
 
     if (chromaRef.current?.offset) {
       chromaRef.current.offset.copy(chromaOffset);
@@ -752,6 +987,7 @@ export default function OctaSurge() {
             distance: world.distance,
             bestCombo: world.bestCombo,
             nearMisses: world.nearMisses,
+            collectibles: world.collectibles,
             replay,
           });
         }
@@ -776,7 +1012,13 @@ export default function OctaSurge() {
     world.hudCommit += delta;
     if (phaseRef.current === 'playing' && world.hudCommit >= 0.08) {
       world.hudCommit = 0;
-      octaSurgeState.setRunMetrics(score, world.distance, world.combo, world.nearMisses);
+      octaSurgeState.setRunMetrics(
+        score,
+        world.distance,
+        world.combo,
+        world.nearMisses,
+        world.collectibles
+      );
     }
 
     const pattern = getPatternName(world.lastPatternIndex);
@@ -789,9 +1031,12 @@ export default function OctaSurge() {
       speed: world.speed,
       combo: world.combo,
       score,
+      collectibles: world.collectibles,
+      speedTier: world.speedTier,
       patternLabel,
       fxPulse: world.fxPulse,
       hitFlash: world.hitFlash,
+      switchBlur: world.switchBlur,
     });
   });
 

@@ -6,7 +6,18 @@ export type OctaCameraMode = 'chase' | 'firstPerson' | 'topDown';
 
 export type OctaTileVariant = 'prism' | 'wire' | 'glass';
 
-export type OctaRunnerShape = 'core' | 'kite' | 'orb';
+export type OctaRunnerShape = string;
+
+export type OctaRunnerGeometry =
+  | 'octa'
+  | 'kite'
+  | 'orb'
+  | 'tetra'
+  | 'icosa'
+  | 'dodeca'
+  | 'diamond'
+  | 'capsule'
+  | 'crystal';
 
 export type OctaFxLevel = 0 | 1 | 2;
 
@@ -18,7 +29,11 @@ export type OctaObstaclePattern =
   | 'mirrorFan'
   | 'quadCross'
   | 'orbitalPairs'
-  | 'pulseLattice';
+  | 'pulseLattice'
+  | 'laserSweep'
+  | 'prismClusters'
+  | 'splitPillars'
+  | 'helixSnare';
 
 export type TurnDirection = -1 | 1;
 
@@ -39,6 +54,7 @@ export type OctaReplay = {
   score: number;
   distance: number;
   bestCombo: number;
+  collectibles?: number;
   inputs: OctaReplayInput[];
 };
 
@@ -47,5 +63,6 @@ export type OctaRunSummary = {
   distance: number;
   bestCombo: number;
   nearMisses: number;
+  collectibles: number;
   replay: OctaReplay;
 };
