@@ -1,29 +1,89 @@
 import { proxy } from 'valtio';
 
 export type StepsPhase = 'menu' | 'playing' | 'gameover';
-export type StepsTrailStyle = 'classic' | 'voxel' | 'carved';
+export type StepsPathStyle = 'smooth-classic';
+export type StepsTileVariant =
+  | 'classic'
+  | 'voxel'
+  | 'carved'
+  | 'alloy'
+  | 'prismatic'
+  | 'gridforge'
+  | 'diamond'
+  | 'sunken'
+  | 'ripple';
 
 const BEST_KEY = 'rachos-fun-steps-best';
 const GEMS_KEY = 'rachos-fun-steps-gems';
 const STYLE_KEY = 'rachos-fun-steps-style';
+const UNLOCKED_KEY = 'rachos-fun-steps-unlocked-variants';
+const UNLOCK_TIER_KEY = 'rachos-fun-steps-unlock-tier';
+
+const TILE_VARIANTS: StepsTileVariant[] = [
+  'classic',
+  'voxel',
+  'carved',
+  'alloy',
+  'prismatic',
+  'gridforge',
+  'diamond',
+  'sunken',
+  'ripple',
+];
+
+const UNLOCK_THRESHOLDS = [15, 35, 60, 90, 130, 175] as const;
+
+const isVariant = (value: unknown): value is StepsTileVariant =>
+  value === 'classic' ||
+  value === 'voxel' ||
+  value === 'carved' ||
+  value === 'alloy' ||
+  value === 'prismatic' ||
+  value === 'gridforge' ||
+  value === 'diamond' ||
+  value === 'sunken' ||
+  value === 'ripple';
+
+function persistUnlocked() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(UNLOCKED_KEY, JSON.stringify(stepsState.unlockedVariants));
+  window.localStorage.setItem(UNLOCK_TIER_KEY, String(stepsState.variantUnlockTier));
+}
+
+function unlockNextVariant() {
+  const locked = TILE_VARIANTS.filter((variant) => !stepsState.unlockedVariants.includes(variant));
+  if (locked.length === 0) return;
+
+  const pick = locked[Math.floor(Math.random() * locked.length)];
+  stepsState.unlockedVariants = [...stepsState.unlockedVariants, pick];
+  stepsState.lastUnlockedVariant = pick;
+  persistUnlocked();
+}
 
 export const stepsState = proxy({
   phase: 'menu' as StepsPhase,
+  pathStyle: 'smooth-classic' as StepsPathStyle,
+
   score: 0,
   best: 0,
   gems: 0,
   runGems: 0,
   pressure: 0,
   failReason: '',
-  trailStyle: 'classic' as StepsTrailStyle,
+
+  tileVariant: 'classic' as StepsTileVariant,
+  unlockedVariants: ['classic', 'voxel', 'carved'] as StepsTileVariant[],
+  variantUnlockTier: 0,
+  lastUnlockedVariant: '' as '' | StepsTileVariant,
 
   worldSeed: Math.floor(Math.random() * 1_000_000_000),
 
   loadBest: () => {
     if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem(BEST_KEY);
-    const parsed = raw ? Number(raw) : 0;
-    if (!Number.isNaN(parsed)) stepsState.best = parsed;
+
+    const rawBest = window.localStorage.getItem(BEST_KEY);
+    const parsedBest = rawBest ? Number(rawBest) : 0;
+    if (!Number.isNaN(parsedBest)) stepsState.best = parsedBest;
 
     const rawGems = window.localStorage.getItem(GEMS_KEY);
     const parsedGems = rawGems ? Number(rawGems) : 0;
@@ -32,8 +92,32 @@ export const stepsState = proxy({
     }
 
     const rawStyle = window.localStorage.getItem(STYLE_KEY);
-    if (rawStyle === 'classic' || rawStyle === 'voxel' || rawStyle === 'carved') {
-      stepsState.trailStyle = rawStyle;
+    if (isVariant(rawStyle)) {
+      stepsState.tileVariant = rawStyle;
+    }
+
+    const rawUnlocked = window.localStorage.getItem(UNLOCKED_KEY);
+    if (rawUnlocked) {
+      try {
+        const parsed = JSON.parse(rawUnlocked) as unknown[];
+        const normalized = parsed.filter(isVariant);
+        if (normalized.length > 0) {
+          const merged = Array.from(new Set<StepsTileVariant>(['classic', 'voxel', 'carved', ...normalized]));
+          stepsState.unlockedVariants = merged;
+        }
+      } catch {
+        stepsState.unlockedVariants = ['classic', 'voxel', 'carved'];
+      }
+    }
+
+    const rawTier = window.localStorage.getItem(UNLOCK_TIER_KEY);
+    const parsedTier = rawTier ? Number(rawTier) : 0;
+    if (!Number.isNaN(parsedTier)) {
+      stepsState.variantUnlockTier = Math.max(0, Math.min(UNLOCK_THRESHOLDS.length, Math.floor(parsedTier)));
+    }
+
+    if (!stepsState.unlockedVariants.includes(stepsState.tileVariant)) {
+      stepsState.tileVariant = stepsState.unlockedVariants[0] ?? 'classic';
     }
   },
 
@@ -43,6 +127,7 @@ export const stepsState = proxy({
     stepsState.runGems = 0;
     stepsState.pressure = 0;
     stepsState.failReason = '';
+    stepsState.lastUnlockedVariant = '';
     stepsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
@@ -65,6 +150,7 @@ export const stepsState = proxy({
     stepsState.runGems = 0;
     stepsState.pressure = 0;
     stepsState.failReason = '';
+    stepsState.lastUnlockedVariant = '';
     stepsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
@@ -72,19 +158,44 @@ export const stepsState = proxy({
     const amount = Math.max(1, Math.floor(count));
     stepsState.runGems += amount;
     stepsState.gems += amount;
+
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(GEMS_KEY, String(stepsState.gems));
     }
+
+    while (
+      stepsState.variantUnlockTier < UNLOCK_THRESHOLDS.length &&
+      stepsState.gems >= UNLOCK_THRESHOLDS[stepsState.variantUnlockTier]
+    ) {
+      stepsState.variantUnlockTier += 1;
+      unlockNextVariant();
+    }
+
+    persistUnlocked();
   },
 
   setPressure: (value: number) => {
     stepsState.pressure = Math.max(0, Math.min(1, value));
   },
 
-  setTrailStyle: (style: StepsTrailStyle) => {
-    stepsState.trailStyle = style;
+  setTileVariant: (variant: StepsTileVariant) => {
+    if (!stepsState.unlockedVariants.includes(variant)) return;
+    stepsState.tileVariant = variant;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STYLE_KEY, style);
+      window.localStorage.setItem(STYLE_KEY, variant);
+    }
+  },
+
+  cycleTileVariant: (direction = 1) => {
+    if (stepsState.unlockedVariants.length <= 1) return;
+    const currentIndex = Math.max(0, stepsState.unlockedVariants.indexOf(stepsState.tileVariant));
+    const nextIndex = (currentIndex + direction + stepsState.unlockedVariants.length) % stepsState.unlockedVariants.length;
+    const next = stepsState.unlockedVariants[nextIndex] ?? 'classic';
+    stepsState.tileVariant = next;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(STYLE_KEY, next);
     }
   },
 });
+
+export const stepsTileVariants = TILE_VARIANTS;

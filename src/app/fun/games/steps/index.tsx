@@ -11,7 +11,7 @@ import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { SeededRandom } from '../../utils/seededRandom';
 
-import { stepsState, type StepsTrailStyle } from './state';
+import { stepsState, stepsTileVariants, type StepsTileVariant } from './state';
 
 export { stepsState } from './state';
 
@@ -50,6 +50,7 @@ type HazardKind =
   | 'split_path_bridge'
   | 'time_slow_zone'
   | 'bomb_tile'
+  | 'rotating_hammer'
   | 'anti_gravity_jump_pad'
   | 'shifting_tiles'
   | 'telefrag_portal'
@@ -90,6 +91,7 @@ type Tile = {
   hazardWindowStart: number;
   hazardOffset: number;
   hazardMotion: number;
+  hazardLastEffect: number;
   fallStart: number;
   drop: number;
   spawnPulse: number;
@@ -164,7 +166,7 @@ const HIDDEN_POS = new THREE.Vector3(0, -9999, 0);
 const HIDDEN_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-const TRAIL_STYLES: StepsTrailStyle[] = ['classic', 'voxel', 'carved'];
+const TILE_STYLES = stepsTileVariants;
 
 const HAZARD_POOL: HazardKind[] = [
   'mirror_maze_platform',
@@ -177,6 +179,7 @@ const HAZARD_POOL: HazardKind[] = [
   'split_path_bridge',
   'time_slow_zone',
   'bomb_tile',
+  'rotating_hammer',
   'anti_gravity_jump_pad',
   'shifting_tiles',
   'telefrag_portal',
@@ -227,6 +230,7 @@ const SPIKE_HAZARDS = new Set<HazardKind>([
 ]);
 const SAW_HAZARDS = new Set<HazardKind>([
   'rotating_floor_disk',
+  'rotating_hammer',
   'rotating_cross_blades',
   'rolling_boulder',
   'meat_grinder',
@@ -283,6 +287,7 @@ const HAZARD_REASON: Record<Exclude<HazardKind, 'none'>, string> = {
   split_path_bridge: 'Split path chose the wrong lane.',
   time_slow_zone: 'Time-slow zone desynced your move.',
   bomb_tile: 'Bomb tile exploded underfoot.',
+  rotating_hammer: 'Rotating hammer sweep connected.',
   anti_gravity_jump_pad: 'Anti-gravity launch lost control.',
   shifting_tiles: 'Shifting tiles slid away.',
   telefrag_portal: 'Portal exit dropped into danger.',
@@ -301,11 +306,62 @@ const HAZARD_REASON: Record<Exclude<HazardKind, 'none'>, string> = {
   lightning_striker: 'Lightning striker hit.',
 };
 
-function trailStyleLabel(style: StepsTrailStyle) {
+const LETHAL_HAZARDS = new Set<HazardKind>([
+  'laser_grid',
+  'rotating_floor_disk',
+  'spike_wave',
+  'bomb_tile',
+  'rotating_hammer',
+  'rolling_boulder',
+  'trapdoor_row',
+  'rotating_cross_blades',
+  'rising_spike_columns',
+  'meat_grinder',
+  'homing_mine',
+  'pendulum_axes',
+  'rising_lava',
+  'fragile_glass',
+  'lightning_striker',
+  'snap_trap',
+]);
+
+const EFFECT_HAZARDS = new Set<HazardKind>([
+  'mirror_maze_platform',
+  'pulse_expander',
+  'gravity_well',
+  'split_path_bridge',
+  'time_slow_zone',
+  'anti_gravity_jump_pad',
+  'shifting_tiles',
+  'telefrag_portal',
+  'magnetic_field',
+  'flicker_bridge',
+  'expand_o_matic',
+]);
+
+function trailStyleLabel(style: StepsTileVariant) {
   if (style === 'classic') return 'Classic';
   if (style === 'voxel') return 'Voxel';
-  return 'Carved';
+  if (style === 'carved') return 'Carved';
+  if (style === 'alloy') return 'Alloy';
+  if (style === 'prismatic') return 'Prismatic';
+  if (style === 'gridforge') return 'GridForge';
+  if (style === 'diamond') return 'Diamond Tess';
+  if (style === 'sunken') return 'Sunken Steps';
+  return 'Ripple';
 }
+
+const VARIANT_ACCENTS: Record<StepsTileVariant, THREE.Color> = {
+  classic: new THREE.Color('#ffffff'),
+  voxel: new THREE.Color('#a8e8ff'),
+  carved: new THREE.Color('#ff9ac6'),
+  alloy: new THREE.Color('#7ecbff'),
+  prismatic: new THREE.Color('#c38dff'),
+  gridforge: new THREE.Color('#61f4c7'),
+  diamond: new THREE.Color('#ffd37a'),
+  sunken: new THREE.Color('#ff8f8f'),
+  ripple: new THREE.Color('#7af0ff'),
+};
 
 function platformLabel(kind: PlatformKind) {
   if (kind === 'standard') return 'Standard';
@@ -605,6 +661,10 @@ function platformPressureModifier(kind: PlatformKind) {
   return 1;
 }
 
+function isHazardEffectDue(tile: Tile, simTime: number, cooldown = 0.35) {
+  return simTime - tile.hazardLastEffect > cooldown;
+}
+
 function Steps() {
   const snap = useSnapshot(stepsState);
   const { paused } = useGameUIState();
@@ -674,9 +734,17 @@ function Steps() {
     speedBoostUntil: 0,
     stickyUntil: 0,
     gravityFlipUntil: 0,
+    controlsInvertedUntil: 0,
+    timeSlowUntil: 0,
+    rotationLockUntil: 0,
+    sizeShiftUntil: 0,
+    sizeShiftScale: 1,
+    teleportCooldownUntil: 0,
+    invertTapLatch: false,
     autoStepUntil: 0,
     lastPlatform: 'standard' as PlatformKind,
     nearMissBonus: 0,
+    tapCharge: 0,
 
     hudCommit: 0,
     pressure: 0,
@@ -812,6 +880,7 @@ function Steps() {
       hazardWindowStart: hazardTiming.windowStart,
       hazardOffset: hazardTiming.offset,
       hazardMotion: 0,
+      hazardLastEffect: -999,
       fallStart: Number.POSITIVE_INFINITY,
       drop: 0,
       spawnPulse: 1,
@@ -866,6 +935,94 @@ function Steps() {
     stepsState.setPressure(0);
   };
 
+  const applyHazardEffect = (tile: Tile) => {
+    const w = world.current;
+    if (tile.hazard === 'none') return;
+    if (!isHazardEffectDue(tile, w.simTime)) return;
+    tile.hazardLastEffect = w.simTime;
+
+    if (tile.hazard === 'mirror_maze_platform') {
+      w.controlsInvertedUntil = Math.max(w.controlsInvertedUntil, w.simTime + 2);
+      w.invertTapLatch = false;
+      w.cameraShake = Math.max(w.cameraShake, 0.1);
+      return;
+    }
+
+    if (tile.hazard === 'pulse_expander') {
+      w.pressure = clamp(w.pressure + 0.24, 0, 1);
+      w.cameraShake = Math.max(w.cameraShake, 0.14);
+      return;
+    }
+
+    if (tile.hazard === 'gravity_well') {
+      w.stickyUntil = Math.max(w.stickyUntil, w.simTime + 0.62);
+      w.pressure = clamp(w.pressure + 0.16, 0, 1);
+      return;
+    }
+
+    if (tile.hazard === 'split_path_bridge') {
+      const safeRight = tile.index % 2 === 0;
+      const wentRight = w.px >= tile.ix * TILE_SIZE;
+      if ((safeRight && !wentRight) || (!safeRight && wentRight)) {
+        triggerDeath(failReasonForHazard(tile.hazard));
+      }
+      return;
+    }
+
+    if (tile.hazard === 'time_slow_zone') {
+      w.timeSlowUntil = Math.max(w.timeSlowUntil, w.simTime + 1.2);
+      return;
+    }
+
+    if (tile.hazard === 'anti_gravity_jump_pad') {
+      w.arcBoost = Math.max(w.arcBoost, 0.3);
+      w.gravityFlipUntil = Math.max(w.gravityFlipUntil, w.simTime + 0.9);
+      w.autoStepUntil = Math.max(w.autoStepUntil, w.simTime + 0.22);
+      return;
+    }
+
+    if (tile.hazard === 'shifting_tiles') {
+      w.cameraShake = Math.max(w.cameraShake, 0.12);
+      w.moveToX += Math.sin(tile.hazardPhase + w.simTime * 4) * 0.08;
+      w.moveToZ += Math.cos(tile.hazardPhase + w.simTime * 3) * 0.08;
+      return;
+    }
+
+    if (tile.hazard === 'telefrag_portal') {
+      if (w.simTime < w.teleportCooldownUntil) return;
+      w.teleportCooldownUntil = w.simTime + 0.2;
+      const target = w.tilesByIndex.get(tile.index + 3 + (tile.index % 3));
+      if (target) {
+        w.currentTileIndex = target.index;
+        w.px = target.ix * TILE_SIZE;
+        w.pz = target.iz * TILE_SIZE;
+        w.py = PLAYER_BASE_Y + 0.2;
+        w.sizeShiftUntil = Math.max(w.sizeShiftUntil, w.simTime + 3);
+        w.sizeShiftScale = 0.62;
+        paintTile(target);
+      }
+      return;
+    }
+
+    if (tile.hazard === 'magnetic_field') {
+      w.rotationLockUntil = Math.max(w.rotationLockUntil, w.simTime + 1.3);
+      return;
+    }
+
+    if (tile.hazard === 'flicker_bridge') {
+      if (!hazardStateAt(tile, w.simTime).open && w.idleOnTile > 0.08) {
+        triggerDeath(failReasonForHazard(tile.hazard));
+      }
+      return;
+    }
+
+    if (tile.hazard === 'expand_o_matic') {
+      w.pressure = clamp(w.pressure + 0.2, 0, 1);
+      w.cameraShake = Math.max(w.cameraShake, 0.1);
+      return;
+    }
+  };
+
   const tryStepForward = () => {
     const w = world.current;
     if (stepsState.phase !== 'playing') return;
@@ -901,13 +1058,15 @@ function Steps() {
     const platformMul = platformStepModifier(current.platform);
     const boostMul = w.simTime < w.speedBoostUntil ? 0.78 : 1;
     const stickyMul = w.simTime < w.stickyUntil ? 1.24 : 1;
-    w.moveDuration = clamp(baseDuration * platformMul * boostMul * stickyMul, STEP_DURATION_MIN * 0.66, STEP_DURATION_BASE * 1.6);
+    const slowMul = w.simTime < w.timeSlowUntil ? 1.34 : 1;
+    w.moveDuration = clamp(baseDuration * platformMul * boostMul * stickyMul * slowMul, STEP_DURATION_MIN * 0.66, STEP_DURATION_BASE * 1.6);
     w.arcBoost =
       current.platform === 'bouncer'
         ? 0.14
         : current.platform === 'trampoline'
-          ? 0.22
+          ? 0.12 + w.tapCharge * 0.28
           : 0;
+    w.tapCharge = 0;
     w.idleOnTile = 0;
     w.cameraShake = Math.max(w.cameraShake, 0.07);
 
@@ -979,9 +1138,17 @@ function Steps() {
     w.speedBoostUntil = 0;
     w.stickyUntil = 0;
     w.gravityFlipUntil = 0;
+    w.controlsInvertedUntil = 0;
+    w.timeSlowUntil = 0;
+    w.rotationLockUntil = 0;
+    w.sizeShiftUntil = 0;
+    w.sizeShiftScale = 1;
+    w.teleportCooldownUntil = 0;
+    w.invertTapLatch = false;
     w.autoStepUntil = 0;
     w.lastPlatform = 'standard';
     w.nearMissBonus = 0;
+    w.tapCharge = 0;
 
     w.hudCommit = 0;
     w.pressure = 0;
@@ -1090,7 +1257,7 @@ function Steps() {
     }
 
     if (tile.platform === 'weight_sensitive_bridge' && !Number.isFinite(tile.fallStart)) {
-      tile.fallStart = w.simTime + 0.48;
+      tile.fallStart = w.simTime + 1.0;
     }
 
     if (tile.platform === 'bouncer') {
@@ -1118,24 +1285,67 @@ function Steps() {
       w.gravityFlipUntil = Math.max(w.gravityFlipUntil, w.simTime + 0.78);
     }
 
+    if (tile.platform === 'size_shifter_pad') {
+      w.sizeShiftUntil = Math.max(w.sizeShiftUntil, w.simTime + 3);
+      w.sizeShiftScale = 0.62;
+    }
+
+    if (tile.platform === 'icy_half_pipe' || tile.platform === 'slippery_ice') {
+      w.speedBoostUntil = Math.max(w.speedBoostUntil, w.simTime + 0.45);
+      w.cameraShake = Math.max(w.cameraShake, 0.08);
+    }
+
+    if (tile.platform === 'treadmill_switch') {
+      const direction = Math.sin(w.simTime * 2.1 + tile.platformPhase) > 0 ? 1 : -1;
+      w.moveToX += direction * 0.22;
+      w.speedBoostUntil = Math.max(w.speedBoostUntil, w.simTime + 0.36);
+    }
+
+    if (tile.platform === 'wind_tunnel') {
+      w.arcBoost = Math.max(w.arcBoost, 0.2);
+      w.autoStepUntil = Math.max(w.autoStepUntil, w.simTime + 0.16);
+    }
+
     if (tile.platform === 'teleporter') {
-      const target = w.tilesByIndex.get(tile.index + 2 + (tile.index % 2));
-      if (target) {
-        w.currentTileIndex = target.index;
-        w.px = target.ix * TILE_SIZE;
-        w.pz = target.iz * TILE_SIZE;
-        w.py = PLAYER_BASE_Y + 0.15;
-        paintTile(target);
-        if (target.index > stepsState.score) {
-          stepsState.score = target.index;
+      if (w.simTime >= w.teleportCooldownUntil) {
+        w.teleportCooldownUntil = w.simTime + 0.2;
+        const target = w.tilesByIndex.get(tile.index + 2 + (tile.index % 2));
+        if (target) {
+          w.currentTileIndex = target.index;
+          w.px = target.ix * TILE_SIZE;
+          w.pz = target.iz * TILE_SIZE;
+          w.py = PLAYER_BASE_Y + 0.15;
+          paintTile(target);
+          if (target.index > stepsState.score) {
+            stepsState.score = target.index;
+          }
+          w.cameraShake = Math.max(w.cameraShake, 0.18);
         }
-        w.cameraShake = Math.max(w.cameraShake, 0.18);
       }
     }
 
-    if (tile.hazard !== 'none' && hazardIsDangerous(tile)) {
-      triggerDeath(failReasonForHazard(tile.hazard));
+    if (tile.platform === 'crushing_ceiling' && platformState.closedBlend > 0.56) {
+      triggerDeath(platformDangerReason(tile.platform));
       return;
+    }
+
+    if (tile.platform === 'sinking_sand') {
+      w.pressure = clamp(w.pressure + 0.16, 0, 1);
+    }
+
+    if (tile.platform === 'reverse_conveyor') {
+      w.timeSlowUntil = Math.max(w.timeSlowUntil, w.simTime + 0.4);
+    }
+
+    if (tile.hazard !== 'none') {
+      const dangerous = hazardIsDangerous(tile);
+      if (dangerous && LETHAL_HAZARDS.has(tile.hazard)) {
+        triggerDeath(failReasonForHazard(tile.hazard));
+        return;
+      }
+      if (EFFECT_HAZARDS.has(tile.hazard) || dangerous) {
+        applyHazardEffect(tile);
+      }
     }
 
     ensurePathAhead(w.currentTileIndex);
@@ -1248,7 +1458,7 @@ function Steps() {
             standingTile.platform === 'weight_sensitive_bridge'
           ) {
             if (!Number.isFinite(standingTile.fallStart)) {
-              const delay = standingTile.platform === 'falling_platform' ? 0.16 : 0.42;
+              const delay = standingTile.platform === 'falling_platform' ? 0.16 : 1.0;
               standingTile.fallStart = w.simTime + delay;
             }
           }
@@ -1259,8 +1469,11 @@ function Steps() {
           }
 
           if (standingTile.hazard !== 'none') {
-            if (hazardIsDangerous(standingTile) && w.idleOnTile > 0.12) {
+            const dangerous = hazardIsDangerous(standingTile);
+            if (dangerous && LETHAL_HAZARDS.has(standingTile.hazard) && w.idleOnTile > 0.12) {
               triggerDeath(failReasonForHazard(standingTile.hazard));
+            } else if (EFFECT_HAZARDS.has(standingTile.hazard) && w.idleOnTile > 0.08) {
+              applyHazardEffect(standingTile);
             }
           }
         }
@@ -1309,6 +1522,10 @@ function Steps() {
     w.spaceWasDown = spaceDown;
 
     const tap = inputState.pointerJustDown || spaceJustDown || enterJustDown;
+    const controlsInverted = w.simTime < w.controlsInvertedUntil;
+    if (!controlsInverted) {
+      w.invertTapLatch = false;
+    }
 
     if (restart) {
       stepsState.startGame();
@@ -1318,12 +1535,27 @@ function Steps() {
         stepsState.startGame();
         resetWorld();
       } else if (stepsState.phase === 'playing') {
+        if (controlsInverted) {
+          if (!w.invertTapLatch) {
+            w.invertTapLatch = true;
+            w.cameraShake = Math.max(w.cameraShake, 0.1);
+            clearFrameInput(input);
+            return;
+          }
+          w.invertTapLatch = false;
+        }
         if (w.moving) {
           w.stepQueued = true;
         } else {
           tryStepForward();
         }
       }
+    }
+
+    if (stepsState.phase === 'playing' && !w.falling && !w.moving && spaceDown) {
+      w.tapCharge = clamp(w.tapCharge + dtRender * 1.5, 0, 1);
+    } else {
+      w.tapCharge = Math.max(0, w.tapCharge - dtRender * 2.4);
     }
 
     clearFrameInput(input);
@@ -1405,14 +1637,22 @@ function Steps() {
         const dangerPulse = hazardState
           ? (0.5 + 0.5 * Math.sin(w.simTime * 8 + tile.hazardPhase * 2.2)) * hazardThreat
           : 0;
-        const isVoxelTrail = snap.trailStyle === 'voxel';
-        const isCarvedTrail = snap.trailStyle === 'carved';
+        const variant = snap.tileVariant;
+        const isVoxelTrail = variant === 'voxel';
+        const isCarvedTrail = variant === 'carved';
+        const isApexPattern =
+          variant === 'alloy' ||
+          variant === 'prismatic' ||
+          variant === 'gridforge' ||
+          variant === 'diamond' ||
+          variant === 'sunken' ||
+          variant === 'ripple';
         const platformScaleX = tile.platform === 'narrow_bridge' ? 0.42 : tile.platform === 'icy_half_pipe' ? 1.12 : 1;
         const platformScaleY = tile.platform === 'weight_sensitive_bridge' ? 0.84 : tile.platform === 'crushing_ceiling' ? 1.08 : 1;
         const platformScaleZ = tile.platform === 'narrow_bridge' ? 1.06 : tile.platform === 'icy_half_pipe' ? 1.22 : 1;
-        const tileScaleX = (isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : 1) * platformScaleX;
-        const tileScaleY = isVoxelTrail ? 1.06 : isCarvedTrail ? 0.96 : 1;
-        const tileScaleZ = (isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : 1) * platformScaleZ;
+        const tileScaleX = (isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : isApexPattern ? 1.01 : 1) * platformScaleX;
+        const tileScaleY = isVoxelTrail ? 1.06 : isCarvedTrail ? 0.96 : isApexPattern ? 1.02 : 1;
+        const tileScaleZ = (isVoxelTrail ? 0.94 : isCarvedTrail ? 0.985 : isApexPattern ? 1.01 : 1) * platformScaleZ;
 
         w.dummy.position.set(x, y, z);
         w.dummy.rotation.set(0, 0, 0);
@@ -1432,6 +1672,7 @@ function Steps() {
         }
         const platformColor = platformTint(tile.platform);
         w.tempColorA.lerp(platformColor, 0.14 + tile.platformMotion * 0.2);
+        w.tempColorA.lerp(VARIANT_ACCENTS[variant], isApexPattern ? 0.2 : variant === 'voxel' || variant === 'carved' ? 0.14 : 0.06);
         if (hazardState && !tile.bonus) {
           w.tempColorA.lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.1);
           w.tempColorA.lerp(COLOR_HAZARD_DANGER, hazardThreat * 0.38 + dangerPulse * 0.08);
@@ -1439,7 +1680,7 @@ function Steps() {
         tileMesh.setColorAt(i, w.tempColorA);
 
         const detailBase = i * TRAIL_DETAIL_SLOTS;
-        if (isVoxelTrail) {
+        if (variant === 'voxel') {
           const liftA = 0.06 + Math.sin(tile.index * 0.77 + w.simTime * 1.5) * 0.018;
           const liftB = 0.04 + Math.cos(tile.index * 0.59 + w.simTime * 1.8) * 0.015;
           const liftC = 0.03 + Math.sin(tile.index * 0.33 + w.simTime * 1.2) * 0.012;
@@ -1466,7 +1707,7 @@ function Steps() {
           trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
           w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.12);
           trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
-        } else if (isCarvedTrail) {
+        } else if (variant === 'carved') {
           const axisX = tile.index % 2 === 0;
           const carveLift = 0.01;
           const carveColor = w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.45);
@@ -1491,6 +1732,34 @@ function Steps() {
           w.dummy.updateMatrix();
           trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
           w.tempColorC.copy(carveColor).lerp(COLOR_WHITE, 0.08);
+          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
+        } else if (isApexPattern) {
+          const pulse = 0.5 + 0.5 * Math.sin(w.simTime * 2.4 + tile.index * 0.3);
+          const axis = tile.index % 2 === 0;
+          const accent = VARIANT_ACCENTS[variant];
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.012 + pulse * 0.008, z);
+          w.dummy.rotation.set(0, axis ? 0 : Math.PI * 0.5, 0);
+          w.dummy.scale.set(0.74, 0.022, 0.1);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
+          w.tempColorC.copy(w.tempColorA).lerp(accent, 0.45);
+          trailDetailMesh.setColorAt(detailBase, w.tempColorC);
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.014 + pulse * 0.01, z);
+          w.dummy.rotation.set(0, axis ? Math.PI * 0.5 : 0, 0);
+          w.dummy.scale.set(0.46, 0.02, 0.1);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
+          w.tempColorC.copy(w.tempColorA).lerp(accent, 0.3).lerp(COLOR_WHITE, 0.08);
+          trailDetailMesh.setColorAt(detailBase + 1, w.tempColorC);
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.017 + pulse * 0.014, z);
+          w.dummy.rotation.set(0, tile.index * 0.18 + w.simTime * 0.2, 0);
+          w.dummy.scale.set(0.14, 0.018, 0.14);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
+          w.tempColorC.copy(accent).lerp(COLOR_WHITE, 0.16 + pulse * 0.2);
           trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
         } else {
           hideTrailDetails(trailDetailMesh, i);
@@ -1682,11 +1951,16 @@ function Steps() {
       } else {
         player.rotation.x = easingLerp(player.rotation.x, 0, dtRender, 12);
         player.rotation.z = easingLerp(player.rotation.z, 0, dtRender, 12);
-        player.rotation.y = easingLerp(player.rotation.y, w.playerYaw, dtRender, 14);
+        const yawTarget = w.simTime < w.rotationLockUntil ? w.playerYaw * 0.3 : w.playerYaw;
+        player.rotation.y = easingLerp(player.rotation.y, yawTarget, dtRender, 14);
 
         const stride = w.moving ? Math.sin(Math.PI * clamp(w.moveT, 0, 1)) : 0;
         const boostSquash = w.simTime < w.speedBoostUntil ? 0.08 : 0;
-        player.scale.set(1 + stride * (0.12 + boostSquash), 1 - stride * 0.17, 1 + stride * (0.12 + boostSquash));
+        const sizeTarget = w.simTime < w.sizeShiftUntil ? w.sizeShiftScale : 1;
+        const sx = (1 + stride * (0.12 + boostSquash)) * sizeTarget;
+        const sy = (1 - stride * 0.17) * sizeTarget;
+        const sz = (1 + stride * (0.12 + boostSquash)) * sizeTarget;
+        player.scale.set(sx, sy, sz);
       }
     }
 
@@ -1707,7 +1981,13 @@ function Steps() {
     camera.position.y = easingLerp(camera.position.y, w.camTarget.y, dtRender, 5.2);
     camera.position.z = easingLerp(camera.position.z, w.camTarget.z + shakeZ, dtRender, 5.2);
 
-    const targetFov = 35 + snap.pressure * 4 + (w.falling ? 2 : 0) + (w.simTime < w.speedBoostUntil ? 3.6 : 0);
+    const targetFov =
+      35 +
+      snap.pressure * 4 +
+      (w.falling ? 2 : 0) +
+      (w.simTime < w.speedBoostUntil ? 3.6 : 0) +
+      (w.simTime < w.controlsInvertedUntil ? 1.8 : 0) -
+      (w.simTime < w.timeSlowUntil ? 1.6 : 0);
     if ('fov' in camera) {
       const perspective = camera as THREE.PerspectiveCamera;
       perspective.fov = easingLerp(perspective.fov, targetFov, dtRender, 4.4);
@@ -1719,6 +1999,7 @@ function Steps() {
   const collapsePct = Math.round(clamp(snap.pressure, 0, 1) * 100);
   const bonusActive = Boolean(world.current.tilesByIndex.get(world.current.currentTileIndex)?.bonus);
   const currentPlatform = world.current.tilesByIndex.get(world.current.currentTileIndex)?.platform ?? 'standard';
+  const jumpChargePct = Math.round(clamp(world.current.tapCharge, 0, 1) * 100);
 
   return (
     <group>
@@ -1861,32 +2142,86 @@ function Steps() {
             zIndex: 40,
           }}
         >
-          <div style={{ fontSize: 11, letterSpacing: 0.8, opacity: 0.84, marginBottom: 7 }}>TRAIL LAYOUT</div>
+          <div style={{ fontSize: 11, letterSpacing: 0.8, opacity: 0.84, marginBottom: 7 }}>TILE STYLING</div>
+          <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 6 }}>
+            Path: {snap.pathStyle === 'smooth-classic' ? 'Smooth Classic' : snap.pathStyle}
+          </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {TRAIL_STYLES.map((style) => (
+            {TILE_STYLES.map((style) => (
               <button
                 key={style}
                 onPointerDown={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                 }}
-                onClick={() => stepsState.setTrailStyle(style)}
+                onClick={() => stepsState.setTileVariant(style)}
                 style={{
+                  opacity: snap.unlockedVariants.includes(style) ? 1 : 0.45,
                   cursor: 'pointer',
                   borderRadius: 999,
                   border:
-                    snap.trailStyle === style ? '1px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.25)',
+                    snap.tileVariant === style ? '1px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.25)',
                   background:
-                    snap.trailStyle === style ? 'linear-gradient(180deg, rgba(255,94,158,0.55), rgba(255,50,94,0.38))' : 'rgba(255,255,255,0.08)',
+                    snap.tileVariant === style ? 'linear-gradient(180deg, rgba(255,94,158,0.55), rgba(255,50,94,0.38))' : 'rgba(255,255,255,0.08)',
                   color: 'white',
                   fontSize: 11,
                   fontWeight: 700,
                   padding: '5px 9px',
                 }}
               >
-                {trailStyleLabel(style)}
+                {trailStyleLabel(style)}{snap.unlockedVariants.includes(style) ? '' : ' 🔒'}
               </button>
             ))}
+          </div>
+          <div style={{ marginTop: 7, fontSize: 10, opacity: 0.74 }}>
+            Unlocks from gem milestones. Unlocked {snap.unlockedVariants.length}/{TILE_STYLES.length}
+          </div>
+          {snap.lastUnlockedVariant && (
+            <div style={{ marginTop: 4, fontSize: 10, color: '#fff4a3', fontWeight: 700 }}>
+              New style unlocked: {trailStyleLabel(snap.lastUnlockedVariant)}
+            </div>
+          )}
+          <div style={{ marginTop: 7, display: 'flex', gap: 6 }}>
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={() => stepsState.cycleTileVariant(-1)}
+              style={{
+                flex: 1,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '4px 0',
+                cursor: 'pointer',
+              }}
+            >
+              Prev
+            </button>
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={() => stepsState.cycleTileVariant(1)}
+              style={{
+                flex: 1,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '4px 0',
+                cursor: 'pointer',
+              }}
+            >
+              Next
+            </button>
           </div>
         </div>
 
@@ -1960,6 +2295,19 @@ function Steps() {
             >
               Platform: {platformLabel(currentPlatform)}
             </div>
+            {(currentPlatform === 'trampoline' || currentPlatform === 'bouncer') && (
+              <div
+                style={{
+                  marginTop: 4,
+                  textAlign: 'center',
+                  fontSize: 11,
+                  color: '#fff4a3',
+                  letterSpacing: 0.4,
+                }}
+              >
+                Jump Charge {jumpChargePct}%
+              </div>
+            )}
           </div>
         )}
 
@@ -1994,7 +2342,7 @@ function Steps() {
                 New obstacle suite: laser grids, gravity wells, cross blades, mines, lava, portals, trapdoors, and more.
               </div>
               <div style={{ marginTop: 5, fontSize: 11, opacity: 0.74 }}>
-                Special platforms: conveyors, bouncers, teleports, ghost tiles, sticky zones, crushers. Active Trail: {trailStyleLabel(snap.trailStyle)}
+                Smooth Classic path + collapse chase. Special platforms: conveyors, bouncers, teleports, ghost tiles, sticky zones, crushers. Active style: {trailStyleLabel(snap.tileVariant)}
               </div>
 
               {snap.phase === 'gameover' && (
