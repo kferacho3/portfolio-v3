@@ -26,6 +26,8 @@ const COLOR_MAP = {
   gem: '#facc15',
   boosterSkip: '#34d399',
   boosterFreeze: '#60a5fa',
+  slam: '#fb923c',
+  crush: '#f43f5e',
 };
 
 export default function ActionEffects() {
@@ -37,6 +39,7 @@ export default function ActionEffects() {
   const dummySpark = useMemo(() => new THREE.Object3D(), []);
   const dummyRing = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
+  const lastStartRef = useRef(0);
 
   const sparkMat = useMemo(
     () =>
@@ -67,7 +70,8 @@ export default function ActionEffects() {
   useFrame((_, dt) => {
     if (!sparkMeshRef.current || !ringMeshRef.current) return;
 
-    if (snap.phase !== 'playing') {
+    if (snap.phase === 'menu') {
+      lastStartRef.current = 0;
       sparksRef.current = [];
       ringsRef.current = [];
       mutation.effectQueue = [];
@@ -76,12 +80,20 @@ export default function ActionEffects() {
       return;
     }
 
+    if (snap.phase === 'playing' && lastStartRef.current !== snap.startTime) {
+      lastStartRef.current = snap.startTime;
+      sparksRef.current = [];
+      ringsRef.current = [];
+    }
+
     const queue = mutation.effectQueue.splice(0, mutation.effectQueue.length);
     if (queue.length) {
       for (const evt of queue) {
         const base = new THREE.Color(COLOR_MAP.gem);
         if (evt.type === 'bomb') base.set(COLOR_MAP.bomb);
         if (evt.type === 'lever') base.set(COLOR_MAP.lever);
+        if (evt.type === 'slam') base.set(COLOR_MAP.slam);
+        if (evt.type === 'crush') base.set(COLOR_MAP.crush);
         if (evt.type === 'booster') {
           base.set(
             evt.variant === 'freeze'
@@ -93,6 +105,10 @@ export default function ActionEffects() {
         const count =
           evt.type === 'bomb'
             ? 24
+            : evt.type === 'crush'
+              ? 34
+              : evt.type === 'slam'
+                ? 14
             : evt.type === 'booster'
               ? 18
               : evt.type === 'lever'
@@ -101,13 +117,23 @@ export default function ActionEffects() {
         const speed =
           evt.type === 'bomb'
             ? 8
+            : evt.type === 'crush'
+              ? 10
+              : evt.type === 'slam'
+                ? 5
             : evt.type === 'booster'
               ? 6
               : evt.type === 'lever'
                 ? 4
                 : 5;
         const maxLife =
-          evt.type === 'bomb' ? 0.9 : evt.type === 'booster' ? 0.7 : 0.6;
+          evt.type === 'bomb'
+            ? 0.9
+            : evt.type === 'crush'
+              ? 1.1
+              : evt.type === 'booster'
+                ? 0.7
+                : 0.6;
 
         for (let i = 0; i < count; i += 1) {
           const dir = new THREE.Vector3(
@@ -127,8 +153,8 @@ export default function ActionEffects() {
         ringsRef.current.push({
           pos: new THREE.Vector3(evt.x, evt.y, evt.z),
           life: 0,
-          maxLife: evt.type === 'bomb' ? 0.6 : 0.45,
-          maxRadius: evt.type === 'bomb' ? 2.2 : 1.4,
+          maxLife: evt.type === 'bomb' ? 0.6 : evt.type === 'crush' ? 0.7 : 0.45,
+          maxRadius: evt.type === 'bomb' ? 2.2 : evt.type === 'crush' ? 2.6 : 1.4,
           color: base.clone(),
         });
       }

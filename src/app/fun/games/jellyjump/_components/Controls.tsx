@@ -27,6 +27,7 @@ export default function Controls() {
         } else if (jellyJumpState.phase === 'playing') {
           // When playing, space should jump, not reset
           jellyJumpState.controls.jump = true;
+          jellyJumpState.controls.jumpHeld = true;
         }
       }
 
@@ -47,6 +48,9 @@ export default function Controls() {
       const key = e.key.toLowerCase();
       const code = e.code;
 
+      if (code === 'Space' || key === ' ') {
+        jellyJumpState.controls.jumpHeld = false;
+      }
       if (code === 'KeyA' || key === 'a' || code === 'ArrowLeft') {
         jellyJumpState.controls.left = false;
       }
@@ -76,6 +80,7 @@ export default function Controls() {
         jellyJumpState.startGame();
       } else if (jellyJumpState.phase === 'playing') {
         jellyJumpState.controls.jump = true;
+        jellyJumpState.controls.jumpHeld = true;
       }
 
       // Avoid any browser gesture defaults on touch.
@@ -84,16 +89,24 @@ export default function Controls() {
       }
     };
 
+    const handlePointerUp = () => {
+      jellyJumpState.controls.jumpHeld = false;
+    };
+
     window.addEventListener('keydown', handleKeyDown, { passive: false });
     window.addEventListener('keyup', handleKeyUp, { passive: false });
     window.addEventListener('pointerdown', handlePointerDown, {
       passive: false,
     });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('pointercancel', handlePointerUp, { passive: true });
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
     };
   }, []);
 

@@ -1,6 +1,16 @@
 export type JellyJumpPhase = 'menu' | 'playing' | 'gameover';
 
-export type PlatformKind = 'slide' | 'rotate' | 'base';
+export type DeathCause = 'lava' | 'crush';
+
+export type PlatformKind =
+  | 'slide'
+  | 'rotate'
+  | 'base'
+  | 'iris'
+  | 'gear'
+  | 'membrane';
+
+export type PlatformSide = 'left' | 'right';
 
 export type JellyPalette = {
   name: string;
@@ -16,7 +26,7 @@ export type JellyPalette = {
 
 export type PlatformPattern = {
   seed: number;
-  types: boolean[]; // true=slide, false=rotate
+  platformKinds: PlatformKind[];
   activationTimes: number[]; // seconds
   obstacles: ObstacleData[]; // bombs/obstacles
   levers: LeverData[]; // levers to activate
@@ -28,7 +38,10 @@ export type PlatformPieceTransform = {
   x: number;
   y: number;
   z: number;
+  rotX?: number;
+  rotY?: number;
   rotZ: number;
+  side?: PlatformSide;
   solid: boolean;
 };
 
@@ -74,7 +87,7 @@ export type Character = {
   size: number;
 };
 
-export type EffectKind = 'bomb' | 'booster' | 'lever' | 'gem';
+export type EffectKind = 'bomb' | 'booster' | 'lever' | 'gem' | 'slam' | 'crush';
 
 export type EffectVariant = 'levelSkip' | 'freeze';
 
@@ -86,4 +99,11 @@ export type EffectEvent = {
   y: number;
   z: number;
   createdAt: number;
+};
+
+export type JellyControls = {
+  jump: boolean;
+  jumpHeld: boolean;
+  left: boolean;
+  right: boolean;
 };

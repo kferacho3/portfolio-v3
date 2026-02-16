@@ -13,7 +13,15 @@ export default function CameraRig() {
     const py = mutation.playerPos[1];
     _target.set(0, py, 0);
 
-    const desiredY = py + CAMERA_Y_OFFSET;
+    if (jellyJumpState.phase === 'playing') {
+      mutation.cameraAnchorY = Math.max(mutation.cameraAnchorY, py);
+    } else if (jellyJumpState.phase === 'menu') {
+      mutation.cameraAnchorY = py;
+    }
+
+    const anchorY =
+      jellyJumpState.phase === 'playing' ? mutation.cameraAnchorY : py;
+    const desiredY = anchorY + CAMERA_Y_OFFSET;
     camera.position.y +=
       (desiredY - camera.position.y) * (1 - Math.exp(-CAMERA_LERP * delta));
     camera.position.x +=
@@ -33,7 +41,7 @@ export default function CameraRig() {
     }
 
     // Slight upward look to sell the "climb"
-    const lookY = py + 0.6;
+    const lookY = anchorY + 0.6;
     camera.lookAt(0, lookY, 0);
 
     // When game is over, freeze camera a bit for readability

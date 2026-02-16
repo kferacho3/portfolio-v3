@@ -1,8 +1,19 @@
 import { proxy } from 'valtio';
 import { generateSeed } from '../../utils/seededRandom';
-import type { EffectEvent, JellyJumpPhase } from './types';
+import type {
+  DeathCause,
+  EffectEvent,
+  JellyControls,
+  JellyJumpPhase,
+} from './types';
 
 const BEST_KEY = 'jellyjump-best';
+const DEFAULT_CONTROLS: JellyControls = {
+  jump: false,
+  jumpHeld: false,
+  left: false,
+  right: false,
+};
 
 export const mutation = {
   playerPos: [0, 1.2, 0] as [number, number, number],
@@ -18,6 +29,9 @@ export const mutation = {
   shakeUntil: 0,
   shakeDuration: 0,
   shakeStrength: 0,
+  slideGapByRow: new Map<number, number>(),
+  slideClosingByRow: new Map<number, boolean>(),
+  cameraAnchorY: 1.2,
 };
 
 export const jellyJumpState = proxy({
@@ -29,12 +43,15 @@ export const jellyJumpState = proxy({
   paletteIndex: 0,
   worldSeed: generateSeed(),
   startTime: 0, // ms
-  controls: { jump: false, left: false, right: false },
+  controls: { ...DEFAULT_CONTROLS },
   gems: 0,
   gemsCollected: 0,
   selectedCharacter: 0,
   frozenUntil: 0, // timestamp when freeze ends
   activatedLevers: new Set<number>(), // row indices of activated levers
+  deathCause: null as DeathCause | null,
+  deathPosition: [0, 1.2, 0] as [number, number, number],
+  deathAt: 0,
 
   reset() {
     this.phase = 'menu';
@@ -44,11 +61,14 @@ export const jellyJumpState = proxy({
     this.paletteIndex = 0;
     this.worldSeed = generateSeed();
     this.startTime = 0;
-    this.controls = { jump: false, left: false, right: false };
+    this.controls = { ...DEFAULT_CONTROLS };
     this.gems = 0;
     this.gemsCollected = 0;
     this.frozenUntil = 0;
     this.activatedLevers.clear();
+    this.deathCause = null;
+    this.deathPosition = [0, 1.2, 0];
+    this.deathAt = 0;
 
     mutation.playerPos = [0, 1.2, 0];
     mutation.playerVel = [0, 0, 0];
@@ -63,6 +83,9 @@ export const jellyJumpState = proxy({
     mutation.shakeUntil = 0;
     mutation.shakeDuration = 0;
     mutation.shakeStrength = 0;
+    mutation.slideGapByRow.clear();
+    mutation.slideClosingByRow.clear();
+    mutation.cameraAnchorY = 1.2;
   },
 
   startGame() {
@@ -73,11 +96,14 @@ export const jellyJumpState = proxy({
     this.paletteIndex = 0;
     this.worldSeed = generateSeed();
     this.startTime = Date.now();
-    this.controls = { jump: false, left: false, right: false };
+    this.controls = { ...DEFAULT_CONTROLS };
     this.gems = 0;
     this.gemsCollected = 0;
     this.frozenUntil = 0;
     this.activatedLevers.clear();
+    this.deathCause = null;
+    this.deathPosition = [0, 1.2, 0];
+    this.deathAt = 0;
 
     mutation.playerPos = [0, 1.2, 0];
     mutation.playerVel = [0, 0, 0];
@@ -92,10 +118,17 @@ export const jellyJumpState = proxy({
     mutation.shakeUntil = 0;
     mutation.shakeDuration = 0;
     mutation.shakeStrength = 0;
+    mutation.slideGapByRow.clear();
+    mutation.slideClosingByRow.clear();
+    mutation.cameraAnchorY = 1.2;
   },
 
-  endGame() {
+  endGame(cause: DeathCause = 'lava', position?: [number, number, number]) {
+    if (this.phase !== 'playing') return;
     this.phase = 'gameover';
+    this.deathCause = cause;
+    this.deathAt = Date.now();
+    this.deathPosition = position ?? [...mutation.playerPos];
     if (this.runMaxLevel > this.best) {
       this.best = this.runMaxLevel;
       try {

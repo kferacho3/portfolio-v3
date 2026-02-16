@@ -155,7 +155,7 @@ export default function GameUI() {
               💎 Collect gems • 🟡 Activate levers to unlock ghost platforms •
               💚 Green = level skip • 🔵 Blue = freeze
               <br />
-              ⚠️ Red bombs knock you down a level!
+              ⚠️ Red bombs knock you down • avoid slide crushes • read Iris/Gear/Membrane rows.
             </div>
           </div>
 
@@ -174,6 +174,20 @@ export default function GameUI() {
                 ? 'Press Space / Click to play'
                 : 'Press Space / Click to retry'}
             </div>
+            {snap.phase === 'gameover' && snap.deathCause && (
+              <div
+                style={{
+                  fontSize: 12,
+                  opacity: 0.9,
+                  color: snap.deathCause === 'crush' ? '#fb7185' : '#f97316',
+                  marginBottom: 8,
+                }}
+              >
+                {snap.deathCause === 'crush'
+                  ? 'CRUSHED by closing walls'
+                  : 'MELTED by the rising lava'}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 14, justifyContent: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>
                 LEVEL {snap.level}

@@ -2,6 +2,7 @@ import { SeededRandom } from '../../utils/seededRandom';
 import {
   PLATFORM_ANIM_DURATION,
   PLATFORM_ANIM_MIN_DURATION,
+  PLATFORM_ANIM_OSCILLATION,
   PLATFORM_CLOSED_PIECE_X,
   PLATFORM_OPEN_SLIDE_X,
   PLATFORM_PATTERN_SIZE,
@@ -26,6 +27,7 @@ import {
   GEM_VALUE,
 } from './constants';
 import type {
+  PlatformSide,
   PlatformPattern,
   PlatformPieceTransform,
   PlatformKind,
@@ -45,17 +47,51 @@ export function generatePattern(
   size: number = PLATFORM_PATTERN_SIZE
 ): PlatformPattern {
   const rng = new SeededRandom(seed);
-  const types: boolean[] = [];
+  const platformKinds: PlatformKind[] = [];
   const activationTimes: number[] = [];
   const obstacles: ObstacleData[] = [];
   const levers: LeverData[] = [];
   const boosters: BoosterData[] = [];
   const gems: GemData[] = [];
 
-  // Mirror your pseudo code:
-  // random[i] is 0/1 choice; rantimes starts [0,3], then increments by ~1.5..3.5
+  platformKinds.push('base');
   for (let i = 0; i < size; i += 1) {
-    types.push(rng.bool(0.5));
+    if (i === 0) continue;
+    if (i < 4) {
+      platformKinds.push(rng.bool(0.65) ? 'slide' : 'rotate');
+      continue;
+    }
+
+    const difficulty = clamp01((i - 5) / 180);
+    const roll = rng.random();
+    const slideW = lerp(0.45, 0.3, difficulty);
+    const rotateW = lerp(0.4, 0.24, difficulty);
+    const irisW = lerp(0.05, 0.2, difficulty);
+    const gearW = lerp(0.05, 0.18, difficulty);
+    const membraneW = lerp(0.05, 0.08, difficulty);
+    const total = slideW + rotateW + irisW + gearW + membraneW;
+
+    let acc = slideW / total;
+    if (roll < acc) {
+      platformKinds.push('slide');
+      continue;
+    }
+    acc += rotateW / total;
+    if (roll < acc) {
+      platformKinds.push('rotate');
+      continue;
+    }
+    acc += irisW / total;
+    if (roll < acc) {
+      platformKinds.push('iris');
+      continue;
+    }
+    acc += gearW / total;
+    if (roll < acc) {
+      platformKinds.push('gear');
+      continue;
+    }
+    platformKinds.push('membrane');
   }
 
   activationTimes.push(0);
@@ -137,7 +173,15 @@ export function generatePattern(
     }
   }
 
-  return { seed, types, activationTimes, obstacles, levers, boosters, gems };
+  return {
+    seed,
+    platformKinds,
+    activationTimes,
+    obstacles,
+    levers,
+    boosters,
+    gems,
+  };
 }
 
 export function getPlatformKind(
@@ -145,8 +189,7 @@ export function getPlatformKind(
   pattern: PlatformPattern
 ): PlatformKind {
   if (index <= 0) return 'base';
-  const isSlide = pattern.types[index % pattern.types.length];
-  return isSlide ? 'slide' : 'rotate';
+  return pattern.platformKinds[index % pattern.platformKinds.length] ?? 'slide';
 }
 
 export function getPlatformPieces(
@@ -161,7 +204,7 @@ export function getPlatformPieces(
   const y = index * PLATFORM_SPACING;
   const kind = getPlatformKind(index, pattern);
 
-  if (kind === 'base') {
+  if (kind === 'base' || (kind !== 'slide' && kind !== 'rotate')) {
     // A fully closed stable platform at the start.
     return {
       kind,
@@ -181,7 +224,10 @@ export function getPlatformPieces(
     PLATFORM_ANIM_MIN_DURATION,
     rowDifficulty
   );
-  const t = clamp01((timeS - activation) / animDuration);
+  const cycleRate = lerp(1, PLATFORM_ANIM_OSCILLATION, rowDifficulty * 0.7);
+  const phase = Math.max(0, ((timeS - activation) / animDuration) * cycleRate);
+  const wrapped = phase % 2;
+  const t = wrapped <= 1 ? wrapped : 2 - wrapped;
 
   if (kind === 'slide') {
     const xL = lerp(-PLATFORM_OPEN_SLIDE_X, -PLATFORM_CLOSED_PIECE_X, t);
@@ -190,8 +236,22 @@ export function getPlatformPieces(
       kind,
       progress: t,
       pieces: [
-        { x: xL, y, z: 0, rotZ: 0, solid: true },
-        { x: xR, y, z: 0, rotZ: 0, solid: true },
+        {
+          x: xL,
+          y,
+          z: 0,
+          rotZ: 0,
+          side: 'left',
+          solid: true,
+        },
+        {
+          x: xR,
+          y,
+          z: 0,
+          rotZ: 0,
+          side: 'right',
+          solid: true,
+        },
       ],
     };
   }
@@ -207,6 +267,7 @@ export function getPlatformPieces(
     y: y + Math.sin(angle) * half,
     z: 0,
     rotZ: angle,
+    side: 'left',
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };
 
@@ -217,10 +278,25 @@ export function getPlatformPieces(
     y: y + Math.sin(angle) * half,
     z: 0,
     rotZ: -angle,
+    side: 'right',
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };
 
   return { kind, progress: t, pieces: [left, right] };
+}
+
+export function getSlideGapWidth(
+  index: number,
+  timeS: number,
+  pattern: PlatformPattern
+) {
+  const { pieces } = getPlatformPieces(index, timeS, pattern);
+  const left = pieces[0];
+  const right = pieces[1];
+  const pieceHalf = PLATFORM_PIECE_LENGTH * 0.5;
+  const gapLeft = left.x + pieceHalf;
+  const gapRight = right.x - pieceHalf;
+  return gapRight - gapLeft;
 }
 
 export function getLavaY(timeS: number, currentLevel: number): number {
@@ -242,4 +318,24 @@ export function getObstaclePosition(obstacle: ObstacleData, timeS: number) {
   );
   const z = clamp(obstacle.z + wobble, -0.9, 0.9);
   return { x, z };
+}
+
+export function hashRow(seed: number, rowIndex: number, salt = 0) {
+  let x = (seed ^ (rowIndex * 374761393) ^ (salt * 668265263)) >>> 0;
+  x ^= x >>> 13;
+  x = Math.imul(x, 1274126177) >>> 0;
+  x ^= x >>> 16;
+  return x >>> 0;
+}
+
+export function rowRandom01(seed: number, rowIndex: number, salt = 0) {
+  return hashRow(seed, rowIndex, salt) / 4294967295;
+}
+
+export function pickSignedSide(seed: number, rowIndex: number, salt = 0) {
+  return rowRandom01(seed, rowIndex, salt) > 0.5 ? 1 : -1;
+}
+
+export function sideFromIndex(index: number): PlatformSide {
+  return index % 2 === 0 ? 'left' : 'right';
 }

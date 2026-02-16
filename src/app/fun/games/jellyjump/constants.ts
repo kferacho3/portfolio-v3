@@ -18,7 +18,10 @@ export const PLAYER_HALF = PLAYER_SIZE / 2;
 
 // Movement / physics
 export const GRAVITY = -26;
-export const JUMP_VELOCITY = 13.25;
+export const JUMP_IMPULSE = 12.5;
+export const JUMP_HOLD_FORCE = 12.0;
+export const JUMP_HOLD_MAX_MS = 130;
+export const FAST_FALL_GRAVITY_MULTIPLIER = 1.45;
 
 // Feel helpers ("sticky" jump that feels fair)
 export const COYOTE_TIME_MS = 110; // jump shortly after leaving a platform
@@ -38,11 +41,28 @@ export const LAVA_SPEED_PER_LEVEL = 0.018; // adds pressure as you climb
 // Platform animations (ported from your pseudo code)
 export const PLATFORM_ANIM_DURATION = 0.95; // base closing speed
 export const PLATFORM_ANIM_MIN_DURATION = 0.68; // cap so late game stays fair
+export const PLATFORM_ANIM_OSCILLATION = 2.6; // >2 means rows reopen after closing
 export const PLATFORM_OPEN_SLIDE_X = 4.5; // open position centers
 export const PLATFORM_CLOSED_PIECE_X = 1.5; // closed piece centers are -1.5 / +1.5
 export const PLATFORM_ROTATE_PIVOT_X = 3.0; // pivot points at -3 / +3
 export const PLATFORM_ROTATE_OPEN_ANGLE = Math.PI / 2; // 90° (vertical)
 export const PLATFORM_ROTATE_SOLID_ANGLE = 0.28; // radians threshold for collision
+export const PLATFORM_FRICTION = 1.0;
+export const PLATFORM_RESTITUTION = 0.02;
+export const PLAYER_CRUSH_WIDTH = PLAYER_SIZE * 0.88;
+
+// Advanced platform archetypes
+export const IRIS_SEGMENTS = 6;
+export const IRIS_RADIUS_OPEN = 4.2;
+export const IRIS_RADIUS_CLOSED = 2.0;
+export const IRIS_SPIN_SPEED = 0.85;
+export const GEAR_TEETH = 9;
+export const GEAR_RADIUS = 3.15;
+export const GEAR_SPIN_SPEED = 1.2;
+export const MEMBRANE_SOLID_UP_VELOCITY = 7.2;
+export const MEMBRANE_COLLIDER_WIDTH = 8.8;
+export const MEMBRANE_COLLIDER_HEIGHT = 0.18;
+export const MEMBRANE_VISUAL_OPACITY = 0.32;
 
 // New game elements
 export const OBSTACLE_RADIUS = 0.4;
