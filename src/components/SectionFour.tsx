@@ -11,15 +11,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  EMAILJS_PUBLIC_KEY,
+  EMAILJS_SERVICE_ID,
+  EMAILJS_TEMPLATE_ID,
+} from '@/lib/emailjsConfig';
 import emailjs from 'emailjs-com';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
-
-// Environment variables
-const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID || 'RachoDevs';
-const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID || 'RachoDevs';
-const PUBLIC_KEY =
-  process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY || 'asi1IXWXVQKV4AGlS';
 
 function SectionFour() {
   const form = useRef<HTMLFormElement>(null);
@@ -92,8 +91,8 @@ function SectionFour() {
 
     try {
       await emailjs.send(
-        SERVICE_ID,
-        TEMPLATE_ID,
+        EMAILJS_SERVICE_ID,
+        EMAILJS_TEMPLATE_ID,
         {
           from_name: formData.name,
           to_name: 'RachoDevs',
@@ -102,7 +101,7 @@ function SectionFour() {
           website: formData.website,
           message: formData.message,
         },
-        PUBLIC_KEY
+        EMAILJS_PUBLIC_KEY
       );
 
       setModalType('success');

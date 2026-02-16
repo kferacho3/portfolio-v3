@@ -41,7 +41,7 @@ const Sidebar = ({ isOpen, toggle }: SidebarProps) => {
     // { href: '/myRoom', label: "Racho's Room" }, // Temporarily hidden
     { href: '/fun', label: "Racho's Arcade" },
     { href: 'https://www.rachocreates.com', label: "Racho's Creative World" },
-    { href: 'https://antiheroes.co/', label: 'Audio Visualizer' },
+    { href: 'https://anti-heroes.co/', label: 'Audio Visualizer' },
   ];
 
   return (

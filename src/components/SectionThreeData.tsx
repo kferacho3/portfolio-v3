@@ -139,14 +139,14 @@ export const featuredWebsites: Project[] = [
   },
   {
     id: 3,
-    title: 'Antiheroes',
+    title: 'ANTI-HEROES v1',
     imageDesktop:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
-    link: 'https://antiheroes.co',
+    link: 'https://main.d38w3p8vlw981a.amplifyapp.com',
     description:
-      'A music-portfolio hub for an ATL producer that marries Spotify’s Web API with an advanced FFT audio visualizer. Five visualization modes—Noise, Fractal, Ray-marched ‘Phantom Star’, Orbital Geometry, and Supershape—react to live audio via the Web Audio API and custom GLSL. Built with Next.js, React Three Fiber, Lamina layered materials, Simplex-Noise, Valtio global store, and Framer-Motion UI flourishes.',
+      'Version 1 of the music-portfolio hub for an ATL producer that marries Spotify’s Web API with an advanced FFT audio visualizer. Five visualization modes—Noise, Fractal, Ray-marched ‘Phantom Star’, Orbital Geometry, and Supershape—react to live audio via the Web Audio API and custom GLSL.',
     techStack: [
       'TypeScript',
       'React 19',
@@ -187,12 +187,12 @@ export const featuredWebsites: Project[] = [
   },
   {
     id: 5,
-    title: 'VapeAura',
+    title: 'Vape Aura',
     imageDesktop:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AuraHempandVaporPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AuraHempandVaporPreview.webp',
-    link: 'https://vapeaura.shop/',
+    link: 'https://main.d1v4eeamvmnirt.amplifyapp.com',
     description:
       'A lean product-showcase for a start-up vape retailer, built with Next.js 15, React 19, and Tailwind CSS 3.4. The roadmap includes a Prisma-backed catalog, Stripe checkout, and an owner-only admin panel. Current features ship with animated category filtering (Framer Motion) and class-safe utility styling via Tailwind-Merge.',
     techStack: [
@@ -204,6 +204,37 @@ export const featuredWebsites: Project[] = [
       'Prisma (planned)',
     ],
     frameworks: ['Tailwind', 'Framer Motion', 'React-Icons'],
+  },
+  {
+    id: 6,
+    title: 'BT GOD',
+    imageDesktop: '/logo.png',
+    imageMobile: '/logo.png',
+    link: 'https://btgod.co',
+    description:
+      'Main project slot for BT GOD. Designed as a focused digital destination for releases, brand identity, and audience engagement.',
+    techStack: ['TypeScript', 'React', 'Next.js', 'Tailwind CSS'],
+    frameworks: ['Framer Motion', 'Design Systems'],
+  },
+  {
+    id: 7,
+    title: 'ANTI-HEROES v2',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
+    link: 'https://anti-heroes.co',
+    description:
+      'Version 2 of the Anti-Heroes experience, positioned as the primary release with refreshed creative direction and expanded interactive production features.',
+    techStack: [
+      'TypeScript',
+      'React 19',
+      'Next.js 15',
+      'Three.js',
+      'Web Audio API',
+      'GLSL',
+    ],
+    frameworks: ['React Three Fiber', 'Lamina', 'Framer Motion'],
   },
 ];
 
