@@ -1193,6 +1193,53 @@ function KnotHop() {
     });
   };
 
+  const spawnPlayerDamageCollisionEffect = (
+    runtime: Runtime,
+    x: number,
+    y: number,
+    z: number,
+    variant: HazardVariant
+  ) => {
+    const core = crashColorHex(variant);
+    spawnBurst(runtime, x, y, z, core, 24, 0.62, 1.72, 0.016, 0.046, 0.16, 0.34, {
+      kind: 'crash',
+      drag: 3.2,
+      gravity: -0.45,
+      spreadZ: 1.2,
+    });
+    spawnBurst(runtime, x, y, z, 0xffe8de, 10, 0.18, 0.74, 0.012, 0.03, 0.08, 0.2, {
+      kind: 'crash',
+      drag: 4.6,
+      gravity: 0,
+      spreadZ: 1.05,
+    });
+  };
+
+  const spawnPlayerCollectCollisionEffect = (
+    runtime: Runtime,
+    x: number,
+    y: number,
+    z: number,
+    variant: CollectibleVariant
+  ) => {
+    const color = collectibleColorHex(variant);
+    const accent = collectibleAccentHex(variant);
+    const burstCount = variant === 'purple' ? 24 : variant === 'green' ? 19 : 14;
+    const sparkleCount = variant === 'purple' ? 13 : variant === 'green' ? 10 : 8;
+    spawnBurst(runtime, x, y, z, color, burstCount, 0.24, 0.94, 0.012, 0.034, 0.12, 0.3, {
+      kind: 'collect',
+      drag: 3.7,
+      gravity: 0,
+      spreadZ: 1.05,
+    });
+    spawnBurst(runtime, x, y, z, accent, sparkleCount, 0.3, 1.16, 0.01, 0.026, 0.1, 0.24, {
+      kind: 'collect',
+      drag: 4.1,
+      gravity: 0,
+      spreadZ: 1.35,
+    });
+  };
+
   const spawnCollectionEffect = (
     runtime: Runtime,
     x: number,
@@ -1397,7 +1444,6 @@ function KnotHop() {
       if (tap) {
         runtime.spinDir = runtime.spinDir > 0 ? -1 : 1;
         runtime.hopPulse = 1;
-        runtime.collectFlash = Math.max(runtime.collectFlash, 0.16);
         playTone(760, 0.03, 0.022);
       }
 
@@ -1475,31 +1521,12 @@ function KnotHop() {
           }
 
           if (event.collectProgress >= 1) {
-            const finCount =
-              collectibleVariant === 'purple'
-                ? 24
-                : collectibleVariant === 'green'
-                  ? 19
-                  : 14;
-            spawnBurst(
+            spawnPlayerCollectCollisionEffect(
               runtime,
               event.collectToX,
               event.collectToY,
               event.collectToZ,
-              collectibleAccentHex(collectibleVariant),
-              finCount,
-              0.16,
-              0.78,
-              0.012,
-              0.035,
-              0.14,
-              0.3,
-              {
-                kind: 'collect',
-                drag: 3.7,
-                gravity: 0,
-                spreadZ: 1.1,
-              }
+              collectibleVariant
             );
 
             seedEvent(event, runtime, runtime.eventCursorZ);
@@ -1534,6 +1561,8 @@ function KnotHop() {
           const playerThetaAtCross = normalizeAngle(
             thetaStart + shortestAngleDiff(thetaEnd, thetaStart) * crossAlpha
           );
+          const playerXAtCross = Math.cos(playerThetaAtCross) * ORBIT_RADIUS;
+          const playerYAtCross = Math.sin(playerThetaAtCross) * ORBIT_RADIUS;
           const eventTheta = eventThetaAtTime(event, sampleElapsed);
           const err = Math.abs(shortestAngleDiff(eventTheta, playerThetaAtCross));
           const impactX = Math.cos(eventTheta) * ORBIT_RADIUS;
@@ -1555,6 +1584,13 @@ function KnotHop() {
                 impactX,
                 impactY,
                 impactZ,
+                event.variant as HazardVariant
+              );
+              spawnPlayerDamageCollisionEffect(
+                runtime,
+                playerXAtCross,
+                playerYAtCross,
+                PLAYER_Z,
                 event.variant as HazardVariant
               );
 
@@ -1651,8 +1687,8 @@ function KnotHop() {
                 0.022
               );
 
-              const absorbX = Math.cos(playerThetaAtCross) * ORBIT_RADIUS;
-              const absorbY = Math.sin(playerThetaAtCross) * ORBIT_RADIUS;
+              const absorbX = playerXAtCross;
+              const absorbY = playerYAtCross;
               event.collecting = true;
               event.collectProgress = 0;
               event.collectTrailClock = 0;
