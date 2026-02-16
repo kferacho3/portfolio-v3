@@ -31,6 +31,28 @@ type DifficultyTuning = {
   perfectScale: number;
   hint: string;
 };
+type ThemePalette = {
+  lane: [THREE.Color, THREE.Color, THREE.Color];
+  background: {
+    deep: THREE.Color;
+    edge: THREE.Color;
+    fog: THREE.Color;
+    stars: THREE.Color;
+  };
+  lights: {
+    hemisphereSky: THREE.Color;
+    hemisphereGround: THREE.Color;
+    key: THREE.Color;
+    fill: THREE.Color;
+  };
+  ui: {
+    core: THREE.Color;
+    coreEmissive: THREE.Color;
+    aura: THREE.Color;
+    zone: THREE.Color;
+    shock: THREE.Color;
+  };
+};
 
 type Pulse = {
   slot: number;
@@ -98,10 +120,17 @@ type Runtime = {
   shockMaxRadius: number;
   parryRadius: number;
   tapCooldown: number;
+  inputBufferLane: number;
+  inputBufferLeft: number;
 
   spawnTimer: number;
   nextPulseSlot: number;
   nextColor: number;
+  paletteSeed: number;
+  paletteActive: number;
+  paletteTarget: number;
+  paletteBlend: number;
+  paletteLaneColors: [THREE.Color, THREE.Color, THREE.Color];
 
   hitThreshold: number;
   perfectThreshold: number;
@@ -166,17 +195,14 @@ const SPAWN_RADIUS_BASE = 0;
 const PARRY_RADIUS_BASE = 2.8;
 const MISS_RADIUS = 4.05;
 const TARGET_NODE_RADIUS = 0.16;
-const CAMERA_BASE_Y = 11.6;
+const CAMERA_BASE_Y = 12.6;
 const SWIPE_THRESHOLD = 0.16;
+const PALETTE_SCORE_STEP = 10;
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
 const WHITE = new THREE.Color('#f8fbff');
-const CYAN = new THREE.Color('#57d9ff');
-const MAGENTA = new THREE.Color('#ff6fd8');
-const ACID = new THREE.Color('#b4f766');
 const DANGER = new THREE.Color('#ff607e');
-const PULSE_COLORS = [CYAN, MAGENTA, ACID] as const;
 const LANE_SHAPE_NAMES = ['Right: Orb', 'Up: Block', 'Left: Spike', 'Down: Diamond'] as const;
 const LANE_INPUT_NAMES = ['Right', 'Up', 'Left', 'Down'] as const;
 const MODE_OPTIONS = ['easy', 'medium', 'hard'] as const satisfies readonly GameDifficulty[];
@@ -206,6 +232,149 @@ const DIFFICULTY_TUNING: Record<GameDifficulty, DifficultyTuning> = {
     perfectScale: 0.92,
     hint: 'Timing +1.0x',
   },
+};
+const makePalette = (config: {
+  lane: [string, string, string];
+  background: { deep: string; edge: string; fog: string; stars: string };
+  lights: { hemisphereSky: string; hemisphereGround: string; key: string; fill: string };
+  ui: { core: string; coreEmissive: string; aura: string; zone: string; shock: string };
+}): ThemePalette => ({
+  lane: [
+    new THREE.Color(config.lane[0]),
+    new THREE.Color(config.lane[1]),
+    new THREE.Color(config.lane[2]),
+  ],
+  background: {
+    deep: new THREE.Color(config.background.deep),
+    edge: new THREE.Color(config.background.edge),
+    fog: new THREE.Color(config.background.fog),
+    stars: new THREE.Color(config.background.stars),
+  },
+  lights: {
+    hemisphereSky: new THREE.Color(config.lights.hemisphereSky),
+    hemisphereGround: new THREE.Color(config.lights.hemisphereGround),
+    key: new THREE.Color(config.lights.key),
+    fill: new THREE.Color(config.lights.fill),
+  },
+  ui: {
+    core: new THREE.Color(config.ui.core),
+    coreEmissive: new THREE.Color(config.ui.coreEmissive),
+    aura: new THREE.Color(config.ui.aura),
+    zone: new THREE.Color(config.ui.zone),
+    shock: new THREE.Color(config.ui.shock),
+  },
+});
+const THEME_PALETTES: ThemePalette[] = [
+  makePalette({
+    lane: ['#57d9ff', '#ff6fd8', '#b4f766'],
+    background: { deep: '#112538', edge: '#1d3d56', fog: '#18344a', stars: '#c2fff6' },
+    lights: {
+      hemisphereSky: '#8aefff',
+      hemisphereGround: '#2a3954',
+      key: '#6cffb9',
+      fill: '#ffd166',
+    },
+    ui: {
+      core: '#f2f9ff',
+      coreEmissive: '#8dffbf',
+      aura: '#7effd9',
+      zone: '#b4fff1',
+      shock: '#f7fcff',
+    },
+  }),
+  makePalette({
+    lane: ['#ffc857', '#ff5f9e', '#5af0e2'],
+    background: { deep: '#2a1638', edge: '#4d2f5f', fog: '#3e2553', stars: '#ffe9bf' },
+    lights: {
+      hemisphereSky: '#ffd8ff',
+      hemisphereGround: '#2f1f3f',
+      key: '#ff9f6e',
+      fill: '#7ce2ff',
+    },
+    ui: {
+      core: '#fff4e5',
+      coreEmissive: '#ff9fc8',
+      aura: '#ffbfe0',
+      zone: '#ffd9b3',
+      shock: '#fff7d9',
+    },
+  }),
+  makePalette({
+    lane: ['#7d7cff', '#32e8ff', '#ff6bcb'],
+    background: { deep: '#131b46', edge: '#26346e', fog: '#202d5c', stars: '#cfd8ff' },
+    lights: {
+      hemisphereSky: '#b4d0ff',
+      hemisphereGround: '#1d2953',
+      key: '#6ed3ff',
+      fill: '#ff9fdc',
+    },
+    ui: {
+      core: '#e8f0ff',
+      coreEmissive: '#7db5ff',
+      aura: '#9fcbff',
+      zone: '#c6e3ff',
+      shock: '#f3fbff',
+    },
+  }),
+  makePalette({
+    lane: ['#ff8f66', '#ffd166', '#67f3b5'],
+    background: { deep: '#1f2f2c', edge: '#36594f', fog: '#2d4a43', stars: '#d6ffe7' },
+    lights: {
+      hemisphereSky: '#b9ffe2',
+      hemisphereGround: '#1f3833',
+      key: '#ffd089',
+      fill: '#6ef3d6',
+    },
+    ui: {
+      core: '#f3fff8',
+      coreEmissive: '#77ffc7',
+      aura: '#8effd2',
+      zone: '#c2ffe5',
+      shock: '#f3fffb',
+    },
+  }),
+  makePalette({
+    lane: ['#ff67c7', '#7ef3ff', '#f9ff7a'],
+    background: { deep: '#2c1733', edge: '#4a285a', fog: '#3b2148', stars: '#fce4ff' },
+    lights: {
+      hemisphereSky: '#ffc0ff',
+      hemisphereGround: '#2c1f35',
+      key: '#ff8fd6',
+      fill: '#8de9ff',
+    },
+    ui: {
+      core: '#fff1ff',
+      coreEmissive: '#ff9fe0',
+      aura: '#ffc6f0',
+      zone: '#ffd7f3',
+      shock: '#fff7ff',
+    },
+  }),
+  makePalette({
+    lane: ['#71f5ff', '#7dff92', '#ffb86f'],
+    background: { deep: '#112b30', edge: '#24515a', fog: '#1c434b', stars: '#dcfeff' },
+    lights: {
+      hemisphereSky: '#b7fbff',
+      hemisphereGround: '#203a3f',
+      key: '#7efed1',
+      fill: '#ffcf8a',
+    },
+    ui: {
+      core: '#ebffff',
+      coreEmissive: '#7dffbf',
+      aura: '#a9ffe8',
+      zone: '#beffef',
+      shock: '#f4fffe',
+    },
+  }),
+];
+const cloneLaneColors = (
+  colors: [THREE.Color, THREE.Color, THREE.Color]
+): [THREE.Color, THREE.Color, THREE.Color] => [colors[0].clone(), colors[1].clone(), colors[2].clone()];
+const pickPaletteSeed = () => Math.floor(Math.random() * THEME_PALETTES.length);
+const smoothstep01 = (t: number) => {
+  const c = clamp(t, 0, 1);
+  return c * c * (3 - 2 * c);
 };
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
@@ -309,8 +478,10 @@ const createShard = (slot: number): Shard => ({
   color: new THREE.Color('#ffffff'),
 });
 
-const createRuntime = (): Runtime => ({
-  mode: DEFAULT_MODE,
+const createRuntime = (): Runtime => {
+  const seed = pickPaletteSeed();
+  return {
+    mode: DEFAULT_MODE,
   elapsed: 0,
   score: 0,
   lives: 3,
@@ -343,10 +514,17 @@ const createRuntime = (): Runtime => ({
   shockMaxRadius: 5.25,
   parryRadius: PARRY_RADIUS_BASE,
   tapCooldown: 0,
+  inputBufferLane: -1,
+  inputBufferLeft: 0,
 
   spawnTimer: 0.64,
   nextPulseSlot: 0,
   nextColor: 0,
+  paletteSeed: seed,
+  paletteActive: seed,
+  paletteTarget: seed,
+  paletteBlend: 1,
+  paletteLaneColors: cloneLaneColors(THEME_PALETTES[seed].lane),
 
   hitThreshold: 0.14,
   perfectThreshold: 0.06,
@@ -360,9 +538,11 @@ const createRuntime = (): Runtime => ({
 
   pulses: Array.from({ length: PULSE_POOL }, (_, idx) => createPulse(idx)),
   shards: Array.from({ length: SHARD_POOL }, (_, idx) => createShard(idx)),
-});
+  };
+};
 
 const resetRuntime = (runtime: Runtime, mode: GameDifficulty) => {
+  const seed = pickPaletteSeed();
   runtime.mode = mode;
   runtime.elapsed = 0;
   runtime.score = 0;
@@ -395,10 +575,19 @@ const resetRuntime = (runtime: Runtime, mode: GameDifficulty) => {
   runtime.shockMaxRadius = 5.25;
   runtime.parryRadius = PARRY_RADIUS_BASE;
   runtime.tapCooldown = 0;
+  runtime.inputBufferLane = -1;
+  runtime.inputBufferLeft = 0;
 
   runtime.spawnTimer = 0.64;
   runtime.nextPulseSlot = 0;
   runtime.nextColor = 0;
+  runtime.paletteSeed = seed;
+  runtime.paletteActive = seed;
+  runtime.paletteTarget = seed;
+  runtime.paletteBlend = 1;
+  runtime.paletteLaneColors[0].copy(THEME_PALETTES[seed].lane[0]);
+  runtime.paletteLaneColors[1].copy(THEME_PALETTES[seed].lane[1]);
+  runtime.paletteLaneColors[2].copy(THEME_PALETTES[seed].lane[2]);
 
   runtime.hitThreshold = 0.14;
   runtime.perfectThreshold = 0.06;
@@ -567,7 +756,9 @@ const findOverlapCandidate = (runtime: Runtime, slack = 1): OverlapCandidate | n
 
 const spawnInterval = (runtime: Runtime) => {
   const tuning = getDifficultyTuning(runtime.mode);
-  return clamp(1.1 - Math.min(0.58, runtime.elapsed * 0.008), 0.52, 1.1) * tuning.spawnScale;
+  const base = clamp(1.1 - Math.min(0.58, runtime.elapsed * 0.008), 0.52, 1.1);
+  const pressure = clamp(runtime.elapsed * 0.0012 + runtime.score * 0.0022, 0, 0.32);
+  return base * tuning.spawnScale * (1 - pressure);
 };
 
 const acquirePulse = (runtime: Runtime) => {
@@ -594,20 +785,21 @@ const spawnPulseSet = (runtime: Runtime) => {
   const pulse = acquirePulse(runtime);
   const tuning = getDifficultyTuning(runtime.mode);
   const speedRamp = Math.min(1.05, runtime.elapsed * 0.018);
+  const scoreRamp = Math.min(0.95, runtime.score * 0.012);
   pulse.active = true;
   pulse.parried = false;
   pulse.lane = lane;
   pulse.angle = CARDINAL_ANGLES[lane];
   pulse.radius = SPAWN_RADIUS_BASE;
   pulse.velocity = 0;
-  pulse.speed = (1.08 + speedRamp + Math.random() * 0.16) * tuning.speedScale;
+  pulse.speed = (1.04 + speedRamp + scoreRamp + Math.random() * 0.18) * tuning.speedScale;
   pulse.thickness = 0.24 + Math.random() * 0.06;
   pulse.colorIndex = runtime.nextColor;
   pulse.life = 0;
   pulse.flash = 0;
   pulse.requestWeight = 0;
   pulse.hitFx = 0;
-  runtime.nextColor = (runtime.nextColor + 1) % PULSE_COLORS.length;
+  runtime.nextColor = (runtime.nextColor + 1) % runtime.paletteLaneColors.length;
 };
 
 const acquireShard = (runtime: Runtime) => {
@@ -672,7 +864,8 @@ const syncPulseLaneMesh = (
   lane: number,
   runtime: Runtime,
   dummy: THREE.Object3D,
-  colorScratch: THREE.Color
+  colorScratch: THREE.Color,
+  laneColor: THREE.Color
 ) => {
   if (!mesh) return;
   for (let i = 0; i < runtime.pulses.length; i += 1) {
@@ -717,10 +910,10 @@ const syncPulseLaneMesh = (
     mesh.setMatrixAt(i, dummy.matrix);
 
     if (pulse.parried) {
-      colorScratch.copy(PULSE_COLORS[pulse.colorIndex]).lerp(WHITE, 0.14 + hitW * 0.2);
+      colorScratch.copy(laneColor).lerp(WHITE, 0.14 + hitW * 0.2);
     } else {
       colorScratch
-        .copy(PULSE_COLORS[pulse.colorIndex])
+        .copy(laneColor)
         .lerp(WHITE, clamp((1 - appear) * 0.35 + requestW * 0.65, 0, 0.82));
     }
     if (pulse.flash > 0) colorScratch.lerp(WHITE, clamp(pulse.flash, 0, 0.8));
@@ -985,13 +1178,21 @@ function PulseParryScene() {
   const runtimeRef = useRef<Runtime>(createRuntime());
 
   const bgMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const starsMaterialRef = useRef<THREE.PointsMaterial>(null);
+  const hemiLightRef = useRef<THREE.HemisphereLight>(null);
+  const keyLightRef = useRef<THREE.PointLight>(null);
+  const fillLightRef = useRef<THREE.PointLight>(null);
   const pulseLaneRefs = useRef<Array<THREE.InstancedMesh | null>>([]);
   const sparkRef = useRef<THREE.InstancedMesh>(null);
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const coreRef = useRef<THREE.Mesh>(null);
+  const coreMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
   const auraRef = useRef<THREE.Mesh>(null);
+  const auraMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const parryZoneRef = useRef<THREE.Mesh>(null);
+  const parryZoneMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const shockRef = useRef<THREE.Mesh>(null);
+  const shockMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   const cursorRef = useRef<THREE.Mesh>(null);
   const parryPetalRefs = useRef<Array<THREE.Mesh | null>>([]);
   const runeRefs = useRef<Array<THREE.Mesh | null>>([]);
@@ -1003,6 +1204,19 @@ function PulseParryScene() {
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorScratch = useMemo(() => new THREE.Color(), []);
   const camTarget = useMemo(() => new THREE.Vector3(), []);
+  const themeDeep = useMemo(() => new THREE.Color(), []);
+  const themeEdge = useMemo(() => new THREE.Color(), []);
+  const themeFog = useMemo(() => new THREE.Color(), []);
+  const themeStars = useMemo(() => new THREE.Color(), []);
+  const themeSky = useMemo(() => new THREE.Color(), []);
+  const themeGround = useMemo(() => new THREE.Color(), []);
+  const themeKey = useMemo(() => new THREE.Color(), []);
+  const themeFill = useMemo(() => new THREE.Color(), []);
+  const themeCore = useMemo(() => new THREE.Color(), []);
+  const themeCoreEmissive = useMemo(() => new THREE.Color(), []);
+  const themeAura = useMemo(() => new THREE.Color(), []);
+  const themeZone = useMemo(() => new THREE.Color(), []);
+  const themeShock = useMemo(() => new THREE.Color(), []);
 
   const starsGeometry = useMemo(() => {
     const count = 220;
@@ -1017,7 +1231,7 @@ function PulseParryScene() {
     return geo;
   }, []);
 
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
 
   useEffect(() => {
     const mode = normalizeMode(usePulseParryStore.getState().mode);
@@ -1062,6 +1276,39 @@ function PulseParryScene() {
     const input = inputRef.current;
     const store = usePulseParryStore.getState();
     const activeMode = normalizeMode(store.mode);
+    const paletteStep = Math.floor(runtime.score / PALETTE_SCORE_STEP);
+    const desiredPalette = (runtime.paletteSeed + paletteStep) % THEME_PALETTES.length;
+    if (desiredPalette !== runtime.paletteTarget) {
+      runtime.paletteActive = runtime.paletteTarget;
+      runtime.paletteTarget = desiredPalette;
+      runtime.paletteBlend = 0;
+    }
+    runtime.paletteBlend = clamp(runtime.paletteBlend + dt * 0.72, 0, 1);
+    const paletteT = smoothstep01(runtime.paletteBlend);
+    const paletteFrom = THEME_PALETTES[runtime.paletteActive];
+    const paletteTo = THEME_PALETTES[runtime.paletteTarget];
+    for (let i = 0; i < runtime.paletteLaneColors.length; i += 1) {
+      runtime.paletteLaneColors[i]
+        .copy(paletteFrom.lane[i])
+        .lerp(paletteTo.lane[i], paletteT);
+    }
+    themeDeep.copy(paletteFrom.background.deep).lerp(paletteTo.background.deep, paletteT);
+    themeEdge.copy(paletteFrom.background.edge).lerp(paletteTo.background.edge, paletteT);
+    themeFog.copy(paletteFrom.background.fog).lerp(paletteTo.background.fog, paletteT);
+    themeStars.copy(paletteFrom.background.stars).lerp(paletteTo.background.stars, paletteT);
+    themeSky.copy(paletteFrom.lights.hemisphereSky).lerp(paletteTo.lights.hemisphereSky, paletteT);
+    themeGround
+      .copy(paletteFrom.lights.hemisphereGround)
+      .lerp(paletteTo.lights.hemisphereGround, paletteT);
+    themeKey.copy(paletteFrom.lights.key).lerp(paletteTo.lights.key, paletteT);
+    themeFill.copy(paletteFrom.lights.fill).lerp(paletteTo.lights.fill, paletteT);
+    themeCore.copy(paletteFrom.ui.core).lerp(paletteTo.ui.core, paletteT);
+    themeCoreEmissive
+      .copy(paletteFrom.ui.coreEmissive)
+      .lerp(paletteTo.ui.coreEmissive, paletteT);
+    themeAura.copy(paletteFrom.ui.aura).lerp(paletteTo.ui.aura, paletteT);
+    themeZone.copy(paletteFrom.ui.zone).lerp(paletteTo.ui.zone, paletteT);
+    themeShock.copy(paletteFrom.ui.shock).lerp(paletteTo.ui.shock, paletteT);
 
     const startTap =
       input.pointerJustDown ||
@@ -1115,18 +1362,25 @@ function PulseParryScene() {
       runtime.targetLanes = 4;
       runtime.laneMask = PHASE_LANE_MASKS[0];
       runtime.parryWindowLeft = Math.max(0, runtime.parryWindowLeft - dt);
-      runtime.hitThreshold = clamp(
-        clamp(0.07 - Math.min(0.02, runtime.elapsed * 0.00042), 0.05, 0.07) * tuning.timingScale,
-        0.05,
-        0.2
+      const challenge = clamp(runtime.elapsed * 0.0065 + runtime.score * 0.014, 0, 1.2);
+      const challengeWindowScale = clamp(1 - challenge * 0.16, 0.78, 1);
+      const baseHitWindow = clamp(
+        clamp(0.072 - Math.min(0.022, runtime.elapsed * 0.00056), 0.05, 0.072) *
+          challengeWindowScale,
+        0.045,
+        0.072
       );
+      runtime.hitThreshold = clamp(baseHitWindow * tuning.timingScale, 0.05, 0.2);
       runtime.perfectThreshold = clamp(
-        runtime.hitThreshold * (0.44 + (tuning.perfectScale - 1) * 0.32),
+        runtime.hitThreshold *
+          clamp(0.44 + (tuning.perfectScale - 1) * 0.32 - challenge * 0.04, 0.34, 0.7),
         0.03,
         runtime.hitThreshold * 0.74
       );
       runtime.parryRadius = PARRY_RADIUS_BASE;
       runtime.tapCooldown = Math.max(0, runtime.tapCooldown - dt);
+      runtime.inputBufferLeft = Math.max(0, runtime.inputBufferLeft - dt);
+      if (runtime.inputBufferLeft <= 0) runtime.inputBufferLane = -1;
       const overlapCandidate = findOverlapCandidate(runtime, 1.05);
       runtime.overlapLane = overlapCandidate?.pulse.lane ?? -1;
       runtime.overlapStrength = overlapCandidate
@@ -1151,6 +1405,8 @@ function PulseParryScene() {
         runtime.parryWindowLeft = 0;
         runtime.shockActive = false;
         runtime.shockLife = 0;
+        runtime.inputBufferLeft = 0;
+        runtime.inputBufferLane = -1;
         spawnBurst(runtime, runtime.parryRadius, DANGER, 12, 2.3, lane);
         usePulseParryStore.getState().setLives(runtime.lives);
         if (runtime.lives <= 0) {
@@ -1160,72 +1416,81 @@ function PulseParryScene() {
         }
       };
 
+      const resolveParry = (lane: number, slack: number, buffered: boolean) => {
+        const contact = findOverlapCandidate(runtime, slack);
+        if (!contact) return false;
+        if (contact.pulse.lane !== lane) {
+          if (!buffered) {
+            const missedLane = contact.pulse.lane;
+            contact.pulse.active = false;
+            contact.pulse.requestWeight = 0;
+            registerOut(
+              `Out: pressed ${LANE_INPUT_NAMES[lane]}, needed ${LANE_INPUT_NAMES[missedLane]}.`,
+              missedLane
+            );
+          }
+          return false;
+        }
+
+        const pulse = contact.pulse;
+        pulse.parried = true;
+        pulse.flash = 1;
+        pulse.hitFx = 1;
+        pulse.requestWeight = Math.max(0, pulse.requestWeight - 0.65);
+        runtime.parryAngle = pulse.angle;
+        runtime.parryWindowLeft = runtime.parryWindow;
+        runtime.parries += 1;
+        runtime.streak += 1;
+        const perfect = contact.diff <= runtime.perfectThreshold + contact.contactRadius * 0.46;
+        runtime.perfectCombo = perfect ? runtime.perfectCombo + 1 : 0;
+        runtime.multiplier = clamp(
+          1 + Math.floor(runtime.streak / 6) * 0.2 + runtime.perfectCombo * 0.05,
+          1,
+          3.2
+        );
+        const streakBonus = runtime.streak > 0 && runtime.streak % 8 === 0;
+        let scoreGain = 1;
+        if (perfect) scoreGain += 1;
+        if (streakBonus) scoreGain += 1;
+        scoreGain = Math.max(1, Math.round(scoreGain * (0.75 + runtime.multiplier * 0.25)));
+        runtime.score += scoreGain;
+        runtime.resonance = clamp(runtime.resonance + 0.48, 0, 12);
+        runtime.coreGlow = Math.min(1.7, runtime.coreGlow + 0.32);
+        runtime.shake = Math.min(1.1, runtime.shake + 0.16);
+        runtime.inputBufferLeft = 0;
+        runtime.inputBufferLane = -1;
+
+        const laneColor = runtime.paletteLaneColors[pulse.colorIndex % runtime.paletteLaneColors.length];
+        const shardCount = perfect ? 16 : 11;
+        spawnBurst(runtime, runtime.parryRadius, laneColor, shardCount, 2.4, pulse.lane);
+        spawnBurst(runtime, runtime.parryRadius * 0.9, WHITE, perfect ? 9 : 6, 2.05, pulse.lane);
+        runtime.perfectFlash = 1;
+        const scoreFxTone: ScoreFxTone = streakBonus ? 'streak' : perfect ? 'perfect' : 'normal';
+        const scoreFxText = streakBonus
+          ? `+${scoreGain} STREAK`
+          : perfect
+            ? `+${scoreGain} PERFECT`
+            : `+${scoreGain}`;
+        usePulseParryStore.getState().onScoreFx(scoreFxText, scoreFxTone);
+        if (perfect) {
+          playClick(true);
+          usePulseParryStore.getState().onPerfectFx();
+        } else {
+          playClick(false);
+        }
+        return true;
+      };
+
       if (laneInput !== null && runtime.tapCooldown <= 0) {
         runtime.tapCooldown = 0.08;
         runtime.shockActive = true;
         runtime.shockRadius = runtime.parryRadius;
         runtime.shockLife = runtime.shockDuration;
         runtime.coreGlow = Math.min(1.25, runtime.coreGlow + 0.08);
+        runtime.inputBufferLane = laneInput;
+        runtime.inputBufferLeft = clamp(0.09 * tuning.timingScale, 0.09, 0.24);
         usePulseParryStore.getState().onTapFx();
-
-        const contact = findOverlapCandidate(runtime, 1);
-        if (contact && contact.pulse.lane === laneInput) {
-          const pulse = contact.pulse;
-          pulse.parried = true;
-          pulse.flash = 1;
-          pulse.hitFx = 1;
-          pulse.requestWeight = Math.max(0, pulse.requestWeight - 0.65);
-          runtime.parryAngle = pulse.angle;
-          runtime.parryWindowLeft = runtime.parryWindow;
-          runtime.parries += 1;
-          runtime.streak += 1;
-          const perfect = contact.diff <= runtime.perfectThreshold + contact.contactRadius * 0.4;
-          runtime.perfectCombo = perfect ? runtime.perfectCombo + 1 : 0;
-          runtime.multiplier = clamp(
-            1 + Math.floor(runtime.streak / 6) * 0.2 + runtime.perfectCombo * 0.05,
-            1,
-            3.2
-          );
-          const streakBonus = runtime.streak > 0 && runtime.streak % 8 === 0;
-          let scoreGain = 1;
-          if (perfect) scoreGain += 1;
-          if (streakBonus) scoreGain += 1;
-          scoreGain = Math.max(1, Math.round(scoreGain * (0.75 + runtime.multiplier * 0.25)));
-          runtime.score += scoreGain;
-          runtime.resonance = clamp(runtime.resonance + 0.48, 0, 12);
-          runtime.coreGlow = Math.min(1.65, runtime.coreGlow + 0.3);
-          runtime.shake = Math.min(1.2, runtime.shake + 0.18);
-
-          spawnBurst(
-            runtime,
-            runtime.parryRadius,
-            PULSE_COLORS[pulse.colorIndex],
-            10,
-            2.3,
-            pulse.lane
-          );
-          runtime.perfectFlash = 1;
-          const scoreFxTone: ScoreFxTone = streakBonus ? 'streak' : perfect ? 'perfect' : 'normal';
-          const scoreFxText = streakBonus
-            ? `+${scoreGain} STREAK`
-            : perfect
-              ? `+${scoreGain} PERFECT`
-              : `+${scoreGain}`;
-          usePulseParryStore.getState().onScoreFx(scoreFxText, scoreFxTone);
-          if (perfect) {
-            playClick(true);
-            usePulseParryStore.getState().onPerfectFx();
-          } else {
-            playClick(false);
-          }
-        } else if (contact) {
-          const missedLane = contact.pulse.lane;
-          contact.pulse.active = false;
-          registerOut(
-            `Out: pressed ${LANE_INPUT_NAMES[laneInput]}, needed ${LANE_INPUT_NAMES[missedLane]}.`,
-            missedLane
-          );
-        }
+        resolveParry(laneInput, 1.16, false);
       }
 
       if (!failed) {
@@ -1279,7 +1544,11 @@ function PulseParryScene() {
           0,
           1
         );
-        if (pulse.radius > runtime.parryRadius + contactRadius + runtime.hitThreshold) {
+        const bufferLateGrace =
+          runtime.inputBufferLeft > 0 && runtime.inputBufferLane === pulse.lane
+            ? runtime.hitThreshold * 0.42
+            : 0;
+        if (pulse.radius > runtime.parryRadius + contactRadius + runtime.hitThreshold * 1.18 + bufferLateGrace) {
           pulse.active = false;
           pulse.requestWeight = 0;
           registerOut(`Out: missed ${LANE_INPUT_NAMES[pulse.lane]} touch window.`, pulse.lane);
@@ -1290,6 +1559,15 @@ function PulseParryScene() {
           pulse.active = false;
           pulse.requestWeight = 0;
         }
+      }
+
+      if (
+        !failed &&
+        runtime.inputBufferLeft > 0 &&
+        runtime.inputBufferLane >= 0 &&
+        runtime.tapCooldown <= 0.065
+      ) {
+        resolveParry(runtime.inputBufferLane, 1.22, true);
       }
 
       if (!failed && runtime.hudCommit >= 0.08) {
@@ -1340,12 +1618,47 @@ function PulseParryScene() {
     if (bgMaterialRef.current) {
       bgMaterialRef.current.uniforms.uTime.value += dt;
       bgMaterialRef.current.uniforms.uFlash.value = runtime.perfectFlash;
+      bgMaterialRef.current.uniforms.uDeep.value.copy(themeDeep);
+      bgMaterialRef.current.uniforms.uEdge.value.copy(themeEdge);
+    }
+    if (scene.background instanceof THREE.Color) {
+      scene.background.copy(themeFog);
+    }
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.copy(themeFog);
+    }
+    if (starsMaterialRef.current) {
+      starsMaterialRef.current.color.copy(themeStars);
+    }
+    if (hemiLightRef.current) {
+      hemiLightRef.current.color.copy(themeSky);
+      hemiLightRef.current.groundColor.copy(themeGround);
+    }
+    if (keyLightRef.current) {
+      keyLightRef.current.color.copy(themeKey);
+    }
+    if (fillLightRef.current) {
+      fillLightRef.current.color.copy(themeFill);
+    }
+    if (coreMaterialRef.current) {
+      coreMaterialRef.current.color.copy(themeCore);
+      coreMaterialRef.current.emissive.copy(themeCoreEmissive);
+    }
+    if (auraMaterialRef.current) {
+      auraMaterialRef.current.color.copy(themeAura);
+    }
+    if (parryZoneMaterialRef.current) {
+      parryZoneMaterialRef.current.color.copy(themeZone);
+    }
+    if (shockMaterialRef.current) {
+      shockMaterialRef.current.color.copy(themeShock);
     }
 
     if (coreRef.current) {
       coreRef.current.position.set(0, 0.02, 0);
-      const mat = coreRef.current.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = 0.5 + runtime.coreGlow * 0.8 + runtime.perfectCombo * 0.05;
+      if (coreMaterialRef.current) {
+        coreMaterialRef.current.emissiveIntensity = 0.5 + runtime.coreGlow * 0.8 + runtime.perfectCombo * 0.05;
+      }
       const coreScale = 1 + runtime.coreGlow * 0.08;
       coreRef.current.scale.setScalar(coreScale);
     }
@@ -1353,15 +1666,25 @@ function PulseParryScene() {
     if (auraRef.current) {
       const auraScale = 0.8 + runtime.coreGlow * 0.38 + runtime.perfectCombo * 0.02;
       auraRef.current.scale.set(auraScale, auraScale, auraScale);
-      const auraMat = auraRef.current.material as THREE.MeshBasicMaterial;
-      auraMat.opacity = clamp(0.24 + runtime.coreGlow * 0.32 + runtime.perfectCombo * 0.014, 0.2, 0.8);
+      if (auraMaterialRef.current) {
+        auraMaterialRef.current.opacity = clamp(
+          0.24 + runtime.coreGlow * 0.32 + runtime.perfectCombo * 0.014,
+          0.2,
+          0.8
+        );
+      }
     }
 
     if (parryZoneRef.current) {
       const zoneScale = runtime.parryRadius;
       parryZoneRef.current.scale.setScalar(zoneScale);
-      const zoneMat = parryZoneRef.current.material as THREE.MeshBasicMaterial;
-      zoneMat.opacity = clamp(0.18 + runtime.coreGlow * 0.18 + runtime.perfectCombo * 0.01, 0.16, 0.48);
+      if (parryZoneMaterialRef.current) {
+        parryZoneMaterialRef.current.opacity = clamp(
+          0.18 + runtime.coreGlow * 0.18 + runtime.perfectCombo * 0.01,
+          0.16,
+          0.48
+        );
+      }
     }
 
     if (shockRef.current) {
@@ -1371,8 +1694,9 @@ function PulseParryScene() {
       const r = Math.max(0.0001, runtime.shockRadius * (1 + pulseT * 0.1));
       shockRef.current.visible = visible;
       shockRef.current.scale.setScalar(r);
-      const shockMat = shockRef.current.material as THREE.MeshBasicMaterial;
-      shockMat.opacity = clamp(0.88 * lifeT, 0, 0.88);
+      if (shockMaterialRef.current) {
+        shockMaterialRef.current.opacity = clamp(0.88 * lifeT, 0, 0.88);
+      }
     }
 
     if (cursorRef.current) {
@@ -1409,7 +1733,7 @@ function PulseParryScene() {
         const lockedScale = 0.285;
         petal.scale.setScalar(isLocked ? lockedScale : isHot ? hotScale : idleScale);
         const mat = petal.material as THREE.MeshBasicMaterial;
-        mat.color.copy(isLocked || isHot ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
+        mat.color.copy(isLocked || isHot ? WHITE : runtime.paletteLaneColors[i % runtime.paletteLaneColors.length]);
         mat.opacity = isLocked ? 0.95 : isHot ? clamp(0.68 + runtime.overlapStrength * 0.25, 0.68, 0.96) : 0.6;
       }
 
@@ -1435,7 +1759,9 @@ function PulseParryScene() {
             : 0.21 + pulse * 0.014;
         rune.scale.setScalar(runeScale);
         const mat = rune.material as THREE.MeshBasicMaterial;
-        mat.color.copy(isLocked ? WHITE : isHot ? WHITE : PULSE_COLORS[i % PULSE_COLORS.length]);
+        mat.color.copy(
+          isLocked ? WHITE : isHot ? WHITE : runtime.paletteLaneColors[i % runtime.paletteLaneColors.length]
+        );
         mat.opacity = isLocked
           ? 0.97
           : isHot
@@ -1451,12 +1777,20 @@ function PulseParryScene() {
         laneBeam.scale.set(1, Math.max(0.75, runtime.parryRadius / 1.55), 1);
         laneBeam.rotation.set(-Math.PI * 0.5, 0, angle);
         const mat = laneBeam.material as THREE.MeshBasicMaterial;
+        mat.color.copy(runtime.paletteLaneColors[i % runtime.paletteLaneColors.length]);
         mat.opacity = (lanePulse + (isLocked ? 0.26 : 0) + (isHot ? runtime.overlapStrength * 0.25 : 0)) * 0.62;
       }
     }
 
     for (let lane = 0; lane < CARDINAL_ANGLES.length; lane += 1) {
-      syncPulseLaneMesh(pulseLaneRefs.current[lane], lane, runtime, dummy, colorScratch);
+      syncPulseLaneMesh(
+        pulseLaneRefs.current[lane],
+        lane,
+        runtime,
+        dummy,
+        colorScratch,
+        runtime.paletteLaneColors[lane % runtime.paletteLaneColors.length]
+      );
     }
 
     if (sparkRef.current) {
@@ -1487,7 +1821,7 @@ function PulseParryScene() {
         sparkRef.current.setMatrixAt(i, dummy.matrix);
 
         colorScratch
-          .copy(PULSE_COLORS[i % PULSE_COLORS.length])
+          .copy(runtime.paletteLaneColors[i % runtime.paletteLaneColors.length])
           .lerp(WHITE, clamp(0.2 + sparkIntensity * 0.55, 0, 0.85));
         sparkRef.current.setColorAt(i, colorScratch);
       }
