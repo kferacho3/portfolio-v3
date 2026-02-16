@@ -1,41 +1,37 @@
-export type FixedStepper = {
-  tick: (delta: number, simulate: (dt: number) => void) => number;
-  reset: () => void;
-  getAlpha: () => number;
-  readonly step: number;
+export type FixedStepState = {
+  accumulator: number;
+  step: number;
+  maxDelta: number;
+  maxSubsteps: number;
 };
 
-export function createFixedStepper(
+export const createFixedStepState = (
   step = 1 / 120,
   maxDelta = 0.05,
-  maxSubSteps = 8
-): FixedStepper {
-  let accumulator = 0;
+  maxSubsteps = 8
+): FixedStepState => ({
+  accumulator: 0,
+  step,
+  maxDelta,
+  maxSubsteps,
+});
 
-  return {
-    step,
-    tick(delta, simulate) {
-      const clamped = Math.min(Math.max(delta, 0), maxDelta);
-      accumulator += clamped;
+export const resetFixedStepState = (state: FixedStepState) => {
+  state.accumulator = 0;
+};
 
-      let steps = 0;
-      while (accumulator >= step && steps < maxSubSteps) {
-        simulate(step);
-        accumulator -= step;
-        steps += 1;
-      }
+export const consumeFixedStep = (
+  state: FixedStepState,
+  delta: number,
+  tick: (dt: number) => void
+) => {
+  const clamped = Math.min(delta, state.maxDelta);
+  state.accumulator += clamped;
 
-      if (steps >= maxSubSteps && accumulator >= step) {
-        accumulator = 0;
-      }
-
-      return steps;
-    },
-    reset() {
-      accumulator = 0;
-    },
-    getAlpha() {
-      return step > 0 ? accumulator / step : 0;
-    },
-  };
-}
+  let loops = 0;
+  while (state.accumulator >= state.step && loops < state.maxSubsteps) {
+    tick(state.step);
+    state.accumulator -= state.step;
+    loops += 1;
+  }
+};

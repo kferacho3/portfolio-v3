@@ -4,7 +4,11 @@ import * as THREE from 'three';
 
 import { GAME } from '../constants';
 import type { RingData } from '../level/types';
-import type { OctaObstacleType, OctaPlatformType, OctaTileVariant } from '../types';
+import type {
+  OctaObstacleType,
+  OctaPlatformType,
+  OctaTileVariant,
+} from '../types';
 import { createTunnelMaterial } from '../shaders/tunnelMaterial';
 
 type Props = {
@@ -25,11 +29,10 @@ const variantToFloat = (variant: OctaTileVariant) => {
   if (variant === 'classic') return 0;
   if (variant === 'alloy') return 1;
   if (variant === 'prismatic') return 2;
-  if (variant === 'trailChevron') return 3;
-  if (variant === 'gridForge') return 4;
-  if (variant === 'diamondTess') return 5;
-  if (variant === 'sunkenSteps') return 6;
-  return 7;
+  if (variant === 'gridForge') return 3;
+  if (variant === 'diamondTess') return 4;
+  if (variant === 'sunkenSteps') return 5;
+  return 6;
 };
 
 const obstacleToFloat = (obstacle: OctaObstacleType) => {
@@ -49,7 +52,6 @@ const obstacleToFloat = (obstacle: OctaObstacleType) => {
   if (obstacle === 'ion_barrier') return 13 / 16;
   if (obstacle === 'void_serpent') return 14 / 16;
   if (obstacle === 'ember_wave') return 15 / 16;
-  if (obstacle === 'quantum_shard') return 1;
   return 1;
 };
 
@@ -84,7 +86,7 @@ export function TunnelMesh({
   const lastBaseRef = useRef(Number.NaN);
 
   const geometry = useMemo(() => {
-    const base = new THREE.BoxGeometry(0.72, 0.1, Math.max(0.42, spacing * 0.82));
+    const base = new THREE.BoxGeometry(0.74, 0.09, Math.max(0.42, spacing * 0.82));
     const instanced = new THREE.InstancedBufferGeometry();
     instanced.index = base.index;
     instanced.attributes = base.attributes;
@@ -148,9 +150,7 @@ export function TunnelMesh({
           activeAttr.array[ptr] = solid ? 1 : 0;
           sidesAttr.array[ptr] = ring.sides;
           stageAttr.array[ptr] = ring.stageId;
-          hazardAttr.array[ptr] = laneMeta
-            ? obstacleToFloat(laneMeta.obstacle)
-            : 0;
+          hazardAttr.array[ptr] = laneMeta ? obstacleToFloat(laneMeta.obstacle) : 0;
           platformAttr.array[ptr] = laneMeta
             ? platformToFloat(laneMeta.platform)
             : 0;
@@ -173,8 +173,6 @@ export function TunnelMesh({
   };
 
   useFrame((state) => {
-    const mat = material;
-
     const baseRing = baseRingRef.current;
     if (baseRing !== lastBaseRef.current) {
       applyRingWindow(baseRing);
@@ -182,15 +180,15 @@ export function TunnelMesh({
     }
 
     const variant = tileVariantRef.current;
-    mat.uniforms.uTime.value = state.clock.elapsedTime;
-    mat.uniforms.uRadius.value = GAME.radius;
-    mat.uniforms.uSpacing.value = spacing;
-    mat.uniforms.uScroll.value = scrollOffsetRef.current;
-    mat.uniforms.uSpeed.value = speedRef.current;
-    mat.uniforms.uAudioReactive.value = audioReactiveRef.current;
-    mat.uniforms.uCombo.value = comboRef.current;
-    mat.uniforms.uVariant.value = variantToFloat(variant);
-    mat.uniforms.uStageFlash.value = stageFlashRef.current;
+    material.uniforms.uTime.value = state.clock.elapsedTime;
+    material.uniforms.uRadius.value = GAME.radius;
+    material.uniforms.uSpacing.value = spacing;
+    material.uniforms.uScroll.value = scrollOffsetRef.current;
+    material.uniforms.uSpeed.value = speedRef.current;
+    material.uniforms.uAudioReactive.value = audioReactiveRef.current;
+    material.uniforms.uCombo.value = comboRef.current;
+    material.uniforms.uVariant.value = variantToFloat(variant);
+    material.uniforms.uStageFlash.value = stageFlashRef.current;
   });
 
   return <mesh geometry={geometry} material={material} frustumCulled={false} />;

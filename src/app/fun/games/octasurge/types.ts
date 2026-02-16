@@ -12,11 +12,22 @@ export type OctaTileVariant =
   | 'classic'
   | 'alloy'
   | 'prismatic'
-  | 'trailChevron'
   | 'gridForge'
   | 'diamondTess'
   | 'sunkenSteps'
-  | 'rippleField';
+  | 'ripple';
+
+export type OctaRunnerShape =
+  | 'cube'
+  | 'tri_prism'
+  | 'hex_prism'
+  | 'pyramid'
+  | 'tetra'
+  | 'octa'
+  | 'dodeca'
+  | 'icosa'
+  | 'star_prism'
+  | 'fortress';
 
 export type OctaPlatformType =
   | 'smooth_lane'
@@ -56,12 +67,11 @@ export type CollectibleKind = 'shard' | 'core' | 'sync' | null;
 export type StageProfile = {
   id: number;
   label: string;
-  sides: number;
+  sides: 6 | 8 | 10 | 12;
   scoreGate: number;
   speedMultiplier: number;
   holeDensity: number;
   obstacleDensity: number;
-  warpAmplitude: number;
   collectibleChance: number;
 };
 
@@ -74,24 +84,6 @@ export type SegmentLanePattern = {
   obstacleCycle: number;
   obstacleOpenWindow: number;
   obstacleWindowStart: number;
-};
-
-export type SegmentPattern = {
-  slot: number;
-  index: number;
-  z: number;
-  prevZ: number;
-  sides: number;
-  solidMask: number;
-  obstacleMask: number;
-  lanePatterns: SegmentLanePattern[];
-  safeLane: number;
-  collectibleLane: number;
-  collectibleType: CollectibleKind;
-  collected: boolean;
-  warpSeed: number;
-  stageId: number;
-  checked: boolean;
 };
 
 export type OctaReplayInputAction =

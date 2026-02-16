@@ -30,7 +30,11 @@ import { PrismJumpUI } from '../games/prismjump/_components/PrismJumpUI';
 import { OctaSurgeUI } from '../games/octasurge/_components/OctaSurgeUI';
 import { octaSurgeState } from '../games/octasurge/state';
 import { useOctaRuntimeStore } from '../games/octasurge/runtime';
-import type { OctaCameraMode, OctaSurgeMode } from '../games/octasurge/types';
+import type {
+  OctaCameraMode,
+  OctaRunnerShape,
+  OctaSurgeMode,
+} from '../games/octasurge/types';
 
 // Valid game IDs for static generation
 const VALID_GAME_IDS: GameId[] = [
@@ -403,6 +407,12 @@ export default function GamePage({ params }: GamePageProps) {
           }}
           onCycleTileVariant={(direction) => {
             octaSurgeState.cycleTileVariant(direction);
+          }}
+          onSelectRunnerShape={(shape: OctaRunnerShape) => {
+            octaSurgeState.setRunnerShape(shape);
+          }}
+          onCycleRunnerShape={(direction) => {
+            octaSurgeState.cycleRunnerShape(direction);
           }}
         />
       )}

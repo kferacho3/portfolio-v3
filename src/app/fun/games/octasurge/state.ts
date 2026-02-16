@@ -3,7 +3,9 @@ import { proxy } from 'valtio';
 import {
   CAMERA_MODE_LABEL,
   GAME,
+  OCTA_DEFAULT_RUNNER_SHAPE,
   OCTA_DEFAULT_UNLOCKED_VARIANTS,
+  OCTA_RUNNER_SHAPES,
   OCTA_TILE_UNLOCK_THRESHOLDS,
   OCTA_TILE_VARIANTS,
   STORAGE_KEYS,
@@ -17,6 +19,7 @@ import type {
   OctaPlatformType,
   OctaReplayModeState,
   OctaReplayRun,
+  OctaRunnerShape,
   OctaSurgeMode,
   OctaSurgePhase,
   OctaTileVariant,
@@ -49,10 +52,20 @@ const safeVariant = (raw: string | null): OctaTileVariant => {
   return OCTA_DEFAULT_UNLOCKED_VARIANTS[0];
 };
 
+const safeRunnerShape = (raw: string | null): OctaRunnerShape => {
+  if (raw && OCTA_RUNNER_SHAPES.includes(raw as OctaRunnerShape)) {
+    return raw as OctaRunnerShape;
+  }
+  return OCTA_DEFAULT_RUNNER_SHAPE;
+};
+
 const safeVariantTier = (raw: string | null) => {
   const value = raw ? Number(raw) : NaN;
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(OCTA_TILE_UNLOCK_THRESHOLDS.length, Math.floor(value)));
+  return Math.max(
+    0,
+    Math.min(OCTA_TILE_UNLOCK_THRESHOLDS.length, Math.floor(value))
+  );
 };
 
 const parseUnlockedVariants = (raw: string | null): OctaTileVariant[] => {
@@ -99,6 +112,7 @@ const parseReplayRun = (raw: string | null): OctaReplayRun | null => {
   try {
     const parsed = JSON.parse(raw) as Partial<OctaReplayRun> & {
       events?: unknown;
+      ghostFrames?: unknown;
     };
     if (parsed.version !== 1) return null;
 
@@ -122,7 +136,7 @@ const parseReplayRun = (raw: string | null): OctaReplayRun | null => {
         ? parsed.outcome
         : 'abort';
     const endReason =
-      typeof parsed.endReason === 'string' ? parsed.endReason : 'Run replay';
+      typeof parsed.endReason === 'string' ? parsed.endReason : 'Replay run';
 
     if (!Number.isFinite(seed) || !Number.isFinite(totalFrames)) return null;
 
@@ -196,9 +210,16 @@ const parseReplayRun = (raw: string | null): OctaReplayRun | null => {
   }
 };
 
+const cloneReplayRun = (run: OctaReplayRun): OctaReplayRun => ({
+  ...run,
+  events: run.events.map((event) => ({ ...event })),
+  ghostFrames: run.ghostFrames.map((frame) => ({ ...frame })),
+});
+
 const persistVariantProgress = () => {
   if (typeof localStorage === 'undefined') return;
   localStorage.setItem(STORAGE_KEYS.tileVariant, octaSurgeState.tileVariant);
+  localStorage.setItem(STORAGE_KEYS.runnerShape, octaSurgeState.runnerShape);
   localStorage.setItem(
     STORAGE_KEYS.unlockedVariants,
     JSON.stringify(octaSurgeState.unlockedVariants)
@@ -218,12 +239,6 @@ const unlockNextVariant = () => {
   octaSurgeState.unlockedVariants = [...octaSurgeState.unlockedVariants, next];
   octaSurgeState.lastUnlockedVariant = next;
 };
-
-const cloneReplayRun = (run: OctaReplayRun): OctaReplayRun => ({
-  ...run,
-  events: run.events.map((event) => ({ ...event })),
-  ghostFrames: run.ghostFrames.map((frame) => ({ ...frame })),
-});
 
 const persistReplay = () => {
   if (typeof localStorage === 'undefined') return;
@@ -247,6 +262,8 @@ export const octaSurgeState = proxy({
   variantUnlockTier: 0,
   styleShards: 0,
   lastUnlockedVariant: '' as '' | OctaTileVariant,
+
+  runnerShape: OCTA_DEFAULT_RUNNER_SHAPE as OctaRunnerShape,
 
   score: 0,
   bestScore: 0,
@@ -282,10 +299,6 @@ export const octaSurgeState = proxy({
     this.mode = mode;
   },
 
-  setFxLevel(level: OctaFxLevel) {
-    this.fxLevel = level;
-  },
-
   cycleFxLevel() {
     this.fxLevel =
       this.fxLevel === 'full'
@@ -297,16 +310,6 @@ export const octaSurgeState = proxy({
 
   setCameraMode(mode: OctaCameraMode) {
     this.cameraMode = mode;
-    this.save();
-  },
-
-  cycleCameraMode() {
-    this.cameraMode =
-      this.cameraMode === 'chase'
-        ? 'firstPerson'
-        : this.cameraMode === 'firstPerson'
-          ? 'topDown'
-          : 'chase';
     this.save();
   },
 
@@ -388,6 +391,7 @@ export const octaSurgeState = proxy({
 
   load() {
     if (typeof localStorage === 'undefined') return;
+
     this.bestScore = safeNum(localStorage.getItem(STORAGE_KEYS.bestScore), 0);
     this.bestClassic = safeNum(localStorage.getItem(STORAGE_KEYS.bestClassic), 0);
     this.bestDaily = safeNum(localStorage.getItem(STORAGE_KEYS.bestDaily), 0);
@@ -408,6 +412,7 @@ export const octaSurgeState = proxy({
       localStorage.getItem(STORAGE_KEYS.variantUnlockTier)
     );
     this.tileVariant = safeVariant(localStorage.getItem(STORAGE_KEYS.tileVariant));
+    this.runnerShape = safeRunnerShape(localStorage.getItem(STORAGE_KEYS.runnerShape));
 
     let expectedTier = 0;
     while (
@@ -464,6 +469,23 @@ export const octaSurgeState = proxy({
         this.unlockedVariants.length) %
       this.unlockedVariants.length;
     this.tileVariant = this.unlockedVariants[nextIndex] ?? this.tileVariant;
+    persistVariantProgress();
+  },
+
+  setRunnerShape(shape: OctaRunnerShape) {
+    if (!OCTA_RUNNER_SHAPES.includes(shape)) return;
+    this.runnerShape = shape;
+    persistVariantProgress();
+  },
+
+  cycleRunnerShape(direction = 1) {
+    const currentIndex = Math.max(0, OCTA_RUNNER_SHAPES.indexOf(this.runnerShape));
+    const nextIndex =
+      (currentIndex +
+        (direction >= 0 ? 1 : -1) +
+        OCTA_RUNNER_SHAPES.length) %
+      OCTA_RUNNER_SHAPES.length;
+    this.runnerShape = OCTA_RUNNER_SHAPES[nextIndex] ?? this.runnerShape;
     persistVariantProgress();
   },
 

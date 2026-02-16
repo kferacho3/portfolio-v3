@@ -42,7 +42,7 @@ const toModeSides = (sides: number): ModeSides => {
 };
 
 const stageByIndex = (index: number) => {
-  const progress = index * 74;
+  const progress = index * 72;
   let stage = STAGE_PROFILES[0];
   for (const candidate of STAGE_PROFILES) {
     if (progress >= candidate.scoreGate) stage = candidate;
@@ -87,32 +87,34 @@ const platformWeight = (
 
   let weight =
     platform === 'smooth_lane'
-      ? 3.1
+      ? 3.4
       : platform === 'drift_boost' || platform === 'reverse_drift'
-        ? 1.02
-      : platform === 'pulse_pad' || platform === 'spring_pad'
-          ? 0.82
-        : platform === 'warp_gate'
-          ? 0.58
-        : platform === 'phase_lane'
-          ? 0.54
-        : platform === 'resin_lane'
-          ? 0.7
-        : platform === 'crusher_lane'
-          ? 0.52
-          : platform === 'split_rail'
-            ? 0.68
-            : platform === 'gravity_drift'
-              ? 0.64
-              : 0.86;
+        ? 1.1
+        : platform === 'pulse_pad' || platform === 'spring_pad'
+          ? 0.84
+          : platform === 'warp_gate'
+            ? 0.6
+            : platform === 'phase_lane'
+              ? 0.58
+              : platform === 'resin_lane'
+                ? 0.7
+                : platform === 'crusher_lane'
+                  ? 0.55
+                  : platform === 'overdrive_strip'
+                    ? 0.76
+                    : platform === 'split_rail'
+                      ? 0.72
+                      : platform === 'gravity_drift'
+                        ? 0.68
+                        : 0.9;
 
-  weight *= 1 + (stageId - 1) * 0.15;
+  weight *= 1 + (stageId - 1) * 0.14;
 
-  if (distance <= 1 && platform !== 'smooth_lane') weight *= 0.68;
-  if (platform === 'smooth_lane' && distance <= 1) weight *= 1.38;
-  if (platform === 'phase_lane' && stageId <= 2) weight *= 0.58;
-  if (platform === 'crusher_lane' && stageId <= 2) weight *= 0.56;
-  if (platform === 'warp_gate' && stageId <= 1) weight *= 0.6;
+  if (distance <= 1 && platform !== 'smooth_lane') weight *= 0.62;
+  if (platform === 'smooth_lane' && distance <= 1) weight *= 1.42;
+  if (platform === 'phase_lane' && stageId <= 2) weight *= 0.56;
+  if (platform === 'crusher_lane' && stageId <= 2) weight *= 0.58;
+  if (platform === 'warp_gate' && stageId <= 1) weight *= 0.62;
   if (platform === 'gravity_drift' && stageId <= 2) weight *= 0.72;
 
   return weight;
@@ -127,45 +129,45 @@ const obstacleWeight = (
     obstacle === 'arc_blade'
       ? 0.62
       : obstacle === 'shutter_gate'
-        ? 0.58
+        ? 0.56
         : obstacle === 'pulse_laser'
-          ? 0.52
+          ? 0.54
           : obstacle === 'gravity_orb'
             ? 0.5
             : obstacle === 'prism_mine'
               ? 0.46
               : obstacle === 'flame_jet'
-                ? 0.42
+                ? 0.44
                 : obstacle === 'phase_portal'
-                  ? 0.46
+                  ? 0.5
                   : obstacle === 'trap_split'
-                    ? 0.56
-        : obstacle === 'magnetron'
-          ? 0.44
-        : obstacle === 'spike_fan'
-          ? 0.54
-        : obstacle === 'thunder_column'
-          ? 0.42
-          : obstacle === 'ion_barrier'
-            ? 0.48
-            : obstacle === 'void_serpent'
-              ? 0.44
-              : obstacle === 'ember_wave'
-                ? 0.46
-                : obstacle === 'quantum_shard'
-                  ? 0.4
-                  : 0.5;
+                    ? 0.57
+                    : obstacle === 'magnetron'
+                      ? 0.46
+                      : obstacle === 'spike_fan'
+                        ? 0.56
+                        : obstacle === 'thunder_column'
+                          ? 0.44
+                          : obstacle === 'vortex_saw'
+                            ? 0.5
+                            : obstacle === 'ion_barrier'
+                              ? 0.52
+                              : obstacle === 'void_serpent'
+                                ? 0.43
+                                : obstacle === 'ember_wave'
+                                  ? 0.48
+                                  : 0.4;
 
-  weight *= 1 + (stageId - 1) * 0.17;
+  weight *= 1 + (stageId - 1) * 0.16;
   if (mode === 'daily') weight *= 1.1;
 
   if (
     (obstacle === 'flame_jet' || obstacle === 'thunder_column') &&
     stageId <= 2
   ) {
-    weight *= 0.7;
+    weight *= 0.68;
   }
-  if (obstacle === 'quantum_shard' && stageId <= 2) weight *= 0.62;
+  if (obstacle === 'quantum_shard' && stageId <= 2) weight *= 0.64;
 
   return weight;
 };
@@ -174,7 +176,7 @@ const obstacleOpenRatioBias = (
   obstacle: Exclude<OctaObstacleType, 'none'>
 ): number => {
   if (obstacle === 'arc_blade' || obstacle === 'pulse_laser') return -0.08;
-  if (obstacle === 'vortex_saw' || obstacle === 'spike_fan') return -0.04;
+  if (obstacle === 'vortex_saw' || obstacle === 'spike_fan') return -0.05;
   if (obstacle === 'flame_jet' || obstacle === 'thunder_column') return 0.06;
   if (obstacle === 'ion_barrier' || obstacle === 'ember_wave') return -0.02;
   if (obstacle === 'void_serpent' || obstacle === 'quantum_shard') return 0.04;
@@ -184,8 +186,8 @@ const obstacleOpenRatioBias = (
 
 const collectibleKind = (rand: () => number): CollectibleKind => {
   const roll = rand();
-  if (roll < 0.54) return 'shard';
-  if (roll < 0.82) return 'core';
+  if (roll < 0.55) return 'shard';
+  if (roll < 0.83) return 'core';
   return 'sync';
 };
 
@@ -198,12 +200,13 @@ const chooseCollectible = (
 ) => {
   if (rand() > chance) return { lane: -1, type: null as CollectibleKind };
   const type = collectibleKind(rand);
+
   const preferred =
     type === 'core'
       ? normalizeLane(safeLane + Math.floor(sides / 2), sides)
       : safeLane;
 
-  if ((solidMask & laneBit(preferred, sides)) !== 0 && rand() < 0.78) {
+  if ((solidMask & laneBit(preferred, sides)) !== 0 && rand() < 0.8) {
     return { lane: preferred, type };
   }
 
@@ -240,14 +243,16 @@ export const createRingRunGenerator = (
   const buildRing = (index: number): RingData => {
     const stage = stageByIndex(index);
     const sides = toModeSides(stage.sides);
-    const rand = mulberry32(hashSeed(seed, index));
+    const rand = mulberry32(
+      hashSeed(seed ^ (mode === 'daily' ? 0x77a5f1 : mode === 'endless' ? 0x5a3c1d : 0x1234567), index)
+    );
 
     const driftRoll = rand();
     let drift = 0;
     if (driftRoll < 0.2) drift = -1;
     else if (driftRoll < 0.4) drift = 1;
-    else if (stage.id >= 3 && driftRoll < 0.49) drift = -2;
-    else if (stage.id >= 3 && driftRoll < 0.58) drift = 2;
+    else if (stage.id >= 3 && driftRoll < 0.48) drift = -2;
+    else if (stage.id >= 3 && driftRoll < 0.56) drift = 2;
 
     const safeLane = normalizeLane(previousSafeLane + drift, sides);
 
@@ -255,9 +260,9 @@ export const createRingRunGenerator = (
     const holeDensity =
       stage.holeDensity +
       (mode === 'daily' ? 0.08 : 0) +
-      Math.max(0, (stage.id - 2) * 0.016);
+      Math.max(0, (stage.id - 2) * 0.014);
     const holeTarget = clamp(
-      Math.floor(sides * holeDensity + rand() * 2.3),
+      Math.floor(sides * holeDensity + rand() * 2.4),
       1,
       Math.max(1, sides - 1)
     );
@@ -272,7 +277,7 @@ export const createRingRunGenerator = (
         Math.abs(lane - safeLane),
         sides - Math.abs(lane - safeLane)
       );
-      if (dist <= 1 && rand() < 0.8) continue;
+      if (dist <= 1 && rand() < 0.82) continue;
       const bit = laneBit(lane, sides);
       if ((solidMask & bit) === 0) continue;
       solidMask &= ~bit;
@@ -300,19 +305,19 @@ export const createRingRunGenerator = (
       platformPhase: rand() * Math.PI * 2,
       obstacle: 'none',
       obstaclePhase: rand() * Math.PI * 2,
-      obstacleCycle: 2.4,
-      obstacleOpenWindow: 2.4,
+      obstacleCycle: 2.5,
+      obstacleOpenWindow: 2.5,
       obstacleWindowStart: 0,
     }));
 
     const obstacleDensity = clamp(
-      stage.obstacleDensity + (mode === 'daily' ? 0.09 : 0),
+      stage.obstacleDensity + (mode === 'daily' ? 0.08 : 0),
       0.08,
-      0.9
+      0.92
     );
 
     let obstacleCount = 0;
-    const obstacleCap = Math.max(1, Math.floor(sides * (0.34 + obstacleDensity * 0.88)));
+    const obstacleCap = Math.max(1, Math.floor(sides * (0.28 + obstacleDensity * 0.86)));
 
     for (let lane = 0; lane < sides; lane += 1) {
       const bit = laneBit(lane, sides);
@@ -329,12 +334,12 @@ export const createRingRunGenerator = (
         Math.abs(lane - safeLane),
         sides - Math.abs(lane - safeLane)
       );
-      const nearPenalty = dist <= 1 ? 0.46 : dist === 2 ? 0.78 : 1;
+      const nearPenalty = dist <= 1 ? 0.44 : dist === 2 ? 0.74 : 1;
       const platformPenalty =
         meta.platform === 'phase_lane' || meta.platform === 'crusher_lane'
           ? 0.62
           : meta.platform === 'resin_lane' || meta.platform === 'gravity_drift'
-            ? 0.76
+            ? 0.78
             : 1;
       const chance = obstacleDensity * nearPenalty * platformPenalty;
 
@@ -348,9 +353,9 @@ export const createRingRunGenerator = (
         (item) => obstacleWeight(item, stage.id, mode)
       );
 
-      const tempo = 1 + stage.id * 0.18;
+      const tempo = 1 + stage.id * 0.17;
       const cycle = clamp(
-        (3.05 - stage.id * 0.22 + rand() * 1.14) / tempo,
+        (3 - stage.id * 0.22 + rand() * 1.1) / tempo,
         0.72,
         3.5
       );
@@ -372,7 +377,7 @@ export const createRingRunGenerator = (
       sides,
       safeLane,
       solidMask,
-      clamp(stage.collectibleChance + (mode === 'daily' ? 0.04 : 0), 0.08, 0.74)
+      clamp(stage.collectibleChance + (mode === 'daily' ? 0.04 : 0), 0.08, 0.76)
     );
 
     previousSafeLane = safeLane;
