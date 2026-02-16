@@ -1,4 +1,11 @@
-import type { OctaCameraMode, StageProfile } from './types';
+import type {
+  OctaCameraMode,
+  OctaObstacleType,
+  OctaPathStyle,
+  OctaPlatformType,
+  OctaTileVariant,
+  StageProfile,
+} from './types';
 
 export const OCTA_SURGE_TITLE = 'OctaSurge // Fiber Rift';
 
@@ -8,12 +15,133 @@ export const STORAGE_KEYS = {
   bestDaily: 'rachos-fun-octasurge-best-daily-v4',
   fxLevel: 'rachos-fun-octasurge-fx-level-v4',
   cameraMode: 'rachos-fun-octasurge-camera-mode-v4',
+  tileVariant: 'rachos-fun-octasurge-tile-variant-v1',
+  unlockedVariants: 'rachos-fun-octasurge-unlocked-variants-v1',
+  variantUnlockTier: 'rachos-fun-octasurge-variant-tier-v1',
+  styleShards: 'rachos-fun-octasurge-style-shards-v1',
 };
 
 export const CAMERA_MODE_LABEL: Record<OctaCameraMode, string> = {
   chase: 'Chase',
   firstPerson: 'First Person',
   topDown: 'Top Down',
+};
+
+export const OCTA_PATH_STYLE_LABEL: Record<OctaPathStyle, string> = {
+  'smooth-classic': 'Smooth Classic',
+};
+
+export const OCTA_TILE_VARIANTS: OctaTileVariant[] = [
+  'classic',
+  'alloy',
+  'prismatic',
+  'trailChevron',
+  'gridForge',
+  'diamondTess',
+  'sunkenSteps',
+  'rippleField',
+];
+
+export const OCTA_TILE_VARIANT_LABEL: Record<OctaTileVariant, string> = {
+  classic: 'Classic',
+  alloy: 'Alloy',
+  prismatic: 'Prismatic',
+  trailChevron: 'Chevron',
+  gridForge: 'Grid Forge',
+  diamondTess: 'Diamond Tess',
+  sunkenSteps: 'Sunken Steps',
+  rippleField: 'Ripple Field',
+};
+
+export const OCTA_TILE_VARIANT_ACCENT: Record<OctaTileVariant, string> = {
+  classic: '#5edbff',
+  alloy: '#7ce7ff',
+  prismatic: '#c192ff',
+  trailChevron: '#ff9b58',
+  gridForge: '#35b6ff',
+  diamondTess: '#79e2ff',
+  sunkenSteps: '#7ddfff',
+  rippleField: '#63f2d1',
+};
+
+export const OCTA_TILE_UNLOCK_THRESHOLDS = [18, 42, 74, 112, 156] as const;
+
+export const OCTA_DEFAULT_UNLOCKED_VARIANTS: OctaTileVariant[] = [
+  'classic',
+  'alloy',
+  'prismatic',
+];
+
+export const OCTA_PLATFORM_POOL: OctaPlatformType[] = [
+  'standard',
+  'conveyor_belt',
+  'reverse_conveyor',
+  'bouncer',
+  'trampoline',
+  'teleporter',
+  'ghost_platform',
+  'sticky_glue',
+  'crushing_ceiling',
+  'speed_ramp',
+];
+
+export const OCTA_OBSTACLE_POOL: Exclude<OctaObstacleType, 'none'>[] = [
+  'laser_grid',
+  'gravity_well',
+  'rotating_cross_blades',
+  'homing_mine',
+  'rising_lava',
+  'telefrag_portal',
+  'trapdoor_row',
+  'pulse_expander',
+  'magnetic_field',
+  'spike_wave',
+  'lightning_striker',
+];
+
+export const OCTA_PLATFORM_LABEL: Record<OctaPlatformType, string> = {
+  standard: 'Standard',
+  conveyor_belt: 'Conveyor Belt',
+  reverse_conveyor: 'Reverse Conveyor',
+  bouncer: 'Bouncer',
+  trampoline: 'Trampoline',
+  teleporter: 'Teleporter',
+  ghost_platform: 'Ghost Platform',
+  sticky_glue: 'Sticky Glue',
+  crushing_ceiling: 'Crushing Ceiling',
+  speed_ramp: 'Speed Ramp',
+};
+
+export const OCTA_OBSTACLE_LABEL: Record<OctaObstacleType, string> = {
+  none: 'Clear',
+  laser_grid: 'Laser Grid',
+  gravity_well: 'Gravity Well',
+  rotating_cross_blades: 'Cross Blades',
+  homing_mine: 'Homing Mine',
+  rising_lava: 'Rising Lava',
+  telefrag_portal: 'Telefrag Portal',
+  trapdoor_row: 'Trapdoor Row',
+  pulse_expander: 'Pulse Expander',
+  magnetic_field: 'Magnetic Field',
+  spike_wave: 'Spike Wave',
+  lightning_striker: 'Lightning Striker',
+};
+
+export const OCTA_OBSTACLE_FAIL_REASON: Record<
+  Exclude<OctaObstacleType, 'none'>,
+  string
+> = {
+  laser_grid: 'Laser grid burn. Lane timing missed.',
+  gravity_well: 'Gravity well lock. Orbit collapsed.',
+  rotating_cross_blades: 'Cross blade impact.',
+  homing_mine: 'Homing mine detonation.',
+  rising_lava: 'Lava surge reached the lane.',
+  telefrag_portal: 'Portal shear. Wrong window.',
+  trapdoor_row: 'Trapdoor lane snapped open.',
+  pulse_expander: 'Pulse wall caught your packet.',
+  magnetic_field: 'Magnetic field pinned your route.',
+  spike_wave: 'Spike wave contact.',
+  lightning_striker: 'Lightning strike connected.',
 };
 
 export const STAGE_PROFILES: StageProfile[] = [

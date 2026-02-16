@@ -24,6 +24,8 @@ import { useGameUIState } from '../../store/selectors';
 import {
   FIBER_COLORS,
   GAME,
+  OCTA_OBSTACLE_FAIL_REASON,
+  OCTA_TILE_VARIANT_ACCENT,
   STAGE_AESTHETICS,
   STAGE_PROFILES,
 } from './constants';
@@ -32,6 +34,10 @@ import { useOctaRuntimeStore } from './runtime';
 import { octaSurgeState } from './state';
 import type {
   OctaCameraMode,
+  OctaObstacleType,
+  OctaPlatformType,
+  OctaTileVariant,
+  SegmentLanePattern,
   SegmentPattern,
   StageProfile,
 } from './types';
@@ -48,6 +54,11 @@ const WHITE = new THREE.Color('#ffffff');
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
+
+const positiveMod = (value: number, mod: number) => {
+  const m = value % mod;
+  return m < 0 ? m + mod : m;
+};
 
 const normalizeAngle = (angle: number) => {
   let value = angle % TWO_PI;
@@ -124,6 +135,138 @@ const collectibleColor = (type: SegmentPattern['collectibleType']) => {
   return '#73e6ff';
 };
 
+const defaultLanePattern = (lane: number): SegmentLanePattern => ({
+  lane,
+  platform: 'standard',
+  platformPhase: 0,
+  obstacle: 'none',
+  obstaclePhase: 0,
+  obstacleCycle: 2.4,
+  obstacleOpenWindow: 2.4,
+  obstacleWindowStart: 0,
+});
+
+const lanePatternFor = (segment: SegmentPattern, lane: number): SegmentLanePattern =>
+  segment.lanePatterns[lane] ?? defaultLanePattern(lane);
+
+const obstacleSeverity = (
+  pattern: SegmentLanePattern,
+  simTime: number
+): { closedBlend: number; danger: boolean } => {
+  if (pattern.obstacle === 'none') return { closedBlend: 0, danger: false };
+
+  const cycle = Math.max(0.8, pattern.obstacleCycle);
+  const openWindow = clamp(pattern.obstacleOpenWindow, 0.15, cycle);
+  const local = positiveMod(simTime + pattern.obstaclePhase * 0.1, cycle);
+  const openStart = positiveMod(pattern.obstacleWindowStart, cycle);
+  const openEnd = openStart + openWindow;
+
+  let open = false;
+  if (openEnd <= cycle) {
+    open = local >= openStart && local <= openEnd;
+  } else {
+    open = local >= openStart || local <= openEnd - cycle;
+  }
+
+  const center = positiveMod(openStart + openWindow * 0.5, cycle);
+  const dist = Math.min(
+    positiveMod(local - center, cycle),
+    positiveMod(center - local, cycle)
+  );
+  const openRadius = openWindow * 0.5;
+  const blend = clamp(1 - dist / Math.max(0.001, openRadius), 0, 1);
+  const closedBlend = open ? 1 - blend * 0.85 : 1;
+
+  const dangerThreshold = (() => {
+    if (
+      pattern.obstacle === 'rotating_cross_blades' ||
+      pattern.obstacle === 'laser_grid' ||
+      pattern.obstacle === 'spike_wave'
+    ) {
+      return 0.36;
+    }
+    if (
+      pattern.obstacle === 'gravity_well' ||
+      pattern.obstacle === 'magnetic_field' ||
+      pattern.obstacle === 'trapdoor_row'
+    ) {
+      return 0.46;
+    }
+    if (
+      pattern.obstacle === 'telefrag_portal' ||
+      pattern.obstacle === 'pulse_expander' ||
+      pattern.obstacle === 'rising_lava'
+    ) {
+      return 0.42;
+    }
+    return 0.5;
+  })();
+
+  return {
+    closedBlend,
+    danger: closedBlend >= dangerThreshold,
+  };
+};
+
+const platformClosedBlend = (platform: OctaPlatformType, phase: number, simTime: number) => {
+  if (platform === 'ghost_platform') {
+    return 0.5 + 0.5 * Math.sin(simTime * 1.8 + phase * 1.2);
+  }
+  if (platform === 'crushing_ceiling') {
+    return 0.5 + 0.5 * Math.sin(simTime * 2.2 + phase * 0.9);
+  }
+  if (platform === 'sticky_glue') {
+    return 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(simTime * 0.9 + phase));
+  }
+  return 0;
+};
+
+const platformTint = (platform: OctaPlatformType) => {
+  if (
+    platform === 'conveyor_belt' ||
+    platform === 'reverse_conveyor' ||
+    platform === 'speed_ramp'
+  ) {
+    return '#77e8ff';
+  }
+  if (platform === 'bouncer' || platform === 'trampoline') return '#ffb970';
+  if (platform === 'teleporter' || platform === 'ghost_platform') return '#bb96ff';
+  if (platform === 'sticky_glue') return '#8fe08f';
+  if (platform === 'crushing_ceiling') return '#ff8f8f';
+  return '#89c8ff';
+};
+
+const obstacleTint = (obstacle: OctaObstacleType) => {
+  if (obstacle === 'none') return '#ffffff';
+  if (
+    obstacle === 'laser_grid' ||
+    obstacle === 'trapdoor_row' ||
+    obstacle === 'lightning_striker'
+  ) {
+    return '#ff9f6d';
+  }
+  if (
+    obstacle === 'gravity_well' ||
+    obstacle === 'magnetic_field' ||
+    obstacle === 'telefrag_portal'
+  ) {
+    return '#b58eff';
+  }
+  if (obstacle === 'rising_lava') return '#ff7144';
+  return '#ff8d82';
+};
+
+const variantScaleBias = (variant: OctaTileVariant, lane: number, runTime: number) => {
+  if (variant === 'alloy') return 1 + Math.sin(runTime * 0.9 + lane * 0.35) * 0.025;
+  if (variant === 'prismatic') return 1 + Math.sin(runTime * 1.1 + lane * 0.4) * 0.035;
+  if (variant === 'trailChevron') return 1 + (lane % 2 === 0 ? 0.028 : -0.018);
+  if (variant === 'gridForge') return 1 + Math.sin(runTime * 1.8 + lane * 0.7) * 0.018;
+  if (variant === 'diamondTess') return 1 + Math.cos(runTime * 1.2 + lane * 0.5) * 0.024;
+  if (variant === 'sunkenSteps') return 0.97 + Math.sin(runTime * 0.8 + lane * 0.2) * 0.02;
+  if (variant === 'rippleField') return 1 + Math.sin(runTime * 2.4 + lane * 0.7) * 0.03;
+  return 1;
+};
+
 const createFxParticle = (): FxParticle => ({
   active: false,
   x: 0,
@@ -166,6 +309,8 @@ export default function OctaSurge() {
       'w',
       'c',
       'v',
+      'q',
+      'e',
       'shift',
     ],
   });
