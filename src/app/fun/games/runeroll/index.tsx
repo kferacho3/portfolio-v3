@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { ContactShadows, Html, PerspectiveCamera } from '@react-three/drei';
+import { ContactShadows, PerspectiveCamera } from '@react-three/drei';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import { AnimatePresence, motion } from 'framer-motion';
 import * as THREE from 'three';
@@ -55,8 +55,6 @@ type RollAnimation = {
   startedAt: number;
   durationMs: number;
   landingFaces: FaceColors;
-  pickupVisualFaceIndex: number | null;
-  pickupVisualColor: FaceColor;
   consumedPickupKeys: string[];
   resultPhase: RollOutcome;
   resultMessage: string;
@@ -98,8 +96,10 @@ const CUBE_SIZE = 0.72;
 const FACE_SIZE = CUBE_SIZE * 0.46;
 const FACE_DEPTH = 0.05;
 const FACE_INSET = 0.015;
+const FACE_EDGE_OFFSET = FACE_INSET + 0.003;
 const LEVEL_MENU_PAGE_SIZE = 12;
 const CHARACTER_MENU_PAGE_SIZE = 8;
+const RUNE_ROLL_OVERLAY_TOP_PX = 74;
 
 const tileBaseColor = new THREE.Color('#16213a');
 const tileStartColor = new THREE.Color('#2a3f66');
@@ -199,19 +199,10 @@ type MoveSimulation =
       valid: true;
       to: GridPos;
       landingFaces: FaceColors;
-      pickupVisualFaceIndex: number | null;
-      pickupVisualColor: FaceColor;
       consumedPickupKeys: string[];
       isWin: boolean;
       resultMessage: string;
     };
-
-const sourceFaceForBottom = (direction: Direction) => {
-  if (direction === 'up') return 3; // back -> bottom
-  if (direction === 'down') return 2; // front -> bottom
-  if (direction === 'left') return 4; // left -> bottom
-  return 5; // right -> bottom
-};
 
 const simulateMove = (
   level: Level,
@@ -234,8 +225,6 @@ const simulateMove = (
   const nextFaces = rotateFaces(faces, direction);
   const nextConsumedPickupKeys = [...consumedPickupKeys];
   const consumedSet = new Set(nextConsumedPickupKeys);
-  let pickupVisualFaceIndex: number | null = null;
-  let pickupVisualColor: FaceColor = null;
 
   if (tile.type === 'wipe') {
     nextFaces[1] = null;
@@ -248,8 +237,6 @@ const simulateMove = (
     if (!alreadyConsumed) {
       nextConsumedPickupKeys.push(tileKey);
     }
-    pickupVisualFaceIndex = sourceFaceForBottom(direction);
-    pickupVisualColor = tile.color;
   }
 
   if (
@@ -266,8 +253,6 @@ const simulateMove = (
       valid: true,
       to,
       landingFaces: nextFaces,
-      pickupVisualFaceIndex,
-      pickupVisualColor,
       consumedPickupKeys: nextConsumedPickupKeys,
       isWin: tile.type === 'end',
       resultMessage: tile.type === 'end' ? 'Seal reached.' : '',
@@ -408,8 +393,6 @@ const useRuneRollStore = create<RuneRollStore>((set, get) => ({
         startedAt: performance.now(),
         durationMs: 290,
         landingFaces: simulation.landingFaces,
-        pickupVisualFaceIndex: simulation.pickupVisualFaceIndex,
-        pickupVisualColor: simulation.pickupVisualColor,
         consumedPickupKeys: simulation.consumedPickupKeys,
         resultPhase: simulation.isWin ? 'won' : 'playing',
         resultMessage: simulation.resultMessage,
@@ -508,23 +491,11 @@ const faceColorHex = (faceColor: FaceColor, character: RuneCharacter) =>
 const faceEmissiveHex = (faceColor: FaceColor, character: RuneCharacter) =>
   faceColor === null ? character.neutralFaceEmissive : faceColor;
 
-const baseFaceIntensity = (
-  faceColor: FaceColor,
-  faceIndex: number,
-  character: RuneCharacter
-) => {
+const baseFaceIntensity = (faceColor: FaceColor, character: RuneCharacter) => {
   if (faceColor === null) {
     return character.neutralIntensity;
   }
-
-  let orientationBoost = 0;
-  if (faceIndex === 0) {
-    orientationBoost = 0.04;
-  } else if (faceIndex === 1) {
-    orientationBoost = 0.06;
-  }
-
-  return character.runeIntensity + orientationBoost + 0.26;
+  return character.runeIntensity + 0.26;
 };
 
 const tileColorFor = (
@@ -807,7 +778,26 @@ function RuneCube() {
   const faceTargetEmissiveRefs = useRef(
     Array.from({ length: 6 }, () => new THREE.Color(character.neutralFaceEmissive))
   );
+  const faceEdgeMaterialRefs = useRef<Array<THREE.LineBasicMaterial | null>>(
+    Array.from({ length: 6 }, () => null)
+  );
+  const faceEdgeTargetColorRefs = useRef(
+    Array.from({ length: 6 }, () => new THREE.Color(character.neutralFaceColor))
+  );
+  const faceEdgeFrameColorRefs = useRef(
+    Array.from({ length: 6 }, () => new THREE.Color(character.neutralFaceColor))
+  );
   const haloTargetColorRef = useRef(new THREE.Color(character.neutralFaceColor));
+  const faceEdgeGeometry = useMemo(
+    () => new THREE.EdgesGeometry(new THREE.PlaneGeometry(FACE_SIZE * 0.96, FACE_SIZE * 0.96)),
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      faceEdgeGeometry.dispose();
+    };
+  }, [faceEdgeGeometry]);
 
   useFrame((_, delta) => {
     const pivot = pivotRef.current;
@@ -822,7 +812,7 @@ function RuneCube() {
     const displayFaces = state.faces;
     const colorLerpAlpha = 1 - Math.exp(-delta * 13);
     const intensityLerpAlpha = 1 - Math.exp(-delta * 11);
-    const updateFaceGlow = (pulseBoost = 0) => {
+    const updateFaceGlow = () => {
       for (let logicalFaceIndex = 0; logicalFaceIndex < 6; logicalFaceIndex += 1) {
         const materialIndex = LOGICAL_TO_BOX_MAT_INDEX[logicalFaceIndex];
         const material = faceMaterialRefs.current[materialIndex];
@@ -836,18 +826,8 @@ function RuneCube() {
         targetEmissive.set(faceEmissiveHex(displayFaces[logicalFaceIndex], character));
         material.emissive.lerp(targetEmissive, colorLerpAlpha);
 
-        const base = baseFaceIntensity(
-          displayFaces[logicalFaceIndex],
-          logicalFaceIndex,
-          character
-        );
-        const boost =
-          animation &&
-          animation.pickupVisualFaceIndex !== null &&
-          animation.pickupVisualFaceIndex === logicalFaceIndex
-            ? pulseBoost * 1.1 + 0.16
-            : 0;
-        const target = Math.min(3.2, base + boost);
+        const base = baseFaceIntensity(displayFaces[logicalFaceIndex], character);
+        const target = Math.min(3.2, base);
         material.emissiveIntensity = lerp(
           material.emissiveIntensity,
           target,
@@ -855,7 +835,29 @@ function RuneCube() {
         );
       }
     };
-    const updateBottomHalo = (pickupBoost = 0) => {
+    const updateFaceEdges = () => {
+      for (let logicalFaceIndex = 0; logicalFaceIndex < 6; logicalFaceIndex += 1) {
+        const edgeMaterial = faceEdgeMaterialRefs.current[logicalFaceIndex];
+        if (!edgeMaterial) continue;
+
+        const faceColor = displayFaces[logicalFaceIndex];
+        const frameColor = faceEdgeFrameColorRefs.current[logicalFaceIndex];
+        frameColor.set(faceColor ?? character.neutralFaceColor);
+        frameColor.multiplyScalar(faceColor === null ? 0.45 : 1.75);
+
+        const targetColor = faceEdgeTargetColorRefs.current[logicalFaceIndex];
+        targetColor.copy(frameColor);
+        edgeMaterial.color.lerp(targetColor, colorLerpAlpha);
+
+        const targetOpacity = faceColor === null ? 0 : 0.92;
+        edgeMaterial.opacity = lerp(
+          edgeMaterial.opacity,
+          targetOpacity,
+          intensityLerpAlpha
+        );
+      }
+    };
+    const updateBottomHalo = () => {
       const halo = bottomHaloRef.current;
       if (!halo) return;
 
@@ -867,8 +869,7 @@ function RuneCube() {
       const bottomColor = displayFaces[1] ?? character.neutralFaceColor;
       haloTargetColorRef.current.set(bottomColor);
       halo.color.lerp(haloTargetColorRef.current, colorLerpAlpha);
-      const targetOpacity =
-        displayFaces[1] === null ? 0.24 : Math.min(1, 0.82 + pickupBoost * 0.2);
+      const targetOpacity = displayFaces[1] === null ? 0.24 : 0.82;
       halo.opacity = lerp(halo.opacity, targetOpacity, intensityLerpAlpha);
     };
 
@@ -878,8 +879,9 @@ function RuneCube() {
       pivot.rotation.set(0, 0, 0);
       cube.position.set(0, CUBE_SIZE * 0.5, 0);
       cube.scale.set(1, 1, 1);
-      updateFaceGlow(0);
-      updateBottomHalo(0);
+      updateFaceGlow();
+      updateFaceEdges();
+      updateBottomHalo();
       return;
     }
 
@@ -915,9 +917,9 @@ function RuneCube() {
     const stretch = 1 + Math.sin(Math.PI * t) * 0.085;
     const side = 1 / Math.sqrt(stretch);
     cube.scale.set(side, stretch, side);
-    const pickupPulse = Math.sin(Math.PI * t) * character.pickupPulseBoost;
-    updateFaceGlow(pickupPulse);
-    updateBottomHalo(pickupPulse);
+    updateFaceGlow();
+    updateFaceEdges();
+    updateBottomHalo();
 
     if (t >= 1) {
       finishAnimation();
@@ -925,6 +927,42 @@ function RuneCube() {
   });
 
   const half = CUBE_SIZE * 0.5;
+  const faceEdgeTransforms: Array<{
+    logicalFaceIndex: number;
+    position: [number, number, number];
+    rotation: [number, number, number];
+  }> = [
+    {
+      logicalFaceIndex: 0,
+      position: [0, half + FACE_EDGE_OFFSET, 0],
+      rotation: [-Math.PI * 0.5, 0, 0],
+    },
+    {
+      logicalFaceIndex: 1,
+      position: [0, -half - FACE_EDGE_OFFSET, 0],
+      rotation: [Math.PI * 0.5, 0, 0],
+    },
+    {
+      logicalFaceIndex: 2,
+      position: [0, 0, half + FACE_EDGE_OFFSET],
+      rotation: [0, 0, 0],
+    },
+    {
+      logicalFaceIndex: 3,
+      position: [0, 0, -half - FACE_EDGE_OFFSET],
+      rotation: [0, Math.PI, 0],
+    },
+    {
+      logicalFaceIndex: 4,
+      position: [-half - FACE_EDGE_OFFSET, 0, 0],
+      rotation: [0, -Math.PI * 0.5, 0],
+    },
+    {
+      logicalFaceIndex: 5,
+      position: [half + FACE_EDGE_OFFSET, 0, 0],
+      rotation: [0, Math.PI * 0.5, 0],
+    },
+  ];
 
   return (
     <group ref={pivotRef}>
@@ -949,6 +987,27 @@ function RuneCube() {
             />
           ))}
         </mesh>
+
+        {faceEdgeTransforms.map(({ logicalFaceIndex, position, rotation }) => (
+          <lineSegments
+            key={`face-edge-${logicalFaceIndex}`}
+            geometry={faceEdgeGeometry}
+            position={position}
+            rotation={rotation}
+          >
+            <lineBasicMaterial
+              ref={(material) => {
+                faceEdgeMaterialRefs.current[logicalFaceIndex] = material;
+              }}
+              color={character.neutralFaceColor}
+              transparent
+              opacity={0.08}
+              toneMapped={false}
+              depthWrite={false}
+            />
+          </lineSegments>
+        ))}
+
         <mesh
           position={[0, -half + FACE_DEPTH * 0.7 + FACE_INSET, 0]}
           rotation={[-Math.PI * 0.5, 0, 0]}
@@ -1481,10 +1540,6 @@ function RuneRollScene() {
         <Vignette eskil={false} offset={0.12} darkness={0.62} />
         <Noise opacity={0.02} premultiply />
       </EffectComposer>
-
-      <Html fullscreen>
-        <RuneRollOverlay />
-      </Html>
     </>
   );
 }
@@ -1524,6 +1579,12 @@ const RuneRoll: React.FC<{ soundsOn?: boolean }> = ({ soundsOn: _soundsOn }) => 
       >
         <RuneRollScene />
       </Canvas>
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[1400]"
+        style={{ top: `${RUNE_ROLL_OVERLAY_TOP_PX}px` }}
+      >
+        <RuneRollOverlay />
+      </div>
     </div>
   );
 };
