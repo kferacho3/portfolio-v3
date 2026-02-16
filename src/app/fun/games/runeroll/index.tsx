@@ -34,6 +34,12 @@ import {
   type Level,
   type Tile,
 } from './levels';
+import {
+  DEFAULT_RUNE_CHARACTER_INDEX,
+  RUNE_CHARACTERS,
+  clampRuneCharacterIndex,
+  type RuneCharacter,
+} from './characters';
 import { runeRollState } from './state';
 
 type RunPhase = 'menu' | 'playing' | 'won' | 'failed' | 'complete';
@@ -57,6 +63,7 @@ type RollAnimation = {
 type RuneRollStore = {
   phase: RunPhase;
   levelIndex: number;
+  characterIndex: number;
   position: GridPos;
   faces: FaceColors;
   consumedPickupKeys: string[];
@@ -72,11 +79,13 @@ type RuneRollStore = {
   resetLevel: () => void;
   nextLevel: () => void;
   selectLevel: (index: number) => void;
+  selectCharacter: (index: number) => void;
   attemptMove: (direction: Direction) => void;
   finishAnimation: () => void;
 };
 
 const PROGRESS_KEY = 'runeroll_puzzle_progress_v1';
+const CHARACTER_KEY = 'runeroll_cube_character_v1';
 
 const TILE_SPACING = 1.08;
 const TILE_HEIGHT = 0.24;
@@ -141,6 +150,28 @@ const sumStars = (stars: number[]) =>
   stars.reduce((total, value) => total + Math.max(0, value), 0);
 
 const clampLevelIndex = (index: number) => clamp(index, 0, RUNE_LEVELS.length - 1);
+const clampCharacterIndex = (index: number) => clampRuneCharacterIndex(index);
+
+const readCharacterIndex = () => {
+  if (typeof window === 'undefined') {
+    return DEFAULT_RUNE_CHARACTER_INDEX;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CHARACTER_KEY);
+    if (raw === null) return DEFAULT_RUNE_CHARACTER_INDEX;
+    return clampCharacterIndex(Number(raw));
+  } catch {
+    return DEFAULT_RUNE_CHARACTER_INDEX;
+  }
+};
+
+const writeCharacterIndex = (index: number) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.localStorage.setItem(CHARACTER_KEY, String(clampCharacterIndex(index)));
+};
 
 const levelCenterGrid = (level: Level): [number, number] => {
   const bounds = getLevelBounds(level);
@@ -240,6 +271,7 @@ const simulateMove = (
 };
 
 const initialStars = readProgress();
+const initialCharacterIndex = readCharacterIndex();
 
 const createRunState = (levelIndex: number) => {
   const level = RUNE_LEVELS[levelIndex];
@@ -259,6 +291,7 @@ const createRunState = (levelIndex: number) => {
 const useRuneRollStore = create<RuneRollStore>((set, get) => ({
   phase: 'menu',
   ...createRunState(0),
+  characterIndex: initialCharacterIndex,
   message: 'Roll the rune cube and match gate colors.',
   levelStars: initialStars,
   totalStars: sumStars(initialStars),
@@ -330,6 +363,12 @@ const useRuneRollStore = create<RuneRollStore>((set, get) => ({
       message:
         nextPhase === 'menu' ? 'Roll the rune cube and match gate colors.' : '',
     });
+  },
+
+  selectCharacter: (index: number) => {
+    const nextIndex = clampCharacterIndex(index);
+    writeCharacterIndex(nextIndex);
+    set({ characterIndex: nextIndex });
   },
 
   attemptMove: (direction: Direction) => {
@@ -459,26 +498,29 @@ const runeColorToIndex = (color: FaceColor) => {
   return index >= 0 ? index : 0;
 };
 
-const faceColorHex = (faceColor: FaceColor) =>
-  faceColor === null ? '#1c2942' : faceColor;
+const faceColorHex = (faceColor: FaceColor, character: RuneCharacter) =>
+  faceColor === null ? character.neutralFaceColor : faceColor;
 
-const faceEmissiveHex = (faceColor: FaceColor) =>
-  faceColor === null ? '#0d1220' : runeEdgeColor(faceColor);
+const faceEmissiveHex = (faceColor: FaceColor, character: RuneCharacter) =>
+  faceColor === null ? character.neutralFaceEmissive : runeEdgeColor(faceColor);
 
-const baseFaceIntensity = (faceColor: FaceColor, faceIndex: number) => {
+const baseFaceIntensity = (
+  faceColor: FaceColor,
+  faceIndex: number,
+  character: RuneCharacter
+) => {
   if (faceColor === null) {
-    return 0.08;
+    return character.neutralIntensity;
   }
 
+  let orientationBoost = 0;
   if (faceIndex === 0) {
-    return 0.8;
+    orientationBoost = 0.04;
+  } else if (faceIndex === 1) {
+    orientationBoost = 0.06;
   }
 
-  if (faceIndex === 1) {
-    return 0.82;
-  }
-
-  return 0.76;
+  return character.runeIntensity + orientationBoost;
 };
 
 const tileColorFor = (
@@ -748,7 +790,9 @@ function RuneCube() {
   const faces = useRuneRollStore((state) => state.faces);
   const animation = useRuneRollStore((state) => state.animation);
   const levelIndex = useRuneRollStore((state) => state.levelIndex);
+  const characterIndex = useRuneRollStore((state) => state.characterIndex);
   const finishAnimation = useRuneRollStore((state) => state.finishAnimation);
+  const character = RUNE_CHARACTERS[characterIndex] ?? RUNE_CHARACTERS[DEFAULT_RUNE_CHARACTER_INDEX];
 
   const pivotRef = useRef<THREE.Group>(null);
   const cubeRef = useRef<THREE.Group>(null);
@@ -784,7 +828,7 @@ function RuneCube() {
         const material = faceMaterialRefs.current[i];
         if (!material) continue;
 
-        const base = baseFaceIntensity(displayFaces[i], i);
+        const base = baseFaceIntensity(displayFaces[i], i, character);
         const boost =
           animation &&
           animation.pickupVisualFaceIndex !== null &&
@@ -837,7 +881,7 @@ function RuneCube() {
     const stretch = 1 + Math.sin(Math.PI * t) * 0.085;
     const side = 1 / Math.sqrt(stretch);
     cube.scale.set(side, stretch, side);
-    const pickupPulse = Math.sin(Math.PI * t) * 1.15;
+    const pickupPulse = Math.sin(Math.PI * t) * character.pickupPulseBoost;
     updateFaceGlow(pickupPulse);
 
     if (t >= 1) {
@@ -853,11 +897,11 @@ function RuneCube() {
         <mesh castShadow receiveShadow>
           <boxGeometry args={[CUBE_SIZE, CUBE_SIZE, CUBE_SIZE]} />
           <meshStandardMaterial
-            color="#111827"
-            emissive="#1a2742"
-            emissiveIntensity={0.28}
-            roughness={0.42}
-            metalness={0.18}
+            color={character.bodyColor}
+            emissive={character.bodyEmissive}
+            emissiveIntensity={0.32}
+            roughness={character.roughness}
+            metalness={character.metalness}
           />
         </mesh>
 
@@ -867,9 +911,9 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[0] = material;
             }}
-            color={faceColorHex(displayFaces[0])}
-            emissive={faceEmissiveHex(displayFaces[0])}
-            emissiveIntensity={baseFaceIntensity(displayFaces[0], 0)}
+            color={faceColorHex(displayFaces[0], character)}
+            emissive={faceEmissiveHex(displayFaces[0], character)}
+            emissiveIntensity={baseFaceIntensity(displayFaces[0], 0, character)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -881,9 +925,9 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[1] = material;
             }}
-            color={faceColorHex(displayFaces[1])}
-            emissive={faceEmissiveHex(displayFaces[1])}
-            emissiveIntensity={baseFaceIntensity(displayFaces[1], 1)}
+            color={faceColorHex(displayFaces[1], character)}
+            emissive={faceEmissiveHex(displayFaces[1], character)}
+            emissiveIntensity={baseFaceIntensity(displayFaces[1], 1, character)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -895,9 +939,9 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[2] = material;
             }}
-            color={faceColorHex(displayFaces[2])}
-            emissive={faceEmissiveHex(displayFaces[2])}
-            emissiveIntensity={baseFaceIntensity(displayFaces[2], 2)}
+            color={faceColorHex(displayFaces[2], character)}
+            emissive={faceEmissiveHex(displayFaces[2], character)}
+            emissiveIntensity={baseFaceIntensity(displayFaces[2], 2, character)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -909,9 +953,9 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[3] = material;
             }}
-            color={faceColorHex(displayFaces[3])}
-            emissive={faceEmissiveHex(displayFaces[3])}
-            emissiveIntensity={baseFaceIntensity(displayFaces[3], 3)}
+            color={faceColorHex(displayFaces[3], character)}
+            emissive={faceEmissiveHex(displayFaces[3], character)}
+            emissiveIntensity={baseFaceIntensity(displayFaces[3], 3, character)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -923,9 +967,9 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[4] = material;
             }}
-            color={faceColorHex(displayFaces[4])}
-            emissive={faceEmissiveHex(displayFaces[4])}
-            emissiveIntensity={baseFaceIntensity(displayFaces[4], 4)}
+            color={faceColorHex(displayFaces[4], character)}
+            emissive={faceEmissiveHex(displayFaces[4], character)}
+            emissiveIntensity={baseFaceIntensity(displayFaces[4], 4, character)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -937,9 +981,9 @@ function RuneCube() {
             ref={(material) => {
               faceMaterialRefs.current[5] = material;
             }}
-            color={faceColorHex(displayFaces[5])}
-            emissive={faceEmissiveHex(displayFaces[5])}
-            emissiveIntensity={baseFaceIntensity(displayFaces[5], 5)}
+            color={faceColorHex(displayFaces[5], character)}
+            emissive={faceEmissiveHex(displayFaces[5], character)}
+            emissiveIntensity={baseFaceIntensity(displayFaces[5], 5, character)}
             roughness={0.3}
             metalness={0.14}
           />
@@ -952,6 +996,7 @@ function RuneCube() {
 function RuneRollOverlay() {
   const phase = useRuneRollStore((state) => state.phase);
   const levelIndex = useRuneRollStore((state) => state.levelIndex);
+  const characterIndex = useRuneRollStore((state) => state.characterIndex);
   const moveCount = useRuneRollStore((state) => state.moveCount);
   const message = useRuneRollStore((state) => state.message);
   const faces = useRuneRollStore((state) => state.faces);
@@ -965,13 +1010,31 @@ function RuneRollOverlay() {
   const resetLevel = useRuneRollStore((state) => state.resetLevel);
   const nextLevel = useRuneRollStore((state) => state.nextLevel);
   const selectLevel = useRuneRollStore((state) => state.selectLevel);
+  const selectCharacter = useRuneRollStore((state) => state.selectCharacter);
   const attemptMove = useRuneRollStore((state) => state.attemptMove);
 
   const level = RUNE_LEVELS[levelIndex];
   const levelStarCount = levelStars[levelIndex] ?? 0;
+  const selectedCharacter =
+    RUNE_CHARACTERS[characterIndex] ?? RUNE_CHARACTERS[DEFAULT_RUNE_CHARACTER_INDEX];
+
+  const levelRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const characterRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  useEffect(() => {
+    if (phase !== 'menu') return;
+    const target = levelRefs.current[levelIndex];
+    target?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [phase, levelIndex]);
+
+  useEffect(() => {
+    if (phase !== 'menu') return;
+    const target = characterRefs.current[characterIndex];
+    target?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [phase, characterIndex]);
 
   const bottomFace = faces[1];
-  const bottomFaceColor = bottomFace === null ? '#7f8da8' : bottomFace;
+  const bottomFaceColor = bottomFace === null ? selectedCharacter.neutralFaceColor : bottomFace;
   const bottomFaceName = bottomFace === null ? 'Unmarked' : runeColorName(bottomFace);
 
   const canMove = phase === 'playing';
@@ -986,6 +1049,7 @@ function RuneRollOverlay() {
       <div className="absolute right-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 text-right backdrop-blur-sm">
         <div className="text-sm font-semibold">Rune {levelIndex + 1}</div>
         <div className="text-[11px] text-white/75">{level.id}</div>
+        <div className="text-[11px] text-cyan-100/80">{selectedCharacter.name}</div>
         <div className="mt-1 text-xs text-white/80">Moves {moveCount}</div>
         <div className="text-xs text-white/80">Par {level.parMoves}</div>
         <div className="text-xs text-amber-200">Best {starsText(levelStarCount)}</div>
@@ -1025,7 +1089,7 @@ function RuneRollOverlay() {
         <div>Restart: R</div>
         <div>Menu: Esc</div>
         <div>Each gate needs the matching bottom face.</div>
-        <div>Pickups imprint once, then become floor.</div>
+        <div>Pickups imprint once and stay charged.</div>
       </div>
 
       {phase === 'playing' && message && (
@@ -1073,46 +1137,158 @@ function RuneRollOverlay() {
 
       {phase === 'menu' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto w-[min(92vw,480px)] rounded-xl border border-cyan-100/42 bg-slate-950/80 px-6 py-5 text-center backdrop-blur-md">
-            <div className="text-3xl font-black tracking-wide text-cyan-100">RUNE ROLL</div>
-            <div className="mt-2 text-sm text-white/85">
-              Keep the rune cube model. Rebuild everything else as a handcrafted,
-              color-match puzzle run.
-            </div>
-
-            <div className="mt-4 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                className="rounded border border-cyan-100/45 bg-cyan-400/10 px-3 py-1.5 text-sm text-cyan-100 disabled:opacity-30"
-                disabled={levelIndex <= 0}
-                onClick={() => selectLevel(levelIndex - 1)}
-              >
-                Prev
-              </button>
-              <div className="text-sm text-white/90">
-                Rune {levelIndex + 1} / {RUNE_LEVELS.length}
+          <div className="pointer-events-auto w-[min(95vw,940px)] rounded-xl border border-cyan-100/42 bg-slate-950/80 px-5 py-5 backdrop-blur-md">
+            <div className="text-center">
+              <div className="text-3xl font-black tracking-wide text-cyan-100">RUNE ROLL</div>
+              <div className="mt-1 text-sm text-white/85">
+                Pick your chamber and cube shell before the run.
               </div>
-              <button
-                type="button"
-                className="rounded border border-cyan-100/45 bg-cyan-400/10 px-3 py-1.5 text-sm text-cyan-100 disabled:opacity-30"
-                disabled={levelIndex >= RUNE_LEVELS.length - 1}
-                onClick={() => selectLevel(levelIndex + 1)}
-              >
-                Next
-              </button>
             </div>
 
-            <div className="mt-2 text-sm text-white/80">{level.id}</div>
-            <div className="text-xs text-white/70">Par {level.parMoves}</div>
-            <div className="text-xs text-amber-200">Best {starsText(levelStarCount)}</div>
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+              <section className="rounded-lg border border-cyan-100/30 bg-slate-900/45 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-cyan-100/80">
+                      Smooth Level Select
+                    </div>
+                    <div className="text-sm text-white/90">
+                      Rune {levelIndex + 1} of {RUNE_LEVELS.length}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-white/85">{level.id}</div>
+                    <div className="text-xs text-white/70">Par {level.parMoves}</div>
+                    <div className="text-xs text-amber-200">Best {starsText(levelStarCount)}</div>
+                  </div>
+                </div>
 
-            <button
-              type="button"
-              className="mt-4 rounded border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
-              onClick={startGame}
-            >
-              Start Rune
-            </button>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-cyan-100/35 bg-cyan-400/10 px-2 py-1 text-sm text-cyan-100 disabled:opacity-30"
+                    disabled={levelIndex <= 0}
+                    onClick={() => selectLevel(levelIndex - 1)}
+                  >
+                    ◀
+                  </button>
+                  <input
+                    type="range"
+                    min={0}
+                    max={RUNE_LEVELS.length - 1}
+                    value={levelIndex}
+                    onChange={(event) => selectLevel(Number(event.target.value))}
+                    className="h-2 w-full cursor-pointer appearance-none rounded-full bg-cyan-100/20 accent-cyan-300"
+                  />
+                  <button
+                    type="button"
+                    className="rounded border border-cyan-100/35 bg-cyan-400/10 px-2 py-1 text-sm text-cyan-100 disabled:opacity-30"
+                    disabled={levelIndex >= RUNE_LEVELS.length - 1}
+                    onClick={() => selectLevel(levelIndex + 1)}
+                  >
+                    ▶
+                  </button>
+                </div>
+
+                <div className="mt-3 flex snap-x gap-2 overflow-x-auto scroll-smooth pb-1">
+                  {RUNE_LEVELS.map((entry, index) => {
+                    const selected = index === levelIndex;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        ref={(element) => {
+                          levelRefs.current[index] = element;
+                        }}
+                        className={`min-w-[86px] snap-center rounded border px-2 py-2 text-left text-xs transition ${
+                          selected
+                            ? 'border-cyan-200/75 bg-cyan-300/18 text-cyan-50 shadow-[0_0_18px_rgba(77,219,255,0.35)]'
+                            : 'border-cyan-100/20 bg-slate-900/60 text-white/75 hover:border-cyan-100/45'
+                        }`}
+                        onClick={() => selectLevel(index)}
+                      >
+                        <div className="font-semibold">#{index + 1}</div>
+                        <div className="truncate text-[10px]">{entry.id}</div>
+                        <div className="text-[10px] text-amber-200/90">
+                          {starsText(levelStars[index] ?? 0)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-cyan-100/30 bg-slate-900/45 p-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-cyan-100/80">
+                  Cube Characters ({RUNE_CHARACTERS.length})
+                </div>
+                <div className="mt-1 text-sm font-semibold text-white/90">{selectedCharacter.name}</div>
+                <div className="text-xs text-white/70">{selectedCharacter.epithet}</div>
+
+                <div className="mt-2 flex items-center gap-2 text-[10px] text-white/70">
+                  <span
+                    className="inline-block h-3 w-3 rounded-sm"
+                    style={{
+                      background: selectedCharacter.accentColor,
+                      boxShadow: `0 0 12px ${selectedCharacter.accentColor}`,
+                    }}
+                  />
+                  <span>Accent</span>
+                  <span
+                    className="inline-block h-3 w-3 rounded-sm"
+                    style={{
+                      background: selectedCharacter.neutralFaceColor,
+                      boxShadow: `0 0 10px ${selectedCharacter.neutralFaceEmissive}`,
+                    }}
+                  />
+                  <span>Unmarked Face</span>
+                </div>
+
+                <div className="mt-3 flex snap-x gap-2 overflow-x-auto scroll-smooth pb-1">
+                  {RUNE_CHARACTERS.map((entry, index) => {
+                    const selected = index === characterIndex;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        ref={(element) => {
+                          characterRefs.current[index] = element;
+                        }}
+                        className={`min-w-[104px] snap-center rounded border px-2 py-2 text-left text-[10px] transition ${
+                          selected
+                            ? 'border-cyan-200/80 bg-cyan-300/18 text-cyan-50 shadow-[0_0_20px_rgba(79,226,255,0.3)]'
+                            : 'border-cyan-100/20 bg-slate-900/60 text-white/75 hover:border-cyan-100/45'
+                        }`}
+                        style={{
+                          backgroundImage: `linear-gradient(135deg, ${entry.bodyColor} 0%, ${entry.neutralFaceColor} 70%)`,
+                        }}
+                        onClick={() => selectCharacter(index)}
+                      >
+                        <div className="truncate text-[11px] font-semibold">{entry.name}</div>
+                        <div className="truncate opacity-85">{entry.epithet}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                className="rounded border border-white/35 bg-white/10 px-3 py-1.5 text-sm text-white transition hover:bg-white/15"
+                onClick={restartCampaign}
+              >
+                New Campaign
+              </button>
+              <button
+                type="button"
+                className="rounded border border-cyan-100/55 bg-cyan-300/18 px-4 py-1.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/28"
+                onClick={startGame}
+              >
+                Start Rune
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1296,3 +1472,4 @@ export * from './levels';
 export * from './generator';
 export * from './levelSolver';
 export * from './rotateFaces';
+export * from './characters';
