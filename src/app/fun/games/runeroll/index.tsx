@@ -47,6 +47,8 @@ type RollAnimation = {
   startedAt: number;
   durationMs: number;
   landingFaces: FaceColors;
+  pickupVisualFaceIndex: number | null;
+  pickupVisualColor: FaceColor;
   consumedPickupKeys: string[];
   resultPhase: RollOutcome;
   resultMessage: string;
@@ -162,10 +164,19 @@ type MoveSimulation =
       valid: true;
       to: GridPos;
       landingFaces: FaceColors;
+      pickupVisualFaceIndex: number | null;
+      pickupVisualColor: FaceColor;
       consumedPickupKeys: string[];
       isWin: boolean;
       resultMessage: string;
     };
+
+const sourceFaceForBottom = (direction: Direction) => {
+  if (direction === 'up') return 3; // back -> bottom
+  if (direction === 'down') return 2; // front -> bottom
+  if (direction === 'left') return 4; // left -> bottom
+  return 5; // right -> bottom
+};
 
 const simulateMove = (
   level: Level,
@@ -188,6 +199,8 @@ const simulateMove = (
   const nextFaces = rotateFaces(faces, direction);
   const nextConsumedPickupKeys = [...consumedPickupKeys];
   const consumedSet = new Set(nextConsumedPickupKeys);
+  let pickupVisualFaceIndex: number | null = null;
+  let pickupVisualColor: FaceColor = null;
 
   if (tile.type === 'wipe') {
     nextFaces[1] = null;
@@ -199,6 +212,8 @@ const simulateMove = (
     if (!alreadyConsumed && nextFaces[1] === null) {
       nextFaces[1] = tile.color;
       nextConsumedPickupKeys.push(tileKey);
+      pickupVisualFaceIndex = sourceFaceForBottom(direction);
+      pickupVisualColor = tile.color;
     }
   }
 
@@ -213,12 +228,14 @@ const simulateMove = (
   }
 
   return {
-    valid: true,
-    to,
-    landingFaces: nextFaces,
-    consumedPickupKeys: nextConsumedPickupKeys,
-    isWin: tile.type === 'end',
-    resultMessage: tile.type === 'end' ? 'Seal reached.' : '',
+      valid: true,
+      to,
+      landingFaces: nextFaces,
+      pickupVisualFaceIndex,
+      pickupVisualColor,
+      consumedPickupKeys: nextConsumedPickupKeys,
+      isWin: tile.type === 'end',
+      resultMessage: tile.type === 'end' ? 'Seal reached.' : '',
   };
 };
 
@@ -348,6 +365,8 @@ const useRuneRollStore = create<RuneRollStore>((set, get) => ({
         startedAt: performance.now(),
         durationMs: 290,
         landingFaces: simulation.landingFaces,
+        pickupVisualFaceIndex: simulation.pickupVisualFaceIndex,
+        pickupVisualColor: simulation.pickupVisualColor,
         consumedPickupKeys: simulation.consumedPickupKeys,
         resultPhase: simulation.isWin ? 'won' : 'playing',
         resultMessage: simulation.resultMessage,
@@ -701,11 +720,25 @@ function RuneBoard() {
 
 function RuneCube() {
   const faces = useRuneRollStore((state) => state.faces);
+  const animation = useRuneRollStore((state) => state.animation);
   const levelIndex = useRuneRollStore((state) => state.levelIndex);
   const finishAnimation = useRuneRollStore((state) => state.finishAnimation);
 
   const pivotRef = useRef<THREE.Group>(null);
   const cubeRef = useRef<THREE.Group>(null);
+  const displayFaces = useMemo<FaceColors>(() => {
+    if (
+      !animation ||
+      animation.pickupVisualFaceIndex === null ||
+      animation.pickupVisualColor === null
+    ) {
+      return faces;
+    }
+
+    const nextFaces = [...faces] as FaceColors;
+    nextFaces[animation.pickupVisualFaceIndex] = animation.pickupVisualColor;
+    return nextFaces;
+  }, [animation, faces]);
 
   useFrame(() => {
     const pivot = pivotRef.current;
@@ -784,9 +817,9 @@ function RuneCube() {
         <mesh position={[0, half - FACE_DEPTH * 0.5 - FACE_INSET, 0]}>
           <boxGeometry args={[FACE_SIZE, FACE_DEPTH, FACE_SIZE]} />
           <meshStandardMaterial
-            color={faceColorHex(faces[0])}
-            emissive={faceEmissiveHex(faces[0])}
-            emissiveIntensity={faces[0] === null ? 0.08 : 0.8}
+            color={faceColorHex(displayFaces[0])}
+            emissive={faceEmissiveHex(displayFaces[0])}
+            emissiveIntensity={displayFaces[0] === null ? 0.08 : 0.8}
             roughness={0.3}
             metalness={0.14}
           />
@@ -795,9 +828,9 @@ function RuneCube() {
         <mesh position={[0, -half + FACE_DEPTH * 0.5 + FACE_INSET, 0]}>
           <boxGeometry args={[FACE_SIZE, FACE_DEPTH, FACE_SIZE]} />
           <meshStandardMaterial
-            color={faceColorHex(faces[1])}
-            emissive={faceEmissiveHex(faces[1])}
-            emissiveIntensity={faces[1] === null ? 0.08 : 0.82}
+            color={faceColorHex(displayFaces[1])}
+            emissive={faceEmissiveHex(displayFaces[1])}
+            emissiveIntensity={displayFaces[1] === null ? 0.08 : 0.82}
             roughness={0.3}
             metalness={0.14}
           />
@@ -806,9 +839,9 @@ function RuneCube() {
         <mesh position={[0, 0, half - FACE_DEPTH * 0.5 - FACE_INSET]}>
           <boxGeometry args={[FACE_SIZE, FACE_SIZE, FACE_DEPTH]} />
           <meshStandardMaterial
-            color={faceColorHex(faces[2])}
-            emissive={faceEmissiveHex(faces[2])}
-            emissiveIntensity={faces[2] === null ? 0.08 : 0.76}
+            color={faceColorHex(displayFaces[2])}
+            emissive={faceEmissiveHex(displayFaces[2])}
+            emissiveIntensity={displayFaces[2] === null ? 0.08 : 0.76}
             roughness={0.3}
             metalness={0.14}
           />
@@ -817,9 +850,9 @@ function RuneCube() {
         <mesh position={[0, 0, -half + FACE_DEPTH * 0.5 + FACE_INSET]}>
           <boxGeometry args={[FACE_SIZE, FACE_SIZE, FACE_DEPTH]} />
           <meshStandardMaterial
-            color={faceColorHex(faces[3])}
-            emissive={faceEmissiveHex(faces[3])}
-            emissiveIntensity={faces[3] === null ? 0.08 : 0.76}
+            color={faceColorHex(displayFaces[3])}
+            emissive={faceEmissiveHex(displayFaces[3])}
+            emissiveIntensity={displayFaces[3] === null ? 0.08 : 0.76}
             roughness={0.3}
             metalness={0.14}
           />
@@ -828,9 +861,9 @@ function RuneCube() {
         <mesh position={[-half + FACE_DEPTH * 0.5 + FACE_INSET, 0, 0]}>
           <boxGeometry args={[FACE_DEPTH, FACE_SIZE, FACE_SIZE]} />
           <meshStandardMaterial
-            color={faceColorHex(faces[4])}
-            emissive={faceEmissiveHex(faces[4])}
-            emissiveIntensity={faces[4] === null ? 0.08 : 0.76}
+            color={faceColorHex(displayFaces[4])}
+            emissive={faceEmissiveHex(displayFaces[4])}
+            emissiveIntensity={displayFaces[4] === null ? 0.08 : 0.76}
             roughness={0.3}
             metalness={0.14}
           />
@@ -839,9 +872,9 @@ function RuneCube() {
         <mesh position={[half - FACE_DEPTH * 0.5 - FACE_INSET, 0, 0]}>
           <boxGeometry args={[FACE_DEPTH, FACE_SIZE, FACE_SIZE]} />
           <meshStandardMaterial
-            color={faceColorHex(faces[5])}
-            emissive={faceEmissiveHex(faces[5])}
-            emissiveIntensity={faces[5] === null ? 0.08 : 0.76}
+            color={faceColorHex(displayFaces[5])}
+            emissive={faceEmissiveHex(displayFaces[5])}
+            emissiveIntensity={displayFaces[5] === null ? 0.08 : 0.76}
             roughness={0.3}
             metalness={0.14}
           />

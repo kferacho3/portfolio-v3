@@ -1003,7 +1003,26 @@ export const SAT_LEVELS: Level[] = [...LEVEL_DEFS, ...LEVEL_DEFS_INTRICATE].map(
 
 export const AUTHORED_LEVELS: Level[] = [...STANDARDIZED_LEVELS, ...EXPERT_LEVELS];
 
-export const RUNE_LEVELS: Level[] = [...LEVELS, ...AUTHORED_LEVELS, ...SAT_LEVELS];
+export const ALL_RUNE_LEVELS: Level[] = [...LEVELS, ...AUTHORED_LEVELS, ...SAT_LEVELS];
+
+const UNSOLVABLE_SAT_LEVEL_IDS = new Set([
+  'RR_MED_05',
+  'RR_MED_06',
+  'RR_MED_08',
+  'RR_MED_09',
+  'RR_MED_11',
+  'RR_MED_12',
+  'RR_MED_14',
+  'RR_MED_15',
+]);
+
+export const SOLVABLE_SAT_LEVELS: Level[] = SAT_LEVELS.filter(
+  (level) => !UNSOLVABLE_SAT_LEVEL_IDS.has(level.id)
+);
+
+// Keep campaign progression on validated-solvable levels.
+// All authored packs are still exported via ALL_RUNE_LEVELS/AUTHORED_LEVELS.
+export const RUNE_LEVELS: Level[] = [...LEVELS, ...SOLVABLE_SAT_LEVELS];
 
 type LevelBounds = {
   minX: number;
