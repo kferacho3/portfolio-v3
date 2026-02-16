@@ -305,6 +305,21 @@ const PLATFORM_MOVING_SET = new Set<PlatformKind>([
 ]);
 
 const PLATFORM_BOUNCE_SET = new Set<PlatformKind>(['bouncer', 'trampoline', 'speed_ramp']);
+const PLATFORM_POWER_SET = new Set<PlatformKind>([
+  'teleporter',
+  'size_shifter_pad',
+  'gravity_flip_zone',
+  'wind_tunnel',
+]);
+const PLATFORM_SURFACE_SET = new Set<PlatformKind>([
+  'sticky_glue',
+  'sinking_sand',
+  'slippery_ice',
+  'icy_half_pipe',
+]);
+const PLATFORM_SPECIAL_SET = new Set<PlatformKind>(
+  PLATFORM_POOL.filter((kind): kind is Exclude<PlatformKind, 'standard'> => kind !== 'standard')
+);
 
 const READABLE_EFFECT_HAZARDS = new Set<HazardKind>([
   'mirror_maze_platform',
@@ -499,6 +514,92 @@ const VARIANT_ACCENTS: Record<StepsTileVariant, THREE.Color> = {
   ripple: new THREE.Color('#7af0ff'),
 };
 
+const HAZARD_LABELS: Record<HazardKind, string> = {
+  none: 'Clear',
+  mirror_maze_platform: 'Mirror Maze',
+  pulse_expander: 'Pulse Expander',
+  gravity_well: 'Gravity Well',
+  snap_trap: 'Snap Trap',
+  laser_grid: 'Laser Grid',
+  rotating_floor_disk: 'Floor Disk',
+  spike_wave: 'Spike Wave',
+  split_path_bridge: 'Split Bridge',
+  time_slow_zone: 'Time Slow',
+  bomb_tile: 'Bomb Tile',
+  rotating_hammer: 'Rotating Hammer',
+  anti_gravity_jump_pad: 'Anti-Gravity Pad',
+  shifting_tiles: 'Shifting Tiles',
+  telefrag_portal: 'Telefrag Portal',
+  magnetic_field: 'Magnetic Field',
+  rolling_boulder: 'Rolling Boulder',
+  trapdoor_row: 'Trapdoor Row',
+  rotating_cross_blades: 'Cross Blades',
+  flicker_bridge: 'Flicker Bridge',
+  rising_spike_columns: 'Spike Columns',
+  meat_grinder: 'Meat Grinder',
+  homing_mine: 'Homing Mine',
+  expand_o_matic: 'Expand-o-Matic',
+  pendulum_axes: 'Pendulum Axes',
+  rising_lava: 'Rising Lava',
+  fragile_glass: 'Fragile Glass',
+  lightning_striker: 'Lightning Striker',
+};
+
+const PLATFORM_HINTS: Record<PlatformKind, string> = {
+  standard: 'Stable footing.',
+  moving_platform: 'Shifts side-to-side.',
+  falling_platform: 'Drops shortly after contact.',
+  conveyor_belt: 'Pushes your step timing forward.',
+  reverse_conveyor: 'Drags movement backward.',
+  bouncer: 'Auto-launches forward.',
+  trampoline: 'Hold to charge extra jump arc.',
+  speed_ramp: 'Forces a faster next step.',
+  sticky_glue: 'Slows movement and raises pressure.',
+  sinking_sand: 'Sinks while you stay still.',
+  ghost_platform: 'Phases open and closed.',
+  narrow_bridge: 'Reduced landing width.',
+  slippery_ice: 'Low friction, extra glide.',
+  teleporter: 'Warps ahead on touch.',
+  weight_sensitive_bridge: 'Falls after a short delay.',
+  size_shifter_pad: 'Shrinks the runner briefly.',
+  icy_half_pipe: 'Slide-boosted lane.',
+  gravity_flip_zone: 'Flips jump arc timing.',
+  treadmill_switch: 'Direction alternates on cycle.',
+  crushing_ceiling: 'Closes on a beat timer.',
+  wind_tunnel: 'Adds forward lift and drift.',
+};
+
+const HAZARD_HINTS: Record<HazardKind, string> = {
+  none: 'No obstacle on this tile.',
+  mirror_maze_platform: 'Inverts your next tap cycle.',
+  pulse_expander: 'Adds collapse pressure instantly.',
+  gravity_well: 'Pulls movement and sticks timing.',
+  snap_trap: 'Snaps closed during danger phase.',
+  laser_grid: 'Sweeping beams on strict intervals.',
+  rotating_floor_disk: 'Spins into unsafe windows.',
+  spike_wave: 'Spikes rise in pulses.',
+  split_path_bridge: 'Only one lane stays safe.',
+  time_slow_zone: 'Desyncs your move speed.',
+  bomb_tile: 'Explodes during hot phase.',
+  rotating_hammer: 'Wide sweep around center.',
+  anti_gravity_jump_pad: 'Launches with gravity flip.',
+  shifting_tiles: 'Offsets your landing trajectory.',
+  telefrag_portal: 'Teleports into danger if mistimed.',
+  magnetic_field: 'Locks orientation and control.',
+  rolling_boulder: 'Orbital roll sweep.',
+  trapdoor_row: 'Floor opens underfoot.',
+  rotating_cross_blades: 'Multi-arm rotating sweep.',
+  flicker_bridge: 'Visibility-safe windows only.',
+  rising_spike_columns: 'Columns rise from floor.',
+  meat_grinder: 'Fast high-radius rotor.',
+  homing_mine: 'Tracks with pulsing approach.',
+  expand_o_matic: 'Expands threat radius quickly.',
+  pendulum_axes: 'Alternating swing arcs.',
+  rising_lava: 'Heat level rises over time.',
+  fragile_glass: 'Shatters if timing is late.',
+  lightning_striker: 'Vertical strike on pulse.',
+};
+
 function platformLabel(kind: PlatformKind) {
   if (kind === 'standard') return 'Standard';
   if (kind === 'moving_platform') return 'Moving';
@@ -521,6 +622,14 @@ function platformLabel(kind: PlatformKind) {
   if (kind === 'treadmill_switch') return 'Switch Treadmill';
   if (kind === 'crushing_ceiling') return 'Crushing Ceiling';
   return 'Wind Tunnel';
+}
+
+function runnerShapeLabel(shape: StepsRunnerShape) {
+  return stepsRunnerShapeLabels[shape] ?? 'Cube';
+}
+
+function hazardLabel(kind: HazardKind) {
+  return HAZARD_LABELS[kind];
 }
 
 function keyFor(ix: number, iz: number) {
@@ -1052,6 +1161,42 @@ function platformPressureModifier(kind: PlatformKind) {
   return 1;
 }
 
+function runnerBaseScale(shape: StepsRunnerShape) {
+  if (shape === 'rounded_cube') return [1.02, 0.98, 1.02] as const;
+  if (shape === 'tri_prism') return [0.98, 0.94, 0.98] as const;
+  if (shape === 'hex_prism') return [0.98, 0.96, 0.98] as const;
+  if (shape === 'pyramid') return [0.94, 0.92, 0.94] as const;
+  if (shape === 'tetra') return [0.96, 0.95, 0.96] as const;
+  if (shape === 'octa') return [0.95, 0.94, 0.95] as const;
+  if (shape === 'dodeca') return [0.92, 0.92, 0.92] as const;
+  if (shape === 'icosa') return [0.9, 0.9, 0.9] as const;
+  if (shape === 'star_prism') return [0.98, 0.9, 0.98] as const;
+  if (shape === 'fortress') return [1.08, 0.84, 1.08] as const;
+  if (shape === 'rhombic') return [0.96, 0.9, 0.96] as const;
+  if (shape === 'pillar') return [0.84, 1.06, 0.84] as const;
+  if (shape === 'wide_box') return [1.12, 0.78, 1.12] as const;
+  return [1, 1, 1] as const;
+}
+
+function runnerVerticalOffset(shape: StepsRunnerShape) {
+  if (shape === 'pillar') return 0.12;
+  if (shape === 'pyramid') return 0.07;
+  if (shape === 'tri_prism' || shape === 'hex_prism') return 0.04;
+  if (shape === 'star_prism') return 0.05;
+  if (shape === 'rhombic') return 0.06;
+  if (shape === 'wide_box' || shape === 'fortress') return -0.01;
+  return 0;
+}
+
+function platformSignalProfile(kind: PlatformKind) {
+  if (PLATFORM_BOUNCE_SET.has(kind)) return { lift: 0.24, scale: 0.21, thickness: 0.13, spin: 3 };
+  if (PLATFORM_MOVING_SET.has(kind)) return { lift: 0.21, scale: 0.18, thickness: 0.1, spin: 1.2 };
+  if (PLATFORM_POWER_SET.has(kind)) return { lift: 0.26, scale: 0.22, thickness: 0.09, spin: 2.4 };
+  if (PLATFORM_SURFACE_SET.has(kind)) return { lift: 0.17, scale: 0.2, thickness: 0.08, spin: 0.8 };
+  if (PLATFORM_TRAP_SET.has(kind)) return { lift: 0.18, scale: 0.2, thickness: 0.12, spin: 1.6 };
+  return { lift: 0.17, scale: 0.16, thickness: 0.08, spin: 1 };
+}
+
 function isHazardEffectDue(tile: Tile, simTime: number, cooldown = 0.35) {
   return simTime - tile.hazardLastEffect > cooldown;
 }
@@ -1073,10 +1218,43 @@ function Steps() {
   const clampMeshRef = useRef<THREE.InstancedMesh>(null);
   const swingMeshRef = useRef<THREE.InstancedMesh>(null);
   const ringMeshRef = useRef<THREE.InstancedMesh>(null);
+  const platformSignalMeshRef = useRef<THREE.InstancedMesh>(null);
+  const hazardAuraMeshRef = useRef<THREE.InstancedMesh>(null);
   const warningMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
   const playerRef = useRef<THREE.Mesh>(null);
+
+  const playerGeometries = useMemo(
+    () =>
+      ({
+        cube: new THREE.BoxGeometry(0.92, 0.52, 0.92),
+        rounded_cube: new THREE.BoxGeometry(0.96, 0.5, 0.96, 3, 2, 3),
+        tri_prism: new THREE.CylinderGeometry(0.52, 0.52, 0.64, 3),
+        hex_prism: new THREE.CylinderGeometry(0.5, 0.5, 0.62, 6),
+        pyramid: new THREE.ConeGeometry(0.54, 0.72, 4),
+        tetra: new THREE.TetrahedronGeometry(0.5, 0),
+        octa: new THREE.OctahedronGeometry(0.48, 0),
+        dodeca: new THREE.DodecahedronGeometry(0.44, 0),
+        icosa: new THREE.IcosahedronGeometry(0.42, 0),
+        star_prism: new THREE.CylinderGeometry(0.42, 0.56, 0.66, 8, 1, false),
+        fortress: new THREE.BoxGeometry(1.02, 0.42, 1.02),
+        rhombic: new THREE.OctahedronGeometry(0.46, 0),
+        pillar: new THREE.CylinderGeometry(0.36, 0.4, 0.78, 8),
+        wide_box: new THREE.BoxGeometry(1.14, 0.4, 1.14),
+      }) as Record<StepsRunnerShape, THREE.BufferGeometry>,
+    []
+  );
+
+  const playerGeometry = playerGeometries[snap.runnerShape] ?? playerGeometries.cube;
+
+  useEffect(() => {
+    return () => {
+      for (const geometry of Object.values(playerGeometries)) {
+        geometry.dispose();
+      }
+    };
+  }, [playerGeometries]);
 
   const world = useRef({
     rng: new SeededRandom(1),
@@ -1634,6 +1812,8 @@ function Steps() {
       clampMeshRef.current &&
       swingMeshRef.current &&
       ringMeshRef.current &&
+      platformSignalMeshRef.current &&
+      hazardAuraMeshRef.current &&
       warningMeshRef.current &&
       gemMeshRef.current &&
       debrisMeshRef.current
@@ -1646,6 +1826,8 @@ function Steps() {
         hideInstance(clampMeshRef.current, i);
         hideInstance(swingMeshRef.current, i);
         hideInstance(ringMeshRef.current, i);
+        hideInstance(platformSignalMeshRef.current, i);
+        hideInstance(hazardAuraMeshRef.current, i);
         hideInstance(warningMeshRef.current, i);
         hideInstance(gemMeshRef.current, i);
       }
@@ -1661,6 +1843,8 @@ function Steps() {
       clampMeshRef.current.instanceMatrix.needsUpdate = true;
       swingMeshRef.current.instanceMatrix.needsUpdate = true;
       ringMeshRef.current.instanceMatrix.needsUpdate = true;
+      platformSignalMeshRef.current.instanceMatrix.needsUpdate = true;
+      hazardAuraMeshRef.current.instanceMatrix.needsUpdate = true;
       warningMeshRef.current.instanceMatrix.needsUpdate = true;
       gemMeshRef.current.instanceMatrix.needsUpdate = true;
       debrisMeshRef.current.instanceMatrix.needsUpdate = true;
@@ -2024,6 +2208,8 @@ function Steps() {
       clampMeshRef.current &&
       swingMeshRef.current &&
       ringMeshRef.current &&
+      platformSignalMeshRef.current &&
+      hazardAuraMeshRef.current &&
       warningMeshRef.current &&
       gemMeshRef.current
     ) {
@@ -2034,6 +2220,8 @@ function Steps() {
       const clampMesh = clampMeshRef.current;
       const swingMesh = swingMeshRef.current;
       const ringMesh = ringMeshRef.current;
+      const platformSignalMesh = platformSignalMeshRef.current;
+      const hazardAuraMesh = hazardAuraMeshRef.current;
       const warningMesh = warningMeshRef.current;
       const gemMesh = gemMeshRef.current;
 
@@ -2047,6 +2235,8 @@ function Steps() {
           hideInstance(clampMesh, i);
           hideInstance(swingMesh, i);
           hideInstance(ringMesh, i);
+          hideInstance(platformSignalMesh, i);
+          hideInstance(hazardAuraMesh, i);
           hideInstance(warningMesh, i);
           hideInstance(gemMesh, i);
           continue;
@@ -2061,6 +2251,8 @@ function Steps() {
           hideInstance(clampMesh, i);
           hideInstance(swingMesh, i);
           hideInstance(ringMesh, i);
+          hideInstance(platformSignalMesh, i);
+          hideInstance(hazardAuraMesh, i);
           hideInstance(warningMesh, i);
           hideInstance(gemMesh, i);
           continue;
@@ -2127,89 +2319,335 @@ function Steps() {
         tileMesh.setColorAt(i, w.tempColorA);
 
         const detailBase = i * TRAIL_DETAIL_SLOTS;
+        let detailSlot = 0;
+        const detailTop = y + TILE_HEIGHT * 0.5 + 0.012;
+        const stylePulse = 0.5 + 0.5 * Math.sin(w.simTime * 2.8 + tile.index * 0.24);
+        const variantAccent = VARIANT_ACCENTS[variant];
+        const writeDetail = (
+          px: number,
+          py: number,
+          pz: number,
+          rx: number,
+          ry: number,
+          rz: number,
+          sx: number,
+          sy: number,
+          sz: number,
+          color: THREE.Color
+        ) => {
+          if (detailSlot >= TRAIL_DETAIL_SLOTS) return;
+          const slot = detailBase + detailSlot;
+          w.dummy.position.set(px, py, pz);
+          w.dummy.rotation.set(rx, ry, rz);
+          w.dummy.scale.set(sx, sy, sz);
+          w.dummy.updateMatrix();
+          trailDetailMesh.setMatrixAt(slot, w.dummy.matrix);
+          trailDetailMesh.setColorAt(slot, color);
+          detailSlot += 1;
+        };
+        const hideUnusedDetails = () => {
+          while (detailSlot < TRAIL_DETAIL_SLOTS) {
+            hideInstance(trailDetailMesh, detailBase + detailSlot);
+            detailSlot += 1;
+          }
+        };
+
         if (variant === 'voxel') {
-          const liftA = 0.06 + Math.sin(tile.index * 0.77 + w.simTime * 1.5) * 0.018;
-          const liftB = 0.04 + Math.cos(tile.index * 0.59 + w.simTime * 1.8) * 0.015;
-          const liftC = 0.03 + Math.sin(tile.index * 0.33 + w.simTime * 1.2) * 0.012;
           const side = tile.index % 2 === 0 ? 1 : -1;
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + liftA, z);
-          w.dummy.rotation.set(0, 0, 0);
-          w.dummy.scale.set(0.48, 0.16, 0.48);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.1);
-          trailDetailMesh.setColorAt(detailBase, w.tempColorC);
-
-          w.dummy.position.set(x + 0.24 * side, y + TILE_HEIGHT * 0.5 + liftB, z - 0.24 * side);
-          w.dummy.scale.set(0.24, 0.12, 0.24);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.05);
-          trailDetailMesh.setColorAt(detailBase + 1, w.tempColorC);
-
-          w.dummy.position.set(x - 0.24 * side, y + TILE_HEIGHT * 0.5 + liftC, z + 0.24 * side);
-          w.dummy.scale.set(0.24, 0.1, 0.24);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.12);
-          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
+          writeDetail(
+            x,
+            detailTop + 0.052 + stylePulse * 0.012,
+            z,
+            0,
+            0,
+            0,
+            0.46,
+            0.12,
+            0.46,
+            w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.16)
+          );
+          writeDetail(
+            x + 0.28 * side,
+            detailTop + 0.036,
+            z - 0.28 * side,
+            0,
+            0,
+            0,
+            0.2,
+            0.1,
+            0.2,
+            w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.06)
+          );
+          writeDetail(
+            x - 0.28 * side,
+            detailTop + 0.034,
+            z + 0.28 * side,
+            0,
+            0,
+            0,
+            0.2,
+            0.1,
+            0.2,
+            w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.12)
+          );
+          writeDetail(
+            x + 0.12 * side,
+            detailTop + 0.02,
+            z + 0.18 * side,
+            0,
+            0,
+            0,
+            0.16,
+            0.06,
+            0.16,
+            w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.08)
+          );
+          writeDetail(
+            x - 0.12 * side,
+            detailTop + 0.02,
+            z - 0.18 * side,
+            0,
+            0,
+            0,
+            0.16,
+            0.06,
+            0.16,
+            w.tempColorC.copy(w.tempColorA).lerp(COLOR_WHITE, 0.04)
+          );
         } else if (variant === 'carved') {
           const axisX = tile.index % 2 === 0;
-          const carveLift = 0.01;
-          const carveColor = w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.45);
+          const carvedColor = w.tempColorC.copy(w.tempColorA).lerp(COLOR_FALL, 0.44);
+          writeDetail(
+            x,
+            detailTop,
+            z,
+            0,
+            axisX ? 0 : Math.PI * 0.5,
+            0,
+            0.78,
+            0.026,
+            0.1,
+            carvedColor
+          );
+          writeDetail(
+            x,
+            detailTop + 0.002,
+            z,
+            0,
+            axisX ? Math.PI * 0.5 : 0,
+            0,
+            0.48,
+            0.024,
+            0.1,
+            carvedColor
+          );
+          writeDetail(
+            x,
+            detailTop + 0.004,
+            z,
+            0,
+            Math.PI * 0.25,
+            0,
+            0.34,
+            0.018,
+            0.08,
+            w.tempColorC.copy(carvedColor).lerp(COLOR_WHITE, 0.08)
+          );
+          writeDetail(
+            x,
+            detailTop + 0.003,
+            z,
+            0,
+            -Math.PI * 0.25,
+            0,
+            0.34,
+            0.018,
+            0.08,
+            w.tempColorC.copy(carvedColor).lerp(COLOR_FALL, 0.1)
+          );
+        } else if (variant === 'alloy') {
+          const seamColor = w.tempColorC.copy(w.tempColorA).lerp(variantAccent, 0.48).lerp(COLOR_WHITE, 0.12);
+          writeDetail(x, detailTop + 0.012, z - 0.22, 0, 0, 0, 0.72, 0.024, 0.08, seamColor);
+          writeDetail(x, detailTop + 0.012, z + 0.22, 0, 0, 0, 0.72, 0.024, 0.08, seamColor);
+          writeDetail(x - 0.22, detailTop + 0.012, z, 0, 0, 0, 0.08, 0.024, 0.72, seamColor);
+          writeDetail(x + 0.22, detailTop + 0.012, z, 0, 0, 0, 0.08, 0.024, 0.72, seamColor);
+          writeDetail(
+            x,
+            detailTop + 0.018 + stylePulse * 0.01,
+            z,
+            0,
+            Math.PI * 0.25,
+            0,
+            0.62,
+            0.02,
+            0.1,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.22)
+          );
+          writeDetail(
+            x,
+            detailTop + 0.018 + stylePulse * 0.01,
+            z,
+            0,
+            -Math.PI * 0.25,
+            0,
+            0.62,
+            0.02,
+            0.1,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.22)
+          );
+        } else if (variant === 'prismatic') {
+          const armColor = w.tempColorC.copy(w.tempColorA).lerp(variantAccent, 0.54);
+          const spin = tile.index * 0.09 + w.simTime * 0.18;
+          for (let shard = 0; shard < 6; shard += 1) {
+            const angle = spin + (Math.PI * 2 * shard) / 6;
+            const px = x + Math.cos(angle) * 0.24;
+            const pz = z + Math.sin(angle) * 0.24;
+            writeDetail(
+              px,
+              detailTop + 0.014 + Math.sin(angle + w.simTime * 0.9) * 0.006,
+              pz,
+              0,
+              angle,
+              0,
+              0.24,
+              0.02,
+              0.08,
+              armColor
+            );
+          }
+          writeDetail(
+            x,
+            detailTop + 0.024 + stylePulse * 0.016,
+            z,
+            0,
+            spin,
+            0,
+            0.16,
+            0.022,
+            0.16,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.28 + stylePulse * 0.2)
+          );
+        } else if (variant === 'gridforge') {
+          const gridColor = w.tempColorC.copy(w.tempColorA).lerp(variantAccent, 0.5).lerp(COLOR_WHITE, 0.08);
+          for (let lane = -1; lane <= 1; lane += 1) {
+            const offset = lane * 0.22;
+            writeDetail(x + offset, detailTop + 0.008, z, 0, 0, 0, 0.06, 0.02, 0.78, gridColor);
+            writeDetail(x, detailTop + 0.008, z + offset, 0, 0, 0, 0.78, 0.02, 0.06, gridColor);
+          }
+          writeDetail(
+            x,
+            detailTop + 0.02 + stylePulse * 0.012,
+            z,
+            0,
+            Math.PI * 0.25,
+            0,
+            0.22,
+            0.02,
+            0.22,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.22)
+          );
+        } else if (variant === 'diamond') {
+          const diamondColor = w.tempColorC.copy(w.tempColorA).lerp(variantAccent, 0.52);
+          writeDetail(x, detailTop + 0.014, z, 0, Math.PI * 0.25, 0, 0.66, 0.02, 0.12, diamondColor);
+          writeDetail(x, detailTop + 0.014, z, 0, -Math.PI * 0.25, 0, 0.66, 0.02, 0.12, diamondColor);
+          writeDetail(x, detailTop + 0.02, z, 0, 0, 0, 0.26, 0.02, 0.26, w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.24));
+          writeDetail(
+            x,
+            detailTop + 0.026 + stylePulse * 0.012,
+            z,
+            0,
+            tile.index * 0.1,
+            0,
+            0.14,
+            0.018,
+            0.14,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.32 + stylePulse * 0.16)
+          );
+        } else if (variant === 'sunken') {
+          const rimColor = w.tempColorC.copy(w.tempColorA).lerp(variantAccent, 0.46);
+          const pitColor = w.tempColorC.copy(variantAccent).lerp(COLOR_FALL, 0.42);
+          writeDetail(x, detailTop + 0.006, z - 0.29, 0, 0, 0, 0.72, 0.018, 0.08, rimColor);
+          writeDetail(x, detailTop + 0.006, z + 0.29, 0, 0, 0, 0.72, 0.018, 0.08, rimColor);
+          writeDetail(x - 0.29, detailTop + 0.006, z, 0, 0, 0, 0.08, 0.018, 0.72, rimColor);
+          writeDetail(x + 0.29, detailTop + 0.006, z, 0, 0, 0, 0.08, 0.018, 0.72, rimColor);
+          writeDetail(x, detailTop - 0.004, z, 0, 0, 0, 0.44, 0.012, 0.44, pitColor);
+          writeDetail(
+            x,
+            detailTop + 0.012 + stylePulse * 0.01,
+            z,
+            0,
+            Math.PI * 0.25,
+            0,
+            0.22,
+            0.014,
+            0.22,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.18)
+          );
+        } else if (variant === 'ripple') {
+          const rippleColor = w.tempColorC.copy(w.tempColorA).lerp(variantAccent, 0.5).lerp(COLOR_WHITE, 0.08);
+          const ringA = 0.68 + stylePulse * 0.08;
+          const ringB = 0.5 + stylePulse * 0.06;
+          const ringC = 0.32 + stylePulse * 0.04;
+          writeDetail(x, detailTop + 0.006, z, 0, 0, 0, ringA, 0.016, 0.06, rippleColor);
+          writeDetail(x, detailTop + 0.006, z, 0, Math.PI * 0.5, 0, ringA, 0.016, 0.06, rippleColor);
+          writeDetail(x, detailTop + 0.01, z, 0, 0, 0, ringB, 0.016, 0.06, rippleColor);
+          writeDetail(x, detailTop + 0.01, z, 0, Math.PI * 0.5, 0, ringB, 0.016, 0.06, rippleColor);
+          writeDetail(x, detailTop + 0.014, z, 0, 0, 0, ringC, 0.016, 0.06, rippleColor);
+          writeDetail(x, detailTop + 0.014, z, 0, Math.PI * 0.5, 0, ringC, 0.016, 0.06, rippleColor);
+          writeDetail(
+            x,
+            detailTop + 0.02 + stylePulse * 0.016,
+            z,
+            0,
+            tile.index * 0.1,
+            0,
+            0.14,
+            0.018,
+            0.14,
+            w.tempColorC.copy(variantAccent).lerp(COLOR_WHITE, 0.3 + stylePulse * 0.18)
+          );
+        }
+        hideUnusedDetails();
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift, z);
-          w.dummy.rotation.set(0, axisX ? 0 : Math.PI * 0.5, 0);
-          w.dummy.scale.set(0.72, 0.03, 0.12);
+        if (PLATFORM_SPECIAL_SET.has(tile.platform)) {
+          const profile = platformSignalProfile(tile.platform);
+          const signalPulse = 0.5 + 0.5 * Math.sin(w.simTime * 4.2 + tile.platformPhase * 1.7);
+          const signalScale = profile.scale + tile.platformMotion * 0.08 + signalPulse * 0.03;
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + profile.lift + signalPulse * 0.04, z);
+          w.dummy.rotation.set(
+            Math.PI * 0.5,
+            w.simTime * profile.spin + tile.platformPhase,
+            Math.sin(w.simTime * 1.4 + tile.platformPhase) * 0.08
+          );
+          w.dummy.scale.set(signalScale, signalScale, profile.thickness + tile.platformMotion * 0.05);
           w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
-          trailDetailMesh.setColorAt(detailBase, carveColor);
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift, z);
-          w.dummy.rotation.set(0, axisX ? Math.PI * 0.5 : 0, 0);
-          w.dummy.scale.set(0.42, 0.03, 0.1);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
-          trailDetailMesh.setColorAt(detailBase + 1, carveColor);
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + carveLift + 0.004, z);
-          w.dummy.rotation.set(0, tile.index * 0.2, 0);
-          w.dummy.scale.set(0.12, 0.02, 0.12);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
-          w.tempColorC.copy(carveColor).lerp(COLOR_WHITE, 0.08);
-          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
-        } else if (isApexPattern) {
-          const pulse = 0.5 + 0.5 * Math.sin(w.simTime * 2.4 + tile.index * 0.3);
-          const axis = tile.index % 2 === 0;
-          const accent = VARIANT_ACCENTS[variant];
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.012 + pulse * 0.008, z);
-          w.dummy.rotation.set(0, axis ? 0 : Math.PI * 0.5, 0);
-          w.dummy.scale.set(0.74, 0.022, 0.1);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(accent, 0.45);
-          trailDetailMesh.setColorAt(detailBase, w.tempColorC);
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.014 + pulse * 0.01, z);
-          w.dummy.rotation.set(0, axis ? Math.PI * 0.5 : 0, 0);
-          w.dummy.scale.set(0.46, 0.02, 0.1);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 1, w.dummy.matrix);
-          w.tempColorC.copy(w.tempColorA).lerp(accent, 0.3).lerp(COLOR_WHITE, 0.08);
-          trailDetailMesh.setColorAt(detailBase + 1, w.tempColorC);
-
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.017 + pulse * 0.014, z);
-          w.dummy.rotation.set(0, tile.index * 0.18 + w.simTime * 0.2, 0);
-          w.dummy.scale.set(0.14, 0.018, 0.14);
-          w.dummy.updateMatrix();
-          trailDetailMesh.setMatrixAt(detailBase + 2, w.dummy.matrix);
-          w.tempColorC.copy(accent).lerp(COLOR_WHITE, 0.16 + pulse * 0.2);
-          trailDetailMesh.setColorAt(detailBase + 2, w.tempColorC);
+          platformSignalMesh.setMatrixAt(i, w.dummy.matrix);
+          w.tempColorB
+            .copy(platformColor)
+            .lerp(variantAccent, 0.16)
+            .lerp(COLOR_WHITE, 0.18 + signalPulse * 0.2 + tile.platformMotion * 0.22);
+          platformSignalMesh.setColorAt(i, w.tempColorB);
         } else {
-          hideTrailDetails(trailDetailMesh, i);
+          hideInstance(platformSignalMesh, i);
+        }
+
+        if (tile.hazard !== 'none' && hazardState && hazardProfile) {
+          const auraPulse = 0.5 + 0.5 * Math.sin(w.simTime * (2.6 + hazardProfile.pulse * 0.5) + tile.hazardPhase);
+          const auraScale = 0.62 + hazardThreat * 0.56 + auraPulse * 0.16;
+          const auraThickness = 0.05 + hazardThreat * 0.04 + dangerPulse * 0.02;
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.5 + 0.02 + hazardProfile.lift * 0.12, z);
+          w.dummy.rotation.set(Math.PI * 0.5, w.simTime * (0.7 + hazardProfile.spin * 0.4), 0);
+          w.dummy.scale.set(auraScale, auraScale, auraThickness);
+          w.dummy.updateMatrix();
+          hazardAuraMesh.setMatrixAt(i, w.dummy.matrix);
+          w.tempColorB
+            .copy(hazardTint(tile.hazard))
+            .lerp(COLOR_HAZARD_SAFE, hazardState.openBlend * 0.2)
+            .lerp(COLOR_HAZARD_DANGER, 0.34 + hazardThreat * 0.42)
+            .lerp(COLOR_WHITE, 0.1 + dangerPulse * 0.16);
+          hazardAuraMesh.setColorAt(i, w.tempColorB);
+        } else {
+          hideInstance(hazardAuraMesh, i);
         }
 
         const hazardVisual = hazardVisualFor(tile.hazard);
@@ -2431,6 +2869,8 @@ function Steps() {
       clampMesh.instanceMatrix.needsUpdate = true;
       swingMesh.instanceMatrix.needsUpdate = true;
       ringMesh.instanceMatrix.needsUpdate = true;
+      platformSignalMesh.instanceMatrix.needsUpdate = true;
+      hazardAuraMesh.instanceMatrix.needsUpdate = true;
       warningMesh.instanceMatrix.needsUpdate = true;
       gemMesh.instanceMatrix.needsUpdate = true;
 
@@ -2441,6 +2881,8 @@ function Steps() {
       if (clampMesh.instanceColor) clampMesh.instanceColor.needsUpdate = true;
       if (swingMesh.instanceColor) swingMesh.instanceColor.needsUpdate = true;
       if (ringMesh.instanceColor) ringMesh.instanceColor.needsUpdate = true;
+      if (platformSignalMesh.instanceColor) platformSignalMesh.instanceColor.needsUpdate = true;
+      if (hazardAuraMesh.instanceColor) hazardAuraMesh.instanceColor.needsUpdate = true;
       if (warningMesh.instanceColor) warningMesh.instanceColor.needsUpdate = true;
       if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
     }
@@ -2465,12 +2907,13 @@ function Steps() {
 
     if (playerRef.current) {
       const player = playerRef.current;
-      player.position.set(w.px, w.py, w.pz);
+      const [baseScaleX, baseScaleY, baseScaleZ] = runnerBaseScale(snap.runnerShape);
+      player.position.set(w.px, w.py + runnerVerticalOffset(snap.runnerShape), w.pz);
 
       if (w.falling) {
         player.rotation.x += dtRender * w.deathSpin;
         player.rotation.z += dtRender * w.deathSpin * 0.66;
-        player.scale.set(1.04, 0.7, 1.04);
+        player.scale.set(1.04 * baseScaleX, 0.7 * baseScaleY, 1.04 * baseScaleZ);
       } else {
         player.rotation.x = easingLerp(player.rotation.x, 0, dtRender, 12);
         player.rotation.z = easingLerp(player.rotation.z, 0, dtRender, 12);
@@ -2480,9 +2923,9 @@ function Steps() {
         const stride = w.moving ? Math.sin(Math.PI * clamp(w.moveT, 0, 1)) : 0;
         const boostSquash = w.simTime < w.speedBoostUntil ? 0.08 : 0;
         const sizeTarget = w.simTime < w.sizeShiftUntil ? w.sizeShiftScale : 1;
-        const sx = (1 + stride * (0.12 + boostSquash)) * sizeTarget;
-        const sy = (1 - stride * 0.17) * sizeTarget;
-        const sz = (1 + stride * (0.12 + boostSquash)) * sizeTarget;
+        const sx = (1 + stride * (0.12 + boostSquash)) * sizeTarget * baseScaleX;
+        const sy = (1 - stride * 0.17) * sizeTarget * baseScaleY;
+        const sz = (1 + stride * (0.12 + boostSquash)) * sizeTarget * baseScaleZ;
         player.scale.set(sx, sy, sz);
       }
     }
@@ -2520,8 +2963,21 @@ function Steps() {
   });
 
   const collapsePct = Math.round(clamp(snap.pressure, 0, 1) * 100);
-  const bonusActive = Boolean(world.current.tilesByIndex.get(world.current.currentTileIndex)?.bonus);
-  const currentPlatform = world.current.tilesByIndex.get(world.current.currentTileIndex)?.platform ?? 'standard';
+  const currentTile = world.current.tilesByIndex.get(world.current.currentTileIndex);
+  const nextTile = world.current.tilesByIndex.get(world.current.currentTileIndex + 1);
+  const bonusActive = Boolean(currentTile?.bonus);
+  const currentPlatform = currentTile?.platform ?? 'standard';
+  const currentHazard = currentTile?.hazard ?? 'none';
+  const nextPlatform = nextTile?.platform ?? 'standard';
+  const nextHazard = nextTile?.hazard ?? 'none';
+  const currentHazardState = currentTile ? hazardStateAt(currentTile, world.current.simTime) : null;
+  const currentPlatformState = currentTile ? platformStateAt(currentTile, world.current.simTime) : null;
+  const nextHazardState = nextTile ? hazardStateAt(nextTile, world.current.simTime) : null;
+  const nextPlatformState = nextTile ? platformStateAt(nextTile, world.current.simTime) : null;
+  const currentHazardThreatPct = currentHazardState ? Math.round((1 - currentHazardState.openBlend) * 100) : 0;
+  const nextHazardThreatPct = nextHazardState ? Math.round((1 - nextHazardState.openBlend) * 100) : 0;
+  const currentPlatformWindowPct = currentPlatformState ? Math.round(currentPlatformState.openBlend * 100) : 100;
+  const nextPlatformWindowPct = nextPlatformState ? Math.round(nextPlatformState.openBlend * 100) : 100;
   const jumpChargePct = Math.round(clamp(world.current.tapCharge, 0, 1) * 100);
 
   return (
@@ -2601,6 +3057,16 @@ function Steps() {
         <meshStandardMaterial vertexColors roughness={0.2} metalness={0.34} emissive="#3dcfff" emissiveIntensity={0.2} />
       </instancedMesh>
 
+      <instancedMesh ref={platformSignalMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+        <torusGeometry args={[0.22, 0.05, 10, 28]} />
+        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.48} emissive="#8bc3ff" emissiveIntensity={0.3} />
+      </instancedMesh>
+
+      <instancedMesh ref={hazardAuraMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+        <torusGeometry args={[0.26, 0.045, 10, 24]} />
+        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.34} emissive="#ff1744" emissiveIntensity={0.28} />
+      </instancedMesh>
+
       <instancedMesh ref={warningMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
         <octahedronGeometry args={[0.13, 0]} />
         <meshStandardMaterial vertexColors roughness={0.2} metalness={0.2} emissive="#ff1744" emissiveIntensity={0.28} />
@@ -2623,8 +3089,7 @@ function Steps() {
         <meshStandardMaterial color={'#ffd9f1'} roughness={0.26} metalness={0.08} />
       </instancedMesh>
 
-      <mesh ref={playerRef} castShadow>
-        <boxGeometry args={PLAYER_SIZE} />
+      <mesh ref={playerRef} castShadow geometry={playerGeometry}>
         <meshStandardMaterial color={'#f85db6'} roughness={0.34} metalness={0.1} emissive="#ff94d4" emissiveIntensity={0.12} />
       </mesh>
 
@@ -2663,14 +3128,14 @@ function Steps() {
             background: 'rgba(10, 18, 38, 0.56)',
             border: '1px solid rgba(255,255,255,0.2)',
             borderRadius: 12,
-            padding: '8px 10px',
+            padding: '10px 10px',
             backdropFilter: 'blur(6px)',
             color: 'white',
-            width: 210,
+            width: 272,
             zIndex: 40,
           }}
         >
-          <div style={{ fontSize: 11, letterSpacing: 0.8, opacity: 0.84, marginBottom: 7 }}>TILE STYLING</div>
+          <div style={{ fontSize: 11, letterSpacing: 0.8, opacity: 0.84, marginBottom: 7 }}>STYLE + RUNNER</div>
           <div style={{ fontSize: 10, opacity: 0.7, marginBottom: 6 }}>
             Path: {snap.pathStyle === 'smooth-classic' ? 'Smooth Classic' : snap.pathStyle}
           </div>
@@ -2709,7 +3174,7 @@ function Steps() {
               New style unlocked: {trailStyleLabel(snap.lastUnlockedVariant)}
             </div>
           )}
-          <div style={{ marginTop: 7, display: 'flex', gap: 6 }}>
+          <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
             <button
               onPointerDown={(event) => {
                 event.preventDefault();
@@ -2750,6 +3215,80 @@ function Steps() {
             >
               Next
             </button>
+          </div>
+          <div style={{ marginTop: 9, fontSize: 10, opacity: 0.76, letterSpacing: 0.3 }}>
+            Runner Shape: {runnerShapeLabel(snap.runnerShape)}
+          </div>
+          <div style={{ marginTop: 5, display: 'flex', gap: 6 }}>
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={() => stepsState.cycleRunnerShape(-1)}
+              style={{
+                flex: 1,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '4px 0',
+                cursor: 'pointer',
+              }}
+            >
+              Prev Shape
+            </button>
+            <button
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={() => stepsState.cycleRunnerShape(1)}
+              style={{
+                flex: 1,
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'white',
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '4px 0',
+                cursor: 'pointer',
+              }}
+            >
+              Next Shape
+            </button>
+          </div>
+          <div style={{ marginTop: 6, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {RUNNER_SHAPES.map((shape) => (
+              <button
+                key={shape}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={() => stepsState.setRunnerShape(shape)}
+                style={{
+                  borderRadius: 999,
+                  border:
+                    snap.runnerShape === shape ? '1px solid rgba(255,255,255,0.9)' : '1px solid rgba(255,255,255,0.22)',
+                  background:
+                    snap.runnerShape === shape
+                      ? 'linear-gradient(180deg, rgba(116,227,255,0.45), rgba(74,155,255,0.28))'
+                      : 'rgba(255,255,255,0.08)',
+                  color: 'white',
+                  fontSize: 9,
+                  fontWeight: 700,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {runnerShapeLabel(shape)}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -2821,7 +3360,55 @@ function Steps() {
                 letterSpacing: 0.4,
               }}
             >
-              Platform: {platformLabel(currentPlatform)}
+              Current Platform: {platformLabel(currentPlatform)} ({currentPlatformWindowPct}% open)
+            </div>
+            <div
+              style={{
+                marginTop: 2,
+                textAlign: 'center',
+                fontSize: 10,
+                color: 'rgba(255,255,255,0.7)',
+                letterSpacing: 0.25,
+              }}
+            >
+              {PLATFORM_HINTS[currentPlatform]}
+            </div>
+            <div
+              style={{
+                marginTop: 5,
+                textAlign: 'center',
+                fontSize: 11,
+                color: currentHazard === 'none' ? 'rgba(255,255,255,0.76)' : '#ffd2db',
+                letterSpacing: 0.35,
+              }}
+            >
+              Current Obstacle: {hazardLabel(currentHazard)}
+              {currentHazard !== 'none' ? ` (${currentHazardThreatPct}% threat)` : ''}
+            </div>
+            {currentHazard !== 'none' && (
+              <div
+                style={{
+                  marginTop: 2,
+                  textAlign: 'center',
+                  fontSize: 10,
+                  color: 'rgba(255,220,230,0.8)',
+                  letterSpacing: 0.2,
+                }}
+              >
+                {HAZARD_HINTS[currentHazard]}
+              </div>
+            )}
+            <div
+              style={{
+                marginTop: 5,
+                textAlign: 'center',
+                fontSize: 11,
+                color: 'rgba(191,245,255,0.92)',
+                letterSpacing: 0.35,
+              }}
+            >
+              Next: {platformLabel(nextPlatform)} ({nextPlatformWindowPct}% open) / {hazardLabel(nextHazard)}
+              {nextHazard !== 'none' ? ` (${nextHazardThreatPct}% threat)` : ''}
             </div>
             {(currentPlatform === 'trampoline' || currentPlatform === 'bouncer') && (
               <div
@@ -2870,7 +3457,7 @@ function Steps() {
                 New obstacle suite: laser grids, gravity wells, cross blades, mines, lava, portals, trapdoors, and more.
               </div>
               <div style={{ marginTop: 5, fontSize: 11, opacity: 0.74 }}>
-                Smooth Classic path + collapse chase. Special platforms: conveyors, bouncers, teleports, ghost tiles, sticky zones, crushers. Active style: {trailStyleLabel(snap.tileVariant)}
+                Smooth Classic path + collapse chase. Special platforms and obstacle telegraphs are now color-coded for readability. Active style: {trailStyleLabel(snap.tileVariant)} | Runner: {runnerShapeLabel(snap.runnerShape)}
               </div>
 
               {snap.phase === 'gameover' && (

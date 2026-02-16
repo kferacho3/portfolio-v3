@@ -7,12 +7,25 @@
 'use client';
 
 import React from 'react';
+import { useSnapshot } from 'valtio';
 import { getGameCard } from '../../config/games';
 import { getArcadePanelCSS } from '../../config/themes';
+import {
+  stepsRunnerShapeLabels,
+  stepsRunnerShapes,
+  stepsState,
+  stepsTileVariants,
+} from '../../games/steps/state';
 import type { GameId, UnlockableSkin } from '../../store/types';
 
 const LOCKED_SKIN_IMAGE =
   'https://racho-devs.s3.us-east-2.amazonaws.com/funV2/reactPongAssets/locked.png';
+
+type StepsStateSnapshot = {
+  tileVariant: (typeof stepsTileVariants)[number];
+  unlockedVariants: ReadonlyArray<(typeof stepsTileVariants)[number]>;
+  runnerShape: (typeof stepsRunnerShapes)[number];
+};
 
 export interface PauseMenuProps {
   gameId: GameId;
@@ -39,8 +52,10 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
   onToggleSounds,
   onSelectSkin,
 }) => {
+  const stepsSnap = useSnapshot(stepsState);
   const showSkinSelection =
     (gameId === 'spinblock' || gameId === 'reactpong') && skins.length > 0;
+  const showStepsMenu = gameId === 'steps';
   const accent = getGameCard(gameId)?.accent ?? '#60a5fa';
   const panelStyles = getArcadePanelCSS(accent);
 
@@ -54,6 +69,9 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
         style={{
           borderRadius: 'var(--arcade-radius)',
           boxShadow: 'var(--arcade-elevation)',
+          width: showStepsMenu ? 'min(92vw, 760px)' : undefined,
+          maxHeight: '84vh',
+          overflowY: 'auto',
         }}
       >
         <div
@@ -81,6 +99,8 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
               <SkinGrid skins={skins} onSelectSkin={onSelectSkin} />
             </>
           )}
+
+          {showStepsMenu && <StepsPauseMenu snap={stepsSnap} />}
 
           <MenuItem onClick={onToggleMusic}>
             Music: {musicOn ? 'On' : 'Off'}
@@ -117,6 +137,113 @@ const MenuItem: React.FC<{
     className="mb-2 cursor-pointer text-white/70 hover:text-white transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
   >
     {children}
+  </li>
+);
+
+const trailStyleLabel = (style: string) => {
+  if (style === 'classic') return 'Classic';
+  if (style === 'voxel') return 'Voxel';
+  if (style === 'carved') return 'Carved';
+  if (style === 'alloy') return 'Alloy';
+  if (style === 'prismatic') return 'Prismatic';
+  if (style === 'gridforge') return 'GridForge';
+  if (style === 'diamond') return 'Diamond Tess';
+  if (style === 'sunken') return 'Sunken Steps';
+  return 'Ripple';
+};
+
+const StepsPauseMenu: React.FC<{ snap: StepsStateSnapshot }> = ({ snap }) => (
+  <li className="mb-4 rounded-xl border border-white/15 bg-white/5 p-3 text-left">
+    <div
+      className="mb-2 text-[10px] uppercase tracking-[0.28em] text-white/55"
+      style={{ fontFamily: 'var(--arcade-mono)' }}
+    >
+      Steps Menu
+    </div>
+    <div className="mb-2 text-[11px] text-white/75">
+      Tile Style: {trailStyleLabel(snap.tileVariant)}
+    </div>
+    <div className="mb-2 flex flex-wrap gap-2">
+      {stepsTileVariants.map((style) => {
+        const unlocked = snap.unlockedVariants.includes(style);
+        const active = snap.tileVariant === style;
+        return (
+          <button
+            key={style}
+            type="button"
+            disabled={!unlocked}
+            onClick={() => stepsState.setTileVariant(style)}
+            className="rounded-full border px-2 py-1 text-[10px] font-semibold transition-all duration-300 disabled:opacity-35"
+            style={{
+              borderColor: active ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.25)',
+              background: active
+                ? 'linear-gradient(140deg, rgba(92,198,255,0.35), rgba(255,132,185,0.28))'
+                : 'rgba(255,255,255,0.08)',
+            }}
+          >
+            {trailStyleLabel(style)}
+            {unlocked ? '' : ' 🔒'}
+          </button>
+        );
+      })}
+    </div>
+    <div className="mb-3 flex gap-2">
+      <button
+        type="button"
+        onClick={() => stepsState.cycleTileVariant(-1)}
+        className="flex-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold transition-all duration-300 hover:bg-white/20"
+      >
+        Prev Style
+      </button>
+      <button
+        type="button"
+        onClick={() => stepsState.cycleTileVariant(1)}
+        className="flex-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold transition-all duration-300 hover:bg-white/20"
+      >
+        Next Style
+      </button>
+    </div>
+
+    <div className="mb-2 text-[11px] text-white/75">
+      Runner Shape: {stepsRunnerShapeLabels[snap.runnerShape]}
+    </div>
+    <div className="mb-2 flex flex-wrap gap-2">
+      {stepsRunnerShapes.map((shape) => {
+        const active = snap.runnerShape === shape;
+        return (
+          <button
+            key={shape}
+            type="button"
+            onClick={() => stepsState.setRunnerShape(shape)}
+            className="rounded-full border px-2 py-1 text-[10px] font-semibold transition-all duration-300"
+            style={{
+              borderColor: active ? 'rgba(255,255,255,0.86)' : 'rgba(255,255,255,0.25)',
+              background: active
+                ? 'linear-gradient(140deg, rgba(122,248,238,0.34), rgba(115,171,255,0.26))'
+                : 'rgba(255,255,255,0.08)',
+            }}
+          >
+            {stepsRunnerShapeLabels[shape]}
+          </button>
+        );
+      })}
+    </div>
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => stepsState.cycleRunnerShape(-1)}
+        className="flex-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold transition-all duration-300 hover:bg-white/20"
+      >
+        Prev Shape
+      </button>
+      <button
+        type="button"
+        onClick={() => stepsState.cycleRunnerShape(1)}
+        className="flex-1 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-semibold transition-all duration-300 hover:bg-white/20"
+      >
+        Next Shape
+      </button>
+    </div>
   </li>
 );
 
