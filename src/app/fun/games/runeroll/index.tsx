@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { ContactShadows, Html, PerspectiveCamera } from '@react-three/drei';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
+import { AnimatePresence, motion } from 'framer-motion';
 import * as THREE from 'three';
 import { create } from 'zustand';
 import {
@@ -93,9 +94,11 @@ const TILE_SIZE = 0.92;
 const MARKER_Y = TILE_HEIGHT + 0.014;
 const CUBE_SIZE = 0.72;
 
-const FACE_SIZE = CUBE_SIZE * 0.38;
+const FACE_SIZE = CUBE_SIZE * 0.46;
 const FACE_DEPTH = 0.05;
 const FACE_INSET = 0.015;
+const LEVEL_MENU_PAGE_SIZE = 12;
+const CHARACTER_MENU_PAGE_SIZE = 8;
 
 const tileBaseColor = new THREE.Color('#16213a');
 const tileStartColor = new THREE.Color('#2a3f66');
@@ -502,7 +505,7 @@ const faceColorHex = (faceColor: FaceColor, character: RuneCharacter) =>
   faceColor === null ? character.neutralFaceColor : faceColor;
 
 const faceEmissiveHex = (faceColor: FaceColor, character: RuneCharacter) =>
-  faceColor === null ? character.neutralFaceEmissive : runeEdgeColor(faceColor);
+  faceColor === null ? character.neutralFaceEmissive : faceColor;
 
 const baseFaceIntensity = (
   faceColor: FaceColor,
@@ -520,7 +523,7 @@ const baseFaceIntensity = (
     orientationBoost = 0.06;
   }
 
-  return character.runeIntensity + orientationBoost;
+  return character.runeIntensity + orientationBoost + 0.26;
 };
 
 const tileColorFor = (
@@ -799,6 +802,7 @@ function RuneCube() {
   const faceMaterialRefs = useRef<Array<THREE.MeshStandardMaterial | null>>(
     Array.from({ length: 6 }, () => null)
   );
+  const bottomHaloRef = useRef<THREE.MeshBasicMaterial | null>(null);
   const displayFaces = useMemo<FaceColors>(() => {
     if (
       !animation ||
@@ -835,8 +839,19 @@ function RuneCube() {
           animation.pickupVisualFaceIndex === i
             ? pulseBoost
             : 0;
-        material.emissiveIntensity = base + boost;
+        const target = base + boost;
+        material.emissiveIntensity = lerp(material.emissiveIntensity, target, 0.24);
       }
+    };
+    const updateBottomHalo = (pickupBoost = 0) => {
+      const halo = bottomHaloRef.current;
+      if (!halo) return;
+
+      const bottomColor = displayFaces[1] ?? character.neutralFaceColor;
+      halo.color.set(bottomColor);
+      const targetOpacity =
+        displayFaces[1] === null ? 0.24 : Math.min(1, 0.82 + pickupBoost * 0.2);
+      halo.opacity = lerp(halo.opacity, targetOpacity, 0.22);
     };
 
     if (!animation) {
@@ -846,6 +861,7 @@ function RuneCube() {
       cube.position.set(0, CUBE_SIZE * 0.5, 0);
       cube.scale.set(1, 1, 1);
       updateFaceGlow(0);
+      updateBottomHalo(0);
       return;
     }
 
@@ -883,6 +899,7 @@ function RuneCube() {
     cube.scale.set(side, stretch, side);
     const pickupPulse = Math.sin(Math.PI * t) * character.pickupPulseBoost;
     updateFaceGlow(pickupPulse);
+    updateBottomHalo(pickupPulse);
 
     if (t >= 1) {
       finishAnimation();
@@ -902,6 +919,21 @@ function RuneCube() {
             emissiveIntensity={0.32}
             roughness={character.roughness}
             metalness={character.metalness}
+          />
+        </mesh>
+        <mesh
+          position={[0, -half + FACE_DEPTH * 0.7 + FACE_INSET, 0]}
+          rotation={[-Math.PI * 0.5, 0, 0]}
+        >
+          <ringGeometry args={[FACE_SIZE * 0.36, FACE_SIZE * 0.58, 42]} />
+          <meshBasicMaterial
+            ref={(material) => {
+              bottomHaloRef.current = material;
+            }}
+            color={displayFaces[1] ?? character.neutralFaceColor}
+            transparent
+            opacity={displayFaces[1] === null ? 0.24 : 0.82}
+            toneMapped={false}
           />
         </mesh>
 
@@ -1017,80 +1049,131 @@ function RuneRollOverlay() {
   const levelStarCount = levelStars[levelIndex] ?? 0;
   const selectedCharacter =
     RUNE_CHARACTERS[characterIndex] ?? RUNE_CHARACTERS[DEFAULT_RUNE_CHARACTER_INDEX];
+  const [levelPage, setLevelPage] = useState(() =>
+    Math.floor(levelIndex / LEVEL_MENU_PAGE_SIZE)
+  );
+  const [levelPageDir, setLevelPageDir] = useState(0);
+  const [characterPage, setCharacterPage] = useState(() =>
+    Math.floor(characterIndex / CHARACTER_MENU_PAGE_SIZE)
+  );
+  const [characterPageDir, setCharacterPageDir] = useState(0);
 
-  const levelRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const characterRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const levelPageCount = Math.ceil(RUNE_LEVELS.length / LEVEL_MENU_PAGE_SIZE);
+  const characterPageCount = Math.ceil(
+    RUNE_CHARACTERS.length / CHARACTER_MENU_PAGE_SIZE
+  );
 
   useEffect(() => {
-    if (phase !== 'menu') return;
-    const target = levelRefs.current[levelIndex];
-    target?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-  }, [phase, levelIndex]);
+    const requiredPage = Math.floor(levelIndex / LEVEL_MENU_PAGE_SIZE);
+    if (requiredPage !== levelPage) {
+      setLevelPageDir(requiredPage > levelPage ? 1 : -1);
+      setLevelPage(requiredPage);
+    }
+  }, [levelIndex, levelPage]);
 
   useEffect(() => {
-    if (phase !== 'menu') return;
-    const target = characterRefs.current[characterIndex];
-    target?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-  }, [phase, characterIndex]);
+    const requiredPage = Math.floor(characterIndex / CHARACTER_MENU_PAGE_SIZE);
+    if (requiredPage !== characterPage) {
+      setCharacterPageDir(requiredPage > characterPage ? 1 : -1);
+      setCharacterPage(requiredPage);
+    }
+  }, [characterIndex, characterPage]);
+
+  const pageLevels = useMemo(() => {
+    const start = levelPage * LEVEL_MENU_PAGE_SIZE;
+    return RUNE_LEVELS.slice(start, start + LEVEL_MENU_PAGE_SIZE).map((entry, offset) => ({
+      entry,
+      index: start + offset,
+    }));
+  }, [levelPage]);
+
+  const pageCharacters = useMemo(() => {
+    const start = characterPage * CHARACTER_MENU_PAGE_SIZE;
+    return RUNE_CHARACTERS.slice(start, start + CHARACTER_MENU_PAGE_SIZE).map((entry, offset) => ({
+      entry,
+      index: start + offset,
+    }));
+  }, [characterPage]);
 
   const bottomFace = faces[1];
   const bottomFaceColor = bottomFace === null ? selectedCharacter.neutralFaceColor : bottomFace;
   const bottomFaceName = bottomFace === null ? 'Unmarked' : runeColorName(bottomFace);
 
   const canMove = phase === 'playing';
+  const showHud = phase !== 'menu';
+  const setLevelPageSmooth = (targetPage: number) => {
+    const clampedPage = clamp(targetPage, 0, levelPageCount - 1);
+    if (clampedPage === levelPage) return;
+    setLevelPageDir(clampedPage > levelPage ? 1 : -1);
+    setLevelPage(clampedPage);
+  };
+  const setCharacterPageSmooth = (targetPage: number) => {
+    const clampedPage = clamp(targetPage, 0, characterPageCount - 1);
+    if (clampedPage === characterPage) return;
+    setCharacterPageDir(clampedPage > characterPage ? 1 : -1);
+    setCharacterPage(clampedPage);
+  };
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none text-white">
-      <div className="absolute left-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 backdrop-blur-sm">
-        <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
-        <div className="text-[11px] text-cyan-50/80">Reforged Puzzle Chambers</div>
-      </div>
-
-      <div className="absolute right-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 text-right backdrop-blur-sm">
-        <div className="text-sm font-semibold">Rune {levelIndex + 1}</div>
-        <div className="text-[11px] text-white/75">{level.id}</div>
-        <div className="text-[11px] text-cyan-100/80">{selectedCharacter.name}</div>
-        <div className="mt-1 text-xs text-white/80">Moves {moveCount}</div>
-        <div className="text-xs text-white/80">Par {level.parMoves}</div>
-        <div className="text-xs text-amber-200">Best {starsText(levelStarCount)}</div>
-      </div>
-
-      <div className="absolute left-4 top-[98px] rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-xs backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-white/70">Bottom face</span>
-          <span
-            className="inline-block h-3.5 w-3.5 rounded-sm"
-            style={{
-              background: bottomFaceColor,
-              boxShadow: `0 0 10px ${bottomFaceColor}`,
-            }}
-          />
-          <span className="font-semibold text-cyan-100">{bottomFaceName}</span>
+      {showHud && (
+        <div className="absolute left-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 backdrop-blur-sm">
+          <div className="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Rune Roll</div>
+          <div className="text-[11px] text-cyan-50/80">Reforged Puzzle Chambers</div>
         </div>
-        <div className="mt-1 text-[11px] text-white/70">Total stars {totalStars}</div>
-        <div className="mt-1 flex items-center gap-1 text-[10px] text-white/70">
-          {RUNE_COLOR_LEGEND.map(({ color, name }) => (
-            <span key={color} className="inline-flex items-center gap-1">
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{
-                  background: color,
-                  boxShadow: `0 0 8px ${color}`,
-                }}
-              />
-              <span>{name}</span>
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
 
-      <div className="absolute bottom-4 left-4 rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm">
-        <div>Move: WASD / Arrow Keys</div>
-        <div>Restart: R</div>
-        <div>Menu: Esc</div>
-        <div>Each gate needs the matching bottom face.</div>
-        <div>Pickups imprint once and stay charged.</div>
-      </div>
+      {showHud && (
+        <div className="absolute right-4 top-4 rounded-md border border-cyan-100/40 bg-slate-950/72 px-3 py-2 text-right backdrop-blur-sm">
+          <div className="text-sm font-semibold">Rune {levelIndex + 1}</div>
+          <div className="text-[11px] text-white/75">{level.id}</div>
+          <div className="text-[11px] text-cyan-100/80">{selectedCharacter.name}</div>
+          <div className="mt-1 text-xs text-white/80">Moves {moveCount}</div>
+          <div className="text-xs text-white/80">Par {level.parMoves}</div>
+          <div className="text-xs text-amber-200">Best {starsText(levelStarCount)}</div>
+        </div>
+      )}
+
+      {showHud && (
+        <div className="absolute left-4 top-[98px] rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-xs backdrop-blur-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-white/70">Bottom face</span>
+            <span
+              className="inline-block h-3.5 w-3.5 rounded-sm"
+              style={{
+                background: bottomFaceColor,
+                boxShadow: `0 0 10px ${bottomFaceColor}`,
+              }}
+            />
+            <span className="font-semibold text-cyan-100">{bottomFaceName}</span>
+          </div>
+          <div className="mt-1 text-[11px] text-white/70">Total stars {totalStars}</div>
+          <div className="mt-1 flex items-center gap-1 text-[10px] text-white/70">
+            {RUNE_COLOR_LEGEND.map(({ color, name }) => (
+              <span key={color} className="inline-flex items-center gap-1">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-sm"
+                  style={{
+                    background: color,
+                    boxShadow: `0 0 8px ${color}`,
+                  }}
+                />
+                <span>{name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showHud && (
+        <div className="absolute bottom-4 left-4 rounded-md border border-cyan-100/30 bg-slate-950/72 px-3 py-2 text-[11px] text-white/80 backdrop-blur-sm">
+          <div>Move: WASD / Arrow Keys</div>
+          <div>Restart: R</div>
+          <div>Menu: Esc</div>
+          <div>Each gate needs the matching bottom face.</div>
+          <div>Pickups imprint once and stay charged.</div>
+        </div>
+      )}
 
       {phase === 'playing' && message && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-md border border-amber-100/35 bg-slate-950/80 px-3 py-1.5 text-xs text-amber-100 backdrop-blur-sm">
@@ -1098,46 +1181,48 @@ function RuneRollOverlay() {
         </div>
       )}
 
-      <div className="pointer-events-auto absolute bottom-6 right-6 grid grid-cols-3 gap-2">
-        <span />
-        <button
-          type="button"
-          disabled={!canMove}
-          className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
-          onClick={() => attemptMove('up')}
-        >
-          ↑
-        </button>
-        <span />
-        <button
-          type="button"
-          disabled={!canMove}
-          className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
-          onClick={() => attemptMove('left')}
-        >
-          ←
-        </button>
-        <button
-          type="button"
-          disabled={!canMove}
-          className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
-          onClick={() => attemptMove('down')}
-        >
-          ↓
-        </button>
-        <button
-          type="button"
-          disabled={!canMove}
-          className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
-          onClick={() => attemptMove('right')}
-        >
-          →
-        </button>
-      </div>
+      {showHud && (
+        <div className="pointer-events-auto absolute bottom-6 right-6 grid grid-cols-3 gap-2">
+          <span />
+          <button
+            type="button"
+            disabled={!canMove}
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            onClick={() => attemptMove('up')}
+          >
+            ↑
+          </button>
+          <span />
+          <button
+            type="button"
+            disabled={!canMove}
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            onClick={() => attemptMove('left')}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            disabled={!canMove}
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            onClick={() => attemptMove('down')}
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            disabled={!canMove}
+            className="rounded border border-cyan-100/45 bg-slate-900/70 px-3 py-2 text-lg font-semibold transition disabled:opacity-40"
+            onClick={() => attemptMove('right')}
+          >
+            →
+          </button>
+        </div>
+      )}
 
       {phase === 'menu' && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="pointer-events-auto w-[min(95vw,940px)] rounded-xl border border-cyan-100/42 bg-slate-950/80 px-5 py-5 backdrop-blur-md">
+        <div className="absolute inset-0 z-20 grid place-items-center bg-slate-950/36 p-4">
+          <div className="pointer-events-auto w-[min(95vw,980px)] rounded-xl border border-cyan-100/42 bg-slate-950/86 px-5 py-5 backdrop-blur-md">
             <div className="text-center">
               <div className="text-3xl font-black tracking-wide text-cyan-100">RUNE ROLL</div>
               <div className="mt-1 text-sm text-white/85">
@@ -1150,7 +1235,7 @@ function RuneRollOverlay() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-xs uppercase tracking-[0.2em] text-cyan-100/80">
-                      Smooth Level Select
+                      Level Select
                     </div>
                     <div className="text-sm text-white/90">
                       Rune {levelIndex + 1} of {RUNE_LEVELS.length}
@@ -1167,54 +1252,57 @@ function RuneRollOverlay() {
                   <button
                     type="button"
                     className="rounded border border-cyan-100/35 bg-cyan-400/10 px-2 py-1 text-sm text-cyan-100 disabled:opacity-30"
-                    disabled={levelIndex <= 0}
-                    onClick={() => selectLevel(levelIndex - 1)}
+                    disabled={levelPage <= 0}
+                    onClick={() => setLevelPageSmooth(levelPage - 1)}
                   >
                     ◀
                   </button>
-                  <input
-                    type="range"
-                    min={0}
-                    max={RUNE_LEVELS.length - 1}
-                    value={levelIndex}
-                    onChange={(event) => selectLevel(Number(event.target.value))}
-                    className="h-2 w-full cursor-pointer appearance-none rounded-full bg-cyan-100/20 accent-cyan-300"
-                  />
+                  <div className="flex-1 text-center text-xs text-white/80">
+                    Page {levelPage + 1} / {levelPageCount}
+                  </div>
                   <button
                     type="button"
                     className="rounded border border-cyan-100/35 bg-cyan-400/10 px-2 py-1 text-sm text-cyan-100 disabled:opacity-30"
-                    disabled={levelIndex >= RUNE_LEVELS.length - 1}
-                    onClick={() => selectLevel(levelIndex + 1)}
+                    disabled={levelPage >= levelPageCount - 1}
+                    onClick={() => setLevelPageSmooth(levelPage + 1)}
                   >
                     ▶
                   </button>
                 </div>
 
-                <div className="mt-3 flex snap-x gap-2 overflow-x-auto scroll-smooth pb-1">
-                  {RUNE_LEVELS.map((entry, index) => {
-                    const selected = index === levelIndex;
-                    return (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        ref={(element) => {
-                          levelRefs.current[index] = element;
-                        }}
-                        className={`min-w-[86px] snap-center rounded border px-2 py-2 text-left text-xs transition ${
-                          selected
-                            ? 'border-cyan-200/75 bg-cyan-300/18 text-cyan-50 shadow-[0_0_18px_rgba(77,219,255,0.35)]'
-                            : 'border-cyan-100/20 bg-slate-900/60 text-white/75 hover:border-cyan-100/45'
-                        }`}
-                        onClick={() => selectLevel(index)}
-                      >
-                        <div className="font-semibold">#{index + 1}</div>
-                        <div className="truncate text-[10px]">{entry.id}</div>
-                        <div className="text-[10px] text-amber-200/90">
-                          {starsText(levelStars[index] ?? 0)}
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="mt-3 min-h-[220px] overflow-hidden rounded-md border border-cyan-100/15 bg-slate-950/45 p-2">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={`level-page-${levelPage}`}
+                      initial={{ opacity: 0, x: levelPageDir >= 0 ? 26 : -26 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: levelPageDir >= 0 ? -26 : 26 }}
+                      transition={{ duration: 0.24, ease: 'easeInOut' }}
+                      className="grid grid-cols-3 gap-2"
+                    >
+                      {pageLevels.map(({ entry, index }) => {
+                        const selected = index === levelIndex;
+                        return (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            className={`rounded border px-2 py-2 text-left text-xs transition ${
+                              selected
+                                ? 'border-cyan-200/75 bg-cyan-300/18 text-cyan-50 shadow-[0_0_18px_rgba(77,219,255,0.35)]'
+                                : 'border-cyan-100/20 bg-slate-900/60 text-white/75 hover:border-cyan-100/45'
+                            }`}
+                            onClick={() => selectLevel(index)}
+                          >
+                            <div className="font-semibold">#{index + 1}</div>
+                            <div className="truncate text-[10px]">{entry.id}</div>
+                            <div className="text-[10px] text-amber-200/90">
+                              {starsText(levelStars[index] ?? 0)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </section>
 
@@ -1244,31 +1332,61 @@ function RuneRollOverlay() {
                   <span>Unmarked Face</span>
                 </div>
 
-                <div className="mt-3 flex snap-x gap-2 overflow-x-auto scroll-smooth pb-1">
-                  {RUNE_CHARACTERS.map((entry, index) => {
-                    const selected = index === characterIndex;
-                    return (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        ref={(element) => {
-                          characterRefs.current[index] = element;
-                        }}
-                        className={`min-w-[104px] snap-center rounded border px-2 py-2 text-left text-[10px] transition ${
-                          selected
-                            ? 'border-cyan-200/80 bg-cyan-300/18 text-cyan-50 shadow-[0_0_20px_rgba(79,226,255,0.3)]'
-                            : 'border-cyan-100/20 bg-slate-900/60 text-white/75 hover:border-cyan-100/45'
-                        }`}
-                        style={{
-                          backgroundImage: `linear-gradient(135deg, ${entry.bodyColor} 0%, ${entry.neutralFaceColor} 70%)`,
-                        }}
-                        onClick={() => selectCharacter(index)}
-                      >
-                        <div className="truncate text-[11px] font-semibold">{entry.name}</div>
-                        <div className="truncate opacity-85">{entry.epithet}</div>
-                      </button>
-                    );
-                  })}
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded border border-cyan-100/35 bg-cyan-400/10 px-2 py-1 text-sm text-cyan-100 disabled:opacity-30"
+                    disabled={characterPage <= 0}
+                    onClick={() => setCharacterPageSmooth(characterPage - 1)}
+                  >
+                    ◀
+                  </button>
+                  <div className="flex-1 text-center text-xs text-white/80">
+                    Page {characterPage + 1} / {characterPageCount}
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded border border-cyan-100/35 bg-cyan-400/10 px-2 py-1 text-sm text-cyan-100 disabled:opacity-30"
+                    disabled={characterPage >= characterPageCount - 1}
+                    onClick={() => setCharacterPageSmooth(characterPage + 1)}
+                  >
+                    ▶
+                  </button>
+                </div>
+
+                <div className="mt-3 min-h-[220px] overflow-hidden rounded-md border border-cyan-100/15 bg-slate-950/45 p-2">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={`character-page-${characterPage}`}
+                      initial={{ opacity: 0, x: characterPageDir >= 0 ? 26 : -26 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: characterPageDir >= 0 ? -26 : 26 }}
+                      transition={{ duration: 0.24, ease: 'easeInOut' }}
+                      className="grid grid-cols-2 gap-2"
+                    >
+                      {pageCharacters.map(({ entry, index }) => {
+                        const selected = index === characterIndex;
+                        return (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            className={`rounded border px-2 py-2 text-left text-[10px] transition ${
+                              selected
+                                ? 'border-cyan-200/80 text-cyan-50 shadow-[0_0_20px_rgba(79,226,255,0.3)]'
+                                : 'border-cyan-100/20 text-white/75 hover:border-cyan-100/45'
+                            }`}
+                            style={{
+                              backgroundImage: `linear-gradient(135deg, ${entry.bodyColor} 0%, ${entry.neutralFaceColor} 70%)`,
+                            }}
+                            onClick={() => selectCharacter(index)}
+                          >
+                            <div className="truncate text-[11px] font-semibold">{entry.name}</div>
+                            <div className="truncate opacity-85">{entry.epithet}</div>
+                          </button>
+                        );
+                      })}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               </section>
             </div>
