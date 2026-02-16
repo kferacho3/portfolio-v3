@@ -1275,6 +1275,8 @@ export default function OctaSurge() {
 
     if (paused) {
       fixedStepperRef.current.reset();
+      turnQueueRef.current.length = 0;
+      flipQueueRef.current = 0;
       updateFxParticles(frameDelta);
       clearFrameInput(inputRef);
       return;
@@ -1282,6 +1284,8 @@ export default function OctaSurge() {
 
     if (deathFxRef.current.active) {
       fixedStepperRef.current.reset();
+      turnQueueRef.current.length = 0;
+      flipQueueRef.current = 0;
       const finished = updateDeathFx(frameDelta);
       updateFxParticles(frameDelta);
       if (finished) {
@@ -1745,6 +1749,12 @@ export default function OctaSurge() {
         lastSafeLane = nextSegment.safeLane;
       }
     }
+    };
+
+    fixedStepperRef.current.tick(frameDelta, (fixedDelta) => {
+      if (endReason) return;
+      simulateStep(fixedDelta);
+    });
 
     const runGoal =
       snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
@@ -1780,6 +1790,7 @@ export default function OctaSurge() {
       cameraMode,
     });
 
+    const delta = frameDelta;
     const stageNow = stageById(stageId);
     const stageVisualNow = stageAestheticById(stageNow.id);
     const variantAccent = OCTA_TILE_VARIANT_ACCENT[snap.tileVariant];
@@ -1879,6 +1890,8 @@ export default function OctaSurge() {
     });
 
     if (endReason) {
+      turnQueueRef.current.length = 0;
+      flipQueueRef.current = 0;
       triggerDeathFx(endReason, deathType);
       updateFxParticles(delta);
       clearFrameInput(inputRef);
@@ -1886,6 +1899,8 @@ export default function OctaSurge() {
     }
 
     if (runComplete) {
+      turnQueueRef.current.length = 0;
+      flipQueueRef.current = 0;
       const playerPos = playerRef.current?.position;
       if (playerPos) {
         emitFxBurst(
