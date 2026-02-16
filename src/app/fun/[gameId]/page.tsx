@@ -361,6 +361,12 @@ export default function GamePage({ params }: GamePageProps) {
             useOctaRuntimeStore.setState({ cameraMode: mode });
             octaSurgeState.setCameraMode(mode);
           }}
+          onSelectTileVariant={(variant) => {
+            octaSurgeState.setTileVariant(variant);
+          }}
+          onCycleTileVariant={(direction) => {
+            octaSurgeState.cycleTileVariant(direction);
+          }}
         />
       )}
 

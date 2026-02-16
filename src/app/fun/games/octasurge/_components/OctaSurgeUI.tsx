@@ -3,12 +3,23 @@
 import type { CSSProperties } from 'react';
 import { useSnapshot } from 'valtio';
 
-import { CAMERA_MODE_LABEL, GAME, OCTA_SURGE_TITLE } from '../constants';
+import {
+  CAMERA_MODE_LABEL,
+  GAME,
+  OCTA_OBSTACLE_LABEL,
+  OCTA_PATH_STYLE_LABEL,
+  OCTA_PLATFORM_LABEL,
+  OCTA_SURGE_TITLE,
+  OCTA_TILE_UNLOCK_THRESHOLDS,
+  OCTA_TILE_VARIANT_LABEL,
+  OCTA_TILE_VARIANTS,
+} from '../constants';
 import { octaSurgeState } from '../state';
 import type {
   OctaCameraMode,
   OctaFxLevel,
   OctaSurgeMode,
+  OctaTileVariant,
 } from '../types';
 
 const uiFont =
@@ -50,18 +61,27 @@ export function OctaSurgeUI({
   onCycleFxLevel,
   onCycleCamera,
   onSelectCamera,
+  onSelectTileVariant,
+  onCycleTileVariant,
 }: {
   onStart: () => void;
   onSelectMode: (mode: OctaSurgeMode) => void;
   onCycleFxLevel: () => void;
   onCycleCamera: () => void;
   onSelectCamera: (mode: OctaCameraMode) => void;
+  onSelectTileVariant: (variant: OctaTileVariant) => void;
+  onCycleTileVariant: (direction: -1 | 1) => void;
 }) {
   const snap = useSnapshot(octaSurgeState);
 
   const runIsTimed = snap.mode !== 'endless';
   const runGoal =
     snap.mode === 'daily' ? GAME.dailyTargetScore : GAME.classicTargetScore;
+  const nextUnlockTarget =
+    OCTA_TILE_UNLOCK_THRESHOLDS[snap.variantUnlockTier] ?? null;
+  const unlockProgress = nextUnlockTarget
+    ? Math.max(0, Math.min(1, snap.styleShards / nextUnlockTarget))
+    : 1;
 
   return (
     <div
@@ -232,6 +252,21 @@ export function OctaSurgeUI({
                   ? `Goal ${Math.floor(runGoal)} pts`
                   : `Time ${snap.time.toFixed(1)}s`} | {Math.floor(snap.speed * 2)} km/h
               </div>
+              <div
+                style={{
+                  marginTop: 5,
+                  fontFamily: monoFont,
+                  fontSize: 10,
+                  opacity: 0.82,
+                  lineHeight: 1.45,
+                }}
+              >
+                Path {OCTA_PATH_STYLE_LABEL[snap.pathStyle]} | Style{' '}
+                {OCTA_TILE_VARIANT_LABEL[snap.tileVariant]}
+                <br />
+                Platform {OCTA_PLATFORM_LABEL[snap.currentPlatform]} | Obstacle{' '}
+                {OCTA_OBSTACLE_LABEL[snap.currentObstacle]}
+              </div>
             </div>
 
             {runIsTimed && (
@@ -277,7 +312,7 @@ export function OctaSurgeUI({
                   opacity: 0.72,
                 }}
               >
-                A / D rotate lanes. Space / W flips. Shift triggers slow-mo.
+                A / D rotate lanes. Space / W flips. Shift slow-mo. Q / E cycles tile style.
               </div>
             )}
           </>
@@ -371,6 +406,7 @@ export function OctaSurgeUI({
                   <span>Classic {Math.floor(snap.bestClassic)}</span>
                   <span>Daily {Math.floor(snap.bestDaily)}</span>
                   <span>{CAMERA_MODE_LABEL[snap.cameraMode]}</span>
+                  <span>{OCTA_PATH_STYLE_LABEL[snap.pathStyle]}</span>
                 </div>
               </div>
 
@@ -430,6 +466,145 @@ export function OctaSurgeUI({
                   })}
                 </div>
 
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    background: 'rgba(255,255,255,0.04)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: 1.5,
+                      opacity: 0.72,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Smooth Classic Path // Apex Tile Styles
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: 'flex',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <button
+                      onClick={() => onCycleTileVariant(-1)}
+                      style={{
+                        ...buttonBase,
+                        fontSize: 11,
+                        padding: '8px 12px',
+                      }}
+                    >
+                      Prev Style
+                    </button>
+                    <button
+                      onClick={() => onCycleTileVariant(1)}
+                      style={{
+                        ...buttonBase,
+                        fontSize: 11,
+                        padding: '8px 12px',
+                      }}
+                    >
+                      Next Style
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: 'flex',
+                      gap: 6,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {OCTA_TILE_VARIANTS.map((variant) => {
+                      const unlocked = snap.unlockedVariants.includes(variant);
+                      const active = snap.tileVariant === variant;
+                      return (
+                        <button
+                          key={variant}
+                          disabled={!unlocked}
+                          onClick={() => onSelectTileVariant(variant)}
+                          style={{
+                            ...buttonBase,
+                            fontSize: 10,
+                            padding: '7px 10px',
+                            opacity: unlocked ? 1 : 0.42,
+                            cursor: unlocked ? 'pointer' : 'not-allowed',
+                            border: active
+                              ? '1px solid rgba(255,255,255,0.82)'
+                              : '1px solid rgba(255,255,255,0.2)',
+                            background: active
+                              ? 'linear-gradient(135deg, rgba(101,239,255,0.36), rgba(255,168,96,0.28))'
+                              : 'rgba(255,255,255,0.05)',
+                          }}
+                        >
+                          {OCTA_TILE_VARIANT_LABEL[variant]}
+                          {!unlocked ? ' LOCK' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 9,
+                      fontFamily: monoFont,
+                      fontSize: 10,
+                      opacity: 0.8,
+                    }}
+                  >
+                    Style shards {snap.styleShards} | Unlocked {snap.unlockedVariants.length}/
+                    {OCTA_TILE_VARIANTS.length}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      height: 4,
+                      borderRadius: 999,
+                      background: 'rgba(255,255,255,0.12)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.floor(unlockProgress * 100)}%`,
+                        background:
+                          'linear-gradient(90deg, rgba(101,239,255,0.95), rgba(255,168,96,0.95))',
+                      }}
+                    />
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontFamily: monoFont,
+                      fontSize: 10,
+                      opacity: 0.75,
+                    }}
+                  >
+                    {nextUnlockTarget
+                      ? `Next style at ${nextUnlockTarget} shards`
+                      : 'All styles unlocked'}
+                  </div>
+                  {snap.lastUnlockedVariant && (
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: 'rgba(145,243,255,0.95)',
+                      }}
+                    >
+                      Unlocked: {OCTA_TILE_VARIANT_LABEL[snap.lastUnlockedVariant]}
+                    </div>
+                  )}
+                </div>
+
                 {snap.phase === 'gameover' && (
                   <div
                     style={{
@@ -463,9 +638,11 @@ export function OctaSurgeUI({
                       maxWidth: 500,
                     }}
                   >
-                    OctaSurge is tuned for readable lanes and progressive difficulty.
-                    Start in ST-01, rotate early, and use flips only when the forward
-                    line forces a ceiling swap.
+                    Smooth Classic path generation stays intact while new obstacle
+                    families (laser grids, gravity wells, cross blades, mines, lava,
+                    portals, trapdoors, and more) and special platforms (conveyors,
+                    bouncers, teleports, ghost lanes, sticky zones, crushers) stack on
+                    top. Collect style shards to unlock every Apex-inspired tile variant.
                   </div>
 
                   <button

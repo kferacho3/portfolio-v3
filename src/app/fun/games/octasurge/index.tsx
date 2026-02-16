@@ -584,13 +584,20 @@ export default function OctaSurge() {
   );
 
   const syncInstances = useCallback(
-    (runTime: number, audioReactive: number, syncTimer: number) => {
+    (
+      runTime: number,
+      audioReactive: number,
+      syncTimer: number,
+      tileVariant: OctaTileVariant
+    ) => {
       const laneMesh = laneMeshRef.current;
       const wireMesh = wireMeshRef.current;
       const obstacleMesh = obstacleMeshRef.current;
       const collectibleMesh = collectibleMeshRef.current;
 
       if (!laneMesh || !wireMesh || !obstacleMesh || !collectibleMesh) return;
+
+      const variantAccent = OCTA_TILE_VARIANT_ACCENT[tileVariant];
 
       for (let i = 0; i < segmentsRef.current.length; i += 1) {
         const segment = segmentsRef.current[i];
@@ -623,13 +630,47 @@ export default function OctaSurge() {
             continue;
           }
 
+          const lanePattern = lanePatternFor(segment, lane);
+          const platformClosed = platformClosedBlend(
+            lanePattern.platform,
+            lanePattern.platformPhase,
+            runTime
+          );
           const angle = lane * step + warp;
-          const x = Math.cos(angle) * GAME.radius;
-          const y = Math.sin(angle) * GAME.radius;
+          const cosA = Math.cos(angle);
+          const sinA = Math.sin(angle);
+
+          const platformLift =
+            lanePattern.platform === 'bouncer'
+              ? Math.abs(Math.sin(runTime * 3.6 + lanePattern.platformPhase)) *
+                  0.14
+              : lanePattern.platform === 'trampoline'
+                ? Math.abs(Math.sin(runTime * 2.5 + lanePattern.platformPhase)) *
+                  0.19
+                : lanePattern.platform === 'ghost_platform'
+                  ? -platformClosed * 0.12
+                  : lanePattern.platform === 'crushing_ceiling'
+                    ? -platformClosed * 0.08
+                    : lanePattern.platform === 'teleporter'
+                      ? Math.sin(runTime * 2.1 + lanePattern.platformPhase) * 0.05
+                      : 0;
+
+          const radius = GAME.radius + platformLift;
+          const x = cosA * radius;
+          const y = sinA * radius;
+          const variantBias = variantScaleBias(tileVariant, lane, runTime);
+          const scaleY =
+            lanePattern.platform === 'sticky_glue'
+              ? 0.88
+              : lanePattern.platform === 'crushing_ceiling'
+                ? 1.02 + platformClosed * 0.2
+                : lanePattern.platform === 'ghost_platform'
+                  ? clamp(1 - platformClosed * 0.72, 0.22, 1.04)
+                  : 1;
 
           tempObject.position.set(x, y, segment.z);
           tempObject.rotation.set(0, 0, angle + Math.PI / 2);
-          tempObject.scale.set(laneWidth, 1, 1);
+          tempObject.scale.set(laneWidth * variantBias, scaleY, 1);
           tempObject.updateMatrix();
 
           laneMesh.setMatrixAt(id, tempObject.matrix);
@@ -640,44 +681,93 @@ export default function OctaSurge() {
             .set(stageVisual.lane)
             .lerp(
               tempColorB.set(stageVisual.laneHot),
-              stageHeat * 0.6 + audioReactive * 0.4
+              stageHeat * 0.58 + audioReactive * 0.4
+            )
+            .lerp(tempColorC.set(platformTint(lanePattern.platform)), 0.14)
+            .lerp(
+              tempColorC.set(variantAccent),
+              tileVariant === 'classic' ? 0.08 : 0.22
             );
           laneMesh.setColorAt(id, tempColorA);
 
+          const wirePulse =
+            0.72 +
+            audioReactive * 0.3 +
+            (lane / segment.sides) * 0.08 +
+            platformClosed * 0.14;
           tempColorA
             .set(stageVisual.wire)
-            .multiplyScalar(
-              0.78 + audioReactive * 0.28 + (lane / segment.sides) * 0.08
-            );
+            .lerp(tempColorB.set(variantAccent), 0.28)
+            .multiplyScalar(wirePulse);
           wireMesh.setColorAt(id, tempColorA);
 
-          const hasObstacle = (segment.obstacleMask & bit) !== 0;
-          if (!hasObstacle) {
+          if (lanePattern.obstacle === 'none') {
             hideInstance(obstacleMesh, id);
             continue;
           }
 
-          const obstacleRadius = GAME.radius - 0.52;
-          const ox = Math.cos(angle) * obstacleRadius;
-          const oy = Math.sin(angle) * obstacleRadius;
-          const pulse = 1 + Math.sin(runTime * 6.2 + lane * 0.65 + i) * 0.05;
+          const obstacleState = obstacleSeverity(lanePattern, runTime);
+          const threat = obstacleState.closedBlend;
+          const obstacleRadius = GAME.radius - 0.52 + threat * 0.08;
+          const ox = cosA * obstacleRadius;
+          const oy = sinA * obstacleRadius;
+
+          let scaleX = laneWidth * 0.5;
+          let scaleYObstacle = 0.76 + threat * 0.65;
+          let scaleZ = 0.92;
+          let obstacleTwist = 0;
+
+          if (lanePattern.obstacle === 'laser_grid') {
+            scaleX = laneWidth * 0.56;
+            scaleYObstacle = 1.28 + threat * 0.44;
+            scaleZ = 0.48;
+          } else if (lanePattern.obstacle === 'rotating_cross_blades') {
+            scaleX = laneWidth * 0.66;
+            scaleYObstacle = 0.62 + threat * 0.38;
+            scaleZ = 1.28;
+            obstacleTwist = runTime * 3.8 + lanePattern.obstaclePhase;
+          } else if (lanePattern.obstacle === 'gravity_well') {
+            scaleX = laneWidth * (0.42 + threat * 0.18);
+            scaleYObstacle = 0.74 + threat * 0.6;
+            scaleZ = 0.74 + threat * 0.28;
+          } else if (lanePattern.obstacle === 'rising_lava') {
+            scaleX = laneWidth * 0.62;
+            scaleYObstacle = 1.52 + threat * 0.72;
+            scaleZ = 0.72;
+          } else if (lanePattern.obstacle === 'telefrag_portal') {
+            scaleX = laneWidth * 0.54;
+            scaleYObstacle = 0.92 + threat * 0.52;
+            scaleZ = 0.62;
+            obstacleTwist = runTime * 2.4 + lanePattern.obstaclePhase * 0.7;
+          } else if (lanePattern.obstacle === 'trapdoor_row') {
+            scaleX = laneWidth * 0.84;
+            scaleYObstacle = 0.5 + threat * 0.36;
+            scaleZ = 0.74;
+          } else if (lanePattern.obstacle === 'lightning_striker') {
+            scaleX = laneWidth * 0.48;
+            scaleYObstacle = 1.18 + threat * 0.62;
+            scaleZ = 0.42;
+          }
 
           tempObject.position.set(ox, oy, segment.z);
-          tempObject.rotation.set(0, 0, angle + Math.PI / 2);
+          tempObject.rotation.set(
+            Math.sin(runTime * 1.3 + lanePattern.obstaclePhase) * 0.12,
+            obstacleTwist,
+            angle + Math.PI / 2
+          );
           tempObject.scale.set(
-            laneWidth * 0.52,
-            pulse * (1 + audioReactive * 0.28),
-            1
+            scaleX,
+            scaleYObstacle * (1 + audioReactive * 0.22),
+            scaleZ
           );
           tempObject.updateMatrix();
           obstacleMesh.setMatrixAt(id, tempObject.matrix);
 
           tempColorA
             .set(stageVisual.obstacle)
-            .lerp(
-              tempColorB.set(stageVisual.obstacleHot),
-              0.45 + audioReactive * 0.4
-            );
+            .lerp(tempColorB.set(obstacleTint(lanePattern.obstacle)), 0.45 + threat * 0.2)
+            .lerp(tempColorC.set(stageVisual.obstacleHot), 0.25 + audioReactive * 0.28)
+            .multiplyScalar(0.52 + threat * 0.7);
           obstacleMesh.setColorAt(id, tempColorA);
         }
 
@@ -714,7 +804,9 @@ export default function OctaSurge() {
         tempObject.updateMatrix();
         collectibleMesh.setMatrixAt(collectibleId, tempObject.matrix);
 
-        tempColorA.set(collectibleColor(segment.collectibleType));
+        tempColorA
+          .set(collectibleColor(segment.collectibleType))
+          .lerp(tempColorB.set(variantAccent), 0.2);
         collectibleMesh.setColorAt(collectibleId, tempColorA);
       }
 
@@ -730,7 +822,7 @@ export default function OctaSurge() {
         collectibleMesh.instanceColor.needsUpdate = true;
       }
     },
-    [hideInstance, tempColorA, tempColorB, tempObject]
+    [hideInstance, tempColorA, tempColorB, tempColorC, tempObject]
   );
 
   const triggerDeathFx = useCallback((reason: string, type: 'void' | 'obstacle') => {
@@ -991,9 +1083,11 @@ export default function OctaSurge() {
       shardCount: 0,
       hudPulse: 0,
       audioReactive: 0,
+      currentPlatform: 'standard',
+      currentObstacle: 'none',
     });
 
-    syncInstances(0, 0, 0);
+    syncInstances(0, 0, 0, snap.tileVariant);
   }, [
     levelGen,
     snap.cameraMode,
@@ -1036,6 +1130,8 @@ export default function OctaSurge() {
         shardCount: runtime.shardCount,
         hudPulse: Math.max(runtime.dangerPulse, runtime.flipPulse),
         audioReactive: runtime.audioReactive,
+        currentPlatform: octaSurgeState.currentPlatform,
+        currentObstacle: octaSurgeState.currentObstacle,
       });
 
       octaSurgeState.setCrashReason(reason);
@@ -1152,7 +1248,8 @@ export default function OctaSurge() {
       syncInstances(
         runtimeBefore.runTime,
         runtimeBefore.audioReactive,
-        runtimeBefore.syncTimer
+        runtimeBefore.syncTimer,
+        snap.tileVariant
       );
       updateFxParticles(delta);
       clearFrameInput(inputRef);
@@ -1205,6 +1302,8 @@ export default function OctaSurge() {
       flipCooldown,
       cameraMode,
     } = runtimeBefore;
+    let currentPlatform = octaSurgeState.currentPlatform as OctaPlatformType;
+    let currentObstacle = octaSurgeState.currentObstacle as OctaObstacleType;
 
     const leftTap =
       input.justPressed.has('arrowleft') ||
@@ -1220,6 +1319,8 @@ export default function OctaSurge() {
       input.justPressed.has('space') ||
       input.justPressed.has('spacebar');
     const slowTap = input.justPressed.has('shift');
+    const stylePrevTap = input.justPressed.has('q');
+    const styleNextTap = input.justPressed.has('e');
     const cameraTap =
       input.justPressed.has('c') ||
       input.justPressed.has('v') ||
@@ -1255,6 +1356,9 @@ export default function OctaSurge() {
       slowMoMeter = clamp(slowMoMeter - 30, 0, 100);
       slowMoTime = 3;
     }
+
+    if (stylePrevTap) octaSurgeState.cycleTileVariant(-1);
+    if (styleNextTap) octaSurgeState.cycleTileVariant(1);
 
     const sampledAudio = sampleAudioReactive();
     audioReactive = THREE.MathUtils.lerp(
@@ -1405,7 +1509,6 @@ export default function OctaSurge() {
 
         const hitBit = laneBit(hitLane, segment.sides);
         const onSolid = hitDist <= laneGrace && (segment.solidMask & hitBit) !== 0;
-        const onObstacle = onSolid && (segment.obstacleMask & hitBit) !== 0;
         const graceSaved = onSolid && hitLane !== roundedLane && hitDist > 0.33;
 
         if (!onSolid) {
@@ -1415,8 +1518,36 @@ export default function OctaSurge() {
           break;
         }
 
-        if (onObstacle) {
-          endReason = 'Prism blade impact. You crossed onto a blocked lane.';
+        laneIndex = hitLane;
+        const lanePattern = lanePatternFor(segment, hitLane);
+        const obstacleState = obstacleSeverity(lanePattern, runTime);
+        const platformState = platformClosedBlend(
+          lanePattern.platform,
+          lanePattern.platformPhase,
+          runTime
+        );
+        const onObstacle =
+          lanePattern.obstacle !== 'none' && obstacleState.danger;
+
+        currentPlatform = lanePattern.platform;
+        currentObstacle = lanePattern.obstacle;
+
+        if (onObstacle && lanePattern.obstacle !== 'none') {
+          endReason = OCTA_OBSTACLE_FAIL_REASON[lanePattern.obstacle];
+          deathType = 'obstacle';
+          dangerPulse = 1;
+          break;
+        }
+
+        if (lanePattern.platform === 'ghost_platform' && platformState > 0.76) {
+          endReason = 'Ghost platform phase dropped beneath the packet.';
+          deathType = 'void';
+          dangerPulse = 1;
+          break;
+        }
+
+        if (lanePattern.platform === 'crushing_ceiling' && platformState > 0.82) {
+          endReason = 'Crushing ceiling clamped shut.';
           deathType = 'obstacle';
           dangerPulse = 1;
           break;
@@ -1448,10 +1579,52 @@ export default function OctaSurge() {
         multiplier = clamp(1 + combo * 0.16 + shardCount * 0.07, 1, 8);
         score += GAME.scoreRate * multiplier * (1 + audioReactive * 0.4);
 
+        if (lanePattern.platform === 'conveyor_belt') {
+          laneIndex = normalizeLane(laneIndex + 1, segment.sides);
+          targetRotation = rotationForLane(laneIndex, segment.sides);
+          score += GAME.scoreRate * 0.2 * multiplier;
+          flipPulse = Math.max(flipPulse, 0.16);
+        } else if (lanePattern.platform === 'reverse_conveyor') {
+          laneIndex = normalizeLane(laneIndex - 1, segment.sides);
+          targetRotation = rotationForLane(laneIndex, segment.sides);
+          score += GAME.scoreRate * 0.2 * multiplier;
+          flipPulse = Math.max(flipPulse, 0.16);
+        } else if (lanePattern.platform === 'bouncer') {
+          score += GAME.scoreRate * 0.3 * multiplier;
+          flipPulse = Math.max(flipPulse, 0.32);
+          dangerPulse = Math.max(dangerPulse, 0.26);
+        } else if (lanePattern.platform === 'trampoline') {
+          score += GAME.scoreRate * 0.42 * multiplier;
+          slowMoMeter = clamp(slowMoMeter + 12, 0, 100);
+          flipPulse = Math.max(flipPulse, 0.4);
+        } else if (lanePattern.platform === 'teleporter') {
+          const jump = Math.sin(segment.index * 0.7 + lanePattern.platformPhase) > 0 ? 2 : -2;
+          laneIndex = normalizeLane(laneIndex + jump, segment.sides);
+          targetRotation = rotationForLane(laneIndex, segment.sides);
+          score += GAME.scoreRate * 0.45 * multiplier;
+          dangerPulse = Math.max(dangerPulse, 0.34);
+        } else if (lanePattern.platform === 'sticky_glue') {
+          speed *= 0.91;
+          comboTimer *= 0.84;
+        } else if (lanePattern.platform === 'speed_ramp') {
+          speed *= 1.05;
+          score += GAME.scoreRate * 0.24 * multiplier;
+        }
+
+        const leftPattern = lanePatternFor(
+          segment,
+          normalizeLane(hitLane - 1, segment.sides)
+        );
+        const rightPattern = lanePatternFor(
+          segment,
+          normalizeLane(hitLane + 1, segment.sides)
+        );
         const leftObstacle =
-          (segment.obstacleMask & laneBit(hitLane - 1, segment.sides)) !== 0;
+          leftPattern.obstacle !== 'none' &&
+          obstacleSeverity(leftPattern, runTime).danger;
         const rightObstacle =
-          (segment.obstacleMask & laneBit(hitLane + 1, segment.sides)) !== 0;
+          rightPattern.obstacle !== 'none' &&
+          obstacleSeverity(rightPattern, runTime).danger;
         if (leftObstacle || rightObstacle) {
           score += GAME.scoreRate * 0.38 * multiplier;
           dangerPulse = Math.max(dangerPulse, 0.36);
@@ -1511,12 +1684,15 @@ export default function OctaSurge() {
               shardCount += 1;
               slowMoMeter = clamp(slowMoMeter + 24, 0, 100);
               score += 120;
+              octaSurgeState.collectStyleShards(1);
             } else if (segment.collectibleType === 'core') {
               multiplier = clamp(multiplier + 0.7, 1, 8);
               score += 220;
+              octaSurgeState.collectStyleShards(2);
             } else if (segment.collectibleType === 'sync') {
               syncTimer = 5;
               score += 180;
+              octaSurgeState.collectStyleShards(1);
             }
 
             dangerPulse = Math.max(dangerPulse, 0.24);
@@ -1577,12 +1753,19 @@ export default function OctaSurge() {
 
     const stageNow = stageById(stageId);
     const stageVisualNow = stageAestheticById(stageNow.id);
+    const variantAccent = OCTA_TILE_VARIANT_ACCENT[snap.tileVariant];
     const progress =
       snap.mode === 'endless' ? 0 : clamp(score / Math.max(1, runGoal), 0, 1);
 
     const colorLerp = 1 - Math.exp(-delta * 2.6);
-    sceneBgRef.current.lerp(tempColorA.set(stageVisualNow.bg), colorLerp);
-    sceneFogRef.current.lerp(tempColorB.set(stageVisualNow.fog), colorLerp);
+    sceneBgRef.current.lerp(
+      tempColorA.set(stageVisualNow.bg).lerp(tempColorC.set(variantAccent), 0.08),
+      colorLerp
+    );
+    sceneFogRef.current.lerp(
+      tempColorB.set(stageVisualNow.fog).lerp(tempColorC.set(variantAccent), 0.12),
+      colorLerp
+    );
     gl.setClearColor(sceneBgRef.current, 1);
     if (scene.fog instanceof THREE.Fog) {
       scene.fog.color.copy(sceneFogRef.current);
@@ -1590,7 +1773,7 @@ export default function OctaSurge() {
 
     if (ambientRef.current) {
       ambientRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.wire),
+        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.22),
         1 - Math.exp(-delta * 2)
       );
     }
@@ -1602,13 +1785,13 @@ export default function OctaSurge() {
     }
     if (lightARef.current) {
       lightARef.current.color.lerp(
-        tempColorA.set(stageVisualNow.wire),
+        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.26),
         1 - Math.exp(-delta * 3)
       );
     }
     if (lightBRef.current) {
       lightBRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.accent),
+        tempColorA.set(stageVisualNow.accent).lerp(tempColorC.set(variantAccent), 0.34),
         1 - Math.exp(-delta * 3)
       );
     }
@@ -1624,25 +1807,25 @@ export default function OctaSurge() {
     }
     if (shellWireMaterialRef.current) {
       shellWireMaterialRef.current.color.lerp(
-        tempColorA.set(stageVisualNow.wire),
+        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.24),
         1 - Math.exp(-delta * 3.2)
       );
     }
     if (laneMaterialRef.current) {
       laneMaterialRef.current.emissive.lerp(
-        tempColorA.set(stageVisualNow.wire),
+        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.22),
         1 - Math.exp(-delta * 3)
       );
     }
     if (obstacleMaterialRef.current) {
       obstacleMaterialRef.current.emissive.lerp(
-        tempColorA.set(stageVisualNow.obstacle),
+        tempColorA.set(stageVisualNow.obstacle).lerp(tempColorC.set(variantAccent), 0.16),
         1 - Math.exp(-delta * 3)
       );
     }
     if (collectibleMaterialRef.current) {
       collectibleMaterialRef.current.emissive.lerp(
-        tempColorA.set(stageVisualNow.wire),
+        tempColorA.set(stageVisualNow.wire).lerp(tempColorC.set(variantAccent), 0.3),
         1 - Math.exp(-delta * 3)
       );
     }
@@ -1662,6 +1845,8 @@ export default function OctaSurge() {
       shardCount,
       hudPulse: Math.max(dangerPulse, flipPulse * 0.8, audioReactive * 0.4),
       audioReactive,
+      currentPlatform,
+      currentObstacle,
     });
 
     if (endReason) {
@@ -1863,7 +2048,7 @@ export default function OctaSurge() {
     }
 
     updateFxParticles(delta);
-    syncInstances(runTime, audioReactive, syncTimer);
+    syncInstances(runTime, audioReactive, syncTimer, snap.tileVariant);
     clearFrameInput(inputRef);
   });
 
