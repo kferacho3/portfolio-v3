@@ -18,7 +18,7 @@ export const GAME_CONFIG = {
   ringSpacing: 1.06,
   tunnelRadius: 3.5,
   platformDepth: 1.04,
-  platformWidthScale: 0.9,
+  platformWidthScale: 0.84,
   obstacleWidthScale: 0.86,
   platformCornerRadius: 0.08,
   laneWidthScale: 1.0,

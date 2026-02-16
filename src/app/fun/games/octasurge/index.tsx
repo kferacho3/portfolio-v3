@@ -183,6 +183,7 @@ const makePanelMaterial = () =>
       varying vec2 vUv;
       varying float vDepth;
       varying float vSides;
+      varying float vLane;
 
       const float PI = 3.141592653589793;
       const float TAU = 6.283185307179586;
@@ -208,6 +209,7 @@ const makePanelMaterial = () =>
         vUv = uv;
         vDepth = z;
         vSides = sides;
+        vLane = lane;
 
         gl_Position = projectionMatrix * modelViewMatrix * vec4(worldPos, 1.0);
       }
@@ -217,6 +219,7 @@ const makePanelMaterial = () =>
       varying vec2 vUv;
       varying float vDepth;
       varying float vSides;
+      varying float vLane;
 
       uniform float uTime;
       uniform float uSpeed;
@@ -234,6 +237,16 @@ const makePanelMaterial = () =>
 
       vec3 paletteGlass(float t) {
         return vec3(0.09, 0.12, 0.22) + vec3(0.52, 0.58, 0.95) * (0.5 + 0.5 * sin(vec3(1.2, 1.0, 1.5) * t));
+      }
+
+      vec3 edgePalette(float lane) {
+        float idx = mod(floor(lane), 6.0);
+        if (idx < 0.5) return vec3(0.24, 0.95, 1.0);
+        if (idx < 1.5) return vec3(1.0, 0.69, 0.28);
+        if (idx < 2.5) return vec3(1.0, 0.45, 0.63);
+        if (idx < 3.5) return vec3(0.72, 0.52, 1.0);
+        if (idx < 4.5) return vec3(0.38, 1.0, 0.74);
+        return vec3(1.0, 0.88, 0.42);
       }
 
       void main() {
@@ -257,6 +270,14 @@ const makePanelMaterial = () =>
         vec3 base = vec3(0.018, 0.022, 0.032);
         float glow = pow(grid, 2.0) * (0.45 + pulse * 0.95);
         vec3 finalColor = base + col * glow;
+
+        float edgeDist = min(vUv.x, 1.0 - vUv.x);
+        float seam = 1.0 - smoothstep(0.0, 0.085, edgeDist);
+        float seamCore = 1.0 - smoothstep(0.0, 0.03, edgeDist);
+        vec3 seamColor = edgePalette(vLane + floor(vSides * 0.5));
+
+        finalColor = mix(finalColor, seamColor * (0.48 + pulse * 0.72), seam * 0.82);
+        finalColor += seamColor * seamCore * (0.3 + pulse * 0.25);
 
         gl_FragColor = vec4(finalColor, 1.0);
       }

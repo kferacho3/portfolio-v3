@@ -223,13 +223,28 @@ export default function GamePage({ params }: GamePageProps) {
     };
   }, [gameId, isValidGame]);
 
+  const startCurrentGame = useCallback(() => {
+    if (gameId === 'octasurge') {
+      octaSurgeState.startGame();
+      setPaused(false);
+      return;
+    }
+
+    if (gameEntry?.start) {
+      gameEntry.start();
+      return;
+    }
+
+    loadGameRef.current?.(gameId).then((entry) => entry.start?.());
+  }, [gameEntry, gameId, setPaused]);
+
   const handleStart = useCallback(() => {
-    gameEntry?.start?.();
+    startCurrentGame();
     setHasStarted(true);
-  }, [gameEntry]);
+  }, [startCurrentGame]);
 
   useEffect(() => {
-    if (!isValidGame || loadingVisible || hasStarted) return;
+    if (!isValidGame || loadingVisible || hasStarted || gameId === 'octasurge') return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -244,7 +259,7 @@ export default function GamePage({ params }: GamePageProps) {
       window.removeEventListener('pointerdown', handleStart);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isValidGame, loadingVisible, hasStarted, handleStart]);
+  }, [isValidGame, loadingVisible, hasStarted, handleStart, gameId]);
 
   const gameSnap = useSnapshot(gameEntry?.state ?? EMPTY_PROXY);
   const currentScore = gameEntry?.getScore ? gameEntry.getScore(gameSnap) : 0;
@@ -252,6 +267,10 @@ export default function GamePage({ params }: GamePageProps) {
 
   // Handle restart
   const handleRestart = () => {
+    if (gameId === 'octasurge') {
+      octaSurgeState.reset();
+    }
+
     if (gameEntry?.reset) {
       gameEntry.reset();
     } else {
@@ -303,7 +322,8 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   const showHud = shouldShowHUD(gameId) && gameId !== 'shapeshifter';
-  const showStartOverlay = !loadingVisible && !hasStarted && !paused;
+  const showStartOverlay =
+    gameId !== 'octasurge' && !loadingVisible && !hasStarted && !paused;
   const activeHealth =
     gameId === 'skyblitz' &&
     (gameSnap as { health?: number })?.health !== undefined
