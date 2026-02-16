@@ -90,17 +90,21 @@ const platformWeight = (
       ? 3.1
       : platform === 'drift_boost' || platform === 'reverse_drift'
         ? 1.02
-        : platform === 'pulse_pad' || platform === 'spring_pad'
+      : platform === 'pulse_pad' || platform === 'spring_pad'
           ? 0.82
-          : platform === 'warp_gate'
-            ? 0.58
-            : platform === 'phase_lane'
-              ? 0.54
-              : platform === 'resin_lane'
-                ? 0.7
-                : platform === 'crusher_lane'
-                  ? 0.52
-                  : 0.86;
+        : platform === 'warp_gate'
+          ? 0.58
+        : platform === 'phase_lane'
+          ? 0.54
+        : platform === 'resin_lane'
+          ? 0.7
+        : platform === 'crusher_lane'
+          ? 0.52
+          : platform === 'split_rail'
+            ? 0.68
+            : platform === 'gravity_drift'
+              ? 0.64
+              : 0.86;
 
   weight *= 1 + (stageId - 1) * 0.15;
 
@@ -109,6 +113,7 @@ const platformWeight = (
   if (platform === 'phase_lane' && stageId <= 2) weight *= 0.58;
   if (platform === 'crusher_lane' && stageId <= 2) weight *= 0.56;
   if (platform === 'warp_gate' && stageId <= 1) weight *= 0.6;
+  if (platform === 'gravity_drift' && stageId <= 2) weight *= 0.72;
 
   return weight;
 };
@@ -135,13 +140,21 @@ const obstacleWeight = (
                   ? 0.46
                   : obstacle === 'trap_split'
                     ? 0.56
-                    : obstacle === 'magnetron'
-                      ? 0.44
-                      : obstacle === 'spike_fan'
-                        ? 0.54
-                        : obstacle === 'thunder_column'
-                          ? 0.42
-                          : 0.5;
+        : obstacle === 'magnetron'
+          ? 0.44
+        : obstacle === 'spike_fan'
+          ? 0.54
+        : obstacle === 'thunder_column'
+          ? 0.42
+          : obstacle === 'ion_barrier'
+            ? 0.48
+            : obstacle === 'void_serpent'
+              ? 0.44
+              : obstacle === 'ember_wave'
+                ? 0.46
+                : obstacle === 'quantum_shard'
+                  ? 0.4
+                  : 0.5;
 
   weight *= 1 + (stageId - 1) * 0.17;
   if (mode === 'daily') weight *= 1.1;
@@ -152,6 +165,7 @@ const obstacleWeight = (
   ) {
     weight *= 0.7;
   }
+  if (obstacle === 'quantum_shard' && stageId <= 2) weight *= 0.62;
 
   return weight;
 };
@@ -162,6 +176,8 @@ const obstacleOpenRatioBias = (
   if (obstacle === 'arc_blade' || obstacle === 'pulse_laser') return -0.08;
   if (obstacle === 'vortex_saw' || obstacle === 'spike_fan') return -0.04;
   if (obstacle === 'flame_jet' || obstacle === 'thunder_column') return 0.06;
+  if (obstacle === 'ion_barrier' || obstacle === 'ember_wave') return -0.02;
+  if (obstacle === 'void_serpent' || obstacle === 'quantum_shard') return 0.04;
   if (obstacle === 'phase_portal' || obstacle === 'gravity_orb') return 0.03;
   return 0;
 };
@@ -317,7 +333,7 @@ export const createRingRunGenerator = (
       const platformPenalty =
         meta.platform === 'phase_lane' || meta.platform === 'crusher_lane'
           ? 0.62
-          : meta.platform === 'resin_lane'
+          : meta.platform === 'resin_lane' || meta.platform === 'gravity_drift'
             ? 0.76
             : 1;
       const chance = obstacleDensity * nearPenalty * platformPenalty;

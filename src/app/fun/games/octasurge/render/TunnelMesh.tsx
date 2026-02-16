@@ -34,31 +34,38 @@ const variantToFloat = (variant: OctaTileVariant) => {
 
 const obstacleToFloat = (obstacle: OctaObstacleType) => {
   if (obstacle === 'none') return 0;
-  if (obstacle === 'arc_blade') return 1 / 12;
-  if (obstacle === 'shutter_gate') return 2 / 12;
-  if (obstacle === 'pulse_laser') return 3 / 12;
-  if (obstacle === 'gravity_orb') return 4 / 12;
-  if (obstacle === 'prism_mine') return 5 / 12;
-  if (obstacle === 'flame_jet') return 6 / 12;
-  if (obstacle === 'phase_portal') return 7 / 12;
-  if (obstacle === 'trap_split') return 8 / 12;
-  if (obstacle === 'magnetron') return 9 / 12;
-  if (obstacle === 'spike_fan') return 10 / 12;
-  if (obstacle === 'thunder_column') return 11 / 12;
+  if (obstacle === 'arc_blade') return 1 / 16;
+  if (obstacle === 'shutter_gate') return 2 / 16;
+  if (obstacle === 'pulse_laser') return 3 / 16;
+  if (obstacle === 'gravity_orb') return 4 / 16;
+  if (obstacle === 'prism_mine') return 5 / 16;
+  if (obstacle === 'flame_jet') return 6 / 16;
+  if (obstacle === 'phase_portal') return 7 / 16;
+  if (obstacle === 'trap_split') return 8 / 16;
+  if (obstacle === 'magnetron') return 9 / 16;
+  if (obstacle === 'spike_fan') return 10 / 16;
+  if (obstacle === 'thunder_column') return 11 / 16;
+  if (obstacle === 'vortex_saw') return 12 / 16;
+  if (obstacle === 'ion_barrier') return 13 / 16;
+  if (obstacle === 'void_serpent') return 14 / 16;
+  if (obstacle === 'ember_wave') return 15 / 16;
+  if (obstacle === 'quantum_shard') return 1;
   return 1;
 };
 
 const platformToFloat = (platform: OctaPlatformType) => {
   if (platform === 'smooth_lane') return 0;
-  if (platform === 'drift_boost') return 1 / 10;
-  if (platform === 'reverse_drift') return 2 / 10;
-  if (platform === 'pulse_pad') return 3 / 10;
-  if (platform === 'spring_pad') return 4 / 10;
-  if (platform === 'warp_gate') return 5 / 10;
-  if (platform === 'phase_lane') return 6 / 10;
-  if (platform === 'resin_lane') return 7 / 10;
-  if (platform === 'crusher_lane') return 8 / 10;
-  return 9 / 10;
+  if (platform === 'drift_boost') return 1 / 12;
+  if (platform === 'reverse_drift') return 2 / 12;
+  if (platform === 'pulse_pad') return 3 / 12;
+  if (platform === 'spring_pad') return 4 / 12;
+  if (platform === 'warp_gate') return 5 / 12;
+  if (platform === 'phase_lane') return 6 / 12;
+  if (platform === 'resin_lane') return 7 / 12;
+  if (platform === 'crusher_lane') return 8 / 12;
+  if (platform === 'overdrive_strip') return 9 / 12;
+  if (platform === 'split_rail') return 10 / 12;
+  return 11 / 12;
 };
 
 export function TunnelMesh({

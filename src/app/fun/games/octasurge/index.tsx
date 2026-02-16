@@ -244,6 +244,12 @@ const platformBlend = (platform: OctaPlatformType, phase: number, time: number) 
   if (platform === 'overdrive_strip') {
     return 0.5 + 0.5 * Math.sin(time * 2.8 + phase * 0.6);
   }
+  if (platform === 'split_rail') {
+    return 0.5 + 0.5 * Math.sin(time * 2.1 + phase * 0.95);
+  }
+  if (platform === 'gravity_drift') {
+    return 0.5 + 0.5 * Math.sin(time * 1.45 + phase * 1.7);
+  }
   return 0;
 };
 
@@ -311,6 +317,18 @@ const obstacleState = (meta: RingLaneMeta, time: number): ObstacleState => {
   } else if (meta.obstacle === 'vortex_saw') {
     tunedClosed = clamp(closedBlend * 1.02 + Math.sin(time * 4.4 + meta.obstaclePhase * 1.7) * 0.12, 0, 1);
     dangerThreshold = 0.38;
+  } else if (meta.obstacle === 'ion_barrier') {
+    tunedClosed = clamp(closedBlend * 1.05 + Math.sin(time * 5.9 + meta.obstaclePhase) * 0.14, 0, 1);
+    dangerThreshold = 0.4;
+  } else if (meta.obstacle === 'void_serpent') {
+    tunedClosed = clamp(closedBlend * 0.9 + (0.5 + 0.5 * Math.sin(time * 1.3 + meta.obstaclePhase)) * 0.3, 0, 1);
+    dangerThreshold = 0.46;
+  } else if (meta.obstacle === 'ember_wave') {
+    tunedClosed = clamp(closedBlend * 0.88 + Math.sin(time * 6.7 + meta.obstaclePhase * 1.5) * 0.18, 0, 1);
+    dangerThreshold = 0.43;
+  } else if (meta.obstacle === 'quantum_shard') {
+    tunedClosed = clamp(closedBlend * 0.82 + (0.5 + 0.5 * Math.sin(time * 7.2 + meta.obstaclePhase * 2.4)) * 0.28, 0, 1);
+    dangerThreshold = 0.49;
   }
 
   return {
@@ -333,6 +351,7 @@ const platformColor = (platform: OctaPlatformType) => {
   ) {
     return '#75e7ff';
   }
+  if (platform === 'split_rail' || platform === 'gravity_drift') return '#95dbff';
   if (platform === 'pulse_pad' || platform === 'spring_pad') return '#ffbf7f';
   if (platform === 'warp_gate' || platform === 'phase_lane') return '#cb95ff';
   if (platform === 'resin_lane') return '#8de08d';
@@ -352,11 +371,15 @@ const obstacleColor = (obstacle: OctaObstacleType) => {
   if (
     obstacle === 'gravity_orb' ||
     obstacle === 'magnetron' ||
-    obstacle === 'phase_portal'
+    obstacle === 'phase_portal' ||
+    obstacle === 'void_serpent' ||
+    obstacle === 'quantum_shard'
   ) {
     return '#be94ff';
   }
   if (obstacle === 'flame_jet') return '#ff7044';
+  if (obstacle === 'ember_wave') return '#ff8b54';
+  if (obstacle === 'ion_barrier') return '#8fe4ff';
   if (obstacle === 'pulse_laser') return '#ff7fd8';
   return '#ff8e7e';
 };
@@ -822,6 +845,14 @@ export default function OctaSurge() {
             psx = 1.12;
             psy = 0.54;
             psz = 0.68;
+          } else if (meta.platform === 'split_rail') {
+            psx = 1.06;
+            psy = 0.58;
+            psz = 0.84;
+          } else if (meta.platform === 'gravity_drift') {
+            psx = 0.74 + platformPulse * 0.24;
+            psy = 0.98;
+            psz = 0.78;
           }
 
           tempObject.position.set(px, py, z - 0.03);
@@ -915,6 +946,27 @@ export default function OctaSurge() {
           sy = 0.11 + hazard.closedBlend * 0.08;
           sz = 0.72;
           tiltY = sim.runTime * 6.4 + meta.obstaclePhase * 1.6;
+        } else if (meta.obstacle === 'ion_barrier') {
+          sx = 0.88;
+          sy = 0.1 + hazard.closedBlend * 0.14;
+          sz = 0.2;
+          tiltY = sim.runTime * 7.2 + meta.obstaclePhase * 1.3;
+        } else if (meta.obstacle === 'void_serpent') {
+          sx = 0.56;
+          sy = 0.24 + hazard.closedBlend * 0.2;
+          sz = 0.56;
+          tiltX = sim.runTime * 2.8 + meta.obstaclePhase * 1.2;
+          tiltY = sim.runTime * 2.4 + meta.obstaclePhase * 0.9;
+        } else if (meta.obstacle === 'ember_wave') {
+          sx = 0.74;
+          sy = 0.12 + hazard.closedBlend * 0.22;
+          sz = 0.46;
+          tiltY = sim.runTime * 5.8 + meta.obstaclePhase * 1.1;
+        } else if (meta.obstacle === 'quantum_shard') {
+          sx = 0.36 + hazard.closedBlend * 0.22;
+          sy = 0.36 + hazard.closedBlend * 0.22;
+          sz = 0.36 + hazard.closedBlend * 0.22;
+          tiltY = sim.runTime * 4.6 + meta.obstaclePhase * 2.2;
         }
 
         tempObject.position.set(ox, oy, z);
@@ -930,16 +982,20 @@ export default function OctaSurge() {
         const useBlade =
           meta.obstacle === 'arc_blade' ||
           meta.obstacle === 'spike_fan' ||
-          meta.obstacle === 'vortex_saw';
+          meta.obstacle === 'vortex_saw' ||
+          meta.obstacle === 'ember_wave';
         const useGate =
           meta.obstacle === 'shutter_gate' ||
           meta.obstacle === 'pulse_laser' ||
           meta.obstacle === 'phase_portal' ||
-          meta.obstacle === 'trap_split';
+          meta.obstacle === 'trap_split' ||
+          meta.obstacle === 'ion_barrier';
         const useCore =
           meta.obstacle === 'gravity_orb' ||
           meta.obstacle === 'prism_mine' ||
-          meta.obstacle === 'magnetron';
+          meta.obstacle === 'magnetron' ||
+          meta.obstacle === 'void_serpent' ||
+          meta.obstacle === 'quantum_shard';
 
         if (useBlade && bladeCount < obstacleCountMax) {
           bladeMesh.setMatrixAt(bladeCount, tempObject.matrix);
@@ -1384,6 +1440,19 @@ export default function OctaSurge() {
         } else if (meta.platform === 'overdrive_strip') {
           sim.speed *= 1.09;
           sim.score += GAME.scoreRate * 0.3 * sim.multiplier;
+        } else if (meta.platform === 'split_rail') {
+          const offset = Math.sin(ring.index * 0.42 + meta.platformPhase) > 0 ? 1 : -1;
+          sim.laneIndex = normalizeLane(sim.laneIndex + offset, ring.sides);
+          sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
+          sim.score += GAME.scoreRate * 0.24 * sim.multiplier;
+          sim.dangerPulse = Math.max(sim.dangerPulse, 0.22);
+        } else if (meta.platform === 'gravity_drift') {
+          const drift = platformGate > 0.5 ? 1 : -1;
+          sim.laneIndex = normalizeLane(sim.laneIndex + drift, ring.sides);
+          sim.targetRotation = rotationForLane(sim.laneIndex, ring.sides);
+          sim.speed *= 1.03;
+          sim.score += GAME.scoreRate * 0.26 * sim.multiplier;
+          sim.flipPulse = Math.max(sim.flipPulse, 0.28);
         }
 
         const leftMeta = ring.laneMeta[normalizeLane(lane - 1, ring.sides)];

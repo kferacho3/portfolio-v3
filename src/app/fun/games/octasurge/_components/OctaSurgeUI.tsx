@@ -659,11 +659,12 @@ export function OctaSurgeUI({
                       maxWidth: 500,
                     }}
                   >
-                    Smooth Classic path generation stays intact while new obstacle
-                    families (laser grids, gravity wells, cross blades, mines, lava,
-                    portals, trapdoors, and more) and special platforms (conveyors,
-                    bouncers, teleports, ghost lanes, sticky zones, crushers) stack on
-                    top. Collect style shards to unlock every Apex-inspired tile variant.
+                    Smooth Classic path generation stays intact while the obstacle
+                    families are fully remapped (arc blades, shutter gates, pulse lasers,
+                    gravity orbs, prism mines, ion barriers, ember waves, and vortex saws)
+                    and new platform systems (drift boosts, warp gates, phase lanes,
+                    split rails, gravity drift lanes, resin lanes, overdrive strips) stack
+                    on top. Collect style shards to unlock every Apex-inspired tile variant.
                     {hasReplay && snap.lastReplay && (
                       <div style={{ marginTop: 8, fontFamily: monoFont, fontSize: 10, opacity: 0.84 }}>
                         Replay ready: {Math.floor(snap.lastReplay.finalScore)} pts in{' '}

@@ -722,8 +722,8 @@ export const GAME_RULES: Record<string, GameRules> = {
     controls:
       'A/D or ←/→ to lane-step • Space/W/↑ to flip 180° • Shift to trigger slow-mo (with charge) • C/V to cycle camera • Enter/Space to start • R to restart',
     objective:
-      'Keep the data packet alive as the corridor morphs from hex to dodecagon, avoid void gaps and prism blades, and clear classic/daily score targets.',
-    tips: 'Flip for opposite-lane saves and core pickups, use Sync orbs to calm tunnel warp, and read one segment ahead before committing to turns.',
+      'Keep the data packet alive as the corridor morphs from hex to dodecagon, survive dense new obstacle families, and clear classic/daily score targets.',
+    tips: 'Pre-read arc blades, shutter gates, and pulse lasers one ring ahead; use drift/warp platforms to recover lines and farm style shards for new tile variants.',
   },
   knothop: {
     controls: 'Tap/Click/Space to reverse spiral direction • R to restart',

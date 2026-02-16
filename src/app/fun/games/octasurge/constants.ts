@@ -84,6 +84,8 @@ export const OCTA_PLATFORM_POOL: OctaPlatformType[] = [
   'resin_lane',
   'crusher_lane',
   'overdrive_strip',
+  'split_rail',
+  'gravity_drift',
 ];
 
 export const OCTA_OBSTACLE_POOL: Exclude<OctaObstacleType, 'none'>[] = [
@@ -99,6 +101,10 @@ export const OCTA_OBSTACLE_POOL: Exclude<OctaObstacleType, 'none'>[] = [
   'spike_fan',
   'thunder_column',
   'vortex_saw',
+  'ion_barrier',
+  'void_serpent',
+  'ember_wave',
+  'quantum_shard',
 ];
 
 export const OCTA_PLATFORM_LABEL: Record<OctaPlatformType, string> = {
@@ -112,6 +118,8 @@ export const OCTA_PLATFORM_LABEL: Record<OctaPlatformType, string> = {
   resin_lane: 'Resin Lane',
   crusher_lane: 'Crusher Lane',
   overdrive_strip: 'Overdrive Strip',
+  split_rail: 'Split Rail',
+  gravity_drift: 'Gravity Drift',
 };
 
 export const OCTA_OBSTACLE_LABEL: Record<OctaObstacleType, string> = {
@@ -128,6 +136,10 @@ export const OCTA_OBSTACLE_LABEL: Record<OctaObstacleType, string> = {
   spike_fan: 'Spike Fan',
   thunder_column: 'Thunder Column',
   vortex_saw: 'Vortex Saw',
+  ion_barrier: 'Ion Barrier',
+  void_serpent: 'Void Serpent',
+  ember_wave: 'Ember Wave',
+  quantum_shard: 'Quantum Shard',
 };
 
 export const OCTA_OBSTACLE_FAIL_REASON: Record<
@@ -146,6 +158,10 @@ export const OCTA_OBSTACLE_FAIL_REASON: Record<
   spike_fan: 'Spike fan clipped your hull.',
   thunder_column: 'Thunder column strike landed.',
   vortex_saw: 'Vortex saw carved the corridor.',
+  ion_barrier: 'Ion barrier caught your trajectory.',
+  void_serpent: 'Void serpent wrapped the lane.',
+  ember_wave: 'Ember wave burned the route.',
+  quantum_shard: 'Quantum shard fragmentation event.',
 };
 
 export const STAGE_PROFILES: StageProfile[] = [

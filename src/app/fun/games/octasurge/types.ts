@@ -28,7 +28,9 @@ export type OctaPlatformType =
   | 'phase_lane'
   | 'resin_lane'
   | 'crusher_lane'
-  | 'overdrive_strip';
+  | 'overdrive_strip'
+  | 'split_rail'
+  | 'gravity_drift';
 
 export type OctaObstacleType =
   | 'none'
@@ -43,7 +45,11 @@ export type OctaObstacleType =
   | 'magnetron'
   | 'spike_fan'
   | 'thunder_column'
-  | 'vortex_saw';
+  | 'vortex_saw'
+  | 'ion_barrier'
+  | 'void_serpent'
+  | 'ember_wave'
+  | 'quantum_shard';
 
 export type CollectibleKind = 'shard' | 'core' | 'sync' | null;
 
