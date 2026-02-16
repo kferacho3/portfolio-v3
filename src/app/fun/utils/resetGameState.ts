@@ -151,7 +151,7 @@ export function resetGameState(gameId: GameId): void {
       prismJumpState.backToMenu();
       return;
     case 'octasurge':
-      octaSurgeState.phase = 'menu';
+      octaSurgeState.reset();
       return;
     case 'knothop':
       knotHopState.phase = 'menu';

@@ -15,9 +15,9 @@ export const TEST_UNLOCK_ALL_CHARACTERS = true;
 export const GAME_CONFIG = {
   ringCount: 240,
   maxSides: 12,
-  ringSpacing: 1.06,
+  ringSpacing: 1.0,
   tunnelRadius: 3.5,
-  platformDepth: 1.04,
+  platformDepth: 1.1,
   platformWidthScale: 0.84,
   obstacleWidthScale: 0.86,
   platformCornerRadius: 0.08,

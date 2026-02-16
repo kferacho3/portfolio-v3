@@ -2,7 +2,7 @@
 // Matches rules:
 // - Can only move onto declared non-void tiles (tiles present in Level.tiles)
 // - Match tiles require bottom face color === tile color
-// - Pickup tiles: if bottom face is null AND pickup not yet consumed, set bottom face to tile color and mark consumed
+// - Pickup tiles: if pickup not yet consumed, set bottom face to tile color and mark consumed
 // - Wipe tiles: set bottom face to null
 
 import { rotateFaces } from './rotateFaces';
@@ -86,10 +86,8 @@ export function solveLevel(level: Level, maxSteps = 2000): number | null {
       } else if (tile.type === 'pickup') {
         const idx = pickupIndex.get(keyPos(nx, nz));
         if (idx !== undefined && (nmask & (1 << idx)) === 0) {
-          if (nf[1] === null) {
-            nf = [nf[0], tile.color, nf[2], nf[3], nf[4], nf[5]];
-            nmask = nmask | (1 << idx);
-          }
+          nf = [nf[0], tile.color, nf[2], nf[3], nf[4], nf[5]];
+          nmask = nmask | (1 << idx);
         }
       }
 

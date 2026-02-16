@@ -500,7 +500,7 @@ function TunnelRenderer({ worldRef, tileVariant }: TunnelProps) {
   const panelGeometry = useMemo(() => {
     const base = new RoundedBoxGeometry(
       1,
-      0.06,
+      0.085,
       GAME_CONFIG.platformDepth,
       3,
       GAME_CONFIG.platformCornerRadius

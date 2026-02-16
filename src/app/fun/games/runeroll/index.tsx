@@ -243,7 +243,7 @@ const simulateMove = (
   if (tile.type === 'pickup') {
     const tileKey = keyForGridPos(to);
     const alreadyConsumed = consumedSet.has(tileKey);
-    if (!alreadyConsumed && nextFaces[1] === null) {
+    if (!alreadyConsumed) {
       nextFaces[1] = tile.color;
       nextConsumedPickupKeys.push(tileKey);
       pickupVisualFaceIndex = sourceFaceForBottom(direction);

@@ -21,6 +21,7 @@ import {
 } from '../store/selectors';
 import { GAME_CARDS, getGameCard, KEY_TO_GAME } from '../config/games';
 import type { GameId } from '../store/types';
+import { resetGameState } from '../utils/resetGameState';
 
 /**
  * Main arcade shell hook
@@ -168,6 +169,7 @@ export function useArcadeKeyboard() {
     reactPongMode,
     goHome,
     launchGame,
+    setPaused,
     restartGame,
     toggleGameRules,
     togglePause,
@@ -183,7 +185,9 @@ export function useArcadeKeyboard() {
         // R = Restart current game
         if (key === 'r') {
           e.preventDefault();
+          resetGameState(currentGame as GameId);
           restartGame();
+          setPaused(false);
         }
         // H = Go home
         if (key === 'h') {
@@ -233,6 +237,7 @@ export function useArcadeKeyboard() {
     currentGame,
     reactPongMode,
     goHome,
+    setPaused,
     restartGame,
     toggleGameRules,
     togglePause,
