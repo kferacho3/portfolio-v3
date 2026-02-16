@@ -29,6 +29,7 @@ import {
   STAGE_AESTHETICS,
   STAGE_PROFILES,
 } from './constants';
+import { createFixedStepper } from './engine/fixedStep';
 import { laneBit, normalizeLane, useLevelGen } from './generator';
 import { useOctaRuntimeStore } from './runtime';
 import { octaSurgeState } from './state';
@@ -360,6 +361,9 @@ export default function OctaSurge() {
     reason: '',
     type: 'void',
   });
+  const fixedStepperRef = useRef(createFixedStepper(1 / 120, 0.05, 8));
+  const turnQueueRef = useRef<Array<-1 | 1>>([]);
+  const flipQueueRef = useRef(0);
   const trailEmitRef = useRef(0);
   const fxParticlesRef = useRef<FxParticle[]>(
     Array.from({ length: FX_PARTICLE_COUNT }, () => createFxParticle())
@@ -1004,6 +1008,9 @@ export default function OctaSurge() {
       mode: snap.mode,
       cameraMode: snap.cameraMode,
     });
+    fixedStepperRef.current.reset();
+    turnQueueRef.current.length = 0;
+    flipQueueRef.current = 0;
 
     const initialSegments = levelGen.initialSegments();
     segmentsRef.current = initialSegments;
@@ -1099,6 +1106,9 @@ export default function OctaSurge() {
   ]);
 
   const startRun = useCallback(() => {
+    fixedStepperRef.current.reset();
+    turnQueueRef.current.length = 0;
+    flipQueueRef.current = 0;
     startAudio();
     octaSurgeState.start();
   }, [startAudio]);
