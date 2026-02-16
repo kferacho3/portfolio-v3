@@ -109,6 +109,21 @@ type Debris = {
   size: number;
 };
 
+type HazardVisualKind = 'spire' | 'rotor' | 'beam' | 'orb' | 'portal';
+type HazardVisualProfile = {
+  visual: HazardVisualKind;
+  radiusBase: number;
+  radiusGain: number;
+  heightBase: number;
+  heightGain: number;
+  lift: number;
+  drift: number;
+  spin: number;
+  pulse: number;
+  tilt: number;
+  colorHeat: number;
+};
+
 const TILE_SIZE = 1;
 const TILE_HEIGHT = 0.24;
 
@@ -125,6 +140,12 @@ const MAX_TRAIL_DETAIL = MAX_RENDER_TILES * TRAIL_DETAIL_SLOTS;
 const INITIAL_PATH_TILES = 280;
 const CHUNK_MIN = 4;
 const CHUNK_MAX = 9;
+const OBSTACLE_WINDOW_SIZE = 10;
+const MIN_OBSTACLES_PER_WINDOW = 2;
+const OBSTACLE_RULE_START_INDEX = 20;
+const RELIEF_WINDOW_START_INDEX = 160;
+const RELIEF_WINDOW_MIN_GAP = 8;
+const RELIEF_WINDOW_CHANCE = 0.035;
 
 const FIXED_STEP = 1 / 120;
 const MAX_SIM_STEPS = 8;
@@ -324,33 +345,33 @@ const PLATFORM_UNLOCK_AT: Record<PlatformKind, number> = {
 };
 
 const HAZARD_UNLOCK_AT: Record<Exclude<HazardKind, 'none'>, number> = {
-  mirror_maze_platform: 42,
-  pulse_expander: 50,
-  gravity_well: 58,
-  snap_trap: 92,
-  laser_grid: 118,
-  rotating_floor_disk: 102,
-  spike_wave: 86,
-  split_path_bridge: 64,
-  time_slow_zone: 54,
-  bomb_tile: 128,
-  rotating_hammer: 98,
-  anti_gravity_jump_pad: 76,
-  shifting_tiles: 84,
-  telefrag_portal: 146,
-  magnetic_field: 134,
-  rolling_boulder: 160,
-  trapdoor_row: 112,
-  rotating_cross_blades: 182,
-  flicker_bridge: 72,
-  rising_spike_columns: 168,
-  meat_grinder: 214,
-  homing_mine: 194,
-  expand_o_matic: 176,
-  pendulum_axes: 206,
-  rising_lava: 228,
-  fragile_glass: 154,
-  lightning_striker: 198,
+  mirror_maze_platform: 14,
+  pulse_expander: 18,
+  gravity_well: 24,
+  snap_trap: 58,
+  laser_grid: 74,
+  rotating_floor_disk: 70,
+  spike_wave: 52,
+  split_path_bridge: 32,
+  time_slow_zone: 28,
+  bomb_tile: 84,
+  rotating_hammer: 64,
+  anti_gravity_jump_pad: 36,
+  shifting_tiles: 42,
+  telefrag_portal: 92,
+  magnetic_field: 88,
+  rolling_boulder: 98,
+  trapdoor_row: 80,
+  rotating_cross_blades: 116,
+  flicker_bridge: 46,
+  rising_spike_columns: 110,
+  meat_grinder: 156,
+  homing_mine: 132,
+  expand_o_matic: 124,
+  pendulum_axes: 148,
+  rising_lava: 168,
+  fragile_glass: 104,
+  lightning_striker: 140,
 };
 
 const HAZARD_REASON: Record<Exclude<HazardKind, 'none'>, string> = {
@@ -381,6 +402,36 @@ const HAZARD_REASON: Record<Exclude<HazardKind, 'none'>, string> = {
   rising_lava: 'Rising lava reached the cube.',
   fragile_glass: 'Fragile glass shattered under pressure.',
   lightning_striker: 'Lightning striker hit.',
+};
+
+const HAZARD_VISUAL_PROFILE: Record<Exclude<HazardKind, 'none'>, HazardVisualProfile> = {
+  mirror_maze_platform: { visual: 'portal', radiusBase: 0.28, radiusGain: 0.58, heightBase: 0.06, heightGain: 0.2, lift: 0.2, drift: 0.04, spin: 1.5, pulse: 1.2, tilt: 0.2, colorHeat: 0.78 },
+  pulse_expander: { visual: 'orb', radiusBase: 0.2, radiusGain: 0.5, heightBase: 0.16, heightGain: 0.54, lift: 0.16, drift: 0.26, spin: 1.65, pulse: 1.4, tilt: 0.22, colorHeat: 0.84 },
+  gravity_well: { visual: 'beam', radiusBase: 0.16, radiusGain: 0.62, heightBase: 0.24, heightGain: 0.74, lift: 0.18, drift: 0.2, spin: 1.1, pulse: 1.1, tilt: 0.2, colorHeat: 0.82 },
+  snap_trap: { visual: 'spire', radiusBase: 0.18, radiusGain: 0.42, heightBase: 0.22, heightGain: 1.08, lift: 0.08, drift: 0.06, spin: 1.26, pulse: 1.15, tilt: 0.2, colorHeat: 0.92 },
+  laser_grid: { visual: 'beam', radiusBase: 0.24, radiusGain: 0.94, heightBase: 0.14, heightGain: 0.48, lift: 0.22, drift: 0.44, spin: 0.92, pulse: 1.24, tilt: 0.2, colorHeat: 0.98 },
+  rotating_floor_disk: { visual: 'rotor', radiusBase: 0.22, radiusGain: 0.74, heightBase: 0.1, heightGain: 0.28, lift: 0.14, drift: 0.18, spin: 2.4, pulse: 1.08, tilt: 0.22, colorHeat: 0.88 },
+  spike_wave: { visual: 'spire', radiusBase: 0.16, radiusGain: 0.52, heightBase: 0.2, heightGain: 1.02, lift: 0.09, drift: 0.12, spin: 1.22, pulse: 1.26, tilt: 0.16, colorHeat: 0.9 },
+  split_path_bridge: { visual: 'spire', radiusBase: 0.18, radiusGain: 0.46, heightBase: 0.18, heightGain: 0.92, lift: 0.06, drift: 0.1, spin: 1.18, pulse: 1.14, tilt: 0.14, colorHeat: 0.86 },
+  time_slow_zone: { visual: 'beam', radiusBase: 0.2, radiusGain: 0.5, heightBase: 0.2, heightGain: 0.58, lift: 0.2, drift: 0.24, spin: 0.84, pulse: 1.02, tilt: 0.24, colorHeat: 0.7 },
+  bomb_tile: { visual: 'orb', radiusBase: 0.2, radiusGain: 0.58, heightBase: 0.18, heightGain: 0.52, lift: 0.14, drift: 0.2, spin: 2.05, pulse: 1.56, tilt: 0.2, colorHeat: 0.96 },
+  rotating_hammer: { visual: 'rotor', radiusBase: 0.24, radiusGain: 0.92, heightBase: 0.1, heightGain: 0.32, lift: 0.14, drift: 0.22, spin: 2.82, pulse: 1.22, tilt: 0.26, colorHeat: 0.92 },
+  anti_gravity_jump_pad: { visual: 'orb', radiusBase: 0.18, radiusGain: 0.46, heightBase: 0.2, heightGain: 0.48, lift: 0.18, drift: 0.18, spin: 1.72, pulse: 1.35, tilt: 0.16, colorHeat: 0.76 },
+  shifting_tiles: { visual: 'orb', radiusBase: 0.2, radiusGain: 0.44, heightBase: 0.2, heightGain: 0.46, lift: 0.16, drift: 0.3, spin: 1.9, pulse: 1.18, tilt: 0.18, colorHeat: 0.8 },
+  telefrag_portal: { visual: 'portal', radiusBase: 0.26, radiusGain: 0.62, heightBase: 0.06, heightGain: 0.24, lift: 0.2, drift: 0.08, spin: 1.82, pulse: 1.4, tilt: 0.22, colorHeat: 0.88 },
+  magnetic_field: { visual: 'beam', radiusBase: 0.18, radiusGain: 0.6, heightBase: 0.2, heightGain: 0.64, lift: 0.18, drift: 0.3, spin: 1.36, pulse: 1.2, tilt: 0.28, colorHeat: 0.78 },
+  rolling_boulder: { visual: 'orb', radiusBase: 0.28, radiusGain: 0.66, heightBase: 0.18, heightGain: 0.54, lift: 0.14, drift: 0.38, spin: 2.3, pulse: 1.12, tilt: 0.24, colorHeat: 0.92 },
+  trapdoor_row: { visual: 'spire', radiusBase: 0.16, radiusGain: 0.5, heightBase: 0.2, heightGain: 1.12, lift: 0.08, drift: 0.16, spin: 1.3, pulse: 1.26, tilt: 0.2, colorHeat: 0.88 },
+  rotating_cross_blades: { visual: 'rotor', radiusBase: 0.28, radiusGain: 1.02, heightBase: 0.12, heightGain: 0.36, lift: 0.16, drift: 0.26, spin: 3.12, pulse: 1.34, tilt: 0.34, colorHeat: 0.96 },
+  flicker_bridge: { visual: 'portal', radiusBase: 0.24, radiusGain: 0.52, heightBase: 0.06, heightGain: 0.2, lift: 0.18, drift: 0.06, spin: 1.4, pulse: 1.5, tilt: 0.2, colorHeat: 0.72 },
+  rising_spike_columns: { visual: 'spire', radiusBase: 0.2, radiusGain: 0.64, heightBase: 0.24, heightGain: 1.28, lift: 0.12, drift: 0.1, spin: 1.46, pulse: 1.44, tilt: 0.24, colorHeat: 0.94 },
+  meat_grinder: { visual: 'rotor', radiusBase: 0.24, radiusGain: 0.96, heightBase: 0.14, heightGain: 0.42, lift: 0.14, drift: 0.34, spin: 2.74, pulse: 1.24, tilt: 0.28, colorHeat: 0.98 },
+  homing_mine: { visual: 'orb', radiusBase: 0.24, radiusGain: 0.56, heightBase: 0.2, heightGain: 0.48, lift: 0.16, drift: 0.34, spin: 2.14, pulse: 1.3, tilt: 0.18, colorHeat: 0.9 },
+  expand_o_matic: { visual: 'spire', radiusBase: 0.18, radiusGain: 0.72, heightBase: 0.18, heightGain: 1.16, lift: 0.08, drift: 0.22, spin: 1.22, pulse: 1.62, tilt: 0.16, colorHeat: 0.86 },
+  pendulum_axes: { visual: 'rotor', radiusBase: 0.24, radiusGain: 0.88, heightBase: 0.12, heightGain: 0.34, lift: 0.16, drift: 0.24, spin: 2.62, pulse: 1.16, tilt: 0.36, colorHeat: 0.92 },
+  rising_lava: { visual: 'spire', radiusBase: 0.24, radiusGain: 0.7, heightBase: 0.32, heightGain: 1.34, lift: 0.16, drift: 0.14, spin: 1.54, pulse: 1.5, tilt: 0.22, colorHeat: 1 },
+  fragile_glass: { visual: 'spire', radiusBase: 0.18, radiusGain: 0.58, heightBase: 0.2, heightGain: 1, lift: 0.1, drift: 0.18, spin: 1.34, pulse: 1.28, tilt: 0.16, colorHeat: 0.84 },
+  lightning_striker: { visual: 'beam', radiusBase: 0.14, radiusGain: 0.72, heightBase: 0.3, heightGain: 1.38, lift: 0.34, drift: 0.28, spin: 1.48, pulse: 1.58, tilt: 0.3, colorHeat: 1 },
 };
 
 const LETHAL_HAZARDS = new Set<HazardKind>([
@@ -524,6 +575,11 @@ function hazardTint(kind: HazardKind) {
   if (SAW_HAZARDS.has(kind)) return COLOR_SAW;
   if (CLAMP_HAZARDS.has(kind)) return COLOR_CLAMP;
   return COLOR_SWING;
+}
+
+function hazardVisualFor(kind: HazardKind) {
+  if (kind === 'none') return 'none' as const;
+  return HAZARD_VISUAL_PROFILE[kind].visual;
 }
 
 function spawnTierForIndex(index: number): SpawnTier {
@@ -744,13 +800,14 @@ function pickHazard(
   rng: SeededRandom,
   streak: number,
   inBonus: boolean,
-  previousHazard: HazardKind
+  previousHazard: HazardKind,
+  reliefWindow = false
 ): HazardKind {
-  if (index < 14 || inBonus) return 'none';
+  if (index < 14) return 'none';
 
   const tier = spawnTierForIndex(index);
   const allowedConsecutive =
-    tier === 'chaos' ? 3 : tier === 'late' ? 2 : tier === 'mid' ? 2 : 1;
+    reliefWindow ? 1 : tier === 'chaos' ? 3 : tier === 'late' ? 2 : tier === 'mid' ? 2 : 1;
   if (streak >= allowedConsecutive) return 'none';
 
   let hazardChance = 0;
@@ -758,6 +815,9 @@ function pickHazard(
   else if (tier === 'mid') hazardChance = clamp(0.28 + (index - 130) * 0.00065, 0.28, 0.4);
   else if (tier === 'late') hazardChance = clamp(0.4 + (index - 300) * 0.0005, 0.4, 0.52);
   else if (tier === 'chaos') hazardChance = clamp(0.52 + (index - 520) * 0.0003, 0.52, 0.62);
+
+  if (inBonus) hazardChance *= 0.46;
+  if (reliefWindow) hazardChance *= 0.28;
 
   if (hazardChance <= 0 || !rng.bool(hazardChance)) return 'none';
 
@@ -778,6 +838,37 @@ function pickHazard(
     }
 
     weight *= THREE.MathUtils.lerp(0.94, 1.08, progression);
+    weighted.push({ item, weight });
+  }
+
+  if (weighted.length === 0) return 'none';
+  return rng.weighted(weighted);
+}
+
+function pickForcedHazard(
+  index: number,
+  rng: SeededRandom,
+  previousHazard: HazardKind,
+  platform: PlatformKind
+): HazardKind {
+  const tier = spawnTierForIndex(index);
+  const progression = clamp(index / 620, 0, 1);
+  const weighted: { item: HazardKind; weight: number }[] = [];
+
+  for (const item of HAZARD_POOL) {
+    if (index < HAZARD_UNLOCK_AT[item]) continue;
+    if (!isHazardCompatible(platform, item, index)) continue;
+
+    let weight = Math.max(0.16, hazardTierWeight(item, tier));
+    weight *= hazardIndividualBias(item);
+
+    if (previousHazard !== 'none' && previousHazard === item) {
+      weight *= 0.42;
+    } else if (sameHazardFamily(item, previousHazard)) {
+      weight *= 0.72;
+    }
+
+    weight *= THREE.MathUtils.lerp(0.96, 1.12, progression);
     weighted.push({ item, weight });
   }
 
@@ -973,6 +1064,7 @@ function Steps() {
   const sawMeshRef = useRef<THREE.InstancedMesh>(null);
   const clampMeshRef = useRef<THREE.InstancedMesh>(null);
   const swingMeshRef = useRef<THREE.InstancedMesh>(null);
+  const ringMeshRef = useRef<THREE.InstancedMesh>(null);
   const warningMeshRef = useRef<THREE.InstancedMesh>(null);
   const gemMeshRef = useRef<THREE.InstancedMesh>(null);
   const debrisMeshRef = useRef<THREE.InstancedMesh>(null);
@@ -993,6 +1085,10 @@ function Steps() {
     hazardStreak: 0,
     hazardSequence: 0,
     platformSequence: 0,
+    obstacleWindowId: -1,
+    obstacleWindowObstacleCount: 0,
+    obstacleWindowRelief: false,
+    lastReliefWindowId: -999,
 
     tilesByKey: new Map<string, Tile>(),
     tilesByIndex: new Map<number, Tile>(),
@@ -1137,17 +1233,49 @@ function Steps() {
     const previousPlatform = previousTile?.platform ?? null;
     const previousHazard = previousTile?.hazard ?? 'none';
 
+    const obstacleWindowId = Math.floor(index / OBSTACLE_WINDOW_SIZE);
+    if (obstacleWindowId !== w.obstacleWindowId) {
+      w.obstacleWindowId = obstacleWindowId;
+      w.obstacleWindowObstacleCount = 0;
+
+      const canRelief =
+        index >= RELIEF_WINDOW_START_INDEX &&
+        obstacleWindowId - w.lastReliefWindowId >= RELIEF_WINDOW_MIN_GAP &&
+        w.rng.bool(RELIEF_WINDOW_CHANCE);
+      w.obstacleWindowRelief = canRelief;
+      if (canRelief) w.lastReliefWindowId = obstacleWindowId;
+    }
+
+    const windowOffset = index - obstacleWindowId * OBSTACLE_WINDOW_SIZE;
+    const remainingSlots = OBSTACLE_WINDOW_SIZE - windowOffset;
+    const requiredObstacles =
+      index >= OBSTACLE_RULE_START_INDEX && !w.obstacleWindowRelief ? MIN_OBSTACLES_PER_WINDOW : 0;
+    const missingObstacles = Math.max(0, requiredObstacles - w.obstacleWindowObstacleCount);
+    const mustSpawnObstacle = missingObstacles > 0 && remainingSlots <= missingObstacles + 1;
+
     const platform = pickPlatform(index, w.rng, inBonus, previousPlatform);
     const platformTiming = buildPlatformTiming(platform, index, w.rng);
 
-    let hazard = pickHazard(index, w.rng, w.hazardStreak, inBonus, previousHazard);
+    let hazard = pickHazard(index, w.rng, w.hazardStreak, inBonus, previousHazard, w.obstacleWindowRelief);
+    if (mustSpawnObstacle && hazard === 'none') {
+      hazard = pickForcedHazard(index, w.rng, previousHazard, platform);
+    }
     if (!isHazardCompatible(platform, hazard, index)) {
-      hazard = 'none';
+      hazard = mustSpawnObstacle ? pickForcedHazard(index, w.rng, previousHazard, platform) : 'none';
+    }
+    if (mustSpawnObstacle && hazard === 'none') {
+      const fallback = HAZARD_POOL.find((item) => index >= HAZARD_UNLOCK_AT[item] && isHazardCompatible(platform, item, index));
+      if (fallback) hazard = fallback;
+    }
+    if (mustSpawnObstacle && hazard === 'none') {
+      const emergency = HAZARD_POOL.find((item) => index >= HAZARD_UNLOCK_AT[item]);
+      if (emergency) hazard = emergency;
     }
     if (hazard === 'none') {
       w.hazardStreak = 0;
     } else {
       w.hazardStreak += 1;
+      w.obstacleWindowObstacleCount += 1;
     }
     const hazardTiming = buildHazardTiming(hazard, index, w.rng, w.hazardSequence);
     if (hazard !== 'none') w.hazardSequence += 1;
@@ -1405,6 +1533,10 @@ function Steps() {
     w.hazardStreak = 0;
     w.hazardSequence = 0;
     w.platformSequence = 0;
+    w.obstacleWindowId = -1;
+    w.obstacleWindowObstacleCount = 0;
+    w.obstacleWindowRelief = false;
+    w.lastReliefWindowId = -999;
 
     w.tilesByKey.clear();
     w.tilesByIndex.clear();
@@ -1493,6 +1625,7 @@ function Steps() {
       sawMeshRef.current &&
       clampMeshRef.current &&
       swingMeshRef.current &&
+      ringMeshRef.current &&
       warningMeshRef.current &&
       gemMeshRef.current &&
       debrisMeshRef.current
@@ -1504,6 +1637,7 @@ function Steps() {
         hideInstance(sawMeshRef.current, i);
         hideInstance(clampMeshRef.current, i);
         hideInstance(swingMeshRef.current, i);
+        hideInstance(ringMeshRef.current, i);
         hideInstance(warningMeshRef.current, i);
         hideInstance(gemMeshRef.current, i);
       }
@@ -1518,6 +1652,7 @@ function Steps() {
       sawMeshRef.current.instanceMatrix.needsUpdate = true;
       clampMeshRef.current.instanceMatrix.needsUpdate = true;
       swingMeshRef.current.instanceMatrix.needsUpdate = true;
+      ringMeshRef.current.instanceMatrix.needsUpdate = true;
       warningMeshRef.current.instanceMatrix.needsUpdate = true;
       gemMeshRef.current.instanceMatrix.needsUpdate = true;
       debrisMeshRef.current.instanceMatrix.needsUpdate = true;
@@ -1880,6 +2015,7 @@ function Steps() {
       sawMeshRef.current &&
       clampMeshRef.current &&
       swingMeshRef.current &&
+      ringMeshRef.current &&
       warningMeshRef.current &&
       gemMeshRef.current
     ) {
@@ -1889,6 +2025,7 @@ function Steps() {
       const sawMesh = sawMeshRef.current;
       const clampMesh = clampMeshRef.current;
       const swingMesh = swingMeshRef.current;
+      const ringMesh = ringMeshRef.current;
       const warningMesh = warningMeshRef.current;
       const gemMesh = gemMeshRef.current;
 
@@ -1901,6 +2038,7 @@ function Steps() {
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
           hideInstance(swingMesh, i);
+          hideInstance(ringMesh, i);
           hideInstance(warningMesh, i);
           hideInstance(gemMesh, i);
           continue;
@@ -1914,6 +2052,7 @@ function Steps() {
           hideInstance(sawMesh, i);
           hideInstance(clampMesh, i);
           hideInstance(swingMesh, i);
+          hideInstance(ringMesh, i);
           hideInstance(warningMesh, i);
           hideInstance(gemMesh, i);
           continue;
@@ -1932,6 +2071,7 @@ function Steps() {
               : 0;
         const y = TILE_HEIGHT * 0.5 - tile.drop + wobble - platformSink;
         const hazardState = tile.hazard === 'none' ? null : hazardStateAt(tile, w.simTime);
+        const hazardProfile = tile.hazard === 'none' ? null : HAZARD_VISUAL_PROFILE[tile.hazard];
         const hazardThreat = tile.hazard === 'none' ? 0 : smoothStep01(tile.hazardMotion);
         const dangerPulse = hazardState
           ? (0.5 + 0.5 * Math.sin(w.simTime * 8 + tile.hazardPhase * 2.2)) * hazardThreat
@@ -2064,115 +2204,189 @@ function Steps() {
           hideTrailDetails(trailDetailMesh, i);
         }
 
-        if (SPIKE_HAZARDS.has(tile.hazard) && hazardState) {
-          const isColumn = tile.hazard === 'rising_spike_columns';
-          const isBomb = tile.hazard === 'bomb_tile';
-          const bob = Math.sin(w.simTime * (2.2 + hazardThreat * 2.1) + tile.hazardPhase) * 0.01 * hazardThreat;
-          const yLift = -0.26 * (1 - hazardThreat) + (isColumn ? 0.15 : 0.05) + bob;
-          const scaleXZ = THREE.MathUtils.lerp(isBomb ? 0.42 : 0.3, isColumn ? 0.8 : 1, hazardThreat);
-          const scaleY = THREE.MathUtils.lerp(0.08, isColumn ? 1.35 : 1.02, hazardThreat);
+        const hazardVisual = hazardVisualFor(tile.hazard);
 
-          w.dummy.position.set(x, y + TILE_HEIGHT * 0.52 + yLift, z);
-          w.dummy.rotation.set(0, tile.hazardPhase + w.simTime * (0.16 + hazardThreat * 0.48), 0);
-          w.dummy.scale.set(scaleXZ, scaleY, scaleXZ);
+        if (hazardVisual === 'spire' && hazardState && hazardProfile) {
+          const bob =
+            Math.sin(w.simTime * (1.8 + hazardProfile.pulse + hazardThreat * 2.2) + tile.hazardPhase) *
+            0.02 *
+            hazardThreat;
+          const yLift = -0.24 * (1 - hazardThreat) + hazardProfile.lift + bob;
+          const spikeRadius = THREE.MathUtils.lerp(
+            hazardProfile.radiusBase,
+            hazardProfile.radiusBase + hazardProfile.radiusGain,
+            hazardThreat
+          );
+          const spikeHeight = THREE.MathUtils.lerp(
+            hazardProfile.heightBase,
+            hazardProfile.heightBase + hazardProfile.heightGain,
+            hazardThreat
+          );
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.53 + yLift, z);
+          w.dummy.rotation.set(
+            Math.sin(w.simTime * 1.4 + tile.hazardPhase) * hazardProfile.tilt,
+            tile.hazardPhase + w.simTime * (0.2 + hazardProfile.spin),
+            Math.cos(w.simTime * 1.2 + tile.hazardPhase) * hazardProfile.tilt * 0.4
+          );
+          w.dummy.scale.set(spikeRadius, spikeHeight, spikeRadius);
           w.dummy.updateMatrix();
           spikeMesh.setMatrixAt(i, w.dummy.matrix);
 
           w.tempColorB
             .copy(hazardTint(tile.hazard))
-            .lerp(COLOR_HAZARD_DANGER, 0.45 + hazardThreat * 0.35)
-            .lerp(COLOR_WHITE, 0.05 + dangerPulse * 0.16);
+            .lerp(COLOR_HAZARD_DANGER, 0.44 + hazardThreat * (0.24 + hazardProfile.colorHeat * 0.2))
+            .lerp(COLOR_WHITE, 0.06 + dangerPulse * 0.16);
           spikeMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(spikeMesh, i);
         }
 
-        if (SAW_HAZARDS.has(tile.hazard) && hazardState) {
-          const driftDirection = tile.index % 2 === 0 ? 1 : -1;
-          const approach = 1 - hazardThreat;
-          const wide = tile.hazard === 'meat_grinder' || tile.hazard === 'rotating_cross_blades';
-          const sideOffset = driftDirection * ((wide ? 1.35 : 1.04) * approach + 0.08);
-          const sweep = Math.sin(w.simTime * (1.4 + hazardThreat * 2.8) + tile.hazardPhase) * (0.04 + hazardThreat * (wide ? 0.18 : 0.12));
-          const yLift = -0.18 * approach + (wide ? 0.16 : 0.08) + hazardThreat * 0.06;
-          const sawScale = THREE.MathUtils.lerp(0.2, wide ? 1.26 : 1.02, hazardThreat);
+        if (hazardVisual === 'rotor' && hazardState && hazardProfile) {
+          const radius = THREE.MathUtils.lerp(
+            hazardProfile.radiusBase,
+            hazardProfile.radiusBase + hazardProfile.radiusGain,
+            hazardThreat
+          );
+          const thickness = THREE.MathUtils.lerp(
+            hazardProfile.heightBase,
+            hazardProfile.heightBase + hazardProfile.heightGain * 0.34,
+            hazardThreat
+          );
+          const lateral =
+            Math.sin(w.simTime * (1.2 + hazardProfile.pulse + hazardThreat * 2.8) + tile.hazardPhase) *
+            hazardProfile.drift *
+            0.42;
+          const lift = -0.16 * (1 - hazardThreat) + hazardProfile.lift;
 
-          w.dummy.position.set(x + sideOffset, y + TILE_HEIGHT * 0.52 + yLift, z + sweep);
-          w.dummy.rotation.set(0, w.simTime * (1.2 + hazardThreat * 5.6), 0);
-          w.dummy.scale.set(sawScale, 0.2 + hazardThreat * (wide ? 0.28 : 0.16), sawScale);
+          w.dummy.position.set(x + lateral, y + TILE_HEIGHT * 0.53 + lift, z);
+          w.dummy.rotation.set(
+            Math.sin(w.simTime * 0.8 + tile.hazardPhase) * hazardProfile.tilt,
+            w.simTime * (1.4 + hazardProfile.spin * 2.2) + tile.hazardPhase,
+            Math.cos(w.simTime * 0.75 + tile.hazardPhase) * hazardProfile.tilt
+          );
+          w.dummy.scale.set(radius, thickness, radius);
           w.dummy.updateMatrix();
           sawMesh.setMatrixAt(i, w.dummy.matrix);
 
           w.tempColorB
             .copy(hazardTint(tile.hazard))
-            .lerp(COLOR_HAZARD_DANGER, 0.5 + hazardThreat * 0.28)
-            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.15);
+            .lerp(COLOR_HAZARD_DANGER, 0.42 + hazardThreat * (0.24 + hazardProfile.colorHeat * 0.22))
+            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.13);
           sawMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(sawMesh, i);
         }
 
-        if (CLAMP_HAZARDS.has(tile.hazard) && hazardState) {
-          const close = hazardThreat;
-          const approach = 1 - close;
-          const axisX = tile.index % 2 === 0;
-          const slideSign = tile.index % 4 < 2 ? 1 : -1;
-          const isBeam = tile.hazard === 'laser_grid' || tile.hazard === 'lightning_striker';
-          const slide = slideSign * (isBeam ? 0.4 : 0.86) * approach;
-          const jawScale = THREE.MathUtils.lerp(isBeam ? 0.44 : 0.2, isBeam ? 1.32 : 1.08, close);
-          const jawHeight = THREE.MathUtils.lerp(0.14, isBeam ? 0.78 : 0.54, close);
-          const sway = Math.sin((hazardState.phase01 * 1.6 + tile.hazardPhase) * Math.PI * 2) * 0.08;
+        if (hazardVisual === 'beam' && hazardState && hazardProfile) {
+          const slideSign = tile.index % 2 === 0 ? 1 : -1;
+          const slide = slideSign * (1 - hazardThreat) * hazardProfile.drift * 0.7;
+          const width = THREE.MathUtils.lerp(
+            hazardProfile.radiusBase,
+            hazardProfile.radiusBase + hazardProfile.radiusGain,
+            hazardThreat
+          );
+          const height = THREE.MathUtils.lerp(
+            hazardProfile.heightBase,
+            hazardProfile.heightBase + hazardProfile.heightGain,
+            hazardThreat
+          );
 
           w.dummy.position.set(
-            x + (axisX ? slide : 0),
-            y + TILE_HEIGHT * 0.52 + (-0.12 * approach + 0.05 + close * 0.08),
-            z + (axisX ? 0 : slide)
+            x + (tile.index % 2 === 0 ? slide : 0),
+            y + TILE_HEIGHT * 0.53 + hazardProfile.lift,
+            z + (tile.index % 2 === 0 ? 0 : slide)
           );
-          w.dummy.rotation.set(0, tile.hazardPhase * 0.32 + sway + slideSign * approach * 0.18, 0);
-          w.dummy.scale.set(jawScale, jawHeight, jawScale);
+          w.dummy.rotation.set(
+            0,
+            tile.index % 2 === 0 ? 0 : Math.PI * 0.5,
+            Math.sin(w.simTime * (1 + hazardProfile.pulse) + tile.hazardPhase) * hazardProfile.tilt
+          );
+          w.dummy.scale.set(width, height, 0.12 + hazardThreat * 0.08);
           w.dummy.updateMatrix();
           clampMesh.setMatrixAt(i, w.dummy.matrix);
 
           w.tempColorB
             .copy(hazardTint(tile.hazard))
-            .lerp(COLOR_HAZARD_DANGER, 0.46 + close * 0.32)
-            .lerp(COLOR_WHITE, 0.06 + dangerPulse * 0.14);
+            .lerp(COLOR_HAZARD_DANGER, 0.44 + hazardThreat * (0.24 + hazardProfile.colorHeat * 0.24))
+            .lerp(COLOR_WHITE, 0.1 + dangerPulse * 0.18);
           clampMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(clampMesh, i);
         }
 
-        if (SWING_HAZARDS.has(tile.hazard) && hazardState) {
-          const swingDir = tile.index % 2 === 0 ? 1 : -1;
-          const anchorOnX = tile.index % 3 !== 0;
-          const approach = 1 - hazardThreat;
-          const heavy = tile.hazard === 'rising_lava' || tile.hazard === 'expand_o_matic' || tile.hazard === 'split_path_bridge';
-          const anchorOffset = swingDir * ((heavy ? 1.2 : 1.02) - hazardThreat * 0.62);
-          const angle = Math.sin(w.simTime * (1.5 + hazardThreat * (heavy ? 2.4 : 1.8)) + tile.hazardPhase) * (0.2 + hazardThreat * (heavy ? 1.25 : 1.05));
-          const radius = 0.32 + hazardThreat * (heavy ? 0.38 : 0.26);
-          const arc = Math.sin(angle) * radius;
-          const dropY = Math.cos(angle) * 0.12 - approach * 0.18;
-          const ballScale = THREE.MathUtils.lerp(0.28, heavy ? 1.25 : 1, hazardThreat);
-          const xPos = anchorOnX ? x + anchorOffset + arc : x + Math.sin(w.simTime * 2.2 + tile.hazardPhase) * 0.03 * hazardThreat;
-          const zPos = anchorOnX ? z + Math.sin(w.simTime * 2.2 + tile.hazardPhase) * 0.03 * hazardThreat : z + anchorOffset + arc;
+        if (hazardVisual === 'orb' && hazardState && hazardProfile) {
+          const drift =
+            Math.sin(w.simTime * (1.8 + hazardProfile.pulse + hazardThreat * 2.4) + tile.hazardPhase) *
+            hazardProfile.drift *
+            0.55;
+          const bob =
+            Math.cos(w.simTime * (1.7 + hazardProfile.pulse) + tile.hazardPhase) * 0.05 * hazardThreat;
+          const radius = THREE.MathUtils.lerp(
+            hazardProfile.radiusBase,
+            hazardProfile.radiusBase + hazardProfile.radiusGain,
+            hazardThreat
+          );
 
-          w.dummy.position.set(xPos, y + TILE_HEIGHT * 0.52 + 0.3 + dropY, zPos);
-          w.dummy.rotation.set(angle * 0.35, w.simTime * (0.9 + hazardThreat * 3.2) + tile.hazardPhase, -angle * 0.35);
-          w.dummy.scale.set(ballScale, ballScale, ballScale);
+          w.dummy.position.set(x + drift, y + TILE_HEIGHT * 0.53 + hazardProfile.lift + bob, z);
+          w.dummy.rotation.set(
+            w.simTime * (0.8 + hazardProfile.spin),
+            w.simTime * (1.3 + hazardProfile.spin * 1.2),
+            w.simTime * (0.65 + hazardProfile.spin * 0.8)
+          );
+          w.dummy.scale.set(radius, radius, radius);
           w.dummy.updateMatrix();
           swingMesh.setMatrixAt(i, w.dummy.matrix);
 
           w.tempColorB
             .copy(hazardTint(tile.hazard))
-            .lerp(COLOR_HAZARD_DANGER, 0.38 + hazardThreat * 0.34)
-            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.12);
+            .lerp(COLOR_HAZARD_DANGER, 0.4 + hazardThreat * (0.26 + hazardProfile.colorHeat * 0.2))
+            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.15);
           swingMesh.setColorAt(i, w.tempColorB);
         } else {
           hideInstance(swingMesh, i);
         }
 
+        if (hazardVisual === 'portal' && hazardState && hazardProfile) {
+          const ripple =
+            Math.sin(w.simTime * (2.4 + hazardProfile.pulse) + tile.hazardPhase * 1.7) *
+            0.12 *
+            hazardThreat;
+          const radius = THREE.MathUtils.lerp(
+            hazardProfile.radiusBase,
+            hazardProfile.radiusBase + hazardProfile.radiusGain + ripple,
+            hazardThreat
+          );
+          const thickness = THREE.MathUtils.lerp(
+            hazardProfile.heightBase,
+            hazardProfile.heightBase + hazardProfile.heightGain * 0.2,
+            hazardThreat
+          );
+
+          w.dummy.position.set(x, y + TILE_HEIGHT * 0.53 + hazardProfile.lift, z);
+          w.dummy.rotation.set(
+            Math.PI * 0.5 + Math.sin(w.simTime * 0.6 + tile.hazardPhase) * hazardProfile.tilt * 0.2,
+            w.simTime * (1 + hazardProfile.spin) + tile.hazardPhase,
+            0
+          );
+          w.dummy.scale.set(radius, radius, thickness);
+          w.dummy.updateMatrix();
+          ringMesh.setMatrixAt(i, w.dummy.matrix);
+
+          w.tempColorB
+            .copy(hazardTint(tile.hazard))
+            .lerp(COLOR_HAZARD_SAFE, 0.16 + hazardState.openBlend * 0.12)
+            .lerp(COLOR_HAZARD_DANGER, 0.28 + hazardThreat * (0.2 + hazardProfile.colorHeat * 0.2))
+            .lerp(COLOR_WHITE, 0.08 + dangerPulse * 0.16);
+          ringMesh.setColorAt(i, w.tempColorB);
+        } else {
+          hideInstance(ringMesh, i);
+        }
+
         if (tile.hazard !== 'none') {
           const beaconPulse = 0.5 + 0.5 * Math.sin(w.simTime * 5.2 + tile.hazardPhase * 1.7);
-          const beaconScale = 0.16 + hazardThreat * 0.2 + beaconPulse * 0.08;
+          const profileRadius = hazardProfile ? hazardProfile.radiusGain : 0.5;
+          const beaconScale = 0.14 + hazardThreat * (0.16 + profileRadius * 0.1) + beaconPulse * 0.08;
           const beaconY = y + TILE_HEIGHT * 0.52 + 0.3 + beaconPulse * 0.08;
           w.dummy.position.set(x, beaconY, z);
           w.dummy.rotation.set(0, w.simTime * 0.8 + tile.hazardPhase, 0);
@@ -2208,6 +2422,7 @@ function Steps() {
       sawMesh.instanceMatrix.needsUpdate = true;
       clampMesh.instanceMatrix.needsUpdate = true;
       swingMesh.instanceMatrix.needsUpdate = true;
+      ringMesh.instanceMatrix.needsUpdate = true;
       warningMesh.instanceMatrix.needsUpdate = true;
       gemMesh.instanceMatrix.needsUpdate = true;
 
@@ -2217,6 +2432,7 @@ function Steps() {
       if (sawMesh.instanceColor) sawMesh.instanceColor.needsUpdate = true;
       if (clampMesh.instanceColor) clampMesh.instanceColor.needsUpdate = true;
       if (swingMesh.instanceColor) swingMesh.instanceColor.needsUpdate = true;
+      if (ringMesh.instanceColor) ringMesh.instanceColor.needsUpdate = true;
       if (warningMesh.instanceColor) warningMesh.instanceColor.needsUpdate = true;
       if (gemMesh.instanceColor) gemMesh.instanceColor.needsUpdate = true;
     }
@@ -2353,28 +2569,33 @@ function Steps() {
       </instancedMesh>
 
       <instancedMesh ref={spikeMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <coneGeometry args={[0.16, 0.34, 12]} />
-        <meshStandardMaterial vertexColors roughness={0.34} metalness={0.14} emissive="#ff2d55" emissiveIntensity={0.12} />
+        <coneGeometry args={[0.2, 0.46, 16]} />
+        <meshStandardMaterial vertexColors roughness={0.28} metalness={0.22} emissive="#ff2d55" emissiveIntensity={0.18} />
       </instancedMesh>
 
       <instancedMesh ref={sawMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <cylinderGeometry args={[0.24, 0.24, 0.12, 14]} />
-        <meshStandardMaterial vertexColors roughness={0.22} metalness={0.6} emissive="#ff1f4d" emissiveIntensity={0.22} />
+        <torusGeometry args={[0.26, 0.08, 10, 18]} />
+        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.64} emissive="#ff2f6f" emissiveIntensity={0.24} />
       </instancedMesh>
 
       <instancedMesh ref={clampMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <boxGeometry args={[0.74, 0.18, 0.74]} />
-        <meshStandardMaterial vertexColors roughness={0.3} metalness={0.22} emissive="#ff3f7f" emissiveIntensity={0.18} />
+        <cylinderGeometry args={[0.12, 0.12, 1, 10]} />
+        <meshStandardMaterial vertexColors roughness={0.26} metalness={0.3} emissive="#ff3f7f" emissiveIntensity={0.22} />
       </instancedMesh>
 
       <instancedMesh ref={swingMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <sphereGeometry args={[0.18, 14, 14]} />
-        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.24} emissive="#ff8a00" emissiveIntensity={0.2} />
+        <icosahedronGeometry args={[0.2, 0]} />
+        <meshStandardMaterial vertexColors roughness={0.18} metalness={0.28} emissive="#ff8a00" emissiveIntensity={0.24} />
+      </instancedMesh>
+
+      <instancedMesh ref={ringMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
+        <torusGeometry args={[0.22, 0.06, 10, 20]} />
+        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.34} emissive="#3dcfff" emissiveIntensity={0.2} />
       </instancedMesh>
 
       <instancedMesh ref={warningMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
-        <octahedronGeometry args={[0.14, 0]} />
-        <meshStandardMaterial vertexColors roughness={0.22} metalness={0.18} emissive="#ff1744" emissiveIntensity={0.24} />
+        <octahedronGeometry args={[0.13, 0]} />
+        <meshStandardMaterial vertexColors roughness={0.2} metalness={0.2} emissive="#ff1744" emissiveIntensity={0.28} />
       </instancedMesh>
 
       <instancedMesh ref={gemMeshRef} args={[undefined, undefined, MAX_RENDER_TILES]}>
