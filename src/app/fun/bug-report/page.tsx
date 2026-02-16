@@ -7,7 +7,6 @@ import {
 } from '@/lib/emailjsConfig';
 import emailjs from 'emailjs-com';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { GAME_CARDS } from '../config/games';
 
@@ -63,8 +62,7 @@ const formatLabel = (value: string) =>
     .trim();
 
 export default function BugReportPage() {
-  const searchParams = useSearchParams();
-  const gameParam = searchParams.get('game');
+  const [gameParam, setGameParam] = useState<string | null>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -84,6 +82,12 @@ export default function BugReportPage() {
     () => GAME_CARDS.find((game) => game.id === gameParam),
     [gameParam]
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const game = new URLSearchParams(window.location.search).get('game');
+    setGameParam(game);
+  }, []);
 
   useEffect(() => {
     if (selectedGameOption?.id) {
