@@ -406,7 +406,7 @@ export default function OctaSurge() {
 
   const baseRingRef = useRef(0);
   const scrollOffsetRef = useRef(0);
-  const speedRef = useRef(GAME.baseSpeed);
+  const speedRef = useRef<number>(GAME.baseSpeed);
   const comboRef = useRef(0);
   const audioReactiveRef = useRef(0);
   const stageFlashRef = useRef(0);

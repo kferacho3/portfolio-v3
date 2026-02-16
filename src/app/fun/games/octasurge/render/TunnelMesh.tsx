@@ -45,7 +45,6 @@ export function TunnelMesh({
   stageFlashRef,
   tileVariantRef,
 }: Props) {
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
   const lastBaseRef = useRef(Number.NaN);
   const lastVariantRef = useRef<OctaTileVariant>('classic');
 
@@ -93,12 +92,7 @@ export function TunnelMesh({
 
   const material = useMemo(() => createTunnelMaterial(), []);
 
-  useEffect(() => {
-    materialRef.current = material;
-    return () => {
-      material.dispose();
-    };
-  }, [material]);
+  useEffect(() => () => material.dispose(), [material]);
 
   const applyRingWindow = (baseRing: number) => {
     const activeAttr = geometry.getAttribute('aActive') as THREE.InstancedBufferAttribute;
@@ -142,8 +136,7 @@ export function TunnelMesh({
   };
 
   useFrame((state) => {
-    const mat = materialRef.current;
-    if (!mat) return;
+    const mat = material;
 
     const baseRing = baseRingRef.current;
     const variant = tileVariantRef.current;
