@@ -51,6 +51,18 @@ type SpiralEvent = {
   wobbleFreq: number;
   wobblePhase: number;
   hitAngle: number;
+  collecting: boolean;
+  collectProgress: number;
+  collectTrailClock: number;
+  collectFromX: number;
+  collectFromY: number;
+  collectFromZ: number;
+  collectToX: number;
+  collectToY: number;
+  collectToZ: number;
+  collectX: number;
+  collectY: number;
+  collectZ: number;
 };
 
 type ParticleKind = 'burst' | 'crash' | 'collect';
@@ -105,9 +117,34 @@ type Runtime = {
 
   obstacleStreak: number;
   lastSpawnTheta: number;
+  paletteFrom: number;
+  paletteTo: number;
+  paletteMix: number;
+  paletteDuration: number;
 
   events: SpiralEvent[];
   particles: BurstParticle[];
+};
+
+type SceneryPalette = {
+  deep: number;
+  mid: number;
+  accentA: number;
+  accentB: number;
+  fog: number;
+  ambient: number;
+  hemiSky: number;
+  hemiGround: number;
+  key: number;
+  fillA: number;
+  fillB: number;
+  guideA: number;
+  guideB: number;
+  orbit: number;
+  trail: number;
+  core: number;
+  coreEmissive: number;
+  collectOverlay: number;
 };
 
 const EVENT_POOL = 96;
@@ -137,6 +174,129 @@ const COLLECT_ANGLE_GREEN = 0.41;
 const COLLECT_ANGLE_PURPLE = 0.37;
 const NEAR_MISS_BONUS_RANGE = 0.18;
 const COLLISION_PADDING_MAX = 0.12;
+
+const SCENERY_PALETTES: SceneryPalette[] = [
+  {
+    deep: 0x050a17,
+    mid: 0x0c1d38,
+    accentA: 0x1d4f8f,
+    accentB: 0x2f8aca,
+    fog: 0x091324,
+    ambient: 0xbfd9ff,
+    hemiSky: 0xbfe8ff,
+    hemiGround: 0x132844,
+    key: 0xd7f4ff,
+    fillA: 0x52d6ff,
+    fillB: 0x7f92ff,
+    guideA: 0x7ddfff,
+    guideB: 0x87ffd1,
+    orbit: 0x86dfff,
+    trail: 0xd9fbff,
+    core: 0x17355a,
+    coreEmissive: 0x40a8d7,
+    collectOverlay: 0x7ff7ff,
+  },
+  {
+    deep: 0x100916,
+    mid: 0x2a1240,
+    accentA: 0x6b2b9a,
+    accentB: 0xb04fc7,
+    fog: 0x1b0f2a,
+    ambient: 0xf2deff,
+    hemiSky: 0xe3c6ff,
+    hemiGround: 0x2a1640,
+    key: 0xffddff,
+    fillA: 0xd685ff,
+    fillB: 0x8d7bff,
+    guideA: 0xe2b0ff,
+    guideB: 0xffcbe8,
+    orbit: 0xdbb2ff,
+    trail: 0xf7e7ff,
+    core: 0x4a1e69,
+    coreEmissive: 0xc25bff,
+    collectOverlay: 0xffc9ff,
+  },
+  {
+    deep: 0x051713,
+    mid: 0x0b3a2f,
+    accentA: 0x1f7a5a,
+    accentB: 0x38b36f,
+    fog: 0x0a251f,
+    ambient: 0xcfffe1,
+    hemiSky: 0xbfffd6,
+    hemiGround: 0x15362b,
+    key: 0xd8ffe8,
+    fillA: 0x63ffd2,
+    fillB: 0x7fffa1,
+    guideA: 0x77ffd0,
+    guideB: 0x9aff9f,
+    orbit: 0x6effcc,
+    trail: 0xd8ffe9,
+    core: 0x135341,
+    coreEmissive: 0x43db9a,
+    collectOverlay: 0xa8ffe5,
+  },
+  {
+    deep: 0x1a0a04,
+    mid: 0x3f1f10,
+    accentA: 0xa24718,
+    accentB: 0xf08a2d,
+    fog: 0x28140a,
+    ambient: 0xffe4cb,
+    hemiSky: 0xffd5ae,
+    hemiGround: 0x4a2714,
+    key: 0xfff0d8,
+    fillA: 0xffa861,
+    fillB: 0xffd47a,
+    guideA: 0xffb783,
+    guideB: 0xffde9a,
+    orbit: 0xffbf84,
+    trail: 0xffefd8,
+    core: 0x733114,
+    coreEmissive: 0xffa25e,
+    collectOverlay: 0xffd4a3,
+  },
+  {
+    deep: 0x060e1e,
+    mid: 0x132b4d,
+    accentA: 0x2f5e9b,
+    accentB: 0x46c2d1,
+    fog: 0x0d1a33,
+    ambient: 0xd4e4ff,
+    hemiSky: 0xb7d6ff,
+    hemiGround: 0x1d2f4d,
+    key: 0xe4edff,
+    fillA: 0x67c0ff,
+    fillB: 0x50f3ff,
+    guideA: 0x90d6ff,
+    guideB: 0x9cf4ff,
+    orbit: 0x8ad9ff,
+    trail: 0xd8efff,
+    core: 0x214571,
+    coreEmissive: 0x5bb4ff,
+    collectOverlay: 0x9beeff,
+  },
+  {
+    deep: 0x120811,
+    mid: 0x341529,
+    accentA: 0x8e2f62,
+    accentB: 0xe35188,
+    fog: 0x200f1a,
+    ambient: 0xffd7ef,
+    hemiSky: 0xffc1e3,
+    hemiGround: 0x3c1830,
+    key: 0xffe6f5,
+    fillA: 0xff78bc,
+    fillB: 0xff9e8b,
+    guideA: 0xff9fd2,
+    guideB: 0xffbfa2,
+    orbit: 0xffa6cb,
+    trail: 0xffe7f5,
+    core: 0x5d1f43,
+    coreEmissive: 0xff66a9,
+    collectOverlay: 0xffd0ea,
+  },
+];
 
 const OFFSCREEN_POS = new THREE.Vector3(9999, 9999, 9999);
 const TINY_SCALE = new THREE.Vector3(0.0001, 0.0001, 0.0001);
@@ -213,6 +373,18 @@ const createEvent = (): SpiralEvent => ({
   wobbleFreq: 0,
   wobblePhase: 0,
   hitAngle: 0.33,
+  collecting: false,
+  collectProgress: 0,
+  collectTrailClock: 0,
+  collectFromX: 0,
+  collectFromY: 0,
+  collectFromZ: 0,
+  collectToX: 0,
+  collectToY: 0,
+  collectToZ: 0,
+  collectX: 0,
+  collectY: 0,
+  collectZ: 0,
 });
 
 const createParticle = (): BurstParticle => ({
@@ -265,6 +437,10 @@ const createRuntime = (): Runtime => ({
 
   obstacleStreak: 0,
   lastSpawnTheta: 0,
+  paletteFrom: 0,
+  paletteTo: 1,
+  paletteMix: 0,
+  paletteDuration: 9.6,
 
   events: Array.from({ length: EVENT_POOL }, createEvent),
   particles: Array.from({ length: PARTICLE_POOL }, createParticle),
@@ -312,6 +488,30 @@ const collectAngleForVariant = (variant: CollectibleVariant) => {
   if (variant === 'green') return COLLECT_ANGLE_GREEN;
   return COLLECT_ANGLE_GOLD;
 };
+
+const absorbSpeedForVariant = (variant: CollectibleVariant) => {
+  if (variant === 'purple') return 5.4;
+  if (variant === 'green') return 4.8;
+  return 4.2;
+};
+
+const absorbTrailStepForVariant = (variant: CollectibleVariant) => {
+  if (variant === 'purple') return 0.018;
+  if (variant === 'green') return 0.022;
+  return 0.026;
+};
+
+const pickPaletteIndex = (exclude = -1) => {
+  if (SCENERY_PALETTES.length <= 1) return 0;
+  let idx = Math.floor(Math.random() * SCENERY_PALETTES.length);
+  if (idx === exclude) {
+    idx = (idx + 1 + Math.floor(Math.random() * (SCENERY_PALETTES.length - 1))) % SCENERY_PALETTES.length;
+  }
+  return idx;
+};
+
+const paletteDurationAtDifficulty = (difficulty: number) =>
+  lerp(10.6, 6.4, clamp(difficulty, 0, 1));
 
 const pickEventKind = (runtime: Runtime, difficulty: number): SpiralEventKind => {
   if (runtime.obstacleStreak >= 3) return 'collectible';
@@ -374,6 +574,18 @@ const seedEvent = (event: SpiralEvent, runtime: Runtime, z: number) => {
   event.wobbleAmp = 0;
   event.wobbleFreq = 0;
   event.wobblePhase = Math.random() * Math.PI * 2;
+  event.collecting = false;
+  event.collectProgress = 0;
+  event.collectTrailClock = 0;
+  event.collectFromX = 0;
+  event.collectFromY = 0;
+  event.collectFromZ = z;
+  event.collectToX = 0;
+  event.collectToY = 0;
+  event.collectToZ = PLAYER_Z;
+  event.collectX = 0;
+  event.collectY = 0;
+  event.collectZ = z;
 
   if (kind === 'obstacle') {
     const variant = pickObstacleVariant(difficulty);
@@ -428,6 +640,10 @@ const resetRuntime = (runtime: Runtime) => {
 
   runtime.obstacleStreak = 0;
   runtime.lastSpawnTheta = 0;
+  runtime.paletteFrom = pickPaletteIndex();
+  runtime.paletteTo = pickPaletteIndex(runtime.paletteFrom);
+  runtime.paletteMix = 0;
+  runtime.paletteDuration = paletteDurationAtDifficulty(0) + Math.random() * 1.6;
 
   for (const event of runtime.events) {
     seedEvent(event, runtime, runtime.eventCursorZ);
@@ -737,6 +953,15 @@ function KnotHop() {
   const bgMatRef = useRef<THREE.ShaderMaterial>(null);
   const coreMatRef = useRef<THREE.MeshStandardMaterial>(null);
   const painOverlayMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const fogRef = useRef<THREE.Fog>(null);
+  const backgroundColorRef = useRef<THREE.Color>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight>(null);
+  const hemisphereLightRef = useRef<THREE.HemisphereLight>(null);
+  const keyLightRef = useRef<THREE.DirectionalLight>(null);
+  const fillLightARef = useRef<THREE.PointLight>(null);
+  const fillLightBRef = useRef<THREE.PointLight>(null);
+  const orbitMatRef = useRef<THREE.MeshBasicMaterial>(null);
+  const trailMatRef = useRef<THREE.PointsMaterial>(null);
 
   const shardRef = useRef<THREE.InstancedMesh>(null);
   const crusherRef = useRef<THREE.InstancedMesh>(null);
@@ -760,6 +985,10 @@ function KnotHop() {
   const zeroOffset = useMemo(() => new THREE.Vector2(0, 0), []);
   const painOverlayColor = useMemo(() => new THREE.Color('#ff2d58'), []);
   const collectOverlayColor = useMemo(() => new THREE.Color('#84f9ff'), []);
+  const paletteColorA = useMemo(() => new THREE.Color(), []);
+  const paletteColorB = useMemo(() => new THREE.Color(), []);
+  const paletteColorC = useMemo(() => new THREE.Color(), []);
+  const paletteColorD = useMemo(() => new THREE.Color(), []);
 
   const shardColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.blackCore), []);
   const shardFlashColor = useMemo(() => new THREE.Color(OBSTACLE_COLORS.blackFlash), []);
@@ -803,7 +1032,7 @@ function KnotHop() {
   const guideFlatA = useMemo(() => new Float32Array(GUIDE_POINTS * 3), []);
   const guideFlatB = useMemo(() => new Float32Array(GUIDE_POINTS * 3), []);
 
-  const { camera } = useThree();
+  const { camera, scene } = useThree();
   const selectedCharacter = useMemo(
     () => findCharacter(snap.selectedCharacter),
     [snap.selectedCharacter]
@@ -1168,7 +1397,7 @@ function KnotHop() {
       if (tap) {
         runtime.spinDir = runtime.spinDir > 0 ? -1 : 1;
         runtime.hopPulse = 1;
-        runtime.flash = Math.max(runtime.flash, 0.28);
+        runtime.collectFlash = Math.max(runtime.collectFlash, 0.16);
         playTone(760, 0.03, 0.022);
       }
 
@@ -1189,6 +1418,96 @@ function KnotHop() {
       const collisionPadding = collisionPaddingAtDifficulty(difficulty);
 
       for (const event of runtime.events) {
+        if (event.kind === 'collectible' && event.collecting) {
+          const collectibleVariant = event.variant as CollectibleVariant;
+          event.pulse += dt * 9.4;
+          event.spin += dt * 8.6;
+          event.flash = Math.max(0, event.flash - dt * 6.8);
+          event.collectProgress = Math.min(
+            1,
+            event.collectProgress + dt * absorbSpeedForVariant(collectibleVariant)
+          );
+
+          const ease = 1 - Math.pow(1 - event.collectProgress, 3);
+          const swirlRadius =
+            (collectibleVariant === 'purple'
+              ? 0.19
+              : collectibleVariant === 'green'
+                ? 0.15
+                : 0.12) *
+            (1 - ease);
+          const swirlPhase = event.spin * (collectibleVariant === 'purple' ? 1.9 : 1.5);
+
+          event.collectX =
+            lerp(event.collectFromX, event.collectToX, ease) + Math.cos(swirlPhase) * swirlRadius;
+          event.collectY =
+            lerp(event.collectFromY, event.collectToY, ease) +
+            Math.sin(swirlPhase * 1.07) * swirlRadius;
+          event.collectZ =
+            lerp(event.collectFromZ, event.collectToZ, ease) +
+            Math.sin(swirlPhase * 0.75) * swirlRadius * 0.24;
+
+          event.collectTrailClock += dt;
+          const trailStep = absorbTrailStepForVariant(collectibleVariant);
+          while (event.collectTrailClock >= trailStep) {
+            event.collectTrailClock -= trailStep;
+            emitParticle(runtime, {
+              x: event.collectX + (Math.random() - 0.5) * 0.04,
+              y: event.collectY + (Math.random() - 0.5) * 0.04,
+              z: event.collectZ + (Math.random() - 0.5) * 0.05,
+              vx: (Math.random() - 0.5) * 0.52,
+              vy: (Math.random() - 0.5) * 0.52,
+              vz: (Math.random() - 0.5) * 0.5,
+              life: 0.16 + Math.random() * 0.14,
+              size: 0.014 + Math.random() * 0.012,
+              color: collectibleColorHex(collectibleVariant),
+              kind: 'collect',
+              drag: 3.8,
+              gravity: 0,
+              homing: collectibleVariant === 'purple' ? 8.6 : collectibleVariant === 'green' ? 7.8 : 7,
+              swirl:
+                (Math.random() < 0.5 ? -1 : 1) *
+                (collectibleVariant === 'purple' ? 5.2 : collectibleVariant === 'green' ? 4.6 : 4),
+              targetX: event.collectToX,
+              targetY: event.collectToY,
+              targetZ: event.collectToZ,
+            });
+          }
+
+          if (event.collectProgress >= 1) {
+            const finCount =
+              collectibleVariant === 'purple'
+                ? 24
+                : collectibleVariant === 'green'
+                  ? 19
+                  : 14;
+            spawnBurst(
+              runtime,
+              event.collectToX,
+              event.collectToY,
+              event.collectToZ,
+              collectibleAccentHex(collectibleVariant),
+              finCount,
+              0.16,
+              0.78,
+              0.012,
+              0.035,
+              0.14,
+              0.3,
+              {
+                kind: 'collect',
+                drag: 3.7,
+                gravity: 0,
+                spreadZ: 1.1,
+              }
+            );
+
+            seedEvent(event, runtime, runtime.eventCursorZ);
+            runtime.eventCursorZ -= spacingAtDifficulty(difficulty) + Math.random() * 0.9;
+          }
+          continue;
+        }
+
         const prevZ = event.z;
         event.z += runtime.speed * dt;
         event.pulse += dt * (event.kind === 'collectible' ? 6.8 : 4.2);
@@ -1313,8 +1632,7 @@ function KnotHop() {
 
               runtime.score += gain;
               event.flash = 1;
-              runtime.shake = Math.min(1.2, runtime.shake + 0.12);
-              runtime.flash = Math.max(runtime.flash, 0.22);
+              runtime.shake = Math.min(1.2, runtime.shake + 0.08);
               runtime.collectFlash = Math.max(
                 runtime.collectFlash,
                 collectibleVariant === 'purple'
@@ -1335,6 +1653,30 @@ function KnotHop() {
 
               const absorbX = Math.cos(playerThetaAtCross) * ORBIT_RADIUS;
               const absorbY = Math.sin(playerThetaAtCross) * ORBIT_RADIUS;
+              event.collecting = true;
+              event.collectProgress = 0;
+              event.collectTrailClock = 0;
+              event.collectFromX = impactX;
+              event.collectFromY = impactY;
+              event.collectFromZ = impactZ;
+              event.collectToX = absorbX;
+              event.collectToY = absorbY;
+              event.collectToZ = PLAYER_Z;
+              event.collectX = impactX;
+              event.collectY = impactY;
+              event.collectZ = impactZ;
+              event.z = impactZ;
+
+              runtime.paletteMix = Math.min(
+                1,
+                runtime.paletteMix +
+                  (collectibleVariant === 'purple'
+                    ? 0.22
+                    : collectibleVariant === 'green'
+                      ? 0.16
+                      : 0.11)
+              );
+
               spawnCollectionEffect(
                 runtime,
                 impactX,
@@ -1387,6 +1729,39 @@ function KnotHop() {
     runtime.shake = Math.max(0, runtime.shake - dt * 4.8);
     runtime.painFlash = Math.max(0, runtime.painFlash - dt * 2.35);
     runtime.collectFlash = Math.max(0, runtime.collectFlash - dt * 3.2);
+
+    const paletteBlendRate = knotHopState.phase === 'playing' ? 1 : 0.42;
+    runtime.paletteMix += (dt * paletteBlendRate) / Math.max(0.6, runtime.paletteDuration);
+    if (runtime.paletteMix >= 1) {
+      runtime.paletteFrom = runtime.paletteTo;
+      runtime.paletteTo = pickPaletteIndex(runtime.paletteFrom);
+      runtime.paletteMix = 0;
+      runtime.paletteDuration =
+        paletteDurationAtDifficulty(difficultyAt(runtime)) + Math.random() * 1.9;
+    }
+
+    const paletteFrom = SCENERY_PALETTES[runtime.paletteFrom] ?? SCENERY_PALETTES[0];
+    const paletteTo = SCENERY_PALETTES[runtime.paletteTo] ?? SCENERY_PALETTES[0];
+    const paletteMix = clamp(runtime.paletteMix, 0, 1);
+
+    paletteColorA.setHex(paletteFrom.collectOverlay);
+    paletteColorB.setHex(paletteTo.collectOverlay);
+    collectOverlayColor.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+
+    paletteColorA.setHex(paletteFrom.deep);
+    paletteColorB.setHex(paletteTo.deep);
+    paletteColorC.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+
+    paletteColorA.setHex(paletteFrom.fog);
+    paletteColorB.setHex(paletteTo.fog);
+    paletteColorD.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+
+    if (backgroundColorRef.current) backgroundColorRef.current.copy(paletteColorC);
+    if (fogRef.current) fogRef.current.color.copy(paletteColorD);
+    if (scene.background instanceof THREE.Color) {
+      scene.background.copy(paletteColorC);
+    }
+
     const orbitNow = ORBIT_RADIUS + runtime.hopPulse * 0.13;
     const px = Math.cos(runtime.theta) * orbitNow;
     const py = Math.sin(runtime.theta) * orbitNow;
@@ -1438,13 +1813,74 @@ function KnotHop() {
     camera.position.lerp(camTarget, 1 - Math.exp(-8.4 * step.renderDt));
     camera.lookAt(lookTarget);
 
+    if (ambientLightRef.current) {
+      paletteColorA.setHex(paletteFrom.ambient);
+      paletteColorB.setHex(paletteTo.ambient);
+      ambientLightRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      ambientLightRef.current.intensity = 0.33 + runtime.collectFlash * 0.06;
+    }
+
+    if (hemisphereLightRef.current) {
+      paletteColorA.setHex(paletteFrom.hemiSky);
+      paletteColorB.setHex(paletteTo.hemiSky);
+      hemisphereLightRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      paletteColorA.setHex(paletteFrom.hemiGround);
+      paletteColorB.setHex(paletteTo.hemiGround);
+      hemisphereLightRef.current.groundColor.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      hemisphereLightRef.current.intensity = 0.4 + runtime.collectFlash * 0.07;
+    }
+
+    if (keyLightRef.current) {
+      paletteColorA.setHex(paletteFrom.key);
+      paletteColorB.setHex(paletteTo.key);
+      keyLightRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      keyLightRef.current.intensity =
+        0.64 + runtime.collectFlash * 0.06 + runtime.painFlash * 0.12;
+    }
+
+    if (fillLightARef.current) {
+      paletteColorA.setHex(paletteFrom.fillA);
+      paletteColorB.setHex(paletteTo.fillA);
+      fillLightARef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      fillLightARef.current.intensity = 0.3 + runtime.collectFlash * 0.08;
+    }
+
+    if (fillLightBRef.current) {
+      paletteColorA.setHex(paletteFrom.fillB);
+      paletteColorB.setHex(paletteTo.fillB);
+      fillLightBRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      fillLightBRef.current.intensity = 0.24 + runtime.collectFlash * 0.06;
+    }
+
     if (bgMatRef.current) {
       bgMatRef.current.uniforms.uTime.value += dt;
       bgMatRef.current.uniforms.uFlash.value = runtime.flash;
       bgMatRef.current.uniforms.uCollect.value = runtime.collectFlash;
+      bgMatRef.current.uniforms.uDeep.value.setHex(paletteFrom.deep).lerp(
+        paletteColorB.setHex(paletteTo.deep),
+        paletteMix
+      );
+      bgMatRef.current.uniforms.uMid.value.setHex(paletteFrom.mid).lerp(
+        paletteColorB.setHex(paletteTo.mid),
+        paletteMix
+      );
+      bgMatRef.current.uniforms.uAccentA.value.setHex(paletteFrom.accentA).lerp(
+        paletteColorB.setHex(paletteTo.accentA),
+        paletteMix
+      );
+      bgMatRef.current.uniforms.uAccentB.value.setHex(paletteFrom.accentB).lerp(
+        paletteColorB.setHex(paletteTo.accentB),
+        paletteMix
+      );
     }
 
     if (coreMatRef.current) {
+      paletteColorA.setHex(paletteFrom.core);
+      paletteColorB.setHex(paletteTo.core);
+      coreMatRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      paletteColorA.setHex(paletteFrom.coreEmissive);
+      paletteColorB.setHex(paletteTo.coreEmissive);
+      coreMatRef.current.emissive.copy(paletteColorA).lerp(paletteColorB, paletteMix);
       coreMatRef.current.emissiveIntensity =
         0.25 +
         runtime.shake * 0.24 +
@@ -1457,15 +1893,20 @@ function KnotHop() {
 
     if (painOverlayMatRef.current) {
       const painWeight = clamp(runtime.painFlash, 0, 1);
-      const collectWeight = clamp(runtime.collectFlash * 0.75, 0, 1);
-      painOverlayMatRef.current.color
-        .copy(painOverlayColor)
-        .lerp(collectOverlayColor, collectWeight);
-      painOverlayMatRef.current.opacity = clamp(
-        painWeight * 0.58 + collectWeight * 0.2,
-        0,
-        0.8
-      );
+      const collectWeight = clamp(runtime.collectFlash, 0, 1);
+      if (painWeight > 0.01) {
+        painOverlayMatRef.current.color
+          .copy(painOverlayColor)
+          .lerp(collectOverlayColor, collectWeight * 0.26);
+        painOverlayMatRef.current.opacity = clamp(
+          painWeight * 0.58 + collectWeight * 0.09,
+          0,
+          0.8
+        );
+      } else {
+        painOverlayMatRef.current.color.copy(collectOverlayColor);
+        painOverlayMatRef.current.opacity = clamp(collectWeight * 0.24, 0, 0.34);
+      }
     }
 
     if (playerGroupRef.current) {
@@ -1500,8 +1941,10 @@ function KnotHop() {
         if (!event.active) continue;
 
         const theta = eventThetaAtTime(event, runtime.elapsed);
-        const x = Math.cos(theta) * ORBIT_RADIUS;
-        const y = Math.sin(theta) * ORBIT_RADIUS;
+        const collecting = event.kind === 'collectible' && event.collecting;
+        const x = collecting ? event.collectX : Math.cos(theta) * ORBIT_RADIUS;
+        const y = collecting ? event.collectY : Math.sin(theta) * ORBIT_RADIUS;
+        const z = collecting ? event.collectZ : event.z;
 
         if (event.kind === 'obstacle') {
           const baseScale =
@@ -1512,7 +1955,7 @@ function KnotHop() {
                 : 0.24;
           const pulse = Math.sin(event.pulse) * 0.04 + event.flash * 0.12;
 
-          dummy.position.set(x, y, event.z);
+          dummy.position.set(x, y, z);
           dummy.rotation.set(event.spin * 0.4, event.spin * 1.05, event.spin * 0.24);
           dummy.scale.setScalar(baseScale + pulse);
           dummy.updateMatrix();
@@ -1547,10 +1990,18 @@ function KnotHop() {
               : event.variant === 'green'
                 ? 0.19 + Math.sin(event.pulse) * 0.028 + event.flash * 0.06
                 : 0.17 + Math.sin(event.pulse) * 0.025 + event.flash * 0.05;
+          const absorbT = collecting ? clamp(event.collectProgress, 0, 1) : 0;
+          const absorbEase = collecting ? 1 - Math.pow(1 - absorbT, 2.6) : 0;
+          const absorbScale = collecting ? Math.max(0.12, 1 - absorbEase * 0.86) : 1;
+          const absorbRoll = collecting ? absorbEase * 2.2 : 0;
 
-          dummy.position.set(x, y, event.z);
-          dummy.rotation.set(event.spin * 0.24, event.spin * 0.9, event.spin * 0.31);
-          dummy.scale.setScalar(collectScale);
+          dummy.position.set(x, y, z);
+          dummy.rotation.set(
+            event.spin * 0.24 + absorbRoll,
+            event.spin * 0.9 + absorbRoll * 0.8,
+            event.spin * 0.31 - absorbRoll * 0.55
+          );
+          dummy.scale.setScalar(collectScale * absorbScale);
           dummy.updateMatrix();
 
           if (event.variant === 'purple') {
@@ -1560,7 +2011,8 @@ function KnotHop() {
               .lerp(
                 purpleColorB,
                 (Math.sin(event.pulse * 0.9) * 0.5 + 0.5) * 0.56 + event.flash * 0.34
-              );
+              )
+              .lerp(whiteColor, absorbEase * 0.52);
             purpleRef.current.setColorAt(purpleIdx, colorScratch);
             purpleIdx += 1;
           } else if (event.variant === 'green') {
@@ -1570,7 +2022,8 @@ function KnotHop() {
               .lerp(
                 greenColorB,
                 (Math.sin(event.pulse * 0.8) * 0.5 + 0.5) * 0.58 + event.flash * 0.32
-              );
+              )
+              .lerp(whiteColor, absorbEase * 0.45);
             greenRef.current.setColorAt(greenIdx, colorScratch);
             greenIdx += 1;
           } else {
@@ -1580,14 +2033,18 @@ function KnotHop() {
               .lerp(
                 goldColorB,
                 (Math.sin(event.pulse * 0.75) * 0.5 + 0.5) * 0.58 + event.flash * 0.34
-              );
+              )
+              .lerp(whiteColor, absorbEase * 0.38);
             goldRef.current.setColorAt(goldIdx, colorScratch);
             goldIdx += 1;
           }
 
-          dummy.position.set(x, y, event.z);
+          const ringScale =
+            (0.11 + Math.sin(event.pulse * 1.2) * 0.02 + event.flash * 0.04) *
+            (collecting ? Math.max(0.08, 1.2 - absorbEase * 1.08) : 1);
+          dummy.position.set(x, y, z);
           dummy.rotation.set(Math.PI / 2, event.spin * 0.2, event.spin * 0.6);
-          dummy.scale.setScalar(0.11 + Math.sin(event.pulse * 1.2) * 0.02 + event.flash * 0.04);
+          dummy.scale.setScalar(ringScale);
           dummy.updateMatrix();
           collectibleRingRef.current.setMatrixAt(ringIdx, dummy.matrix);
           colorScratch
@@ -1604,8 +2061,10 @@ function KnotHop() {
                 : event.variant === 'green'
                   ? greenColorB
                   : goldColorB,
-              0.6
-            );
+                0.6
+            )
+            .lerp(whiteColor, absorbEase * 0.62)
+            .multiplyScalar(collecting ? 1 + (1 - absorbEase) * 0.28 : 1);
           collectibleRingRef.current.setColorAt(ringIdx, colorScratch);
           ringIdx += 1;
         }
@@ -1770,6 +2229,36 @@ function KnotHop() {
     if (guideGeomB?.setFromPoints) guideGeomB.setFromPoints(guidePointsB);
     else if (guideGeomB?.setPositions) guideGeomB.setPositions(guideFlatB);
 
+    const guideMatA: any = guideLineARef.current?.material;
+    if (guideMatA?.color) {
+      paletteColorA.setHex(paletteFrom.guideA);
+      paletteColorB.setHex(paletteTo.guideA);
+      guideMatA.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      guideMatA.opacity = 0.32 + runtime.collectFlash * 0.16;
+    }
+
+    const guideMatB: any = guideLineBRef.current?.material;
+    if (guideMatB?.color) {
+      paletteColorA.setHex(paletteFrom.guideB);
+      paletteColorB.setHex(paletteTo.guideB);
+      guideMatB.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      guideMatB.opacity = 0.28 + runtime.collectFlash * 0.15;
+    }
+
+    if (orbitMatRef.current) {
+      paletteColorA.setHex(paletteFrom.orbit);
+      paletteColorB.setHex(paletteTo.orbit);
+      orbitMatRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      orbitMatRef.current.opacity = 0.34 + runtime.collectFlash * 0.14;
+    }
+
+    if (trailMatRef.current) {
+      paletteColorA.setHex(paletteFrom.trail);
+      paletteColorB.setHex(paletteTo.trail);
+      trailMatRef.current.color.copy(paletteColorA).lerp(paletteColorB, paletteMix);
+      trailMatRef.current.opacity = 0.5 + runtime.collectFlash * 0.18;
+    }
+
     clearFrameInput(inputRef);
   });
 
@@ -1789,8 +2278,8 @@ function KnotHop() {
           />
         </mesh>
       </PerspectiveCamera>
-      <color attach="background" args={['#04070f']} />
-      <fog attach="fog" args={['#04070f', 8, 54]} />
+      <color ref={backgroundColorRef} attach="background" args={['#04070f']} />
+      <fog ref={fogRef} attach="fog" args={['#04070f', 8, 54]} />
 
       <KnotHopUI />
 
@@ -1804,17 +2293,30 @@ function KnotHop() {
         speed={0.22}
       />
 
-      <ambientLight intensity={0.36} />
-      <hemisphereLight args={['#c5e5ff', '#0e1a2b', 0.42]} />
-      <directionalLight position={[2.6, 4.1, 3.4]} intensity={0.68} color="#d8ecff" />
-      <pointLight position={[-2.3, 2.0, -9]} intensity={0.34} color="#4dd8ff" />
-      <pointLight position={[2.3, 1.6, -11]} intensity={0.28} color="#7d7bff" />
+      <ambientLight ref={ambientLightRef} intensity={0.36} />
+      <hemisphereLight ref={hemisphereLightRef} args={['#c5e5ff', '#0e1a2b', 0.42]} />
+      <directionalLight
+        ref={keyLightRef}
+        position={[2.6, 4.1, 3.4]}
+        intensity={0.68}
+        color="#d8ecff"
+      />
+      <pointLight ref={fillLightARef} position={[-2.3, 2.0, -9]} intensity={0.34} color="#4dd8ff" />
+      <pointLight ref={fillLightBRef} position={[2.3, 1.6, -11]} intensity={0.28} color="#7d7bff" />
 
       <mesh position={[0, 0, -24]}>
         <planeGeometry args={[34, 20]} />
         <shaderMaterial
           ref={bgMatRef}
-          uniforms={{ uTime: { value: 0 }, uFlash: { value: 0 }, uCollect: { value: 0 } }}
+          uniforms={{
+            uTime: { value: 0 },
+            uFlash: { value: 0 },
+            uCollect: { value: 0 },
+            uDeep: { value: new THREE.Color(0x02060f) },
+            uMid: { value: new THREE.Color(0x0f2240) },
+            uAccentA: { value: new THREE.Color(0x1b3d72) },
+            uAccentB: { value: new THREE.Color(0x3b4a98) },
+          }}
           vertexShader={`
             varying vec2 vUv;
             void main() {
@@ -1826,6 +2328,10 @@ function KnotHop() {
             uniform float uTime;
             uniform float uFlash;
             uniform float uCollect;
+            uniform vec3 uDeep;
+            uniform vec3 uMid;
+            uniform vec3 uAccentA;
+            uniform vec3 uAccentB;
             varying vec2 vUv;
 
             float hash(vec2 p) {
@@ -1835,10 +2341,10 @@ function KnotHop() {
             }
 
             void main() {
-              vec3 deep = vec3(0.02, 0.03, 0.08);
-              vec3 mid = vec3(0.03, 0.08, 0.16);
-              vec3 accentA = vec3(0.08, 0.17, 0.32);
-              vec3 accentB = vec3(0.24, 0.10, 0.22);
+              vec3 deep = uDeep;
+              vec3 mid = uMid;
+              vec3 accentA = uAccentA;
+              vec3 accentB = uAccentB;
 
               float grad = smoothstep(0.0, 1.0, vUv.y);
               float wave = 0.5 + 0.5 * sin(vUv.x * 13.0 + uTime * 0.4);
@@ -1982,11 +2488,24 @@ function KnotHop() {
 
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[ORBIT_RADIUS, 0.016, 10, 96]} />
-        <meshBasicMaterial color="#88deff" transparent opacity={0.42} toneMapped={false} />
+        <meshBasicMaterial
+          ref={orbitMatRef}
+          color="#88deff"
+          transparent
+          opacity={0.42}
+          toneMapped={false}
+        />
       </mesh>
 
       <points geometry={trailGeometry}>
-        <pointsMaterial color="#d8f9ff" size={0.062} sizeAttenuation transparent opacity={0.62} />
+        <pointsMaterial
+          ref={trailMatRef}
+          color="#d8f9ff"
+          size={0.062}
+          sizeAttenuation
+          transparent
+          opacity={0.62}
+        />
       </points>
 
       <EffectComposer enableNormalPass={false} multisampling={0}>
