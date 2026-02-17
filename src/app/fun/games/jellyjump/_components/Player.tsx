@@ -135,20 +135,30 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     const sampleY = rb.translation().y;
     let gatePinchFloor = mutation.lastGroundedFloor;
     let gatePinchedButNotSliced = false;
+    let pinchAssistRow: number | null = null;
     for (const [rowIndex, contacts] of sideContactsRef.current) {
       if (contacts.left <= 0 || contacts.right <= 0) continue;
       const slideGap = mutation.slideGapByRow.get(rowIndex);
       const rotateGap = mutation.rotateGapByRow.get(rowIndex);
-      const gap = typeof slideGap === 'number' ? slideGap : rotateGap;
-      if (typeof gap !== 'number' || gap <= sliceGapWidth) continue;
-      const closing =
-        (mutation.slideClosingByRow.get(rowIndex) ?? false) ||
-        (mutation.rotateClosingByRow.get(rowIndex) ?? false);
-      if (!closing) continue;
       const rowY = rowIndex * PLATFORM_SPACING;
-      if (Math.abs(sampleY - rowY) > selectedChar.size * 0.72) continue;
-      gatePinchedButNotSliced = true;
-      if (rowIndex > gatePinchFloor) gatePinchFloor = rowIndex;
+      if (Math.abs(sampleY - rowY) > selectedChar.size * 0.95) continue;
+
+      if (typeof slideGap === 'number') {
+        gatePinchedButNotSliced = true;
+        if (rowIndex > gatePinchFloor) gatePinchFloor = rowIndex;
+        if (sampleY <= rowY + selectedChar.size * 0.48) {
+          if (pinchAssistRow === null || rowIndex > pinchAssistRow) pinchAssistRow = rowIndex;
+        }
+        continue;
+      }
+
+      if (typeof rotateGap === 'number' && rotateGap > sliceGapWidth) {
+        gatePinchedButNotSliced = true;
+        if (rowIndex > gatePinchFloor) gatePinchFloor = rowIndex;
+        if (sampleY <= rowY + selectedChar.size * 0.55) {
+          if (pinchAssistRow === null || rowIndex > pinchAssistRow) pinchAssistRow = rowIndex;
+        }
+      }
     }
 
     let groundedFloor = mutation.lastGroundedFloor;
@@ -176,7 +186,16 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     ) {
       const jumpFromFloor = grounded ? groundedFloor : mutation.lastGroundedFloor;
       const targetFloor = Math.max(1, jumpFromFloor + 1);
-      const currentY = rb.translation().y;
+      let currentY = rb.translation().y;
+      if (pinchAssistRow !== null) {
+        const rowY = pinchAssistRow * PLATFORM_SPACING;
+        const escapeY = rowY + PLATFORM_THICKNESS * 0.5 + selectedChar.size * 0.52;
+        const posNow = rb.translation();
+        const liftY = Math.max(currentY, escapeY);
+        const centerX = THREE.MathUtils.lerp(posNow.x, 0, 0.72);
+        rb.setTranslation({ x: centerX, y: liftY, z: 0 }, true);
+        currentY = liftY;
+      }
       const platformTopOffset = PLATFORM_THICKNESS * 0.5 + selectedChar.size * 0.5;
       const landingCenterY = targetFloor * PLATFORM_SPACING + platformTopOffset;
       const clearanceY = PLATFORM_THICKNESS * 0.5;
@@ -199,7 +218,16 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       triggerHaptic(10);
     }
 
-    if (gatePinchedButNotSliced) {
+    if (pinchAssistRow !== null) {
+      const rowY = pinchAssistRow * PLATFORM_SPACING;
+      const escapeY = rowY + PLATFORM_THICKNESS * 0.5 + selectedChar.size * 0.54;
+      const posNow = rb.translation();
+      const lv = rb.linvel();
+      const centerPull = 1 - Math.exp(-16 * dt);
+      const centeredX = THREE.MathUtils.lerp(posNow.x, 0, centerPull);
+      rb.setTranslation({ x: centeredX, y: Math.max(posNow.y, escapeY), z: 0 }, true);
+      rb.setLinvel({ x: lv.x * 0.2, y: Math.max(lv.y, 2.4), z: 0 }, true);
+    } else if (gatePinchedButNotSliced) {
       const posNow = rb.translation();
       const lv = rb.linvel();
       const centerPull = 1 - Math.exp(-12 * dt);
@@ -298,19 +326,10 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
 
     for (const [rowIndex, contacts] of sideContactsRef.current) {
       if (contacts.left <= 0 || contacts.right <= 0) continue;
-      const slideGap = mutation.slideGapByRow.get(rowIndex);
       const rotateGap = mutation.rotateGapByRow.get(rowIndex);
-      const gap = typeof slideGap === 'number' ? slideGap : rotateGap;
-      if (typeof gap !== 'number') continue;
-      const closing =
-        (mutation.slideClosingByRow.get(rowIndex) ?? false) ||
-        (mutation.rotateClosingByRow.get(rowIndex) ?? false);
-      if (tryGateSlice(rowIndex, gap, closing)) return;
-    }
-
-    for (const [rowIndex, gap] of mutation.slideGapByRow) {
-      const closing = mutation.slideClosingByRow.get(rowIndex) ?? false;
-      if (tryGateSlice(rowIndex, gap, closing)) return;
+      if (typeof rotateGap !== 'number') continue;
+      const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
+      if (tryGateSlice(rowIndex, rotateGap, closing)) return;
     }
     for (const [rowIndex, gap] of mutation.rotateGapByRow) {
       const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
@@ -552,7 +571,7 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
         >
           <CuboidCollider
             args={[playerHalf, playerHalf, playerHalf]}
-            friction={0.35}
+            friction={0.08}
             restitution={0.02}
           />
           <CuboidCollider

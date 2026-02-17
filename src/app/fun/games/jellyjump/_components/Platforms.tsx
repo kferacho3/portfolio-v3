@@ -352,10 +352,10 @@ const RotateRow = memo(function RotateRow({
       right.rotZ
     );
 
-    const angle = Math.abs(left.rotY ?? 0);
+    const angle = Math.abs(left.rotZ);
     const halfSpanX =
       PLATFORM_PIECE_LENGTH * 0.5 * Math.abs(Math.cos(angle)) +
-      PLATFORM_DEPTH * 0.5 * Math.abs(Math.sin(angle));
+      PLATFORM_THICKNESS * 0.5 * Math.abs(Math.sin(angle));
     const gapWidth = right.x - halfSpanX - (left.x + halfSpanX);
     const isClosing =
       lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002;

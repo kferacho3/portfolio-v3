@@ -260,26 +260,25 @@ export function getPlatformPieces(
   const angle = (1 - t) * PLATFORM_ROTATE_OPEN_ANGLE; // π/2 -> 0
   const half = PLATFORM_PIECE_LENGTH / 2;
 
-  // Left piece pivots at (-PIVOT_X, y)
+  // Left/right rotate in the X/Y plane so their lower inner edges close first.
   const pivotLX = -PLATFORM_ROTATE_PIVOT_X;
   const left: PlatformPieceTransform = {
     x: pivotLX + Math.cos(angle) * half,
-    y,
-    z: Math.sin(angle) * half,
-    rotY: -angle,
-    rotZ: 0,
+    y: y - Math.sin(angle) * half,
+    z: 0,
+    rotY: 0,
+    rotZ: -angle,
     side: 'left',
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };
 
-  // Right piece pivots at (+PIVOT_X, y) and rotates symmetrically
   const pivotRX = PLATFORM_ROTATE_PIVOT_X;
   const right: PlatformPieceTransform = {
     x: pivotRX - Math.cos(angle) * half,
-    y,
-    z: -Math.sin(angle) * half,
-    rotY: angle,
-    rotZ: 0,
+    y: y - Math.sin(angle) * half,
+    z: 0,
+    rotY: 0,
+    rotZ: angle,
     side: 'right',
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };
