@@ -18,9 +18,9 @@ export const PLAYER_HALF = PLAYER_SIZE / 2;
 
 // Movement / physics
 export const GRAVITY = -26;
-export const JUMP_IMPULSE = 12.5;
-export const JUMP_HOLD_FORCE = 12.0;
-export const JUMP_HOLD_MAX_MS = 130;
+export const JUMP_IMPULSE = 11.9;
+export const JUMP_HOLD_FORCE = 0;
+export const JUMP_HOLD_MAX_MS = 0;
 export const FAST_FALL_GRAVITY_MULTIPLIER = 1.45;
 
 // Feel helpers ("sticky" jump that feels fair)

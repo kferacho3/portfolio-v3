@@ -18,6 +18,7 @@ export default function Controls() {
       }
 
       if (code === 'Space' || key === ' ') {
+        if (e.repeat) return;
         // Only start game if explicitly in menu/gameover phase
         if (
           jellyJumpState.phase === 'menu' ||

@@ -18,17 +18,22 @@ const JellyMaterialImpl = shaderMaterial(
   varying float vPulse;
 
   void main() {
-    vec3 p = position;
-    float wobble = sin((p.y + uTime * 2.6) * 12.0 + p.x * 6.0) * uJiggle;
-    float heavy = smoothstep(-0.5, 0.8, p.y);
-    p.x += normal.x * wobble * (0.24 + heavy * 0.45);
-    p.z += normal.z * wobble * (0.24 + heavy * 0.45);
-    p.y += sin((p.x + p.z) * 9.0 + uTime * 7.0) * uVelocity * 0.05;
+    // Use position-based displacement (not normal-based) so box edge vertices
+    // shared by adjacent faces stay aligned and the cube does not crack.
+    vec3 base = position;
+    vec3 p = base;
+    float heavy = smoothstep(-0.5, 0.8, base.y);
+    float amp = (0.20 + heavy * 0.32) * uJiggle;
+    float wobbleX = sin((base.y + uTime * 2.6) * 11.0 + base.z * 4.5);
+    float wobbleZ = cos((base.y + uTime * 2.45) * 11.0 - base.x * 4.5);
+    p.x += wobbleX * amp;
+    p.z += wobbleZ * amp;
+    p.y += sin((base.x + base.z) * 9.0 + uTime * 7.0) * uVelocity * 0.045;
 
     vec4 world = modelMatrix * vec4(p, 1.0);
     vWorldPos = world.xyz;
     vNormal = normalize(mat3(modelMatrix) * normal);
-    vPulse = wobble;
+    vPulse = max(abs(wobbleX), abs(wobbleZ)) * uJiggle;
     gl_Position = projectionMatrix * viewMatrix * world;
   }
   `,

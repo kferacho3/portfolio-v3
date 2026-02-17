@@ -132,14 +132,22 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     }
 
     const grounded = groundContactsRef.current > 0;
-    if (grounded) mutation.lastGroundedMs = nowMs;
+    if (grounded) {
+      mutation.lastGroundedMs = nowMs;
+      mutation.jumpConsumedSinceGrounded = false;
+    }
     const canCoyote = nowMs - mutation.lastGroundedMs <= COYOTE_TIME_MS;
 
-    if (mutation.jumpQueuedUntilMs >= nowMs && (grounded || canCoyote)) {
+    if (
+      mutation.jumpQueuedUntilMs >= nowMs &&
+      !mutation.jumpConsumedSinceGrounded &&
+      (grounded || canCoyote)
+    ) {
       const lv = rb.linvel();
-      rb.setLinvel({ x: lv.x, y: Math.max(0, lv.y * 0.2), z: 0 }, true);
+      rb.setLinvel({ x: lv.x, y: 0, z: 0 }, true);
       rb.applyImpulse({ x: 0, y: JUMP_IMPULSE * freezeScale, z: 0 }, true);
       mutation.jumpQueuedUntilMs = 0;
+      mutation.jumpConsumedSinceGrounded = true;
       groundContactsRef.current = 0;
       jumpedAtMsRef.current = nowMs;
       jumpHoldMsRef.current = 0;
@@ -478,6 +486,14 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
               const data: PlatformUserData | undefined =
                 event?.other?.rigidBodyObject?.userData;
               if (data?.kind !== 'platform') return;
+              const rbCurrent = playerRef.current;
+              if (!rbCurrent) return;
+              const vy = rbCurrent.linvel().y;
+              if (vy > 1.2) return;
+              if (typeof data.rowIndex === 'number') {
+                const rowY = data.rowIndex * PLATFORM_SPACING;
+                if (rbCurrent.translation().y < rowY) return;
+              }
               groundContactsRef.current += 1;
               mutation.lastGroundedMs = Date.now();
             }}
