@@ -79,49 +79,49 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
                 'radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.08), transparent 55%), radial-gradient(circle at 85% 20%, rgba(255, 180, 102, 0.25), transparent 50%)',
               mixBlendMode: 'screen',
             }}
-	          />
+          />
 
-	          <div className="relative mb-3 flex items-center justify-between gap-3">
-	            <div className="flex items-center gap-2">
-	              <span className="relative h-7 w-7 overflow-hidden rounded-md border border-white/20 bg-white/5 p-1">
-	                <Image
-	                  src="/symbol.png"
-	                  alt=""
-	                  fill
-	                  aria-hidden
-	                  className="object-contain"
-	                  sizes="28px"
-	                />
-	              </span>
-	              <div className="relative h-5 w-[120px]">
-	                <Image
-	                  src="/logo.png"
-	                  alt="Racho Arcade"
-	                  fill
-	                  className="object-contain"
-	                  sizes="120px"
-	                />
-	                <Image
-	                  src="/logo-white.png"
-	                  alt=""
-	                  fill
-	                  aria-hidden
-	                  className="object-contain opacity-50 mix-blend-screen"
-	                  sizes="120px"
-	                />
-	              </div>
-	            </div>
-	            <span
-	              className="text-[9px] uppercase tracking-[0.24em] text-white/45"
-	              style={{ fontFamily: 'var(--arcade-mono)' }}
-	            >
-	              Lobby Deck
-	            </span>
-	          </div>
+          <div className="relative mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="relative h-7 w-7 overflow-hidden rounded-md border border-white/20 bg-white/5 p-1">
+                <Image
+                  src="/symbol.png"
+                  alt=""
+                  fill
+                  aria-hidden
+                  className="object-contain"
+                  sizes="28px"
+                />
+              </span>
+              <div className="relative h-5 w-[120px]">
+                <Image
+                  src="/logo.png"
+                  alt="Racho Arcade"
+                  fill
+                  className="object-contain"
+                  sizes="120px"
+                />
+                <Image
+                  src="/logo-white.png"
+                  alt=""
+                  fill
+                  aria-hidden
+                  className="object-contain opacity-50 mix-blend-screen"
+                  sizes="120px"
+                />
+              </div>
+            </div>
+            <span
+              className="text-[9px] uppercase tracking-[0.24em] text-white/45"
+              style={{ fontFamily: 'var(--arcade-mono)' }}
+            >
+              Lobby Deck
+            </span>
+          </div>
 
-	          {/* Main content */}
-	          <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
-	            <div className="flex items-center justify-between gap-3 min-w-0">
+          {/* Main content */}
+          <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
+            <div className="flex items-center justify-between gap-3 min-w-0">
               <NavigationButton
                 direction="prev"
                 onClick={handleSelectPrevious}
