@@ -14,7 +14,6 @@ import {
   IRIS_SPIN_SPEED,
   MEMBRANE_COLLIDER_HEIGHT,
   MEMBRANE_COLLIDER_WIDTH,
-  MEMBRANE_SOLID_UP_VELOCITY,
   MEMBRANE_VISUAL_OPACITY,
   PLATFORM_CLOSED_PIECE_X,
   PLATFORM_DEPTH,
@@ -57,6 +56,11 @@ const MEMBRANE_EXTENTS: [number, number, number] = [
   MEMBRANE_COLLIDER_WIDTH * 0.5,
   MEMBRANE_COLLIDER_HEIGHT * 0.5,
   PLATFORM_DEPTH * 0.45,
+];
+const UNIQUE_SAFE_EXTENTS: [number, number, number] = [
+  PLATFORM_PIECE_LENGTH * 0.48,
+  PLATFORM_THICKNESS * 0.5,
+  PLATFORM_DEPTH * 0.44,
 ];
 
 const IDENTITY_ROT = { x: 0, y: 0, z: 0, w: 1 };
@@ -440,21 +444,36 @@ const IrisRow = memo(function IrisRow({
   phase,
   startTime,
   geometry,
+  safeGeometry,
   material,
 }: {
   rowIndex: number;
   phase: JellyJumpPhase;
   startTime: number;
   geometry: THREE.BoxGeometry;
+  safeGeometry: THREE.BoxGeometry;
   material: THREE.MeshStandardMaterial;
 }) {
   const refs = useRef<(RapierRigidBody | null)[]>(Array.from({ length: IRIS_SEGMENTS }, () => null));
+  const safeRef = useRef<RapierRigidBody | null>(null);
 
   useFrame(() => {
     const timeS = phase === 'playing' ? (Date.now() - startTime) / 1000 : 0;
     const y = rowIndex * PLATFORM_SPACING;
+    const playerY = mutation.playerPos[1];
+    const playerVY = mutation.playerVel[1];
+    const isLatched = mutation.uniqueLockedRows.has(rowIndex);
+    const nearRow = Math.abs(playerY - y) < 3.4;
+    const playerBelowAndRising = playerY < y - 0.08 && playerVY > 0.25;
+    const catchActive =
+      phase === 'playing' && nearRow && (isLatched || (!playerBelowAndRising && playerVY <= 0.35));
+
+    setKinematicPose(safeRef.current, 0, catchActive ? y : y - 120, 0);
+
     const spin = timeS * IRIS_SPIN_SPEED + rowIndex * 0.31;
-    const close = 0.5 + Math.sin(timeS * 1.8 + rowIndex * 0.42) * 0.5;
+    const close = catchActive
+      ? 0.12
+      : 0.5 + Math.sin(timeS * 1.8 + rowIndex * 0.42) * 0.5;
     const radius = THREE.MathUtils.lerp(IRIS_RADIUS_OPEN, IRIS_RADIUS_CLOSED, close);
 
     for (let i = 0; i < IRIS_SEGMENTS; i += 1) {
@@ -468,6 +487,20 @@ const IrisRow = memo(function IrisRow({
 
   return (
     <group>
+      <RigidBody
+        ref={safeRef}
+        type="kinematicPosition"
+        colliders={false}
+        canSleep={false}
+        userData={{ kind: 'platform', platformKind: 'iris', rowIndex }}
+      >
+        <CuboidCollider
+          args={UNIQUE_SAFE_EXTENTS}
+          friction={PLATFORM_FRICTION}
+          restitution={PLATFORM_RESTITUTION}
+        />
+        <mesh castShadow receiveShadow geometry={safeGeometry} material={material} />
+      </RigidBody>
       {Array.from({ length: IRIS_SEGMENTS }, (_, i) => (
         <RigidBody
           key={`iris-${rowIndex}-${i}`}
@@ -496,6 +529,7 @@ const GearRow = memo(function GearRow({
   phase,
   startTime,
   geometry,
+  safeGeometry,
   material,
   gapIndex,
 }: {
@@ -503,14 +537,26 @@ const GearRow = memo(function GearRow({
   phase: JellyJumpPhase;
   startTime: number;
   geometry: THREE.BoxGeometry;
+  safeGeometry: THREE.BoxGeometry;
   material: THREE.MeshStandardMaterial;
   gapIndex: number;
 }) {
   const refs = useRef<(RapierRigidBody | null)[]>(Array.from({ length: GEAR_TEETH }, () => null));
+  const safeRef = useRef<RapierRigidBody | null>(null);
 
   useFrame(() => {
     const timeS = phase === 'playing' ? (Date.now() - startTime) / 1000 : 0;
     const y = rowIndex * PLATFORM_SPACING;
+    const playerY = mutation.playerPos[1];
+    const playerVY = mutation.playerVel[1];
+    const isLatched = mutation.uniqueLockedRows.has(rowIndex);
+    const nearRow = Math.abs(playerY - y) < 3.4;
+    const playerBelowAndRising = playerY < y - 0.08 && playerVY > 0.25;
+    const catchActive =
+      phase === 'playing' && nearRow && (isLatched || (!playerBelowAndRising && playerVY <= 0.35));
+
+    setKinematicPose(safeRef.current, 0, catchActive ? y : y - 120, 0);
+
     const spin = timeS * GEAR_SPIN_SPEED + rowIndex * 0.28;
 
     for (let i = 0; i < GEAR_TEETH; i += 1) {
@@ -529,6 +575,20 @@ const GearRow = memo(function GearRow({
 
   return (
     <group>
+      <RigidBody
+        ref={safeRef}
+        type="kinematicPosition"
+        colliders={false}
+        canSleep={false}
+        userData={{ kind: 'platform', platformKind: 'gear', rowIndex }}
+      >
+        <CuboidCollider
+          args={UNIQUE_SAFE_EXTENTS}
+          friction={PLATFORM_FRICTION}
+          restitution={PLATFORM_RESTITUTION}
+        />
+        <mesh castShadow receiveShadow geometry={safeGeometry} material={material} />
+      </RigidBody>
       {Array.from({ length: GEAR_TEETH }, (_, i) => (
         <RigidBody
           key={`gear-${rowIndex}-${i}`}
@@ -568,11 +628,13 @@ const MembraneRow = memo(function MembraneRow({
     const y = rowIndex * PLATFORM_SPACING;
     const playerY = mutation.playerPos[1];
     const playerVY = mutation.playerVel[1];
-    const nearRow = Math.abs(playerY - y) < 8;
+    const isLatched = mutation.uniqueLockedRows.has(rowIndex);
+    const nearRow = Math.abs(playerY - y) < 3.6;
+    const playerBelowAndRising = playerY < y - 0.08 && playerVY > 0.25;
     const solid =
       phase === 'playing' &&
       nearRow &&
-      playerVY > MEMBRANE_SOLID_UP_VELOCITY;
+      (isLatched || (!playerBelowAndRising && (playerY >= y - 0.02 || playerVY <= 0.3)));
 
     setKinematicPose(rbRef.current, 0, solid ? y : y - 80, 0);
 
@@ -766,6 +828,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     mutation.rotateClosingByRow.clear();
     mutation.slideLockedRows.clear();
     mutation.rotateLockedRows.clear();
+    mutation.uniqueLockedRows.clear();
     setRows(() => {
       const initial: RowEntry[] = [];
       for (let i = 0; i <= PLATFORM_VISIBLE_ABOVE + 4; i += 1) {
@@ -813,6 +876,9 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     }
     for (const key of Array.from(mutation.rotateLockedRows)) {
       if (key < start - 6 || key > end + 6) mutation.rotateLockedRows.delete(key);
+    }
+    for (const key of Array.from(mutation.uniqueLockedRows)) {
+      if (key < start - 6 || key > end + 6) mutation.uniqueLockedRows.delete(key);
     }
   });
 
@@ -895,6 +961,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
               phase={phase}
               startTime={startTime}
               geometry={irisGeometry}
+              safeGeometry={pieceGeometry}
               material={irisMat}
             />
           );
@@ -912,6 +979,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
               phase={phase}
               startTime={startTime}
               geometry={gearGeometry}
+              safeGeometry={pieceGeometry}
               material={gearMat}
               gapIndex={gapIndex}
             />

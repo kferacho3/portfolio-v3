@@ -630,6 +630,12 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
                 mutation.slideLockedRows.add(data.rowIndex);
               } else if (data.platformKind === 'rotate') {
                 mutation.rotateLockedRows.add(data.rowIndex);
+              } else if (
+                data.platformKind === 'iris' ||
+                data.platformKind === 'gear' ||
+                data.platformKind === 'membrane'
+              ) {
+                mutation.uniqueLockedRows.add(data.rowIndex);
               }
               mutation.lastGroundedMs = Date.now();
             }}

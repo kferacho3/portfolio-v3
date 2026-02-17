@@ -104,6 +104,9 @@ export function generatePattern(
   // Generate obstacles, levers, boosters, and gems (only after level 5 for difficulty)
   for (let i = 5; i < size; i += 1) {
     const difficulty = clamp01((i - 5) / 160);
+    const rowKind = platformKinds[i] ?? 'slide';
+    const isUniqueRow =
+      rowKind === 'iris' || rowKind === 'gear' || rowKind === 'membrane';
     const obstacleRate = lerp(
       OBSTACLE_SPAWN_RATE,
       OBSTACLE_SPAWN_RATE + 0.16,
@@ -134,7 +137,7 @@ export function generatePattern(
     }
 
     // Obstacles (bombs)
-    if (!hasLever && rng.random() < obstacleRate) {
+    if (!hasLever && !isUniqueRow && rng.random() < obstacleRate) {
       obstacles.push({
         rowIndex: i,
         x: rng.float(-CORRIDOR_HALF_WIDTH + 1, CORRIDOR_HALF_WIDTH - 1),
