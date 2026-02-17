@@ -597,6 +597,8 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
               groundRowsRef.current.add(data.rowIndex);
               if (data.platformKind === 'slide') {
                 mutation.slideLockedRows.add(data.rowIndex);
+              } else if (data.platformKind === 'rotate') {
+                mutation.rotateLockedRows.add(data.rowIndex);
               }
               mutation.lastGroundedMs = Date.now();
             }}

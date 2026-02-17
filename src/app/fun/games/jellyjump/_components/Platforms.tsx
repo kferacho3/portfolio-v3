@@ -339,7 +339,33 @@ const RotateRow = memo(function RotateRow({
 
   useFrame(() => {
     const timeS = phase === 'playing' ? (Date.now() - startTime) / 1000 : 0;
-    const { pieces, progress } = getPlatformPieces(rowIndex, timeS, pattern);
+    const isLatched = mutation.rotateLockedRows.has(rowIndex);
+    const y = rowIndex * PLATFORM_SPACING;
+    const { pieces, progress } = isLatched
+      ? {
+          pieces: [
+            {
+              x: -PLATFORM_CLOSED_PIECE_X,
+              y,
+              z: 0,
+              rotY: 0,
+              rotZ: 0,
+              side: 'left' as PlatformSide,
+              solid: true,
+            },
+            {
+              x: PLATFORM_CLOSED_PIECE_X,
+              y,
+              z: 0,
+              rotY: 0,
+              rotZ: 0,
+              side: 'right' as PlatformSide,
+              solid: true,
+            },
+          ] as const,
+          progress: 1,
+        }
+      : getPlatformPieces(rowIndex, timeS, pattern);
     const left = pieces[0];
     const right = pieces[1];
     setKinematicPose(leftRef.current, left.x, left.y, left.z, left.rotY ?? 0, left.rotZ);
@@ -356,9 +382,10 @@ const RotateRow = memo(function RotateRow({
     const halfSpanX =
       PLATFORM_PIECE_LENGTH * 0.5 * Math.abs(Math.cos(angle)) +
       PLATFORM_THICKNESS * 0.5 * Math.abs(Math.sin(angle));
-    const gapWidth = right.x - halfSpanX - (left.x + halfSpanX);
+    const gapWidth = isLatched ? 0 : right.x - halfSpanX - (left.x + halfSpanX);
     const isClosing =
-      lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002;
+      !isLatched &&
+      (lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002);
     lastGapRef.current = gapWidth;
     mutation.rotateGapByRow.set(rowIndex, gapWidth);
     mutation.rotateClosingByRow.set(rowIndex, isClosing && progress < 0.99);
@@ -738,6 +765,7 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     mutation.rotateGapByRow.clear();
     mutation.rotateClosingByRow.clear();
     mutation.slideLockedRows.clear();
+    mutation.rotateLockedRows.clear();
     setRows(() => {
       const initial: RowEntry[] = [];
       for (let i = 0; i <= PLATFORM_VISIBLE_ABOVE + 4; i += 1) {
@@ -782,6 +810,9 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     }
     for (const key of Array.from(mutation.rotateClosingByRow.keys())) {
       if (key < start - 6 || key > end + 6) mutation.rotateClosingByRow.delete(key);
+    }
+    for (const key of Array.from(mutation.rotateLockedRows)) {
+      if (key < start - 6 || key > end + 6) mutation.rotateLockedRows.delete(key);
     }
   });
 
