@@ -28,7 +28,6 @@ import {
   LEVEL_SKIP_BOOST,
   LEVER_SIZE,
   OBSTACLE_RADIUS,
-  PLATFORM_CLOSED_PIECE_X,
   PLATFORM_PATTERN_SIZE,
   PLATFORM_SPACING,
   PLATFORM_THICKNESS,
@@ -131,7 +130,8 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       jellyJumpState.controls.jump = false;
     }
 
-    const sliceGapWidth = selectedChar.size * 0.2;
+    const crushGapWidth = selectedChar.size * 0.88;
+    const escapeAssistGapWidth = selectedChar.size * 0.95;
     const sampleY = rb.translation().y;
     let gatePinchFloor = mutation.lastGroundedFloor;
     let gatePinchedButNotSliced = false;
@@ -143,7 +143,7 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       const rowY = rowIndex * PLATFORM_SPACING;
       if (Math.abs(sampleY - rowY) > selectedChar.size * 0.95) continue;
 
-      if (typeof slideGap === 'number') {
+      if (typeof slideGap === 'number' && slideGap > escapeAssistGapWidth) {
         gatePinchedButNotSliced = true;
         if (rowIndex > gatePinchFloor) gatePinchFloor = rowIndex;
         if (sampleY <= rowY + selectedChar.size * 0.48) {
@@ -152,7 +152,7 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
         continue;
       }
 
-      if (typeof rotateGap === 'number' && rotateGap > sliceGapWidth) {
+      if (typeof rotateGap === 'number' && rotateGap > escapeAssistGapWidth) {
         gatePinchedButNotSliced = true;
         if (rowIndex > gatePinchFloor) gatePinchFloor = rowIndex;
         if (sampleY <= rowY + selectedChar.size * 0.55) {
@@ -301,22 +301,40 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     const interactionRadius = selectedChar.size * 0.5 + 0.3;
     const timeS = (nowMs - snap.startTime) / 1000;
 
-    const sliceVerticalBand = selectedChar.size * 0.5 + PLATFORM_THICKNESS * 0.55;
-    const sliceCenterBandX = PLATFORM_CLOSED_PIECE_X + selectedChar.size * 0.55;
-    const tryGateSlice = (rowIndex: number, gap: number, closing: boolean) => {
-      if (!closing || gap > sliceGapWidth) return false;
+    const tryGateCrush = (
+      rowIndex: number,
+      gap: number,
+      closing: boolean,
+      kind: 'slide' | 'rotate'
+    ) => {
+      if (!closing) return false;
       const rowY = rowIndex * PLATFORM_SPACING;
       const gateBottomY = rowY - PLATFORM_THICKNESS * 0.5;
       const gateTopY = rowY + PLATFORM_THICKNESS * 0.5;
       const playerBottomY = py - selectedChar.size * 0.5;
       const playerTopY = py + selectedChar.size * 0.5;
-      const overlapHeight =
-        Math.min(playerTopY, gateTopY) - Math.max(playerBottomY, gateBottomY);
-      if (overlapHeight <= 0) return false;
-      // If the jelly is on/above the top face while it closes, that level is already cleared.
+      const overlapHeight = Math.min(playerTopY, gateTopY) - Math.max(playerBottomY, gateBottomY);
+      if (overlapHeight <= PLATFORM_THICKNESS * 0.35) return false;
+      // If the jelly is on/above the top face while it closes, this level is cleared and safe.
       if (playerBottomY >= gateTopY - 0.12) return false;
-      if (Math.abs(py - rowY) > sliceVerticalBand) return false;
-      if (Math.abs(px) > sliceCenterBandX) return false;
+
+      const contacts = sideContactsRef.current.get(rowIndex);
+      const dualSideContact = (contacts?.left ?? 0) > 0 && (contacts?.right ?? 0) > 0;
+      const halfGap = Math.max(0, gap * 0.5);
+      const xIntrusion = Math.abs(px) + selectedChar.size * 0.5 - halfGap;
+      const inTightGap = gap <= crushGapWidth;
+
+      if (!dualSideContact && !inTightGap) return false;
+      if (!dualSideContact && xIntrusion <= selectedChar.size * 0.05) return false;
+      // Rotate gates can slice at narrower gaps; slide gates need stronger horizontal squeeze.
+      if (
+        kind === 'slide' &&
+        !dualSideContact &&
+        (gap > selectedChar.size * 0.8 || xIntrusion < selectedChar.size * 0.1)
+      ) {
+        return false;
+      }
+
       mutation.effectQueue.push({
         id: mutation.nextEffectId++,
         type: 'crush',
@@ -335,10 +353,23 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
 
     for (const [rowIndex, contacts] of sideContactsRef.current) {
       if (contacts.left <= 0 || contacts.right <= 0) continue;
+      const slideGap = mutation.slideGapByRow.get(rowIndex);
+      if (typeof slideGap === 'number') {
+        const closing = mutation.slideClosingByRow.get(rowIndex) ?? false;
+        if (tryGateCrush(rowIndex, slideGap, closing, 'slide')) return;
+      }
       const rotateGap = mutation.rotateGapByRow.get(rowIndex);
       if (typeof rotateGap !== 'number') continue;
       const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
-      if (tryGateSlice(rowIndex, rotateGap, closing)) return;
+      if (tryGateCrush(rowIndex, rotateGap, closing, 'rotate')) return;
+    }
+    for (const [rowIndex, gap] of mutation.slideGapByRow) {
+      const closing = mutation.slideClosingByRow.get(rowIndex) ?? false;
+      if (tryGateCrush(rowIndex, gap, closing, 'slide')) return;
+    }
+    for (const [rowIndex, gap] of mutation.rotateGapByRow) {
+      const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
+      if (tryGateCrush(rowIndex, gap, closing, 'rotate')) return;
     }
 
     for (const obstacle of pattern.obstacles) {
