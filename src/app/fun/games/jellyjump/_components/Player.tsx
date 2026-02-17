@@ -306,10 +306,15 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     const tryGateSlice = (rowIndex: number, gap: number, closing: boolean) => {
       if (!closing || gap > sliceGapWidth) return false;
       const rowY = rowIndex * PLATFORM_SPACING;
+      const gateBottomY = rowY - PLATFORM_THICKNESS * 0.5;
       const gateTopY = rowY + PLATFORM_THICKNESS * 0.5;
       const playerBottomY = py - selectedChar.size * 0.5;
-      // If the jelly is already above the gate top, that level is cleared and must be safe.
-      if (playerBottomY >= gateTopY - 0.03) return false;
+      const playerTopY = py + selectedChar.size * 0.5;
+      const overlapHeight =
+        Math.min(playerTopY, gateTopY) - Math.max(playerBottomY, gateBottomY);
+      if (overlapHeight <= 0) return false;
+      // If the jelly is on/above the top face while it closes, that level is already cleared.
+      if (playerBottomY >= gateTopY - 0.12) return false;
       if (Math.abs(py - rowY) > sliceVerticalBand) return false;
       if (Math.abs(px) > sliceCenterBandX) return false;
       mutation.effectQueue.push({
@@ -334,10 +339,6 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       if (typeof rotateGap !== 'number') continue;
       const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
       if (tryGateSlice(rowIndex, rotateGap, closing)) return;
-    }
-    for (const [rowIndex, gap] of mutation.rotateGapByRow) {
-      const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
-      if (tryGateSlice(rowIndex, gap, closing)) return;
     }
 
     for (const obstacle of pattern.obstacles) {
