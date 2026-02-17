@@ -131,13 +131,36 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       jellyJumpState.controls.jump = false;
     }
 
+    const sliceGapWidth = selectedChar.size * 0.2;
+    const sampleY = rb.translation().y;
+    let gatePinchFloor = mutation.lastGroundedFloor;
+    let gatePinchedButNotSliced = false;
+    for (const [rowIndex, contacts] of sideContactsRef.current) {
+      if (contacts.left <= 0 || contacts.right <= 0) continue;
+      const slideGap = mutation.slideGapByRow.get(rowIndex);
+      const rotateGap = mutation.rotateGapByRow.get(rowIndex);
+      const gap = typeof slideGap === 'number' ? slideGap : rotateGap;
+      if (typeof gap !== 'number' || gap <= sliceGapWidth) continue;
+      const closing =
+        (mutation.slideClosingByRow.get(rowIndex) ?? false) ||
+        (mutation.rotateClosingByRow.get(rowIndex) ?? false);
+      if (!closing) continue;
+      const rowY = rowIndex * PLATFORM_SPACING;
+      if (Math.abs(sampleY - rowY) > selectedChar.size * 0.72) continue;
+      gatePinchedButNotSliced = true;
+      if (rowIndex > gatePinchFloor) gatePinchFloor = rowIndex;
+    }
+
     let groundedFloor = mutation.lastGroundedFloor;
     if (groundRowsRef.current.size > 0) {
       for (const rowIndex of groundRowsRef.current) {
         if (rowIndex > groundedFloor) groundedFloor = rowIndex;
       }
     }
-    const grounded = groundRowsRef.current.size > 0;
+    if (gatePinchedButNotSliced && gatePinchFloor > groundedFloor) {
+      groundedFloor = gatePinchFloor;
+    }
+    const grounded = groundRowsRef.current.size > 0 || gatePinchedButNotSliced;
     if (grounded) {
       mutation.lastGroundedMs = nowMs;
       mutation.lastGroundedFloor = groundedFloor;
@@ -174,6 +197,15 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       squashRef.current = -1.0;
       jiggleRef.current = Math.max(jiggleRef.current, 0.22);
       triggerHaptic(10);
+    }
+
+    if (gatePinchedButNotSliced) {
+      const posNow = rb.translation();
+      const lv = rb.linvel();
+      const centerPull = 1 - Math.exp(-12 * dt);
+      const centeredX = THREE.MathUtils.lerp(posNow.x, 0, centerPull);
+      rb.setTranslation({ x: centeredX, y: posNow.y + 0.01, z: 0 }, true);
+      rb.setLinvel({ x: lv.x * 0.3, y: Math.max(lv.y, 2.2), z: 0 }, true);
     }
 
     const withinHoldWindow = nowMs - jumpedAtMsRef.current <= JUMP_HOLD_MAX_MS;
@@ -241,7 +273,6 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     const interactionRadius = selectedChar.size * 0.5 + 0.3;
     const timeS = (nowMs - snap.startTime) / 1000;
 
-    const sliceGapWidth = selectedChar.size * 0.2;
     const sliceVerticalBand = selectedChar.size * 0.5 + PLATFORM_THICKNESS * 0.55;
     const sliceCenterBandX = PLATFORM_CLOSED_PIECE_X + selectedChar.size * 0.55;
     const tryGateSlice = (rowIndex: number, gap: number, closing: boolean) => {

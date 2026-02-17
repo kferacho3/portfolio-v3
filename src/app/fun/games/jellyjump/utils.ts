@@ -264,9 +264,10 @@ export function getPlatformPieces(
   const pivotLX = -PLATFORM_ROTATE_PIVOT_X;
   const left: PlatformPieceTransform = {
     x: pivotLX + Math.cos(angle) * half,
-    y: y + Math.sin(angle) * half,
-    z: 0,
-    rotZ: angle,
+    y,
+    z: Math.sin(angle) * half,
+    rotY: -angle,
+    rotZ: 0,
     side: 'left',
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };
@@ -275,9 +276,10 @@ export function getPlatformPieces(
   const pivotRX = PLATFORM_ROTATE_PIVOT_X;
   const right: PlatformPieceTransform = {
     x: pivotRX - Math.cos(angle) * half,
-    y: y + Math.sin(angle) * half,
-    z: 0,
-    rotZ: -angle,
+    y,
+    z: -Math.sin(angle) * half,
+    rotY: angle,
+    rotZ: 0,
     side: 'right',
     solid: angle < PLATFORM_ROTATE_SOLID_ANGLE,
   };

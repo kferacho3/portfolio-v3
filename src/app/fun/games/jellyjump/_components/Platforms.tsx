@@ -342,13 +342,20 @@ const RotateRow = memo(function RotateRow({
     const { pieces, progress } = getPlatformPieces(rowIndex, timeS, pattern);
     const left = pieces[0];
     const right = pieces[1];
-    setKinematicPose(leftRef.current, left.x, left.y, left.z, 0, left.rotZ);
-    setKinematicPose(rightRef.current, right.x, right.y, right.z, 0, right.rotZ);
+    setKinematicPose(leftRef.current, left.x, left.y, left.z, left.rotY ?? 0, left.rotZ);
+    setKinematicPose(
+      rightRef.current,
+      right.x,
+      right.y,
+      right.z,
+      right.rotY ?? 0,
+      right.rotZ
+    );
 
-    const angle = Math.abs(left.rotZ);
+    const angle = Math.abs(left.rotY ?? 0);
     const halfSpanX =
       PLATFORM_PIECE_LENGTH * 0.5 * Math.abs(Math.cos(angle)) +
-      PLATFORM_THICKNESS * 0.5 * Math.abs(Math.sin(angle));
+      PLATFORM_DEPTH * 0.5 * Math.abs(Math.sin(angle));
     const gapWidth = right.x - halfSpanX - (left.x + halfSpanX);
     const isClosing =
       lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002;
