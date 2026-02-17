@@ -22,6 +22,10 @@ import {
 import { GAME_CARDS, getGameCard, KEY_TO_GAME } from '../config/games';
 import type { GameId } from '../store/types';
 import { resetGameState } from '../utils/resetGameState';
+import {
+  buildGameDeckBugReportHref,
+  createGameDeckBugContext,
+} from '../utils/gameDeckBugContext';
 
 /**
  * Main arcade shell hook
@@ -167,6 +171,7 @@ export function useArcadeKeyboard() {
     currentGame,
     isHome,
     reactPongMode,
+    getCurrentMode,
     goHome,
     launchGame,
     setPaused,
@@ -207,8 +212,24 @@ export function useArcadeKeyboard() {
         // B = Open bug report in new tab
         if (key === 'b') {
           e.preventDefault();
+          const activeGameId = currentGame as GameId;
+          const gameTitle = getGameCard(activeGameId)?.title ?? activeGameId;
+          const href = buildGameDeckBugReportHref(
+            createGameDeckBugContext({
+              gameId: activeGameId,
+              gameTitle,
+              score: 0,
+              mode: getCurrentMode(),
+              paused: false,
+              hasStarted: true,
+              route:
+                typeof window !== 'undefined'
+                  ? window.location.pathname
+                  : `/fun/${activeGameId}`,
+            })
+          );
           window.open(
-            `/fun/bug-report?game=${encodeURIComponent(currentGame)}`,
+            href,
             '_blank',
             'noopener,noreferrer'
           );
@@ -245,6 +266,7 @@ export function useArcadeKeyboard() {
     isHome,
     currentGame,
     reactPongMode,
+    getCurrentMode,
     goHome,
     setPaused,
     restartGame,
