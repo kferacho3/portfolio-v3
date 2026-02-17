@@ -20,7 +20,6 @@ import {
   JUMP_BUFFER_MS,
   JUMP_HOLD_FORCE,
   JUMP_HOLD_MAX_MS,
-  JUMP_IMPULSE,
   LATERAL_ACCEL,
   LATERAL_DRAG,
   LATERAL_ENABLED,
@@ -31,6 +30,7 @@ import {
   OBSTACLE_RADIUS,
   PLATFORM_PATTERN_SIZE,
   PLATFORM_SPACING,
+  PLATFORM_THICKNESS,
   PLAYER_CRUSH_WIDTH,
 } from '../constants';
 import type { DeathCause, PlatformPattern, PlatformSide } from '../types';
@@ -71,7 +71,7 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
   const jiggleRef = useRef(0);
   const jumpHoldMsRef = useRef(0);
   const jumpedAtMsRef = useRef(0);
-  const groundContactsRef = useRef(0);
+  const groundRowsRef = useRef<Set<number>>(new Set());
   const sideContactsRef = useRef<Map<number, { left: number; right: number }>>(new Map());
   const deathHandledRef = useRef(false);
 
@@ -89,7 +89,7 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
   useEffect(() => {
     if (snap.phase === 'playing') {
       deathHandledRef.current = false;
-      groundContactsRef.current = 0;
+      groundRowsRef.current.clear();
       sideContactsRef.current.clear();
       jumpHoldMsRef.current = 0;
       jumpedAtMsRef.current = 0;
@@ -131,9 +131,17 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       jellyJumpState.controls.jump = false;
     }
 
-    const grounded = groundContactsRef.current > 0;
+    let groundedFloor = mutation.lastGroundedFloor;
+    if (groundRowsRef.current.size > 0) {
+      for (const rowIndex of groundRowsRef.current) {
+        if (rowIndex > groundedFloor) groundedFloor = rowIndex;
+      }
+    }
+    const grounded = groundRowsRef.current.size > 0;
     if (grounded) {
       mutation.lastGroundedMs = nowMs;
+      mutation.lastGroundedFloor = groundedFloor;
+      mutation.currentFloor = groundedFloor;
       mutation.jumpConsumedSinceGrounded = false;
     }
     const canCoyote = nowMs - mutation.lastGroundedMs <= COYOTE_TIME_MS;
@@ -143,12 +151,24 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       !mutation.jumpConsumedSinceGrounded &&
       (grounded || canCoyote)
     ) {
+      const jumpFromFloor = grounded ? groundedFloor : mutation.lastGroundedFloor;
+      const targetFloor = Math.max(1, jumpFromFloor + 1);
+      const currentY = rb.translation().y;
+      const platformTopOffset = PLATFORM_THICKNESS * 0.5 + selectedChar.size * 0.5;
+      const landingCenterY = targetFloor * PLATFORM_SPACING + platformTopOffset;
+      const clearanceY = PLATFORM_THICKNESS * 0.5;
+      const heightToJump = Math.max(0.01, landingCenterY + clearanceY - currentY);
+      const gravityAbs = Math.abs(GRAVITY);
+      const velocityNeeded = Math.sqrt(2 * gravityAbs * heightToJump) * freezeScale;
+      const singleStepHeight = PLATFORM_SPACING + clearanceY;
+      const maxSingleJumpV = Math.sqrt(2 * gravityAbs * singleStepHeight);
+      const jumpVelocity = Math.min(velocityNeeded, maxSingleJumpV);
+
       const lv = rb.linvel();
-      rb.setLinvel({ x: lv.x, y: 0, z: 0 }, true);
-      rb.applyImpulse({ x: 0, y: JUMP_IMPULSE * freezeScale, z: 0 }, true);
+      rb.setLinvel({ x: lv.x, y: jumpVelocity, z: 0 }, true);
       mutation.jumpQueuedUntilMs = 0;
       mutation.jumpConsumedSinceGrounded = true;
-      groundContactsRef.current = 0;
+      groundRowsRef.current.clear();
       jumpedAtMsRef.current = nowMs;
       jumpHoldMsRef.current = 0;
       squashRef.current = -1.0;
@@ -184,6 +204,9 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
       if (vy < 0 && !isFrozen) {
         vy += GRAVITY * (FAST_FALL_GRAVITY_MULTIPLIER - 1) * dt;
       }
+      const singleStepHeight = PLATFORM_SPACING + PLATFORM_THICKNESS * 0.5;
+      const maxSingleJumpV = Math.sqrt(2 * Math.abs(GRAVITY) * singleStepHeight);
+      if (vy > maxSingleJumpV) vy = maxSingleJumpV;
       if (isFrozen) {
         vy *= 0.9;
       }
@@ -423,7 +446,8 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
           ccd
           canSleep={false}
           enabledRotations={[false, false, false]}
-          linearDamping={0.02}
+          linearDamping={0}
+          gravityScale={1}
           angularDamping={3.8}
           onCollisionEnter={(event: any) => {
             const data: PlatformUserData | undefined =
@@ -486,22 +510,22 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
               const data: PlatformUserData | undefined =
                 event?.other?.rigidBodyObject?.userData;
               if (data?.kind !== 'platform') return;
+              if (typeof data.rowIndex !== 'number') return;
               const rbCurrent = playerRef.current;
               if (!rbCurrent) return;
               const vy = rbCurrent.linvel().y;
               if (vy > 1.2) return;
-              if (typeof data.rowIndex === 'number') {
-                const rowY = data.rowIndex * PLATFORM_SPACING;
-                if (rbCurrent.translation().y < rowY) return;
-              }
-              groundContactsRef.current += 1;
+              const rowY = data.rowIndex * PLATFORM_SPACING;
+              if (rbCurrent.translation().y < rowY) return;
+              groundRowsRef.current.add(data.rowIndex);
               mutation.lastGroundedMs = Date.now();
             }}
             onIntersectionExit={(event: any) => {
               const data: PlatformUserData | undefined =
                 event?.other?.rigidBodyObject?.userData;
               if (data?.kind !== 'platform') return;
-              groundContactsRef.current = Math.max(0, groundContactsRef.current - 1);
+              if (typeof data.rowIndex !== 'number') return;
+              groundRowsRef.current.delete(data.rowIndex);
             }}
           />
 

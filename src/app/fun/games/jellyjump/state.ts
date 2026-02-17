@@ -22,6 +22,8 @@ export const mutation = {
   lastAwardedLevel: 0,
   isGrounded: true,
   lastGroundedMs: 0,
+  currentFloor: 0,
+  lastGroundedFloor: 0,
   jumpQueuedUntilMs: 0,
   jumpConsumedSinceGrounded: false,
   lastBombHitMs: 0,
@@ -77,6 +79,8 @@ export const jellyJumpState = proxy({
     mutation.lastAwardedLevel = 0;
     mutation.isGrounded = true;
     mutation.lastGroundedMs = 0;
+    mutation.currentFloor = 0;
+    mutation.lastGroundedFloor = 0;
     mutation.jumpQueuedUntilMs = 0;
     mutation.jumpConsumedSinceGrounded = false;
     mutation.lastBombHitMs = 0;
@@ -113,6 +117,8 @@ export const jellyJumpState = proxy({
     mutation.lastAwardedLevel = 0;
     mutation.isGrounded = true;
     mutation.lastGroundedMs = Date.now();
+    mutation.currentFloor = 0;
+    mutation.lastGroundedFloor = 0;
     mutation.jumpQueuedUntilMs = 0;
     mutation.jumpConsumedSinceGrounded = false;
     mutation.lastBombHitMs = 0;
