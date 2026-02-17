@@ -204,7 +204,33 @@ const SlideRow = memo(function SlideRow({
 
   useFrame(() => {
     const timeS = phase === 'playing' ? (Date.now() - startTime) / 1000 : 0;
-    const { pieces, progress } = getPlatformPieces(rowIndex, timeS, pattern);
+    const isLatched = mutation.slideLockedRows.has(rowIndex);
+    const y = rowIndex * PLATFORM_SPACING;
+    const { pieces, progress } = isLatched
+      ? {
+          pieces: [
+            {
+              x: -PLATFORM_CLOSED_PIECE_X,
+              y,
+              z: 0,
+              rotY: 0,
+              rotZ: 0,
+              side: 'left' as PlatformSide,
+              solid: true,
+            },
+            {
+              x: PLATFORM_CLOSED_PIECE_X,
+              y,
+              z: 0,
+              rotY: 0,
+              rotZ: 0,
+              side: 'right' as PlatformSide,
+              solid: true,
+            },
+          ] as const,
+          progress: 1,
+        }
+      : getPlatformPieces(rowIndex, timeS, pattern);
     const left = pieces[0];
     const right = pieces[1];
 
@@ -218,9 +244,10 @@ const SlideRow = memo(function SlideRow({
       right.rotZ
     );
 
-    const gapWidth = getSlideGapWidth(rowIndex, timeS, pattern);
+    const gapWidth = isLatched ? 0 : getSlideGapWidth(rowIndex, timeS, pattern);
     const isClosing =
-      lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002;
+      !isLatched &&
+      (lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002);
     lastGapRef.current = gapWidth;
     mutation.slideGapByRow.set(rowIndex, gapWidth);
     mutation.slideClosingByRow.set(rowIndex, isClosing && progress < 0.99);
@@ -300,14 +327,34 @@ const RotateRow = memo(function RotateRow({
 }: SharedRowProps) {
   const leftRef = useRef<RapierRigidBody | null>(null);
   const rightRef = useRef<RapierRigidBody | null>(null);
+  const lastGapRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      mutation.rotateGapByRow.delete(rowIndex);
+      mutation.rotateClosingByRow.delete(rowIndex);
+    },
+    [rowIndex]
+  );
 
   useFrame(() => {
     const timeS = phase === 'playing' ? (Date.now() - startTime) / 1000 : 0;
-    const { pieces } = getPlatformPieces(rowIndex, timeS, pattern);
+    const { pieces, progress } = getPlatformPieces(rowIndex, timeS, pattern);
     const left = pieces[0];
     const right = pieces[1];
     setKinematicPose(leftRef.current, left.x, left.y, left.z, 0, left.rotZ);
     setKinematicPose(rightRef.current, right.x, right.y, right.z, 0, right.rotZ);
+
+    const angle = Math.abs(left.rotZ);
+    const halfSpanX =
+      PLATFORM_PIECE_LENGTH * 0.5 * Math.abs(Math.cos(angle)) +
+      PLATFORM_THICKNESS * 0.5 * Math.abs(Math.sin(angle));
+    const gapWidth = right.x - halfSpanX - (left.x + halfSpanX);
+    const isClosing =
+      lastGapRef.current === null ? true : gapWidth < lastGapRef.current - 0.002;
+    lastGapRef.current = gapWidth;
+    mutation.rotateGapByRow.set(rowIndex, gapWidth);
+    mutation.rotateClosingByRow.set(rowIndex, isClosing && progress < 0.99);
   });
 
   return (
@@ -681,6 +728,9 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     windowRef.current = { start: 0, end: PLATFORM_VISIBLE_ABOVE + 4 };
     mutation.slideGapByRow.clear();
     mutation.slideClosingByRow.clear();
+    mutation.rotateGapByRow.clear();
+    mutation.rotateClosingByRow.clear();
+    mutation.slideLockedRows.clear();
     setRows(() => {
       const initial: RowEntry[] = [];
       for (let i = 0; i <= PLATFORM_VISIBLE_ABOVE + 4; i += 1) {
@@ -719,6 +769,12 @@ export default function Platforms({ pattern }: { pattern: PlatformPattern }) {
     }
     for (const key of Array.from(mutation.slideClosingByRow.keys())) {
       if (key < start - 6 || key > end + 6) mutation.slideClosingByRow.delete(key);
+    }
+    for (const key of Array.from(mutation.rotateGapByRow.keys())) {
+      if (key < start - 6 || key > end + 6) mutation.rotateGapByRow.delete(key);
+    }
+    for (const key of Array.from(mutation.rotateClosingByRow.keys())) {
+      if (key < start - 6 || key > end + 6) mutation.rotateClosingByRow.delete(key);
     }
   });
 

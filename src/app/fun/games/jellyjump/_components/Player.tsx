@@ -28,10 +28,10 @@ import {
   LEVEL_SKIP_BOOST,
   LEVER_SIZE,
   OBSTACLE_RADIUS,
+  PLATFORM_CLOSED_PIECE_X,
   PLATFORM_PATTERN_SIZE,
   PLATFORM_SPACING,
   PLATFORM_THICKNESS,
-  PLAYER_CRUSH_WIDTH,
 } from '../constants';
 import type { DeathCause, PlatformPattern, PlatformSide } from '../types';
 import { getLavaY, getObstaclePosition } from '../utils';
@@ -241,27 +241,49 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     const interactionRadius = selectedChar.size * 0.5 + 0.3;
     const timeS = (nowMs - snap.startTime) / 1000;
 
+    const sliceGapWidth = selectedChar.size * 0.2;
+    const sliceVerticalBand = selectedChar.size * 0.5 + PLATFORM_THICKNESS * 0.55;
+    const sliceCenterBandX = PLATFORM_CLOSED_PIECE_X + selectedChar.size * 0.55;
+    const tryGateSlice = (rowIndex: number, gap: number, closing: boolean) => {
+      if (!closing || gap > sliceGapWidth) return false;
+      const rowY = rowIndex * PLATFORM_SPACING;
+      if (Math.abs(py - rowY) > sliceVerticalBand) return false;
+      if (Math.abs(px) > sliceCenterBandX) return false;
+      mutation.effectQueue.push({
+        id: mutation.nextEffectId++,
+        type: 'crush',
+        x: px,
+        y: py,
+        z: pz,
+        createdAt: nowMs,
+      });
+      mutation.shakeUntil = nowMs + CAMERA_SHAKE_DURATION_MS;
+      mutation.shakeDuration = CAMERA_SHAKE_DURATION_MS;
+      mutation.shakeStrength = CAMERA_SHAKE_STRENGTH * 1.5;
+      triggerHaptic(180);
+      markDeath('crush', px, py, pz);
+      return true;
+    };
+
     for (const [rowIndex, contacts] of sideContactsRef.current) {
       if (contacts.left <= 0 || contacts.right <= 0) continue;
-      const gap = mutation.slideGapByRow.get(rowIndex);
+      const slideGap = mutation.slideGapByRow.get(rowIndex);
+      const rotateGap = mutation.rotateGapByRow.get(rowIndex);
+      const gap = typeof slideGap === 'number' ? slideGap : rotateGap;
       if (typeof gap !== 'number') continue;
+      const closing =
+        (mutation.slideClosingByRow.get(rowIndex) ?? false) ||
+        (mutation.rotateClosingByRow.get(rowIndex) ?? false);
+      if (tryGateSlice(rowIndex, gap, closing)) return;
+    }
+
+    for (const [rowIndex, gap] of mutation.slideGapByRow) {
       const closing = mutation.slideClosingByRow.get(rowIndex) ?? false;
-      if (closing && gap <= PLAYER_CRUSH_WIDTH) {
-        mutation.effectQueue.push({
-          id: mutation.nextEffectId++,
-          type: 'crush',
-          x: px,
-          y: py,
-          z: pz,
-          createdAt: nowMs,
-        });
-        mutation.shakeUntil = nowMs + CAMERA_SHAKE_DURATION_MS;
-        mutation.shakeDuration = CAMERA_SHAKE_DURATION_MS;
-        mutation.shakeStrength = CAMERA_SHAKE_STRENGTH * 1.5;
-        triggerHaptic(180);
-        markDeath('crush', px, py, pz);
-        return;
-      }
+      if (tryGateSlice(rowIndex, gap, closing)) return;
+    }
+    for (const [rowIndex, gap] of mutation.rotateGapByRow) {
+      const closing = mutation.rotateClosingByRow.get(rowIndex) ?? false;
+      if (tryGateSlice(rowIndex, gap, closing)) return;
     }
 
     for (const obstacle of pattern.obstacles) {
@@ -518,6 +540,9 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
               const rowY = data.rowIndex * PLATFORM_SPACING;
               if (rbCurrent.translation().y < rowY) return;
               groundRowsRef.current.add(data.rowIndex);
+              if (data.platformKind === 'slide') {
+                mutation.slideLockedRows.add(data.rowIndex);
+              }
               mutation.lastGroundedMs = Date.now();
             }}
             onIntersectionExit={(event: any) => {

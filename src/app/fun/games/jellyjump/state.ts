@@ -34,6 +34,9 @@ export const mutation = {
   shakeStrength: 0,
   slideGapByRow: new Map<number, number>(),
   slideClosingByRow: new Map<number, boolean>(),
+  rotateGapByRow: new Map<number, number>(),
+  rotateClosingByRow: new Map<number, boolean>(),
+  slideLockedRows: new Set<number>(),
   cameraAnchorY: 1.2,
 };
 
@@ -91,6 +94,9 @@ export const jellyJumpState = proxy({
     mutation.shakeStrength = 0;
     mutation.slideGapByRow.clear();
     mutation.slideClosingByRow.clear();
+    mutation.rotateGapByRow.clear();
+    mutation.rotateClosingByRow.clear();
+    mutation.slideLockedRows.clear();
     mutation.cameraAnchorY = 1.2;
   },
 
@@ -129,6 +135,9 @@ export const jellyJumpState = proxy({
     mutation.shakeStrength = 0;
     mutation.slideGapByRow.clear();
     mutation.slideClosingByRow.clear();
+    mutation.rotateGapByRow.clear();
+    mutation.rotateClosingByRow.clear();
+    mutation.slideLockedRows.clear();
     mutation.cameraAnchorY = 1.2;
   },
 
