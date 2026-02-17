@@ -6,9 +6,15 @@ import {
   EMAILJS_SERVICE_ID,
 } from '@/lib/emailjsConfig';
 import emailjs from 'emailjs-com';
+import Image from 'next/image';
 import Link from 'next/link';
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { GAME_CARDS } from '../config/games';
+import {
+  parseGameDeckBugContext,
+  serializeGameDeckBugContext,
+  type GameDeckBugContext,
+} from '../utils/gameDeckBugContext';
 
 const MAX_SCREENSHOTS = 3;
 const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
@@ -63,6 +69,7 @@ const formatLabel = (value: string) =>
 
 export default function BugReportPage() {
   const [gameParam, setGameParam] = useState<string | null>(null);
+  const [deckContext, setDeckContext] = useState<GameDeckBugContext | null>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -82,11 +89,58 @@ export default function BugReportPage() {
     () => GAME_CARDS.find((game) => game.id === gameParam),
     [gameParam]
   );
+  const activeGameOption = useMemo(
+    () => GAME_CARDS.find((game) => game.id === formData.game),
+    [formData.game]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const game = new URLSearchParams(window.location.search).get('game');
-    setGameParam(game);
+    const search = new URLSearchParams(window.location.search);
+    const game = search.get('game');
+    const parsedDeckContext = parseGameDeckBugContext(search.get('deckContext'));
+    const preferredGame = parsedDeckContext?.gameId ?? game;
+
+    setGameParam(preferredGame);
+
+    if (parsedDeckContext) {
+      setDeckContext(parsedDeckContext);
+
+      const stateLabel = parsedDeckContext.paused
+        ? 'paused'
+        : parsedDeckContext.hasStarted
+          ? 'live'
+          : 'ready';
+      const sessionSeed = [
+        parsedDeckContext.sessionTag,
+        `score=${parsedDeckContext.score}`,
+        parsedDeckContext.mode ? `mode=${formatLabel(parsedDeckContext.mode)}` : '',
+        parsedDeckContext.health !== undefined
+          ? `health=${parsedDeckContext.health}%`
+          : '',
+        `state=${stateLabel}`,
+      ]
+        .filter(Boolean)
+        .join(' | ');
+      const autoSteps = [
+        'Auto-captured by Game Deck context:',
+        `- Tag: ${parsedDeckContext.contextTag}`,
+        `- Route: ${parsedDeckContext.route}`,
+        `- Captured: ${parsedDeckContext.capturedAt}`,
+        '',
+        'Reproduction details:',
+      ].join('\n');
+
+      setFormData((prev) => ({
+        ...prev,
+        game: parsedDeckContext.gameId,
+        sessionId: prev.sessionId || sessionSeed,
+        summary:
+          prev.summary ||
+          `${parsedDeckContext.contextTag} Issue in ${parsedDeckContext.gameTitle}`,
+        steps: prev.steps || autoSteps,
+      }));
+    }
   }, []);
 
   useEffect(() => {
@@ -110,6 +164,17 @@ export default function BugReportPage() {
   }, []);
 
   const screenshotNames = screenshots.map((file) => file.name).join(', ');
+  const serializedDeckContext = useMemo(
+    () => (deckContext ? serializeGameDeckBugContext(deckContext) : ''),
+    [deckContext]
+  );
+  const deckStateLabel = deckContext
+    ? deckContext.paused
+      ? 'paused'
+      : deckContext.hasStarted
+        ? 'live'
+        : 'ready'
+    : '';
   const compiledMessage = [
     `Summary: ${formData.summary || 'N/A'}`,
     `Type: ${formatLabel(formData.reportType)}`,
@@ -119,6 +184,12 @@ export default function BugReportPage() {
     `Platform: ${formatLabel(formData.platform)}`,
     `Browser / Device: ${formData.browser || 'N/A'}`,
     `Session / Level Context: ${formData.sessionId || 'N/A'}`,
+    `Arcade Deck Tag: ${deckContext?.contextTag || 'N/A'}`,
+    `Arcade Deck Snapshot: ${
+      deckContext
+        ? `score=${deckContext.score}; mode=${deckContext.mode || 'N/A'}; health=${deckContext.health ?? 'N/A'}; state=${deckStateLabel}; session=${deckContext.sessionTag}; route=${deckContext.route}; captured=${deckContext.capturedAt}`
+        : 'N/A'
+    }`,
     '',
     'Steps to Reproduce:',
     formData.steps || 'N/A',
@@ -269,12 +340,41 @@ export default function BugReportPage() {
 
         <div className="relative mx-auto w-full max-w-6xl">
           <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-cyan-100/20 bg-slate-950/70 px-4 py-3 shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-md sm:px-6">
-            <div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <span className="relative h-9 w-9 overflow-hidden rounded-lg border border-cyan-100/30 bg-cyan-200/10 p-1.5">
+                  <Image
+                    src="/symbol.png"
+                    alt=""
+                    fill
+                    aria-hidden
+                    className="object-contain"
+                    sizes="36px"
+                  />
+                </span>
+                <div className="relative h-6 w-[132px]">
+                  <Image
+                    src="/logo-white.png"
+                    alt="Racho Arcade"
+                    fill
+                    className="object-contain"
+                    sizes="132px"
+                  />
+                  <Image
+                    src="/logo.png"
+                    alt=""
+                    fill
+                    aria-hidden
+                    className="object-contain opacity-50 mix-blend-screen"
+                    sizes="132px"
+                  />
+                </div>
+              </div>
               <p
-                className="text-[10px] uppercase tracking-[0.34em] text-cyan-200/70"
+                className="mt-2 text-[10px] uppercase tracking-[0.34em] text-cyan-200/70"
                 style={{ fontFamily: headingFont }}
               >
-                Universal Arcade Deck
+                Universal Game Deck
               </p>
               <h1
                 className="mt-2 text-lg text-cyan-50 sm:text-2xl"
@@ -285,7 +385,7 @@ export default function BugReportPage() {
             </div>
 
             <Link
-              href={selectedGameOption ? `/fun/${selectedGameOption.id}` : '/fun'}
+              href={activeGameOption ? `/fun/${activeGameOption.id}` : '/fun'}
               className="inline-flex items-center gap-2 rounded-xl border border-cyan-100/40 bg-cyan-300/15 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-300/25"
               style={{ fontFamily: headingFont }}
             >
@@ -329,10 +429,25 @@ export default function BugReportPage() {
                   Selected Game
                 </p>
                 <p className="mt-2 text-sm text-white/90">
-                  {selectedGameOption?.title ||
+                  {activeGameOption?.title ||
                     (formData.game ? formatLabel(formData.game) : 'None')}
                 </p>
               </div>
+
+              {deckContext && (
+                <div className="mt-4 rounded-xl border border-fuchsia-200/20 bg-fuchsia-400/10 px-4 py-3 text-xs text-fuchsia-100/90">
+                  <p className="font-semibold uppercase tracking-[0.18em]">
+                    Auto-tagged Context
+                  </p>
+                  <p className="mt-2 break-all font-mono text-[11px] text-fuchsia-50/90">
+                    {deckContext.contextTag}
+                  </p>
+                  <p className="mt-1 text-white/80">
+                    Score {deckContext.score}
+                    {deckContext.mode ? ` • ${formatLabel(deckContext.mode)}` : ''}
+                  </p>
+                </div>
+              )}
             </aside>
 
             <section className="rounded-3xl border border-cyan-100/25 bg-slate-950/82 p-5 shadow-[0_30px_70px_rgba(0,0,0,0.55)] backdrop-blur-md sm:p-6">
@@ -364,6 +479,16 @@ export default function BugReportPage() {
                 <input type="hidden" name="platform" value={formData.platform} />
                 <input type="hidden" name="browser" value={formData.browser} />
                 <input type="hidden" name="session_id" value={formData.sessionId} />
+                <input
+                  type="hidden"
+                  name="deck_context_tag"
+                  value={deckContext?.contextTag ?? ''}
+                />
+                <input
+                  type="hidden"
+                  name="deck_context_payload"
+                  value={serializedDeckContext}
+                />
                 <input type="hidden" name="screenshot_names" value={screenshotNames} />
                 <input
                   type="hidden"

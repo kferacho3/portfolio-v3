@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import GameLoadingOverlay from '../components/GameLoadingOverlay';
 import GameStartOverlay from '../components/GameStartOverlay';
-import { GameControlPanel, GameHUD, PauseMenu } from '../components/shell';
+import { GameControlPanel, PauseMenu } from '../components/shell';
 import {
   useGameUIState,
   useAudioState,
@@ -22,7 +22,6 @@ import {
   useGameModeActions,
 } from '../store/selectors';
 import { useGameAudio, useArcadeKeyboard, useVisibilityPause } from '../hooks';
-import { shouldShowHUD } from '../config/games';
 import type { GameId } from '../store/types';
 import { proxy, useSnapshot } from 'valtio';
 import type { LoadedGame } from '../games/registry';
@@ -98,6 +97,12 @@ const nextOctaCameraMode = (mode: OctaCameraMode): OctaCameraMode => {
   return 'chase';
 };
 
+const createDeckSessionTag = (gameId: GameId, seed: number) => {
+  const stamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 8);
+  return `${gameId}-${seed}-${stamp}-${random}`;
+};
+
 /** Loaded with ssr: false to avoid @react-three vendor-chunk errors during page generation */
 const SharedCanvasContent = dynamic(
   () => import('./SharedCanvasContent').then((m) => m.default),
@@ -168,9 +173,17 @@ export default function GamePage({ params }: GamePageProps) {
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingVisible, setLoadingVisible] = useState(true);
   const [hasStarted, setHasStarted] = useState(false);
+  const [deckSessionTag, setDeckSessionTag] = useState(
+    createDeckSessionTag(gameId, restartSeed)
+  );
   const loadGameRef = React.useRef<
     ((id: GameId) => Promise<LoadedGame>) | null
   >(null);
+
+  useEffect(() => {
+    if (!isValidGame) return;
+    setDeckSessionTag(createDeckSessionTag(gameId, restartSeed));
+  }, [gameId, isValidGame, restartSeed]);
 
   useEffect(() => {
     if (!isValidGame) {
@@ -321,7 +334,6 @@ export default function GamePage({ params }: GamePageProps) {
     return null;
   }
 
-  const showHud = shouldShowHUD(gameId) && gameId !== 'shapeshifter';
   const showStartOverlay =
     gameId !== 'octasurge' && !loadingVisible && !hasStarted && !paused;
   const activeHealth =
@@ -329,14 +341,7 @@ export default function GamePage({ params }: GamePageProps) {
     (gameSnap as { health?: number })?.health !== undefined
       ? ((gameSnap as { health?: number }).health ?? health)
       : health;
-  const showModeSelection = gameId === 'skyblitz' || gameId === 'reactpong';
   const pauseDisabled = gameId === 'reactpong' && reactPongMode === 'WallMode';
-  const showFallbackScoreOverlay =
-    !!gameEntry?.getScore &&
-    !showHud &&
-    gameId !== 'prismjump' &&
-    gameId !== 'octasurge' &&
-    gameId !== 'orbitlatch';
   const modeOptions =
     gameId === 'skyblitz'
       ? ['UfoMode', 'RunnerManMode']
@@ -437,24 +442,18 @@ export default function GamePage({ params }: GamePageProps) {
         />
       )}
 
-      {showFallbackScoreOverlay && (
-        <div className="pointer-events-none fixed left-4 top-4 z-[1400] rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white backdrop-blur-md">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-white/70">
-            Score
-          </div>
-          <div className="text-lg font-black leading-none tabular-nums">
-            {Math.floor(currentScore)}
-          </div>
-        </div>
-      )}
-
       {/* Game Control Panel */}
       <GameControlPanel
         gameId={gameId}
+        score={currentScore}
+        health={activeHealth}
+        currentMode={currentMode}
+        isPaused={paused}
+        hasStarted={hasStarted || gameId === 'octasurge'}
+        sessionTag={deckSessionTag}
         showGameRules={showGameRules}
         showPauseHints={!pauseDisabled}
         modeOptions={modeOptions}
-        currentMode={currentMode}
         musicOn={musicOn}
         soundsOn={soundsOn}
         onToggleGameRules={toggleGameRules}
@@ -467,20 +466,6 @@ export default function GamePage({ params }: GamePageProps) {
         gameMenuLabel="Game Menu"
         disableGameMenu={pauseDisabled}
       />
-
-      {/* HUD Overlay */}
-      {showHud && (
-        <GameHUD
-          gameId={gameId}
-          score={currentScore}
-          health={activeHealth}
-          showHealth={gameId === 'skyblitz'}
-          showModeSelection={showModeSelection}
-          modeOptions={modeOptions}
-          currentMode={currentMode}
-          onModeSwitch={handleModeSwitch}
-        />
-      )}
 
       {/* Pause Menu */}
       {paused && !pauseDisabled && (
