@@ -306,6 +306,10 @@ export default function Player({ pattern }: { pattern: PlatformPattern }) {
     const tryGateSlice = (rowIndex: number, gap: number, closing: boolean) => {
       if (!closing || gap > sliceGapWidth) return false;
       const rowY = rowIndex * PLATFORM_SPACING;
+      const gateTopY = rowY + PLATFORM_THICKNESS * 0.5;
+      const playerBottomY = py - selectedChar.size * 0.5;
+      // If the jelly is already above the gate top, that level is cleared and must be safe.
+      if (playerBottomY >= gateTopY - 0.03) return false;
       if (Math.abs(py - rowY) > sliceVerticalBand) return false;
       if (Math.abs(px) > sliceCenterBandX) return false;
       mutation.effectQueue.push({
