@@ -60,8 +60,8 @@ function HomePage() {
           <Background3D onAnimationComplete={handleBackgroundComplete} />
 
           {/* DOM layer ----------------------------------------------------- */}
-          <Scroll html style={{ width: '100vw' }}>
-            <main className="min-h-screen p-6">
+          <Scroll html style={{ width: '100vw', overflowX: 'hidden' }}>
+            <main className="min-h-screen overflow-x-hidden px-3 py-4 sm:p-6">
               {bgAnimationDone && (
                 <>
                   <SectionOne onAnimationComplete={handleSectionOneComplete} />

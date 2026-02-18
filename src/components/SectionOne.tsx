@@ -71,14 +71,14 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
     <section
       id="home"
       aria-labelledby="hero-title"
-      className="relative flex h-screen w-full flex-col items-center justify-between"
+      className="relative flex h-screen w-full flex-col items-center justify-between overflow-hidden"
     >
       {/* ═══════════════════════════════════════════════════════════════════
           TOP: Eyebrow text positioned above the 3D model
           ═══════════════════════════════════════════════════════════════════ */}
       {shown && (
         <motion.div
-          className="relative z-10 pt-0 sm:pt-4 text-center"
+          className="relative z-10 pt-1 sm:pt-4 text-center"
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -100,13 +100,13 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
           ═══════════════════════════════════════════════════════════════════ */}
       {shown && (
         <motion.div
-          className="relative z-10 w-full pb-40"
+          className="relative z-10 w-full pb-24 sm:pb-32 md:pb-36 lg:pb-40"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
           {/* Super compact container - theme aware */}
-          <div className="mx-auto max-w-xl px-2">
+          <div className="mx-auto w-full max-w-xl px-3 sm:px-2">
             <div
               className="
                 relative rounded-lg

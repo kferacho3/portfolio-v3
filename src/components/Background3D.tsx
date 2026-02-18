@@ -1583,7 +1583,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const originalNormals = useRef<Float32Array | null>(null);
   const scroll = useScroll();
   const theatre = useCurrentSheet();
-  const { gl } = useThree();
+  const { gl, viewport } = useThree();
 
   /* shape / material state - always start with FractalCube */
   /* shape / material state - always start with FractalCube */
@@ -2756,31 +2756,40 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - positioned in a ring around the periphery, NOT obstructing center */
+  /* icon positions - keep a tight ring around the center shape, within viewport bounds */
   const iconPositions = useMemo(() => {
     const list: THREE.Vector3[] = [];
-    // Push icons much further out - they orbit at the edges
-    const R = isMobileView ? 2.8 : 3.5; // Increased radius significantly
-    const ySpread = isMobileView ? 0.6 : 0.8; // Limit vertical spread
+    const minViewport = Math.min(viewport.width, viewport.height);
+    const maxX = Math.max(0.95, viewport.width * (isMobileView ? 0.24 : 0.32));
+    const maxY = Math.max(0.55, viewport.height * (isMobileView ? 0.16 : 0.22));
+    const ringRadius = THREE.MathUtils.clamp(
+      minViewport * (isMobileView ? 0.23 : 0.28),
+      isMobileView ? 1.05 : 1.45,
+      isMobileView ? 1.45 : 2.15
+    );
+    const depthRadius = ringRadius * (isMobileView ? 0.32 : 0.42);
+    const verticalJitter = maxY * (isMobileView ? 0.08 : 0.1);
 
     icons.forEach((_, i) => {
-      const θ = (2 * Math.PI * i) / icons.length; // Even distribution around circle
-      // Alternate between upper and lower ring, avoiding center Y
-      const yOffset =
-        (i % 2 === 0 ? 1 : -1) *
-        (ySpread * 0.5 + Math.random() * ySpread * 0.5);
-      const depthOffset = Math.sin(θ * 2) * 0.5; // Slight depth variation
-
-      list.push(
-        new THREE.Vector3(
-          Math.cos(θ) * R,
-          yOffset,
-          Math.sin(θ) * R + depthOffset
-        )
+      const theta =
+        (2 * Math.PI * i) / icons.length + (i % 2 === 0 ? 0.14 : -0.14);
+      const x = THREE.MathUtils.clamp(
+        Math.cos(theta) * ringRadius,
+        -maxX,
+        maxX
       );
+      const yBase = Math.sin(theta * 1.35) * maxY * 0.85;
+      const y = THREE.MathUtils.clamp(
+        yBase + (i % 2 === 0 ? verticalJitter : -verticalJitter),
+        -maxY,
+        maxY
+      );
+      const z = Math.sin(theta * 0.9) * depthRadius;
+
+      list.push(new THREE.Vector3(x, y, z));
     });
     return list;
-  }, [icons.length, isMobileView]);
+  }, [icons.length, isMobileView, viewport.height, viewport.width]);
 
   /* ================================================================
    * Frame-loop setup
@@ -2972,10 +2981,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
     });
 
     /* 7 ▸ icon float ----------------------------------------------------- */
+    const bobAmplitude = isMobileView ? 0.045 : 0.08;
     iconRefs.current.forEach((m, i) => {
       if (!m) return;
       m.rotation.y += 0.01;
-      m.position.y = iconPositions[i].y + Math.sin(clock.elapsedTime + i) * 0.1;
+      m.position.y =
+        iconPositions[i].y + Math.sin(clock.elapsedTime * 0.9 + i) * bobAmplitude;
     });
 
     /* 8 ▸ inertial spin -------------------------------------------------- */
@@ -3160,7 +3171,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
                     speed={isMobileView ? 1.5 : 2}
                     rotationIntensity={0.15}
                     floatIntensity={0.15}
-                    floatingRange={[-0.03, 0.03]}
+                    floatingRange={isMobileView ? [-0.02, 0.02] : [-0.025, 0.025]}
                   >
                     <mesh
                       position={p}
@@ -3170,14 +3181,14 @@ export default function Background3D({ onAnimationComplete }: Props) {
                     >
                       <planeGeometry
                         args={[
-                          isMobileView ? 0.22 : 0.28,
-                          isMobileView ? 0.22 : 0.28,
+                          isMobileView ? 0.18 : 0.26,
+                          isMobileView ? 0.18 : 0.26,
                         ]}
                       />
                       <meshBasicMaterial
                         map={iconTextures[i]}
                         transparent
-                        opacity={0.5}
+                        opacity={isMobileView ? 0.44 : 0.5}
                         side={THREE.DoubleSide}
                       />
                     </mesh>

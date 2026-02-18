@@ -139,30 +139,23 @@ export const featuredWebsites: Project[] = [
   },
   {
     id: 3,
-    title: 'ANTI-HEROES v1',
+    title: 'ANTI-HEROES v2',
     imageDesktop:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/Anti-heroesPreview.webp',
     imageMobile:
-      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
-    link: 'https://main.d38w3p8vlw981a.amplifyapp.com',
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/Anti-heroesPreview.webp',
+    link: 'https://anti-heroes.co',
     description:
-      'Version 1 of the music-portfolio hub for an ATL producer that marries Spotify’s Web API with an advanced FFT audio visualizer. Five visualization modes—Noise, Fractal, Ray-marched ‘Phantom Star’, Orbital Geometry, and Supershape—react to live audio via the Web Audio API and custom GLSL.',
+      'Version 2 of the Anti-Heroes experience, positioned as the primary release with refreshed creative direction and expanded interactive production features.',
     techStack: [
       'TypeScript',
       'React 19',
       'Next.js 15',
       'Three.js',
       'Web Audio API',
-      'Spotify API',
       'GLSL',
     ],
-    frameworks: [
-      'React Three Fiber',
-      'Lamina',
-      '@react-spring/three',
-      'Valtio',
-      'Framer Motion',
-    ],
+    frameworks: ['React Three Fiber', 'Lamina', 'Framer Motion'],
   },
   {
     id: 4,
@@ -208,8 +201,10 @@ export const featuredWebsites: Project[] = [
   {
     id: 6,
     title: 'BT GOD',
-    imageDesktop: '/logo.png',
-    imageMobile: '/logo.png',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/btgodPreview.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/btgodPreview.webp',
     link: 'https://btgod.co',
     description:
       'Main project slot for BT GOD. Designed as a focused digital destination for releases, brand identity, and audience engagement.',
@@ -218,23 +213,30 @@ export const featuredWebsites: Project[] = [
   },
   {
     id: 7,
-    title: 'ANTI-HEROES v2',
+    title: 'ANTI-HEROES v1',
     imageDesktop:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/AntiheroesPreview.webp',
-    link: 'https://anti-heroes.co',
+    link: 'https://main.d38w3p8vlw981a.amplifyapp.com',
     description:
-      'Version 2 of the Anti-Heroes experience, positioned as the primary release with refreshed creative direction and expanded interactive production features.',
+      'Version 1 of the music-portfolio hub for an ATL producer that marries Spotify’s Web API with an advanced FFT audio visualizer. Five visualization modes—Noise, Fractal, Ray-marched ‘Phantom Star’, Orbital Geometry, and Supershape—react to live audio via the Web Audio API and custom GLSL.',
     techStack: [
       'TypeScript',
       'React 19',
       'Next.js 15',
       'Three.js',
       'Web Audio API',
+      'Spotify API',
       'GLSL',
     ],
-    frameworks: ['React Three Fiber', 'Lamina', 'Framer Motion'],
+    frameworks: [
+      'React Three Fiber',
+      'Lamina',
+      '@react-spring/three',
+      'Valtio',
+      'Framer Motion',
+    ],
   },
 ];
 
