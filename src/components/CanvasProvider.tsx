@@ -4,7 +4,7 @@
 import { Canvas } from '@react-three/fiber';
 import { getProject } from '@theatre/core';
 import { SheetProvider } from '@theatre/r3f';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import siteState from '../../site.json';
 
@@ -68,7 +68,21 @@ function getPerfSettings() {
 
 /* ──────────────────────────────────────────  Component  ────────────────── */
 const CanvasProvider: React.FC<CanvasProviderProps> = ({ children }) => {
-  const perf = useMemo(() => getPerfSettings(), []);
+  const [perf, setPerf] = useState(getPerfSettings);
+
+  useEffect(() => {
+    const updatePerf = () => {
+      setPerf(getPerfSettings());
+    };
+
+    window.addEventListener('resize', updatePerf);
+    window.addEventListener('orientationchange', updatePerf);
+
+    return () => {
+      window.removeEventListener('resize', updatePerf);
+      window.removeEventListener('orientationchange', updatePerf);
+    };
+  }, []);
 
   /* graceful handling of context-loss (iOS etc.) */
   useEffect(() => {

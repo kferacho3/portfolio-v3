@@ -474,6 +474,8 @@ export default function PrismJump() {
       'w',
     ],
   });
+  const touchStrafeAxisRef = useRef<0 | 1 | -1>(0);
+  const touchPointerIdRef = useRef<number | null>(null);
 
   const playerRef = useRef<RapierRigidBody | null>(null);
   const platformBodiesRef = useRef<(RapierRigidBody | null)[]>(
@@ -638,6 +640,57 @@ export default function PrismJump() {
   }, [gl, palette.background, palette.fog, scene]);
 
   useEffect(() => {
+    const isUiTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return Boolean(target.closest('button,a,input,textarea,select'));
+    };
+
+    const updateTouchAxis = (clientX: number) => {
+      const width = Math.max(1, window.innerWidth);
+      const leftZone = width * 0.38;
+      const rightZone = width * 0.62;
+      if (clientX <= leftZone) {
+        touchStrafeAxisRef.current = 1;
+      } else if (clientX >= rightZone) {
+        touchStrafeAxisRef.current = -1;
+      } else {
+        touchStrafeAxisRef.current = 0;
+      }
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+      if (isUiTarget(event.target)) return;
+
+      touchPointerIdRef.current = event.pointerId;
+      updateTouchAxis(event.clientX);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (touchPointerIdRef.current !== event.pointerId) return;
+      updateTouchAxis(event.clientX);
+    };
+
+    const clearTouchAxis = (event?: PointerEvent) => {
+      if (event && touchPointerIdRef.current !== event.pointerId) return;
+      touchPointerIdRef.current = null;
+      touchStrafeAxisRef.current = 0;
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointermove', handlePointerMove, { passive: true });
+    window.addEventListener('pointerup', clearTouchAxis);
+    window.addEventListener('pointercancel', clearTouchAxis);
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', clearTouchAxis);
+      window.removeEventListener('pointercancel', clearTouchAxis);
+    };
+  }, []);
+
+  useEffect(() => {
     if (snap.phase !== 'playing') return;
     initializeRun(snap.worldSeed);
   }, [initializeRun, snap.phase, snap.worldSeed]);
@@ -668,6 +721,7 @@ export default function PrismJump() {
     // Camera is angled from the right, so world-axis movement feels inverted on screen.
     if (moveLeft && !moveRight) strafeAxis = 1;
     if (moveRight && !moveLeft) strafeAxis = -1;
+    if (strafeAxis === 0) strafeAxis = touchStrafeAxisRef.current;
     const wantsJump = jumpForward;
 
     if (snap.phase !== 'playing') {

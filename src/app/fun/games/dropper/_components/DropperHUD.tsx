@@ -106,7 +106,9 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
         </div>
       </div>
 
-      <div className="text-xs text-white/40 mt-3">Move mouse to catch!</div>
+      <div className="text-xs text-white/40 mt-3">
+        Drag, move, or tap to catch!
+      </div>
     </div>
 
     {gameOver && (
@@ -119,7 +121,7 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
           </p>
           <p className="text-lg text-white/60 mb-4">Best Combo: {bestCombo}x</p>
           <p className="text-white/50 animate-pulse">
-            Click or Press SPACE to restart
+            Tap/Click or press SPACE to restart
           </p>
         </div>
       </div>

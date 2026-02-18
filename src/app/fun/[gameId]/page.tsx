@@ -12,6 +12,8 @@ import { useRouter } from 'next/navigation';
 import GameLoadingOverlay from '../components/GameLoadingOverlay';
 import GameStartOverlay from '../components/GameStartOverlay';
 import { GameControlPanel, PauseMenu } from '../components/shell';
+import { getGameCard } from '../config/games';
+import { PRISM3D_STUDIO_URL, isGameUnlocked } from '../config/access';
 import {
   useGameUIState,
   useAudioState,
@@ -121,12 +123,53 @@ interface GamePageProps {
   params: { gameId: string };
 }
 
+const LockedGameGate: React.FC<{
+  gameId: GameId;
+  onBackToArcade: () => void;
+}> = ({ gameId, onBackToArcade }) => {
+  const card = getGameCard(gameId);
+  const title = card?.title ?? 'This game';
+
+  return (
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 px-4">
+      <div className="w-full max-w-[640px] rounded-3xl border border-cyan-300/40 bg-slate-950/90 p-7 text-white shadow-2xl backdrop-blur-xl">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-cyan-200/80">
+          Locked In This Arcade
+        </p>
+        <h1 className="mt-3 text-3xl font-black text-white">{title}</h1>
+        <p className="mt-3 text-sm leading-relaxed text-slate-200/85">
+          This title is only available through the full Prism3D catalog.
+          Continue on the main destination to play this game and discover more.
+        </p>
+
+        <div className="mt-7 flex flex-wrap gap-3">
+          <a
+            href={PRISM3D_STUDIO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-2xl border border-cyan-300/45 bg-cyan-400/15 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20"
+          >
+            Visit prism3d.studio
+          </a>
+          <button
+            onClick={onBackToArcade}
+            className="inline-flex items-center rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+          >
+            Back to Arcade
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function GamePage({ params }: GamePageProps) {
   const router = useRouter();
   const gameId = params.gameId as GameId;
 
   // Validate game ID
   const isValidGame = VALID_GAME_IDS.includes(gameId);
+  const isUnlockedGame = isValidGame && isGameUnlocked(gameId);
 
   // Zustand state
   const { paused, showGameRules, restartSeed, health } = useGameUIState();
@@ -140,7 +183,7 @@ export default function GamePage({ params }: GamePageProps) {
   const { setSkyBlitzMode, setReactPongMode } = useGameModeActions();
 
   // Audio
-  useGameAudio(isValidGame ? gameId : 'home');
+  useGameAudio(isUnlockedGame ? gameId : 'home');
 
   // Keyboard controls
   useArcadeKeyboard();
@@ -150,17 +193,24 @@ export default function GamePage({ params }: GamePageProps) {
 
   // Set current game in store on mount
   useEffect(() => {
-    if (isValidGame) {
+    if (isUnlockedGame) {
       setCurrentGame(gameId);
+    } else {
+      setCurrentGame('home');
     }
-  }, [isValidGame, gameId, setCurrentGame]);
+  }, [isUnlockedGame, gameId, setCurrentGame]);
 
   // ReactPong Wall Mode is a no-pause endurance mode.
   useEffect(() => {
-    if (gameId === 'reactpong' && reactPongMode === 'WallMode' && paused) {
+    if (
+      isUnlockedGame &&
+      gameId === 'reactpong' &&
+      reactPongMode === 'WallMode' &&
+      paused
+    ) {
       setPaused(false);
     }
-  }, [gameId, reactPongMode, paused, setPaused]);
+  }, [isUnlockedGame, gameId, reactPongMode, paused, setPaused]);
 
   // Redirect to home if invalid game
   useEffect(() => {
@@ -181,12 +231,12 @@ export default function GamePage({ params }: GamePageProps) {
   >(null);
 
   useEffect(() => {
-    if (!isValidGame) return;
+    if (!isUnlockedGame) return;
     setDeckSessionTag(createDeckSessionTag(gameId, restartSeed));
-  }, [gameId, isValidGame, restartSeed]);
+  }, [gameId, isUnlockedGame, restartSeed]);
 
   useEffect(() => {
-    if (!isValidGame) {
+    if (!isUnlockedGame) {
       setGameEntry(null);
       setLoadingVisible(false);
       return;
@@ -234,7 +284,7 @@ export default function GamePage({ params }: GamePageProps) {
       if (rampTimer) clearInterval(rampTimer);
       if (hideTimer) clearTimeout(hideTimer);
     };
-  }, [gameId, isValidGame]);
+  }, [gameId, isUnlockedGame]);
 
   const startCurrentGame = useCallback(() => {
     if (gameId === 'octasurge') {
@@ -257,7 +307,13 @@ export default function GamePage({ params }: GamePageProps) {
   }, [startCurrentGame]);
 
   useEffect(() => {
-    if (!isValidGame || loadingVisible || hasStarted || gameId === 'octasurge') return;
+    if (
+      !isUnlockedGame ||
+      loadingVisible ||
+      hasStarted ||
+      gameId === 'octasurge'
+    )
+      return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -272,7 +328,7 @@ export default function GamePage({ params }: GamePageProps) {
       window.removeEventListener('pointerdown', handleStart);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isValidGame, loadingVisible, hasStarted, handleStart, gameId]);
+  }, [isUnlockedGame, loadingVisible, hasStarted, handleStart, gameId]);
 
   const gameSnap = useSnapshot(gameEntry?.state ?? EMPTY_PROXY);
   const currentScore = gameEntry?.getScore ? gameEntry.getScore(gameSnap) : 0;
@@ -332,6 +388,18 @@ export default function GamePage({ params }: GamePageProps) {
 
   if (!isValidGame) {
     return null;
+  }
+
+  if (!isUnlockedGame) {
+    return (
+      <LockedGameGate
+        gameId={gameId}
+        onBackToArcade={() => {
+          goHome();
+          router.push('/fun');
+        }}
+      />
+    );
   }
 
   const showStartOverlay =

@@ -40,7 +40,7 @@ const Sidebar = ({ isOpen, toggle }: SidebarProps) => {
   const navLinks = [
     // { href: '/myRoom', label: "Racho's Room" }, // Temporarily hidden
     { href: '/fun', label: "Racho's Arcade" },
-    { href: 'https://www.rachocreates.com', label: "Racho's Creative World" },
+    { href: 'https://prism3d.studio', label: 'Prism3D.studio' },
     { href: 'https://anti-heroes.co/', label: 'Audio Visualizer' },
   ];
 

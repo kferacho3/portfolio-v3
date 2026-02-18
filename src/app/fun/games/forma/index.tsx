@@ -1026,6 +1026,71 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [snap.gameOver, snap.started, moveTiles, initializeGame]);
 
+  // Swipe controls for mobile/tablet
+  useEffect(() => {
+    if (!snap.started || snap.gameOver) return;
+
+    let activePointerId: number | null = null;
+    let startX: number | null = null;
+    let startY: number | null = null;
+    const swipeThreshold = Math.max(
+      26,
+      Math.min(window.innerWidth, window.innerHeight) * 0.045
+    );
+
+    const isUiTarget = (target: EventTarget | null) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return Boolean(target.closest('button,a,input,textarea,select'));
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      if (isUiTarget(event.target)) return;
+
+      activePointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (activePointerId !== event.pointerId) return;
+      if (startX == null || startY == null) return;
+
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+      activePointerId = null;
+      startX = null;
+      startY = null;
+
+      if (Math.abs(dx) < swipeThreshold && Math.abs(dy) < swipeThreshold) {
+        return;
+      }
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        moveTiles(dx > 0 ? 'right' : 'left');
+      } else {
+        moveTiles(dy > 0 ? 'down' : 'up');
+      }
+    };
+
+    const clearSwipe = (event?: PointerEvent) => {
+      if (event && activePointerId !== event.pointerId) return;
+      activePointerId = null;
+      startX = null;
+      startY = null;
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('pointercancel', clearSwipe);
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', clearSwipe);
+    };
+  }, [snap.started, snap.gameOver, moveTiles]);
+
   const handleModeSelect = (size: GridSizeOption) => {
     const nextConfig = GRID_CONFIGS[size];
     setGrid(createEmptyGrid(nextConfig.size));
@@ -1090,7 +1155,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         </div>
 
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
-          <div>WASD or Arrow Keys to merge</div>
+          <div>WASD / Arrow Keys / Swipe to merge</div>
           <div className="text-xs mt-1 text-white/40">
             Red tiles decay - merge them fast!
           </div>

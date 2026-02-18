@@ -106,23 +106,41 @@ const Dropper: React.FC<{ soundsOn?: boolean }> = ({
   );
 
   useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
+    const canvas = gl.domElement;
+    const previousTouchAction = canvas.style.touchAction;
+
+    const syncPlayerFromClientX = (clientX: number) => {
       if (gameOver) return;
-      const rect = gl.domElement.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      playerXRef.current = x * 9;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      playerXRef.current = Math.max(-9, Math.min(9, x * 9));
       setPlayerX(playerXRef.current);
     };
 
-    const handleClick = () => {
+    const handlePointerMove = (event: PointerEvent) => {
+      syncPlayerFromClientX(event.clientX);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (gameOver) reset();
+      syncPlayerFromClientX(event.clientX);
+    };
+
+    const handleWindowClick = () => {
       if (gameOver) reset();
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('click', handleClick);
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('click', handleWindowClick);
+
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('click', handleClick);
+      canvas.style.touchAction = previousTouchAction;
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('click', handleWindowClick);
     };
   }, [gl, gameOver, reset]);
 

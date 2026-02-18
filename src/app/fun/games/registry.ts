@@ -7,6 +7,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import type { GameId, UnlockableSkin } from '../store/types';
+import { isGameUnlocked } from '../config/access';
 
 type GameModule = Record<string, any>;
 
@@ -398,6 +399,10 @@ function buildGameEntry(gameId: GameId, mod: GameModule): LoadedGame {
 const gameCache = new Map<GameId, Promise<LoadedGame>>();
 
 export function loadGame(gameId: GameId): Promise<LoadedGame> {
+  if (!isGameUnlocked(gameId)) {
+    return Promise.reject(new Error(`Game "${gameId}" is locked.`));
+  }
+
   const cached = gameCache.get(gameId);
   if (cached) return cached;
 

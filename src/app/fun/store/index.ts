@@ -17,6 +17,7 @@ import type {
   ShapeShifterMode,
 } from './types';
 import { GAME_CARDS } from '../config/games';
+import { PLAYABLE_GAME_ALLOWLIST } from '../config/access';
 
 /**
  * Total number of games in the arcade
@@ -25,49 +26,9 @@ import { GAME_CARDS } from '../config/games';
 const TOTAL_GAMES = GAME_CARDS.length;
 
 /**
- * Games that should be excluded from random selection
- */
-const EXCLUDED_FROM_RANDOM: GameId[] = ['museum'];
-
-/**
  * All playable game IDs
  */
-const ALL_GAME_IDS: GameId[] = [
-  'geochrome',
-  'shapeshifter',
-  'skyblitz',
-  'dropper',
-  'stackz',
-  'sizr',
-  'pinball',
-  'rollette',
-  'flappybird',
-  'fluxhop',
-  'reactpong',
-  'spinblock',
-  'museum',
-  'gyro',
-  'prism',
-  'forma',
-  'weave',
-  'pave',
-  'voidrunner',
-  'jellyjump',
-  'goup',
-  'steps',
-  'smashhit',
-  'shades',
-  'twodots',
-  'polyforge',
-  'apex',
-  'growth',
-  'polarity',
-  'tetherdrift',
-  'trace',
-  'flipbox',
-  'portalpunch',
-  'conveyorchaos',
-];
+const ALL_GAME_IDS: GameId[] = [...PLAYABLE_GAME_ALLOWLIST];
 
 /**
  * Default state values
@@ -213,9 +174,7 @@ export const useArcadeStore = create<ArcadeStore>()(
 
         launchRandomGame: () => {
           const { currentGame } = get();
-          const playableGames = ALL_GAME_IDS.filter(
-            (id) => id !== currentGame && !EXCLUDED_FROM_RANDOM.includes(id)
-          );
+          const playableGames = ALL_GAME_IDS.filter((id) => id !== currentGame);
 
           if (playableGames.length === 0) return;
 

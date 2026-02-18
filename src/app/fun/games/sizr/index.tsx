@@ -272,7 +272,7 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
   const movingXRef = useRef(-MOVE_RANGE);
   const directionRef = useRef(1);
   const movingMeshRef = useRef<THREE.Mesh>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
 
   // Speed increases with height
   const moveSpeed = useMemo(() => {
@@ -411,6 +411,24 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [placeBlock, reset]);
 
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const previousTouchAction = canvas.style.touchAction;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      placeBlock();
+    };
+
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      canvas.style.touchAction = previousTouchAction;
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [gl, placeBlock]);
+
   // Animation loop
   useFrame((_, delta) => {
     if (gameOver) return;
@@ -471,10 +489,12 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
             )}
           </div>
 
-          <div className="text-xs text-white/40 mt-4">Press SPACE to place</div>
+          <div className="text-xs text-white/40 mt-4">
+            Tap or press SPACE to place
+          </div>
           {gameOver && (
             <div className="text-red-400 mt-2 font-semibold animate-pulse">
-              Missed! Press SPACE to restart
+              Missed! Tap or SPACE to restart
             </div>
           )}
         </div>

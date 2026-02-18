@@ -638,27 +638,48 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
 
   // Mouse control
   useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
+    const canvas = gl.domElement;
+    const previousTouchAction = canvas.style.touchAction;
+
+    const syncPlayerFromClientX = (clientX: number) => {
       if (gameOver || !gameStarted) return;
 
-      const rect = gl.domElement.getBoundingClientRect();
-      const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
 
-      playerXRef.current = x * 7;
+      playerXRef.current = Math.max(-7, Math.min(7, x * 7));
       setPlayerX(playerXRef.current);
     };
 
-    const handleClick = () => {
+    const handlePointerMove = (event: PointerEvent) => {
+      syncPlayerFromClientX(event.clientX);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!gameStarted || gameOver) {
+        reset();
+        return;
+      }
+      syncPlayerFromClientX(event.clientX);
+    };
+
+    const handleWindowClick = () => {
       if (!gameStarted || gameOver) {
         reset();
       }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('click', handleClick);
+    canvas.style.touchAction = 'none';
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('click', handleWindowClick);
+
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('click', handleClick);
+      canvas.style.touchAction = previousTouchAction;
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('click', handleWindowClick);
     };
   }, [gl, gameOver, gameStarted, reset]);
 
@@ -851,7 +872,9 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
             />
           </div>
 
-          <div className="text-xs text-white/40 mt-3">Mouse or A/D to move</div>
+          <div className="text-xs text-white/40 mt-3">
+            Drag/tap or use A/D to move
+          </div>
         </div>
 
         {/* Game Over / Start Screen */}
@@ -882,7 +905,7 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
                 </>
               )}
               <p className="text-white/50 animate-pulse">
-                Click or Press SPACE to {gameOver ? 'restart' : 'start'}
+                Tap/Click or press SPACE to {gameOver ? 'restart' : 'start'}
               </p>
             </div>
           </div>

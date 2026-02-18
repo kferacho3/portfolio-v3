@@ -9,6 +9,7 @@
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
+import { isGameUnlocked } from '../../config/access';
 import { GAME_CARDS, TOTAL_GAMES } from '../../config/games';
 import { getArcadePanelCSS } from '../../config/themes';
 
@@ -26,6 +27,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
   const router = useRouter();
   const [showInfo, setShowInfo] = useState(false);
   const selectedGame = GAME_CARDS[selectedIndex] ?? GAME_CARDS[0];
+  const selectedGameUnlocked = isGameUnlocked(selectedGame.id);
   const panelStyles = getArcadePanelCSS(selectedGame.accent);
 
   // Reset info panel when game changes
@@ -48,7 +50,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
   };
 
   const handlePreloadSelected = () => {
-    if (!selectedGame) return;
+    if (!selectedGame || !selectedGameUnlocked) return;
     // Prefetch the route JS without executing/loading the game module.
     router.prefetch(`/fun/${selectedGame.id}`);
   };
@@ -132,6 +134,14 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
                   <div className="text-base font-semibold text-white/90 md:text-lg truncate text-center md:text-left">
                     {selectedGame.title}
                   </div>
+                  {!selectedGameUnlocked && (
+                    <div
+                      className="text-[9px] uppercase tracking-[0.24em] text-cyan-200/80 text-center md:text-left"
+                      style={{ fontFamily: 'var(--arcade-mono)' }}
+                    >
+                      Locked Here
+                    </div>
+                  )}
                   <div
                     className="text-[10px] uppercase tracking-[0.28em] text-white/40 text-center md:text-left"
                     style={{ fontFamily: 'var(--arcade-mono)' }}
@@ -149,6 +159,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
             </div>
 
             <LaunchButton
+              locked={!selectedGameUnlocked}
               className="w-full justify-center md:w-auto"
               onClick={handleLaunchSelected}
               onPreload={handlePreloadSelected}
@@ -166,6 +177,11 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
               }}
             >
               {selectedGame.description}
+              {!selectedGameUnlocked && (
+                <div className="mt-2 text-cyan-200/90">
+                  Locked in this arcade. Open to visit Prism3D.
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -223,10 +239,11 @@ const InfoButton: React.FC<{
  * Launch/Start button
  */
 const LaunchButton: React.FC<{
+  locked: boolean;
   className?: string;
   onClick: () => void;
   onPreload: () => void;
-}> = ({ className, onClick, onPreload }) => (
+}> = ({ locked, className, onClick, onPreload }) => (
   <button
     onClick={onClick}
     onMouseEnter={onPreload}
@@ -251,12 +268,12 @@ const LaunchButton: React.FC<{
         sizes="16px"
       />
     </span>
-    Play
+    {locked ? 'Unlock' : 'Play'}
     <span
       className="transition-opacity duration-300 group-hover:opacity-80"
-      style={{ color: 'var(--arcade-accent)' }}
+      style={{ color: locked ? '#7de3ff' : 'var(--arcade-accent)' }}
     >
-      ↗
+      {locked ? 'Prism3D ↗' : '↗'}
     </span>
   </button>
 );

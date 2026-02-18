@@ -25,6 +25,7 @@ import { RachosArcade, GameCard } from './components/RachosArcade';
 import ArcadeWorldFX from './components/ArcadeWorldFX';
 import { ArcadeDeck } from './components/shell';
 import { GAME_CARDS } from './config/games';
+import { PRISM3D_STUDIO_URL, isGameUnlocked } from './config/access';
 import { ORBIT_SETTINGS } from './config/themes';
 import { useGameState, useNavigationActions } from './store/selectors';
 import { useAutoCycleGames } from './hooks';
@@ -258,6 +259,10 @@ const ArcadeScene: React.FC<ArcadeSceneProps> = ({
 export default function FunPage() {
   const router = useRouter();
   const [autoCycleEnabled, setAutoCycleEnabled] = useState(false);
+  const [lockedGame, setLockedGame] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
 
   // Zustand state
   const { selectedIndex } = useGameState();
@@ -317,6 +322,15 @@ export default function FunPage() {
   // Handle game launch - navigate to game page
   const handleLaunchGame = useCallback(
     (gameId: string) => {
+      if (!isGameUnlocked(gameId)) {
+        const lockedCard = GAME_CARDS.find((card) => card.id === gameId);
+        setLockedGame({
+          id: gameId,
+          title: lockedCard?.title ?? 'This game',
+        });
+        return;
+      }
+
       router.push(`/fun/${gameId}`);
     },
     [router]
@@ -338,6 +352,38 @@ export default function FunPage() {
         onSelectGame={handleSelectGame}
         onLaunchGame={handleLaunchGame}
       />
+
+      {lockedGame && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 px-4">
+          <div className="w-full max-w-[620px] rounded-3xl border border-cyan-300/35 bg-slate-950/90 p-7 text-white shadow-2xl backdrop-blur-xl">
+            <div className="text-[11px] uppercase tracking-[0.3em] text-cyan-200/75">
+              Locked Game
+            </div>
+            <h2 className="mt-3 text-3xl font-black text-white">{lockedGame.title}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-200/85">
+              This game is locked in this arcade. Play it on the main Prism3D
+              destination with many more games.
+            </p>
+
+            <div className="mt-7 flex flex-wrap gap-3">
+              <a
+                href={PRISM3D_STUDIO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center rounded-2xl border border-cyan-300/45 bg-cyan-400/15 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-300/20"
+              >
+                Visit prism3d.studio
+              </a>
+              <button
+                onClick={() => setLockedGame(null)}
+                className="inline-flex items-center rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white/90 transition hover:bg-white/10"
+              >
+                Back to Lobby
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
