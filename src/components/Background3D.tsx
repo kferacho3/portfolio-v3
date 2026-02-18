@@ -2738,7 +2738,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     () =>
       [...iconPool]
         .sort(() => 0.5 - Math.random())
-        .slice(0, isMobileView ? 6 : 8), // Reduced count to avoid clutter
+        .slice(0, isMobileView ? 8 : 12),
     [isMobileView]
   );
   const iconTextures = useMemo(
@@ -2756,38 +2756,79 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - keep a tight ring around the center shape, within viewport bounds */
+  /* icon positions - spread evenly around the center shape with min-gap separation */
   const iconPositions = useMemo(() => {
     const list: THREE.Vector3[] = [];
-    const minViewport = Math.min(viewport.width, viewport.height);
-    const maxX = Math.max(0.95, viewport.width * (isMobileView ? 0.24 : 0.32));
-    const maxY = Math.max(0.55, viewport.height * (isMobileView ? 0.16 : 0.22));
-    const ringRadius = THREE.MathUtils.clamp(
-      minViewport * (isMobileView ? 0.23 : 0.28),
-      isMobileView ? 1.05 : 1.45,
-      isMobileView ? 1.45 : 2.15
-    );
-    const depthRadius = ringRadius * (isMobileView ? 0.32 : 0.42);
-    const verticalJitter = maxY * (isMobileView ? 0.08 : 0.1);
+    const count = icons.length;
+    if (!count) return list;
 
-    icons.forEach((_, i) => {
-      const theta =
-        (2 * Math.PI * i) / icons.length + (i % 2 === 0 ? 0.14 : -0.14);
+    const maxX = Math.max(1.05, viewport.width * (isMobileView ? 0.26 : 0.34));
+    const maxY = Math.max(0.6, viewport.height * (isMobileView ? 0.18 : 0.24));
+    const radiusX = THREE.MathUtils.clamp(
+      viewport.width * (isMobileView ? 0.18 : 0.23),
+      isMobileView ? 0.95 : 1.25,
+      isMobileView ? 1.35 : 1.95
+    );
+    const radiusY = THREE.MathUtils.clamp(
+      viewport.height * (isMobileView ? 0.13 : 0.18),
+      isMobileView ? 0.62 : 0.84,
+      isMobileView ? 1.0 : 1.38
+    );
+    const radialSwing = isMobileView ? 0.11 : 0.18;
+    const depthStep = isMobileView ? 0.07 : 0.11;
+    const startAngle = -Math.PI / 2;
+
+    for (let i = 0; i < count; i++) {
+      const theta = startAngle + (2 * Math.PI * i) / count;
+      const ringOffset = i % 2 === 0 ? radialSwing : -radialSwing;
       const x = THREE.MathUtils.clamp(
-        Math.cos(theta) * ringRadius,
+        Math.cos(theta) * (radiusX + ringOffset),
         -maxX,
         maxX
       );
-      const yBase = Math.sin(theta * 1.35) * maxY * 0.85;
       const y = THREE.MathUtils.clamp(
-        yBase + (i % 2 === 0 ? verticalJitter : -verticalJitter),
+        Math.sin(theta) * (radiusY + ringOffset * 0.55),
         -maxY,
         maxY
       );
-      const z = Math.sin(theta * 0.9) * depthRadius;
-
+      const z = 0.14 + ((i % 3) - 1) * depthStep;
       list.push(new THREE.Vector3(x, y, z));
-    });
+    }
+
+    const minGap = isMobileView ? 0.46 : 0.64;
+    const delta = new THREE.Vector2();
+    for (let pass = 0; pass < 10; pass++) {
+      let changed = false;
+
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const a = list[i];
+          const b = list[j];
+
+          delta.set(a.x - b.x, a.y - b.y);
+          let dist = delta.length();
+          if (dist === 0) {
+            delta.set(0.001, 0);
+            dist = 0.001;
+          }
+
+          if (dist >= minGap) continue;
+
+          const push = ((minGap - dist) * 0.5) / dist;
+          const pushX = delta.x * push;
+          const pushY = delta.y * push;
+
+          a.x = THREE.MathUtils.clamp(a.x + pushX, -maxX, maxX);
+          a.y = THREE.MathUtils.clamp(a.y + pushY, -maxY, maxY);
+          b.x = THREE.MathUtils.clamp(b.x - pushX, -maxX, maxX);
+          b.y = THREE.MathUtils.clamp(b.y - pushY, -maxY, maxY);
+          changed = true;
+        }
+      }
+
+      if (!changed) break;
+    }
+
     return list;
   }, [icons.length, isMobileView, viewport.height, viewport.width]);
 
@@ -3181,8 +3222,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
                     >
                       <planeGeometry
                         args={[
-                          isMobileView ? 0.18 : 0.26,
-                          isMobileView ? 0.18 : 0.26,
+                          isMobileView ? 0.18 : 0.24,
+                          isMobileView ? 0.18 : 0.24,
                         ]}
                       />
                       <meshBasicMaterial
