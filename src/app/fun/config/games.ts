@@ -5,11 +5,12 @@
  */
 
 import type { GameCard, GameRules, GameId, GameType } from '../store/types';
+import { PLAYABLE_GAME_ALLOWLIST } from './access';
 
 /**
  * Game cards for the arcade carousel
  */
-export const GAME_CARDS: GameCard[] = [
+const BASE_GAME_CARDS: GameCard[] = [
   {
     id: 'geochrome',
     title: 'GeoChrome',
@@ -471,6 +472,31 @@ export const GAME_CARDS: GameCard[] = [
     hotkey: '',
   },
 ];
+
+const UNLOCKED_GAME_ORDER = new Map<string, number>(
+  PLAYABLE_GAME_ALLOWLIST.map((gameId, index) => [gameId, index])
+);
+
+export const GAME_CARDS: GameCard[] = BASE_GAME_CARDS
+  .map((card, originalIndex) => ({
+    card,
+    originalIndex,
+    unlockedOrder: UNLOCKED_GAME_ORDER.get(card.id),
+  }))
+  .sort((a, b) => {
+    const aUnlocked = a.unlockedOrder !== undefined;
+    const bUnlocked = b.unlockedOrder !== undefined;
+
+    if (aUnlocked && bUnlocked) {
+      return (a.unlockedOrder as number) - (b.unlockedOrder as number);
+    }
+    if (aUnlocked !== bUnlocked) {
+      return aUnlocked ? -1 : 1;
+    }
+
+    return a.originalIndex - b.originalIndex;
+  })
+  .map((entry) => entry.card);
 
 /**
  * Game rules for the info panel

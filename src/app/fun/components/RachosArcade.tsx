@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import * as THREE from 'three';
 import { GLTF } from 'three-stdlib';
+import { isGameUnlocked } from '../config/access';
 
 type GLTFResult = GLTF & {
   nodes: Record<string, THREE.Object3D>;
@@ -175,6 +176,139 @@ const getProxyUrl = (url: string) => {
   return url;
 };
 
+const drawRoundedRectPath = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) => {
+  const r = Math.max(0, Math.min(radius, width * 0.5, height * 0.5));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+};
+
+function createLockedPosterTexture(baseTexture: THREE.Texture): THREE.Texture {
+  const image = baseTexture.image as
+    | (CanvasImageSource & { width?: number; height?: number })
+    | undefined;
+  if (!image || typeof image.width !== 'number' || typeof image.height !== 'number') {
+    return baseTexture;
+  }
+
+  const width = Math.max(1, Math.round(image.width));
+  const height = Math.max(1, Math.round(image.height));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return baseTexture;
+
+  ctx.drawImage(image as CanvasImageSource, 0, 0, width, height);
+
+  // Dim poster so locked state is obvious before the badge is read.
+  ctx.fillStyle = 'rgba(6, 10, 18, 0.52)';
+  ctx.fillRect(0, 0, width, height);
+
+  const badgeSize = Math.min(width, height) * 0.3;
+  const badgeCx = width * 0.5;
+  const badgeCy = height * 0.5 - badgeSize * 0.03;
+
+  const gradient = ctx.createRadialGradient(
+    badgeCx,
+    badgeCy - badgeSize * 0.08,
+    badgeSize * 0.1,
+    badgeCx,
+    badgeCy,
+    badgeSize * 0.7
+  );
+  gradient.addColorStop(0, 'rgba(30, 41, 60, 0.94)');
+  gradient.addColorStop(1, 'rgba(5, 10, 22, 0.96)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(badgeCx, badgeCy, badgeSize * 0.62, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(125, 228, 255, 0.95)';
+  ctx.lineWidth = badgeSize * 0.04;
+  ctx.beginPath();
+  ctx.arc(badgeCx, badgeCy, badgeSize * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const bodyW = badgeSize * 0.54;
+  const bodyH = badgeSize * 0.43;
+  const bodyX = badgeCx - bodyW * 0.5;
+  const bodyY = badgeCy - bodyH * 0.02;
+  const lockRadius = bodyW * 0.14;
+
+  ctx.fillStyle = '#dff9ff';
+  drawRoundedRectPath(ctx, bodyX, bodyY, bodyW, bodyH, lockRadius);
+  ctx.fill();
+
+  const shackleRadius = bodyW * 0.28;
+  const shackleCx = badgeCx;
+  const shackleCy = bodyY - bodyH * 0.06;
+  ctx.strokeStyle = '#dff9ff';
+  ctx.lineWidth = badgeSize * 0.062;
+  ctx.beginPath();
+  ctx.arc(shackleCx, shackleCy, shackleRadius, Math.PI * 1.03, Math.PI * 1.97);
+  ctx.stroke();
+
+  ctx.fillStyle = '#0f2535';
+  ctx.beginPath();
+  ctx.arc(badgeCx, bodyY + bodyH * 0.5, bodyW * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(badgeCx - bodyW * 0.035, bodyY + bodyH * 0.5, bodyW * 0.07, bodyH * 0.2);
+
+  const labelHeight = badgeSize * 0.31;
+  const labelY = badgeCy + badgeSize * 0.56;
+  drawRoundedRectPath(
+    ctx,
+    badgeCx - badgeSize * 0.62,
+    labelY - labelHeight * 0.5,
+    badgeSize * 1.24,
+    labelHeight,
+    labelHeight * 0.3
+  );
+  ctx.fillStyle = 'rgba(10, 19, 36, 0.95)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(125, 228, 255, 0.92)';
+  ctx.lineWidth = badgeSize * 0.026;
+  ctx.stroke();
+
+  ctx.fillStyle = '#d4f7ff';
+  ctx.font = `700 ${Math.max(18, badgeSize * 0.18)}px system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('LOCKED', badgeCx, labelY);
+
+  const lockedTexture = new THREE.CanvasTexture(canvas);
+  lockedTexture.colorSpace = baseTexture.colorSpace;
+  lockedTexture.flipY = baseTexture.flipY;
+  lockedTexture.wrapS = baseTexture.wrapS;
+  lockedTexture.wrapT = baseTexture.wrapT;
+  lockedTexture.mapping = baseTexture.mapping;
+  lockedTexture.repeat.copy(baseTexture.repeat);
+  lockedTexture.offset.copy(baseTexture.offset);
+  lockedTexture.center.copy(baseTexture.center);
+  lockedTexture.rotation = baseTexture.rotation;
+  lockedTexture.anisotropy = baseTexture.anisotropy;
+  lockedTexture.needsUpdate = true;
+
+  return lockedTexture;
+}
+
 export function RachosArcade(props: ModelProps) {
   const {
     arcadeRef,
@@ -205,6 +339,7 @@ export function RachosArcade(props: ModelProps) {
   } | null>(null);
 
   const currentGame = games[selectedIndex] || games[0];
+  const currentGameUnlocked = isGameUnlocked(currentGame?.id ?? '');
 
   const { scene, nodes, animations } = useGLTF(
     '/fun/models/rachoArcade.glb',
@@ -521,13 +656,15 @@ export function RachosArcade(props: ModelProps) {
     if (!mesh || !currentGame?.poster) return;
 
     const posterUrl = currentGame.poster;
+    const isLockedPoster = !currentGameUnlocked;
+    const cacheKey = `${posterUrl}::${isLockedPoster ? 'locked' : 'open'}`;
     const proxyUrl = getProxyUrl(posterUrl);
 
     // Check cache first
-    if (textureCache.has(posterUrl)) {
-      const cached = textureCache.get(posterUrl)!;
+    if (textureCache.has(cacheKey)) {
+      const cached = textureCache.get(cacheKey)!;
       cached.lastUsed = Date.now();
-      applyTextureToMesh(mesh, cached.texture);
+      applyTextureToMesh(mesh, cached.texture, isLockedPoster);
       return;
     }
 
@@ -540,21 +677,27 @@ export function RachosArcade(props: ModelProps) {
       (texture) => {
         // Optimize texture size
         const optimizedTexture = optimizeTexture(texture);
+        const finalTexture = isLockedPoster
+          ? createLockedPosterTexture(optimizedTexture)
+          : optimizedTexture;
+        if (finalTexture !== optimizedTexture) {
+          optimizedTexture.dispose();
+        }
 
         // Cache the texture with timestamp
-        textureCache.set(posterUrl, {
-          texture: optimizedTexture,
+        textureCache.set(cacheKey, {
+          texture: finalTexture,
           lastUsed: Date.now(),
         });
 
-        applyTextureToMesh(mesh, optimizedTexture);
+        applyTextureToMesh(mesh, finalTexture, isLockedPoster);
       },
       undefined,
       (error) => {
         console.warn('Failed to load poster texture:', posterUrl, error);
       }
     );
-  }, [currentGame?.poster, screenPlaneConfig]);
+  }, [currentGame?.poster, currentGameUnlocked, screenPlaneConfig]);
 
   // Handle click on the screen mesh to launch game
   const handleScreenClick = useCallback(() => {
@@ -659,7 +802,11 @@ export function RachosArcade(props: ModelProps) {
 }
 
 // Helper function to properly apply texture to mesh
-function applyTextureToMesh(mesh: THREE.Mesh, texture: THREE.Texture) {
+function applyTextureToMesh(
+  mesh: THREE.Mesh,
+  texture: THREE.Texture,
+  locked = false
+) {
   // Configure texture for proper display with memory optimization
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.ClampToEdgeWrapping;
@@ -720,12 +867,13 @@ function applyTextureToMesh(mesh: THREE.Mesh, texture: THREE.Texture) {
       : new THREE.MeshBasicMaterial({
           toneMapped: false,
           side: THREE.DoubleSide,
-          transparent: false,
+          transparent: locked,
         });
 
   material.toneMapped = false;
   material.side = THREE.DoubleSide;
-  material.transparent = false;
+  material.transparent = locked;
+  material.opacity = locked ? 0.74 : 1;
   material.map = texture;
   material.needsUpdate = true;
 
