@@ -37,13 +37,21 @@ function HomePage() {
 
   // Failsafe: never block the DOM content permanently if animation callbacks miss.
   useEffect(() => {
-    const fallback = window.setTimeout(() => setBgAnimationDone(true), 1400);
+    const isMobile = window.innerWidth <= 768;
+    const fallback = window.setTimeout(
+      () => setBgAnimationDone(true),
+      isMobile ? 520 : 980
+    );
     return () => window.clearTimeout(fallback);
   }, []);
 
   useEffect(() => {
     if (!bgAnimationDone || sectionOneDone) return;
-    const fallback = window.setTimeout(() => setSectionOneDone(true), 1400);
+    const isMobile = window.innerWidth <= 768;
+    const fallback = window.setTimeout(
+      () => setSectionOneDone(true),
+      isMobile ? 520 : 980
+    );
     return () => window.clearTimeout(fallback);
   }, [bgAnimationDone, sectionOneDone]);
 

@@ -28,10 +28,15 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
   /* 1. wait for 3-D intro to finish -------------------------------- */
   const [shown, setShown] = useState(false);
   useEffect(() => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const introDelay = reducedMotion ? 120 : isMobile ? 380 : 900;
     const id = setTimeout(() => {
       setShown(true);
       onAnimationComplete();
-    }, 1500);
+    }, introDelay);
     return () => clearTimeout(id);
   }, [onAnimationComplete]);
 
@@ -71,14 +76,14 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
     <section
       id="home"
       aria-labelledby="hero-title"
-      className="relative flex h-screen w-full flex-col items-center justify-between overflow-hidden"
+      className="relative flex min-h-[calc(100svh-74px)] w-full flex-col items-center justify-between overflow-hidden sm:min-h-screen"
     >
       {/* ═══════════════════════════════════════════════════════════════════
           TOP: Eyebrow text positioned above the 3D model
           ═══════════════════════════════════════════════════════════════════ */}
       {shown && (
         <motion.div
-          className="relative z-10 pt-1 sm:pt-4 text-center"
+          className="relative z-10 pt-[max(0.25rem,env(safe-area-inset-top))] sm:pt-4 text-center"
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
@@ -93,20 +98,20 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
       )}
 
       {/* CENTER: Clear zone for 3D model */}
-      <div className="flex-1" aria-hidden="true" />
+      <div className="flex-1 min-h-[32svh] sm:min-h-0" aria-hidden="true" />
 
       {/* ═══════════════════════════════════════════════════════════════════
           BOTTOM: ULTRA COMPACT hero content - FULLY VISIBLE ON LOAD
           ═══════════════════════════════════════════════════════════════════ */}
       {shown && (
         <motion.div
-          className="relative z-10 w-full pb-24 sm:pb-32 md:pb-36 lg:pb-40"
+          className="relative z-10 w-full pb-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] sm:pb-32 md:pb-36 lg:pb-40"
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
           {/* Super compact container - theme aware */}
-          <div className="mx-auto w-full max-w-xl px-3 sm:px-2">
+          <div className="mx-auto w-full max-w-[min(100%,27rem)] sm:max-w-xl px-3 sm:px-2">
             <div
               className="
                 relative rounded-lg

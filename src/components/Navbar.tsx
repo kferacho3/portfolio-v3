@@ -93,6 +93,7 @@ const Navbar: React.FC = () => {
         className={`fixed top-0 left-0 right-0 z-[2147483647] bg-opacity-80 ${
           theme === 'dark' ? 'bg-black' : 'bg-white'
         } backdrop-blur`}
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
         initial={{ y: 0 }}
         animate={{ y: navbarVisible ? 0 : '-100%' }}
         transition={{ duration: 0.3 }}
@@ -226,7 +227,7 @@ const Navbar: React.FC = () => {
         <Sidebar isOpen={isOpen} toggle={handleToggleMenu} />
       </div>
       {/* Adjust padding-top of the content to prevent overlap */}
-      <div style={{ paddingTop: '70px' }}></div>
+      <div style={{ paddingTop: 'calc(env(safe-area-inset-top) + 74px)' }} />
     </>
   );
 };

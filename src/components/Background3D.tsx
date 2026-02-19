@@ -1937,8 +1937,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const getPositionAndScale = () => {
     if (isMobileView) {
       return {
-        position: [0, 0.5, 0] as [number, number, number],
-        scale: 0.7,
+        // Raise and shrink on mobile so CTAs/hero copy never overlap the model.
+        position: [0, 0.9, 0] as [number, number, number],
+        scale: 0.6,
       };
     }
     return {
@@ -2058,7 +2059,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* shape / material state - always start with FractalCube */
   /* shape / material state - always start with FractalCube */
   /* initial value must be a member of the union */
-  const [shape, setShape] = useState<ShapeName>('FractalCube');
+  const [shape, setShape] = useState<ShapeName>('CinquefoilKnot');
   const [bulb, setBulb] =
     useState<Awaited<ReturnType<typeof mandelbulbGeometry>>>();
   /* where the other React states sit, e.g. right after `bulb` */
@@ -2070,8 +2071,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
       >
     >
   >({});
-  const [materialIndex, setMaterialIndex] = useState(4); // Index 4 is meshNormalMaterial
-  const [color, setColor] = useState(randHex());
+  const [materialIndex, setMaterialIndex] = useState(1); // Start with translucent glass
+  const [color, setColor] = useState('#c8e8ff');
   const [wireframe] = useState(false);
   const [shaderSeed, setShaderSeed] = useState(Math.random() * 1000);
   const [isShapePending, startShapeTransition] = useTransition();
@@ -2097,17 +2098,43 @@ export default function Background3D({ onAnimationComplete }: Props) {
     };
   }, []);
 
-  // kick off the worker once
+  // Preload mandelbulb lazily; keep mobile payload lighter.
   useEffect(() => {
     let live = true;
-    mandelbulbGeometry({ dim: 100, maxIterations: 24 }).then((g) => {
-      if (live) setBulb(g);
-    });
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let idleId: number | null = null;
+
+    const start = () => {
+      const config = isMobileView
+        ? { dim: 56, maxIterations: 14 }
+        : { dim: 92, maxIterations: 22 };
+      mandelbulbGeometry(config).then((g) => {
+        if (live) setBulb(g);
+      });
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      idleId = (window as unknown as { requestIdleCallback: Function })
+        .requestIdleCallback(start, { timeout: isMobileView ? 1300 : 800 });
+    } else {
+      timeoutId = setTimeout(start, isMobileView ? 500 : 0);
+    }
+
     return () => {
       live = false;
+      if (
+        idleId !== null &&
+        typeof window !== 'undefined' &&
+        'cancelIdleCallback' in window
+      ) {
+        (window as unknown as { cancelIdleCallback: Function }).cancelIdleCallback(
+          idleId
+        );
+      }
+      if (timeoutId) clearTimeout(timeoutId);
       bulb?.dispose(); // tidy up if the component unmounts
     };
-  }, []);
+  }, [isMobileView]);
 
   useEffect(() => {
     /* run only for the five shader shapes */
@@ -2809,6 +2836,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const localHoverPosRef = useRef(new THREE.Vector3());
   // Add mobile touch position tracking
   const mobileHoverPos = useRef(new THREE.Vector3());
+  const mobileHoverSmoothed = useRef(new THREE.Vector3());
+  const touchPulseRef = useRef(0);
+  const touchReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const lastTouchPos = useRef<{ x: number; y: number } | null>(null);
 
   /* ═══════════════════ CURSOR VELOCITY TRACKING ═══════════════════ */
@@ -2848,14 +2880,21 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
       // For mobile, update the touch position
       if (isMobileView) {
+        if (touchReleaseTimerRef.current) {
+          clearTimeout(touchReleaseTimerRef.current);
+          touchReleaseTimerRef.current = null;
+        }
         const rect = gl.domElement.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
         const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         lastTouchPos.current = { x, y };
         mobileHoverPos.current.set(x * 5, y * 5, 0);
+        mobileHoverSmoothed.current.copy(mobileHoverPos.current);
+        touchPulseRef.current = 1;
+        api.start({ hoverAmp: 1, config: FAST_IN, immediate: true });
       }
     },
-    [gl.domElement, isMobileView]
+    [api, gl.domElement, isMobileView]
   );
 
   const onPointerUp = useCallback(() => {
@@ -2868,9 +2907,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
     vel.current.y = dragVelocity.current.y * 0.5;
     dragIntensity.current = 0;
 
-    // Clear mobile touch position
+    // Retain last touch briefly so the deformation eases out naturally.
     if (isMobileView) {
-      lastTouchPos.current = null;
+      if (touchReleaseTimerRef.current) clearTimeout(touchReleaseTimerRef.current);
+      touchReleaseTimerRef.current = setTimeout(() => {
+        lastTouchPos.current = null;
+      }, 420);
     }
   }, [isMobileView]);
 
@@ -2904,11 +2946,26 @@ export default function Background3D({ onAnimationComplete }: Props) {
         const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         lastTouchPos.current = { x, y };
         mobileHoverPos.current.set(x * 5, y * 5, 0);
+        touchPulseRef.current = Math.min(1.2, touchPulseRef.current + 0.03);
       }
 
       prev.current = { x: e.clientX, y: e.clientY };
     },
     [gl.domElement, isMobileView]
+  );
+
+  const onPointerMoveMesh = useCallback(
+    (e: ThreeEvent<PointerEvent>) => {
+      if (!isMobileView || e.pointerType !== 'touch') return;
+      const rect = gl.domElement.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      lastTouchPos.current = { x, y };
+      mobileHoverPos.current.set(x * 5, y * 5, 0);
+      touchPulseRef.current = Math.min(1.15, touchPulseRef.current + 0.02);
+      api.start({ hoverAmp: 1, config: FAST_IN, immediate: true });
+    },
+    [api, gl.domElement, isMobileView]
   );
 
   /* use _onPointerDown inside the inline handler */
@@ -2932,6 +2989,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      if (touchReleaseTimerRef.current) {
+        clearTimeout(touchReleaseTimerRef.current);
+        touchReleaseTimerRef.current = null;
+      }
     };
   }, [onPointerMove, onPointerUp]); // keep deps minimal
 
@@ -3785,7 +3846,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* icon textures & positions */
   const icons = useMemo(
-    () => iconPool.slice(0, isMobileView ? 15 : 24),
+    () => iconPool.slice(0, isMobileView ? 11 : 24),
     [isMobileView]
   );
   const iconTextures = useMemo(
@@ -3814,11 +3875,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
       0.78,
       1.18
     );
-    const innerRadius = (isMobileView ? 1.35 : 1.72) * viewportScale;
-    const outerRadius = (isMobileView ? 2.02 : 2.56) * viewportScale;
+    const innerRadius = (isMobileView ? 1.12 : 1.72) * viewportScale;
+    const outerRadius = (isMobileView ? 1.72 : 2.56) * viewportScale;
     const minGapSq = (isMobileView ? 0.34 : 0.48) ** 2;
-    const maxY = isMobileView ? 1.16 : 1.44;
-    const minY = isMobileView ? -1.16 : -1.38;
+    const maxY = isMobileView ? 0.98 : 1.44;
+    const minY = isMobileView ? -0.68 : -1.38;
     const points: THREE.Vector3[] = [];
     const canPlace = (candidate: THREE.Vector3) =>
       points.every((existing) => candidate.distanceToSquared(existing) >= minGapSq);
@@ -3901,7 +3962,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     if (scrollProgress > 0.8) {
       scrollApi.set({ scrollPos: [0, 0, 0], scrollScale: [1, 1, 1] });
     } else {
-      const yOffset = scrollProgress * 1.5;
+      const yOffset = scrollProgress * (isMobileView ? 1.05 : 1.5);
       const scaleR = 1 - scrollProgress * 0.3;
       scrollApi.set({
         scrollPos: [0, yOffset, 0],
@@ -3911,9 +3972,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
     /* 3 ▸ world-space pointer (desktop) / last touch (mobile) ------------ */
     if (isMobileView && lastTouchPos.current) {
-      hoverPos.current.copy(mobileHoverPos.current);
+      mobileHoverSmoothed.current.lerp(mobileHoverPos.current, 0.22);
+      hoverPos.current.copy(mobileHoverSmoothed.current);
     } else {
-      hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
+      if (isMobileView) {
+        mobileHoverSmoothed.current.lerp(tmpV.set(0, 0, 0), 0.08);
+        hoverPos.current.copy(mobileHoverSmoothed.current);
+      } else {
+        hoverPos.current.set(pointer.x * 5, pointer.y * 5, 0);
+      }
     }
 
     /* ═══════════════════ CURSOR VELOCITY CALCULATION ═══════════════════ */
@@ -3934,9 +4001,17 @@ export default function Background3D({ onAnimationComplete }: Props) {
     meshRef.current?.worldToLocal(localHoverPos);
 
     /* 4 ▸ base amplitude from hover & drag ------------------------------- */
+    touchPulseRef.current = THREE.MathUtils.damp(
+      touchPulseRef.current,
+      isDragging.current ? 1 : lastTouchPos.current ? 0.38 : 0,
+      6,
+      delta
+    );
+
     const baseAmp =
       hoverMix.current * HOVER_GAIN + // was 0.35
-      (isDragging.current ? DRAG_GAIN * dragIntensity.current : 0); // was 0.45
+      (isDragging.current ? DRAG_GAIN * dragIntensity.current : 0) +
+      (isMobileView ? touchPulseRef.current * 0.85 : 0); // tactile mobile "hover"
 
     /* 5 ▸ vertex displacement ------------------------------------------- */
     if (
@@ -4225,6 +4300,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
                                       : handlePointerLeave
                                   }
                                   onPointerDown={onPointerDownMesh}
+                                  onPointerMove={onPointerMoveMesh}
                                   onClick={handleModelClick}
                                 >
                                   {geometryNode}
@@ -4246,6 +4322,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
                                       : handlePointerLeave
                                   }
                                   onPointerDown={onPointerDownMesh}
+                                  onPointerMove={onPointerMoveMesh}
                                   onClick={handleModelClick}
                                 >
                                   <sphereGeometry args={[1, 32, 32]} />
