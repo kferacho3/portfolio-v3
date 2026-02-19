@@ -29,6 +29,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createNoise3D, createNoise4D } from 'simplex-noise';
@@ -2073,6 +2074,28 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const [color, setColor] = useState(randHex());
   const [wireframe] = useState(false);
   const [shaderSeed, setShaderSeed] = useState(Math.random() * 1000);
+  const [isShapePending, startShapeTransition] = useTransition();
+  const geometryCacheRef = useRef<Map<ShapeName, THREE.BufferGeometry>>(
+    new Map()
+  );
+
+  const getCachedGeometry = useCallback(
+    (kind: ShapeName, factory: () => THREE.BufferGeometry) => {
+      const cached = geometryCacheRef.current.get(kind);
+      if (cached) return cached;
+      const geometry = factory();
+      geometryCacheRef.current.set(kind, geometry);
+      return geometry;
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      geometryCacheRef.current.forEach((g) => g.dispose());
+      geometryCacheRef.current.clear();
+    };
+  }, []);
 
   // kick off the worker once
   useEffect(() => {
@@ -2240,7 +2263,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'GreatIcosahedron':
         return <primitive object={greatIcosahedronGeometry()} />;
       case 'CompoundFiveTetrahedra':
-        return <primitive object={compoundFiveTetrahedraGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => compoundFiveTetrahedraGeometry())}
+          />
+        );
       case 'PlatonicCompound':
         return <primitive object={platonicCompoundGeometry()} />;
       case 'FractalCube':
@@ -2304,23 +2331,33 @@ export default function Background3D({ onAnimationComplete }: Props) {
           <primitive object={apollonianPackingGeometry(3, 3, 0.5, 'pyramid')} />
         );
       case 'MengerSponge':
-        return <primitive object={mengerSpongeGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => mengerSpongeGeometry())} />;
       case 'MengerSpongeDense':
-        return <primitive object={mengerSpongeGeometry(3)} />;
+        return <primitive object={getCachedGeometry(kind, () => mengerSpongeGeometry(3))} />;
       case 'SierpinskiIcosahedron':
-        return <primitive object={sierpinskiIcosahedronGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => sierpinskiIcosahedronGeometry())}
+          />
+        );
       case 'Koch3D':
         return <primitive object={koch3DGeometry()} />;
       case 'Koch3DDeep':
-        return <primitive object={koch3DGeometry(2)} />;
+        return <primitive object={getCachedGeometry(kind, () => koch3DGeometry(2))} />;
       case 'GoursatTetrahedral':
         return <primitive object={goursatTetrahedralGeometry()} />;
       case 'Mandelbox':
-        return <primitive object={mandelboxGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => mandelboxGeometry())} />;
       case 'SierpinskiTetrahedron':
-        return <primitive object={sierpinskiTetrahedronGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => sierpinskiTetrahedronGeometry())}
+          />
+        );
       case 'MagnetFractal':
-        return <primitive object={magnetFractalGeometry()} />;
+        return (
+          <primitive object={getCachedGeometry(kind, () => magnetFractalGeometry())} />
+        );
 
       /* inside makeGeometry switch */
       /* ——— FRACTAL SHADER MODES ——— */
@@ -2372,7 +2409,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'CatenoidSurface':
         return <primitive object={catenoidSurfaceGeometry()} />;
       case 'CostaSurface':
-        return <primitive object={costaSurfaceGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => costaSurfaceGeometry())} />;
       case 'ScherkSurface':
         return <primitive object={scherkSurfaceGeometry()} />;
       case 'DupinCyclide':
@@ -2436,9 +2473,17 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'RhombicDodecahedron':
         return <primitive object={rhombicDodecahedronGeometry()} />;
       case 'Rhombicosidodecahedron':
-        return <primitive object={rhombicosidodecahedronGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => rhombicosidodecahedronGeometry())}
+          />
+        );
       case 'GreatRhombicosidodecahedron':
-        return <primitive object={greatRhombicosidodecahedronGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => greatRhombicosidodecahedronGeometry())}
+          />
+        );
       case 'TruncatedIcosahedron':
         return <primitive object={truncatedIcosahedronGeometry()} />;
       case 'DisdyakisTriacontahedron':
@@ -2475,7 +2520,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
         const rot = get4DRotation(recipe);
         return (
           <primitive
-            object={cell120HullGeometry(rot, recipe.proj4D_distance, 0.9)}
+            object={getCachedGeometry(kind, () =>
+              cell120HullGeometry(rot, recipe.proj4D_distance, 0.9)
+            )}
           />
         );
       }
@@ -2484,7 +2531,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
         const rot = get4DRotation(recipe);
         return (
           <primitive
-            object={cell600HullGeometry(rot, recipe.proj4D_distance, 0.8)}
+            object={getCachedGeometry(kind, () =>
+              cell600HullGeometry(rot, recipe.proj4D_distance, 0.8)
+            )}
           />
         );
       }
@@ -2520,23 +2569,37 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'SchwarzDSurface':
         return <primitive object={schwarzDSurfaceGeometry()} />;
       case 'LidinoidSurface':
-        return <primitive object={lidinoidSurfaceGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => lidinoidSurfaceGeometry())} />;
       case 'IWPSurface':
-        return <primitive object={iwpSurfaceGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => iwpSurfaceGeometry())} />;
       case 'OrthocircleSurface':
-        return <primitive object={orthocircleSurfaceGeometry()} />;
+        return (
+          <primitive object={getCachedGeometry(kind, () => orthocircleSurfaceGeometry())} />
+        );
       case 'ChmutovSurface':
-        return <primitive object={chmutovSurfaceGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => chmutovSurfaceGeometry())} />;
       case 'BarthSexticSurface':
-        return <primitive object={barthSexticSurfaceGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => barthSexticSurfaceGeometry())}
+          />
+        );
       case 'BretzelSurface':
-        return <primitive object={bretzelSurfaceGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => bretzelSurfaceGeometry())} />;
       case 'KummerQuarticSurface':
-        return <primitive object={kummerQuarticSurfaceGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => kummerQuarticSurfaceGeometry())}
+          />
+        );
       case 'ClebschCubicSurface':
-        return <primitive object={clebschCubicSurfaceGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => clebschCubicSurfaceGeometry())}
+          />
+        );
       case 'PilzSurface':
-        return <primitive object={pilzSurfaceGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => pilzSurfaceGeometry())} />;
       case 'Genus2Surface':
         return <primitive object={genus2SurfaceGeometry()} />;
       case 'MetaballSurface':
@@ -2585,19 +2648,27 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'MobiusPrism':
         return <primitive object={mobiusPrismGeometry()} />;
       case 'HopfTori':
-        return <primitive object={hopfToriGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => hopfToriGeometry())} />;
       case 'DiracBelt':
         return <primitive object={diracBeltGeometry()} />;
       case 'Gomboc':
         return <primitive object={gombocGeometry()} />;
       case 'Noperthedron':
-        return <primitive object={noperthedronGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => noperthedronGeometry())} />;
       case 'BianchiPinkallTorus':
-        return <primitive object={bianchiPinkallTorusGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => bianchiPinkallTorusGeometry())}
+          />
+        );
       case 'DecoTetrahedron':
-        return <primitive object={decoTetrahedronGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => decoTetrahedronGeometry())} />;
       case 'AlexanderHornedSphere':
-        return <primitive object={alexanderHornedSphereGeometry()} />;
+        return (
+          <primitive
+            object={getCachedGeometry(kind, () => alexanderHornedSphereGeometry())}
+          />
+        );
       // Advanced Knots
       case 'CelticKnot':
         return <primitive object={celticKnotGeometry()} />;
@@ -2609,16 +2680,16 @@ export default function Background3D({ onAnimationComplete }: Props) {
       case 'SpiralTorus':
         return <primitive object={spiralTorusGeometry()} />;
       case 'VoronoiShell':
-        return <primitive object={voronoiShellGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => voronoiShellGeometry())} />;
       case 'PenroseTiling3D':
-        return <primitive object={penroseTiling3DGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => penroseTiling3DGeometry())} />;
       case 'Hexapod':
         return <primitive object={hexapodGeometry()} />;
       // Minimal Surfaces
       case 'RuledSurface':
         return <primitive object={ruledSurfaceGeometry()} />;
       case 'GyroidMinimal':
-        return <primitive object={gyroidMinimalGeometry()} />;
+        return <primitive object={getCachedGeometry(kind, () => gyroidMinimalGeometry())} />;
       // Polyhedra
       case 'SnubDodecahedron':
         return <primitive object={snubDodecahedronGeometry()} />;
@@ -2965,16 +3036,170 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const getNextMaterialIndex = (current: number) =>
     (current + 1) % TOTAL_MATERIAL_MODES;
 
-  const getNextShapeInPool = (current: ShapeName): ShapeName => {
-    const pool = isMobileView
-      ? SHAPES.filter((name) => !MOBILE_HEAVY_SHAPES.has(name))
-      : SHAPES;
+  const shapeBagRef = useRef<ShapeName[]>([]);
 
-    if (pool.length === 0) return current;
-    const index = pool.indexOf(current);
-    if (index < 0) return pool[0] as ShapeName;
-    return pool[(index + 1) % pool.length] as ShapeName;
-  };
+  const refillShapeBag = useCallback(() => {
+    const bag = [...SHAPES] as ShapeName[];
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    shapeBagRef.current = bag;
+  }, []);
+
+  const getNextShapeInPool = useCallback(
+    (current: ShapeName): ShapeName => {
+      if (shapeBagRef.current.length === 0) refillShapeBag();
+
+      let next = current;
+      let guard = 0;
+      while (next === current && guard < SHAPES.length + 2) {
+        if (shapeBagRef.current.length === 0) refillShapeBag();
+        next = (shapeBagRef.current.pop() ?? current) as ShapeName;
+        guard++;
+      }
+      return next;
+    },
+    [refillShapeBag]
+  );
+
+  const prewarmShape = useCallback(
+    async (kind: ShapeName) => {
+      if (geometryCacheRef.current.has(kind)) return;
+      if (
+        !MOBILE_HEAVY_SHAPES.has(kind) &&
+        kind !== 'CompoundFiveTetrahedra' &&
+        kind !== 'CostaSurface' &&
+        kind !== 'Rhombicosidodecahedron' &&
+        kind !== 'GreatRhombicosidodecahedron' &&
+        kind !== 'Cell120Hull'
+      ) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        const run = () => {
+          try {
+            switch (kind) {
+              case 'CompoundFiveTetrahedra':
+                getCachedGeometry(kind, () => compoundFiveTetrahedraGeometry());
+                break;
+              case 'MagnetFractal':
+                getCachedGeometry(kind, () => magnetFractalGeometry());
+                break;
+              case 'MengerSponge':
+                getCachedGeometry(kind, () => mengerSpongeGeometry());
+                break;
+              case 'MengerSpongeDense':
+                getCachedGeometry(kind, () => mengerSpongeGeometry(3));
+                break;
+              case 'Mandelbox':
+                getCachedGeometry(kind, () => mandelboxGeometry());
+                break;
+              case 'SierpinskiIcosahedron':
+                getCachedGeometry(kind, () => sierpinskiIcosahedronGeometry());
+                break;
+              case 'SierpinskiTetrahedron':
+                getCachedGeometry(kind, () => sierpinskiTetrahedronGeometry());
+                break;
+              case 'Koch3DDeep':
+                getCachedGeometry(kind, () => koch3DGeometry(2));
+                break;
+              case 'CostaSurface':
+                getCachedGeometry(kind, () => costaSurfaceGeometry());
+                break;
+              case 'BarthSexticSurface':
+                getCachedGeometry(kind, () => barthSexticSurfaceGeometry());
+                break;
+              case 'BretzelSurface':
+                getCachedGeometry(kind, () => bretzelSurfaceGeometry());
+                break;
+              case 'KummerQuarticSurface':
+                getCachedGeometry(kind, () => kummerQuarticSurfaceGeometry());
+                break;
+              case 'ClebschCubicSurface':
+                getCachedGeometry(kind, () => clebschCubicSurfaceGeometry());
+                break;
+              case 'PilzSurface':
+                getCachedGeometry(kind, () => pilzSurfaceGeometry());
+                break;
+              case 'LidinoidSurface':
+                getCachedGeometry(kind, () => lidinoidSurfaceGeometry());
+                break;
+              case 'IWPSurface':
+                getCachedGeometry(kind, () => iwpSurfaceGeometry());
+                break;
+              case 'OrthocircleSurface':
+                getCachedGeometry(kind, () => orthocircleSurfaceGeometry());
+                break;
+              case 'ChmutovSurface':
+                getCachedGeometry(kind, () => chmutovSurfaceGeometry());
+                break;
+              case 'Rhombicosidodecahedron':
+                getCachedGeometry(kind, () => rhombicosidodecahedronGeometry());
+                break;
+              case 'GreatRhombicosidodecahedron':
+                getCachedGeometry(kind, () =>
+                  greatRhombicosidodecahedronGeometry()
+                );
+                break;
+              case 'Cell120Hull': {
+                const recipe = getRecipe(kind);
+                const rot = get4DRotation(recipe);
+                getCachedGeometry(kind, () =>
+                  cell120HullGeometry(rot, recipe.proj4D_distance, 0.9)
+                );
+                break;
+              }
+              case 'Cell600Hull': {
+                const recipe = getRecipe(kind);
+                const rot = get4DRotation(recipe);
+                getCachedGeometry(kind, () =>
+                  cell600HullGeometry(rot, recipe.proj4D_distance, 0.8)
+                );
+                break;
+              }
+              case 'Noperthedron':
+                getCachedGeometry(kind, () => noperthedronGeometry());
+                break;
+              case 'BianchiPinkallTorus':
+                getCachedGeometry(kind, () => bianchiPinkallTorusGeometry());
+                break;
+              case 'DecoTetrahedron':
+                getCachedGeometry(kind, () => decoTetrahedronGeometry());
+                break;
+              case 'AlexanderHornedSphere':
+                getCachedGeometry(kind, () => alexanderHornedSphereGeometry());
+                break;
+              case 'HopfTori':
+                getCachedGeometry(kind, () => hopfToriGeometry());
+                break;
+              case 'VoronoiShell':
+                getCachedGeometry(kind, () => voronoiShellGeometry());
+                break;
+              case 'PenroseTiling3D':
+                getCachedGeometry(kind, () => penroseTiling3DGeometry());
+                break;
+              case 'GyroidMinimal':
+                getCachedGeometry(kind, () => gyroidMinimalGeometry());
+                break;
+              default:
+                break;
+            }
+          } finally {
+            resolve();
+          }
+        };
+
+        if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+          (window as any).requestIdleCallback(run, { timeout: 120 });
+        } else {
+          setTimeout(run, 0);
+        }
+      });
+    },
+    [getCachedGeometry]
+  );
 
   const cycleMaterial = () => {
     setMaterialIndex((idx) => getNextMaterialIndex(idx));
@@ -2990,15 +3215,27 @@ export default function Background3D({ onAnimationComplete }: Props) {
     cycleInProgress.current = true;
     shapeApi.start({
       to: async (next) => {
-        await next({ scale: [0, 0, 0] });
+        await next({
+          scale: [0.72, 0.72, 0.72],
+          config: { duration: 160, easing: easings.easeOutCubic },
+        });
 
         const nextShape = getNextShapeInPool(shape);
         console.log('[Background3D] switching to', nextShape);
-        setShape(nextShape);
+        await prewarmShape(nextShape);
+
+        startShapeTransition(() => {
+          setShape(nextShape);
+        });
 
         cycleMaterial();
 
-        await next({ scale: [1, 1, 1] });
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+        await next({
+          scale: [1, 1, 1],
+          config: { duration: 260, easing: easings.easeOutBack },
+        });
       },
       onRest: () => {
         cycleInProgress.current = false;
@@ -3009,7 +3246,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const handleModelClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     // Ignore drag-complete clicks so cycling feels intentional.
-    if (isDragging.current || e.delta > 6) return;
+    if (isShapePending || isDragging.current || e.delta > 6) return;
     if (e.altKey || e.shiftKey || e.metaKey) {
       cycleMaterial();
       return;
@@ -3541,6 +3778,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ),
   ] as const;
 
+  const geometryNode = useMemo(
+    () => makeGeometry(shape),
+    [shape, bulb, shaderCloud, getCachedGeometry]
+  );
+
   /* icon textures & positions */
   const icons = useMemo(
     () => iconPool.slice(0, isMobileView ? 15 : 24),
@@ -3985,7 +4227,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
                                   onPointerDown={onPointerDownMesh}
                                   onClick={handleModelClick}
                                 >
-                                  {makeGeometry(shape)}
+                                  {geometryNode}
                                   {materialFns[materialIndex](envMap)}
                                 </e.mesh>
 
