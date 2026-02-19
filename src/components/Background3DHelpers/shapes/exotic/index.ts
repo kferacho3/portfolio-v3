@@ -218,6 +218,75 @@ export function cliffordTorusProjectionGeometry(
   return geo;
 }
 
+/**
+ * Mobius Prism
+ * A faceted Mobius-like band with a rectangular/prismatic profile.
+ */
+export function mobiusPrismGeometry(
+  radius = 1.0,
+  width = 0.55,
+  thickness = 0.22,
+  uSegments = 180,
+  vSegments = 24
+): THREE.BufferGeometry {
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const U = u * Math.PI * 2;
+    const w = (v - 0.5) * 2;
+
+    // Faceted profile: emphasize edges to feel "prismatic".
+    const faceted = Math.sign(w) * Math.pow(Math.abs(w), 0.35);
+    const profile = faceted * width;
+    const h = thickness * Math.sin(U * 0.5) * (1.0 - Math.abs(w) * 0.55);
+
+    const x = (radius + profile * Math.cos(U * 0.5)) * Math.cos(U);
+    const y = (radius + profile * Math.cos(U * 0.5)) * Math.sin(U);
+    const z = profile * Math.sin(U * 0.5) + h;
+
+    target.set(x, z, y);
+  };
+
+  const geo = new ParametricGeometry(func, uSegments, vSegments);
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
+/**
+ * Hopf Fibered Tori
+ * Family of linked torus rings arranged with Hopf-inspired orientation.
+ */
+export function hopfToriGeometry(
+  count = 7,
+  orbitRadius = 0.7,
+  torusMajor = 0.34,
+  torusTube = 0.05
+): THREE.BufferGeometry {
+  const rings: THREE.BufferGeometry[] = [];
+  const axis = new THREE.Vector3(0, 0, 1);
+
+  for (let i = 0; i < count; i++) {
+    const t = (i / count) * Math.PI * 2;
+    const center = new THREE.Vector3(
+      Math.cos(t) * orbitRadius,
+      Math.sin(t * 2.0) * orbitRadius * 0.45,
+      Math.sin(t) * orbitRadius
+    );
+
+    const torus = new THREE.TorusGeometry(torusMajor, torusTube, 16, 96);
+    const dir = center.clone().normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(axis, dir);
+    torus.applyQuaternion(q);
+    torus.rotateY(t * 0.5);
+    torus.translate(center.x, center.y, center.z);
+    rings.push(torus);
+  }
+
+  const merged = mergeGeometries(rings, false);
+  merged.computeVertexNormals();
+  merged.center();
+  return merged;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ADVANCED KNOTS
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -909,6 +978,8 @@ export const EXOTIC_SHAPES = [
   'WhitneyUmbrella',
   'MonkeySaddle',
   'CliffordTorusProjection',
+  'MobiusPrism',
+  'HopfTori',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',

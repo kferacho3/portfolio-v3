@@ -391,6 +391,8 @@ export const SHAPES = [
   'Koch3D',
   'Koch3DDeep',
   'GoursatTetrahedral',
+  'Mandelbox',
+  'SierpinskiTetrahedron',
   // NEW: Fractal Shaders
   'QuaternionPhoenixShader',
   'ApollonianGasketShader',
@@ -440,6 +442,8 @@ export const SHAPES = [
   'IWPSurface',
   'OrthocircleSurface',
   'ChmutovSurface',
+  'BarthSexticSurface',
+  'BretzelSurface',
   'Genus2Surface',
   'MetaballSurface',
   'BlobbySurface',
@@ -460,6 +464,8 @@ export const SHAPES = [
   'WhitneyUmbrella',
   'MonkeySaddle',
   'CliffordTorusProjection',
+  'MobiusPrism',
+  'HopfTori',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',
@@ -2098,6 +2104,126 @@ export const apollonianPackingGeometry = (
   geom.setIndex(iArr);
   geom.computeVertexNormals();
   geom.computeBoundingSphere();
+  return geom;
+};
+
+/**
+ * Mandelbox fractal mesh built from voxelized escape-time sampling.
+ * Uses classic box-fold + sphere-fold iteration and keeps only interior points.
+ */
+export const mandelboxGeometry = (
+  dim = 20,
+  maxIterations = 12,
+  scaleFactor = -1.8,
+  minRadius = 0.5,
+  fixedRadius = 1.0,
+  span = 1.45,
+  voxelSize = 0.085
+): THREE.BufferGeometry => {
+  const cubes: THREE.BufferGeometry[] = [];
+  const clampedDim = Math.max(8, Math.min(32, Math.floor(dim)));
+  const clampedIters = Math.max(4, Math.min(24, Math.floor(maxIterations)));
+  const minR2 = minRadius * minRadius;
+  const fixedR2 = fixedRadius * fixedRadius;
+  const bailout2 = 12 * 12;
+  const denom = Math.max(1, clampedDim - 1);
+
+  const map = (i: number) => -span + ((2 * span) / denom) * i;
+  const boxFold = (value: number) => {
+    if (value > 1) return 2 - value;
+    if (value < -1) return -2 - value;
+    return value;
+  };
+
+  for (let ix = 0; ix < clampedDim; ix++) {
+    const x = map(ix);
+    for (let iy = 0; iy < clampedDim; iy++) {
+      const y = map(iy);
+      for (let iz = 0; iz < clampedDim; iz++) {
+        const z0 = map(iz);
+        const c = new THREE.Vector3(x, y, z0);
+        const z = c.clone();
+        let escaped = false;
+
+        for (let iter = 0; iter < clampedIters; iter++) {
+          z.set(boxFold(z.x), boxFold(z.y), boxFold(z.z));
+
+          const r2 = z.lengthSq();
+          if (r2 < minR2) {
+            z.multiplyScalar(fixedR2 / minR2);
+          } else if (r2 < fixedR2) {
+            z.multiplyScalar(fixedR2 / Math.max(r2, 1e-6));
+          }
+
+          z.multiplyScalar(scaleFactor).add(c);
+          if (z.lengthSq() > bailout2) {
+            escaped = true;
+            break;
+          }
+        }
+
+        if (!escaped) {
+          const cube = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+          cube.translate(x, y, z0);
+          cubes.push(cube);
+        }
+      }
+    }
+  }
+
+  if (cubes.length === 0) {
+    return new THREE.IcosahedronGeometry(1, 1);
+  }
+
+  const geom = mergeGeometries(cubes);
+  geom.computeBoundingSphere();
+  const radius = geom.boundingSphere?.radius ?? 1;
+  if (radius > 0) geom.scale(1 / radius, 1 / radius, 1 / radius);
+  geom.computeVertexNormals();
+  geom.userData.complexity = 'high';
+  return geom;
+};
+
+/**
+ * Sierpinski tetrahedron (Tetrix) built recursively from tetrahedral copies.
+ */
+export const sierpinskiTetrahedronGeometry = (
+  depth = 3,
+  baseSize = 1.7
+): THREE.BufferGeometry => {
+  const clampedDepth = Math.max(1, Math.min(5, Math.floor(depth)));
+  const leaves: THREE.BufferGeometry[] = [];
+  const offsets = [
+    new THREE.Vector3(1, 1, 1).normalize(),
+    new THREE.Vector3(-1, -1, 1).normalize(),
+    new THREE.Vector3(-1, 1, -1).normalize(),
+    new THREE.Vector3(1, -1, -1).normalize(),
+  ];
+
+  const addNode = (center: THREE.Vector3, size: number, level: number) => {
+    if (level === 0) {
+      const tetra = new THREE.TetrahedronGeometry(size * 0.46, 0);
+      tetra.translate(center.x, center.y, center.z);
+      leaves.push(tetra);
+      return;
+    }
+
+    const childSize = size * 0.5;
+    const childOffset = size * 0.58;
+    for (const dir of offsets) {
+      const nextCenter = center.clone().addScaledVector(dir, childOffset);
+      addNode(nextCenter, childSize, level - 1);
+    }
+  };
+
+  addNode(new THREE.Vector3(0, 0, 0), baseSize, clampedDepth);
+
+  const geom = mergeGeometries(leaves);
+  geom.computeBoundingSphere();
+  const radius = geom.boundingSphere?.radius ?? 1;
+  if (radius > 0) geom.scale(1 / radius, 1 / radius, 1 / radius);
+  geom.computeVertexNormals();
+  geom.userData.complexity = 'high';
   return geom;
 };
 

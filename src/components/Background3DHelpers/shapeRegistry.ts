@@ -632,6 +632,25 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     noiseScaleBias: 0.85,
     preferredMaterials: ['glass', 'thinfilm', 'normal'],
   },
+  Mandelbox: {
+    name: 'Mandelbox',
+    category: 'fractalMesh',
+    complexity: 'high',
+    mobileSafe: false,
+    deformBias: 0.88,
+    noiseScaleBias: 0.82,
+    lowNoise: true,
+    preferredMaterials: ['glass', 'normal', 'wireglow'],
+  },
+  SierpinskiTetrahedron: {
+    name: 'SierpinskiTetrahedron',
+    category: 'fractalMesh',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.95,
+    noiseScaleBias: 0.9,
+    preferredMaterials: ['glass', 'normal', 'wireglow'],
+  },
 
   // ════════════════════ Shader Fractals (Points) ════════════════════
   QuaternionPhoenixShader: {
@@ -915,6 +934,26 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     lowNoise: true,
     preferredMaterials: ['diamond', 'glass', 'matcap'],
   },
+  BarthSexticSurface: {
+    name: 'BarthSexticSurface',
+    category: 'implicit',
+    complexity: 'high',
+    mobileSafe: false,
+    deformBias: 0.7,
+    noiseScaleBias: 0.64,
+    lowNoise: true,
+    preferredMaterials: ['diamond', 'glass', 'thinfilm'],
+  },
+  BretzelSurface: {
+    name: 'BretzelSurface',
+    category: 'implicit',
+    complexity: 'high',
+    mobileSafe: false,
+    deformBias: 0.78,
+    noiseScaleBias: 0.72,
+    lowNoise: true,
+    preferredMaterials: ['glass', 'matcap', 'wireglow'],
+  },
   Genus2Surface: {
     name: 'Genus2Surface',
     category: 'implicit',
@@ -1191,6 +1230,25 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     deformBias: 0.72,
     noiseScaleBias: 0.68,
     preferredMaterials: ['glass', 'diamond', 'holographic'],
+  },
+  MobiusPrism: {
+    name: 'MobiusPrism',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.88,
+    noiseScaleBias: 0.82,
+    preferredMaterials: ['glass', 'thinfilm', 'matcap'],
+  },
+  HopfTori: {
+    name: 'HopfTori',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: false,
+    deformBias: 0.72,
+    noiseScaleBias: 0.68,
+    lowNoise: true,
+    preferredMaterials: ['holographic', 'glass', 'rimglow'],
   },
 
   // ──────────────── Advanced Knots ────────────────

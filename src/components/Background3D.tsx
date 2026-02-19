@@ -72,6 +72,7 @@ import {
   koch3DGeometry,
   /* NEW: Fractals */
   mandelbulbGeometry,
+  mandelboxGeometry,
   mandelbulbSliceGeometry,
   mengerSpongeGeometry,
   /* parametric & special shapes */
@@ -84,6 +85,7 @@ import {
   romanSurfaceGeometry,
   sacredGeometryShape,
   schwarzPGeometry,
+  sierpinskiTetrahedronGeometry,
   sierpinskiIcosahedronGeometry,
   springGeometry,
   starPrismGeometry,
@@ -157,6 +159,8 @@ import {
   iwpSurfaceGeometry,
   orthocircleSurfaceGeometry,
   chmutovSurfaceGeometry,
+  barthSexticSurfaceGeometry,
+  bretzelSurfaceGeometry,
   genus2SurfaceGeometry,
   metaballSurfaceGeometry,
   blobbyOrganicGeometry,
@@ -180,6 +184,8 @@ import {
   whitneyUmbrellaGeometry,
   monkeySaddleGeometry,
   cliffordTorusProjectionGeometry,
+  mobiusPrismGeometry,
+  hopfToriGeometry,
   celticKnotGeometry,
   solomonSealGeometry,
   doubleHelixGeometry,
@@ -306,7 +312,14 @@ type ProceduralPreset =
   | 'IridescentSpectrum'
   | 'AuroraVeins'
   | 'ObsidianPulse'
-  | 'PearlescentShell';
+  | 'PearlescentShell'
+  // NEW: Hyper Coating Pack
+  | 'HologramScan'
+  | 'QuantumFoam'
+  | 'VelvetAnodized'
+  | 'LavaChrome'
+  | 'PrismaticGel'
+  | 'GhostWire';
 
 const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   InkSplatter: 0,
@@ -334,6 +347,13 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   AuroraVeins: 19,
   ObsidianPulse: 20,
   PearlescentShell: 21,
+  // NEW: Hyper Coating Pack
+  HologramScan: 22,
+  QuantumFoam: 23,
+  VelvetAnodized: 24,
+  LavaChrome: 25,
+  PrismaticGel: 26,
+  GhostWire: 27,
 } as const;
 
 const PROCEDURAL_PRESET_META: Record<
@@ -425,6 +445,34 @@ const PROCEDURAL_PRESET_META: Record<
     envIntensity: 3.1,
     transparent: true,
     palette: ['#F8F7FF', '#C8D7FF', '#FFD8E8', '#D2FFF2'],
+  },
+  // NEW: Hyper Coating Pack
+  HologramScan: {
+    envIntensity: 3.7,
+    transparent: true,
+    palette: ['#0A1026', '#00F5FF', '#7A5CFF', '#FFFFFF'],
+  },
+  QuantumFoam: {
+    envIntensity: 2.9,
+    palette: ['#08121A', '#2DE2E6', '#6A4CFF', '#FF4D9E'],
+  },
+  VelvetAnodized: {
+    envIntensity: 2.6,
+    palette: ['#101010', '#2A2A2A', '#B7FF00', '#F2F2F2'],
+  },
+  LavaChrome: {
+    envIntensity: 3.3,
+    palette: ['#120707', '#5A0A0A', '#FF4E11', '#FFE07A'],
+  },
+  PrismaticGel: {
+    envIntensity: 4.2,
+    transparent: true,
+    palette: ['#E7FCFF', '#99F0FF', '#9D8BFF', '#FFE7FA'],
+  },
+  GhostWire: {
+    envIntensity: 3.0,
+    transparent: true,
+    palette: ['#05070D', '#1F2D52', '#6EE7FF', '#E4F9FF'],
   },
 };
 
@@ -954,7 +1002,7 @@ void main() {
 
     metal = 0.75;
     rough = 0.12;
-  } else {
+  } else if (style < 21.5) {
     // 21) PearlescentShell - soft nacre interference
     vec2 q = p * 2.1;
     float t = uTime * 0.25;
@@ -970,6 +1018,95 @@ void main() {
     metal = 0.2;
     rough = 0.18;
     alpha = 0.9;
+  } else if (style < 22.5) {
+    // 22) HologramScan - angular scanlines + chroma rails
+    vec2 q = p * 2.7;
+    float t = uTime * 1.2;
+
+    float scan = sin(vWorldPos.y * 95.0 + t * 7.0) * 0.5 + 0.5;
+    float rails = smoothstep(0.35, 0.95, sin((q.x + q.y) * 8.0 - t * 1.6) * 0.5 + 0.5);
+    float jitter = hash21(floor(q * 8.0 + t));
+
+    v = mix(scan, rails, 0.55);
+    edge = rails * 1.6 + jitter * 0.6;
+
+    metal = 0.45;
+    rough = 0.08;
+    alpha = 0.82;
+  } else if (style < 23.5) {
+    // 23) QuantumFoam - cellular interference bubbles
+    vec2 q = p * 2.4;
+    float t = uTime * 0.35;
+
+    vec2 vd = voronoi2(q + vec2(t, -t * 0.7));
+    float bubble = smoothstep(0.32, 0.02, vd.x);
+    float membrane = smoothstep(0.09, 0.01, vd.y - vd.x);
+    float pulse = 0.6 + 0.4 * sin(t * 4.0 + vd.x * 14.0);
+
+    v = bubble * pulse;
+    edge = membrane * 2.5;
+
+    metal = 0.22;
+    rough = 0.32;
+    alpha = 0.9;
+  } else if (style < 24.5) {
+    // 24) VelvetAnodized - matte body + crisp anodized edge highlights
+    vec2 q = p * 3.0;
+    float grain = fbm(q * 10.0 + uTime * 0.08);
+    float brush = sin(q.x * 24.0 + grain * 6.0) * 0.5 + 0.5;
+    float rimBoost = pow(1.0 - sat(dot(N, V)), 2.0);
+
+    v = grain * 0.65 + brush * 0.35;
+    edge = rimBoost * 1.8;
+
+    metal = 0.3;
+    rough = 0.62;
+  } else if (style < 25.5) {
+    // 25) LavaChrome - chrome shell with molten sub-surface lines
+    vec2 q = p * 2.2;
+    float t = uTime * 0.55;
+
+    float flow = fbm(q * 2.8 + vec2(t, -t * 0.6));
+    vec2 vd = voronoi2(q * 3.6 + t * 0.1);
+    float fissure = smoothstep(0.12, 0.015, vd.y - vd.x);
+    float glow = fissure * (0.65 + 0.35 * sin(t * 3.5 + flow * 8.0));
+
+    v = flow * 0.5;
+    edge = glow * 3.2;
+
+    metal = 0.95;
+    rough = 0.06;
+  } else if (style < 26.5) {
+    // 26) PrismaticGel - translucent gel with slow chroma drift
+    vec2 q = p * 1.8;
+    float t = uTime * 0.2;
+
+    float gel = fbm(q * 2.2 + t);
+    float swirl = sin((q.x * q.y) * 9.0 + t * 3.0 + gel * 4.0) * 0.5 + 0.5;
+    float sparkle = pow(hash21(floor(q * 16.0 + t * 1.2)), 18.0);
+
+    v = mix(gel, swirl, 0.45);
+    edge = swirl * 1.1 + sparkle * 2.3;
+
+    metal = 0.08;
+    rough = 0.09;
+    alpha = 0.84;
+  } else {
+    // 27) GhostWire - x-ray lattice with spectral edge bleed
+    vec2 q = p * 3.8;
+    float t = uTime * 0.9;
+
+    vec2 grid = abs(fract(q) - 0.5);
+    float wire = 1.0 - smoothstep(0.06, 0.11, min(grid.x, grid.y));
+    float pulse = 0.55 + 0.45 * sin(t * 4.0 + length(vWorldPos) * 5.0);
+    float rim = pow(1.0 - sat(dot(N, V)), 2.4);
+
+    v = wire * pulse;
+    edge = wire * 2.2 + rim * 1.2;
+
+    metal = 0.18;
+    rough = 0.24;
+    alpha = 0.68;
   }
 
   // palette blend
@@ -993,8 +1130,13 @@ void main() {
 
   vec3 col = diffuse;
 
-  // diamond: add refraction + fake dispersion
-  if (style > 7.5) {
+  // Refraction-heavy branch only for gem-like styles.
+  bool useRefraction =
+    (style > 7.5 && style < 8.5) ||   // DiamondCaustics
+    (style > 16.5 && style < 17.5) || // DiamondRainbow
+    (style > 25.5 && style < 26.5);   // PrismaticGel
+
+  if (useRefraction) {
     float ior = 2.417;
     vec3 refrR = envRefract(N, V, 1.0 / ior);
     vec3 refrG = envRefract(N, V, 1.0 / (ior * 1.01));
@@ -1104,6 +1246,7 @@ const ROT_LIMIT_X = Math.PI / 2.5; // ~72° – feels natural                // 
 const ROT_LIMIT_Y = Math.PI; // 180° – full spin sideways
 const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'Mandelbulb',
+  'Mandelbox',
   'QuaternionJulia',
   'MengerSpongeDense',
   'GoursatTetrahedral',
@@ -1125,6 +1268,9 @@ const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'IWPSurface',
   'OrthocircleSurface',
   'ChmutovSurface',
+  'BarthSexticSurface',
+  'BretzelSurface',
+  'HopfTori',
 ]);
 /* ────────────────── 4.   Enhanced Materials ──────────────────────────── */
 const NeonMaterial: React.FC<NeonMaterialProps> = ({
@@ -1849,6 +1995,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={koch3DGeometry(2)} />;
       case 'GoursatTetrahedral':
         return <primitive object={goursatTetrahedralGeometry()} />;
+      case 'Mandelbox':
+        return <primitive object={mandelboxGeometry()} />;
+      case 'SierpinskiTetrahedron':
+        return <primitive object={sierpinskiTetrahedronGeometry()} />;
 
       /* inside makeGeometry switch */
       /* ——— FRACTAL SHADER MODES ——— */
@@ -2040,6 +2190,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={orthocircleSurfaceGeometry()} />;
       case 'ChmutovSurface':
         return <primitive object={chmutovSurfaceGeometry()} />;
+      case 'BarthSexticSurface':
+        return <primitive object={barthSexticSurfaceGeometry()} />;
+      case 'BretzelSurface':
+        return <primitive object={bretzelSurfaceGeometry()} />;
       case 'Genus2Surface':
         return <primitive object={genus2SurfaceGeometry()} />;
       case 'MetaballSurface':
@@ -2085,6 +2239,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={monkeySaddleGeometry()} />;
       case 'CliffordTorusProjection':
         return <primitive object={cliffordTorusProjectionGeometry()} />;
+      case 'MobiusPrism':
+        return <primitive object={mobiusPrismGeometry()} />;
+      case 'HopfTori':
+        return <primitive object={hopfToriGeometry()} />;
       // Advanced Knots
       case 'CelticKnot':
         return <primitive object={celticKnotGeometry()} />;
@@ -2128,6 +2286,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
     MengerSpongeDense: 0.95,
     Koch3D: 1.1,
     Koch3DDeep: 0.95,
+    Mandelbox: 0.88,
+    SierpinskiTetrahedron: 0.95,
     TriPrism: 1.15,
     PentPrism: 1.12,
     HexPrism: 1.1,
@@ -2177,6 +2337,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
     IWPSurface: 0.7,
     OrthocircleSurface: 0.76,
     ChmutovSurface: 0.74,
+    BarthSexticSurface: 0.7,
+    BretzelSurface: 0.78,
     Genus2Surface: 0.84,
     MetaballSurface: 0.9,
     BlobbySurface: 0.9,
@@ -2190,6 +2352,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
     WhitneyUmbrella: 0.78,
     MonkeySaddle: 0.82,
     CliffordTorusProjection: 0.74,
+    MobiusPrism: 0.88,
+    HopfTori: 0.72,
   };
 
   /* drag rotation state */
@@ -2427,31 +2591,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
     []
   );
 
-  /* Weighted material picker for better variety */
-  const pickMaterialIndex = () => {
-    const roll = Math.random();
-
-    // Common (original set 0-4): ~26%
-    if (roll < 0.26) return Math.floor(Math.random() * 5);
-
-    // Phase 4 materials (5-9): ~14%
-    if (roll < 0.4) return 5 + Math.floor(Math.random() * 5);
-
-    // Original procedural patterns (10-14): ~12%
-    if (roll < 0.52) return 10 + Math.floor(Math.random() * 5);
-
-    // Original precious metals (15-18): ~8%
-    if (roll < 0.6) return 15 + Math.floor(Math.random() * 4);
-
-    // NEW: Ultra pattern shaders (19-23): ~16%
-    if (roll < 0.76) return 19 + Math.floor(Math.random() * 5);
-
-    // NEW: Legendary precious metal variations (24-27): ~14%
-    if (roll < 0.9) return 24 + Math.floor(Math.random() * 4);
-
-    // NEW: Spectral shader pack (28-31): ~10%
-    return 28 + Math.floor(Math.random() * 4);
-  };
+  const TOTAL_MATERIAL_MODES = 38;
+  const getNextMaterialIndex = (current: number) =>
+    (current + 1) % TOTAL_MATERIAL_MODES;
 
   const getNextShapeInPool = (current: ShapeName): ShapeName => {
     const pool = isMobileView
@@ -2464,8 +2606,18 @@ export default function Background3D({ onAnimationComplete }: Props) {
     return pool[(index + 1) % pool.length] as ShapeName;
   };
 
-  /* click => cycle to next shape */
+  const cycleMaterial = () => {
+    setMaterialIndex((idx) => getNextMaterialIndex(idx));
+    setShaderSeed(Math.random() * 1000);
+    setColor(randHex());
+  };
+
+  const cycleInProgress = useRef(false);
+
+  /* click => cycle to next shape + next material */
   const cycleShape = () => {
+    if (cycleInProgress.current) return;
+    cycleInProgress.current = true;
     shapeApi.start({
       to: async (next) => {
         await next({ scale: [0, 0, 0] });
@@ -2474,12 +2626,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
         console.log('[Background3D] switching to', nextShape);
         setShape(nextShape);
 
-        setMaterialIndex(pickMaterialIndex());
-        setColor(randHex());
-        setShaderSeed(Math.random() * 1000);
-        setWireframe(Math.random() < 0.3);
+        cycleMaterial();
 
         await next({ scale: [1, 1, 1] });
+      },
+      onRest: () => {
+        cycleInProgress.current = false;
       },
     });
   };
@@ -2488,6 +2640,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
     e.stopPropagation();
     // Ignore drag-complete clicks so cycling feels intentional.
     if (isDragging.current || e.delta > 6) return;
+    if (e.altKey || e.shiftKey || e.metaKey) {
+      cycleMaterial();
+      return;
+    }
     cycleShape();
   };
 
@@ -2810,6 +2966,73 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ) : (
         <ProceduralMeshMaterial
           preset="PearlescentShell"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    /* ───── NEW: Hyper Coating Pack ───── */
+    // 32: Hologram Scan
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#5EF8FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="HologramScan"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 33: Quantum Foam
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#4DD7FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="QuantumFoam"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 34: Velvet Anodized
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#B7FF00" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="VelvetAnodized"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 35: Lava Chrome
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FF5F1F" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="LavaChrome"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 36: Prismatic Gel
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#C8D9FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="PrismaticGel"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 37: Ghost Wire
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#A0CCFF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="GhostWire"
           envMap={env}
           seed={shaderSeed}
         />

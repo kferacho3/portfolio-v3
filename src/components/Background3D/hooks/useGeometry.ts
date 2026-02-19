@@ -23,12 +23,17 @@ export const MOBILE_HEAVY_SHAPES: ShapeName[] = [
   'ApollonianPacking',
   'ApollonianPyramid',
   'QuaternionJulia',
+  'Mandelbox',
   'Koch3DDeep',
   'SierpinskiIcosahedron',
+  'SierpinskiTetrahedron',
   'Cell600Hull',
   'VoronoiShell',
   'PenroseTiling3D',
   'GyroidMinimal',
+  'BarthSexticSurface',
+  'BretzelSurface',
+  'HopfTori',
 ];
 
 /**

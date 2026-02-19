@@ -650,6 +650,81 @@ export function chmutovSurfaceGeometry(
   });
 }
 
+/**
+ * Barth Sextic (approximation)
+ * Famous algebraic surface with rich nodal structure and icosahedral symmetry.
+ */
+export function barthSexticSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const phi = (1 + Math.sqrt(5)) / 2;
+  const a = phi * phi;
+
+  const fn: ImplicitFunction = (x, y, z) => {
+    const sx = x * 0.95;
+    const sy = y * 0.95;
+    const sz = z * 0.95;
+    const r2 = sx * sx + sy * sy + sz * sz;
+
+    const p1 = a * sx * sx - sy * sy;
+    const p2 = a * sy * sy - sz * sz;
+    const p3 = a * sz * sz - sx * sx;
+
+    const radial = r2 - 1;
+    return 4 * p1 * p2 * p3 - (1 + 2 * phi) * radial * radial;
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 40,
+    bounds: 1.25,
+    isoValue: 0,
+    scale: 0.86,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
+/**
+ * Bretzel-5 inspired implicit surface
+ * Creates a five-loop pretzel lattice by blending toroidal fields.
+ */
+export function bretzelSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const fn: ImplicitFunction = (x, y, z) => {
+    const loops = 5;
+    const major = 0.62;
+    const minor = 0.22;
+    let field = 0;
+
+    for (let i = 0; i < loops; i++) {
+      const a = (i / loops) * Math.PI * 2;
+      const cx = Math.cos(a) * major;
+      const cz = Math.sin(a) * major;
+      const qx = x - cx;
+      const qz = z - cz;
+      const torus =
+        Math.pow(Math.sqrt(qx * qx + qz * qz) - minor, 2) + y * y - 0.07;
+      field += 0.11 / (Math.abs(torus) + 0.035);
+    }
+
+    return field - 1.18;
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 36,
+    bounds: 1.45,
+    isoValue: 0,
+    scale: 0.78,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    FACTORY FUNCTIONS
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -666,7 +741,9 @@ export type ImplicitSurfaceType =
   | 'blobby'
   | 'torus'
   | 'genus2'
-  | 'chmutov';
+  | 'chmutov'
+  | 'barthSextic'
+  | 'bretzel';
 
 /**
  * Create an implicit surface geometry by name
@@ -700,6 +777,10 @@ export function createImplicitSurface(
       return genus2SurfaceGeometry(params);
     case 'chmutov':
       return chmutovSurfaceGeometry(4, params);
+    case 'barthSextic':
+      return barthSexticSurfaceGeometry(params);
+    case 'bretzel':
+      return bretzelSurfaceGeometry(params);
     default:
       return gyroidSurfaceGeometry(params);
   }
@@ -719,6 +800,8 @@ export function randomImplicitSurfaceType(): ImplicitSurfaceType {
     'orthocircle',
     'metaballs',
     'blobby',
+    'barthSextic',
+    'bretzel',
   ];
   return types[Math.floor(Math.random() * types.length)];
 }
