@@ -2,7 +2,7 @@
 
 import { Html, useAnimations, useCursor, useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
-import { motion } from 'framer-motion';
+import { Variants, motion } from 'framer-motion';
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GLTF } from 'three-stdlib';
@@ -106,7 +106,7 @@ const Indicator: React.FC<{
   onSelect: () => void;
   gradient: string;
 }> = ({ isSelected, hovered, onSelect, gradient }) => {
-  const pulseVariants = (gradient: string) => ({
+  const pulseVariants = (gradient: string): Variants => ({
     initial: { scale: 1, opacity: 0.5 },
     pulse: {
       scale: [1, 1.1, 1],
@@ -114,7 +114,7 @@ const Indicator: React.FC<{
       transition: {
         duration: 1.5,
         repeat: Infinity,
-        ease: 'easeInOut',
+        ease: 'easeInOut' as const,
       },
     },
     hover: {
@@ -123,7 +123,7 @@ const Indicator: React.FC<{
       background: gradient,
       transition: {
         duration: 0.5,
-        ease: 'easeInOut',
+        ease: 'easeInOut' as const,
       },
     },
     selected: {
@@ -132,7 +132,7 @@ const Indicator: React.FC<{
       background: gradient,
       transition: {
         duration: 0.5,
-        ease: 'easeInOut',
+        ease: 'easeInOut' as const,
       },
     },
   });

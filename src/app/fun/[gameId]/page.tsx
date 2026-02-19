@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import GameLoadingOverlay from '../components/GameLoadingOverlay';
 import GameStartOverlay from '../components/GameStartOverlay';
 import { GameControlPanel, PauseMenu } from '../components/shell';
@@ -120,7 +120,7 @@ const SharedCanvasContent = dynamic(
 );
 
 interface GamePageProps {
-  params: { gameId: string };
+  params: Promise<{ gameId: string }>;
 }
 
 const LockedGameGate: React.FC<{
@@ -163,8 +163,9 @@ const LockedGameGate: React.FC<{
   );
 };
 
-export default function GamePage({ params }: GamePageProps) {
+export default function GamePage(_props: GamePageProps) {
   const router = useRouter();
+  const params = useParams<{ gameId: string }>();
   const gameId = params.gameId as GameId;
 
   // Validate game ID

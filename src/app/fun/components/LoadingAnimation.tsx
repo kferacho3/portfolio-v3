@@ -13,7 +13,8 @@ const pacmanChompVariants: Variants = {
     ],
     transition: {
       duration: 0.3,
-      yoyo: Infinity,
+      repeat: Infinity,
+      repeatType: 'reverse',
       repeatDelay: 0.1,
     },
   },

@@ -2202,14 +2202,14 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* ===============  4. Hover timeout (FIX #2)  =============== */
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handlePointerEnter = (e: THREE.Event) => {
+  const handlePointerEnter = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     setHovered(true);
     api.start({ hoverAmp: 1, config: FAST_IN, immediate: true });
   };
 
-  const handlePointerLeave = (e: THREE.Event) => {
+  const handlePointerLeave = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
@@ -2294,7 +2294,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* use _onPointerDown inside the inline handler */
   // The onPointerDownMesh function is correct and requires no changes.
-  const onPointerDownMesh = (e: THREE.Event) => {
+  const onPointerDownMesh = (e: ThreeEvent<PointerEvent>) => {
     setGrabbing(true);
     // useCursor will automatically set cursor to 'grabbing' when grabbing state is true
     onPointerDown(e.nativeEvent as PointerEvent);

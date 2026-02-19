@@ -821,9 +821,15 @@ function applyTextureToMesh(
   normalizeMeshUVs(mesh);
 
   const screenAspect = getMeshAspect(mesh);
+  const textureImage = texture.image as
+    | { width?: number; height?: number }
+    | undefined;
   const imageAspect =
-    texture.image && texture.image.height
-      ? texture.image.width / texture.image.height
+    textureImage &&
+    typeof textureImage.width === 'number' &&
+    typeof textureImage.height === 'number' &&
+    textureImage.height > 0
+      ? textureImage.width / textureImage.height
       : screenAspect;
 
   // Ensure full height is visible - use contain mode (no cropping)

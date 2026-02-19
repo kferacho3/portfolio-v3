@@ -8,14 +8,17 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'zomtech.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.zomtech.com',
+      },
+      {
+        protocol: 'https',
         hostname: 'zom.ai',
       },
     ],
-  },
-  eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors. These should be fixed for code quality.
-    ignoreDuringBuilds: true,
   },
 };
 

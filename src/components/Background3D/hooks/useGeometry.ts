@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useState, useMemo, useEffect } from 'react';
+import type { BufferGeometry } from 'three';
 import {
   SHAPES,
   type ShapeName,
@@ -111,7 +112,7 @@ export function useGeometry(isMobile: boolean = false) {
 /**
  * Validate and fix geometry issues (holes, NaN vertices, etc.)
  */
-export function validateAndFixGeometry(geometry: THREE.BufferGeometry): void {
+export function validateAndFixGeometry(geometry: BufferGeometry): void {
   const positionAttr = geometry.getAttribute('position');
   if (!positionAttr) return;
 

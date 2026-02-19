@@ -13,6 +13,10 @@ type Params = {
   slug: string;
 };
 
+type CaseStudyPageProps = {
+  params: Promise<Params>;
+};
+
 export function generateStaticParams(): Params[] {
   return caseStudyProjects
     .map((project) => project.caseStudy?.slug)
@@ -20,12 +24,10 @@ export function generateStaticParams(): Params[] {
     .map((slug) => ({ slug: slug as string }));
 }
 
-export function generateMetadata({
+export async function generateMetadata({
   params,
-}: {
-  params: Params;
-}): Metadata {
-  const { slug } = params;
+}: CaseStudyPageProps): Promise<Metadata> {
+  const { slug } = await params;
   const project = getProjectByCaseStudySlug(slug);
 
   if (!project || !project.caseStudy) {
@@ -67,12 +69,10 @@ export function generateMetadata({
   };
 }
 
-export default function CaseStudyDetailPage({
+export default async function CaseStudyDetailPage({
   params,
-}: {
-  params: Params;
-}) {
-  const { slug } = params;
+}: CaseStudyPageProps) {
+  const { slug } = await params;
   const project = getProjectByCaseStudySlug(slug);
 
   if (!project || !project.caseStudy) {
