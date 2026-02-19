@@ -231,13 +231,16 @@ import {
   SiJavascript,
   SiNextdotjs,
   SiNodedotjs,
+  SiOpenai,
   SiPostgresql,
   SiPrisma,
   SiReact,
+  SiReactivex,
   SiStripe,
   SiStyledcomponents,
   SiSupabase,
   SiTailwindcss,
+  SiTrpc,
   SiTypescript,
 } from 'react-icons/si';
 
@@ -1366,6 +1369,9 @@ const iconPool = [
   { n: 'Figma', i: SiFigma, c: '#F24E1E' },
   { n: 'Framer', i: SiFramer, c: '#0055FF' },
   { n: 'Blender', i: SiBlender, c: '#F5792A' },
+  { n: 'OpenAI', i: SiOpenai, c: '#10A37F' },
+  { n: 'tRPC', i: SiTrpc, c: '#2596BE' },
+  { n: 'ReactSpring', i: SiReactivex, c: '#7BD88F' },
 ] as const;
 
 /* ────────────── 7.   Theatre wrappers ────────────────────────────── */
@@ -2745,7 +2751,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* icon textures & positions */
   const icons = useMemo(
-    () => iconPool.slice(0, isMobileView ? 12 : 18),
+    () => iconPool.slice(0, isMobileView ? 15 : 24),
     [isMobileView]
   );
   const iconTextures = useMemo(
@@ -2763,104 +2769,115 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - poisson-like annulus sampling with strict spacing */
+  /* icon positions - deterministic multi-ring spacing around the center shape */
   const iconPositions = useMemo(() => {
     const count = icons.length;
     if (!count) return [];
 
-    const maxX = Math.max(1.6, viewport.width * (isMobileView ? 0.42 : 0.52));
-    const maxY = Math.max(0.92, viewport.height * (isMobileView ? 0.29 : 0.36));
-    const minY = -Math.max(0.42, viewport.height * (isMobileView ? 0.1 : 0.13));
+    const maxX = Math.max(1.85, viewport.width * (isMobileView ? 0.48 : 0.58));
+    const maxY = Math.max(1.02, viewport.height * (isMobileView ? 0.34 : 0.41));
+    const minY = -Math.max(0.48, viewport.height * (isMobileView ? 0.12 : 0.16));
+    const centerClearX = isMobileView ? 0.88 : 1.24;
+    const centerClearY = isMobileView ? 0.62 : 0.9;
+    const innerRadiusX = THREE.MathUtils.clamp(
+      viewport.width * (isMobileView ? 0.25 : 0.31),
+      isMobileView ? 1.08 : 1.52,
+      isMobileView ? 1.62 : 2.22
+    );
+    const innerRadiusY = THREE.MathUtils.clamp(
+      viewport.height * (isMobileView ? 0.18 : 0.23),
+      isMobileView ? 0.74 : 1.02,
+      isMobileView ? 1.08 : 1.48
+    );
     const outerRadiusX = THREE.MathUtils.clamp(
-      viewport.width * (isMobileView ? 0.3 : 0.38),
-      isMobileView ? 1.3 : 1.95,
-      isMobileView ? 2.05 : 3.0
+      viewport.width * (isMobileView ? 0.39 : 0.5),
+      isMobileView ? 1.58 : 2.26,
+      isMobileView ? 2.42 : 3.42
     );
     const outerRadiusY = THREE.MathUtils.clamp(
-      viewport.height * (isMobileView ? 0.22 : 0.29),
-      isMobileView ? 0.86 : 1.24,
-      isMobileView ? 1.45 : 2.02
+      viewport.height * (isMobileView ? 0.27 : 0.35),
+      isMobileView ? 1.0 : 1.36,
+      isMobileView ? 1.68 : 2.34
     );
-    const centerClearX = isMobileView ? 0.82 : 1.18;
-    const centerClearY = isMobileView ? 0.58 : 0.84;
-    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-    const depthStep = isMobileView ? 0.055 : 0.085;
-    const fract = (value: number) => value - Math.floor(value);
+    const ringCount = isMobileView ? 3 : 4;
+    const perRingBase = Math.floor(count / ringCount);
+    const perRingRemainder = count % ringCount;
+    const minGapSq = (isMobileView ? 0.34 : 0.48) ** 2;
+    const yBias = isMobileView ? 0.04 : 0.06;
+    const depthStep = isMobileView ? 0.05 : 0.075;
+    const points: THREE.Vector3[] = [];
 
-    const generatePoints = (minGap: number) => {
-      const points: THREE.Vector3[] = [];
-      const minGapSq = minGap * minGap;
-      const attempts = count * 220;
+    for (let ring = 0; ring < ringCount; ring++) {
+      const ringItemCount = perRingBase + (ring < perRingRemainder ? 1 : 0);
+      if (!ringItemCount) continue;
 
-      for (let attempt = 0; attempt < attempts && points.length < count; attempt++) {
-        const angle = attempt * goldenAngle;
-        const radialT = fract(attempt * 0.754877666 + 0.3125);
-        const ringFactor = THREE.MathUtils.lerp(0.56, 1, Math.sqrt(radialT));
-        const x = THREE.MathUtils.clamp(
-          Math.cos(angle) * outerRadiusX * ringFactor,
-          -maxX,
-          maxX
-        );
+      const ringT = ring / (ringCount - 1);
+      const ringRadiusX = THREE.MathUtils.lerp(innerRadiusX, outerRadiusX, ringT);
+      const ringRadiusY = THREE.MathUtils.lerp(innerRadiusY, outerRadiusY, ringT);
+      const angleStep = (Math.PI * 2) / ringItemCount;
+      const phase =
+        (ring % 2 === 0 ? 0 : Math.PI / ringItemCount) + ring * 0.21;
+
+      for (let idx = 0; idx < ringItemCount; idx++) {
+        let angle = phase + idx * angleStep;
+        let candidateX = 0;
+        let candidateY = 0;
+        let accepted = false;
+
+        for (let attempt = 0; attempt < 3; attempt++) {
+          candidateX = THREE.MathUtils.clamp(
+            Math.cos(angle) * ringRadiusX,
+            -maxX,
+            maxX
+          );
+          candidateY = THREE.MathUtils.clamp(
+            Math.sin(angle) * ringRadiusY - yBias,
+            minY,
+            maxY
+          );
+
+          const centerRatio =
+            (candidateX * candidateX) / (centerClearX * centerClearX) +
+            (candidateY * candidateY) / (centerClearY * centerClearY);
+          if (centerRatio < 1) {
+            angle += angleStep * 0.35;
+            continue;
+          }
+
+          accepted = points.every((existing) => {
+            const dx = candidateX - existing.x;
+            const dy = candidateY - existing.y;
+            return dx * dx + dy * dy >= minGapSq;
+          });
+          if (accepted) break;
+
+          angle += angleStep * 0.27;
+        }
+
+        if (!accepted && points.length >= count) continue;
+
+        const depthLane = (ring + idx) % 5;
+        const z = 0.06 + depthLane * depthStep;
+        points.push(new THREE.Vector3(candidateX, candidateY, z));
+      }
+    }
+
+    if (points.length < count) {
+      const remaining = count - points.length;
+      for (let idx = 0; idx < remaining; idx++) {
+        const theta = -Math.PI / 2 + (2 * Math.PI * idx) / remaining;
+        const x = THREE.MathUtils.clamp(Math.cos(theta) * outerRadiusX, -maxX, maxX);
         const y = THREE.MathUtils.clamp(
-          Math.sin(angle) * outerRadiusY * ringFactor,
+          Math.sin(theta) * outerRadiusY - yBias,
           minY,
           maxY
         );
-
-        const centerRatio =
-          (x * x) / (centerClearX * centerClearX) +
-          (y * y) / (centerClearY * centerClearY);
-        if (centerRatio < 1) continue;
-
-        let tooClose = false;
-        for (let i = 0; i < points.length; i++) {
-          const p = points[i];
-          const dx = x - p.x;
-          const dy = y - p.y;
-          if (dx * dx + dy * dy < minGapSq) {
-            tooClose = true;
-            break;
-          }
-        }
-        if (tooClose) continue;
-
-        const depthLane = points.length % 4;
-        const z =
-          0.08 +
-          depthLane * depthStep +
-          (depthLane % 2 === 0 ? depthStep * 0.18 : -depthStep * 0.18);
+        const z = 0.06 + ((idx % 5) + 1) * depthStep;
         points.push(new THREE.Vector3(x, y, z));
       }
-
-      return points;
-    };
-
-    let best: THREE.Vector3[] = [];
-    const initialGap = isMobileView ? 0.46 : 0.62;
-    const minimumGap = isMobileView ? 0.34 : 0.46;
-
-    for (let gap = initialGap; gap >= minimumGap; gap *= 0.9) {
-      const candidate = generatePoints(gap);
-      if (candidate.length > best.length) best = candidate;
-      if (candidate.length === count) {
-        best = candidate;
-        break;
-      }
     }
 
-    if (best.length < count) {
-      const remaining = count - best.length;
-      const startAngle = -Math.PI / 2;
-      for (let i = 0; i < remaining; i++) {
-        const theta = startAngle + (2 * Math.PI * i) / remaining;
-        const x = THREE.MathUtils.clamp(Math.cos(theta) * outerRadiusX, -maxX, maxX);
-        const y = THREE.MathUtils.clamp(Math.sin(theta) * outerRadiusY, minY, maxY);
-        const z = 0.08 + ((best.length % 4) + 1) * depthStep;
-        best.push(new THREE.Vector3(x, y, z));
-      }
-    }
-
-    return best.slice(0, count);
+    return points.slice(0, count);
   }, [icons.length, isMobileView, viewport.height, viewport.width]);
 
   /* ================================================================
@@ -3053,7 +3070,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     });
 
     /* 7 ▸ icon float ----------------------------------------------------- */
-    const bobAmplitude = isMobileView ? 0.03 : 0.05;
+    const bobAmplitude = isMobileView ? 0.018 : 0.028;
     iconRefs.current.forEach((m, i) => {
       if (!m) return;
       m.rotation.y += 0.01;
@@ -3240,10 +3257,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
                 {iconPositions.map((p, i) => (
                   <Float
                     key={i}
-                    speed={isMobileView ? 1.5 : 2}
-                    rotationIntensity={0.15}
-                    floatIntensity={0.12}
-                    floatingRange={isMobileView ? [-0.014, 0.014] : [-0.018, 0.018]}
+                    speed={isMobileView ? 1.15 : 1.5}
+                    rotationIntensity={0.1}
+                    floatIntensity={0.08}
+                    floatingRange={isMobileView ? [-0.01, 0.01] : [-0.014, 0.014]}
                   >
                     <mesh
                       position={p}

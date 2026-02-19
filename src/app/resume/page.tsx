@@ -6,44 +6,65 @@ const canonicalUrl = 'https://www.rachocreates.com/resume';
 export const metadata: Metadata = {
   title: 'Resume',
   description:
-    'ATS-friendly resume for Kamal Feracho, full-stack engineer specializing in product UI systems, API integrations, and interactive 3D experiences.',
+    'ATS-friendly resume for Kamal Feracho across Front-End/Full-Stack Engineering and Product/Brand Design.',
   alternates: {
     canonical: canonicalUrl,
   },
   openGraph: {
     title: 'Kamal Feracho Resume',
     description:
-      'ATS-friendly resume covering engineering experience, skills, and selected projects.',
+      'ATS-friendly resume covering engineering and product design experience, skills, and selected case studies.',
     url: canonicalUrl,
     type: 'profile',
   },
 };
 
 export default function ResumePage() {
+  const skillKeywords = Array.from(
+    new Set(
+      resumeData.tracks.flatMap((track) =>
+        track.skills.flatMap((group) => group.items)
+      )
+    )
+  );
+
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'Person',
     name: resumeData.name,
-    jobTitle: 'Full-Stack Engineer',
-    email: resumeData.email,
+    jobTitle: 'Front-End Engineer and Product Designer',
+    telephone: resumeData.phone,
+    email: `mailto:${resumeData.email}`,
     url: resumeData.website,
     sameAs: [resumeData.github, resumeData.linkedin],
-    knowsAbout: resumeData.skills.flatMap((group) => group.items),
+    knowsAbout: skillKeywords,
+    hasOccupation: resumeData.tracks.map((track) => ({
+      '@type': 'Occupation',
+      name: track.title,
+    })),
+    alumniOf: {
+      '@type': 'CollegeOrUniversity',
+      name: 'Georgia Institute of Technology',
+      sameAs: 'https://www.gatech.edu/',
+    },
   };
 
   return (
-    <main className="mx-auto max-w-4xl px-4 pb-16 pt-20 text-slate-900 dark:text-slate-100">
+    <main className="mx-auto max-w-5xl px-4 pb-20 pt-24 text-sm leading-6 text-slate-900 dark:text-slate-100">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
       />
 
-      <article className="rounded-lg border border-slate-300 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-950">
-        <header className="border-b border-slate-300 pb-5 dark:border-slate-700">
+      <article className="rounded-lg border border-slate-300 bg-white p-6 dark:border-slate-700 dark:bg-slate-950 sm:p-8">
+        <header className="border-b border-slate-300 pb-6 dark:border-slate-700">
           <h1 className="text-3xl font-bold">{resumeData.name}</h1>
-          <p className="mt-1 text-sm">{resumeData.headline}</p>
-          <p className="mt-1 text-sm">{resumeData.location}</p>
-          <p className="mt-3 text-sm">
+          <p className="mt-2">{resumeData.location}</p>
+          <p className="mt-1">
+            <a href={`tel:${resumeData.phone.replace(/[^\d+]/g, '')}`} className="underline">
+              {resumeData.phone}
+            </a>{' '}
+            |{' '}
             <a href={`mailto:${resumeData.email}`} className="underline">
               {resumeData.email}
             </a>{' '}
@@ -66,47 +87,95 @@ export default function ResumePage() {
           </p>
         </header>
 
-        <section className="mt-6">
-          <h2 className="text-xl font-semibold">Summary</h2>
-          <p className="mt-2 text-sm leading-6">{resumeData.summary}</p>
-        </section>
+        {resumeData.tracks.map((track) => (
+          <section
+            key={track.id}
+            aria-labelledby={`track-${track.id}`}
+            className="mt-8 border-b border-slate-300 pb-8 last:border-b-0 dark:border-slate-700"
+          >
+            <h2 id={`track-${track.id}`} className="text-2xl font-bold">
+              {track.title}
+            </h2>
+            <p className="mt-1 font-semibold">{track.headline}</p>
 
-        <section className="mt-6">
-          <h2 className="text-xl font-semibold">Core Skills</h2>
-          <div className="mt-3 space-y-2">
-            {resumeData.skills.map((group) => (
-              <p key={group.label} className="text-sm">
-                <span className="font-semibold">{group.label}:</span>{' '}
-                {group.items.join(', ')}
-              </p>
-            ))}
-          </div>
-        </section>
+            <section className="mt-5">
+              <h3 className="text-lg font-semibold">Professional Summary</h3>
+              <p className="mt-2">{track.summary}</p>
+            </section>
 
-        <section className="mt-6">
-          <h2 className="text-xl font-semibold">Professional Experience</h2>
-          <div className="mt-3 space-y-5">
-            {resumeData.experience.map((item) => (
-              <div key={`${item.company}-${item.role}`}>
-                <p className="text-sm font-semibold">
-                  {item.role} | {item.company} | {item.period}
-                </p>
-                <ul className="mt-2 list-disc pl-5 text-sm leading-6">
-                  {item.bullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
+            <section className="mt-5">
+              <h3 className="text-lg font-semibold">Core Skills</h3>
+              <ul className="mt-2 list-disc pl-5">
+                {track.skills.map((group) => (
+                  <li key={`${track.id}-${group.label}`}>
+                    <span className="font-semibold">{group.label}:</span>{' '}
+                    {group.items.join(', ')}
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="mt-5">
+              <h3 className="text-lg font-semibold">Experience</h3>
+              <div className="mt-3 space-y-5">
+                {track.experience.map((item) => (
+                  <article key={`${track.id}-${item.company}-${item.role}`}>
+                    <p className="font-semibold">
+                      {item.role} | {item.company} | {item.period}
+                    </p>
+                    {item.link ? (
+                      <p>
+                        <a
+                          href={item.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline"
+                        >
+                          {item.link}
+                        </a>
+                      </p>
+                    ) : null}
+                    <ul className="mt-2 list-disc pl-5">
+                      {item.bullets.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <section className="mt-5">
+              <h3 className="text-lg font-semibold">Education</h3>
+              <ul className="mt-2 list-disc pl-5">
+                {track.education.map((item) => (
+                  <li key={`${track.id}-${item.school}-${item.period}`}>
+                    {item.degree} | {item.school} | {item.location} |{' '}
+                    {item.period}
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {track.language?.length ? (
+              <section className="mt-5">
+                <h3 className="text-lg font-semibold">Language</h3>
+                <ul className="mt-2 list-disc pl-5">
+                  {track.language.map((item) => (
+                    <li key={`${track.id}-${item}`}>{item}</li>
                   ))}
                 </ul>
-              </div>
-            ))}
-          </div>
-        </section>
+              </section>
+            ) : null}
+          </section>
+        ))}
 
-        <section className="mt-6">
-          <h2 className="text-xl font-semibold">Selected Projects</h2>
+        <section className="mt-8">
+          <h2 className="text-2xl font-bold">Selected Projects and Case Studies</h2>
           <div className="mt-3 space-y-5">
             {resumeData.selectedProjects.map((project) => (
-              <div key={project.title}>
-                <p className="text-sm font-semibold">
+              <article key={project.title}>
+                <p className="font-semibold">
                   <a
                     href={project.link}
                     target="_blank"
@@ -116,12 +185,23 @@ export default function ResumePage() {
                     {project.title}
                   </a>
                 </p>
-                <ul className="mt-2 list-disc pl-5 text-sm leading-6">
+                <p>{project.focus}</p>
+                <ul className="mt-2 list-disc pl-5">
                   {project.bullets.map((bullet) => (
                     <li key={bullet}>{bullet}</li>
                   ))}
                 </ul>
-              </div>
+                {project.caseStudySlug ? (
+                  <p className="mt-2">
+                    <a
+                      href={`/case-studies/${project.caseStudySlug}`}
+                      className="underline"
+                    >
+                      Case study: /case-studies/{project.caseStudySlug}
+                    </a>
+                  </p>
+                ) : null}
+              </article>
             ))}
           </div>
         </section>

@@ -212,7 +212,41 @@ export const featuredWebsites: Project[] = [
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/WardrobeXPreview.webp',
     link: 'https://www.wardrobex.io/',
     description:
-      'An immersive Web 3.0 wardrobe marketplace (formerly Web3Outfitters) for digital wearables and NFTs. Built with Next.js, React Three Fiber, Zustand state management, and AWS Amplify hosting. Features on-chain metadata rendering, drag-and-drop 3D closets, wallet-gated routes, and smooth physics-based interactions via @react-three/cannon. Styled-Components handle theming, while React-Spring drives page-level transitions.',
+      'Immersive 3D wardrobe marketplace rebuilt for performance and scale. Migrated to modern Next.js routing and dynamic loading while preserving rich interactive closet behavior and high-volume product browsing.',
+    highlights: [
+      'Re-architected the storefront into a 3D closet experience with React Three Fiber and custom PBR shaders.',
+      'Validated stronger engagement with Hotjar scroll-depth and session-time metrics.',
+      'Migrated to Next.js App Router plus dynamic imports and edge functions to reduce first-byte latency.',
+      'Implemented virtualized product browsing for 1k to 10k SKUs while keeping mobile CLS under 0.1.',
+    ],
+    caseStudy: {
+      slug: 'wardrobex-3d-commerce',
+      oneLiner:
+        '3D commerce rebuild focused on engagement, runtime performance, and catalog-scale UX.',
+      role: 'Lead Front-End Engineer',
+      challenge:
+        'Preserve an immersive 3D shopping identity while improving load behavior, navigation speed, and large-catalog browsing performance.',
+      constraints: [
+        'Complex 3D interaction layer had to remain central to product identity.',
+        'Catalog size ranged from 1k to 10k products under mobile performance constraints.',
+        'Migration needed to avoid downtime while replacing routing and loading behavior.',
+      ],
+      architecture: [
+        'Moved platform routing to Next.js App Router with dynamic import boundaries.',
+        'Split interactive closet surfaces from product-feed virtualization paths.',
+        'Used edge-aware rendering and data-loading patterns for faster first response.',
+      ],
+      execution: [
+        'Reworked closet scene interactions with custom PBR shader behavior.',
+        'Implemented React-Window virtualization for high-cardinality product grids.',
+        'Validated lighthouse and CLS targets during rollout across device classes.',
+      ],
+      outcomes: [
+        'Improved first-byte latency and perceived load responsiveness.',
+        'Sustained immersive 3D UX while scaling catalog browsing.',
+        'Maintained CLS below 0.1 on mobile for key commerce surfaces.',
+      ],
+    },
     techStack: [
       'TypeScript',
       'React 19',
@@ -237,7 +271,7 @@ export const featuredWebsites: Project[] = [
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/Anti-heroesPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/Anti-heroesPreview.webp',
-    link: 'https://anti-heroes.co',
+    link: 'https://antiheroes.co/',
     description:
       'Remodeled primary release of Anti-Heroes with a simplified runtime architecture focused on faster loads, more stable playback, and cleaner traffic paths from social/stream audiences.',
     highlights: [

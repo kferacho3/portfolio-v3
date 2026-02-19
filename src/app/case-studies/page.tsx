@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import TrackedAnchor from '@/components/TrackedAnchor';
 import { caseStudyProjects } from '@/components/SectionThreeData';
 
 export const metadata: Metadata = {
@@ -59,20 +59,30 @@ export default function CaseStudiesPage() {
               </div>
 
               <div className="mt-6 flex gap-3">
-                <Link
+                <TrackedAnchor
+                  action="open_case_study_listing_card"
+                  category="case-studies"
                   href={`/case-studies/${caseStudy.slug}`}
+                  projectSlug={caseStudy.slug}
+                  projectTitle={project.title}
+                  projectUrl={project.link}
                   className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white dark:bg-white dark:text-slate-900"
                 >
                   Read Case Study
-                </Link>
-                <a
+                </TrackedAnchor>
+                <TrackedAnchor
+                  action="visit_live_project_listing"
+                  category="case-studies"
                   href={project.link}
+                  projectSlug={caseStudy.slug}
+                  projectTitle={project.title}
+                  projectUrl={project.link}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-lg border border-gray-300/70 px-4 py-2 text-sm font-semibold text-foreground dark:border-white/20"
                 >
                   Live Project
-                </a>
+                </TrackedAnchor>
               </div>
             </article>
           );
