@@ -24,6 +24,7 @@ export const MOBILE_HEAVY_SHAPES: ShapeName[] = [
   'ApollonianPyramid',
   'QuaternionJulia',
   'Mandelbox',
+  'MagnetFractal',
   'Koch3DDeep',
   'SierpinskiIcosahedron',
   'SierpinskiTetrahedron',
@@ -34,7 +35,10 @@ export const MOBILE_HEAVY_SHAPES: ShapeName[] = [
   'BarthSexticSurface',
   'BretzelSurface',
   'KummerQuarticSurface',
+  'ClebschCubicSurface',
+  'PilzSurface',
   'HopfTori',
+  'AlexanderHornedSphere',
 ];
 
 /**

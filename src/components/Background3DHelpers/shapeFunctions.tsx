@@ -393,6 +393,7 @@ export const SHAPES = [
   'GoursatTetrahedral',
   'Mandelbox',
   'SierpinskiTetrahedron',
+  'MagnetFractal',
   // NEW: Fractal Shaders
   'QuaternionPhoenixShader',
   'ApollonianGasketShader',
@@ -403,6 +404,7 @@ export const SHAPES = [
   'EnneperSurface',
   'HelicoidSurface',
   'CatenoidSurface',
+  'CostaSurface',
   'ScherkSurface',
   'DupinCyclide',
   'SphericalHarmonics',
@@ -419,12 +421,15 @@ export const SHAPES = [
   'BorromeanRings',
   'LissajousKnot',
   'RhombicDodecahedron',
+  'Rhombicosidodecahedron',
+  'GreatRhombicosidodecahedron',
   'TruncatedIcosahedron',
   'DisdyakisTriacontahedron',
   // NEW: 4D Projections (Phase 4)
   'TesseractHull',
   'Cell16Hull',
   'Cell24Hull',
+  'Cell120Hull',
   'Cell600Hull',
   // NEW: Strange Attractors (Phase 4)
   'LorenzAttractor',
@@ -445,6 +450,8 @@ export const SHAPES = [
   'BarthSexticSurface',
   'BretzelSurface',
   'KummerQuarticSurface',
+  'ClebschCubicSurface',
+  'PilzSurface',
   'Genus2Surface',
   'MetaballSurface',
   'BlobbySurface',
@@ -469,6 +476,10 @@ export const SHAPES = [
   'HopfTori',
   'DiracBelt',
   'Gomboc',
+  'Noperthedron',
+  'BianchiPinkallTorus',
+  'DecoTetrahedron',
+  'AlexanderHornedSphere',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',
@@ -2230,6 +2241,67 @@ export const sierpinskiTetrahedronGeometry = (
   return geom;
 };
 
+/**
+ * Magnet fractal-inspired mesh deformation.
+ * Uses a complex rational map per vertex and pushes radius by escape behavior.
+ */
+export const magnetFractalGeometry = (
+  subdiv = 7,
+  iterations = 16,
+  cRe = 0.18,
+  cIm = -0.56
+): THREE.BufferGeometry => {
+  const geo = new THREE.IcosahedronGeometry(1, subdiv);
+  const pos = geo.attributes.position as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+
+    // Seed complex plane from spherical direction
+    let zr = v.x * 1.2;
+    let zi = v.z * 1.2;
+    let dr = 0;
+    let escapedAt = iterations;
+
+    for (let k = 0; k < iterations; k++) {
+      const zr2 = zr * zr - zi * zi;
+      const zi2 = 2 * zr * zi;
+
+      // Magnet map (variant): z <- ((z^2 + c - 1) / (2z + c - 2))^2
+      const nr = zr2 + cRe - 1;
+      const ni = zi2 + cIm;
+      const drDen = 2 * zr + cRe - 2;
+      const diDen = 2 * zi + cIm;
+      const denom = drDen * drDen + diDen * diDen + 1e-7;
+
+      const qr = (nr * drDen + ni * diDen) / denom;
+      const qi = (ni * drDen - nr * diDen) / denom;
+
+      zr = qr * qr - qi * qi;
+      zi = 2 * qr * qi;
+
+      dr = zr * zr + zi * zi;
+      if (dr > 64) {
+        escapedAt = k;
+        break;
+      }
+    }
+
+    const stay = 1 - escapedAt / iterations;
+    const pulse = Math.sin((v.y + v.x) * 8 + stay * Math.PI * 2) * 0.08;
+    const r = 0.82 + stay * 0.55 + pulse;
+    pos.setXYZ(i, v.x * r, v.y * r, v.z * r);
+  }
+
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  geo.userData.lowNoise = true;
+  geo.userData.complexity = 'high';
+  return geo;
+};
+
 // 10. Menger Sponge (level 2 for performance)
 export const mengerSpongeGeometry = (level = 2, size = 8) => {
   const geometry = new THREE.BufferGeometry();
@@ -2744,7 +2816,33 @@ export const catenoidSurfaceGeometry = (uSeg = 140, vSeg = 90) => {
   return normalizeGeometry(geom);
 };
 
-/* 4) Scherk's first minimal surface (clamped to avoid infinities) */
+/* 4) Costa-inspired surface (blended saddle + catenoid neck) */
+export const costaSurfaceGeometry = (uSeg = 170, vSeg = 120) => {
+  const geom = new ParametricGeometry(
+    (u: number, v: number, target: THREE.Vector3) => {
+      const U = (u * 2 - 1) * Math.PI;
+      const V = (v * 2 - 1) * 1.65;
+
+      // Costa-like look: catenoid neck plus oscillating saddle lobes.
+      const ch = Math.cosh(V * 0.62);
+      const sh = Math.sinh(V * 0.62);
+      const neck = 0.78 / (0.62 + ch);
+      const lobe = 0.26 * Math.cos(3.0 * U) * Math.exp(-V * V * 0.38);
+
+      const x = (ch + lobe) * Math.cos(U);
+      const y = (ch + lobe) * Math.sin(U);
+      const z = sh + neck * Math.sin(2.0 * U);
+
+      target.set(x, z, y).multiplyScalar(0.46);
+    },
+    uSeg,
+    vSeg
+  );
+
+  return normalizeGeometry(geom);
+};
+
+/* 5) Scherk's first minimal surface (clamped to avoid infinities) */
 export const scherkSurfaceGeometry = (uSeg = 160, vSeg = 160) => {
   const clamp = (x: number, lo: number, hi: number) =>
     Math.max(lo, Math.min(hi, x));
@@ -2767,7 +2865,7 @@ export const scherkSurfaceGeometry = (uSeg = 160, vSeg = 160) => {
   return normalizeGeometry(geom);
 };
 
-/* 5) Dupin cyclide (toroidal "pinched" surface) */
+/* 6) Dupin cyclide (toroidal "pinched" surface) */
 export const dupinCyclideGeometry = (uSeg = 160, vSeg = 120) => {
   const a = 1.25;
   const b = 0.55;
@@ -3305,6 +3403,105 @@ export const rhombicDodecahedronGeometry = (scale: number = 1) => {
     new THREE.Float32BufferAttribute(positions, 3)
   );
   geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+/**
+ * Rhombicosidodecahedron - Archimedean-style hybrid with 62-face character.
+ * Constructed from a symmetric vertex cloud and wrapped via convex hull.
+ */
+export const rhombicosidodecahedronGeometry = (scale: number = 1) => {
+  const phi = (1 + Math.sqrt(5)) / 2;
+  const phi2 = phi * phi;
+  const phi3 = phi2 * phi;
+
+  const vertices: THREE.Vector3[] = [];
+  const seen = new Set<string>();
+  const eps = 1e-9;
+
+  const add = (x: number, y: number, z: number) => {
+    const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    vertices.push(new THREE.Vector3(x, y, z));
+  };
+
+  const perms = (a: number, b: number, c: number): [number, number, number][] => [
+    [a, b, c],
+    [a, c, b],
+    [b, a, c],
+    [b, c, a],
+    [c, a, b],
+    [c, b, a],
+  ];
+
+  const addPermutedSigned = (a: number, b: number, c: number) => {
+    for (const [x0, y0, z0] of perms(a, b, c)) {
+      for (const sx of [-1, 1]) {
+        if (Math.abs(x0) < eps && sx < 0) continue;
+        for (const sy of [-1, 1]) {
+          if (Math.abs(y0) < eps && sy < 0) continue;
+          for (const sz of [-1, 1]) {
+            if (Math.abs(z0) < eps && sz < 0) continue;
+            add(x0 * sx, y0 * sy, z0 * sz);
+          }
+        }
+      }
+    }
+  };
+
+  // Symmetric coordinate families (rhombicosidodecahedral character).
+  addPermutedSigned(1, 1, phi3);
+  addPermutedSigned(0, phi2, 2 * phi + 1);
+  addPermutedSigned(phi, 2, 2 * phi);
+  addPermutedSigned(phi + 1, phi, 1);
+
+  const points = vertices.map((v) => {
+    const d = v.length() || 1;
+    const n = v.clone().multiplyScalar(1 / d);
+    const facet = 1 + 0.055 * Math.sin(v.x * 2.7 + v.y * 3.1 + v.z * 3.7);
+    return n.multiplyScalar(scale * 0.82 * facet);
+  });
+
+  try {
+    const {
+      ConvexGeometry,
+    } = require('three/examples/jsm/geometries/ConvexGeometry.js');
+    const geometry = new ConvexGeometry(points);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return geometry;
+  } catch {
+    const fallback = new THREE.IcosahedronGeometry(scale, 2);
+    fallback.computeVertexNormals();
+    return fallback;
+  }
+};
+
+/**
+ * Great Rhombicosidodecahedron - stellated/spiked variant.
+ */
+export const greatRhombicosidodecahedronGeometry = (scale: number = 1) => {
+  const geometry = rhombicosidodecahedronGeometry(scale * 0.96).clone();
+  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const z = pos.getZ(i);
+    const len = Math.sqrt(x * x + y * y + z * z) || 1;
+    const nx = x / len;
+    const ny = y / len;
+    const nz = z / len;
+
+    const spike =
+      1.06 + 0.22 * Math.abs(Math.sin(nx * 9.0 + ny * 7.0 + nz * 5.0));
+    pos.setXYZ(i, nx * len * spike, ny * len * spike, nz * len * spike);
+  }
+
+  pos.needsUpdate = true;
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;

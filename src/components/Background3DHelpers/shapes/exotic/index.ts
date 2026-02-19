@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import { ParametricGeometry } from 'three-stdlib';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    EXOTIC SURFACES
@@ -352,6 +353,158 @@ export function gombocGeometry(
   geo.computeVertexNormals();
   geo.center();
   return geo;
+}
+
+/**
+ * Noperthedron-inspired convex body.
+ * Built from two nested rotated tetrahedra and wrapped as a convex hull.
+ */
+export function noperthedronGeometry(scale = 1): THREE.BufferGeometry {
+  const points: THREE.Vector3[] = [];
+
+  const tetraA = [
+    new THREE.Vector3(1, 1, 1),
+    new THREE.Vector3(-1, -1, 1),
+    new THREE.Vector3(-1, 1, -1),
+    new THREE.Vector3(1, -1, -1),
+  ];
+  const tetraB = tetraA.map((p) => p.clone().multiplyScalar(0.68));
+
+  const q = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(0.85, 0.42, 1.1)
+  );
+
+  for (const p of tetraA) points.push(p.clone().normalize().multiplyScalar(scale));
+  for (const p of tetraB)
+    points.push(p.clone().applyQuaternion(q).normalize().multiplyScalar(scale));
+
+  const geo = new ConvexGeometry(points);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+/**
+ * Bianchi-Pinkall torus family inspired immersion.
+ * Produces a self-intersecting, conformal ribbon torus variant.
+ */
+export function bianchiPinkallTorusGeometry(
+  major = 1.0,
+  minor = 0.34,
+  warp = 0.26,
+  uSegments = 180,
+  vSegments = 96
+): THREE.BufferGeometry {
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const U = u * Math.PI * 2;
+    const V = v * Math.PI * 2;
+
+    const cosU = Math.cos(U);
+    const sinU = Math.sin(U);
+    const cosV = Math.cos(V);
+    const sinV = Math.sin(V);
+
+    const conformal = 1 + warp * Math.cos(2 * U) * Math.cos(V);
+    const r = major + minor * cosV * conformal;
+
+    const x = r * cosU + warp * 0.35 * Math.cos(3 * U) * sinV;
+    const y = r * sinU + warp * 0.35 * Math.sin(3 * U) * sinV;
+    const z = minor * sinV + warp * 0.45 * Math.sin(2 * U) * cosV;
+
+    target.set(x, z, y);
+  };
+
+  const geo = new ParametricGeometry(func, uSegments, vSegments);
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
+/**
+ * Deco tetrahedron.
+ * Stylized tetrahedral solid with art-deco edge curvature.
+ */
+export function decoTetrahedronGeometry(
+  radius = 1.0,
+  detail = 3,
+  curvePower = 0.62
+): THREE.BufferGeometry {
+  const geo = new THREE.TetrahedronGeometry(radius, detail);
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const v = new THREE.Vector3();
+
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const nx = Math.sign(v.x) * Math.pow(Math.abs(v.x), curvePower);
+    const ny = Math.sign(v.y) * Math.pow(Math.abs(v.y), curvePower);
+    const nz = Math.sign(v.z) * Math.pow(Math.abs(v.z), curvePower);
+    v.set(nx, ny, nz).normalize().multiplyScalar(radius * (0.9 + 0.12 * Math.sin(6 * nx * ny * nz)));
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+/**
+ * Alexander horned sphere inspired recursive horn structure.
+ * Approximation using nested interlocking torus arcs.
+ */
+export function alexanderHornedSphereGeometry(
+  depth = 4,
+  baseRadius = 0.85,
+  tube = 0.08
+): THREE.BufferGeometry {
+  const geometries: THREE.BufferGeometry[] = [];
+  const arc = Math.PI * 1.45;
+
+  const addHorn = (level: number, matrix: THREE.Matrix4, sign: number, radius: number) => {
+    const localTube = Math.max(0.01, tube * Math.pow(0.62, depth - level));
+    const arcGeo = new THREE.TorusGeometry(
+      radius,
+      localTube,
+      12,
+      56,
+      arc
+    );
+    arcGeo.applyMatrix4(matrix);
+    geometries.push(arcGeo);
+
+    if (level <= 0) return;
+
+    const childScale = 0.58;
+    const childRadius = radius * childScale;
+
+    const left = matrix
+      .clone()
+      .multiply(new THREE.Matrix4().makeTranslation(0, radius * 0.22, radius * 0.92))
+      .multiply(new THREE.Matrix4().makeRotationY(0.95 * sign))
+      .multiply(new THREE.Matrix4().makeRotationX(0.32))
+      .multiply(new THREE.Matrix4().makeScale(childScale, childScale, childScale));
+    const right = matrix
+      .clone()
+      .multiply(new THREE.Matrix4().makeTranslation(0, -radius * 0.22, -radius * 0.92))
+      .multiply(new THREE.Matrix4().makeRotationY(-0.95 * sign))
+      .multiply(new THREE.Matrix4().makeRotationX(-0.32))
+      .multiply(new THREE.Matrix4().makeScale(childScale, childScale, childScale));
+
+    addHorn(level - 1, left, -sign, childRadius);
+    addHorn(level - 1, right, sign, childRadius);
+  };
+
+  addHorn(
+    Math.max(1, Math.min(5, depth)),
+    new THREE.Matrix4().makeRotationX(Math.PI * 0.5),
+    1,
+    baseRadius
+  );
+
+  const merged = mergeGeometries(geometries, false);
+  merged.computeVertexNormals();
+  merged.center();
+  return merged;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1049,6 +1202,10 @@ export const EXOTIC_SHAPES = [
   'HopfTori',
   'DiracBelt',
   'Gomboc',
+  'Noperthedron',
+  'BianchiPinkallTorus',
+  'DecoTetrahedron',
+  'AlexanderHornedSphere',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',

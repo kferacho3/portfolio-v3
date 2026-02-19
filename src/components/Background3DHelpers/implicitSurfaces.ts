@@ -760,6 +760,64 @@ export function kummerQuarticSurfaceGeometry(
   return geometry;
 }
 
+/**
+ * Clebsch cubic-inspired surface (compact affine approximation).
+ */
+export function clebschCubicSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const fn: ImplicitFunction = (x, y, z) => {
+    const sx = x * 1.05;
+    const sy = y * 1.05;
+    const sz = z * 1.05;
+    return sx * sx * sx + sy * sy * sy + sz * sz * sz + 1 - 3 * sx * sy * sz;
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 38,
+    bounds: 1.35,
+    isoValue: 0,
+    scale: 0.78,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
+/**
+ * Pilz surface-inspired TPMS variant with bulbous cap-like cells.
+ */
+export function pilzSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const fn: ImplicitFunction = (x, y, z) => {
+    const s = Math.PI;
+    const sx = x * s;
+    const sy = y * s;
+    const sz = z * s;
+
+    const base = Math.cos(sx) + Math.cos(sy) + Math.cos(sz);
+    const caps =
+      0.35 *
+      (Math.cos(2 * sx) * Math.cos(sy) +
+        Math.cos(2 * sy) * Math.cos(sz) +
+        Math.cos(2 * sz) * Math.cos(sx));
+    return base + caps - 0.08;
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 38,
+    bounds: 1.7,
+    isoValue: 0,
+    scale: 0.72,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    FACTORY FUNCTIONS
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -779,7 +837,9 @@ export type ImplicitSurfaceType =
   | 'chmutov'
   | 'barthSextic'
   | 'bretzel'
-  | 'kummerQuartic';
+  | 'kummerQuartic'
+  | 'clebschCubic'
+  | 'pilz';
 
 /**
  * Create an implicit surface geometry by name
@@ -819,6 +879,10 @@ export function createImplicitSurface(
       return bretzelSurfaceGeometry(params);
     case 'kummerQuartic':
       return kummerQuarticSurfaceGeometry(params);
+    case 'clebschCubic':
+      return clebschCubicSurfaceGeometry(params);
+    case 'pilz':
+      return pilzSurfaceGeometry(params);
     default:
       return gyroidSurfaceGeometry(params);
   }
@@ -841,6 +905,8 @@ export function randomImplicitSurfaceType(): ImplicitSurfaceType {
     'barthSextic',
     'bretzel',
     'kummerQuartic',
+    'clebschCubic',
+    'pilz',
   ];
   return types[Math.floor(Math.random() * types.length)];
 }

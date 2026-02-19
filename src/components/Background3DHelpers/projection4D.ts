@@ -381,6 +381,116 @@ export function cell24HullGeometry(
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   120-CELL (Hecatonicosachoron) - 600 vertices (approximated dual cloud)
+   Built from 600-cell edge-midpoint dualization for an ultra-dense hull.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const vec4Distance = (a: Vec4, b: Vec4): number => {
+  const dx = a[0] - b[0];
+  const dy = a[1] - b[1];
+  const dz = a[2] - b[2];
+  const dw = a[3] - b[3];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz + dw * dw);
+};
+
+const vec4Length = (v: Vec4): number =>
+  Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2] + v[3] * v[3]);
+
+/**
+ * Approximate 120-cell vertices by dualizing local edge neighborhoods
+ * of the 600-cell (edge midpoint cloud + radial normalization).
+ */
+export function get120CellVerticesApprox(): Vec4[] {
+  const base = get600CellVertices();
+  if (base.length < 2) return [];
+
+  let minDist = Infinity;
+  for (let i = 0; i < base.length; i++) {
+    for (let j = i + 1; j < base.length; j++) {
+      const d = vec4Distance(base[i], base[j]);
+      if (d > 1e-6 && d < minDist) minDist = d;
+    }
+  }
+
+  const edgeThreshold = minDist * 1.05;
+  const mids: Vec4[] = [];
+  const seen = new Set<string>();
+
+  for (let i = 0; i < base.length; i++) {
+    for (let j = i + 1; j < base.length; j++) {
+      const d = vec4Distance(base[i], base[j]);
+      if (d > edgeThreshold) continue;
+
+      const m: Vec4 = [
+        (base[i][0] + base[j][0]) * 0.5,
+        (base[i][1] + base[j][1]) * 0.5,
+        (base[i][2] + base[j][2]) * 0.5,
+        (base[i][3] + base[j][3]) * 0.5,
+      ];
+
+      const l = vec4Length(m) || 1;
+      // Normalize to keep a stable dual-like shell.
+      const n: Vec4 = [m[0] / l, m[1] / l, m[2] / l, m[3] / l];
+      const key = `${n[0].toFixed(5)},${n[1].toFixed(5)},${n[2].toFixed(5)},${n[3].toFixed(5)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      mids.push(n);
+    }
+  }
+
+  // Keep complexity bounded for hull generation.
+  const target = 420;
+  if (mids.length <= target) return mids;
+  const stride = Math.max(1, Math.floor(mids.length / target));
+  return mids.filter((_, idx) => idx % stride === 0).slice(0, target);
+}
+
+/**
+ * Create a 120-cell-inspired 4D hull projected into 3D.
+ * This is intentionally heavy and intended for desktop rendering.
+ */
+export function cell120HullGeometry(
+  rotation: Partial<Rotation4D> = {},
+  projectionDistance: number = 2.6,
+  scale: number = 0.9
+): THREE.BufferGeometry {
+  const fullRotation: Rotation4D = {
+    xy: Math.PI / 6,
+    xz: Math.PI / 7,
+    xw: Math.PI / 4,
+    yz: Math.PI / 9,
+    yw: Math.PI / 5,
+    zw: Math.PI / 8,
+    ...rotation,
+  };
+
+  const vertices4D = get120CellVerticesApprox();
+  const points3D = vertices4D.map((v) => {
+    const rotated = rotate4D(v, fullRotation);
+    return project4Dto3D(rotated, projectionDistance).multiplyScalar(scale);
+  });
+
+  const uniquePoints: THREE.Vector3[] = [];
+  for (const p of points3D) {
+    let dup = false;
+    for (const q of uniquePoints) {
+      if (p.distanceToSquared(q) < 1e-4) {
+        dup = true;
+        break;
+      }
+    }
+    if (!dup) uniquePoints.push(p);
+  }
+
+  const geometry = convexHullFromPoints(uniquePoints);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  geometry.userData.complexity = 'extreme';
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    600-CELL (Hexacosichoron) - 120 vertices, 720 edges, 1200 triangular faces
    4D analog of the icosahedron - extremely complex, desktop only
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -611,7 +721,12 @@ export function updateProjectedGeometry(
    FACTORY FUNCTIONS FOR EASY USE
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export type Polytope4D = 'tesseract' | '16cell' | '24cell' | '600cell';
+export type Polytope4D =
+  | 'tesseract'
+  | '16cell'
+  | '24cell'
+  | '120cell'
+  | '600cell';
 
 /**
  * Create a 4D polytope geometry by name
@@ -628,6 +743,8 @@ export function create4DPolytope(
       return cell16HullGeometry(rotation, 2, scale * 1.2);
     case '24cell':
       return cell24HullGeometry(rotation, 2.5, scale);
+    case '120cell':
+      return cell120HullGeometry(rotation, 2.6, scale * 0.9);
     case '600cell':
       return cell600HullGeometry(rotation, 2, scale * 0.8);
     default:

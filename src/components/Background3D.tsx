@@ -74,6 +74,7 @@ import {
   mandelbulbGeometry,
   mandelboxGeometry,
   mandelbulbSliceGeometry,
+  magnetFractalGeometry,
   mengerSpongeGeometry,
   /* parametric & special shapes */
   mobiusGeometry,
@@ -162,6 +163,8 @@ import {
   barthSexticSurfaceGeometry,
   bretzelSurfaceGeometry,
   kummerQuarticSurfaceGeometry,
+  clebschCubicSurfaceGeometry,
+  pilzSurfaceGeometry,
   genus2SurfaceGeometry,
   metaballSurfaceGeometry,
   blobbyOrganicGeometry,
@@ -189,6 +192,10 @@ import {
   hopfToriGeometry,
   diracBeltGeometry,
   gombocGeometry,
+  noperthedronGeometry,
+  bianchiPinkallTorusGeometry,
+  decoTetrahedronGeometry,
+  alexanderHornedSphereGeometry,
   celticKnotGeometry,
   solomonSealGeometry,
   doubleHelixGeometry,
@@ -327,7 +334,12 @@ type ProceduralPreset =
   | 'ThinFilmLattice'
   | 'AuricCircuit'
   | 'CryoPlasma'
-  | 'VoidPearl';
+  | 'VoidPearl'
+  // NEW: Advanced Fractal-Style Coatings
+  | 'OrbitTrapPulse'
+  | 'CurvatureHeat'
+  | 'DomainSpectrum'
+  | 'CausticRefraction';
 
 const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   InkSplatter: 0,
@@ -367,6 +379,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   AuricCircuit: 29,
   CryoPlasma: 30,
   VoidPearl: 31,
+  // NEW: Advanced Fractal-Style Coatings
+  OrbitTrapPulse: 32,
+  CurvatureHeat: 33,
+  DomainSpectrum: 34,
+  CausticRefraction: 35,
 } as const;
 
 const PROCEDURAL_PRESET_META: Record<
@@ -506,6 +523,26 @@ const PROCEDURAL_PRESET_META: Record<
     envIntensity: 3.2,
     transparent: true,
     palette: ['#090811', '#2A1E4A', '#8D7BFF', '#F5EFFF'],
+  },
+  // NEW: Advanced Fractal-Style Coatings
+  OrbitTrapPulse: {
+    envIntensity: 3.5,
+    transparent: true,
+    palette: ['#080A1A', '#00E7FF', '#FF3BA7', '#F6FFE2'],
+  },
+  CurvatureHeat: {
+    envIntensity: 2.9,
+    palette: ['#1A0606', '#84261A', '#FF8A00', '#FFF06A'],
+  },
+  DomainSpectrum: {
+    envIntensity: 3.6,
+    transparent: true,
+    palette: ['#07121C', '#00B7FF', '#7D5CFF', '#FF5CCB'],
+  },
+  CausticRefraction: {
+    envIntensity: 5.2,
+    transparent: true,
+    palette: ['#E4FBFF', '#A5E6FF', '#AFC4FF', '#FFFFFF'],
   },
 };
 
@@ -1192,7 +1229,7 @@ void main() {
     metal = 0.14;
     rough = 0.28;
     alpha = 0.86;
-  } else {
+  } else if (style < 31.5) {
     // 31) VoidPearl - dark nacre with soft spectral pulses
     vec2 q = p * 2.0;
     float t = uTime * 0.3;
@@ -1207,6 +1244,64 @@ void main() {
     metal = 0.24;
     rough = 0.16;
     alpha = 0.88;
+  } else if (style < 32.5) {
+    // 32) OrbitTrapPulse - orbit-trap-like contour pulses
+    vec2 q = p * 2.9;
+    float t = uTime * 0.75;
+
+    vec2 trap = abs(fract(q + vec2(t * 0.12, -t * 0.07)) - 0.5);
+    float dTrap = min(trap.x, trap.y);
+    float trapLine = 1.0 - smoothstep(0.06, 0.12, dTrap);
+    float oscill = 0.5 + 0.5 * sin(t * 4.2 + dTrap * 60.0);
+
+    v = mix(fbm(q * 1.4), oscill, 0.6);
+    edge = trapLine * (1.3 + oscill);
+
+    metal = 0.55;
+    rough = 0.14;
+    alpha = 0.9;
+  } else if (style < 33.5) {
+    // 33) CurvatureHeat - pseudo-curvature heatmap from high-frequency gradients
+    vec2 q = p * 3.1;
+    float t = uTime * 0.22;
+    float h0 = fbm(q + t);
+    float hx = fbm(q + vec2(0.03, 0.0) + t);
+    float hy = fbm(q + vec2(0.0, 0.03) + t);
+    float grad = length(vec2(hx - h0, hy - h0)) * 15.0;
+
+    v = h0;
+    edge = smoothstep(0.18, 0.85, grad) * 2.1;
+
+    metal = 0.28;
+    rough = 0.34;
+  } else if (style < 34.5) {
+    // 34) DomainSpectrum - angular domain coloring style mapping
+    vec2 q = p * 2.1;
+    float t = uTime * 0.18;
+    float angle = atan(q.y, q.x) / 6.2831853 + 0.5;
+    float radius = length(q);
+    float hueBands = fract(angle + 0.22 * fbm(q * 2.0 + t));
+    float rings = sin(radius * 12.0 - t * 2.6) * 0.5 + 0.5;
+
+    v = mix(hueBands, rings, 0.45);
+    edge = smoothstep(0.62, 0.93, rings) * 1.8;
+
+    metal = 0.2;
+    rough = 0.2;
+    alpha = 0.9;
+  } else {
+    // 35) CausticRefraction - high-clarity refractive caustic sparkles
+    vec2 q = p * 4.0;
+    float t = uTime * 0.33;
+    float caustic = pow(fbm(q * 2.5 + t), 3.2);
+    float sparkle = pow(hash21(floor(q * 9.0 + t * 2.0)), 21.0);
+
+    v = caustic;
+    edge = sparkle * 4.6;
+
+    metal = 0.03;
+    rough = 0.01;
+    alpha = 0.82;
   }
 
   // palette blend
@@ -1234,7 +1329,8 @@ void main() {
   bool useRefraction =
     (style > 7.5 && style < 8.5) ||   // DiamondCaustics
     (style > 16.5 && style < 17.5) || // DiamondRainbow
-    (style > 25.5 && style < 26.5);   // PrismaticGel
+    (style > 25.5 && style < 26.5) || // PrismaticGel
+    (style > 34.5 && style < 35.5);   // CausticRefraction
 
   if (useRefraction) {
     float ior = 2.417;
@@ -1348,6 +1444,7 @@ const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'Mandelbulb',
   'Mandelbox',
   'QuaternionJulia',
+  'MagnetFractal',
   'MengerSpongeDense',
   'GoursatTetrahedral',
   'QuaternionPhoenixShader',
@@ -1371,7 +1468,10 @@ const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'BarthSexticSurface',
   'BretzelSurface',
   'KummerQuarticSurface',
+  'ClebschCubicSurface',
+  'PilzSurface',
   'HopfTori',
+  'AlexanderHornedSphere',
 ]);
 /* ────────────────── 4.   Enhanced Materials ──────────────────────────── */
 const NeonMaterial: React.FC<NeonMaterialProps> = ({
@@ -2100,6 +2200,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={mandelboxGeometry()} />;
       case 'SierpinskiTetrahedron':
         return <primitive object={sierpinskiTetrahedronGeometry()} />;
+      case 'MagnetFractal':
+        return <primitive object={magnetFractalGeometry()} />;
 
       /* inside makeGeometry switch */
       /* ——— FRACTAL SHADER MODES ——— */
@@ -2297,6 +2399,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={bretzelSurfaceGeometry()} />;
       case 'KummerQuarticSurface':
         return <primitive object={kummerQuarticSurfaceGeometry()} />;
+      case 'ClebschCubicSurface':
+        return <primitive object={clebschCubicSurfaceGeometry()} />;
+      case 'PilzSurface':
+        return <primitive object={pilzSurfaceGeometry()} />;
       case 'Genus2Surface':
         return <primitive object={genus2SurfaceGeometry()} />;
       case 'MetaballSurface':
@@ -2350,6 +2456,14 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={diracBeltGeometry()} />;
       case 'Gomboc':
         return <primitive object={gombocGeometry()} />;
+      case 'Noperthedron':
+        return <primitive object={noperthedronGeometry()} />;
+      case 'BianchiPinkallTorus':
+        return <primitive object={bianchiPinkallTorusGeometry()} />;
+      case 'DecoTetrahedron':
+        return <primitive object={decoTetrahedronGeometry()} />;
+      case 'AlexanderHornedSphere':
+        return <primitive object={alexanderHornedSphereGeometry()} />;
       // Advanced Knots
       case 'CelticKnot':
         return <primitive object={celticKnotGeometry()} />;
@@ -2395,6 +2509,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     Koch3DDeep: 0.95,
     Mandelbox: 0.88,
     SierpinskiTetrahedron: 0.95,
+    MagnetFractal: 0.82,
     TriPrism: 1.15,
     PentPrism: 1.12,
     HexPrism: 1.1,
@@ -2447,6 +2562,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
     BarthSexticSurface: 0.7,
     BretzelSurface: 0.78,
     KummerQuarticSurface: 0.72,
+    ClebschCubicSurface: 0.68,
+    PilzSurface: 0.72,
     Genus2Surface: 0.84,
     MetaballSurface: 0.9,
     BlobbySurface: 0.9,
@@ -2464,6 +2581,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
     HopfTori: 0.72,
     DiracBelt: 0.8,
     Gomboc: 0.86,
+    Noperthedron: 0.9,
+    BianchiPinkallTorus: 0.78,
+    DecoTetrahedron: 0.92,
+    AlexanderHornedSphere: 0.62,
   };
 
   /* drag rotation state */
@@ -2701,7 +2822,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     []
   );
 
-  const TOTAL_MATERIAL_MODES = 42;
+  const TOTAL_MATERIAL_MODES = 46;
   const getNextMaterialIndex = (current: number) =>
     (current + 1) % TOTAL_MATERIAL_MODES;
 
@@ -3187,6 +3308,50 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ) : (
         <ProceduralMeshMaterial
           preset="VoidPearl"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 42: Orbit Trap Pulse
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#5BF8FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="OrbitTrapPulse"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 43: Curvature Heat
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FF8A00" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="CurvatureHeat"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 44: Domain Spectrum
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#8B6BFF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="DomainSpectrum"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 45: Caustic Refraction
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#D9F6FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="CausticRefraction"
           envMap={env}
           seed={shaderSeed}
         />
