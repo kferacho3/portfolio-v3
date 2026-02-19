@@ -1,33 +1,31 @@
 import js from '@eslint/js';
-import { FlatCompat } from '@eslint/eslintrc';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-});
+import globals from 'globals';
+import prettier from 'eslint-config-prettier';
+import tseslint from 'typescript-eslint';
 
 export default [
-  ...compat.extends(
-    'next',
-    'plugin:@next/next/recommended',
-    'plugin:@typescript-eslint/recommended',
-    'plugin:prettier/recommended'
-  ),
+  {
+    ignores: ['.next/**', 'node_modules/**', 'public/**'],
+  },
+  {
+    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.es2021,
+      },
+    },
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  prettier,
   {
     rules: {
-      'prettier/prettier': 'warn',
       '@typescript-eslint/no-namespace': [
         'error',
         { allowDeclarations: true },
       ],
     },
-  },
-  {
-    ignores: ['.next/**', 'node_modules/**', 'public/**'],
   },
 ];
