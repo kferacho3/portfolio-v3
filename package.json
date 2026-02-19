@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "steps:spawn-report": "node scripts/steps-spawn-report.mjs"
@@ -33,7 +33,7 @@
     "framer-motion": "^12.34.2",
     "lodash-es": "^4.17.23",
     "lucide-react": "^0.574.0",
-    "next": "16.1.6",
+    "next": "14.2.35",
     "p5": "^2.2.1",
     "postprocessing": "^6.38.2",
     "react": "^18.3.1",
@@ -69,7 +69,7 @@
     "@typescript-eslint/parser": "^8.56.0",
     "autoprefixer": "^10.4.24",
     "eslint": "^9.39.2",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "14.2.35",
     "eslint-config-prettier": "^10.1.8",
     "eslint-formatter-codeframe": "^7.32.2",
     "eslint-plugin-prettier": "^5.5.5",
