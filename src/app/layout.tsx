@@ -7,7 +7,7 @@ import { GameProvider } from '../contexts/GameContext';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import './globals.css';
 
-const SITE_URL = 'https://www.rachocreates.com';
+const SITE_URL = 'https://rachodevs.com';
 const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
 export const metadata: Metadata = {
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     'Interactive 3D',
     'Atlanta Developer',
   ],
-  authors: [{ name: 'Kamal Feracho', url: 'https://www.rachocreates.com' }],
+  authors: [{ name: 'Kamal Feracho', url: SITE_URL }],
   creator: 'Kamal Feracho',
   publisher: 'Kamal Feracho',
   category: 'Technology',
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     title: 'Kamal Feracho | Full-Stack Engineer & UI Architect',
     description:
       'Building product-ready UI systems, design systems, and immersive 3D web experiences. Expert in React, Next.js, and Three.js.',
-    url: 'https://www.rachocreates.com',
+    url: SITE_URL,
     siteName: 'Kamal Feracho Portfolio',
     images: [
       {

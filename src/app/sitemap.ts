@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { caseStudyProjects } from '@/components/SectionThreeData';
 
-const SITE_URL = 'https://www.rachocreates.com';
+const SITE_URL = 'https://rachodevs.com';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { resumeData } from '@/lib/resumeData';
 
-const canonicalUrl = 'https://www.rachocreates.com/resume';
+const SITE_URL = 'https://rachodevs.com';
+const canonicalUrl = `${SITE_URL}/resume`;
 
 export const metadata: Metadata = {
   title: 'Resume',
@@ -37,9 +38,8 @@ export default function ResumePage() {
     '@type': 'Person',
     name: resumeData.name,
     jobTitle: 'Front-End Engineer and Product Designer',
-    telephone: resumeData.phone,
     email: `mailto:${resumeData.email}`,
-    url: resumeData.website,
+    url: SITE_URL,
     sameAs: [resumeData.github, resumeData.linkedin],
     knowsAbout: skillKeywords,
     hasOccupation: resumeData.tracks.map((track) => ({
@@ -99,40 +99,10 @@ export default function ResumePage() {
           <p className="mt-2 text-muted-foreground">{resumeData.location}</p>
           <p className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-sm">
             <a
-              href={`tel:${resumeData.phone.replace(/[^\d+]/g, '')}`}
-              className="rounded-full border border-gray-300/70 px-3 py-1 text-foreground transition hover:border-[#39FF14]/70 dark:border-white/20"
-            >
-              {resumeData.phone}
-            </a>
-            <a
               href={`mailto:${resumeData.email}`}
               className="rounded-full border border-gray-300/70 px-3 py-1 text-foreground transition hover:border-[#9400D3]/70 dark:border-white/20"
             >
               {resumeData.email}
-            </a>
-            <a
-              href={resumeData.website}
-              className="rounded-full border border-gray-300/70 px-3 py-1 text-foreground transition hover:border-[#FFA500]/70 dark:border-white/20"
-            >
-              {resumeData.website}
-            </a>
-            <a
-              href={resumeData.github}
-              className="rounded-full border border-gray-300/70 px-3 py-1 text-foreground transition hover:border-[#39FF14]/70 dark:border-white/20"
-            >
-              GitHub
-            </a>
-            <a
-              href={resumeData.linkedin}
-              className="rounded-full border border-gray-300/70 px-3 py-1 text-foreground transition hover:border-[#9400D3]/70 dark:border-white/20"
-            >
-              LinkedIn
-            </a>
-            <a
-              href="/Resume.pdf"
-              className="rounded-full border border-gray-300/70 px-3 py-1 text-foreground transition hover:border-[#FFA500]/70 dark:border-white/20"
-            >
-              PDF Version
             </a>
           </p>
         </header>

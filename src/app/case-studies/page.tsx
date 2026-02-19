@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description:
     'Technical case studies from Kamal Feracho covering architecture, constraints, implementation decisions, and outcomes.',
   alternates: {
-    canonical: 'https://www.rachocreates.com/case-studies',
+    canonical: 'https://rachodevs.com/case-studies',
   },
 };
 

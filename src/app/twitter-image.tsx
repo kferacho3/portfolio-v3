@@ -45,7 +45,7 @@ export default function Image() {
             Case Studies • UI Architecture • 3D Web
           </div>
         </div>
-        <div style={{ fontSize: 26, color: '#C4B5FD' }}>rachocreates.com</div>
+        <div style={{ fontSize: 26, color: '#C4B5FD' }}>rachodevs.com</div>
       </div>
     ),
     size

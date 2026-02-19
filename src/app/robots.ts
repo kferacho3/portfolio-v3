@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: '*',
       allow: '/',
     },
-    sitemap: 'https://www.rachocreates.com/sitemap.xml',
+    sitemap: 'https://rachodevs.com/sitemap.xml',
   };
 }

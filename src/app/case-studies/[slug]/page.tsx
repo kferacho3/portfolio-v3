@@ -7,6 +7,8 @@ import {
   getProjectByCaseStudySlug,
 } from '@/components/SectionThreeData';
 
+const SITE_URL = 'https://rachodevs.com';
+
 type Params = {
   slug: string;
 };
@@ -34,7 +36,7 @@ export function generateMetadata({
 
   const title = `${project.title} Case Study`;
   const description = project.caseStudy.oneLiner;
-  const url = `https://www.rachocreates.com/case-studies/${project.caseStudy.slug}`;
+  const url = `${SITE_URL}/case-studies/${project.caseStudy.slug}`;
 
   return {
     title,
@@ -83,17 +85,17 @@ export default function CaseStudyDetailPage({
     '@type': 'TechArticle',
     headline: `${project.title} case study`,
     description: caseStudy.oneLiner,
-    url: `https://www.rachocreates.com/case-studies/${caseStudy.slug}`,
+    url: `${SITE_URL}/case-studies/${caseStudy.slug}`,
     author: {
       '@type': 'Person',
       name: 'Kamal Feracho',
-      url: 'https://www.rachocreates.com',
+      url: SITE_URL,
     },
     about: project.techStack,
     isPartOf: {
       '@type': 'CreativeWorkSeries',
       name: 'Portfolio Case Studies',
-      url: 'https://www.rachocreates.com/case-studies',
+      url: `${SITE_URL}/case-studies`,
     },
   };
 

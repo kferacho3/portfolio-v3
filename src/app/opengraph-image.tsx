@@ -50,7 +50,7 @@ export default function Image() {
             color: '#A7F3D0',
           }}
         >
-          rachocreates.com
+          rachodevs.com
         </div>
       </div>
     ),

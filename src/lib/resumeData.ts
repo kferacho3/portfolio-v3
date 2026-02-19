@@ -43,7 +43,7 @@ export const resumeData = {
   phone: '+1 470-416-5838',
   email: 'kferacho64@gmail.com',
   location: 'Conyers, GA 30094',
-  website: 'https://www.rachocreates.com',
+  website: 'https://rachodevs.com',
   github: 'https://github.com/kferacho3',
   linkedin: 'https://www.linkedin.com/in/kamal-feracho-075a5a1aa/',
   tracks: [
