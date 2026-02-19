@@ -2,7 +2,7 @@
    projection4D.ts - 4D Polytope Projections to 3D
    
    Creates mesmerizing geometries by projecting 4D regular polytopes into 3D.
-   Includes: Tesseract (8-cell), 16-cell, 24-cell, 600-cell
+   Includes: Tesseract (8-cell), 16-cell, 24-cell, 120-cell, 600-cell
    
    These shapes have an "alien" symmetry that's impossible in pure 3D,
    making them perfect for a visually striking background.

@@ -471,6 +471,15 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     noiseScaleBias: 1.0,
     preferredMaterials: ['glass', 'diamond', 'thinfilm'],
   },
+  CompoundFiveTetrahedra: {
+    name: 'CompoundFiveTetrahedra',
+    category: 'poly',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.94,
+    noiseScaleBias: 0.9,
+    preferredMaterials: ['glass', 'diamond', 'thinfilm'],
+  },
   PlatonicCompound: {
     name: 'PlatonicCompound',
     category: 'poly',

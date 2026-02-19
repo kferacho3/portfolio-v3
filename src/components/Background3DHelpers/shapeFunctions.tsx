@@ -362,6 +362,7 @@ export const SHAPES = [
   'StellarDodecahedron',
   'GreatIcosidodecahedron',
   'GreatIcosahedron',
+  'CompoundFiveTetrahedra',
   'SuperShapeVariant1',
   'SuperShapeVariant2',
   'SuperShapeVariant3',
@@ -1365,6 +1366,28 @@ export const platonicCompoundGeometry = () => {
   group.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   group.computeVertexNormals();
   return group;
+};
+
+/**
+ * Compound of Five Tetrahedra
+ * Five interlocking tetrahedra arranged with golden-like symmetry.
+ */
+export const compoundFiveTetrahedraGeometry = (scale = 1) => {
+  const geometries: THREE.BufferGeometry[] = [];
+  const tilt = Math.atan(2); // classic tetrahedral tilt
+
+  for (let i = 0; i < 5; i++) {
+    const tetra = new THREE.TetrahedronGeometry(scale * 0.62, 0);
+    tetra.rotateY((i / 5) * Math.PI * 2);
+    tetra.rotateX(tilt);
+    tetra.rotateZ(((i % 2 === 0 ? 1 : -1) * Math.PI) / 10);
+    geometries.push(tetra);
+  }
+
+  const merged = mergeGeometries(geometries);
+  merged.computeVertexNormals();
+  merged.computeBoundingSphere();
+  return merged;
 };
 
 export const fractalCubeGeometry = () => {

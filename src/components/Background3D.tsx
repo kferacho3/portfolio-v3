@@ -60,6 +60,7 @@ import {
   gearShape,
   goursatTetrahedralGeometry,
   grannyKnotGeometry,
+  compoundFiveTetrahedraGeometry,
   greatIcosahedronGeometry,
   greatIcosidodecahedronGeometry,
   /* NEW: Minimal surfaces */
@@ -2238,6 +2239,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
         );
       case 'GreatIcosahedron':
         return <primitive object={greatIcosahedronGeometry()} />;
+      case 'CompoundFiveTetrahedra':
+        return <primitive object={compoundFiveTetrahedraGeometry()} />;
       case 'PlatonicCompound':
         return <primitive object={platonicCompoundGeometry()} />;
       case 'FractalCube':
@@ -2672,6 +2675,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     RhombicDodecahedron: 1.0,
     Rhombicosidodecahedron: 0.92,
     GreatRhombicosidodecahedron: 0.84,
+    CompoundFiveTetrahedra: 0.94,
     TruncatedIcosahedron: 0.95,
     DisdyakisTriacontahedron: 0.85,
     // 4D Projections
