@@ -33,6 +33,7 @@ export type ResumeProject = {
   title: string;
   link: string;
   caseStudySlug?: string;
+  hidden?: boolean;
   focus: string;
   bullets: string[];
 };
@@ -298,6 +299,7 @@ export const resumeData = {
       title: 'Zom AI',
       link: 'https://zomtech.com',
       caseStudySlug: 'zom-ai',
+      hidden: true,
       focus: 'Lead frontend architecture and product UI systems',
       bullets: [
         'Built shared app-shell patterns for advisor workflows across planning, meetings, research, and risk.',

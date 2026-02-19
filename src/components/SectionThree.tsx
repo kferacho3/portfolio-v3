@@ -8,9 +8,9 @@ import { createPortal } from 'react-dom';
 import { trackEvent, trackProjectInteraction } from '../lib/analytics';
 import {
   Project,
-  earlyProjects,
-  featuredWebsites,
-  uiUxDesigns,
+  earlyProjectsForProjectPreviews,
+  featuredWebsitesForProjectPreviews,
+  uiUxDesignsForProjectPreviews,
 } from './SectionThreeData';
 
 type CategoryKey = 'featured' | 'early' | 'uiux';
@@ -576,9 +576,12 @@ export default function SectionThree() {
     CategoryKey,
     { label: string; projects: Project[] }
   > = {
-    featured: { label: 'Featured Builds', projects: featuredWebsites },
-    early: { label: 'Early Projects', projects: earlyProjects },
-    uiux: { label: 'UI/UX Design', projects: uiUxDesigns },
+    featured: {
+      label: 'Featured Builds',
+      projects: featuredWebsitesForProjectPreviews,
+    },
+    early: { label: 'Early Projects', projects: earlyProjectsForProjectPreviews },
+    uiux: { label: 'UI/UX Design', projects: uiUxDesignsForProjectPreviews },
   };
 
   const currentProjects = categories[selectedCategory].projects;

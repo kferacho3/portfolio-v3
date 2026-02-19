@@ -20,6 +20,10 @@ export const metadata: Metadata = {
 };
 
 export default function ResumePage() {
+  const visibleSelectedProjects = resumeData.selectedProjects.filter(
+    (project) => !project.hidden
+  );
+
   const skillKeywords = Array.from(
     new Set(
       resumeData.tracks.flatMap((track) =>
@@ -173,7 +177,7 @@ export default function ResumePage() {
         <section className="mt-8">
           <h2 className="text-2xl font-bold">Selected Projects and Case Studies</h2>
           <div className="mt-3 space-y-5">
-            {resumeData.selectedProjects.map((project) => (
+            {visibleSelectedProjects.map((project) => (
               <article key={project.title}>
                 <p className="font-semibold">
                   <a

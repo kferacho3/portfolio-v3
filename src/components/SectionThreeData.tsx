@@ -7,6 +7,10 @@ export interface Project {
   imageMobile: string;
   link: string;
   description: string;
+  visibility?: {
+    hideEverywhere?: boolean;
+    hideFromProjectPreviews?: boolean;
+  };
   caseStudy?: {
     slug: string;
     oneLiner: string;
@@ -42,6 +46,9 @@ export const featuredWebsites: Project[] = [
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
     link: 'https://zomtech.com',
+    visibility: {
+      hideEverywhere: true,
+    },
     description:
       'Lead frontend and UI engineering across the product. Built the app shell and component architecture, delivered responsive UX from mobile to desktop, and orchestrated complex API integrations with authenticated workflows and synchronized state.',
     featureTabs: [
@@ -128,6 +135,9 @@ export const featuredWebsites: Project[] = [
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ProjectMuseum.webp',
     link: 'https://prism3d.studio',
+    visibility: {
+      hideFromProjectPreviews: true,
+    },
     description:
       'A modular web arcade platform focused on fast iteration and scalable game delivery. Built around a shared shell, centralized game registry, reusable runtime hooks (input/audio/lifecycle), and tuned performance paths for high-FPS browser gameplay.',
     highlights: [
@@ -531,7 +541,27 @@ export const allProjects: Project[] = [
   ...uiUxDesigns,
 ];
 
-export const caseStudyProjects: Project[] = allProjects.filter(
+const isHiddenEverywhere = (project: Project) =>
+  project.visibility?.hideEverywhere === true;
+
+const isVisibleInProjectPreviews = (project: Project) =>
+  !isHiddenEverywhere(project) &&
+  project.visibility?.hideFromProjectPreviews !== true;
+
+export const featuredWebsitesForProjectPreviews: Project[] =
+  featuredWebsites.filter(isVisibleInProjectPreviews);
+
+export const earlyProjectsForProjectPreviews: Project[] =
+  earlyProjects.filter(isVisibleInProjectPreviews);
+
+export const uiUxDesignsForProjectPreviews: Project[] =
+  uiUxDesigns.filter(isVisibleInProjectPreviews);
+
+export const publicProjects: Project[] = allProjects.filter(
+  (project) => !isHiddenEverywhere(project)
+);
+
+export const caseStudyProjects: Project[] = publicProjects.filter(
   (project) => !!project.caseStudy
 );
 

@@ -2,10 +2,10 @@
 
 import { Float, Html, Stars } from '@react-three/drei';
 import React from 'react';
-import { featuredWebsites } from '@/components/SectionThreeData';
+import { featuredWebsitesForProjectPreviews } from '@/components/SectionThreeData';
 
 const ProjectMuseum: React.FC = () => {
-  const projects = featuredWebsites.slice(0, 6);
+  const projects = featuredWebsitesForProjectPreviews.slice(0, 6);
 
   return (
     <>
