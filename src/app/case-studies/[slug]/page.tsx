@@ -222,7 +222,7 @@ export default async function CaseStudyDetailPage({
         <TrackedAnchor
           action="navigate_to_contact_from_case_study"
           category="case-studies"
-          href={`/?source=${caseStudy.slug}#contact`}
+          href={`/contact?source=${caseStudy.slug}`}
           projectSlug={caseStudy.slug}
           projectTitle={project.title}
           projectUrl={project.link}

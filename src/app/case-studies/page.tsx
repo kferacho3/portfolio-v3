@@ -45,6 +45,19 @@ export default function CaseStudiesPage() {
             Build Narratives
           </span>
         </div>
+
+        <div className="mt-6">
+          <TrackedAnchor
+            action="navigate_to_contact_from_case_studies_listing"
+            category="case-studies"
+            href="/contact?source=case-studies"
+            projectTitle="Case Studies Listing"
+            projectUrl="/case-studies"
+            className="inline-flex rounded-lg border border-[#39FF14]/45 bg-[#39FF14]/10 px-4 py-2 text-sm font-semibold text-[#39FF14] transition hover:border-[#39FF14]/75 hover:bg-[#39FF14]/15"
+          >
+            Discuss Your Project
+          </TrackedAnchor>
+        </div>
       </header>
 
       <section className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

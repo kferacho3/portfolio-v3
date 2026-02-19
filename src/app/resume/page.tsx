@@ -104,6 +104,12 @@ export default function ResumePage() {
             >
               {resumeData.email}
             </a>
+            <a
+              href="/contact?source=resume"
+              className="rounded-full border border-[#39FF14]/45 bg-[#39FF14]/10 px-3 py-1 font-semibold text-[#39FF14] transition hover:border-[#39FF14]/75 hover:bg-[#39FF14]/15"
+            >
+              Contact Me
+            </a>
           </p>
         </header>
 
