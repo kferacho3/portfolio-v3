@@ -1,8 +1,8 @@
 'use client';
 
-import { Html } from '@react-three/drei';
 import { useMemo } from 'react';
 import { useSnapshot } from 'valtio';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 
 import { CHARACTER_MODELS } from '../constants';
 import { knotHopState } from '../state';
@@ -21,7 +21,7 @@ export function KnotHopUI() {
   const lockCost = `${selectedCharacter.cost.gold}G ${selectedCharacter.cost.green}E ${selectedCharacter.cost.purple}V`;
 
   return (
-    <Html fullscreen>
+    <FixedViewportOverlay>
       <div className="absolute inset-0 pointer-events-none select-none text-white">
         <div className="absolute left-4 top-4 rounded-md border border-cyan-100/35 bg-gradient-to-br from-cyan-900/40 via-slate-900/55 to-rose-900/24 px-3 py-2 backdrop-blur-[2px]">
           <div className="text-xs uppercase tracking-[0.24em] text-cyan-50/90">
@@ -160,6 +160,6 @@ export function KnotHopUI() {
           </div>
         )}
       </div>
-    </Html>
+    </FixedViewportOverlay>
   );
 }

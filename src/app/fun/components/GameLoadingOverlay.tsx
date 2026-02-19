@@ -21,6 +21,18 @@ const GameLoadingOverlay: React.FC<GameLoadingOverlayProps> = ({
   const accent = card?.accent ?? '#7dd3fc';
   const title = card?.title ?? 'Loading';
   const panelStyles = getArcadePanelCSS(accent);
+  const clampedProgress = Math.min(100, Math.max(0, progress));
+  const stageLabel =
+    clampedProgress < 20
+      ? 'Loading module'
+      : clampedProgress < 45
+        ? 'Compiling shaders'
+        : clampedProgress < 72
+          ? 'Binding controls + HUD'
+          : clampedProgress < 95
+            ? 'Optimizing runtime'
+            : 'Launching';
+  const percentLabel = `${Math.round(clampedProgress)}%`;
 
   return (
     <div
@@ -59,28 +71,49 @@ const GameLoadingOverlay: React.FC<GameLoadingOverlayProps> = ({
             Loading
           </div>
           <div className="mt-3 text-2xl font-semibold text-white">{title}</div>
+          <div
+            className="mt-2 text-[10px] uppercase tracking-[0.3em] text-white/50"
+            style={{ fontFamily: 'var(--arcade-mono)' }}
+          >
+            {stageLabel}
+          </div>
           <div className="mt-6">
             <PacmanLoading
-              progress={progress}
+              progress={clampedProgress}
               backdrop={false}
               showLabel={false}
               className="h-auto"
             />
           </div>
-          <div className="mt-6 h-2 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="mt-5 flex items-center justify-between text-[10px] text-white/45">
+            <span>Arcade warm-up</span>
+            <span style={{ fontFamily: 'var(--arcade-mono)' }}>{percentLabel}</span>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full transition-all duration-300"
               style={{
-                width: `${Math.min(progress, 100)}%`,
+                width: `${clampedProgress}%`,
                 background: `linear-gradient(90deg, ${accent}, rgba(247, 178, 103, 0.95))`,
               }}
             />
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] uppercase tracking-[0.18em] text-white/55">
+            <div className={clampedProgress >= 25 ? 'text-cyan-200/90' : ''}>
+              Render
+            </div>
+            <div className={clampedProgress >= 60 ? 'text-cyan-200/90' : ''}>
+              Systems
+            </div>
+            <div className={clampedProgress >= 90 ? 'text-cyan-200/90' : ''}>
+              Start
+            </div>
           </div>
           <div
             className="mt-3 text-[11px] uppercase tracking-[0.35em] text-white/40"
             style={{ fontFamily: 'var(--arcade-mono)' }}
           >
-            Warming up the arcade module
+            Calibrating arcade scene
           </div>
         </div>
       </div>

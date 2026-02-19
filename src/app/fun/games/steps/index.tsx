@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Html } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -10,6 +9,7 @@ import { useSnapshot } from 'valtio';
 import { useGameUIState } from '../../store/selectors';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
 import { SeededRandom } from '../../utils/seededRandom';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 
 import {
   stepsRunnerShapeLabels,
@@ -3099,7 +3099,7 @@ function Steps() {
         <Noise opacity={0.018} />
       </EffectComposer>
 
-      <Html fullscreen style={{ pointerEvents: 'none' }}>
+      <FixedViewportOverlay>
         <div
           style={{
             position: 'absolute',
@@ -3474,7 +3474,7 @@ function Steps() {
             </div>
           </div>
         )}
-      </Html>
+      </FixedViewportOverlay>
     </group>
   );
 }

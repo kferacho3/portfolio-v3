@@ -9,7 +9,7 @@
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
-import { isGameUnlocked } from '../../config/access';
+import { isGameUnlocked, PLAYABLE_GAME_ALLOWLIST } from '../../config/access';
 import { GAME_CARDS, TOTAL_GAMES } from '../../config/games';
 import { getArcadePanelCSS } from '../../config/themes';
 
@@ -26,8 +26,10 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
 }) => {
   const router = useRouter();
   const [showInfo, setShowInfo] = useState(false);
+  const [showCatalog, setShowCatalog] = useState(false);
   const selectedGame = GAME_CARDS[selectedIndex] ?? GAME_CARDS[0];
   const selectedGameUnlocked = isGameUnlocked(selectedGame.id);
+  const unlockedPreviewCount = PLAYABLE_GAME_ALLOWLIST.length;
   const panelStyles = getArcadePanelCSS(selectedGame.accent);
 
   // Reset info panel when game changes
@@ -121,6 +123,19 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
             </span>
           </div>
 
+          <div
+            className="relative mb-3 border px-3 py-2 text-[10px] leading-relaxed text-white/75 md:text-[11px]"
+            style={{
+              borderColor: 'var(--arcade-stroke)',
+              background: 'rgba(10, 12, 18, 0.55)',
+              borderRadius: 'var(--arcade-radius-sm)',
+            }}
+          >
+            Showing {unlockedPreviewCount} playable previews in this lobby.
+            Prism3D Studio hosts 60+ games total, and locked cards here are
+            sneak peeks with full descriptions.
+          </div>
+
           {/* Main content */}
           <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
             <div className="flex items-center justify-between gap-3 min-w-0">
@@ -149,10 +164,16 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
                     {selectedIndex + 1} / {TOTAL_GAMES}
                   </div>
                 </div>
-                <InfoButton
-                  isActive={showInfo}
-                  onClick={() => setShowInfo((prev) => !prev)}
-                />
+                <div className="flex items-center gap-1.5">
+                  <InfoButton
+                    isActive={showInfo}
+                    onClick={() => setShowInfo((prev) => !prev)}
+                  />
+                  <CatalogButton
+                    isActive={showCatalog}
+                    onClick={() => setShowCatalog((prev) => !prev)}
+                  />
+                </div>
               </div>
 
               <NavigationButton direction="next" onClick={handleSelectNext} />
@@ -179,9 +200,63 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
               {selectedGame.description}
               {!selectedGameUnlocked && (
                 <div className="mt-2 text-cyan-200/90">
-                  Locked in this arcade. Open to visit Prism3D.
+                  Locked in this arcade. This is a sneak peek. Play it on
+                  Prism3D.
                 </div>
               )}
+            </div>
+          )}
+
+          {showCatalog && (
+            <div
+              className="relative mt-3 border px-3 py-3 text-white/75"
+              style={{
+                borderColor: 'var(--arcade-stroke)',
+                background: 'rgba(10, 12, 18, 0.6)',
+                borderRadius: 'var(--arcade-radius-sm)',
+              }}
+            >
+              <div
+                className="mb-2 text-[10px] uppercase tracking-[0.28em] text-white/45"
+                style={{ fontFamily: 'var(--arcade-mono)' }}
+              >
+                Full Game Catalog
+              </div>
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                {GAME_CARDS.map((game, index) => {
+                  const unlocked = isGameUnlocked(game.id);
+                  const isSelected = game.id === selectedGame.id;
+                  return (
+                    <button
+                      key={game.id}
+                      onClick={() => onSelectGame(index)}
+                      className={`w-full border px-3 py-2 text-left transition ${
+                        isSelected
+                          ? 'border-cyan-300/55 bg-cyan-400/10'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/25'
+                      }`}
+                      style={{ borderRadius: 'var(--arcade-radius-sm)' }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-white/90">
+                          {game.title}
+                        </div>
+                        <span
+                          className={`text-[9px] uppercase tracking-[0.22em] ${
+                            unlocked ? 'text-emerald-200/80' : 'text-cyan-200/80'
+                          }`}
+                          style={{ fontFamily: 'var(--arcade-mono)' }}
+                        >
+                          {unlocked ? 'Playable Here' : 'Sneak Peek'}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] leading-relaxed text-white/65">
+                        {game.description}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -232,6 +307,27 @@ const InfoButton: React.FC<{
     }}
   >
     i
+  </button>
+);
+
+const CatalogButton: React.FC<{
+  isActive: boolean;
+  onClick: () => void;
+}> = ({ isActive, onClick }) => (
+  <button
+    onClick={onClick}
+    aria-label="Toggle full game catalog"
+    aria-pressed={isActive}
+    className="flex h-8 items-center justify-center border px-2 text-[10px] uppercase tracking-[0.18em] text-white/60 transition-all duration-300 hover:-translate-y-0.5 hover:text-white active:translate-y-0 active:scale-95"
+    style={{
+      borderColor: isActive ? 'var(--arcade-accent)' : 'var(--arcade-stroke)',
+      background: isActive ? 'rgba(125, 227, 255, 0.14)' : 'rgba(10, 12, 18, 0.45)',
+      color: isActive ? 'var(--arcade-accent)' : 'rgba(255,255,255,0.72)',
+      borderRadius: 'var(--arcade-radius-sm)',
+      fontFamily: 'var(--arcade-mono)',
+    }}
+  >
+    List
   </button>
 );
 

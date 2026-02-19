@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Html, PerspectiveCamera } from '@react-three/drei';
+import { PerspectiveCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 import { create } from 'zustand';
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 import { polarityState, type PolarityCharge } from './state';
 
 type GameStatus = 'START' | 'PLAYING' | 'GAMEOVER';
@@ -1030,9 +1031,9 @@ function PolarityScene() {
         <Noise premultiply opacity={0.018} />
       </EffectComposer>
 
-      <Html fullscreen>
+      <FixedViewportOverlay>
         <PolarityOverlay />
-      </Html>
+      </FixedViewportOverlay>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { Html } from '@react-three/drei';
 import React from 'react';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import { ARM_COLOR, BONUS_ORB_COLOR, ORB_COLOR } from '../constants';
 import type { WeaveControlScheme } from '../types';
 
@@ -70,7 +71,7 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
       </Html>
     )}
 
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
+    <FixedViewportOverlay>
       <div className="absolute top-4 left-4 z-50">
         <div className="bg-black/50 backdrop-blur-sm rounded-xl px-4 py-3 text-white border border-white/10">
           <div
@@ -248,7 +249,7 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
           </div>
         </div>
       )}
-    </Html>
+    </FixedViewportOverlay>
   </>
 );
 

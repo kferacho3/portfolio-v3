@@ -19,6 +19,7 @@ import React, {
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
 import { SeededRandom } from '../../utils/seededRandom';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -602,7 +603,7 @@ const ModeSelection: React.FC<{
   const [hoveredSize, setHoveredSize] = useState<GridSizeOption | null>(null);
 
   return (
-    <Html fullscreen style={{ pointerEvents: 'auto' }}>
+    <FixedViewportOverlay pointerEvents="auto">
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-[#0a0a1a] to-[#1a1a3a]">
         <div className="text-center max-w-5xl px-4">
           <h1 className="text-6xl font-bold text-white mb-2">FORMA</h1>
@@ -653,7 +654,7 @@ const ModeSelection: React.FC<{
           </div>
         </div>
       </div>
-    </Html>
+    </FixedViewportOverlay>
   );
 };
 
@@ -1128,7 +1129,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       ))}
 
       {/* HUD */}
-      <Html fullscreen style={{ pointerEvents: 'none' }}>
+      <FixedViewportOverlay>
         <div className="absolute top-4 left-4 z-50">
           <div className="bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3 text-white">
             <div className="text-2xl font-bold">{snap.score}</div>
@@ -1236,7 +1237,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
             </div>
           </div>
         )}
-      </Html>
+      </FixedViewportOverlay>
     </>
   );
 };

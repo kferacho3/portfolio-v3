@@ -2,9 +2,10 @@
 
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Html, OrthographicCamera } from '@react-three/drei';
+import { OrthographicCamera } from '@react-three/drei';
 import { useEffect, useMemo, useRef } from 'react';
 import { proxy, useSnapshot } from 'valtio';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 import {
   BALL_SKINS,
   state as persistState,
@@ -1737,12 +1738,12 @@ export default function SlowMo() {
   return (
     <>
       <SlowMoScene />
-      <Html fullscreen style={{ pointerEvents: 'none' }}>
+      <FixedViewportOverlay pointerEvents="auto">
         <div className="fixed inset-0 pointer-events-auto select-none">
           <SlowMoHoldInputLayer />
           <SlowMoOverlay />
         </div>
-      </Html>
+      </FixedViewportOverlay>
     </>
   );
 }

@@ -227,7 +227,10 @@ function renderGameContent(
 ) {
   const Game = mod.default as ComponentType<any>;
   const render = (props?: Record<string, unknown>) =>
-    createElement(Game, props ?? null);
+    createElement(Game, {
+      key: buildKey(gameId, restartSeed),
+      ...(props ?? {}),
+    });
   const renderHtmlGame = () =>
     createElement(
       Html,

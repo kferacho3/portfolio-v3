@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Html, OrthographicCamera } from '@react-three/drei';
+import { OrthographicCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useSnapshot } from 'valtio';
 
 import { useGameStateActions, useGameUIState } from '../../store/selectors';
 import { SeededRandom } from '../../utils/seededRandom';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 
 import {
   BOOST_DURATION,
@@ -1510,7 +1511,7 @@ const Growth: React.FC = () => {
         </mesh>
       </group>
 
-      <Html fullscreen style={{ pointerEvents: 'none' }}>
+      <FixedViewportOverlay>
         <div
           style={{
             position: 'absolute',
@@ -1643,7 +1644,7 @@ const Growth: React.FC = () => {
             </div>
           </div>
         )}
-      </Html>
+      </FixedViewportOverlay>
       <CharacterSelection />
     </group>
   );

@@ -1,5 +1,5 @@
-import { Html } from '@react-three/drei';
 import { useSnapshot } from 'valtio';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import { growthState } from '../state';
 
 export default function CharacterSelection() {
@@ -8,7 +8,7 @@ export default function CharacterSelection() {
   if (snap.phase === 'playing') return null;
 
   return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
+    <FixedViewportOverlay>
       <div
         style={{
           position: 'absolute',
@@ -33,6 +33,6 @@ export default function CharacterSelection() {
           Menu: 1 Voxelized • 2 Classic • 3 Apex
         </div>
       </div>
-    </Html>
+    </FixedViewportOverlay>
   );
 }

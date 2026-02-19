@@ -22,6 +22,7 @@ import React, {
 } from 'react';
 import * as THREE from 'three';
 import { proxy, useSnapshot } from 'valtio';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GAME STATE (Valtio)
@@ -678,7 +679,7 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
       )}
 
       {/* HUD - Top stats (fixed to viewport so it never clips under the site header) */}
-      <Html fullscreen style={{ pointerEvents: 'none' }} zIndexRange={[0, 0]}>
+      <FixedViewportOverlay zIndexRange={[0, 0]}>
         <div
           style={{
             position: 'absolute',
@@ -710,7 +711,7 @@ const ShapeShifter: React.FC<ShapeShifterProps> = ({ soundsOn = true }) => {
             Best: <strong style={{ color: '#facc15' }}>{snap.bestScore}</strong>
           </span>
         </div>
-      </Html>
+      </FixedViewportOverlay>
 
       {/* Bottom controls - positioned below grid in world space */}
       <Html

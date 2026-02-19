@@ -1,6 +1,5 @@
 'use client';
 
-import { Html } from '@react-three/drei';
 import React, { useEffect } from 'react';
 import { useSnapshot } from 'valtio';
 import {
@@ -8,6 +7,7 @@ import {
   ArcadeHudPill,
   ArcadeHudShell,
 } from '../../../components/shell/ArcadeHudPanel';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import { clamp } from '../utils';
 import { BEST_SCORE_KEY, ZONE_SCORE_MULT } from '../constants';
 import { polarityState } from '../state';
@@ -39,7 +39,7 @@ export const PolarityHUD: React.FC = () => {
   const toastOpacity = clamp(snap.toastTime / 1.1, 0, 1);
 
   return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
+    <FixedViewportOverlay>
       <ArcadeHudShell
         gameId="polarity"
         className="absolute top-4 left-4 pointer-events-auto"
@@ -211,6 +211,6 @@ export const PolarityHUD: React.FC = () => {
           </ArcadeHudShell>
         </div>
       )}
-    </Html>
+    </FixedViewportOverlay>
   );
 };

@@ -1,5 +1,5 @@
-import { Html } from '@react-three/drei';
 import React from 'react';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import type { MoveDirection } from '../types';
 
 const ControlsOverlay: React.FC<{
@@ -10,7 +10,7 @@ const ControlsOverlay: React.FC<{
   onReset: () => void;
 }> = ({ status, combo, bestCombo, onMove }) => {
   return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
+    <FixedViewportOverlay>
       <div className="fixed left-6 top-6 flex flex-col gap-2 text-white pointer-events-none">
         <div
           className="rounded-xl border border-cyan-400/30 bg-slate-950/80 px-3 py-2 text-xs uppercase tracking-[0.3em]"
@@ -83,7 +83,7 @@ const ControlsOverlay: React.FC<{
           </div>
         </div>
       )}
-    </Html>
+    </FixedViewportOverlay>
   );
 };
 

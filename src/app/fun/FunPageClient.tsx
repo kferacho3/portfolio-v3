@@ -361,8 +361,8 @@ export default function FunPage() {
             </div>
             <h2 className="mt-3 text-3xl font-black text-white">{lockedGame.title}</h2>
             <p className="mt-3 text-sm leading-relaxed text-slate-200/85">
-              This game is locked in this arcade. Play it on the main Prism3D
-              destination with many more games.
+              This game is locked in this arcade as a sneak peek. Play it on
+              prism3d.studio, where the full catalog includes 60+ games.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3">

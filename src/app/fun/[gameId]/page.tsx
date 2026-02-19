@@ -138,8 +138,8 @@ const LockedGameGate: React.FC<{
         </p>
         <h1 className="mt-3 text-3xl font-black text-white">{title}</h1>
         <p className="mt-3 text-sm leading-relaxed text-slate-200/85">
-          This title is only available through the full Prism3D catalog.
-          Continue on the main destination to play this game and discover more.
+          This title is a locked sneak peek in this arcade. Continue on
+          prism3d.studio to play it in the full catalog of 60+ games.
         </p>
 
         <div className="mt-7 flex flex-wrap gap-3">

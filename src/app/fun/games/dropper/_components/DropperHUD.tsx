@@ -1,5 +1,5 @@
-import { Html } from '@react-three/drei';
 import React from 'react';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import type { DropperDifficulty } from '../types';
 import HeartsDisplay from './HeartsDisplay';
 import PowerUpDisplay from './PowerUpDisplay';
@@ -39,7 +39,7 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
   gameOver,
   bestCombo,
 }) => (
-  <Html fullscreen style={{ pointerEvents: 'none' }}>
+  <FixedViewportOverlay>
     <div className="absolute top-4 left-4 rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-sm px-5 py-4 text-white shadow-xl pointer-events-auto">
       <div className="text-3xl font-bold">
         {score}
@@ -148,7 +148,7 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
         <span className="text-red-500">☠️ Danger</span>
       </div>
     </div>
-  </Html>
+  </FixedViewportOverlay>
 );
 
 export default DropperHUD;

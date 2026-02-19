@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Html, OrthographicCamera, Sparkles } from '@react-three/drei';
+import { OrthographicCamera, Sparkles } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Bloom, EffectComposer, Noise, Vignette } from '@react-three/postprocessing';
 import { useSnapshot } from 'valtio';
 import * as THREE from 'three';
 
 import { clearFrameInput, useInputRef } from '../../hooks/useInput';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 import { getLevelGoalMeters, onePathState } from './state';
 import { BIOME_PALETTES, GAME_TITLE, TUNING } from './tuning';
 
@@ -638,7 +639,7 @@ function Overlay() {
   const goal = getLevelGoalMeters(snap.level);
 
   return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
+    <FixedViewportOverlay pointerEvents="auto">
       <div
         className="absolute inset-0 select-none"
         style={{ pointerEvents: 'auto' }}
@@ -820,7 +821,7 @@ function Overlay() {
           </div>
         )}
       </div>
-    </Html>
+    </FixedViewportOverlay>
   );
 }
 
@@ -833,7 +834,7 @@ function HUD({
 }) {
   const r = runRef.current;
   return (
-    <Html fullscreen style={{ pointerEvents: 'none' }}>
+    <FixedViewportOverlay>
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-4 left-4 rounded-xl bg-white/80 px-3 py-2 text-xs sm:text-sm font-semibold text-black/80">
           <div>Distance {toMeters(r.distance)}m</div>
@@ -852,7 +853,7 @@ function HUD({
           </div>
         </div>
       </div>
-    </Html>
+    </FixedViewportOverlay>
   );
 }
 

@@ -12,6 +12,7 @@ import React, {
 } from 'react';
 import { proxy } from 'valtio';
 import * as THREE from 'three';
+import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GAME STATE
@@ -467,7 +468,7 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
   return (
     <>
       {/* HUD */}
-      <Html fullscreen style={{ pointerEvents: 'none' }}>
+      <FixedViewportOverlay>
         <div className="absolute top-4 left-4 rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-sm px-5 py-4 text-white shadow-xl pointer-events-auto">
           <div className="text-3xl font-bold">{score}</div>
           <div className="text-xs text-white/50 uppercase tracking-wider">
@@ -508,7 +509,7 @@ const Sizr: React.FC<SizrProps> = ({ soundsOn: _soundsOn = true }) => {
             Match the size perfectly!
           </div>
         </div>
-      </Html>
+      </FixedViewportOverlay>
 
       {/* Lighting */}
       <ambientLight intensity={0.6} />

@@ -1,5 +1,5 @@
-import { Html } from '@react-three/drei';
 import React from 'react';
+import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 
 const GameOverOverlay: React.FC<{
   score: number;
@@ -7,7 +7,7 @@ const GameOverOverlay: React.FC<{
   onRestart: () => void;
 }> = ({ score, bestScore, onRestart }) => {
   return (
-    <Html fullscreen>
+    <FixedViewportOverlay pointerEvents="auto">
       <div className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/70 text-white backdrop-blur-sm">
         <div
           className="w-[min(92vw,360px)] rounded-2xl border border-cyan-400/30 bg-slate-950/95 p-6 text-center shadow-xl"
@@ -40,7 +40,7 @@ const GameOverOverlay: React.FC<{
           </div>
         </div>
       </div>
-    </Html>
+    </FixedViewportOverlay>
   );
 };
 
