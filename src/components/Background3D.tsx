@@ -2769,112 +2769,71 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - deterministic multi-ring spacing around the center shape */
+  /* icon positions - 3D shell distribution around the model (full XYZ) */
   const iconPositions = useMemo(() => {
     const count = icons.length;
     if (!count) return [];
 
-    const maxX = Math.max(1.85, viewport.width * (isMobileView ? 0.48 : 0.58));
-    const maxY = Math.max(1.02, viewport.height * (isMobileView ? 0.34 : 0.41));
-    const minY = -Math.max(0.48, viewport.height * (isMobileView ? 0.12 : 0.16));
-    const centerClearX = isMobileView ? 0.88 : 1.24;
-    const centerClearY = isMobileView ? 0.62 : 0.9;
-    const innerRadiusX = THREE.MathUtils.clamp(
-      viewport.width * (isMobileView ? 0.25 : 0.31),
-      isMobileView ? 1.08 : 1.52,
-      isMobileView ? 1.62 : 2.22
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const viewportScale = THREE.MathUtils.clamp(
+      Math.min(viewport.width, viewport.height) / (isMobileView ? 3.7 : 3.25),
+      0.78,
+      1.18
     );
-    const innerRadiusY = THREE.MathUtils.clamp(
-      viewport.height * (isMobileView ? 0.18 : 0.23),
-      isMobileView ? 0.74 : 1.02,
-      isMobileView ? 1.08 : 1.48
-    );
-    const outerRadiusX = THREE.MathUtils.clamp(
-      viewport.width * (isMobileView ? 0.39 : 0.5),
-      isMobileView ? 1.58 : 2.26,
-      isMobileView ? 2.42 : 3.42
-    );
-    const outerRadiusY = THREE.MathUtils.clamp(
-      viewport.height * (isMobileView ? 0.27 : 0.35),
-      isMobileView ? 1.0 : 1.36,
-      isMobileView ? 1.68 : 2.34
-    );
-    const ringCount = isMobileView ? 3 : 4;
-    const perRingBase = Math.floor(count / ringCount);
-    const perRingRemainder = count % ringCount;
+    const innerRadius = (isMobileView ? 1.35 : 1.72) * viewportScale;
+    const outerRadius = (isMobileView ? 2.02 : 2.56) * viewportScale;
     const minGapSq = (isMobileView ? 0.34 : 0.48) ** 2;
-    const yBias = isMobileView ? 0.04 : 0.06;
-    const depthStep = isMobileView ? 0.05 : 0.075;
+    const maxY = isMobileView ? 1.16 : 1.44;
+    const minY = isMobileView ? -1.16 : -1.38;
     const points: THREE.Vector3[] = [];
+    const canPlace = (candidate: THREE.Vector3) =>
+      points.every((existing) => candidate.distanceToSquared(existing) >= minGapSq);
 
-    for (let ring = 0; ring < ringCount; ring++) {
-      const ringItemCount = perRingBase + (ring < perRingRemainder ? 1 : 0);
-      if (!ringItemCount) continue;
+    // Build a layered shell by sweeping Fibonacci directions and jittering radius.
+    for (let pass = 0; pass < 6 && points.length < count; pass++) {
+      for (let idx = 0; idx < count && points.length < count; idx++) {
+        const t = (idx + 0.5) / count;
+        const y = 1 - 2 * t;
+        const ring = Math.sqrt(Math.max(0, 1 - y * y));
+        const theta = goldenAngle * idx + pass * 0.42;
+        const dir = new THREE.Vector3(
+          Math.cos(theta) * ring,
+          y,
+          Math.sin(theta) * ring
+        );
 
-      const ringT = ring / (ringCount - 1);
-      const ringRadiusX = THREE.MathUtils.lerp(innerRadiusX, outerRadiusX, ringT);
-      const ringRadiusY = THREE.MathUtils.lerp(innerRadiusY, outerRadiusY, ringT);
-      const angleStep = (Math.PI * 2) / ringItemCount;
-      const phase =
-        (ring % 2 === 0 ? 0 : Math.PI / ringItemCount) + ring * 0.21;
+        const jitter = isMobileView ? 0.08 : 0.12;
+        dir.x += Math.sin((idx + 1) * 1.93 + pass * 0.31) * jitter;
+        dir.y += Math.cos((idx + 1) * 1.41 + pass * 0.27) * jitter * 0.72;
+        dir.z += Math.sin((idx + 1) * 2.07 + pass * 0.35) * jitter;
+        dir.normalize();
 
-      for (let idx = 0; idx < ringItemCount; idx++) {
-        let angle = phase + idx * angleStep;
-        let candidateX = 0;
-        let candidateY = 0;
-        let accepted = false;
+        const shellMix = (idx * 0.61803398875 + pass * 0.173) % 1;
+        const radius = THREE.MathUtils.lerp(innerRadius, outerRadius, shellMix);
+        const candidate = dir.multiplyScalar(radius);
+        candidate.y = THREE.MathUtils.clamp(candidate.y, minY, maxY);
 
-        for (let attempt = 0; attempt < 3; attempt++) {
-          candidateX = THREE.MathUtils.clamp(
-            Math.cos(angle) * ringRadiusX,
-            -maxX,
-            maxX
-          );
-          candidateY = THREE.MathUtils.clamp(
-            Math.sin(angle) * ringRadiusY - yBias,
-            minY,
-            maxY
-          );
-
-          const centerRatio =
-            (candidateX * candidateX) / (centerClearX * centerClearX) +
-            (candidateY * candidateY) / (centerClearY * centerClearY);
-          if (centerRatio < 1) {
-            angle += angleStep * 0.35;
-            continue;
-          }
-
-          accepted = points.every((existing) => {
-            const dx = candidateX - existing.x;
-            const dy = candidateY - existing.y;
-            return dx * dx + dy * dy >= minGapSq;
-          });
-          if (accepted) break;
-
-          angle += angleStep * 0.27;
-        }
-
-        if (!accepted && points.length >= count) continue;
-
-        const depthLane = (ring + idx) % 5;
-        const z = 0.06 + depthLane * depthStep;
-        points.push(new THREE.Vector3(candidateX, candidateY, z));
+        if (!canPlace(candidate)) continue;
+        points.push(candidate);
       }
     }
 
-    if (points.length < count) {
-      const remaining = count - points.length;
-      for (let idx = 0; idx < remaining; idx++) {
-        const theta = -Math.PI / 2 + (2 * Math.PI * idx) / remaining;
-        const x = THREE.MathUtils.clamp(Math.cos(theta) * outerRadiusX, -maxX, maxX);
-        const y = THREE.MathUtils.clamp(
-          Math.sin(theta) * outerRadiusY - yBias,
-          minY,
-          maxY
-        );
-        const z = 0.06 + ((idx % 5) + 1) * depthStep;
-        points.push(new THREE.Vector3(x, y, z));
-      }
+    // Fallback to random sphere points if strict spacing misses any slots.
+    while (points.length < count) {
+      const u = Math.random();
+      const v = Math.random();
+      const theta = 2 * Math.PI * u;
+      const phi = Math.acos(2 * v - 1);
+      const sinPhi = Math.sin(phi);
+      const radius = THREE.MathUtils.lerp(innerRadius, outerRadius, Math.random());
+      const candidate = new THREE.Vector3(
+        radius * sinPhi * Math.cos(theta),
+        THREE.MathUtils.clamp(radius * Math.cos(phi), minY, maxY),
+        radius * sinPhi * Math.sin(theta)
+      );
+
+      if (!canPlace(candidate) && points.length > 0) continue;
+      points.push(candidate);
     }
 
     return points.slice(0, count);
@@ -2899,7 +2858,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* ─────────────────────────── Main frame-loop ───────────────────────── */
   /* ─────────────────────────── Main frame-loop ────────────────────────── */
-  useFrame(({ clock, pointer }, delta) => {
+  useFrame(({ clock, pointer, camera }, delta) => {
     /* 1 ▸ current hover / drag amount (0-1) ------------------------------ */
     hoverMix.current = hoverAmp.get();
 
@@ -3070,12 +3029,18 @@ export default function Background3D({ onAnimationComplete }: Props) {
     });
 
     /* 7 ▸ icon float ----------------------------------------------------- */
-    const bobAmplitude = isMobileView ? 0.018 : 0.028;
+    const bobAmplitude = isMobileView ? 0.016 : 0.026;
+    const driftAmplitude = bobAmplitude * 0.65;
     iconRefs.current.forEach((m, i) => {
       if (!m) return;
-      m.rotation.y += 0.01;
-      m.position.y =
-        iconPositions[i].y + Math.sin(clock.elapsedTime * 0.9 + i) * bobAmplitude;
+      const base = iconPositions[i];
+      const t = clock.elapsedTime;
+      m.position.x = base.x + Math.sin(t * 0.68 + i * 1.11) * driftAmplitude;
+      m.position.y = base.y + Math.cos(t * 0.92 + i * 0.87) * bobAmplitude;
+      m.position.z = base.z + Math.sin(t * 0.77 + i * 1.29) * driftAmplitude;
+      // Keep icon planes facing the viewer even when distributed in depth.
+      m.lookAt(camera.position);
+      m.rotateZ(Math.sin(t * 0.62 + i * 0.45) * 0.2);
     });
 
     /* 8 ▸ inertial spin -------------------------------------------------- */

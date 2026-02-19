@@ -54,31 +54,31 @@ function HomePage() {
   /* ─────────────────────── 4. Render ────────────────────────────────── */
   return (
     <CanvasProvider>
-      <Suspense fallback={null}>
-        <ScrollControls pages={pages} damping={0}>
-          {/* 3D layer  ----------------------------------------------------- */}
+      <ScrollControls pages={pages} damping={0}>
+        {/* 3D layer  ----------------------------------------------------- */}
+        <Suspense fallback={null}>
           <Background3D onAnimationComplete={handleBackgroundComplete} />
+        </Suspense>
 
-          {/* DOM layer ----------------------------------------------------- */}
-          <Scroll html style={{ width: '100vw', overflowX: 'hidden' }}>
-            <main className="min-h-screen overflow-x-hidden px-3 py-4 sm:p-6">
-              {bgAnimationDone && (
-                <>
-                  <SectionOne onAnimationComplete={handleSectionOneComplete} />
+        {/* DOM layer ----------------------------------------------------- */}
+        <Scroll html style={{ width: '100vw', overflowX: 'hidden' }}>
+          <main className="min-h-screen overflow-x-hidden px-3 py-4 sm:p-6">
+            {bgAnimationDone && (
+              <>
+                <SectionOne onAnimationComplete={handleSectionOneComplete} />
 
-                  {sectionOneDone && (
-                    <>
-                      <SectionTwo />
-                      <SectionThree />
-                      <SectionFour />
-                    </>
-                  )}
-                </>
-              )}
-            </main>
-          </Scroll>
-        </ScrollControls>
-      </Suspense>
+                {sectionOneDone && (
+                  <>
+                    <SectionTwo />
+                    <SectionThree />
+                    <SectionFour />
+                  </>
+                )}
+              </>
+            )}
+          </main>
+        </Scroll>
+      </ScrollControls>
     </CanvasProvider>
   );
 }
