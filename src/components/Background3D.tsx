@@ -2060,7 +2060,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* shape / material state - always start with FractalCube */
   /* initial value must be a member of the union */
   const [shape, setShape] = useState<ShapeName>(() =>
-    isMobileView ? 'LissajousKnot' : 'FractalCube'
+    isMobileView ? 'CelticKnot' : 'FractalCube'
   );
   const [bulb, setBulb] =
     useState<Awaited<ReturnType<typeof mandelbulbGeometry>>>();
@@ -2073,12 +2073,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
       >
     >
   >({});
-  // Mobile starts on a smoother premium shader; desktop keeps prior default look.
+  // Mobile starts with a vivid, clearly colored coating; desktop keeps prior default look.
   const [materialIndex, setMaterialIndex] = useState(() =>
-    isMobileView ? 9 : 4
-  ); // 9 = Chromatic Dispersion, 4 = meshNormalMaterial
+    isMobileView ? 20 : 4
+  ); // 20 = Crystal Geode, 4 = meshNormalMaterial
   const [color, setColor] = useState(() =>
-    isMobileView ? '#c8e8ff' : randHex()
+    isMobileView ? '#7ee2ff' : randHex()
   );
   const [wireframe] = useState(false);
   const [shaderSeed, setShaderSeed] = useState(Math.random() * 1000);
