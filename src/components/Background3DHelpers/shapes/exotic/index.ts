@@ -287,6 +287,73 @@ export function hopfToriGeometry(
   return merged;
 }
 
+/**
+ * Dirac Belt
+ * Ribbon with a 4pi twist (spinor-style topology visualization).
+ */
+export function diracBeltGeometry(
+  radius = 1.0,
+  width = 0.36,
+  uSegments = 220,
+  vSegments = 18
+): THREE.BufferGeometry {
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const t = u * Math.PI * 2;
+    const w = (v - 0.5) * 2;
+    const twist = t * 2.0; // 4pi over one lap
+
+    const radial = radius + (w * width * 0.5) * Math.cos(twist);
+    const x = radial * Math.cos(t);
+    const y = radial * Math.sin(t);
+    const z =
+      (w * width * 0.5) * Math.sin(twist) + 0.18 * Math.sin(2.0 * t + w * 0.7);
+
+    target.set(x, z, y);
+  };
+
+  const geo = new ParametricGeometry(func, uSegments, vSegments);
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
+/**
+ * Gomboc-inspired convex body.
+ * Approximates the single-stable/single-unstable equilibrium silhouette.
+ */
+export function gombocGeometry(
+  scale = 1,
+  uSegments = 140,
+  vSegments = 96
+): THREE.BufferGeometry {
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const U = u * Math.PI * 2;
+    const V = (v - 0.5) * Math.PI;
+
+    const sV = Math.sin(V);
+    const cV = Math.cos(V);
+
+    // Asymmetric convex radial field
+    const r =
+      0.92 +
+      0.16 * sV * Math.cos(U) +
+      0.09 * cV * cV -
+      0.06 * Math.sin(2.0 * U) * cV +
+      0.05 * Math.sin(3.0 * U) * sV * sV;
+
+    const x = r * cV * Math.cos(U);
+    const y = r * cV * Math.sin(U);
+    const z = r * sV + 0.08 * cV;
+
+    target.set(x * scale, z * scale, y * scale);
+  };
+
+  const geo = new ParametricGeometry(func, uSegments, vSegments);
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    ADVANCED KNOTS
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -980,6 +1047,8 @@ export const EXOTIC_SHAPES = [
   'CliffordTorusProjection',
   'MobiusPrism',
   'HopfTori',
+  'DiracBelt',
+  'Gomboc',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',

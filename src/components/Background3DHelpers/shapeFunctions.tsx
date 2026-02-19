@@ -444,6 +444,7 @@ export const SHAPES = [
   'ChmutovSurface',
   'BarthSexticSurface',
   'BretzelSurface',
+  'KummerQuarticSurface',
   'Genus2Surface',
   'MetaballSurface',
   'BlobbySurface',
@@ -466,6 +467,8 @@ export const SHAPES = [
   'CliffordTorusProjection',
   'MobiusPrism',
   'HopfTori',
+  'DiracBelt',
+  'Gomboc',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',

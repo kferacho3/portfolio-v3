@@ -161,6 +161,7 @@ import {
   chmutovSurfaceGeometry,
   barthSexticSurfaceGeometry,
   bretzelSurfaceGeometry,
+  kummerQuarticSurfaceGeometry,
   genus2SurfaceGeometry,
   metaballSurfaceGeometry,
   blobbyOrganicGeometry,
@@ -186,6 +187,8 @@ import {
   cliffordTorusProjectionGeometry,
   mobiusPrismGeometry,
   hopfToriGeometry,
+  diracBeltGeometry,
+  gombocGeometry,
   celticKnotGeometry,
   solomonSealGeometry,
   doubleHelixGeometry,
@@ -319,7 +322,12 @@ type ProceduralPreset =
   | 'VelvetAnodized'
   | 'LavaChrome'
   | 'PrismaticGel'
-  | 'GhostWire';
+  | 'GhostWire'
+  // NEW: Rare Finish Pack
+  | 'ThinFilmLattice'
+  | 'AuricCircuit'
+  | 'CryoPlasma'
+  | 'VoidPearl';
 
 const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   InkSplatter: 0,
@@ -354,6 +362,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   LavaChrome: 25,
   PrismaticGel: 26,
   GhostWire: 27,
+  // NEW: Rare Finish Pack
+  ThinFilmLattice: 28,
+  AuricCircuit: 29,
+  CryoPlasma: 30,
+  VoidPearl: 31,
 } as const;
 
 const PROCEDURAL_PRESET_META: Record<
@@ -473,6 +486,26 @@ const PROCEDURAL_PRESET_META: Record<
     envIntensity: 3.0,
     transparent: true,
     palette: ['#05070D', '#1F2D52', '#6EE7FF', '#E4F9FF'],
+  },
+  // NEW: Rare Finish Pack
+  ThinFilmLattice: {
+    envIntensity: 4.0,
+    transparent: true,
+    palette: ['#E5FCFF', '#9DEBFF', '#A384FF', '#FFE8A6'],
+  },
+  AuricCircuit: {
+    envIntensity: 3.3,
+    palette: ['#201307', '#8A5A0A', '#FFD36B', '#FFF2C8'],
+  },
+  CryoPlasma: {
+    envIntensity: 3.8,
+    transparent: true,
+    palette: ['#031420', '#11698E', '#6DEBFF', '#D8FFFF'],
+  },
+  VoidPearl: {
+    envIntensity: 3.2,
+    transparent: true,
+    palette: ['#090811', '#2A1E4A', '#8D7BFF', '#F5EFFF'],
   },
 };
 
@@ -1091,7 +1124,7 @@ void main() {
     metal = 0.08;
     rough = 0.09;
     alpha = 0.84;
-  } else {
+  } else if (style < 27.5) {
     // 27) GhostWire - x-ray lattice with spectral edge bleed
     vec2 q = p * 3.8;
     float t = uTime * 0.9;
@@ -1107,6 +1140,73 @@ void main() {
     metal = 0.18;
     rough = 0.24;
     alpha = 0.68;
+  } else if (style < 28.5) {
+    // 28) ThinFilmLattice - prismatic lattice with thin-film bands
+    vec2 q = p * 3.4;
+    float t = uTime * 0.42;
+
+    vec2 grid = abs(fract(q) - 0.5);
+    float lattice = 1.0 - smoothstep(0.05, 0.12, min(grid.x, grid.y));
+    float film = sin((fbm(q * 1.8 + t) * 16.0 + length(q) * 5.0) + t * 2.0) * 0.5 + 0.5;
+
+    v = mix(film, lattice, 0.6);
+    edge = lattice * 2.0;
+
+    metal = 0.86;
+    rough = 0.06;
+    alpha = 0.86;
+  } else if (style < 29.5) {
+    // 29) AuricCircuit - gold conductive traces
+    vec2 q = p * 4.3;
+    float t = uTime * 0.25;
+    vec2 id = floor(q);
+    vec2 gv = fract(q) - 0.5;
+
+    float lane = hash21(id + floor(t * 2.0));
+    float width = 0.05 + 0.03 * hash21(id + 13.7);
+    float trace =
+      lane < 0.5
+        ? 1.0 - smoothstep(width, width + 0.02, abs(gv.x))
+        : 1.0 - smoothstep(width, width + 0.02, abs(gv.y));
+    float node = smoothstep(0.16, 0.0, length(gv));
+
+    v = 0.35 + 0.65 * fbm(q * 1.2);
+    edge = trace * 1.7 + node * 0.9;
+
+    metal = 1.0;
+    rough = 0.18;
+  } else if (style < 30.5) {
+    // 30) CryoPlasma - cold plasma discharge bands
+    vec2 q = p * 2.6;
+    float t = uTime * 0.9;
+
+    float waveA = sin(q.x * 6.0 + t) * sin(q.y * 4.0 - t * 0.7);
+    float waveB = sin(length(q) * 9.0 - t * 1.4);
+    float plasma = waveA * 0.55 + waveB * 0.45;
+    plasma = plasma * 0.5 + 0.5;
+
+    float crack = pow(fbm(q * 8.0 + t * 0.5), 3.0);
+    v = plasma;
+    edge = crack * 2.4;
+
+    metal = 0.14;
+    rough = 0.28;
+    alpha = 0.86;
+  } else {
+    // 31) VoidPearl - dark nacre with soft spectral pulses
+    vec2 q = p * 2.0;
+    float t = uTime * 0.3;
+
+    float n1 = fbm(q * 2.3 + t);
+    float n2 = fbm(q * 4.5 - t * 0.6);
+    float pearl = sin((n1 * 8.5 + n2 * 4.0 + length(q) * 4.0) + t * 0.8) * 0.5 + 0.5;
+
+    v = mix(n1, n2, 0.5);
+    edge = smoothstep(0.58, 0.92, pearl) * 1.9;
+
+    metal = 0.24;
+    rough = 0.16;
+    alpha = 0.88;
   }
 
   // palette blend
@@ -1270,6 +1370,7 @@ const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'ChmutovSurface',
   'BarthSexticSurface',
   'BretzelSurface',
+  'KummerQuarticSurface',
   'HopfTori',
 ]);
 /* ────────────────── 4.   Enhanced Materials ──────────────────────────── */
@@ -1753,7 +1854,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   >({});
   const [materialIndex, setMaterialIndex] = useState(4); // Index 4 is meshNormalMaterial
   const [color, setColor] = useState(randHex());
-  const [wireframe, setWireframe] = useState(false);
+  const [wireframe] = useState(false);
   const [shaderSeed, setShaderSeed] = useState(Math.random() * 1000);
 
   // kick off the worker once
@@ -2194,6 +2295,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={barthSexticSurfaceGeometry()} />;
       case 'BretzelSurface':
         return <primitive object={bretzelSurfaceGeometry()} />;
+      case 'KummerQuarticSurface':
+        return <primitive object={kummerQuarticSurfaceGeometry()} />;
       case 'Genus2Surface':
         return <primitive object={genus2SurfaceGeometry()} />;
       case 'MetaballSurface':
@@ -2243,6 +2346,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={mobiusPrismGeometry()} />;
       case 'HopfTori':
         return <primitive object={hopfToriGeometry()} />;
+      case 'DiracBelt':
+        return <primitive object={diracBeltGeometry()} />;
+      case 'Gomboc':
+        return <primitive object={gombocGeometry()} />;
       // Advanced Knots
       case 'CelticKnot':
         return <primitive object={celticKnotGeometry()} />;
@@ -2339,6 +2446,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     ChmutovSurface: 0.74,
     BarthSexticSurface: 0.7,
     BretzelSurface: 0.78,
+    KummerQuarticSurface: 0.72,
     Genus2Surface: 0.84,
     MetaballSurface: 0.9,
     BlobbySurface: 0.9,
@@ -2354,6 +2462,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
     CliffordTorusProjection: 0.74,
     MobiusPrism: 0.88,
     HopfTori: 0.72,
+    DiracBelt: 0.8,
+    Gomboc: 0.86,
   };
 
   /* drag rotation state */
@@ -2591,7 +2701,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     []
   );
 
-  const TOTAL_MATERIAL_MODES = 38;
+  const TOTAL_MATERIAL_MODES = 42;
   const getNextMaterialIndex = (current: number) =>
     (current + 1) % TOTAL_MATERIAL_MODES;
 
@@ -3033,6 +3143,50 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ) : (
         <ProceduralMeshMaterial
           preset="GhostWire"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 38: Thin Film Lattice
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#B6EDFF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="ThinFilmLattice"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 39: Auric Circuit
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#FFD36B" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="AuricCircuit"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 40: Cryo Plasma
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#9EE8FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="CryoPlasma"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 41: Void Pearl
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#C6B9FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="VoidPearl"
           envMap={env}
           seed={shaderSeed}
         />

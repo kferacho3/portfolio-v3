@@ -725,6 +725,41 @@ export function bretzelSurfaceGeometry(
   return geometry;
 }
 
+/**
+ * Kummer Quartic (approximation)
+ * Quartic surface family with 16 singularity-like pockets.
+ */
+export function kummerQuarticSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const a = 0.72;
+  const lambda = 5.2;
+
+  const fn: ImplicitFunction = (x, y, z) => {
+    const x2 = x * x;
+    const y2 = y * y;
+    const z2 = z * z;
+    const r2 = x2 + y2 + z2;
+
+    const quartic =
+      Math.pow(r2 + a * a, 2) -
+      4 * a * a * r2 -
+      lambda * (x2 * y2 + y2 * z2 + z2 * x2);
+    return quartic;
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 40,
+    bounds: 1.35,
+    isoValue: 0,
+    scale: 0.82,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    FACTORY FUNCTIONS
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -743,7 +778,8 @@ export type ImplicitSurfaceType =
   | 'genus2'
   | 'chmutov'
   | 'barthSextic'
-  | 'bretzel';
+  | 'bretzel'
+  | 'kummerQuartic';
 
 /**
  * Create an implicit surface geometry by name
@@ -781,6 +817,8 @@ export function createImplicitSurface(
       return barthSexticSurfaceGeometry(params);
     case 'bretzel':
       return bretzelSurfaceGeometry(params);
+    case 'kummerQuartic':
+      return kummerQuarticSurfaceGeometry(params);
     default:
       return gyroidSurfaceGeometry(params);
   }
@@ -802,6 +840,7 @@ export function randomImplicitSurfaceType(): ImplicitSurfaceType {
     'blobby',
     'barthSextic',
     'bretzel',
+    'kummerQuartic',
   ];
   return types[Math.floor(Math.random() * types.length)];
 }

@@ -33,6 +33,7 @@ export const MOBILE_HEAVY_SHAPES: ShapeName[] = [
   'GyroidMinimal',
   'BarthSexticSurface',
   'BretzelSurface',
+  'KummerQuarticSurface',
   'HopfTori',
 ];
 

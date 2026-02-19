@@ -954,6 +954,16 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     lowNoise: true,
     preferredMaterials: ['glass', 'matcap', 'wireglow'],
   },
+  KummerQuarticSurface: {
+    name: 'KummerQuarticSurface',
+    category: 'implicit',
+    complexity: 'high',
+    mobileSafe: false,
+    deformBias: 0.72,
+    noiseScaleBias: 0.66,
+    lowNoise: true,
+    preferredMaterials: ['diamond', 'glass', 'thinfilm'],
+  },
   Genus2Surface: {
     name: 'Genus2Surface',
     category: 'implicit',
@@ -1249,6 +1259,24 @@ export const SHAPE_META: Record<ShapeName, ShapeMeta> = {
     noiseScaleBias: 0.68,
     lowNoise: true,
     preferredMaterials: ['holographic', 'glass', 'rimglow'],
+  },
+  DiracBelt: {
+    name: 'DiracBelt',
+    category: 'exotic',
+    complexity: 'high',
+    mobileSafe: true,
+    deformBias: 0.8,
+    noiseScaleBias: 0.74,
+    preferredMaterials: ['thinfilm', 'holographic', 'rimglow'],
+  },
+  Gomboc: {
+    name: 'Gomboc',
+    category: 'exotic',
+    complexity: 'mid',
+    mobileSafe: true,
+    deformBias: 0.86,
+    noiseScaleBias: 0.8,
+    preferredMaterials: ['glass', 'diamond', 'matcap'],
   },
 
   // ──────────────── Advanced Knots ────────────────
