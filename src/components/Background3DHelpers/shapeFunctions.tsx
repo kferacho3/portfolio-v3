@@ -436,6 +436,11 @@ export const SHAPES = [
   // NEW: Implicit Surfaces (Phase 4)
   'GyroidSurface',
   'SchwarzDSurface',
+  'LidinoidSurface',
+  'IWPSurface',
+  'OrthocircleSurface',
+  'ChmutovSurface',
+  'Genus2Surface',
   'MetaballSurface',
   'BlobbySurface',
   // NEW: Harmonic Surfaces (Phase 4)
@@ -452,6 +457,9 @@ export const SHAPES = [
   'DiniSurface',
   'SeifertSurface',
   'CalabiFold',
+  'WhitneyUmbrella',
+  'MonkeySaddle',
+  'CliffordTorusProjection',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',

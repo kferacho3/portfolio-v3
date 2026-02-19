@@ -432,6 +432,67 @@ export function lidinoidSurfaceGeometry(
   return geometry;
 }
 
+/**
+ * Schoen I-WP (I-Wrapped Package) surface
+ * f(x,y,z) = 2(cos x cos y + cos y cos z + cos z cos x) - (cos 2x + cos 2y + cos 2z)
+ */
+export function iwpSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const fn: ImplicitFunction = (x, y, z) => {
+    const scale = Math.PI;
+    const sx = x * scale,
+      sy = y * scale,
+      sz = z * scale;
+    return (
+      2 *
+        (Math.cos(sx) * Math.cos(sy) +
+          Math.cos(sy) * Math.cos(sz) +
+          Math.cos(sz) * Math.cos(sx)) -
+      (Math.cos(2 * sx) + Math.cos(2 * sy) + Math.cos(2 * sz))
+    );
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 36,
+    bounds: 1.8,
+    isoValue: 0,
+    scale: 0.52,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
+/**
+ * Orthocircle lattice surface
+ * Based on three perpendicular cylinders: x^2+y^2=r^2, y^2+z^2=r^2, z^2+x^2=r^2
+ */
+export function orthocircleSurfaceGeometry(
+  params: IsoSurfaceParams = {}
+): THREE.BufferGeometry {
+  const r = 0.85;
+  const fn: ImplicitFunction = (x, y, z) => {
+    const c1 = x * x + y * y - r * r;
+    const c2 = y * y + z * z - r * r;
+    const c3 = z * z + x * x - r * r;
+    // Product yields an intricate cage-like iso-surface near zero.
+    return c1 * c2 * c3;
+  };
+
+  const geometry = createIsoSurfaceGeometry(fn, {
+    resolution: 34,
+    bounds: 1.4,
+    isoValue: 0,
+    scale: 0.72,
+    ...params,
+  });
+
+  geometry.userData.lowNoise = true;
+  return geometry;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    METABALL SURFACES
    Organic blob-like surfaces from potential field fusion
@@ -599,6 +660,8 @@ export type ImplicitSurfaceType =
   | 'schwarzP'
   | 'neovius'
   | 'lidinoid'
+  | 'iwp'
+  | 'orthocircle'
   | 'metaballs'
   | 'blobby'
   | 'torus'
@@ -623,6 +686,10 @@ export function createImplicitSurface(
       return neoviusSurfaceGeometry(params);
     case 'lidinoid':
       return lidinoidSurfaceGeometry(params);
+    case 'iwp':
+      return iwpSurfaceGeometry(params);
+    case 'orthocircle':
+      return orthocircleSurfaceGeometry(params);
     case 'metaballs':
       return metaballSurfaceGeometry([], params);
     case 'blobby':
@@ -648,6 +715,8 @@ export function randomImplicitSurfaceType(): ImplicitSurfaceType {
     'schwarzP',
     'neovius',
     'lidinoid',
+    'iwp',
+    'orthocircle',
     'metaballs',
     'blobby',
   ];

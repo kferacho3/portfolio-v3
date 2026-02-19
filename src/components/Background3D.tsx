@@ -153,6 +153,11 @@ import {
 import {
   gyroidSurfaceGeometry,
   schwarzDSurfaceGeometry,
+  lidinoidSurfaceGeometry,
+  iwpSurfaceGeometry,
+  orthocircleSurfaceGeometry,
+  chmutovSurfaceGeometry,
+  genus2SurfaceGeometry,
   metaballSurfaceGeometry,
   blobbyOrganicGeometry,
 } from './Background3DHelpers/implicitSurfaces';
@@ -172,6 +177,9 @@ import {
   diniSurfaceGeometry,
   seifertSurfaceGeometry,
   calabiFoldGeometry,
+  whitneyUmbrellaGeometry,
+  monkeySaddleGeometry,
+  cliffordTorusProjectionGeometry,
   celticKnotGeometry,
   solomonSealGeometry,
   doubleHelixGeometry,
@@ -293,7 +301,12 @@ type ProceduralPreset =
   | 'GoldLiquid'
   | 'SilverChrome'
   | 'PlatinumMirror'
-  | 'DiamondRainbow';
+  | 'DiamondRainbow'
+  // NEW: Spectral / Interference Variations
+  | 'IridescentSpectrum'
+  | 'AuroraVeins'
+  | 'ObsidianPulse'
+  | 'PearlescentShell';
 
 const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   InkSplatter: 0,
@@ -316,6 +329,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   SilverChrome: 15,
   PlatinumMirror: 16,
   DiamondRainbow: 17,
+  // NEW: Spectral / Interference Variations
+  IridescentSpectrum: 18,
+  AuroraVeins: 19,
+  ObsidianPulse: 20,
+  PearlescentShell: 21,
 } as const;
 
 const PROCEDURAL_PRESET_META: Record<
@@ -387,6 +405,26 @@ const PROCEDURAL_PRESET_META: Record<
     envIntensity: 6.0,
     transparent: true,
     palette: ['#FFFFFF', '#FF0000', '#00FF00', '#0000FF'],
+  },
+  // NEW: Spectral / Interference Variations
+  IridescentSpectrum: {
+    envIntensity: 4.6,
+    transparent: true,
+    palette: ['#E0F8FF', '#7AD3FF', '#B685FF', '#FFE07A'],
+  },
+  AuroraVeins: {
+    envIntensity: 3.4,
+    transparent: true,
+    palette: ['#041825', '#00D2A0', '#7C4DFF', '#F4FF8A'],
+  },
+  ObsidianPulse: {
+    envIntensity: 2.8,
+    palette: ['#07070A', '#1A1A2C', '#FF3B8A', '#7AF0FF'],
+  },
+  PearlescentShell: {
+    envIntensity: 3.1,
+    transparent: true,
+    palette: ['#F8F7FF', '#C8D7FF', '#FFD8E8', '#D2FFF2'],
   },
 };
 
@@ -847,7 +885,7 @@ void main() {
     
     metal = 1.0;
     rough = 0.0;
-  } else {
+  } else if (style < 17.5) {
     // 17) DiamondRainbow - strong chromatic dispersion
     vec2 q = p * 3.0;
     float t = uTime * 0.25;
@@ -871,6 +909,67 @@ void main() {
     metal = 0.0;
     rough = 0.0;
     alpha = 0.8;
+  } else if (style < 18.5) {
+    // 18) IridescentSpectrum - thin-film spectral sweep
+    vec2 q = p * 2.6;
+    float t = uTime * 0.45;
+
+    float flow = fbm(q * 1.8 + vec2(t, -t * 0.6));
+    float bands = sin((flow * 18.0 + length(q) * 4.0) + t * 2.3) * 0.5 + 0.5;
+    float prismatic = sin((q.x - q.y) * 6.0 + t * 1.7) * 0.5 + 0.5;
+
+    v = mix(flow, bands, 0.55);
+    edge = prismatic * 1.2;
+
+    metal = 0.9;
+    rough = 0.07;
+    alpha = 0.88;
+  } else if (style < 19.5) {
+    // 19) AuroraVeins - flowing luminous veins
+    vec2 q = p * 1.9;
+    float t = uTime * 0.2;
+
+    float veil = fbm(q * 2.0 + t);
+    float streak = sin(q.x * 8.0 + veil * 10.0 - t * 5.0) * 0.5 + 0.5;
+    float branches = pow(fbm(q * 5.5 - t * 0.8), 2.2);
+
+    v = veil * 0.65 + streak * 0.35;
+    edge = branches * 2.4;
+
+    metal = 0.12;
+    rough = 0.4;
+    alpha = 0.92;
+  } else if (style < 20.5) {
+    // 20) ObsidianPulse - dark glass with pulsing fissures
+    vec2 q = p * 3.3;
+    float t = uTime * 0.6;
+
+    float baseNoise = fbm(q * 1.5);
+    vec2 vd = voronoi2(q * 2.2 + t * 0.08);
+    float fissure = smoothstep(0.11, 0.01, vd.y - vd.x);
+    float pulse = 0.55 + 0.45 * sin(t * 2.6 + baseNoise * 7.0);
+
+    v = baseNoise * 0.45;
+    edge = fissure * pulse * 3.0;
+
+    metal = 0.75;
+    rough = 0.12;
+  } else {
+    // 21) PearlescentShell - soft nacre interference
+    vec2 q = p * 2.1;
+    float t = uTime * 0.25;
+
+    float layer1 = fbm(q * 2.4 + t);
+    float layer2 = fbm(q * 4.7 - t * 0.4);
+    float pearl = sin((layer1 * 9.0 + layer2 * 4.0 + length(q) * 5.0) + t);
+    pearl = pearl * 0.5 + 0.5;
+
+    v = layer1 * 0.5 + layer2 * 0.5;
+    edge = smoothstep(0.62, 0.92, pearl) * 1.6;
+
+    metal = 0.2;
+    rough = 0.18;
+    alpha = 0.9;
   }
 
   // palette blend
@@ -1003,81 +1102,6 @@ const isMobile = () => {
 
 const ROT_LIMIT_X = Math.PI / 2.5; // ~72° – feels natural                // NEW
 const ROT_LIMIT_Y = Math.PI; // 180° – full spin sideways
-const FRACTAL_SHAPES: ShapeName[] = [
-  'FractalCube',
-  'MandelbulbSlice',
-  'Mandelbulb',
-  'QuaternionJulia',
-  'ApollonianPacking',
-  'ApollonianPyramid',
-  'MengerSponge',
-  'MengerSpongeDense',
-  'SierpinskiIcosahedron',
-  'Koch3D',
-  'Koch3DDeep',
-  'GoursatTetrahedral',
-  'QuaternionPhoenixShader',
-  'ApollonianGasketShader',
-  'MergerSpongeShader',
-  'QuaternionJuliaSetsShader',
-  'KleinianLimitShader',
-];
-const PRISM_SHAPES: ShapeName[] = [
-  'TriPrism',
-  'PentPrism',
-  'HexPrism',
-  'StarPrism',
-  'Crystal',
-];
-/* Ultra-rare shapes - surfaces, attractors, and complex geometries */
-const ULTRA_RARE_SHAPES: ShapeName[] = [
-  // minimal/parametric surfaces
-  'EnneperSurface',
-  'HelicoidSurface',
-  'CatenoidSurface',
-  'ScherkSurface',
-  'DupinCyclide',
-  'TorusFlower',
-  'TwistedSuperEllipsoid',
-  'SphericalHarmonics',
-  // attractors / tubes
-  'LorenzAttractor',
-  'RosslerAttractor',
-  'LorenzAttractorTube',
-  'RosslerAttractorTube',
-  'HypotrochoidKnot',
-  'LissajousKnot',
-  'SuperformulaSpiral',
-  // shells / convex hull oddities
-  'NautilusShell',
-  'Oloid',
-  // NEW Phase 4 additions
-  'TesseractHull',
-  'Cell16Hull',
-  'Cell24Hull',
-  'Cell600Hull',
-  'AizawaAttractor',
-  'ThomasAttractor',
-  'HalvorsenAttractor',
-  'ChenAttractor',
-  'DadrasAttractor',
-  'SprottAttractor',
-  'GyroidSurface',
-  'SchwarzDSurface',
-  'MetaballSurface',
-  'BlobbySurface',
-  'SphericalHarmonic',
-  'HarmonicSuperposition',
-  'FourierBlob',
-  'AtomicOrbital',
-  'ToroidalHarmonic',
-  'TorusLink',
-  'BorromeanRings',
-  'RhombicDodecahedron',
-  'TruncatedIcosahedron',
-  'DisdyakisTriacontahedron',
-];
-
 const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'Mandelbulb',
   'QuaternionJulia',
@@ -1097,6 +1121,10 @@ const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'Oloid',
   'Cell600Hull',
   'DisdyakisTriacontahedron',
+  'LidinoidSurface',
+  'IWPSurface',
+  'OrthocircleSurface',
+  'ChmutovSurface',
 ]);
 /* ────────────────── 4.   Enhanced Materials ──────────────────────────── */
 const NeonMaterial: React.FC<NeonMaterialProps> = ({
@@ -1439,45 +1467,6 @@ export default function Background3D({ onAnimationComplete }: Props) {
     e.x = THREE.MathUtils.clamp(e.x, -ROT_LIMIT_X, ROT_LIMIT_X); // NEW
     e.y = THREE.MathUtils.clamp(e.y, -ROT_LIMIT_Y, ROT_LIMIT_Y); // NEW
   }; // NEW
-
-  /* Random initial shape */
-  /* Random initial shape - updated with ultra-rare shapes */
-  const getRandomShape = (exclude?: ShapeName): ShapeName => {
-    const safePool = (
-      pool: readonly ShapeName[] | ShapeName[],
-      fallback: readonly ShapeName[] | ShapeName[]
-    ) => {
-      if (!isMobileView) return pool;
-      const filtered = (pool as ShapeName[]).filter(
-        (s) => !MOBILE_HEAVY_SHAPES.has(s)
-      );
-      return filtered.length ? filtered : fallback;
-    };
-
-    const basePool = safePool(SHAPES, SHAPES);
-    const fractalPool = safePool(FRACTAL_SHAPES, basePool);
-    const prismPool = safePool(PRISM_SHAPES, basePool);
-    const ultraRarePool = safePool(ULTRA_RARE_SHAPES, basePool);
-
-    const pickPool = () => {
-      const roll = Math.random();
-      // ~35% chance of fractal shapes
-      if (roll < 0.35) return fractalPool;
-      // ~15% chance of prism shapes
-      if (roll < 0.5) return prismPool;
-      // ~12% chance of ultra-rare shapes (surfaces, attractors, etc.)
-      if (roll < 0.62) return ultraRarePool;
-      // ~38% chance of any base shape
-      return basePool;
-    };
-
-    let shape: ShapeName;
-    do {
-      const pool = pickPool();
-      shape = pool[Math.floor(Math.random() * pool.length)] as ShapeName;
-    } while (shape === exclude);
-    return shape;
-  };
 
   /* Calculate position and scale based on viewport */
   const getPositionAndScale = () => {
@@ -2043,6 +2032,16 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={gyroidSurfaceGeometry()} />;
       case 'SchwarzDSurface':
         return <primitive object={schwarzDSurfaceGeometry()} />;
+      case 'LidinoidSurface':
+        return <primitive object={lidinoidSurfaceGeometry()} />;
+      case 'IWPSurface':
+        return <primitive object={iwpSurfaceGeometry()} />;
+      case 'OrthocircleSurface':
+        return <primitive object={orthocircleSurfaceGeometry()} />;
+      case 'ChmutovSurface':
+        return <primitive object={chmutovSurfaceGeometry()} />;
+      case 'Genus2Surface':
+        return <primitive object={genus2SurfaceGeometry()} />;
       case 'MetaballSurface':
         return <primitive object={metaballSurfaceGeometry()} />;
       case 'BlobbySurface':
@@ -2080,6 +2079,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={seifertSurfaceGeometry()} />;
       case 'CalabiFold':
         return <primitive object={calabiFoldGeometry()} />;
+      case 'WhitneyUmbrella':
+        return <primitive object={whitneyUmbrellaGeometry()} />;
+      case 'MonkeySaddle':
+        return <primitive object={monkeySaddleGeometry()} />;
+      case 'CliffordTorusProjection':
+        return <primitive object={cliffordTorusProjectionGeometry()} />;
       // Advanced Knots
       case 'CelticKnot':
         return <primitive object={celticKnotGeometry()} />;
@@ -2168,6 +2173,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
     // Implicit Surfaces
     GyroidSurface: 0.75,
     SchwarzDSurface: 0.8,
+    LidinoidSurface: 0.72,
+    IWPSurface: 0.7,
+    OrthocircleSurface: 0.76,
+    ChmutovSurface: 0.74,
+    Genus2Surface: 0.84,
     MetaballSurface: 0.9,
     BlobbySurface: 0.9,
     // Harmonics
@@ -2176,6 +2186,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
     FourierBlob: 0.9,
     AtomicOrbital: 0.8,
     ToroidalHarmonic: 0.9,
+    // New exotic surfaces
+    WhitneyUmbrella: 0.78,
+    MonkeySaddle: 0.82,
+    CliffordTorusProjection: 0.74,
   };
 
   /* drag rotation state */
@@ -2295,6 +2309,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* use _onPointerDown inside the inline handler */
   // The onPointerDownMesh function is correct and requires no changes.
   const onPointerDownMesh = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
     setGrabbing(true);
     // useCursor will automatically set cursor to 'grabbing' when grabbing state is true
     onPointerDown(e.nativeEvent as PointerEvent);
@@ -2339,10 +2354,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     setUsage: (usage: number) => THREE.BufferAttribute;
   };
   const TARGET_R = 1.2; // all geometries will end up with this radius
-  const CLICK_RADIUS = 0.9; // stricter click zone relative to target radius
   const radiusRef = useRef(TARGET_R); // expose for useFrame fall-off
-  const clickSphereRef = useRef(new THREE.Sphere());
-  const clickCenterRef = useRef(new THREE.Vector3());
 
   /* ---------------- helper: capture pristine vertices ------------------ */
   const handleMeshRef = useCallback(
@@ -2419,34 +2431,48 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const pickMaterialIndex = () => {
     const roll = Math.random();
 
-    // Common (original set 0-4): ~30%
-    if (roll < 0.3) return Math.floor(Math.random() * 5);
+    // Common (original set 0-4): ~26%
+    if (roll < 0.26) return Math.floor(Math.random() * 5);
 
-    // Phase 4 materials (5-9): ~15%
-    if (roll < 0.45) return 5 + Math.floor(Math.random() * 5);
+    // Phase 4 materials (5-9): ~14%
+    if (roll < 0.4) return 5 + Math.floor(Math.random() * 5);
 
     // Original procedural patterns (10-14): ~12%
-    if (roll < 0.57) return 10 + Math.floor(Math.random() * 5);
+    if (roll < 0.52) return 10 + Math.floor(Math.random() * 5);
 
     // Original precious metals (15-18): ~8%
-    if (roll < 0.65) return 15 + Math.floor(Math.random() * 4);
+    if (roll < 0.6) return 15 + Math.floor(Math.random() * 4);
 
-    // NEW: Ultra pattern shaders (19-23): ~18%
-    if (roll < 0.83) return 19 + Math.floor(Math.random() * 5);
+    // NEW: Ultra pattern shaders (19-23): ~16%
+    if (roll < 0.76) return 19 + Math.floor(Math.random() * 5);
 
-    // NEW: Legendary precious metal variations (24-27): ~17%
-    return 24 + Math.floor(Math.random() * 4);
+    // NEW: Legendary precious metal variations (24-27): ~14%
+    if (roll < 0.9) return 24 + Math.floor(Math.random() * 4);
+
+    // NEW: Spectral shader pack (28-31): ~10%
+    return 28 + Math.floor(Math.random() * 4);
   };
 
-  /* click => randomize to different shape */
-  const randomizeShape = () => {
+  const getNextShapeInPool = (current: ShapeName): ShapeName => {
+    const pool = isMobileView
+      ? SHAPES.filter((name) => !MOBILE_HEAVY_SHAPES.has(name))
+      : SHAPES;
+
+    if (pool.length === 0) return current;
+    const index = pool.indexOf(current);
+    if (index < 0) return pool[0] as ShapeName;
+    return pool[(index + 1) % pool.length] as ShapeName;
+  };
+
+  /* click => cycle to next shape */
+  const cycleShape = () => {
     shapeApi.start({
       to: async (next) => {
         await next({ scale: [0, 0, 0] });
 
-        const newShape = getRandomShape(shape);
-        console.log('[Background3D] switching to', newShape);
-        setShape(newShape);
+        const nextShape = getNextShapeInPool(shape);
+        console.log('[Background3D] switching to', nextShape);
+        setShape(nextShape);
 
         setMaterialIndex(pickMaterialIndex());
         setColor(randHex());
@@ -2459,14 +2485,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
   };
 
   const handleModelClick = (e: ThreeEvent<MouseEvent>) => {
-    if (!meshRef.current) return;
-    const center = clickCenterRef.current;
-    meshRef.current.getWorldPosition(center);
-    clickSphereRef.current.center.copy(center);
-    clickSphereRef.current.radius = radiusRef.current * CLICK_RADIUS;
-    if (e.ray?.intersectsSphere(clickSphereRef.current)) {
-      randomizeShape();
-    }
+    e.stopPropagation();
+    // Ignore drag-complete clicks so cycling feels intentional.
+    if (isDragging.current || e.delta > 6) return;
+    cycleShape();
   };
 
   /* material modes */
@@ -2743,6 +2765,51 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ) : (
         <ProceduralMeshMaterial
           preset="DiamondRainbow"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    /* ───── NEW: Spectral / Interference Shader Pack ───── */
+    // 28: Iridescent Spectrum
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#B8F3FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="IridescentSpectrum"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 29: Aurora Veins
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#39E1B7" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="AuroraVeins"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 30: Obsidian Pulse
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#0D0D12" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="ObsidianPulse"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 31: Pearlescent Shell
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#F5ECFF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="PearlescentShell"
           envMap={env}
           seed={shaderSeed}
         />
@@ -3173,7 +3240,6 @@ export default function Background3D({ onAnimationComplete }: Props) {
                             {(envMap) => (
                               <>
                                 <e.mesh
-                                  raycast={() => null}
                                   ref={(m: THREE.Mesh | null) => {
                                     meshRef.current = m;
                                     if (m) handleMeshRef(m);
@@ -3181,6 +3247,18 @@ export default function Background3D({ onAnimationComplete }: Props) {
                                   theatreKey="Background3DMesh"
                                   castShadow
                                   receiveShadow
+                                  onPointerEnter={
+                                    isMobileView
+                                      ? undefined
+                                      : handlePointerEnter
+                                  }
+                                  onPointerLeave={
+                                    isMobileView
+                                      ? undefined
+                                      : handlePointerLeave
+                                  }
+                                  onPointerDown={onPointerDownMesh}
+                                  onClick={handleModelClick}
                                 >
                                   {makeGeometry(shape)}
                                   {materialFns[materialIndex](envMap)}

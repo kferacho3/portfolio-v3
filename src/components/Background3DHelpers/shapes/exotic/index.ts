@@ -3,7 +3,8 @@
    shapes/exotic/index.ts - 15 Ultra-unique exotic shape geometries
    
    Categories:
-   - Exotic Surfaces (4): HyperbolicParaboloid, DiniSurface, SeiferSurface, CalabiFold
+   - Exotic Surfaces (7): HyperbolicParaboloid, DiniSurface, SeiferSurface, CalabiFold,
+                          WhitneyUmbrella, MonkeySaddle, CliffordTorusProjection
    - Advanced Knots (3): CelticKnot, SolomonSeal, DoubleHelix
    - Geometric Structures (4): SpiralTorus, VoronoiShell, PenroseTiling3D, Hexapod
    - Minimal Surfaces (2): RuledSurface, GyroidMinimal
@@ -119,6 +120,101 @@ export function calabiFoldGeometry(
 
   const geo = new ParametricGeometry(func, segments, segments);
   geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Whitney Umbrella
+ * Classic pinch-point singularity surface: x^2 = y^2 z
+ */
+export function whitneyUmbrellaGeometry(
+  scale = 1,
+  segments = 96
+): THREE.BufferGeometry {
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const U = (u - 0.5) * 2.4;
+    const V = (v - 0.5) * 2.4;
+
+    const x = U * V;
+    const y = U;
+    const z = V * V;
+
+    target.set(x * scale * 0.55, (z - 0.6) * scale * 0.55, y * scale * 0.55);
+  };
+
+  const geo = new ParametricGeometry(func, segments, segments);
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
+/**
+ * Monkey Saddle
+ * z = x^3 - 3xy^2, a triple-saddle algebraic surface.
+ */
+export function monkeySaddleGeometry(
+  scale = 1,
+  segments = 96
+): THREE.BufferGeometry {
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const x = (u - 0.5) * 2.2;
+    const y = (v - 0.5) * 2.2;
+    const z = x * x * x - 3 * x * y * y;
+
+    target.set(x * scale * 0.52, z * scale * 0.2, y * scale * 0.52);
+  };
+
+  const geo = new ParametricGeometry(func, segments, segments);
+  geo.computeVertexNormals();
+  geo.center();
+  return geo;
+}
+
+/**
+ * Clifford Torus Projection
+ * 4D torus projection rendered as a compact crystalline ring.
+ */
+export function cliffordTorusProjectionGeometry(
+  scale = 1,
+  uSegments = 120,
+  vSegments = 90
+): THREE.BufferGeometry {
+  const project4D = (
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    d = 2.4
+  ): THREE.Vector3 => {
+    const f = 1 / (d - w);
+    return new THREE.Vector3(x * f, y * f, z * f);
+  };
+
+  const func = (u: number, v: number, target: THREE.Vector3) => {
+    const U = u * Math.PI * 2;
+    const V = v * Math.PI * 2;
+    const r = 1 / Math.sqrt(2);
+
+    // Clifford torus in S^3
+    const x4 = r * Math.cos(U);
+    const y4 = r * Math.sin(U);
+    const z4 = r * Math.cos(V);
+    const w4 = r * Math.sin(V);
+
+    // Slow 4D twist to avoid obvious symmetry.
+    const twist = 0.55;
+    const cs = Math.cos(twist);
+    const sn = Math.sin(twist);
+    const tx = x4 * cs - w4 * sn;
+    const tw = x4 * sn + w4 * cs;
+
+    const p = project4D(tx, y4, z4, tw);
+    target.set(p.x * scale * 0.95, p.y * scale * 0.95, p.z * scale * 0.95);
+  };
+
+  const geo = new ParametricGeometry(func, uSegments, vSegments);
+  geo.computeVertexNormals();
+  geo.center();
   return geo;
 }
 
@@ -810,6 +906,9 @@ export const EXOTIC_SHAPES = [
   'DiniSurface',
   'SeifertSurface',
   'CalabiFold',
+  'WhitneyUmbrella',
+  'MonkeySaddle',
+  'CliffordTorusProjection',
   // Advanced Knots
   'CelticKnot',
   'SolomonSeal',
