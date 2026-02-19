@@ -113,12 +113,15 @@ import {
   borromeanRingsGeometry,
   lissajousKnotGeometry,
   rhombicDodecahedronGeometry,
+  rhombicosidodecahedronGeometry,
+  greatRhombicosidodecahedronGeometry,
   truncatedIcosahedronGeometry,
   disdyakisTriacontahedronGeometry,
   /* NEW: Ultra-rare surfaces & attractor tubes */
   enneperSurfaceGeometry,
   helicoidSurfaceGeometry,
   catenoidSurfaceGeometry,
+  costaSurfaceGeometry,
   scherkSurfaceGeometry,
   dupinCyclideGeometry,
   sphericalHarmonicsGeometry,
@@ -137,6 +140,7 @@ import {
   tesseractHullGeometry,
   cell16HullGeometry,
   cell24HullGeometry,
+  cell120HullGeometry,
   cell600HullGeometry,
 } from './Background3DHelpers/projection4D';
 
@@ -339,7 +343,12 @@ type ProceduralPreset =
   | 'OrbitTrapPulse'
   | 'CurvatureHeat'
   | 'DomainSpectrum'
-  | 'CausticRefraction';
+  | 'CausticRefraction'
+  // NEW: Experimental Math Coatings
+  | 'LyapunovHalo'
+  | 'HarmonicPearlescence'
+  | 'ZBufferMoire'
+  | 'InterferenceGlass';
 
 const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   InkSplatter: 0,
@@ -384,6 +393,11 @@ const PROCEDURAL_PRESET_ID: Record<ProceduralPreset, number> = {
   CurvatureHeat: 33,
   DomainSpectrum: 34,
   CausticRefraction: 35,
+  // NEW: Experimental Math Coatings
+  LyapunovHalo: 36,
+  HarmonicPearlescence: 37,
+  ZBufferMoire: 38,
+  InterferenceGlass: 39,
 } as const;
 
 const PROCEDURAL_PRESET_META: Record<
@@ -543,6 +557,26 @@ const PROCEDURAL_PRESET_META: Record<
     envIntensity: 5.2,
     transparent: true,
     palette: ['#E4FBFF', '#A5E6FF', '#AFC4FF', '#FFFFFF'],
+  },
+  // NEW: Experimental Math Coatings
+  LyapunovHalo: {
+    envIntensity: 3.9,
+    transparent: true,
+    palette: ['#080A16', '#0BC6FF', '#FF56A8', '#F7FFE2'],
+  },
+  HarmonicPearlescence: {
+    envIntensity: 4.1,
+    transparent: true,
+    palette: ['#EAFBFF', '#B6D6FF', '#EAD5FF', '#FFF0C8'],
+  },
+  ZBufferMoire: {
+    envIntensity: 2.7,
+    palette: ['#0A0A0F', '#2C3E7A', '#59E3FF', '#E6FAFF'],
+  },
+  InterferenceGlass: {
+    envIntensity: 5.6,
+    transparent: true,
+    palette: ['#F5FDFF', '#9BE9FF', '#9FB4FF', '#FFFFFF'],
   },
 };
 
@@ -1289,7 +1323,7 @@ void main() {
     metal = 0.2;
     rough = 0.2;
     alpha = 0.9;
-  } else {
+  } else if (style < 35.5) {
     // 35) CausticRefraction - high-clarity refractive caustic sparkles
     vec2 q = p * 4.0;
     float t = uTime * 0.33;
@@ -1302,6 +1336,85 @@ void main() {
     metal = 0.03;
     rough = 0.01;
     alpha = 0.82;
+  } else if (style < 36.5) {
+    // 36) LyapunovHalo - divergence heat with orbit-like halos
+    vec2 q = p * 1.85;
+    float t = uTime * 0.45;
+    vec2 z = q * 0.35;
+    float lyap = 0.0;
+
+    for (int i = 0; i < 6; i++) {
+      float nx = sin(2.6 * z.y + 1.2 + t * 0.23);
+      float ny = sin(2.1 * z.x + 2.0 - t * 0.19);
+      float deriv = abs(2.6 * cos(2.6 * z.y + 1.2 + t * 0.23));
+      lyap += log(deriv + 1e-3);
+      z = vec2(nx, ny) + q * 0.08;
+    }
+
+    lyap = lyap / 6.0;
+    float halo = smoothstep(-0.2, 0.35, lyap);
+    float contour = 1.0 - smoothstep(0.03, 0.09, abs(fract(lyap * 4.0) - 0.5));
+
+    v = halo;
+    edge = contour * 2.1;
+
+    metal = 0.48;
+    rough = 0.18;
+    alpha = 0.9;
+  } else if (style < 37.5) {
+    // 37) HarmonicPearlescence - spherical-harmonic-like lobe interference
+    vec2 q = p * 2.2;
+    float t = uTime * 0.28;
+    float ang = atan(q.y, q.x);
+    float rad = length(q);
+
+    float l3 = sin(3.0 * ang + rad * 3.7 + t);
+    float l5 = sin(5.0 * ang - rad * 6.5 - t * 1.2);
+    float l7 = sin(7.0 * ang + rad * 2.8 + t * 0.6);
+
+    float pearl = 0.5 + 0.5 * (l3 * 0.45 + l5 * 0.35 + l7 * 0.2);
+    float ridge = smoothstep(0.62, 0.94, abs(l5));
+
+    v = pearl;
+    edge = ridge * 1.9;
+
+    metal = 0.34;
+    rough = 0.1;
+    alpha = 0.88;
+  } else if (style < 38.5) {
+    // 38) ZBufferMoire - deliberate near-layer moire interference
+    vec2 q = p * 6.2;
+    float t = uTime * 1.35;
+
+    float layerA = sin(q.x * 14.0 + q.y * 1.7 + t);
+    float layerB = sin(q.x * 14.35 + q.y * 1.62 - t * 0.93);
+    float moire = abs(layerA - layerB);
+    float scan = 0.5 + 0.5 * sin(vWorldPos.y * 52.0 + t * 1.8);
+
+    v = sat(1.0 - moire * 0.55);
+    edge = smoothstep(0.45, 1.0, moire) * (0.8 + 0.6 * scan);
+
+    metal = 0.62;
+    rough = 0.24;
+  } else {
+    // 39) InterferenceGlass - thin-film caustic glass with spectral bands
+    vec2 q = p * 3.5;
+    float t = uTime * 0.41;
+    float field = fbm(q * 2.7 + t);
+    float phase = field * 22.0 + length(q) * 8.0 - t * 3.4;
+
+    float waveR = sin(phase);
+    float waveG = sin(phase + 2.0943951);
+    float waveB = sin(phase + 4.1887902);
+    float spectral = (waveR + waveG + waveB) * 0.1667 + 0.5;
+    float sparkle = pow(hash21(floor(q * 10.0 + t * 2.0)), 20.0);
+
+    v = spectral;
+    edge = sparkle * 4.0 + smoothstep(0.52, 0.9, spectral) * 0.85;
+
+    metal = 0.08;
+    rough = 0.015;
+    alpha = 0.8;
   }
 
   // palette blend
@@ -1330,7 +1443,8 @@ void main() {
     (style > 7.5 && style < 8.5) ||   // DiamondCaustics
     (style > 16.5 && style < 17.5) || // DiamondRainbow
     (style > 25.5 && style < 26.5) || // PrismaticGel
-    (style > 34.5 && style < 35.5);   // CausticRefraction
+    (style > 34.5 && style < 35.5) || // CausticRefraction
+    (style > 38.5 && style < 39.5);   // InterferenceGlass
 
   if (useRefraction) {
     float ior = 2.417;
@@ -1460,7 +1574,9 @@ const MOBILE_HEAVY_SHAPES = new Set<ShapeName>([
   'NautilusShell',
   'Oloid',
   'Cell600Hull',
+  'Cell120Hull',
   'DisdyakisTriacontahedron',
+  'GreatRhombicosidodecahedron',
   'LidinoidSurface',
   'IWPSurface',
   'OrthocircleSurface',
@@ -2252,6 +2368,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
         return <primitive object={helicoidSurfaceGeometry()} />;
       case 'CatenoidSurface':
         return <primitive object={catenoidSurfaceGeometry()} />;
+      case 'CostaSurface':
+        return <primitive object={costaSurfaceGeometry()} />;
       case 'ScherkSurface':
         return <primitive object={scherkSurfaceGeometry()} />;
       case 'DupinCyclide':
@@ -2314,6 +2432,10 @@ export default function Background3D({ onAnimationComplete }: Props) {
       }
       case 'RhombicDodecahedron':
         return <primitive object={rhombicDodecahedronGeometry()} />;
+      case 'Rhombicosidodecahedron':
+        return <primitive object={rhombicosidodecahedronGeometry()} />;
+      case 'GreatRhombicosidodecahedron':
+        return <primitive object={greatRhombicosidodecahedronGeometry()} />;
       case 'TruncatedIcosahedron':
         return <primitive object={truncatedIcosahedronGeometry()} />;
       case 'DisdyakisTriacontahedron':
@@ -2343,6 +2465,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
         const rot = get4DRotation(recipe);
         return (
           <primitive object={cell24HullGeometry(rot, recipe.proj4D_distance)} />
+        );
+      }
+      case 'Cell120Hull': {
+        const recipe = getRecipe(kind);
+        const rot = get4DRotation(recipe);
+        return (
+          <primitive
+            object={cell120HullGeometry(rot, recipe.proj4D_distance, 0.9)}
+          />
         );
       }
       case 'Cell600Hull': {
@@ -2518,6 +2649,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     EnneperSurface: 0.9,
     HelicoidSurface: 0.85,
     CatenoidSurface: 0.85,
+    CostaSurface: 0.78,
     ScherkSurface: 0.8,
     DupinCyclide: 0.9,
     SphericalHarmonics: 0.85,
@@ -2538,12 +2670,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
     BorromeanRings: 1.0,
     LissajousKnot: 0.95,
     RhombicDodecahedron: 1.0,
+    Rhombicosidodecahedron: 0.92,
+    GreatRhombicosidodecahedron: 0.84,
     TruncatedIcosahedron: 0.95,
     DisdyakisTriacontahedron: 0.85,
     // 4D Projections
     TesseractHull: 0.9,
     Cell16Hull: 0.9,
     Cell24Hull: 0.85,
+    Cell120Hull: 0.78,
     Cell600Hull: 0.75,
     // Strange Attractors
     AizawaAttractor: 0.85,
@@ -2822,7 +2957,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     []
   );
 
-  const TOTAL_MATERIAL_MODES = 46;
+  const TOTAL_MATERIAL_MODES = 50;
   const getNextMaterialIndex = (current: number) =>
     (current + 1) % TOTAL_MATERIAL_MODES;
 
@@ -3352,6 +3487,50 @@ export default function Background3D({ onAnimationComplete }: Props) {
       ) : (
         <ProceduralMeshMaterial
           preset="CausticRefraction"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 46: Lyapunov Halo
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#5BE5FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="LyapunovHalo"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 47: Harmonic Pearlescence
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#E5E8FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="HarmonicPearlescence"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 48: ZBuffer Moire
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#6BC8FF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="ZBufferMoire"
+          envMap={env}
+          seed={shaderSeed}
+        />
+      ),
+    // 49: Interference Glass
+    (env: THREE.Texture | null) =>
+      wireframe ? (
+        <meshBasicMaterial color="#ECFAFF" wireframe />
+      ) : (
+        <ProceduralMeshMaterial
+          preset="InterferenceGlass"
           envMap={env}
           seed={shaderSeed}
         />
