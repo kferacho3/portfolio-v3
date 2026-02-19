@@ -2845,6 +2845,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
   const mobileHoverPos = useRef(new THREE.Vector3());
   const mobileHoverSmoothed = useRef(new THREE.Vector3());
   const touchPulseRef = useRef(0);
+  const theatreSeqRef = useRef<number | null>(null);
+  const dragReleaseAtRef = useRef(0);
   const touchReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -2906,6 +2908,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   const onPointerUp = useCallback(() => {
     isDragging.current = false;
+    dragReleaseAtRef.current = performance.now();
     setGrabbing(false); // Reset grabbing state
     // useCursor will handle cursor reset based on hovered state
 
@@ -4160,17 +4163,44 @@ export default function Background3D({ onAnimationComplete }: Props) {
     });
 
     /* 8 ▸ inertial spin -------------------------------------------------- */
-    if (spinGroupRef.current && !isDragging.current) {
-      spinGroupRef.current.rotation.y += vel.current.x;
-      spinGroupRef.current.rotation.x += vel.current.y;
+    if (outerGroupRef.current && !isDragging.current) {
+      outerGroupRef.current.rotation.y += vel.current.x;
+      outerGroupRef.current.rotation.x += vel.current.y;
+      clampRotation(outerGroupRef.current.rotation);
       vel.current.x *= 0.95;
       vel.current.y *= 0.95;
     }
 
     /* 9 ▸ Theatre sequencing -------------------------------------------- */
     if (theatre?.sequence) {
-      theatre.sequence.position =
-        scrollProgress * val(theatre.sequence.pointer.length);
+      const sequenceLength = val(theatre.sequence.pointer.length);
+      const scrollTargetSequencePos = scrollProgress * sequenceLength;
+      if (theatreSeqRef.current === null) {
+        theatreSeqRef.current = scrollTargetSequencePos;
+      }
+
+      // While dragging, freeze Theatre's sequence and let manual rotation
+      // dominate; on release, ease back to scroll-driven sequencing.
+      const targetSequencePos = isDragging.current
+        ? theatreSeqRef.current
+        : scrollTargetSequencePos;
+
+      const msSinceRelease = performance.now() - dragReleaseAtRef.current;
+      const theatreFollow = isDragging.current
+        ? 0
+        : msSinceRelease < 360
+          ? 3.8
+          : 8.5;
+
+      if (theatreFollow > 0) {
+        theatreSeqRef.current = THREE.MathUtils.damp(
+          theatreSeqRef.current,
+          targetSequencePos,
+          theatreFollow,
+          delta
+        );
+      }
+      theatre.sequence.position = theatreSeqRef.current;
     }
   });
 
@@ -4215,7 +4245,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
         {/* Enhanced particles */}
         <Particles particlesCount={isMobileView ? 400 : 800} />
 
-        <EGroup ref={outerGroupRef} theatreKey="Dodecahedron">
+        <EGroup theatreKey="Dodecahedron">
           {/* Enhanced lighting */}
           <ambientLight intensity={0.25} />
           <directionalLight
@@ -4239,7 +4269,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
           />
 
           {/* Main group - static scale (includes icons) */}
-          <group scale={outerScale}>
+          <group ref={outerGroupRef} scale={outerScale}>
             {/* 3D SHAPE with drop-in + scale animations */}
             <a.group
               position={
