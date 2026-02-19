@@ -2059,7 +2059,9 @@ export default function Background3D({ onAnimationComplete }: Props) {
   /* shape / material state - always start with FractalCube */
   /* shape / material state - always start with FractalCube */
   /* initial value must be a member of the union */
-  const [shape, setShape] = useState<ShapeName>('CinquefoilKnot');
+  const [shape, setShape] = useState<ShapeName>(() =>
+    isMobileView ? 'LissajousKnot' : 'FractalCube'
+  );
   const [bulb, setBulb] =
     useState<Awaited<ReturnType<typeof mandelbulbGeometry>>>();
   /* where the other React states sit, e.g. right after `bulb` */
@@ -2071,8 +2073,13 @@ export default function Background3D({ onAnimationComplete }: Props) {
       >
     >
   >({});
-  const [materialIndex, setMaterialIndex] = useState(1); // Start with translucent glass
-  const [color, setColor] = useState('#c8e8ff');
+  // Mobile starts on a smoother premium shader; desktop keeps prior default look.
+  const [materialIndex, setMaterialIndex] = useState(() =>
+    isMobileView ? 9 : 4
+  ); // 9 = Chromatic Dispersion, 4 = meshNormalMaterial
+  const [color, setColor] = useState(() =>
+    isMobileView ? '#c8e8ff' : randHex()
+  );
   const [wireframe] = useState(false);
   const [shaderSeed, setShaderSeed] = useState(Math.random() * 1000);
   const [isShapePending, startShapeTransition] = useTransition();
