@@ -219,19 +219,24 @@ import Particles from './Particles';
 /* icons */
 import { FaAws } from 'react-icons/fa';
 import {
+  SiBlender,
   SiAdobe,
   SiCss3,
   SiFigma,
   SiFirebase,
   SiFramer,
   SiGit,
+  SiGraphql,
   SiHtml5,
   SiJavascript,
   SiNextdotjs,
+  SiNodedotjs,
+  SiPostgresql,
   SiPrisma,
   SiReact,
   SiStripe,
   SiStyledcomponents,
+  SiSupabase,
   SiTailwindcss,
   SiTypescript,
 } from 'react-icons/si';
@@ -1344,18 +1349,23 @@ const iconPool = [
   { n: 'CSS', i: SiCss3, c: '#1572B6' },
   { n: 'HTML', i: SiHtml5, c: '#E34F26' },
   { n: 'ReactJS', i: SiReact, c: '#61DAFB' },
+  { n: 'Node', i: SiNodedotjs, c: '#5FA04E' },
   { n: 'Styled', i: SiStyledcomponents, c: '#DB7093' },
   { n: 'TypeScript', i: SiTypescript, c: '#3178C6' },
-  { n: 'Next', i: SiNextdotjs, c: '#000' },
+  { n: 'Next', i: SiNextdotjs, c: '#F8F8F8' },
   { n: 'Tailwind', i: SiTailwindcss, c: '#38B2AC' },
-  { n: 'Prisma', i: SiPrisma, c: '#2D3748' },
+  { n: 'Prisma', i: SiPrisma, c: '#9AB7D9' },
   { n: 'Stripe', i: SiStripe, c: '#635BFF' },
   { n: 'Firebase', i: SiFirebase, c: '#FFCA28' },
+  { n: 'GraphQL', i: SiGraphql, c: '#E10098' },
+  { n: 'Supabase', i: SiSupabase, c: '#3ECF8E' },
+  { n: 'PostgreSQL', i: SiPostgresql, c: '#4169E1' },
   { n: 'AWS', i: FaAws, c: '#FF9900' },
   { n: 'Git', i: SiGit, c: '#F05032' },
   { n: 'Adobe', i: SiAdobe, c: '#FF0000' },
   { n: 'Figma', i: SiFigma, c: '#F24E1E' },
   { n: 'Framer', i: SiFramer, c: '#0055FF' },
+  { n: 'Blender', i: SiBlender, c: '#F5792A' },
 ] as const;
 
 /* ────────────── 7.   Theatre wrappers ────────────────────────────── */
@@ -2735,10 +2745,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* icon textures & positions */
   const icons = useMemo(
-    () =>
-      [...iconPool]
-        .sort(() => 0.5 - Math.random())
-        .slice(0, isMobileView ? 8 : 12),
+    () => iconPool.slice(0, isMobileView ? 10 : 14),
     [isMobileView]
   );
   const iconTextures = useMemo(
@@ -2756,48 +2763,82 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - spread evenly around the center shape with min-gap separation */
+  /* icon positions - multi-ring layout with minimum-gap relaxation */
   const iconPositions = useMemo(() => {
     const list: THREE.Vector3[] = [];
     const count = icons.length;
     if (!count) return list;
 
-    const maxX = Math.max(1.05, viewport.width * (isMobileView ? 0.26 : 0.34));
-    const maxY = Math.max(0.6, viewport.height * (isMobileView ? 0.18 : 0.24));
+    const maxX = Math.max(1.35, viewport.width * (isMobileView ? 0.34 : 0.43));
+    const maxY = Math.max(0.8, viewport.height * (isMobileView ? 0.25 : 0.32));
+    const minY = -Math.max(0.52, viewport.height * (isMobileView ? 0.14 : 0.19));
     const radiusX = THREE.MathUtils.clamp(
-      viewport.width * (isMobileView ? 0.18 : 0.23),
-      isMobileView ? 0.95 : 1.25,
-      isMobileView ? 1.35 : 1.95
+      viewport.width * (isMobileView ? 0.22 : 0.28),
+      isMobileView ? 1.12 : 1.5,
+      isMobileView ? 1.72 : 2.4
     );
     const radiusY = THREE.MathUtils.clamp(
-      viewport.height * (isMobileView ? 0.13 : 0.18),
-      isMobileView ? 0.62 : 0.84,
-      isMobileView ? 1.0 : 1.38
+      viewport.height * (isMobileView ? 0.16 : 0.22),
+      isMobileView ? 0.74 : 1.02,
+      isMobileView ? 1.2 : 1.64
     );
-    const radialSwing = isMobileView ? 0.11 : 0.18;
-    const depthStep = isMobileView ? 0.07 : 0.11;
+    const ringScales = isMobileView ? [1.04, 1.28] : [0.96, 1.18, 1.36];
+    const ringCounts = ringScales.map(() => 0);
+    const ringDepth = isMobileView ? 0.065 : 0.095;
     const startAngle = -Math.PI / 2;
 
     for (let i = 0; i < count; i++) {
-      const theta = startAngle + (2 * Math.PI * i) / count;
-      const ringOffset = i % 2 === 0 ? radialSwing : -radialSwing;
-      const x = THREE.MathUtils.clamp(
-        Math.cos(theta) * (radiusX + ringOffset),
-        -maxX,
-        maxX
-      );
-      const y = THREE.MathUtils.clamp(
-        Math.sin(theta) * (radiusY + ringOffset * 0.55),
-        -maxY,
-        maxY
-      );
-      const z = 0.14 + ((i % 3) - 1) * depthStep;
-      list.push(new THREE.Vector3(x, y, z));
+      ringCounts[i % ringScales.length] += 1;
     }
 
-    const minGap = isMobileView ? 0.46 : 0.64;
+    let iconIndex = 0;
+    for (let ringIndex = 0; ringIndex < ringScales.length; ringIndex++) {
+      const slots = ringCounts[ringIndex];
+      if (!slots) continue;
+
+      const angleOffset = (ringIndex * Math.PI) / (slots * 1.45);
+      const ringScale = ringScales[ringIndex];
+      for (let slot = 0; slot < slots; slot++) {
+        const theta = startAngle + (2 * Math.PI * slot) / slots + angleOffset;
+        const x = THREE.MathUtils.clamp(
+          Math.cos(theta) * radiusX * ringScale,
+          -maxX,
+          maxX
+        );
+        const y = THREE.MathUtils.clamp(
+          Math.sin(theta) * radiusY * ringScale * 0.9,
+          minY,
+          maxY
+        );
+        const z =
+          0.08 +
+          ringIndex * ringDepth +
+          (slot % 2 === 0 ? ringDepth * 0.2 : -ringDepth * 0.2);
+        list[iconIndex++] = new THREE.Vector3(x, y, z);
+      }
+    }
+
+    const centerClearX = isMobileView ? 0.78 : 1.1;
+    const centerClearY = isMobileView ? 0.54 : 0.78;
+    const minGap = isMobileView ? 0.52 : 0.72;
     const delta = new THREE.Vector2();
-    for (let pass = 0; pass < 10; pass++) {
+    const keepOutsideCenter = (point: THREE.Vector3) => {
+      point.x = THREE.MathUtils.clamp(point.x, -maxX, maxX);
+      point.y = THREE.MathUtils.clamp(point.y, minY, maxY);
+
+      const ratio =
+        (point.x * point.x) / (centerClearX * centerClearX) +
+        (point.y * point.y) / (centerClearY * centerClearY);
+      if (ratio < 1) {
+        const pushScale = 1 / Math.sqrt(Math.max(ratio, 0.0001));
+        point.x = THREE.MathUtils.clamp(point.x * pushScale, -maxX, maxX);
+        point.y = THREE.MathUtils.clamp(point.y * pushScale, minY, maxY);
+      }
+    };
+
+    list.forEach(keepOutsideCenter);
+
+    for (let pass = 0; pass < 14; pass++) {
       let changed = false;
 
       for (let i = 0; i < list.length; i++) {
@@ -2818,10 +2859,13 @@ export default function Background3D({ onAnimationComplete }: Props) {
           const pushX = delta.x * push;
           const pushY = delta.y * push;
 
-          a.x = THREE.MathUtils.clamp(a.x + pushX, -maxX, maxX);
-          a.y = THREE.MathUtils.clamp(a.y + pushY, -maxY, maxY);
-          b.x = THREE.MathUtils.clamp(b.x - pushX, -maxX, maxX);
-          b.y = THREE.MathUtils.clamp(b.y - pushY, -maxY, maxY);
+          a.x += pushX;
+          a.y += pushY;
+          b.x -= pushX;
+          b.y -= pushY;
+
+          keepOutsideCenter(a);
+          keepOutsideCenter(b);
           changed = true;
         }
       }
@@ -3220,16 +3264,11 @@ export default function Background3D({ onAnimationComplete }: Props) {
                         iconRefs.current[i] = el;
                       }}
                     >
-                      <planeGeometry
-                        args={[
-                          isMobileView ? 0.18 : 0.24,
-                          isMobileView ? 0.18 : 0.24,
-                        ]}
-                      />
+                      <planeGeometry args={[isMobileView ? 0.16 : 0.21, isMobileView ? 0.16 : 0.21]} />
                       <meshBasicMaterial
                         map={iconTextures[i]}
                         transparent
-                        opacity={isMobileView ? 0.44 : 0.5}
+                        opacity={isMobileView ? 0.5 : 0.56}
                         side={THREE.DoubleSide}
                       />
                     </mesh>
