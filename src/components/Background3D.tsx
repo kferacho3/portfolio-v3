@@ -2745,7 +2745,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
 
   /* icon textures & positions */
   const icons = useMemo(
-    () => iconPool.slice(0, isMobileView ? 10 : 14),
+    () => iconPool.slice(0, isMobileView ? 12 : 18),
     [isMobileView]
   );
   const iconTextures = useMemo(
@@ -2763,117 +2763,104 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - multi-ring layout with minimum-gap relaxation */
+  /* icon positions - poisson-like annulus sampling with strict spacing */
   const iconPositions = useMemo(() => {
-    const list: THREE.Vector3[] = [];
     const count = icons.length;
-    if (!count) return list;
+    if (!count) return [];
 
-    const maxX = Math.max(1.35, viewport.width * (isMobileView ? 0.34 : 0.43));
-    const maxY = Math.max(0.8, viewport.height * (isMobileView ? 0.25 : 0.32));
-    const minY = -Math.max(0.52, viewport.height * (isMobileView ? 0.14 : 0.19));
-    const radiusX = THREE.MathUtils.clamp(
-      viewport.width * (isMobileView ? 0.22 : 0.28),
-      isMobileView ? 1.12 : 1.5,
-      isMobileView ? 1.72 : 2.4
+    const maxX = Math.max(1.6, viewport.width * (isMobileView ? 0.42 : 0.52));
+    const maxY = Math.max(0.92, viewport.height * (isMobileView ? 0.29 : 0.36));
+    const minY = -Math.max(0.42, viewport.height * (isMobileView ? 0.1 : 0.13));
+    const outerRadiusX = THREE.MathUtils.clamp(
+      viewport.width * (isMobileView ? 0.3 : 0.38),
+      isMobileView ? 1.3 : 1.95,
+      isMobileView ? 2.05 : 3.0
     );
-    const radiusY = THREE.MathUtils.clamp(
-      viewport.height * (isMobileView ? 0.16 : 0.22),
-      isMobileView ? 0.74 : 1.02,
-      isMobileView ? 1.2 : 1.64
+    const outerRadiusY = THREE.MathUtils.clamp(
+      viewport.height * (isMobileView ? 0.22 : 0.29),
+      isMobileView ? 0.86 : 1.24,
+      isMobileView ? 1.45 : 2.02
     );
-    const ringScales = isMobileView ? [1.04, 1.28] : [0.96, 1.18, 1.36];
-    const ringCounts = ringScales.map(() => 0);
-    const ringDepth = isMobileView ? 0.065 : 0.095;
-    const startAngle = -Math.PI / 2;
+    const centerClearX = isMobileView ? 0.82 : 1.18;
+    const centerClearY = isMobileView ? 0.58 : 0.84;
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+    const depthStep = isMobileView ? 0.055 : 0.085;
+    const fract = (value: number) => value - Math.floor(value);
 
-    for (let i = 0; i < count; i++) {
-      ringCounts[i % ringScales.length] += 1;
-    }
+    const generatePoints = (minGap: number) => {
+      const points: THREE.Vector3[] = [];
+      const minGapSq = minGap * minGap;
+      const attempts = count * 220;
 
-    let iconIndex = 0;
-    for (let ringIndex = 0; ringIndex < ringScales.length; ringIndex++) {
-      const slots = ringCounts[ringIndex];
-      if (!slots) continue;
-
-      const angleOffset = (ringIndex * Math.PI) / (slots * 1.45);
-      const ringScale = ringScales[ringIndex];
-      for (let slot = 0; slot < slots; slot++) {
-        const theta = startAngle + (2 * Math.PI * slot) / slots + angleOffset;
+      for (let attempt = 0; attempt < attempts && points.length < count; attempt++) {
+        const angle = attempt * goldenAngle;
+        const radialT = fract(attempt * 0.754877666 + 0.3125);
+        const ringFactor = THREE.MathUtils.lerp(0.56, 1, Math.sqrt(radialT));
         const x = THREE.MathUtils.clamp(
-          Math.cos(theta) * radiusX * ringScale,
+          Math.cos(angle) * outerRadiusX * ringFactor,
           -maxX,
           maxX
         );
         const y = THREE.MathUtils.clamp(
-          Math.sin(theta) * radiusY * ringScale * 0.9,
+          Math.sin(angle) * outerRadiusY * ringFactor,
           minY,
           maxY
         );
+
+        const centerRatio =
+          (x * x) / (centerClearX * centerClearX) +
+          (y * y) / (centerClearY * centerClearY);
+        if (centerRatio < 1) continue;
+
+        let tooClose = false;
+        for (let i = 0; i < points.length; i++) {
+          const p = points[i];
+          const dx = x - p.x;
+          const dy = y - p.y;
+          if (dx * dx + dy * dy < minGapSq) {
+            tooClose = true;
+            break;
+          }
+        }
+        if (tooClose) continue;
+
+        const depthLane = points.length % 4;
         const z =
           0.08 +
-          ringIndex * ringDepth +
-          (slot % 2 === 0 ? ringDepth * 0.2 : -ringDepth * 0.2);
-        list[iconIndex++] = new THREE.Vector3(x, y, z);
+          depthLane * depthStep +
+          (depthLane % 2 === 0 ? depthStep * 0.18 : -depthStep * 0.18);
+        points.push(new THREE.Vector3(x, y, z));
       }
-    }
 
-    const centerClearX = isMobileView ? 0.78 : 1.1;
-    const centerClearY = isMobileView ? 0.54 : 0.78;
-    const minGap = isMobileView ? 0.52 : 0.72;
-    const delta = new THREE.Vector2();
-    const keepOutsideCenter = (point: THREE.Vector3) => {
-      point.x = THREE.MathUtils.clamp(point.x, -maxX, maxX);
-      point.y = THREE.MathUtils.clamp(point.y, minY, maxY);
-
-      const ratio =
-        (point.x * point.x) / (centerClearX * centerClearX) +
-        (point.y * point.y) / (centerClearY * centerClearY);
-      if (ratio < 1) {
-        const pushScale = 1 / Math.sqrt(Math.max(ratio, 0.0001));
-        point.x = THREE.MathUtils.clamp(point.x * pushScale, -maxX, maxX);
-        point.y = THREE.MathUtils.clamp(point.y * pushScale, minY, maxY);
-      }
+      return points;
     };
 
-    list.forEach(keepOutsideCenter);
+    let best: THREE.Vector3[] = [];
+    const initialGap = isMobileView ? 0.46 : 0.62;
+    const minimumGap = isMobileView ? 0.34 : 0.46;
 
-    for (let pass = 0; pass < 14; pass++) {
-      let changed = false;
-
-      for (let i = 0; i < list.length; i++) {
-        for (let j = i + 1; j < list.length; j++) {
-          const a = list[i];
-          const b = list[j];
-
-          delta.set(a.x - b.x, a.y - b.y);
-          let dist = delta.length();
-          if (dist === 0) {
-            delta.set(0.001, 0);
-            dist = 0.001;
-          }
-
-          if (dist >= minGap) continue;
-
-          const push = ((minGap - dist) * 0.5) / dist;
-          const pushX = delta.x * push;
-          const pushY = delta.y * push;
-
-          a.x += pushX;
-          a.y += pushY;
-          b.x -= pushX;
-          b.y -= pushY;
-
-          keepOutsideCenter(a);
-          keepOutsideCenter(b);
-          changed = true;
-        }
+    for (let gap = initialGap; gap >= minimumGap; gap *= 0.9) {
+      const candidate = generatePoints(gap);
+      if (candidate.length > best.length) best = candidate;
+      if (candidate.length === count) {
+        best = candidate;
+        break;
       }
-
-      if (!changed) break;
     }
 
-    return list;
+    if (best.length < count) {
+      const remaining = count - best.length;
+      const startAngle = -Math.PI / 2;
+      for (let i = 0; i < remaining; i++) {
+        const theta = startAngle + (2 * Math.PI * i) / remaining;
+        const x = THREE.MathUtils.clamp(Math.cos(theta) * outerRadiusX, -maxX, maxX);
+        const y = THREE.MathUtils.clamp(Math.sin(theta) * outerRadiusY, minY, maxY);
+        const z = 0.08 + ((best.length % 4) + 1) * depthStep;
+        best.push(new THREE.Vector3(x, y, z));
+      }
+    }
+
+    return best.slice(0, count);
   }, [icons.length, isMobileView, viewport.height, viewport.width]);
 
   /* ================================================================
@@ -3066,7 +3053,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     });
 
     /* 7 ▸ icon float ----------------------------------------------------- */
-    const bobAmplitude = isMobileView ? 0.045 : 0.08;
+    const bobAmplitude = isMobileView ? 0.03 : 0.05;
     iconRefs.current.forEach((m, i) => {
       if (!m) return;
       m.rotation.y += 0.01;
@@ -3255,8 +3242,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
                     key={i}
                     speed={isMobileView ? 1.5 : 2}
                     rotationIntensity={0.15}
-                    floatIntensity={0.15}
-                    floatingRange={isMobileView ? [-0.02, 0.02] : [-0.025, 0.025]}
+                    floatIntensity={0.12}
+                    floatingRange={isMobileView ? [-0.014, 0.014] : [-0.018, 0.018]}
                   >
                     <mesh
                       position={p}
@@ -3264,11 +3251,13 @@ export default function Background3D({ onAnimationComplete }: Props) {
                         iconRefs.current[i] = el;
                       }}
                     >
-                      <planeGeometry args={[isMobileView ? 0.16 : 0.21, isMobileView ? 0.16 : 0.21]} />
+                      <planeGeometry
+                        args={[isMobileView ? 0.15 : 0.19, isMobileView ? 0.15 : 0.19]}
+                      />
                       <meshBasicMaterial
                         map={iconTextures[i]}
                         transparent
-                        opacity={isMobileView ? 0.5 : 0.56}
+                        opacity={isMobileView ? 0.58 : 0.64}
                         side={THREE.DoubleSide}
                       />
                     </mesh>
