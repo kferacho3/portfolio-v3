@@ -297,13 +297,13 @@ export const resumeData = {
   selectedProjects: [
     {
       title: 'Zom AI',
-      link: 'https://zomtech.com',
-      caseStudySlug: 'zom-ai',
-      hidden: true,
-      focus: 'Lead frontend architecture and product UI systems',
+      link: 'https://www.zomtech.com/',
+      focus:
+        'Domain-specific AI platform for financial advisors focused on context-aware guidance and secure delivery.',
       bullets: [
-        'Built shared app-shell patterns for advisor workflows across planning, meetings, research, and risk.',
-        'Implemented role-aware auth, synchronized API state, and resilient production release instrumentation.',
+        'The platform positions itself as purpose-built for financial advisors, with a context-leveraged model tuned for advisor workflows and client context.',
+        'Support documentation highlights enterprise onboarding services including integrations, data migration, custom model tuning, and workflow automation setup.',
+        'Security documentation cites AWS Fargate/ECS deployment in private subnets, JWT-based role access controls, and an active vulnerability disclosure program.',
       ],
     },
     {
