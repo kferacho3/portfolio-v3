@@ -16,9 +16,16 @@ import {
   EMAILJS_SERVICE_ID,
   EMAILJS_TEMPLATE_ID,
 } from '@/lib/emailjsConfig';
+import {
+  clearFunnelAttribution,
+  getFunnelAttribution,
+  rememberFunnelAttribution,
+  trackEvent,
+} from '@/lib/analytics';
 import emailjs from 'emailjs-com';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
+import { getProjectByCaseStudySlug } from './SectionThreeData';
 
 function SectionFour() {
   const form = useRef<HTMLFormElement>(null);
@@ -81,9 +88,21 @@ function SectionFour() {
   /* ───────────────────────────────── send mail ─────────────────────────────── */
   const sendEmail = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const attribution = getFunnelAttribution();
+    trackEvent('contact_form_submit_attempt', {
+      service: formData.service || 'unspecified',
+      website: formData.website || 'unspecified',
+      source_project: attribution?.projectTitle ?? 'none',
+      source_action: attribution?.action ?? 'none',
+      source_category: attribution?.category ?? 'none',
+    });
+
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length) {
       setErrors(validationErrors);
+      trackEvent('contact_form_submit_blocked', {
+        error_keys: Object.keys(validationErrors).join(','),
+      });
       return;
     }
     setErrors({});
@@ -100,6 +119,10 @@ function SectionFour() {
           service: formData.service,
           website: formData.website,
           message: formData.message,
+          source_project: attribution?.projectTitle ?? '',
+          source_action: attribution?.action ?? '',
+          source_category: attribution?.category ?? '',
+          source_project_slug: attribution?.projectSlug ?? '',
         },
         EMAILJS_PUBLIC_KEY
       );
@@ -119,6 +142,14 @@ function SectionFour() {
         _honeypot: '',
       });
       setTouched({});
+      trackEvent('contact_form_submit_success', {
+        service: formData.service,
+        website: formData.website,
+        source_project: attribution?.projectTitle ?? 'none',
+        source_action: attribution?.action ?? 'none',
+        source_category: attribution?.category ?? 'none',
+      });
+      clearFunnelAttribution();
     } catch (err) {
       console.error(err);
       setModalType('error');
@@ -126,6 +157,11 @@ function SectionFour() {
         'Oops! Something went wrong. Please try again or email me directly.'
       );
       setModalOpen(true);
+      trackEvent('contact_form_submit_error', {
+        service: formData.service || 'unspecified',
+        website: formData.website || 'unspecified',
+        source_project: attribution?.projectTitle ?? 'none',
+      });
     } finally {
       setSending(false);
     }
@@ -137,6 +173,22 @@ function SectionFour() {
       e.key === 'Escape' && setModalOpen(false);
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const source = new URLSearchParams(window.location.search).get('source');
+    if (!source) return;
+
+    const project = getProjectByCaseStudySlug(source);
+    if (!project) return;
+
+    rememberFunnelAttribution({
+      action: 'arrive_from_case_study',
+      category: 'case-studies',
+      projectSlug: source,
+      projectTitle: project.title,
+      projectUrl: project.link,
+    });
   }, []);
 
   /* ────────────────────────────── render ───────────────────────────────────── */
@@ -542,6 +594,11 @@ function SectionFour() {
                             : undefined
                         }
                         className="rounded-full border border-gray-200/50 dark:border-white/10 bg-gray-100/50 dark:bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground transition hover:border-gray-300/60 dark:hover:border-white/30 hover:text-foreground"
+                        onClick={() =>
+                          trackEvent('contact_alt_channel_click', {
+                            channel: item.label.toLowerCase(),
+                          })
+                        }
                       >
                         {item.label}
                       </a>

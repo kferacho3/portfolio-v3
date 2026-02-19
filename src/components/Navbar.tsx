@@ -42,6 +42,8 @@ const Navbar: React.FC = () => {
   const primaryLinks = [
     // { href: '/myRoom', label: "Racho's Room" }, // Temporarily hidden
     { href: '/fun', label: "Racho's Arcade" },
+    { href: '/case-studies', label: 'Case Studies' },
+    { href: '/resume', label: 'Resume' },
   ];
 
   // Define bright colors

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { trackEvent, trackProjectInteraction } from '../lib/analytics';
 import {
   Project,
   earlyProjects,
@@ -16,10 +17,11 @@ type CategoryKey = 'featured' | 'early' | 'uiux';
 
 type ModalProps = {
   project: Project;
+  category: CategoryKey;
   onClose: () => void;
 };
 
-function ProjectModal({ project, onClose }: ModalProps) {
+function ProjectModal({ project, category, onClose }: ModalProps) {
   const featureTabs = project.featureTabs ?? [];
   const [activeFeatureKey, setActiveFeatureKey] = useState<string>(
     featureTabs[0]?.key ?? ''
@@ -53,6 +55,8 @@ function ProjectModal({ project, onClose }: ModalProps) {
   const descId = `project-dialog-desc-${project.id}`;
   const activeFeature =
     featureTabs.find((t) => t.key === activeFeatureKey) ?? featureTabs[0];
+  const caseStudy = project.caseStudy;
+  const caseStudyHref = caseStudy ? `/case-studies/${caseStudy.slug}` : null;
 
   return createPortal(
     <AnimatePresence>
@@ -107,6 +111,76 @@ function ProjectModal({ project, onClose }: ModalProps) {
               <p id={descId} className="text-muted-foreground leading-relaxed">
                 {project.description}
               </p>
+            )}
+
+            {caseStudy && (
+              <section aria-label="Case study details" className="space-y-6">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
+                    Case Study Summary
+                  </p>
+                  <p className="mt-3 text-foreground/90">{caseStudy.oneLiner}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    <span className="font-semibold text-foreground/90">Role:</span>{' '}
+                    {caseStudy.role}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-foreground">Challenge</h4>
+                  <p className="text-muted-foreground leading-relaxed">
+                    {caseStudy.challenge}
+                  </p>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-3">
+                  <div>
+                    <h4 className="mb-2 font-semibold text-foreground">Constraints</h4>
+                    <ul className="space-y-2">
+                      {caseStudy.constraints.map((item) => (
+                        <li key={item} className="text-sm text-muted-foreground">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="mb-2 font-semibold text-foreground">Architecture</h4>
+                    <ul className="space-y-2">
+                      {caseStudy.architecture.map((item) => (
+                        <li key={item} className="text-sm text-muted-foreground">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <h4 className="mb-2 font-semibold text-foreground">Execution</h4>
+                    <ul className="space-y-2">
+                      {caseStudy.execution.map((item) => (
+                        <li key={item} className="text-sm text-muted-foreground">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="mb-3 font-semibold text-foreground">Outcomes</h4>
+                  <ul className="space-y-2">
+                    {caseStudy.outcomes.map((outcome) => (
+                      <li
+                        key={outcome}
+                        className="flex items-start gap-2 text-muted-foreground"
+                      >
+                        <span className="brand-gradient-dot mt-2 h-1.5 w-1.5 flex-shrink-0 rounded-full" />
+                        <span>{outcome}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
             )}
 
             {project.highlights && project.highlights.length > 0 && (
@@ -231,11 +305,37 @@ function ProjectModal({ project, onClose }: ModalProps) {
             </div>
 
             <div className="flex flex-col gap-4 md:flex-row">
+              {caseStudyHref ? (
+                <a
+                  href={caseStudyHref}
+                  className="flex-1 rounded-lg border border-gray-200/60 dark:border-white/20 bg-gray-100/70 dark:bg-white/5 px-6 py-3 text-center font-medium text-foreground transition hover:bg-gray-200/70 dark:hover:bg-white/10"
+                  onClick={() =>
+                    trackProjectInteraction({
+                      action: 'open_case_study_page',
+                      category,
+                      projectSlug: caseStudy?.slug,
+                      projectTitle: project.title,
+                      projectUrl: project.link,
+                    })
+                  }
+                >
+                  Read Full Case Study
+                </a>
+              ) : null}
               <a
                 href={project.link}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 rounded-lg bg-primary px-6 py-3 text-center font-medium text-primary-foreground transition hover:bg-primary/90"
+                onClick={() =>
+                  trackProjectInteraction({
+                    action: 'visit_live_project_modal',
+                    category,
+                    projectSlug: caseStudy?.slug,
+                    projectTitle: project.title,
+                    projectUrl: project.link,
+                  })
+                }
               >
                 Visit Live Project
               </a>
@@ -259,10 +359,17 @@ const buildKeywords = (project: Project) =>
 
 type SpotlightProps = {
   project: Project;
-  onSelect: (project: Project) => void;
+  onSelect: (project: Project, source: 'spotlight') => void;
+  onVisitLive: (project: Project, source: 'spotlight') => void;
+  onReadCaseStudy: (project: Project, source: 'spotlight') => void;
 };
 
-function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
+function ProjectSpotlight({
+  project,
+  onSelect,
+  onVisitLive,
+  onReadCaseStudy,
+}: SpotlightProps) {
   const highlights = project.highlights?.slice(0, 3) ?? [];
 
   return (
@@ -358,16 +465,26 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-start pt-2">
             <button
               type="button"
-              onClick={() => onSelect(project)}
+              onClick={() => onSelect(project, 'spotlight')}
               className="rounded-xl bg-gray-900 dark:bg-white px-6 py-3 text-sm font-semibold text-white dark:text-slate-900 shadow-[0_10px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_rgba(255,255,255,0.15)] transition hover:shadow-[0_16px_40px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_16px_40px_rgba(255,255,255,0.25)]"
             >
               Open Case Study
             </button>
+            {project.caseStudy ? (
+              <a
+                href={`/case-studies/${project.caseStudy.slug}`}
+                className="rounded-xl border border-gray-300/60 dark:border-white/20 bg-gray-100/50 dark:bg-white/5 px-6 py-3 text-center text-sm font-semibold text-foreground transition hover:border-gray-400/80 dark:hover:border-white/40 hover:bg-gray-200/50 dark:hover:bg-white/10"
+                onClick={() => onReadCaseStudy(project, 'spotlight')}
+              >
+                Read Full Case Study
+              </a>
+            ) : null}
             <a
               href={project.link}
               target="_blank"
               rel="noopener noreferrer"
               className="rounded-xl border border-gray-300/60 dark:border-white/20 bg-gray-100/50 dark:bg-white/5 px-6 py-3 text-center text-sm font-semibold text-foreground transition hover:border-gray-400/80 dark:hover:border-white/40 hover:bg-gray-200/50 dark:hover:bg-white/10"
+              onClick={() => onVisitLive(project, 'spotlight')}
             >
               Visit Live Project
             </a>
@@ -380,7 +497,7 @@ function ProjectSpotlight({ project, onSelect }: SpotlightProps) {
 
 type CardProps = {
   project: Project;
-  onSelect: (project: Project) => void;
+  onSelect: (project: Project, source: 'grid') => void;
   priority?: boolean;
 };
 
@@ -395,7 +512,7 @@ function ProjectCard({ project, onSelect, priority = false }: CardProps) {
       <meta itemProp="keywords" content={buildKeywords(project)} />
       <button
         type="button"
-        onClick={() => onSelect(project)}
+        onClick={() => onSelect(project, 'grid')}
         aria-label={`View ${project.title} details`}
         className="hover-gradient-border flex h-full w-full flex-col overflow-hidden rounded-2xl border border-gray-200/40 dark:border-white/10 bg-white/50 dark:bg-card/40 text-left shadow-[0_12px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_18px_50px_rgba(0,0,0,0.25)] backdrop-blur-xl transition duration-300 hover:-translate-y-1 hover:border-gray-300/60 dark:hover:border-white/20 hover:bg-white/70 dark:hover:bg-card/60"
       >
@@ -469,6 +586,37 @@ export default function SectionThree() {
   const gridProjects = currentProjects.slice(1);
   const categoryKeys: CategoryKey[] = ['featured', 'early', 'uiux'];
 
+  const openProject = (project: Project, source: 'spotlight' | 'grid') => {
+    trackProjectInteraction({
+      action: source === 'spotlight' ? 'open_project_modal_spotlight' : 'open_project_modal_grid',
+      category: selectedCategory,
+      projectSlug: project.caseStudy?.slug,
+      projectTitle: project.title,
+      projectUrl: project.link,
+    });
+    setSelectedProject(project);
+  };
+
+  const visitProject = (project: Project, source: 'spotlight') => {
+    trackProjectInteraction({
+      action: source === 'spotlight' ? 'visit_live_project_spotlight' : 'visit_live_project',
+      category: selectedCategory,
+      projectSlug: project.caseStudy?.slug,
+      projectTitle: project.title,
+      projectUrl: project.link,
+    });
+  };
+
+  const readCaseStudy = (project: Project, source: 'spotlight') => {
+    trackProjectInteraction({
+      action: source === 'spotlight' ? 'open_case_study_page_spotlight' : 'open_case_study_page',
+      category: selectedCategory,
+      projectSlug: project.caseStudy?.slug,
+      projectTitle: project.title,
+      projectUrl: project.link,
+    });
+  };
+
   return (
     <section
       id="projects"
@@ -532,7 +680,15 @@ export default function SectionThree() {
                   aria-selected={isActive}
                   aria-controls={`projects-panel-${key}`}
                   id={`projects-tab-${key}`}
-                  onClick={() => setSelectedCategory(key)}
+                  onClick={() => {
+                    if (key !== selectedCategory) {
+                      trackEvent('project_category_change', {
+                        from: selectedCategory,
+                        to: key,
+                      });
+                    }
+                    setSelectedCategory(key);
+                  }}
                   className={`rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.25em] transition sm:text-sm ${
                     isActive
                       ? 'bg-gray-900 dark:bg-white text-white dark:text-slate-900 shadow-[0_8px_30px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_30px_rgba(255,255,255,0.2)]'
@@ -561,7 +717,9 @@ export default function SectionThree() {
             {spotlightProject && (
               <ProjectSpotlight
                 project={spotlightProject}
-                onSelect={setSelectedProject}
+                onSelect={openProject}
+                onVisitLive={visitProject}
+                onReadCaseStudy={readCaseStudy}
               />
             )}
 
@@ -570,7 +728,7 @@ export default function SectionThree() {
                 <ProjectCard
                   key={project.id}
                   project={project}
-                  onSelect={setSelectedProject}
+                  onSelect={openProject}
                   priority={selectedCategory === 'featured' && idx < 2}
                 />
               ))}
@@ -588,6 +746,7 @@ export default function SectionThree() {
       {selectedProject && (
         <ProjectModal
           project={selectedProject}
+          category={selectedCategory}
           onClose={() => setSelectedProject(null)}
         />
       )}

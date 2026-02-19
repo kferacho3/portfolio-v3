@@ -7,6 +7,16 @@ export interface Project {
   imageMobile: string;
   link: string;
   description: string;
+  caseStudy?: {
+    slug: string;
+    oneLiner: string;
+    role: string;
+    challenge: string;
+    constraints: string[];
+    architecture: string[];
+    execution: string[];
+    outcomes: string[];
+  };
   highlights?: string[];
   featureTabs?: Array<{
     key: string;
@@ -71,6 +81,34 @@ export const featuredWebsites: Project[] = [
       'Shipped performance profiling, accessibility improvements, and QA release checks.',
       'Instrumented analytics and error tracking for production observability.',
     ],
+    caseStudy: {
+      slug: 'zom-ai',
+      oneLiner:
+        'Advisor workflow platform where I led frontend architecture and product UI execution.',
+      role: 'Lead Frontend Engineer / UI Systems',
+      challenge:
+        'Unify planning, meetings, research, and risk workflows into one responsive product UI without fragmenting state across views.',
+      constraints: [
+        'High information density across advisor workflows.',
+        'Strict auth and role-aware routing requirements.',
+        'Need to keep interactions responsive on both mobile and desktop.',
+      ],
+      architecture: [
+        'Modular app shell + reusable component architecture.',
+        'Shared design system primitives for consistency and faster release cycles.',
+        'Centralized state and API orchestration for synchronized client context.',
+      ],
+      execution: [
+        'Built responsive feature surfaces for planning, meetings, research, and risk views.',
+        'Implemented secure auth/session flows and role-based navigation paths.',
+        'Added observability hooks for analytics/error monitoring and release QA.',
+      ],
+      outcomes: [
+        'Established a maintainable UI foundation for ongoing feature expansion.',
+        'Reduced handoff friction with consistent UX and reusable patterns.',
+        'Improved product reliability through release checks and instrumentation.',
+      ],
+    },
     techStack: [
       'TypeScript',
       'React',
@@ -81,6 +119,61 @@ export const featuredWebsites: Project[] = [
       'Design Systems',
     ],
     frameworks: [],
+  },
+  {
+    id: 8,
+    title: 'Prism Ultimate',
+    imageDesktop:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ProjectMuseum.webp',
+    imageMobile:
+      'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/ProjectMuseum.webp',
+    link: 'https://prism3d.studio',
+    description:
+      'A modular web arcade platform focused on fast iteration and scalable game delivery. Built around a shared shell, centralized game registry, reusable runtime hooks (input/audio/lifecycle), and tuned performance paths for high-FPS browser gameplay.',
+    highlights: [
+      'Built a centralized game registry and shell architecture for many game modules.',
+      'Standardized pause/resume, restart, lifecycle, and control handling across titles.',
+      'Implemented reusable HUD/overlay systems and shared rendering helpers.',
+      'Optimized update loops, object counts, and camera/scene behavior for smoother runtime performance.',
+      'Created a scalable structure for adding new titles without rewriting platform logic.',
+    ],
+    caseStudy: {
+      slug: 'prism-ultimate',
+      oneLiner:
+        'Scalable browser arcade system designed to ship many games under one consistent runtime.',
+      role: 'Lead Engineer / Platform + Game Systems',
+      challenge:
+        'Support a growing catalog of games while preventing duplicated runtime logic and keeping performance stable on typical hardware.',
+      constraints: [
+        'Large and evolving game catalog with distinct mechanics.',
+        'Need for consistent UX/control conventions across titles.',
+        'Performance sensitivity under real-time rendering and input.',
+      ],
+      architecture: [
+        'Shared arcade shell and game registry to isolate game modules from platform concerns.',
+        'Reusable hooks for lifecycle, input, and audio control.',
+        'Common HUD, pause, and overlay components with per-game extensions.',
+      ],
+      execution: [
+        'Defined standardized game module contracts and loading flow.',
+        'Built shared runtime utilities used by multiple game families.',
+        'Refined gameplay loops and rendering paths to reduce frame instability.',
+      ],
+      outcomes: [
+        'Faster game integration and safer iteration across the catalog.',
+        'Lower maintenance overhead by removing repeated infrastructure code.',
+        'Better runtime consistency and smoother gameplay under load.',
+      ],
+    },
+    techStack: [
+      'TypeScript',
+      'React',
+      'Next.js',
+      'Three.js',
+      'React Three Fiber',
+      'Zustand',
+    ],
+    frameworks: ['Valtio', 'Framer Motion', 'React Three Drei'],
   },
   {
     id: 1,
@@ -146,7 +239,41 @@ export const featuredWebsites: Project[] = [
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/Anti-heroesPreview.webp',
     link: 'https://anti-heroes.co',
     description:
-      'Version 2 of the Anti-Heroes experience, positioned as the primary release with refreshed creative direction and expanded interactive production features.',
+      'Remodeled primary release of Anti-Heroes with a simplified runtime architecture focused on faster loads, more stable playback, and cleaner traffic paths from social/stream audiences.',
+    highlights: [
+      'Refactored visual/audio pipeline to reduce runtime overhead and interaction friction.',
+      'Simplified scene and UX flow to improve first-load experience and retention.',
+      'Improved routing and content structure for clearer campaign/traffic entry paths.',
+      'Maintained creative direction while reducing technical complexity.',
+    ],
+    caseStudy: {
+      slug: 'anti-heroes-revamp',
+      oneLiner:
+        'Performance-oriented revamp of the Anti-Heroes experience while preserving the creative identity.',
+      role: 'Lead Frontend Engineer / Creative Tech',
+      challenge:
+        'The original build delivered strong visuals but needed a leaner runtime to improve responsiveness and support traffic growth.',
+      constraints: [
+        'Creative direction had to remain intact during optimization.',
+        'Audio-visual interactivity needed to stay central to the experience.',
+        'Landing/engagement flow had to be simpler for campaign traffic.',
+      ],
+      architecture: [
+        'Simplified rendering and interaction pathways to lower runtime complexity.',
+        'Leaned feature surface to prioritize high-value interactive moments.',
+        'Updated page flow and structure for cleaner discovery and navigation.',
+      ],
+      execution: [
+        'Reworked heavy scenes/components and tightened visual pipeline decisions.',
+        'Reduced friction in user journey from entry to core interaction moments.',
+        'Revalidated on-device behavior and tuned for consistency.',
+      ],
+      outcomes: [
+        'Stronger runtime stability and improved perceived speed.',
+        'Cleaner user journey aligned to traffic acquisition goals.',
+        'More maintainable code path for future campaign iterations.',
+      ],
+    },
     techStack: [
       'TypeScript',
       'React 19',
@@ -363,3 +490,16 @@ export const uiUxDesigns: Project[] = [
     frameworks: [''],
   },
 ];
+
+export const allProjects: Project[] = [
+  ...featuredWebsites,
+  ...earlyProjects,
+  ...uiUxDesigns,
+];
+
+export const caseStudyProjects: Project[] = allProjects.filter(
+  (project) => !!project.caseStudy
+);
+
+export const getProjectByCaseStudySlug = (slug: string): Project | undefined =>
+  caseStudyProjects.find((project) => project.caseStudy?.slug === slug);

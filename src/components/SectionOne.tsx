@@ -169,6 +169,11 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
                     className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] text-white shadow-[0_0_30px_rgba(148,0,211,0.6)] hover:shadow-[0_0_40px_rgba(148,0,211,0.8)] transition-all duration-300 hover:scale-105"
                   />
                   <AnimatedLink
+                    text="ATS RESUME"
+                    link="/resume"
+                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider transition-all duration-300 hover:scale-105 bg-gray-100 dark:bg-[#9400D3]/30 text-gray-900 dark:text-white border border-gray-300 dark:border-[#9400D3]/50"
+                  />
+                  <AnimatedLink
                     icon={
                       <AiFillGithub className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     }
