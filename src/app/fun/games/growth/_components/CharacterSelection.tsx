@@ -1,6 +1,6 @@
 import { useSnapshot } from 'valtio';
-import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import { growthState } from '../state';
+import GrowthViewportOverlay from './GrowthViewportOverlay';
 
 export default function CharacterSelection() {
   const snap = useSnapshot(growthState);
@@ -8,7 +8,7 @@ export default function CharacterSelection() {
   if (snap.phase === 'playing') return null;
 
   return (
-    <FixedViewportOverlay>
+    <GrowthViewportOverlay>
       <div
         style={{
           position: 'fixed',
@@ -37,6 +37,6 @@ export default function CharacterSelection() {
           More Growth styles: prism3d.studio
         </div>
       </div>
-    </FixedViewportOverlay>
+    </GrowthViewportOverlay>
   );
 }

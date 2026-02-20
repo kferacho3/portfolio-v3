@@ -8,7 +8,6 @@ import { useSnapshot } from 'valtio';
 
 import { useGameStateActions, useGameUIState } from '../../store/selectors';
 import { SeededRandom } from '../../utils/seededRandom';
-import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 
 import {
   BOOST_DURATION,
@@ -30,6 +29,7 @@ import { growthState } from './state';
 import type { Face, GrowthPathStyleId, GrowthSegment, PowerupType } from './types';
 import { validateObstacleLayout } from './validateObstacleLayout';
 import CharacterSelection from './_components/CharacterSelection';
+import GrowthViewportOverlay from './_components/GrowthViewportOverlay';
 import { useCameraShake } from './useCameraShake';
 import { useJellySquash } from './useJellySquash';
 import { useKeyboardControls } from './useKeyboardControls';
@@ -1599,7 +1599,7 @@ const Growth: React.FC = () => {
         </mesh>
       </group>
 
-      <FixedViewportOverlay>
+      <GrowthViewportOverlay>
         <div
           style={{
             position: 'fixed',
@@ -1737,7 +1737,7 @@ const Growth: React.FC = () => {
             </div>
           </div>
         )}
-      </FixedViewportOverlay>
+      </GrowthViewportOverlay>
       <CharacterSelection />
     </group>
   );
