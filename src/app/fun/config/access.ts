@@ -13,7 +13,6 @@ export const PLAYABLE_GAME_ALLOWLIST = [
   'apex',
   'polarity',
   'growth',
-  'steps',
   'slowmo',
   'bouncer',
   'prismjump',

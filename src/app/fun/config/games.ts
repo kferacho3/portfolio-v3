@@ -373,9 +373,9 @@ const BASE_GAME_CARDS: GameCard[] = [
   },
   {
     id: 'bouncer',
-    title: 'Bouncer',
+    title: 'Rollbounce',
     description:
-      'Bounce the ball on platforms. Avoid spikes. Collect squares to unlock new ball skins and palettes.',
+      'Hold to roll along the lane, release to relaunch your bounce rhythm, and survive mixed hazards while collecting shards for skins.',
     accent: '#FF5A8A',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Bouncer.webp',
@@ -733,10 +733,10 @@ export const GAME_RULES: Record<string, GameRules> = {
     tips: 'Hold SLOW longer to let the ball bounce to the other side. Collect stars to unlock new ball skins. Speed increases with score.',
   },
   bouncer: {
-    controls: 'Tap/Click to bounce • R to restart',
+    controls: 'Hold Click/Touch/Space to roll • Release to bounce • R to restart',
     objective:
-      'Bounce the ball on platforms and avoid spikes. Collect squares to unlock new ball skins and color palettes.',
-    tips: 'Time your bounces carefully. Collect squares to unlock new ball skins. Try different palettes for variety.',
+      'Blend roll mode and bounce timing to clear spike, floating, and swinging hazards while collecting shards for new skins and evolving palettes.',
+    tips: 'Hold early to settle into a safe ground roll, then release with intent to arc over hazards. Shard pickups keep your palette flow fresh.',
   },
   prismjump: {
     controls: 'Tap/Space/Click to jump • A/D or ←/→ to move • R to restart',

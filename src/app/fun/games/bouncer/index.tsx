@@ -59,6 +59,28 @@ function lerpColor(a: string, b: string, t: number) {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
+function colorWithAlpha(color: string, alpha: number) {
+  const safeAlpha = clamp(alpha, 0, 1);
+  if (color.startsWith('rgb(')) {
+    return color.replace('rgb(', 'rgba(').replace(')', `, ${safeAlpha})`);
+  }
+  if (color.startsWith('rgba(')) {
+    const parts = color
+      .slice(5, -1)
+      .split(',')
+      .map((segment) => segment.trim());
+    if (parts.length >= 3) {
+      return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${safeAlpha})`;
+    }
+  }
+  const parsed = hexToRgb(color);
+  return `rgba(${parsed.r}, ${parsed.g}, ${parsed.b}, ${safeAlpha})`;
+}
+
+function hasSpaceInput(keys: Set<string>) {
+  return keys.has(' ') || keys.has('space') || keys.has('spacebar');
+}
+
 function rand(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
@@ -289,6 +311,8 @@ type Runtime = {
   hitFlash: number;
   dropHeld: boolean;
   holdCharge: number;
+  groundRoll: boolean;
+  ballSpin: number;
 };
 
 function floatingCenter(o: FloatingObstacle, rt: Runtime) {
@@ -351,6 +375,8 @@ function makeRuntime(): Runtime {
     hitFlash: 0,
     dropHeld: false,
     holdCharge: 0,
+    groundRoll: false,
+    ballSpin: 0,
   };
 }
 
@@ -415,6 +441,8 @@ export default function Bouncer() {
       // Place ball on the platform
       rt.ballY = rt.groundY - rt.platformH / 2 - rt.ballR;
       rt.vy = -rt.bounceVy;
+      rt.ballSpin = 0;
+      rt.groundRoll = false;
 
       setReady(true);
     };
@@ -488,32 +516,30 @@ export default function Bouncer() {
       const dtReal = clamp(rawDt, 0, 0.033);
       rt.elapsed += dtReal;
 
-      // Controls (Bouncer):
-      // Tap while playing = immediate forced drop from the current position.
-      // Holding increases drop speed, but never max bounce height.
+      // Controls (Rollbounce):
+      // Hold click/touch/space to keep the ball grounded in roll mode.
+      // Releasing the hold resumes the bounce loop.
       const input = inputRef.current;
       const pointer = canvasPointerRef.current;
-      const spaceHeld =
-        input.keysDown.has(' ') ||
-        input.keysDown.has('space') ||
-        input.keysDown.has('spacebar');
-      rt.dropHeld =
-        rt.phase === 'playing' ? pointer.down || spaceHeld : false;
+      const spaceHeld = hasSpaceInput(input.keysDown);
+      const spaceJustPressed = hasSpaceInput(input.justPressed);
+      const holdInputActive = pointer.down || spaceHeld;
+      const justPressedInput = pointer.justDown || spaceJustPressed;
+
+      if (justPressedInput && rt.phase !== 'playing') {
+        startGame(rt);
+      }
+
+      const prevDropHeld = rt.dropHeld;
+      rt.dropHeld = rt.phase === 'playing' ? holdInputActive : false;
+      const holdReleased = prevDropHeld && !rt.dropHeld;
       rt.holdCharge = clamp(
-        rt.holdCharge + (rt.dropHeld ? dtReal * 2.6 : -dtReal * 1.0),
+        rt.holdCharge + (rt.dropHeld ? dtReal * 2.3 : -dtReal * 1.35),
         0,
         1
       );
 
       const dt = dtReal;
-      // Tap from menu/gameover starts. During play it never restarts; it triggers an immediate drop.
-      if (pointer.justDown) {
-        if (rt.phase === 'playing') {
-          invokeImmediateDrop(rt);
-        } else {
-          startGame(rt);
-        }
-      }
 
       // Palette transitions
       if (snap.paletteIndex !== rt.paletteIdx) {
@@ -524,7 +550,7 @@ export default function Bouncer() {
       rt.paletteT = clamp(rt.paletteT + dtReal * 2.8, 0, 1);
 
       if (rt.phase === 'playing') {
-        updateGame(rt, dt, dtReal, currentSkin);
+        updateGame(rt, dt, dtReal, currentSkin, holdReleased);
       } else {
         // In menu/gameover we still animate a gentle bounce and particles for vibe.
         updateIdle(rt, dt, dtReal);
@@ -547,6 +573,15 @@ export default function Bouncer() {
   }, [snap.phase, snap.paletteIndex, snap.selectedSkin]);
 
   const palette = paletteAt(snap.paletteIndex);
+  const hudChipStyle = {
+    borderColor: colorWithAlpha(palette.pickupOuter, 0.5),
+    background: colorWithAlpha(palette.bg, 0.48),
+    color: palette.spikes,
+  };
+  const menuPanelStyle = {
+    background: `linear-gradient(155deg, ${colorWithAlpha(palette.bg, 0.9)}, ${colorWithAlpha(palette.platform, 0.28)})`,
+    borderColor: colorWithAlpha(palette.pickupOuter, 0.52),
+  };
 
   return (
     <div
@@ -555,58 +590,67 @@ export default function Bouncer() {
     >
       <canvas ref={canvasRef} className="w-full h-full block" />
 
-      {/* Minimal UI overlay */}
+      {/* Rollbounce UI */}
       <div className="absolute inset-0 pointer-events-none">
         <div
-          className="absolute top-4 left-4 text-xs font-medium opacity-70"
-          style={{ color: palette.spikes }}
+          className="absolute top-4 left-4 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.16em]"
+          style={hudChipStyle}
         >
-          {snap.phase === 'playing' ? 'TAP = DROP' : 'TAP TO PLAY'}
+          {snap.phase === 'playing'
+            ? 'HOLD TO ROLL  RELEASE TO BOUNCE'
+            : 'CLICK / TOUCH / SPACE TO START'}
         </div>
 
         <div
-          className="absolute top-4 right-4 text-xs font-medium opacity-70"
-          style={{ color: palette.spikes }}
+          className="absolute top-4 right-4 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.16em]"
+          style={hudChipStyle}
         >
-          ◇ {snap.squares}
+          SHARDS {snap.squares}
+        </div>
+
+        <div
+          className="absolute top-14 left-1/2 -translate-x-1/2 rounded-full border px-4 py-1 text-[11px] font-semibold tracking-[0.2em]"
+          style={hudChipStyle}
+        >
+          SCORE {snap.score}
         </div>
 
         {snap.phase !== 'playing' && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div
-              className="pointer-events-auto rounded-2xl px-6 py-5 backdrop-blur-sm"
-              style={{ background: 'rgba(0,0,0,0.06)' }}
+              className="pointer-events-auto w-[min(420px,92vw)] rounded-3xl border px-7 py-6 backdrop-blur-md"
+              style={menuPanelStyle}
             >
               <div className="text-center">
                 <div
-                  className="text-3xl font-extrabold tracking-tight"
+                  className="text-4xl font-black tracking-[0.08em]"
                   style={{ color: palette.spikes }}
                 >
-                  BOUNCER
+                  ROLLBOUNCE
                 </div>
                 <div
-                  className="mt-1 text-sm opacity-80"
+                  className="mt-2 text-sm leading-relaxed"
                   style={{ color: palette.spikes }}
                 >
-                  Tap/hold to drop. Dodge spikes. Collect squares to shift the
-                  colors.
+                  Hold click, touch, or space to lock into ground-roll mode.
+                  Release to launch back into bounce rhythm, dodge hazards, and
+                  stack shards for skins.
                 </div>
 
                 {snap.phase === 'gameover' && (
                   <div
-                    className="mt-3 text-sm"
+                    className="mt-4 text-sm"
                     style={{ color: palette.spikes }}
                   >
-                    Score:{' '}
-                    <span className="font-semibold">{snap.score}</span>{' '}
-                    · Best:{' '}
+                    Score <span className="font-semibold">{snap.score}</span>
+                    {' · Best '}
                     <span className="font-semibold">{snap.bestScore}</span>
                   </div>
                 )}
 
                 {snap.phase === 'menu' && (
                   <div
-                    className="mt-3 text-sm"
+                    className="mt-4 text-sm"
                     style={{ color: palette.spikes }}
                   >
                     Best:{' '}
@@ -616,7 +660,7 @@ export default function Bouncer() {
 
                 <div className="mt-4 flex items-center justify-center gap-3">
                   <button
-                    className="px-4 py-2 rounded-xl text-sm font-semibold"
+                    className="px-4 py-2 rounded-xl text-sm font-semibold shadow-sm"
                     style={{ background: palette.spikes, color: palette.bg }}
                     onClick={() => startGame(runtimeRef.current)}
                   >
@@ -624,10 +668,11 @@ export default function Bouncer() {
                   </button>
 
                   <button
-                    className="px-4 py-2 rounded-xl text-sm font-semibold"
+                    className="px-4 py-2 rounded-xl border text-sm font-semibold"
                     style={{
-                      background: 'rgba(255,255,255,0.8)',
-                      color: '#1B2330',
+                      background: colorWithAlpha(palette.bg, 0.75),
+                      color: palette.spikes,
+                      borderColor: colorWithAlpha(palette.pickupOuter, 0.48),
                     }}
                     onClick={() => {
                       // Skin cycling / unlocking: if locked, try to buy.
@@ -646,10 +691,11 @@ export default function Bouncer() {
 
                   {snap.phase === 'gameover' && (
                     <button
-                      className="px-4 py-2 rounded-xl text-sm font-semibold"
+                      className="px-4 py-2 rounded-xl border text-sm font-semibold"
                       style={{
-                        background: 'rgba(0,0,0,0.65)',
-                        color: '#FFFFFF',
+                        background: colorWithAlpha(palette.scoreTint, 0.28),
+                        borderColor: colorWithAlpha(palette.pickupOuter, 0.45),
+                        color: palette.spikes,
                       }}
                       onClick={() => backToMenu(runtimeRef.current)}
                     >
@@ -659,11 +705,10 @@ export default function Bouncer() {
                 </div>
 
                 <div
-                  className="mt-3 text-[11px] opacity-70"
+                  className="mt-4 text-[11px] tracking-[0.12em]"
                   style={{ color: palette.spikes }}
                 >
-                  Inspired by the snappy, minimalist one-tap era (original
-                  implementation).
+                  Roll with intention, bounce with timing.
                 </div>
               </div>
             </div>
@@ -691,6 +736,9 @@ function startGame(rt: Runtime) {
   rt.shownScore = 0;
   rt.hitFlash = 0;
   rt.holdCharge = 0;
+  rt.dropHeld = false;
+  rt.groundRoll = false;
+  rt.ballSpin = 0;
 
   rt.obstacles = [];
   rt.pickups = [];
@@ -719,14 +767,8 @@ function backToMenu(rt: Runtime) {
   rt.phase = 'menu';
   rt.dropHeld = false;
   rt.holdCharge = 0;
+  rt.groundRoll = false;
   setScore(0);
-}
-
-function invokeImmediateDrop(rt: Runtime) {
-  const dropBoost = 1.6 + rt.holdCharge * 1.8;
-  // Immediate response: force a downward velocity from the current position.
-  rt.vy = rt.bounceVy * dropBoost;
-  spawnTapBurst(rt, Math.round(6 + rt.holdCharge * 8));
 }
 
 function triggerHitAndGameOver(rt: Runtime, skin: (typeof ballSkins)[number]) {
@@ -747,6 +789,8 @@ function triggerHitAndGameOver(rt: Runtime, skin: (typeof ballSkins)[number]) {
 function updateIdle(rt: Runtime, dt: number, dtReal: number) {
   // Gentle bounce even in idle screens
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
+  rt.groundRoll = false;
+  rt.ballSpin += (rt.speed / Math.max(1, rt.ballR)) * dt * 0.24;
 
   rt.vy += rt.g * dt;
   rt.ballY += rt.vy * dt;
@@ -775,29 +819,70 @@ function updateGame(
   rt: Runtime,
   dt: number,
   dtReal: number,
-  skin: (typeof ballSkins)[number]
+  skin: (typeof ballSkins)[number],
+  holdReleased: boolean
 ) {
   // Difficulty curve
   rt.speed = playSpeedForScore(rt.score);
 
   // Ball physics
   const floorY = rt.groundY - rt.platformH / 2 - rt.ballR;
-  const gMult = rt.dropHeld ? 1.75 : 1;
-  rt.vy += rt.g * gMult * dt;
-  rt.ballY += rt.vy * dt;
-
-  // Hard cap: every bounce can only reach the baseline max height from the normal bounce impulse.
   const maxRise = (rt.bounceVy * rt.bounceVy) / (2 * rt.g);
   const minY = floorY - maxRise;
-  if (rt.ballY < minY) {
-    rt.ballY = minY;
-    if (rt.vy < 0) rt.vy = 0;
+  const spinPerSec = rt.speed / Math.max(1, rt.ballR);
+
+  if (rt.dropHeld) {
+    rt.vy += rt.g * 2.35 * dt;
+    rt.ballY += rt.vy * dt;
+    if (rt.ballY >= floorY) {
+      if (!rt.groundRoll) {
+        spawnDust(rt, Math.round(8 + rt.holdCharge * 7));
+      }
+      rt.ballY = floorY;
+      rt.vy = 0;
+      rt.groundRoll = true;
+      rt.ballSpin += spinPerSec * dt * 0.95;
+      if (Math.random() < dt * (8 + rt.holdCharge * 16)) {
+        spawnDust(rt, 1);
+      }
+    } else {
+      rt.groundRoll = false;
+      rt.ballSpin += spinPerSec * dt * 0.35;
+    }
+  } else {
+    if (
+      holdReleased &&
+      (rt.groundRoll || rt.ballY >= floorY - rt.ballR * 0.16)
+    ) {
+      rt.ballY = floorY;
+      rt.vy = -rt.bounceVy;
+      spawnTapBurst(rt, Math.round(8 + rt.holdCharge * 10));
+      spawnDust(rt, Math.round(10 + rt.holdCharge * 9));
+    }
+
+    rt.groundRoll = false;
+    rt.vy += rt.g * dt;
+    rt.ballY += rt.vy * dt;
+
+    // Hard cap: each rebound stays within baseline max bounce height.
+    if (rt.ballY < minY) {
+      rt.ballY = minY;
+      if (rt.vy < 0) rt.vy = 0;
+    }
+
+    if (rt.ballY > floorY) {
+      rt.ballY = floorY;
+      rt.vy = -rt.bounceVy;
+      spawnDust(rt, Math.round(12 + rt.holdCharge * 6));
+    }
+
+    rt.ballSpin +=
+      spinPerSec * dt * 0.28 +
+      clamp(-rt.vy / rt.bounceVy, -1.2, 1.2) * dt * 0.9;
   }
 
-  if (rt.ballY > floorY) {
-    rt.ballY = floorY;
-    rt.vy = -rt.bounceVy;
-    spawnDust(rt, Math.round(14 + rt.holdCharge * 8));
+  if (Math.abs(rt.ballSpin) > Math.PI * 6) {
+    rt.ballSpin %= Math.PI * 2;
   }
 
   // Scroll world + spawn obstacles/pickups.
@@ -1193,39 +1278,117 @@ function draw(
   const scoreTint = lerpColor(prev.scoreTint, next.scoreTint, t);
   const pickupOuter = lerpColor(prev.pickupOuter, next.pickupOuter, t);
   const pickupInner = lerpColor(prev.pickupInner, next.pickupInner, t);
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-  // Background
-  ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, h);
-
-  // Big translucent score number (like the reference screenshots)
-  ctx.save();
-  ctx.globalAlpha = 0.08;
-  ctx.fillStyle = scoreTint;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `800 ${Math.round(h * 0.38)}px ui-sans-serif, system-ui, -apple-system`;
-  ctx.fillText(
-    String(Math.max(0, Math.round(rt.shownScore))),
-    w * 0.56,
-    h * 0.28
-  );
-  ctx.restore();
-
-  // Platform
-  ctx.fillStyle = platform;
-  ctx.fillRect(0, rt.groundY - rt.platformH / 2, w, rt.platformH);
-
-  // Obstacles
   const yBase = rt.groundY - rt.platformH / 2;
   const spike = spikeMetrics(rt.ballR);
 
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Atmosphere backdrop
+  ctx.clearRect(0, 0, w, h);
+  const skyGradient = ctx.createLinearGradient(0, 0, 0, h);
+  skyGradient.addColorStop(0, lerpColor(bg, '#0b1220', 0.38));
+  skyGradient.addColorStop(0.55, bg);
+  skyGradient.addColorStop(1, lerpColor(platform, '#070a12', 0.52));
+  ctx.fillStyle = skyGradient;
+  ctx.fillRect(0, 0, w, h);
+
+  const glowLeft = ctx.createRadialGradient(
+    w * 0.22,
+    h * 0.2,
+    0,
+    w * 0.22,
+    h * 0.2,
+    w * 0.62
+  );
+  glowLeft.addColorStop(0, colorWithAlpha(pickupOuter, 0.28));
+  glowLeft.addColorStop(1, colorWithAlpha(pickupOuter, 0));
+  ctx.fillStyle = glowLeft;
+  ctx.fillRect(0, 0, w, h);
+
+  const glowRight = ctx.createRadialGradient(
+    w * 0.78,
+    h * 0.14,
+    0,
+    w * 0.78,
+    h * 0.14,
+    w * 0.58
+  );
+  glowRight.addColorStop(0, colorWithAlpha(scoreTint, 0.24));
+  glowRight.addColorStop(1, colorWithAlpha(scoreTint, 0));
+  ctx.fillStyle = glowRight;
+  ctx.fillRect(0, 0, w, h);
+
+  // Horizon contours
+  ctx.save();
+  ctx.strokeStyle = colorWithAlpha(scoreTint, 0.24);
+  ctx.lineWidth = Math.max(1, rt.ballR * 0.08);
+  for (let i = 0; i < 5; i++) {
+    const y = h * (0.12 + i * 0.088);
+    const wave = Math.sin(rt.elapsed * 0.45 + i * 0.92) * rt.ballR * 0.46;
+    ctx.beginPath();
+    ctx.moveTo(-80, y + wave);
+    ctx.quadraticCurveTo(
+      w * 0.36,
+      y - rt.ballR * 0.95 - wave,
+      w + 80,
+      y + wave
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Oversized score watermark
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = colorWithAlpha(scoreTint, 0.9);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 ${Math.round(h * 0.3)}px "Trebuchet MS", "Avenir Next", sans-serif`;
+  ctx.fillText(
+    String(Math.max(0, Math.round(rt.shownScore))),
+    w * 0.58,
+    h * 0.24
+  );
+  ctx.restore();
+
+  // Ground track
+  const trackTop = yBase;
+  const trackHeight = Math.max(rt.platformH * 3.1, rt.ballR * 1.15);
+  const trackGradient = ctx.createLinearGradient(
+    0,
+    trackTop,
+    0,
+    trackTop + trackHeight
+  );
+  trackGradient.addColorStop(0, platform);
+  trackGradient.addColorStop(0.45, lerpColor(platform, '#0f172a', 0.38));
+  trackGradient.addColorStop(1, lerpColor(platform, '#020617', 0.74));
+  ctx.fillStyle = trackGradient;
+  ctx.fillRect(0, trackTop, w, trackHeight);
+  ctx.fillStyle = colorWithAlpha('#ffffff', 0.26);
+  ctx.fillRect(0, trackTop, w, Math.max(1, rt.platformH * 0.18));
+  ctx.fillStyle = colorWithAlpha(platform, 0.9);
+  ctx.fillRect(0, trackTop, w, rt.platformH);
+  ctx.save();
+  ctx.strokeStyle = colorWithAlpha(pickupOuter, 0.52);
+  ctx.lineWidth = Math.max(1.4, rt.ballR * 0.08);
+  ctx.setLineDash([
+    Math.max(14, rt.ballR * 0.9),
+    Math.max(12, rt.ballR * 0.65),
+  ]);
+  ctx.lineDashOffset = -rt.elapsed * rt.speed * 0.95;
+  ctx.beginPath();
+  ctx.moveTo(0, trackTop + trackHeight * 0.56);
+  ctx.lineTo(w, trackTop + trackHeight * 0.56);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
   for (const o of rt.obstacles) {
     if (o.kind === 'spikes') {
-      ctx.fillStyle = spikes;
+      ctx.save();
+      ctx.shadowBlur = rt.ballR * 0.9;
+      ctx.shadowColor = colorWithAlpha(spikes, 0.62);
       for (let i = 0; i < o.spikes; i++) {
         const x0 = o.x + i * (spike.base + spike.gap);
         ctx.beginPath();
@@ -1233,8 +1396,17 @@ function draw(
         ctx.lineTo(x0 + spike.base / 2, yBase - spike.height);
         ctx.lineTo(x0 + spike.base, yBase);
         ctx.closePath();
+        ctx.fillStyle = spikes;
+        ctx.fill();
+        ctx.fillStyle = colorWithAlpha(pickupInner, 0.36);
+        ctx.beginPath();
+        ctx.moveTo(x0 + spike.base * 0.24, yBase - spike.height * 0.22);
+        ctx.lineTo(x0 + spike.base * 0.5, yBase - spike.height * 0.78);
+        ctx.lineTo(x0 + spike.base * 0.76, yBase - spike.height * 0.22);
+        ctx.closePath();
         ctx.fill();
       }
+      ctx.restore();
       continue;
     }
 
@@ -1242,81 +1414,103 @@ function draw(
       const center = floatingCenter(o, rt);
       ctx.save();
       ctx.translate(center.x, center.y);
-      ctx.rotate(rt.elapsed * o.rotSpeed + o.phase * 0.5);
+      ctx.rotate(rt.elapsed * o.rotSpeed + o.phase * 0.6);
+      ctx.shadowBlur = o.size * 0.5;
+      ctx.shadowColor = colorWithAlpha(pickupOuter, 0.48);
 
+      ctx.fillStyle = colorWithAlpha(pickupOuter, 0.26);
+      ctx.beginPath();
+      ctx.arc(0, 0, o.size * 0.78, 0, Math.PI * 2);
+      ctx.fill();
+
+      const outer = o.size * 0.58;
       ctx.fillStyle = pickupInner;
-      ctx.fillRect(-o.size / 2, -o.size / 2, o.size, o.size);
+      ctx.beginPath();
+      ctx.moveTo(0, -outer);
+      ctx.lineTo(outer, 0);
+      ctx.lineTo(0, outer);
+      ctx.lineTo(-outer, 0);
+      ctx.closePath();
+      ctx.fill();
 
-      const core = o.size * 0.44;
+      const core = o.size * 0.24;
       ctx.fillStyle = spikes;
-      ctx.fillRect(-core / 2, -core / 2, core, core);
+      ctx.beginPath();
+      ctx.arc(0, 0, core, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       continue;
     }
 
     const bob = swingingBob(o, rt);
     ctx.save();
-    ctx.strokeStyle = scoreTint;
+    ctx.strokeStyle = colorWithAlpha(scoreTint, 0.84);
     ctx.lineWidth = Math.max(2, rt.ballR * 0.16);
     ctx.beginPath();
     ctx.moveTo(o.x, o.anchorY);
     ctx.lineTo(bob.x, bob.y);
     ctx.stroke();
 
-    ctx.fillStyle = platform;
+    ctx.fillStyle = colorWithAlpha(platform, 0.95);
     ctx.beginPath();
     ctx.arc(o.x, o.anchorY, Math.max(3, rt.ballR * 0.18), 0, Math.PI * 2);
     ctx.fill();
 
-    const teeth = 8;
-    const toothR = o.bobR * 0.38;
-    for (let i = 0; i < teeth; i++) {
-      const a = (i / teeth) * Math.PI * 2 + rt.elapsed * 1.8;
-      const a2 = a + Math.PI / teeth;
-      const r1 = o.bobR * 0.88;
-      const r2 = o.bobR + toothR;
-      ctx.fillStyle = spikes;
-      ctx.beginPath();
-      ctx.moveTo(bob.x + Math.cos(a) * r1, bob.y + Math.sin(a) * r1);
-      ctx.lineTo(bob.x + Math.cos(a2) * r2, bob.y + Math.sin(a2) * r2);
-      ctx.lineTo(
-        bob.x + Math.cos(a + (Math.PI / teeth) * 2) * r1,
-        bob.y + Math.sin(a + (Math.PI / teeth) * 2) * r1
-      );
-      ctx.closePath();
-      ctx.fill();
-    }
+    ctx.strokeStyle = colorWithAlpha(pickupOuter, 0.58);
+    ctx.lineWidth = Math.max(1.2, rt.ballR * 0.08);
+    ctx.beginPath();
+    ctx.arc(bob.x, bob.y, o.bobR * 1.38, 0, Math.PI * 2);
+    ctx.stroke();
 
     ctx.fillStyle = spikes;
     ctx.beginPath();
     ctx.arc(bob.x, bob.y, o.bobR, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.globalAlpha = 0.62;
-    ctx.fillStyle = pickupOuter;
+    ctx.fillStyle = colorWithAlpha(pickupOuter, 0.74);
     ctx.beginPath();
     ctx.arc(bob.x, bob.y, o.bobR * 0.56, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // Pickups (squares)
+  // Pickups
   for (const p of rt.pickups) {
     ctx.save();
     ctx.translate(p.x, p.y);
-    ctx.rotate(Math.PI / 4);
+    ctx.rotate(rt.elapsed * 1.8 + p.id * 0.2);
+    ctx.shadowColor = colorWithAlpha(pickupOuter, 0.62);
+    ctx.shadowBlur = p.size * 1.1;
 
+    const outer = p.size * 0.62;
     ctx.fillStyle = pickupOuter;
-    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+    ctx.beginPath();
+    ctx.moveTo(0, -outer);
+    ctx.lineTo(outer, 0);
+    ctx.lineTo(0, outer);
+    ctx.lineTo(-outer, 0);
+    ctx.closePath();
+    ctx.fill();
 
     ctx.fillStyle = pickupInner;
-    const inner = p.size * 0.42;
-    ctx.fillRect(-inner / 2, -inner / 2, inner, inner);
+    const inner = p.size * 0.34;
+    ctx.beginPath();
+    ctx.moveTo(0, -inner);
+    ctx.lineTo(inner, 0);
+    ctx.lineTo(0, inner);
+    ctx.lineTo(-inner, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = colorWithAlpha('#ffffff', 0.52);
+    ctx.beginPath();
+    ctx.arc(0, 0, p.size * 0.11, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
   }
 
-  // Particles (confetti squares)
+  // Particles
   ctx.save();
   ctx.globalAlpha = 0.9;
   for (const p of rt.particles) {
@@ -1327,7 +1521,6 @@ function draw(
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rot);
 
-    // Color is palette-aware by default, with per-particle override support.
     const particleColor = p.color ?? (fade > 0.55 ? spikes : pickupOuter);
     ctx.fillStyle = particleColor;
     if (p.shape === 'orb') {
@@ -1341,7 +1534,7 @@ function draw(
   }
   ctx.restore();
 
-  // Mini balls from spike disintegration
+  // Mini balls from disintegration
   ctx.save();
   for (const m of rt.miniBalls) {
     const fade = clamp(1 - m.age / m.life, 0, 1);
@@ -1373,72 +1566,104 @@ function draw(
 
   const hideBall = rt.phase === 'gameover' && rt.miniBalls.length > 0;
   if (!hideBall) {
-    // Ball shadow
+    // Ball shadow and roll trail
     const shadowScale = clamp(1 - (yBase - rt.ballY) / (h * 0.28), 0.15, 1);
     ctx.save();
-    ctx.globalAlpha = 0.18 * shadowScale;
+    ctx.globalAlpha = 0.2 * shadowScale;
     ctx.fillStyle = '#000000';
     ctx.beginPath();
     ctx.ellipse(
       rt.ballX,
       yBase + rt.ballR * 0.35,
-      rt.ballR * 0.85 * shadowScale,
+      rt.ballR * 0.85 * shadowScale * (rt.groundRoll ? 1.35 : 1),
       rt.ballR * 0.32 * shadowScale,
       0,
       0,
       Math.PI * 2
     );
     ctx.fill();
+
+    if (rt.groundRoll) {
+      for (let i = 0; i < 5; i++) {
+        const trailT = (i + 1) / 5;
+        ctx.globalAlpha = (1 - trailT) * 0.2;
+        ctx.fillStyle = skin.fill;
+        ctx.beginPath();
+        ctx.arc(
+          rt.ballX - trailT * rt.ballR * 2.4,
+          rt.ballY + rt.ballR * 0.1,
+          rt.ballR * (1 - trailT * 0.18),
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+    }
     ctx.restore();
 
     // Ball
     ctx.save();
-    // Hit flash
-    if (rt.hitFlash > 0) {
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = `rgba(255,255,255,${0.35 * rt.hitFlash})`;
-      ctx.fillRect(0, 0, w, h);
-    }
-
-    ctx.fillStyle = skin.fill;
+    ctx.translate(rt.ballX, rt.ballY);
+    ctx.rotate(rt.ballSpin);
+    const ballGradient = ctx.createRadialGradient(
+      -rt.ballR * 0.32,
+      -rt.ballR * 0.44,
+      rt.ballR * 0.2,
+      0,
+      0,
+      rt.ballR * 1.04
+    );
+    ballGradient.addColorStop(0, lerpColor(skin.inner, '#ffffff', 0.4));
+    ballGradient.addColorStop(0.58, skin.fill);
+    ballGradient.addColorStop(1, lerpColor(skin.fill, '#111827', 0.48));
+    ctx.fillStyle = ballGradient;
     ctx.beginPath();
-    ctx.arc(rt.ballX, rt.ballY, rt.ballR, 0, Math.PI * 2);
+    ctx.arc(0, 0, rt.ballR, 0, Math.PI * 2);
     ctx.fill();
 
-    // Inner circle
-    ctx.globalAlpha = 0.55;
-    ctx.fillStyle = skin.inner;
-    ctx.beginPath();
-    ctx.arc(rt.ballX, rt.ballY, rt.ballR * 0.55, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Ring
-    ctx.strokeStyle = skin.ring;
+    ctx.strokeStyle = colorWithAlpha(skin.ring, 0.96);
     ctx.lineWidth = Math.max(2, rt.ballR * 0.12);
     ctx.beginPath();
-    ctx.arc(rt.ballX, rt.ballY, rt.ballR * 0.92, 0, Math.PI * 2);
+    ctx.arc(0, 0, rt.ballR * 0.74, -Math.PI * 0.25, Math.PI * 0.95);
     ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, rt.ballR * 0.5, Math.PI * 0.72, Math.PI * 1.84);
+    ctx.stroke();
+
+    ctx.fillStyle = colorWithAlpha('#ffffff', 0.36);
+    ctx.beginPath();
+    ctx.arc(-rt.ballR * 0.26, -rt.ballR * 0.34, rt.ballR * 0.2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
-  } else if (rt.hitFlash > 0) {
+  }
+
+  if (rt.hitFlash > 0) {
     ctx.save();
-    ctx.fillStyle = `rgba(255,255,255,${0.35 * rt.hitFlash})`;
+    ctx.fillStyle = `rgba(255,255,255,${0.34 * rt.hitFlash})`;
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
 
-  // Bottom-left score counter
+  // Bottom HUD
   ctx.save();
   const hudPad = Math.max(10, Math.round(rt.ballR * 0.65));
-  const hudSize = Math.max(15, Math.round(rt.ballR * 1.02));
+  const hudSize = Math.max(15, Math.round(rt.ballR * 0.94));
   ctx.globalAlpha = 0.9;
   ctx.fillStyle = spikes;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'bottom';
-  ctx.font = `800 ${hudSize}px ui-sans-serif, system-ui, -apple-system`;
+  ctx.font = `700 ${hudSize}px "Trebuchet MS", "Avenir Next", sans-serif`;
   ctx.fillText(
     `Score ${Math.max(0, Math.round(rt.shownScore))}`,
     hudPad,
+    h - hudPad
+  );
+  ctx.textAlign = 'right';
+  ctx.fillStyle = colorWithAlpha(pickupOuter, 0.92);
+  ctx.fillText(
+    `Best ${Math.max(bouncerState.bestScore, rt.score)}`,
+    w - hudPad,
     h - hudPad
   );
   ctx.restore();
