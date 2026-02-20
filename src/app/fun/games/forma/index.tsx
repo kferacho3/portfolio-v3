@@ -410,14 +410,15 @@ const PolygonTile: React.FC<{
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
-  const [initialX, initialY, initialZ] = getGridPosition(tile.row, tile.col, config);
+  const [initialX, initialY, initialZ] = getGridPosition(
+    tile.row,
+    tile.col,
+    config
+  );
   const targetPos = useRef(new THREE.Vector3(initialX, initialY, initialZ));
   const scaleRef = useRef(tile.isNew ? 0 : 1);
   const rotationRef = useRef(0);
-  const bounds = useMemo(
-    () => getGridBounds(config),
-    [config.size, config.cellSize, config.cellGap]
-  );
+  const bounds = useMemo(() => getGridBounds(config), [config]);
 
   const color = colorForSides(tile.sides, palette);
   const isUnstable = tile.unstable !== undefined;
@@ -430,7 +431,15 @@ const PolygonTile: React.FC<{
       THREE.MathUtils.clamp(y, bounds.minY, bounds.maxY),
       z
     );
-  }, [tile.row, tile.col, config, bounds.minX, bounds.maxX, bounds.minY, bounds.maxY]);
+  }, [
+    tile.row,
+    tile.col,
+    config,
+    bounds.minX,
+    bounds.maxX,
+    bounds.minY,
+    bounds.maxY,
+  ]);
 
   // Hard reset transforms whenever a new tile component mounts.
   useEffect(() => {
@@ -608,9 +617,27 @@ const PolygonTile: React.FC<{
 };
 
 // Grid background
-const GridBackground: React.FC<{ config: GridConfig }> = ({ config }) => {
+const GridBackground: React.FC<{
+  config: GridConfig;
+  palette: FormaPalette;
+}> = ({ config, palette }) => {
+  const haloRef = useRef<THREE.Mesh>(null);
+  const scanRef = useRef<THREE.Mesh>(null);
+
+  const frameColor = useMemo(
+    () => blendHex(colorForSides(6, palette), '#8ec5ff', 0.35),
+    [palette]
+  );
+  const glowColor = useMemo(
+    () => blendHex(colorForSides(4, palette), '#37e5ff', 0.45),
+    [palette]
+  );
+
   const cells = useMemo(() => {
     const result: JSX.Element[] = [];
+    const darkCell = blendHex(colorForSides(3, palette), '#050915', 0.86);
+    const lightCell = blendHex(colorForSides(4, palette), '#101631', 0.82);
+
     for (let row = 0; row < config.size; row++) {
       for (let col = 0; col < config.size; col++) {
         const pos = getGridPosition(row, col, config);
@@ -618,37 +645,242 @@ const GridBackground: React.FC<{ config: GridConfig }> = ({ config }) => {
 
         // Checkerboard pattern for visual clarity
         const isDark = (row + col) % 2 === 0;
-        const cellColor = isDark ? '#1a1a2e' : '#1f1f3a';
+        const cellColor = isDark ? darkCell : lightCell;
+        const emissive = blendHex(cellColor, frameColor, 0.24);
 
         result.push(
           <mesh key={`cell-${key}`} position={[pos[0], pos[1], -0.1]}>
             <boxGeometry
               args={[config.cellSize * 0.95, config.cellSize * 0.95, 0.05]}
             />
-            <meshStandardMaterial color={cellColor} transparent opacity={0.9} />
+            <meshStandardMaterial
+              color={cellColor}
+              emissive={emissive}
+              emissiveIntensity={0.18}
+              transparent
+              opacity={0.94}
+              roughness={0.74}
+              metalness={0.08}
+            />
           </mesh>
         );
       }
     }
     return result;
-  }, [config]);
+  }, [config, frameColor, palette]);
 
-  // Grid border
   const totalWidth =
     config.size * (config.cellSize + config.cellGap) - config.cellGap;
 
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    if (haloRef.current) {
+      const pulse = 0.7 + Math.sin(t * 1.9) * 0.2;
+      haloRef.current.scale.setScalar(1 + pulse * 0.07);
+      const mat = haloRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.08 + pulse * 0.08;
+    }
+
+    if (scanRef.current) {
+      scanRef.current.position.y = Math.sin(t * 0.86) * (totalWidth * 0.42);
+      const mat = scanRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.09 + (Math.sin(t * 1.6) * 0.06 + 0.06);
+    }
+  });
+
   return (
     <group position={[0, 0, -0.2]}>
+      <mesh ref={haloRef} position={[0, 0, -0.18]}>
+        <circleGeometry args={[totalWidth * 0.67, 64]} />
+        <meshBasicMaterial color={glowColor} transparent opacity={0.14} />
+      </mesh>
+
+      <mesh ref={scanRef} position={[0, 0, -0.11]}>
+        <planeGeometry args={[totalWidth * 0.92, config.cellSize * 0.22]} />
+        <meshBasicMaterial color={frameColor} transparent opacity={0.16} />
+      </mesh>
+
       {cells}
+
       {/* Border frame */}
       <lineSegments>
         <edgesGeometry
           args={[
-            new THREE.BoxGeometry(totalWidth + 0.2, totalWidth + 0.2, 0.1),
+            new THREE.BoxGeometry(totalWidth + 0.24, totalWidth + 0.24, 0.1),
           ]}
         />
-        <lineBasicMaterial color="#3a3a5a" linewidth={2} />
+        <lineBasicMaterial color={frameColor} linewidth={2} />
       </lineSegments>
+    </group>
+  );
+};
+
+const TileEffectInstance: React.FC<{
+  effect: TileFx;
+  config: GridConfig;
+  onDone: (id: string) => void;
+}> = ({ effect, config, onDone }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
+  const secondaryRingRef = useRef<THREE.Mesh>(null);
+  const coreRef = useRef<THREE.Mesh>(null);
+  const shardRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const ageRef = useRef(0);
+  const completedRef = useRef(false);
+
+  const signature = useMemo(
+    () => mergeSignatureForSides(effect.sides),
+    [effect.sides]
+  );
+  const life =
+    effect.kind === 'merge'
+      ? signature.duration
+      : 0.24 + effect.intensity * 0.2;
+  const shardCount =
+    effect.kind === 'merge'
+      ? signature.shardCount
+      : 5 + Math.round(effect.intensity * 3);
+  const shardAngles = useMemo(
+    () =>
+      Array.from({ length: shardCount }, (_, index) => {
+        return (index / Math.max(shardCount, 1)) * Math.PI * 2;
+      }),
+    [shardCount]
+  );
+
+  const [x, y] = getGridPosition(effect.row, effect.col, config);
+
+  useFrame((_, delta) => {
+    ageRef.current += delta;
+    const progress = THREE.MathUtils.clamp(ageRef.current / life, 0, 1);
+    const eased = 1 - Math.pow(1 - progress, 2);
+    const fade = 1 - progress;
+    const spinBoost = effect.kind === 'merge' ? signature.spin : 1;
+    const blast = effect.kind === 'merge' ? signature.blast : 1;
+
+    if (ringRef.current) {
+      const scale = 0.4 + eased * (0.95 + effect.intensity * 0.55) * blast;
+      ringRef.current.scale.setScalar(scale);
+      ringRef.current.rotation.z += delta * spinBoost;
+      const mat = ringRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.7 * fade;
+    }
+
+    if (secondaryRingRef.current) {
+      const scale = 0.3 + eased * (1.3 + effect.intensity * 0.6) * blast;
+      secondaryRingRef.current.scale.setScalar(scale);
+      secondaryRingRef.current.rotation.z -= delta * spinBoost * 0.8;
+      const mat = secondaryRingRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = effect.kind === 'merge' ? 0.56 * fade : 0;
+    }
+
+    if (coreRef.current) {
+      const scale = 1 - eased * 0.92;
+      coreRef.current.scale.setScalar(Math.max(0.08, scale));
+      const mat = coreRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.74 * fade;
+    }
+
+    shardRefs.current.forEach((shard, index) => {
+      if (!shard) return;
+      const angle = shardAngles[index] + progress * spinBoost * 1.8;
+      const dist =
+        config.cellSize *
+        (0.16 + eased * (0.75 + effect.intensity * 0.18)) *
+        blast;
+      shard.position.set(
+        Math.cos(angle) * dist,
+        Math.sin(angle) * dist,
+        config.cellSize * 0.02
+      );
+      const shardScale =
+        (1 - eased) * config.cellSize * (effect.kind === 'merge' ? 0.12 : 0.08);
+      shard.scale.setScalar(Math.max(config.cellSize * 0.025, shardScale));
+      const mat = shard.material as THREE.MeshBasicMaterial;
+      mat.opacity = 0.82 * fade;
+    });
+
+    if (groupRef.current) {
+      groupRef.current.position.set(x, y, config.cellSize * 0.12);
+    }
+
+    if (progress >= 1 && !completedRef.current) {
+      completedRef.current = true;
+      onDone(effect.id);
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={[x, y, config.cellSize * 0.12]}>
+      <mesh ref={ringRef}>
+        <ringGeometry
+          args={[config.cellSize * 0.18, config.cellSize * 0.24, 32, 1]}
+        />
+        <meshBasicMaterial color={effect.color} transparent opacity={0.65} />
+      </mesh>
+
+      <mesh ref={secondaryRingRef}>
+        <ringGeometry
+          args={[
+            config.cellSize * 0.1,
+            config.cellSize * 0.14,
+            Math.min(48, effect.sides * 4),
+            1,
+          ]}
+        />
+        <meshBasicMaterial
+          color={blendHex(effect.color, '#ffffff', 0.25)}
+          transparent
+          opacity={0.48}
+        />
+      </mesh>
+
+      <mesh ref={coreRef}>
+        <circleGeometry
+          args={[config.cellSize * 0.16, Math.min(effect.sides, 20)]}
+        />
+        <meshBasicMaterial
+          color={blendHex(effect.color, '#ffffff', 0.35)}
+          transparent
+          opacity={0.72}
+        />
+      </mesh>
+
+      {shardAngles.map((_, index) => (
+        <mesh
+          key={`fx-${effect.id}-shard-${index}`}
+          ref={(mesh) => {
+            shardRefs.current[index] = mesh;
+          }}
+        >
+          <circleGeometry
+            args={[
+              config.cellSize * (effect.kind === 'merge' ? 0.08 : 0.06),
+              Math.min(Math.max(3, effect.sides), 16),
+            ]}
+          />
+          <meshBasicMaterial color={effect.color} transparent opacity={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+const TileEffectLayer: React.FC<{
+  effects: TileFx[];
+  config: GridConfig;
+  onDone: (id: string) => void;
+}> = ({ effects, config, onDone }) => {
+  return (
+    <group>
+      {effects.map((effect) => (
+        <TileEffectInstance
+          key={effect.id}
+          effect={effect}
+          config={config}
+          onDone={onDone}
+        />
+      ))}
     </group>
   );
 };
@@ -719,18 +951,36 @@ const ModeSelection: React.FC<{
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface ComboToast {
+  id: string;
+  label: string;
+  color: string;
+}
+
 const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const snap = useSnapshot(formaState);
   const { camera, scene } = useThree();
 
   const config = GRID_CONFIGS[snap.gridSize];
+  const fxIntensityBoost = soundsOn ? 1 : 0.92;
 
-  const [grid, setGrid] = useState<(Tile | null)[][]>(() =>
+  const [, setGrid] = useState<(Tile | null)[][]>(() =>
     createEmptyGrid(config.size)
   );
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [activePalette, setActivePalette] = useState<FormaPalette>(
     FORMA_PALETTES[0]
+  );
+  const [tileFx, setTileFx] = useState<TileFx[]>([]);
+  const [comboToast, setComboToast] = useState<ComboToast | null>(null);
+
+  const hudAccent = useMemo(
+    () => colorForSides(Math.max(4, snap.highestSides), activePalette),
+    [activePalette, snap.highestSides]
+  );
+  const boardAmbient = useMemo(
+    () => blendHex(colorForSides(3, activePalette), '#0a0b17', 0.72),
+    [activePalette]
   );
 
   const rngRef = useRef(new SeededRandom(Date.now()));
@@ -738,13 +988,16 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   const gameRunRef = useRef(0);
   const paletteIndexRef = useRef(0);
   const canMove = useRef(true);
+  const fxIdCounter = useRef(0);
+  const moveUnlockTimeoutRef = useRef<number | null>(null);
+  const comboToastTimeoutRef = useRef<number | null>(null);
 
   // Camera setup - updates when grid size changes
   useEffect(() => {
     camera.position.set(0, 0, config.cameraZ);
     camera.lookAt(0, 0, 0);
-    scene.background = new THREE.Color('#0a0a1a');
-  }, [camera, scene, config.cameraZ]);
+    scene.background = new THREE.Color(boardAmbient);
+  }, [camera, scene, config.cameraZ, boardAmbient]);
 
   const randomizePaletteForRun = useCallback(() => {
     if (FORMA_PALETTES.length === 0) return;
@@ -756,6 +1009,58 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     }
     paletteIndexRef.current = nextIndex;
     setActivePalette(FORMA_PALETTES[nextIndex]);
+  }, []);
+
+  const scheduleMoveUnlock = useCallback((delayMs: number) => {
+    if (moveUnlockTimeoutRef.current !== null) {
+      window.clearTimeout(moveUnlockTimeoutRef.current);
+    }
+    moveUnlockTimeoutRef.current = window.setTimeout(() => {
+      canMove.current = true;
+      moveUnlockTimeoutRef.current = null;
+    }, delayMs);
+  }, []);
+
+  const pushEffects = useCallback((effects: Omit<TileFx, 'id'>[]) => {
+    if (effects.length === 0) return;
+    setTileFx((prev) => {
+      const appended = effects.map((effect) => ({
+        ...effect,
+        id: `fx-${fxIdCounter.current++}`,
+      }));
+      return [...prev, ...appended].slice(-220);
+    });
+  }, []);
+
+  const removeEffect = useCallback((id: string) => {
+    setTileFx((prev) => prev.filter((effect) => effect.id !== id));
+  }, []);
+
+  const showComboToast = useCallback((label: string, color: string) => {
+    if (comboToastTimeoutRef.current !== null) {
+      window.clearTimeout(comboToastTimeoutRef.current);
+    }
+    const next: ComboToast = {
+      id: `combo-${Date.now()}-${fxIdCounter.current++}`,
+      label,
+      color,
+    };
+    setComboToast(next);
+    comboToastTimeoutRef.current = window.setTimeout(() => {
+      setComboToast((current) => (current?.id === next.id ? null : current));
+      comboToastTimeoutRef.current = null;
+    }, 780);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (moveUnlockTimeoutRef.current !== null) {
+        window.clearTimeout(moveUnlockTimeoutRef.current);
+      }
+      if (comboToastTimeoutRef.current !== null) {
+        window.clearTimeout(comboToastTimeoutRef.current);
+      }
+    };
   }, []);
 
   // Spawn new tile
@@ -805,6 +1110,17 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     rngRef.current = new SeededRandom(Date.now() + gameRunRef.current * 101);
     randomizePaletteForRun();
     const initialGrid = createEmptyGrid(cfg.size);
+    setTileFx([]);
+    setComboToast(null);
+    canMove.current = true;
+    if (moveUnlockTimeoutRef.current !== null) {
+      window.clearTimeout(moveUnlockTimeoutRef.current);
+      moveUnlockTimeoutRef.current = null;
+    }
+    if (comboToastTimeoutRef.current !== null) {
+      window.clearTimeout(comboToastTimeoutRef.current);
+      comboToastTimeoutRef.current = null;
+    }
 
     for (let i = 0; i < cfg.initialTiles; i++) {
       const tile = spawnTile(initialGrid, cfg);
@@ -830,7 +1146,17 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       const emptyGrid = createEmptyGrid(GRID_CONFIGS[snap.gridSize].size);
       setGrid(emptyGrid);
       setTiles([]);
+      setTileFx([]);
+      setComboToast(null);
       canMove.current = true;
+      if (moveUnlockTimeoutRef.current !== null) {
+        window.clearTimeout(moveUnlockTimeoutRef.current);
+        moveUnlockTimeoutRef.current = null;
+      }
+      if (comboToastTimeoutRef.current !== null) {
+        window.clearTimeout(comboToastTimeoutRef.current);
+        comboToastTimeoutRef.current = null;
+      }
     }
   }, [snap.started, snap.gridSize]);
 
@@ -841,6 +1167,8 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       canMove.current = false;
 
       const cfg = GRID_CONFIGS[snap.gridSize];
+      const fxBuffer: Omit<TileFx, 'id'>[] = [];
+      let bestMergedSides = 0;
 
       setGrid((prevGrid) => {
         const newGrid = createEmptyGrid(cfg.size);
@@ -867,7 +1195,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           // Compact tiles and handle unstable decay
           for (const tile of line) {
             if (tile) {
-              let newTile = { ...tile, isNew: false, merging: false };
+              const newTile = { ...tile, isNew: false, merging: false };
 
               // Decay unstable tiles
               if (newTile.unstable !== undefined) {
@@ -896,6 +1224,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
                 merging: true,
                 unstable: undefined, // Merging removes unstable
               });
+              bestMergedSides = Math.max(bestMergedSides, newSides);
               scoreGain += newSides * newSides * (cfg.size / 4); // Scale score with grid size
               mergesThisMove++;
               if (newSides > formaState.highestSides) {
@@ -936,9 +1265,36 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
                 tile
               ) {
                 const originalRow = tile.row;
+                const originalCol = tile.col;
                 tile.row = targetRow;
                 tile.col = col;
-                if (originalRow !== targetRow) moved = true;
+                const travel =
+                  Math.abs(originalRow - targetRow) +
+                  Math.abs(originalCol - col);
+                if (travel > 0) {
+                  moved = true;
+                  fxBuffer.push({
+                    kind: 'collision',
+                    row: targetRow,
+                    col,
+                    sides: tile.sides,
+                    color: colorForSides(tile.sides, activePalette),
+                    intensity:
+                      Math.min(1.9, 0.7 + travel * 0.34) * fxIntensityBoost,
+                  });
+                }
+                if (tile.merging) {
+                  fxBuffer.push({
+                    kind: 'merge',
+                    row: targetRow,
+                    col,
+                    sides: tile.sides,
+                    color: colorForSides(tile.sides, activePalette),
+                    intensity:
+                      (1 + Math.min(1.6, (tile.sides - 3) * 0.09)) *
+                      fxIntensityBoost,
+                  });
+                }
                 newGrid[targetRow][col] = tile;
               }
             });
@@ -962,10 +1318,37 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
                 targetCol < cfg.size &&
                 tile
               ) {
+                const originalRow = tile.row;
                 const originalCol = tile.col;
                 tile.row = row;
                 tile.col = targetCol;
-                if (originalCol !== targetCol) moved = true;
+                const travel =
+                  Math.abs(originalRow - row) +
+                  Math.abs(originalCol - targetCol);
+                if (travel > 0) {
+                  moved = true;
+                  fxBuffer.push({
+                    kind: 'collision',
+                    row,
+                    col: targetCol,
+                    sides: tile.sides,
+                    color: colorForSides(tile.sides, activePalette),
+                    intensity:
+                      Math.min(1.9, 0.7 + travel * 0.34) * fxIntensityBoost,
+                  });
+                }
+                if (tile.merging) {
+                  fxBuffer.push({
+                    kind: 'merge',
+                    row,
+                    col: targetCol,
+                    sides: tile.sides,
+                    color: colorForSides(tile.sides, activePalette),
+                    intensity:
+                      (1 + Math.min(1.6, (tile.sides - 3) * 0.09)) *
+                      fxIntensityBoost,
+                  });
+                }
                 newGrid[row][targetCol] = tile;
               }
             });
@@ -993,7 +1376,32 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
               !newGrid[newTile.row][newTile.col]
             ) {
               newGrid[newTile.row][newTile.col] = newTile;
+              fxBuffer.push({
+                kind: 'collision',
+                row: newTile.row,
+                col: newTile.col,
+                sides: newTile.sides,
+                color: colorForSides(newTile.sides, activePalette),
+                intensity: 0.56 * fxIntensityBoost,
+              });
             }
+          }
+
+          pushEffects(fxBuffer);
+          if (mergesThisMove > 0 && bestMergedSides >= 4) {
+            const signature = mergeSignatureForSides(bestMergedSides);
+            const chainLabel =
+              mergesThisMove > 1
+                ? `${mergesThisMove}x Chain • ${signature.label}`
+                : signature.label;
+            showComboToast(
+              chainLabel,
+              blendHex(
+                colorForSides(bestMergedSides, activePalette),
+                '#ffffff',
+                0.24
+              )
+            );
           }
         }
 
@@ -1023,14 +1431,22 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
           formaState.gameOver = true;
         }
 
-        setTimeout(() => {
-          canMove.current = true;
-        }, 80);
+        scheduleMoveUnlock(moved ? 88 : 46);
 
         return newGrid;
       });
     },
-    [snap.gameOver, snap.started, snap.gridSize, spawnTile]
+    [
+      snap.gameOver,
+      snap.started,
+      snap.gridSize,
+      spawnTile,
+      activePalette,
+      fxIntensityBoost,
+      pushEffects,
+      scheduleMoveUnlock,
+      showComboToast,
+    ]
   );
 
   // Keyboard handling
@@ -1051,6 +1467,8 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         }
         return;
       }
+
+      if (e.repeat) return;
 
       switch (e.key) {
         case 'ArrowUp':
@@ -1138,7 +1556,9 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
       startY = null;
     };
 
-    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointerdown', handlePointerDown, {
+      passive: true,
+    });
     window.addEventListener('pointerup', handlePointerUp, { passive: true });
     window.addEventListener('pointercancel', clearSwipe);
 
@@ -1153,6 +1573,16 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
     const nextConfig = GRID_CONFIGS[size];
     setGrid(createEmptyGrid(nextConfig.size));
     setTiles([]);
+    setTileFx([]);
+    setComboToast(null);
+    if (moveUnlockTimeoutRef.current !== null) {
+      window.clearTimeout(moveUnlockTimeoutRef.current);
+      moveUnlockTimeoutRef.current = null;
+    }
+    if (comboToastTimeoutRef.current !== null) {
+      window.clearTimeout(comboToastTimeoutRef.current);
+      comboToastTimeoutRef.current = null;
+    }
     tileIdCounter.current = 0;
     rngRef.current = new SeededRandom(Date.now());
     canMove.current = true;
@@ -1168,12 +1598,16 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
   return (
     <>
       {/* Lighting */}
-      <ambientLight intensity={0.5} />
-      <pointLight position={[0, 5, 10]} intensity={1} />
-      <pointLight position={[-5, -5, 8]} intensity={0.3} />
+      <ambientLight intensity={0.42} />
+      <hemisphereLight
+        args={[blendHex(hudAccent, '#ffffff', 0.2), '#05070f', 0.42]}
+      />
+      <pointLight position={[0, 5, 10]} intensity={1.1} color={hudAccent} />
+      <pointLight position={[-5, -5, 8]} intensity={0.34} color="#7cdfff" />
+      <pointLight position={[5, -3, 7]} intensity={0.28} color="#ff6ac1" />
 
       {/* Grid */}
-      <GridBackground config={config} />
+      <GridBackground config={config} palette={activePalette} />
 
       {/* Tiles */}
       {tiles.map((tile) => (
@@ -1185,10 +1619,35 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         />
       ))}
 
+      {/* Tile collisions + merge signatures */}
+      <TileEffectLayer effects={tileFx} config={config} onDone={removeEffect} />
+
       {/* HUD */}
       <FixedViewportOverlay>
+        {comboToast && (
+          <div className="absolute top-4 left-1/2 z-50 -translate-x-1/2">
+            <div
+              className="rounded-full border px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white shadow-lg"
+              style={{
+                borderColor: withAlpha(comboToast.color, 0.66),
+                background: `linear-gradient(120deg, ${withAlpha(comboToast.color, 0.22)}, rgba(7, 10, 24, 0.86))`,
+                boxShadow: `0 0 18px ${withAlpha(comboToast.color, 0.34)}`,
+              }}
+            >
+              {comboToast.label}
+            </div>
+          </div>
+        )}
+
         <div className="absolute top-4 left-4 z-50">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-4 py-3 text-white">
+          <div
+            className="backdrop-blur-sm rounded-lg px-4 py-3 text-white border"
+            style={{
+              borderColor: withAlpha(hudAccent, 0.45),
+              background: `linear-gradient(145deg, ${withAlpha(hudAccent, 0.2)}, rgba(7, 10, 26, 0.86))`,
+              boxShadow: `0 0 24px ${withAlpha(hudAccent, 0.2)}`,
+            }}
+          >
             <div className="text-2xl font-bold">{snap.score}</div>
             <div className="text-xs text-white/60">Best: {snap.highScore}</div>
             <div className="text-xs text-white/40 mt-1">
@@ -1198,8 +1657,16 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         </div>
 
         <div className="absolute top-4 right-4 z-50">
-          <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm">
-            <div className="font-medium text-cyan-400">{config.name}</div>
+          <div
+            className="backdrop-blur-sm rounded-lg px-3 py-2 text-white text-sm border"
+            style={{
+              borderColor: withAlpha(hudAccent, 0.45),
+              background: `linear-gradient(145deg, rgba(7, 10, 24, 0.86), ${withAlpha(hudAccent, 0.16)})`,
+            }}
+          >
+            <div className="font-medium" style={{ color: hudAccent }}>
+              {config.name}
+            </div>
             <div className="text-xs text-white/50">
               {snap.gridSize}×{snap.gridSize} Grid
             </div>
@@ -1215,18 +1682,26 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         <div className="absolute bottom-4 left-4 text-white/60 text-sm pointer-events-auto">
           <div>WASD / Arrow Keys / Swipe to merge</div>
           <div className="text-xs mt-1 text-white/40">
-            Red tiles decay - merge them fast!
+            New: every landing triggers collision pulses. Each polygon upgrade
+            has its own signature burst.
           </div>
           <button
             onClick={() => formaState.backToMenu()}
-            className="mt-2 text-xs text-cyan-400 hover:text-cyan-300"
+            className="mt-2 text-xs hover:opacity-85"
+            style={{ color: hudAccent }}
           >
             ESC - Back to Menu
           </button>
         </div>
 
         {/* Legend */}
-        <div className="absolute bottom-4 right-4 text-white/40 text-xs">
+        <div
+          className="absolute bottom-4 right-4 text-white/40 text-xs border rounded-md px-2 py-2"
+          style={{
+            borderColor: withAlpha(hudAccent, 0.32),
+            background: 'rgba(6, 8, 20, 0.66)',
+          }}
+        >
           <div className="flex items-center gap-2 mb-1">
             <div
               className="w-3 h-3 rounded"
@@ -1259,7 +1734,13 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
 
         {snap.gameOver && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 pointer-events-auto">
-            <div className="text-center">
+            <div
+              className="text-center border rounded-2xl px-8 py-7"
+              style={{
+                borderColor: withAlpha(hudAccent, 0.52),
+                background: `linear-gradient(160deg, rgba(6, 8, 20, 0.92), ${withAlpha(hudAccent, 0.18)})`,
+              }}
+            >
               <h1 className="text-5xl font-bold text-white mb-4">GAME OVER</h1>
               <p className="text-3xl text-white/80 mb-2">{snap.score}</p>
               <p className="text-lg text-white/60 mb-1">
