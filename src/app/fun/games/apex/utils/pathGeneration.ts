@@ -317,7 +317,7 @@ export const generateCurvedTiles = () => {
         CURVE_SEGMENT_SHORT_RANGE[1]
       )
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.48, 0.66);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.44, 0.6);
     mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.74, 0.98);
 
     result = advanceCurvedState(
