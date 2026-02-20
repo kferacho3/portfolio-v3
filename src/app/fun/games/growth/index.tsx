@@ -1602,12 +1602,14 @@ const Growth: React.FC = () => {
       <FixedViewportOverlay>
         <div
           style={{
-            position: 'absolute',
-            top: 14,
-            left: 14,
+            position: 'fixed',
+            top: 'max(14px, env(safe-area-inset-top))',
+            left: 'max(14px, env(safe-area-inset-left))',
             color: '#ffffff',
             fontFamily: '"Avenir Next", "Segoe UI", sans-serif',
             textShadow: '0 2px 10px rgba(0,0,0,0.5)',
+            maxWidth: 'min(260px, calc(100vw - 28px))',
+            zIndex: 4,
           }}
         >
           <div style={{ fontSize: 13, opacity: 0.84 }}>GROWTH</div>
@@ -1637,17 +1639,19 @@ const Growth: React.FC = () => {
         {(snap.phase === 'menu' || snap.phase === 'gameover') && (
           <div
             style={{
-              position: 'absolute',
+              position: 'fixed',
               inset: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               pointerEvents: 'auto',
+              padding:
+                'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
             }}
           >
             <div
               style={{
-                width: 420,
+                width: 'min(420px, calc(100vw - 32px))',
                 borderRadius: 18,
                 padding: '20px 22px',
                 background:
@@ -1655,6 +1659,8 @@ const Growth: React.FC = () => {
                 color: '#fff',
                 textAlign: 'center',
                 boxShadow: '0 18px 46px rgba(0,0,0,0.35)',
+                maxHeight: 'min(86vh, 760px)',
+                overflowY: 'auto',
               }}
             >
               <div style={{ fontSize: 30, fontWeight: 900 }}>Growth</div>

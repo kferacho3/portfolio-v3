@@ -11,9 +11,9 @@ export default function CharacterSelection() {
     <FixedViewportOverlay>
       <div
         style={{
-          position: 'absolute',
-          right: 18,
-          bottom: 18,
+          position: 'fixed',
+          right: 'max(18px, env(safe-area-inset-right))',
+          bottom: 'max(18px, env(safe-area-inset-bottom))',
           padding: '10px 12px',
           borderRadius: 12,
           background: 'rgba(12, 18, 36, 0.72)',
@@ -23,6 +23,7 @@ export default function CharacterSelection() {
           border: '1px solid rgba(148, 163, 184, 0.35)',
           backdropFilter: 'blur(6px)',
           maxWidth: 260,
+          zIndex: 5,
         }}
       >
         <div style={{ fontWeight: 700, marginBottom: 4 }}>Controls</div>
