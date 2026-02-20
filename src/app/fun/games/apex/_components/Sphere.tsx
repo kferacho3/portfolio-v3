@@ -7,6 +7,10 @@ import {
   AIRBORNE_GAMEOVER_DELAY,
   CAMERA_OFFSET_X,
   CAMERA_OFFSET_Z,
+  CURVE_DEFAULT_CURVATURE,
+  CURVE_DEFAULT_CURVATURE_VEL,
+  CURVE_PLAYER_CURVATURE_DAMPING,
+  CURVE_PLAYER_CURVATURE_VEL_DAMPING,
   DIRECTIONS,
   LEVEL_DISTANCE,
   MODE_SETTINGS,
@@ -138,6 +142,19 @@ const Sphere: React.FC = () => {
 
     if (snap.mode === 'curved') {
       if (!mutation.gameOver && mutation.isOnPlatform) {
+        mutation.curveCurvature = THREE.MathUtils.damp(
+          mutation.curveCurvature,
+          CURVE_DEFAULT_CURVATURE,
+          CURVE_PLAYER_CURVATURE_DAMPING,
+          delta
+        );
+        mutation.curveCurvatureVel = THREE.MathUtils.damp(
+          mutation.curveCurvatureVel,
+          CURVE_DEFAULT_CURVATURE_VEL,
+          CURVE_PLAYER_CURVATURE_VEL_DAMPING,
+          delta
+        );
+
         const distanceStep = mutation.speed * delta;
         const result = advanceCurvedState(
           mutation.curveCenterPos,

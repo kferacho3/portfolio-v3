@@ -83,13 +83,13 @@ export const MODE_SETTINGS: Record<GameMode, ModeSettings> = {
     fallDelay: FALL_DELAY,
   },
   curved: {
-    speedMultiplier: 0.96,
+    speedMultiplier: 0.95,
     scoreMultiplier: 1.1,
-    speedIncrementMultiplier: 0.9,
-    speedLimitMultiplier: 0.94,
+    speedIncrementMultiplier: 0.86,
+    speedLimitMultiplier: 0.91,
     gemSpawnChance: GEM_SPAWN_CHANCE * 1.18,
     powerUpChance: POWERUP_SPAWN_CHANCE * 1.2,
-    fallDelay: FALL_DELAY * 1.2,
+    fallDelay: FALL_DELAY * 1.24,
   },
   spiral: {
     speedMultiplier: 1.05,
@@ -136,15 +136,19 @@ export const CURVE_SPRING = 3.5;
 export const CURVE_DAMPING = 1.4;
 export const CURVE_DEFAULT_CURVATURE = 0.52;
 export const CURVE_DEFAULT_CURVATURE_VEL = 0.82;
+export const CURVE_INPUT_CURVATURE_BOOST = 0.12;
+export const CURVE_INPUT_CURVATURE_VEL_BOOST = 0.24;
+export const CURVE_PLAYER_CURVATURE_DAMPING = 4.2;
+export const CURVE_PLAYER_CURVATURE_VEL_DAMPING = 5.4;
 export const CURVE_FORWARD_BIAS = 0.09;
 export const CURVE_MAX_YAW = 0.76;
 export const CURVE_CENTER_PULL = 0.036;
-export const CURVE_SEGMENT_RANGE: [number, number] = [28, 56];
-export const CURVE_SEGMENT_SHORT_RANGE: [number, number] = [12, 20];
-export const CURVE_BOUNDARY_SOFT = TILE_SIZE * 8.6;
-export const CURVE_BOUNDARY_HARD = TILE_SIZE * 11.4;
+export const CURVE_SEGMENT_RANGE: [number, number] = [34, 68];
+export const CURVE_SEGMENT_SHORT_RANGE: [number, number] = [16, 26];
+export const CURVE_BOUNDARY_SOFT = TILE_SIZE * 9.4;
+export const CURVE_BOUNDARY_HARD = TILE_SIZE * 12.8;
 export const CURVE_BOUNDARY_GAIN = 1.1;
-export const CURVE_SELF_INTERSECTION_DISTANCE = TILE_SIZE * 0.9;
+export const CURVE_SELF_INTERSECTION_DISTANCE = TILE_SIZE * 1.2;
 export const CURVE_TILE_STEP = TILE_SIZE * 0.92;
 export const CURVE_LANE_OFFSET = TILE_SIZE * 0.65;
 export const CURVE_LANE_DAMPING = 9;
