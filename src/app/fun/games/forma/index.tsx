@@ -39,6 +39,27 @@ interface Tile {
 
 type Direction = 'up' | 'down' | 'left' | 'right';
 
+type TileFxKind = 'collision' | 'merge';
+
+interface TileFx {
+  id: string;
+  kind: TileFxKind;
+  row: number;
+  col: number;
+  sides: number;
+  color: string;
+  intensity: number;
+}
+
+interface MergeSignature {
+  label: string;
+  ringCount: number;
+  shardCount: number;
+  spin: number;
+  blast: number;
+  duration: number;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // GRID SIZE CONFIGURATIONS
 // ═══════════════════════════════════════════════════════════════════════════
@@ -337,6 +358,42 @@ const getGridBounds = (config: GridConfig) => {
     maxX: halfExtent,
     minY: -halfExtent,
     maxY: halfExtent,
+  };
+};
+
+const blendHex = (a: string, b: string, t: number) => {
+  const colA = new THREE.Color(a);
+  const colB = new THREE.Color(b);
+  colA.lerp(colB, THREE.MathUtils.clamp(t, 0, 1));
+  return `#${colA.getHexString()}`;
+};
+
+const withAlpha = (color: string, alpha: number) => {
+  const clamped = THREE.MathUtils.clamp(alpha, 0, 1);
+  const parsed = new THREE.Color(color);
+  return `rgba(${Math.round(parsed.r * 255)}, ${Math.round(parsed.g * 255)}, ${Math.round(parsed.b * 255)}, ${clamped})`;
+};
+
+const mergeSignatureForSides = (sides: number): MergeSignature => {
+  const motifs = [
+    'Prism Bloom',
+    'Nova Lattice',
+    'Flux Crown',
+    'Halo Weave',
+    'Pulse Orbit',
+    'Zenith Spiral',
+    'Glyph Burst',
+    'Arc Bloom',
+  ];
+  const normalized = Math.max(3, Math.floor(sides));
+  const tier = normalized - 3;
+  return {
+    label: `${motifs[normalized % motifs.length]} • ${normalized}-gon`,
+    ringCount: 2 + (tier % 2),
+    shardCount: 6 + Math.min(12, tier),
+    spin: 1.1 + tier * 0.06,
+    blast: 1 + Math.min(1.5, tier * 0.08),
+    duration: 0.36 + Math.min(0.58, tier * 0.02),
   };
 };
 
