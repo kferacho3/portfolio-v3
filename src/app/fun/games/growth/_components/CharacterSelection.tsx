@@ -30,7 +30,10 @@ export default function CharacterSelection() {
         <div>D / E / Right Arrow / Swipe Right: rotate -90°</div>
         <div>Tap / Space: jump</div>
         <div style={{ marginTop: 6, opacity: 0.82 }}>
-          Menu: 1 Voxelized • 2 Classic • 3 Apex
+          Voxelized style is locked in this arcade build.
+        </div>
+        <div style={{ marginTop: 4, opacity: 0.74 }}>
+          More Growth styles: prism3d.studio
         </div>
       </div>
     </FixedViewportOverlay>

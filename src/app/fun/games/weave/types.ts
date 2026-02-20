@@ -1,5 +1,3 @@
-export type WeaveControlScheme = 'mouse' | 'keyboard' | 'hybrid';
-
 export interface LaserArm {
   id: string;
   angle: number;

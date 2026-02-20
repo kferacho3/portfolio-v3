@@ -2,7 +2,6 @@ import { Html } from '@react-three/drei';
 import React from 'react';
 import FixedViewportOverlay from '../../_shared/FixedViewportOverlay';
 import { ARM_COLOR, BONUS_ORB_COLOR, ORB_COLOR } from '../constants';
-import type { WeaveControlScheme } from '../types';
 
 type WeaveHUDProps = {
   score: number;
@@ -12,8 +11,6 @@ type WeaveHUDProps = {
   levelOrbCount: number;
   levelUpOrbs: number;
   levelProgress: number;
-  controlScheme: WeaveControlScheme;
-  onControlSchemeChange: (scheme: WeaveControlScheme) => void;
   currentColor: string;
   highScore: number;
   bestCombo: number;
@@ -33,8 +30,6 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
   levelOrbCount,
   levelUpOrbs,
   levelProgress,
-  controlScheme,
-  onControlSchemeChange,
   currentColor,
   highScore,
   bestCombo,
@@ -117,29 +112,13 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
 
           <div className="mt-4">
             <div className="text-[10px] text-white/40 uppercase tracking-wider mb-2">
-              Controls
+              Control Mode
             </div>
-            <div className="flex gap-2 pointer-events-auto">
-              {(['mouse', 'keyboard', 'hybrid'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => onControlSchemeChange(mode)}
-                  className={`px-2 py-1 rounded-md text-[10px] border transition ${
-                    controlScheme === mode
-                      ? 'border-cyan-400 text-cyan-200 bg-cyan-400/10'
-                      : 'border-white/15 text-white/60 hover:border-white/30'
-                  }`}
-                >
-                  {mode === 'mouse'
-                    ? 'Mouse'
-                    : mode === 'keyboard'
-                      ? 'Keyboard'
-                      : 'Hybrid'}
-                </button>
-              ))}
+            <div className="inline-flex items-center rounded-md border border-cyan-400/50 bg-cyan-400/10 px-3 py-1 text-[10px] text-cyan-100">
+              Arcade Default (Locked)
             </div>
             <div className="mt-2 text-[10px] text-white/35">
-              Default: Mouse. Keyboard: ←/→ or A/D, Space flips direction.
+              Full Weave control/mode variants are available on prism3d.studio.
             </div>
           </div>
         </div>
@@ -168,9 +147,9 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
 
       <div className="absolute bottom-4 left-4 text-white/40 text-xs">
         <div className="flex items-center gap-3">
-          <span>Mouse (default) or ←/→ / A/D to orbit</span>
+          <span>Mouse or ←/→ / A/D to orbit</span>
           <span className="text-white/20">|</span>
-          <span>Space flips direction (Keyboard/Hybrid)</span>
+          <span>Space flips direction</span>
           <span className="text-white/20">|</span>
           <span>Collect orbs, dodge lasers</span>
         </div>

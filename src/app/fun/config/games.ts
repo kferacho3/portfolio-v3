@@ -103,7 +103,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'fluxhop',
     title: 'FluxHop',
     description:
-      'Neon lane hopper with drift logs, ice lanes, subway runs, and slow-burn difficulty.',
+      'Arcade-default neon lane hopper with drift logs, ice lanes, and subway runs.',
     accent: '#22f5c5',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/FluxHop.webp',
@@ -163,7 +163,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'forma',
     title: 'Forma',
     description:
-      'Merge to evolve. Triangle to square to pentagon. 2048 meets geometry.',
+      'Arcade-default Forma board with clean merge flow and faster turn readability.',
     accent: '#ff6b6b',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Forma.webp',
@@ -173,7 +173,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'weave',
     title: 'Weave',
     description:
-      'Thread through spinning segments. Stitch shapes. Flow-state geometry.',
+      'Arcade-default Weave run with escalating laser patterns and locked profile.',
     accent: '#48dbfb',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Weave.webp',
@@ -204,7 +204,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'apex',
     title: 'Apex',
     description:
-      'Tap to turn. Stay on the path. 6 unique modes including curves, spirals, and gravity shifts.',
+      'Curved-mode Apex run tuned for smoother arcs, clearer lanes, and cleaner recovery.',
     accent: '#00ffff',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Apex.webp',
@@ -295,7 +295,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'growth',
     title: 'Growth',
     description:
-      'Rotate the beam to dodge obstacles. Stay on the path, collect gems, and survive as speed ramps up.',
+      'Arcade-default Growth route with the voxelized terrain profile and easier pacing.',
     accent: '#facc15',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Growth.webp',
@@ -365,7 +365,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'slowmo',
     title: 'SlowMo',
     description:
-      'Hold to slow time. Let the ball bounce into the safe lane, then release. Collect stars to unlock new balls.',
+      'Hold to slow time, guide the lane bounce, and survive the locked Medium default run.',
     accent: '#ff6b6b',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/SlowMo.webp',
@@ -375,7 +375,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'bouncer',
     title: 'Rollbounce',
     description:
-      'Hold to roll along the lane, release to relaunch your bounce rhythm, and survive mixed hazards while collecting shards for skins.',
+      'Hold to roll along the lane, release to relaunch your bounce rhythm, and clear mixed hazards.',
     accent: '#FF5A8A',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/Bouncer.webp',
@@ -385,7 +385,7 @@ const BASE_GAME_CARDS: GameCard[] = [
     id: 'prismjump',
     title: 'Prism Jump',
     description:
-      "One-tap jump across constantly moving platforms in an interstellar world. Each row alternates direction. Collect cubes, unlock one of 33 characters (100 cubes lottery). Don't get carried off-screen!",
+      'One-tap jump across moving platform rows, strafe to line up landings, and survive widening gaps.',
     accent: '#3366ff',
     poster:
       'https://racho-devs.s3.us-east-2.amazonaws.com/fun/arcadePoster/PrismJump.webp',
@@ -562,7 +562,7 @@ export const GAME_RULES: Record<string, GameRules> = {
     controls: 'Arrow keys/WASD/Space or swipe • Tap to hop forward',
     objective:
       'Hop across infinite lanes, dodge traffic, and ride drift logs. Chain forward hops for combo boosts.',
-    tips: 'Ice rows drift sideways, subways are fast, wildlife wander. Boost pads auto-hop forward; logs carry you.',
+    tips: 'Ice rows drift sideways, subways are fast, wildlife wander. Boost pads auto-hop forward; logs carry you. Extra FluxHop variants are on prism3d.studio.',
   },
   reactpong: {
     controls:
@@ -595,13 +595,13 @@ export const GAME_RULES: Record<string, GameRules> = {
     controls: 'WASD or Arrow Keys to merge',
     objective:
       'Merge matching polygons to evolve them. Triangle → Square → Pentagon and beyond.',
-    tips: 'Red tiles decay fast—merge them quickly!',
+    tips: 'Red tiles decay fast—merge them quickly. Full Forma board-size modes are on prism3d.studio.',
   },
   weave: {
     controls: 'A/D or Mouse to orbit • Thread through gaps',
     objective:
       'Orbit the center and weave through sweeping lines. Each pass stitches a new pattern. Mistakes unravel progress.',
-    tips: 'Build combos for slow-motion highlights. Complete patterns to level up!',
+    tips: 'Build combos for slow-motion highlights. Complete patterns to level up. Expanded Weave profiles are on prism3d.studio.',
   },
   pave: {
     controls:
@@ -625,14 +625,14 @@ export const GAME_RULES: Record<string, GameRules> = {
   apex: {
     controls: 'Tap/Space/Click to change direction • R to restart',
     objective:
-      "Stay on the path. Collect gems. Don't fall. 6 unique modes with different path patterns.",
-    tips: 'Try different modes: Classic for sharp turns, Curved for flow, Spiral for hypnotic patterns, Zen for no death.',
+      "Stay on the path, collect gems, and don't fall. This arcade build uses Curved mode for a smoother default run.",
+    tips: 'Other Apex modes are available on prism3d.studio.',
   },
   polarity: {
     controls: 'Tap/Click to flip polarity and swap rails • R to restart',
     objective:
       'Auto-run forward, match your charge to upcoming gates, and survive as speed ramps up.',
-    tips: 'Treat every gate like a rhythm cue. One clean flip beats panic tapping.',
+    tips: 'Treat every gate like a rhythm cue. One clean flip beats panic tapping. Additional Polarity variants are on prism3d.studio.',
   },
   tetherdrift: {
     controls:
@@ -681,17 +681,17 @@ export const GAME_RULES: Record<string, GameRules> = {
   },
   growth: {
     controls:
-      'A/Q/Left Arrow/Swipe Left = rotate +90° • D/E/Right Arrow/Swipe Right = rotate -90° • Tap/Space = jump • 1/2/3 choose path style • R to restart',
+      'A/Q/Left Arrow/Swipe Left = rotate +90° • D/E/Right Arrow/Swipe Right = rotate -90° • Tap/Space = jump • R to restart',
     objective:
       'Ride the surface of the path, jump low branches, and rotate to an open face when tall branches become impossible to clear.',
-    tips: 'Branches grow in real time. Low branches are jumpable, tall branches force a rotate. Always scan at least one segment ahead.',
+    tips: 'Branches grow in real time. Low branches are jumpable, tall branches force a rotate. Extra path styles are on prism3d.studio.',
   },
   steps: {
     controls: 'Tap/Space/Click to step forward • Enter starts • R to restart',
     objective:
       'Advance one step per tap, survive spikes/saws/clamps, and keep pace before your current path segment collapses.',
     tips:
-      'Treat it like rhythm: commit to clean timing windows, grab gems when safe, and avoid stalling because pressure ramps into tile collapse.',
+      'Treat it like rhythm: commit to clean timing windows, grab gems when safe, and avoid stalling because pressure ramps into tile collapse. Full style/runner variants are on prism3d.studio.',
   },
   smashhit: {
     controls: 'Hold Click/Tap/Space to fire • Move mouse/touch to aim • R to restart',
@@ -729,20 +729,20 @@ export const GAME_RULES: Record<string, GameRules> = {
   slowmo: {
     controls: 'Hold/Tap to slow time • Release to resume • R to restart',
     objective:
-      'Hold to slow time and let the ball bounce into the safe lane. Avoid obstacles and collect stars to unlock new balls.',
-    tips: 'Hold SLOW longer to let the ball bounce to the other side. Collect stars to unlock new ball skins. Speed increases with score.',
+      'Hold to slow time and let the ball bounce into the safe lane. Avoid obstacles and manage energy in the locked Medium arcade mode.',
+    tips: 'Hold SLOW longer to let the ball bounce to the other side. Full SlowMo difficulty and skin packs are on prism3d.studio.',
   },
   bouncer: {
     controls: 'Hold Click/Touch/Space to roll • Release to bounce • R to restart',
     objective:
-      'Blend roll mode and bounce timing to clear spike, floating, and swinging hazards while collecting shards for new skins and evolving palettes.',
-    tips: 'Hold early to settle into a safe ground roll, then release with intent to arc over hazards. Shard pickups keep your palette flow fresh.',
+      'Blend roll mode and bounce timing to clear spike, floating, and swinging hazards while collecting shards.',
+    tips: 'Hold early to settle into a safe ground roll, then release with intent to arc over hazards. Extra skins and palettes are on prism3d.studio.',
   },
   prismjump: {
     controls: 'Tap/Space/Click to jump • A/D or ←/→ to move • R to restart',
     objective:
-      'Jump across continuously moving rows, strafe left/right to line up landings, and survive widening platform gaps as you progress. Collect cubes to unlock one of 33 unique characters (100 cubes lottery).',
-    tips: 'Rows alternate direction and never stop. Early rows are forgiving, but deep rows have wider gaps and tighter platform windows. A new platform color palette loads every run.',
+      'Jump across continuously moving rows, strafe left/right to line up landings, and survive widening platform gaps as you progress.',
+    tips: 'Rows alternate direction and never stop. Early rows are forgiving, but deep rows have wider gaps and tighter platform windows. Full character skin sets are on prism3d.studio.',
   },
   octasurge: {
     controls:

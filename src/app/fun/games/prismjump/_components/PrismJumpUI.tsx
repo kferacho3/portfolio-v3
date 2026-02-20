@@ -202,25 +202,10 @@ export function PrismJumpUI() {
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  gap: 8,
+                  gap: 10,
                   flexWrap: 'wrap',
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => prismJumpState.cycleSkin(-1)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.26)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Prev Skin
-                </button>
                 <div
                   style={{
                     display: 'inline-flex',
@@ -242,24 +227,12 @@ export function PrismJumpUI() {
                     }}
                   />
                   <span style={{ fontSize: 13, fontWeight: 700 }}>
-                    {currentSkin.name}
+                    {currentSkin.name} (Locked)
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => prismJumpState.cycleSkin(1)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.26)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Next Skin
-                </button>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 13, opacity: 0.8 }}>
+                Full Prism Jump character skins: <a href="https://prism3d.studio" target="_blank" rel="noopener noreferrer" style={{ color: '#75f4ff' }}>prism3d.studio</a>
               </div>
               <button
                 type="button"
@@ -354,36 +327,6 @@ export function PrismJumpUI() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => prismJumpState.cycleSkin(-1)}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.26)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Prev Skin
-                </button>
-                <button
-                  type="button"
-                  onClick={() => prismJumpState.cycleSkin(1)}
-                  style={{
-                    padding: '10px 16px',
-                    borderRadius: 12,
-                    border: '1px solid rgba(255,255,255,0.26)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: '#fff',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Next Skin
-                </button>
-                <button
-                  type="button"
                   onClick={() => prismJumpState.backToMenu()}
                   style={{
                     padding: '10px 16px',
@@ -398,6 +341,9 @@ export function PrismJumpUI() {
                   Menu
                 </button>
               </div>
+              <p style={{ margin: '12px 0 0', fontSize: 13, opacity: 0.8 }}>
+                Full Prism Jump character skins: <a href="https://prism3d.studio" target="_blank" rel="noopener noreferrer" style={{ color: '#75f4ff' }}>prism3d.studio</a>
+              </p>
             </div>
           </div>
         )}

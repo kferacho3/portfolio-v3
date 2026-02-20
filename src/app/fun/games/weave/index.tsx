@@ -78,9 +78,8 @@ type ImpactWave = {
   color: string;
 };
 
-const Weave: React.FC<{ soundsOn?: boolean }> = ({
-  soundsOn: _soundsOn = true,
-}) => {
+const Weave: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
+  void soundsOn;
   const snap = useSnapshot(weaveState);
   const { camera, scene } = useThree();
 
@@ -275,46 +274,31 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
 
       if (key === ' ') {
         e.preventDefault();
-        if (
-          snap.controlScheme === 'keyboard' ||
-          snap.controlScheme === 'hybrid'
-        ) {
-          const next =
-            playerDirection.current === 0
-              ? -lastNonZeroDirection.current
-              : playerDirection.current * -1;
-          playerDirection.current = next;
-          lastNonZeroDirection.current = next as 1 | -1;
-        }
+        const next =
+          playerDirection.current === 0
+            ? -lastNonZeroDirection.current
+            : playerDirection.current * -1;
+        playerDirection.current = next;
+        lastNonZeroDirection.current = next as 1 | -1;
         return;
       }
 
-      if (
-        snap.controlScheme === 'keyboard' ||
-        snap.controlScheme === 'hybrid'
-      ) {
-        if (key === 'ArrowLeft' || lower === 'a') {
-          playerDirection.current = 1;
-          lastNonZeroDirection.current = 1;
-        } else if (key === 'ArrowRight' || lower === 'd') {
-          playerDirection.current = -1;
-          lastNonZeroDirection.current = -1;
-        }
+      if (key === 'ArrowLeft' || lower === 'a') {
+        playerDirection.current = 1;
+        lastNonZeroDirection.current = 1;
+      } else if (key === 'ArrowRight' || lower === 'd') {
+        playerDirection.current = -1;
+        lastNonZeroDirection.current = -1;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const key = e.key;
       const lower = key.toLowerCase();
-      if (
-        snap.controlScheme === 'keyboard' ||
-        snap.controlScheme === 'hybrid'
-      ) {
-        if (key === 'ArrowLeft' || lower === 'a') {
-          if (playerDirection.current === 1) playerDirection.current = 0;
-        } else if (key === 'ArrowRight' || lower === 'd') {
-          if (playerDirection.current === -1) playerDirection.current = 0;
-        }
+      if (key === 'ArrowLeft' || lower === 'a') {
+        if (playerDirection.current === 1) playerDirection.current = 0;
+      } else if (key === 'ArrowRight' || lower === 'd') {
+        if (playerDirection.current === -1) playerDirection.current = 0;
       }
     };
 
@@ -324,7 +308,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [snap.controlScheme, snap.gameOver, gameStarted, resetRun]);
+  }, [snap.gameOver, gameStarted, resetRun]);
 
   useEffect(() => {
     let isPointerDown = false;
@@ -345,7 +329,6 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
 
     const handlePointerMove = (e: PointerEvent) => {
       if (!gameStarted || snap.gameOver) return;
-      if (snap.controlScheme === 'keyboard') return;
 
       if (isPointerDown) {
         const dx = e.clientX - lastX;
@@ -381,7 +364,7 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [snap.controlScheme, snap.gameOver, gameStarted, resetRun]);
+  }, [snap.gameOver, gameStarted, resetRun]);
 
   useFrame((_, delta) => {
     if (snap.gameOver || !gameStarted) return;
@@ -753,8 +736,6 @@ const Weave: React.FC<{ soundsOn?: boolean }> = ({
         levelOrbCount={levelOrbCount.current}
         levelUpOrbs={LEVEL_UP_ORBS}
         levelProgress={levelProgress}
-        controlScheme={snap.controlScheme}
-        onControlSchemeChange={(scheme) => weaveState.setControlScheme(scheme)}
         currentColor={currentColor}
         highScore={snap.highScore}
         bestCombo={snap.bestCombo}

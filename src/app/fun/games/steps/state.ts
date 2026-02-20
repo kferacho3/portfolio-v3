@@ -65,6 +65,9 @@ const RUNNER_SHAPES: StepsRunnerShape[] = [
   'wide_box',
 ];
 
+const LOCKED_TILE_VARIANT: StepsTileVariant = 'classic';
+const LOCKED_RUNNER_SHAPE: StepsRunnerShape = 'cube';
+
 export const stepsRunnerShapeLabels: Record<StepsRunnerShape, string> = {
   cube: 'Cube',
   rounded_cube: 'Rounded Cube',
@@ -82,51 +85,6 @@ export const stepsRunnerShapeLabels: Record<StepsRunnerShape, string> = {
   wide_box: 'Wide Box',
 };
 
-const UNLOCK_THRESHOLDS = [15, 35, 60, 90, 130, 175] as const;
-
-const isVariant = (value: unknown): value is StepsTileVariant =>
-  value === 'classic' ||
-  value === 'voxel' ||
-  value === 'carved' ||
-  value === 'alloy' ||
-  value === 'prismatic' ||
-  value === 'gridforge' ||
-  value === 'diamond' ||
-  value === 'sunken' ||
-  value === 'ripple';
-
-const isRunnerShape = (value: unknown): value is StepsRunnerShape =>
-  value === 'cube' ||
-  value === 'rounded_cube' ||
-  value === 'tri_prism' ||
-  value === 'hex_prism' ||
-  value === 'pyramid' ||
-  value === 'tetra' ||
-  value === 'octa' ||
-  value === 'dodeca' ||
-  value === 'icosa' ||
-  value === 'star_prism' ||
-  value === 'fortress' ||
-  value === 'rhombic' ||
-  value === 'pillar' ||
-  value === 'wide_box';
-
-function persistUnlocked() {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(UNLOCKED_KEY, JSON.stringify(stepsState.unlockedVariants));
-  window.localStorage.setItem(UNLOCK_TIER_KEY, String(stepsState.variantUnlockTier));
-}
-
-function unlockNextVariant() {
-  const locked = TILE_VARIANTS.filter((variant) => !stepsState.unlockedVariants.includes(variant));
-  if (locked.length === 0) return;
-
-  const pick = locked[Math.floor(Math.random() * locked.length)];
-  stepsState.unlockedVariants = [...stepsState.unlockedVariants, pick];
-  stepsState.lastUnlockedVariant = pick;
-  persistUnlocked();
-}
-
 export const stepsState = proxy({
   phase: 'menu' as StepsPhase,
   pathStyle: 'smooth-classic' as StepsPathStyle,
@@ -138,11 +96,11 @@ export const stepsState = proxy({
   pressure: 0,
   failReason: '',
 
-  tileVariant: 'classic' as StepsTileVariant,
-  unlockedVariants: ['classic', 'voxel', 'carved'] as StepsTileVariant[],
+  tileVariant: LOCKED_TILE_VARIANT as StepsTileVariant,
+  unlockedVariants: [LOCKED_TILE_VARIANT] as StepsTileVariant[],
   variantUnlockTier: 0,
   lastUnlockedVariant: '' as '' | StepsTileVariant,
-  runnerShape: 'cube' as StepsRunnerShape,
+  runnerShape: LOCKED_RUNNER_SHAPE as StepsRunnerShape,
 
   worldSeed: Math.floor(Math.random() * 1_000_000_000),
 
@@ -159,39 +117,16 @@ export const stepsState = proxy({
       stepsState.gems = Math.max(0, Math.floor(parsedGems));
     }
 
-    const rawStyle = window.localStorage.getItem(STYLE_KEY);
-    if (isVariant(rawStyle)) {
-      stepsState.tileVariant = rawStyle;
-    }
+    stepsState.tileVariant = LOCKED_TILE_VARIANT;
+    stepsState.runnerShape = LOCKED_RUNNER_SHAPE;
+    stepsState.unlockedVariants = [LOCKED_TILE_VARIANT];
+    stepsState.variantUnlockTier = 0;
+    stepsState.lastUnlockedVariant = '';
 
-    const rawRunnerShape = window.localStorage.getItem(RUNNER_SHAPE_KEY);
-    if (isRunnerShape(rawRunnerShape)) {
-      stepsState.runnerShape = rawRunnerShape;
-    }
-
-    const rawUnlocked = window.localStorage.getItem(UNLOCKED_KEY);
-    if (rawUnlocked) {
-      try {
-        const parsed = JSON.parse(rawUnlocked) as unknown[];
-        const normalized = parsed.filter(isVariant);
-        if (normalized.length > 0) {
-          const merged = Array.from(new Set<StepsTileVariant>(['classic', 'voxel', 'carved', ...normalized]));
-          stepsState.unlockedVariants = merged;
-        }
-      } catch {
-        stepsState.unlockedVariants = ['classic', 'voxel', 'carved'];
-      }
-    }
-
-    const rawTier = window.localStorage.getItem(UNLOCK_TIER_KEY);
-    const parsedTier = rawTier ? Number(rawTier) : 0;
-    if (!Number.isNaN(parsedTier)) {
-      stepsState.variantUnlockTier = Math.max(0, Math.min(UNLOCK_THRESHOLDS.length, Math.floor(parsedTier)));
-    }
-
-    if (!stepsState.unlockedVariants.includes(stepsState.tileVariant)) {
-      stepsState.tileVariant = stepsState.unlockedVariants[0] ?? 'classic';
-    }
+    window.localStorage.setItem(STYLE_KEY, LOCKED_TILE_VARIANT);
+    window.localStorage.setItem(RUNNER_SHAPE_KEY, LOCKED_RUNNER_SHAPE);
+    window.localStorage.setItem(UNLOCKED_KEY, JSON.stringify([LOCKED_TILE_VARIANT]));
+    window.localStorage.setItem(UNLOCK_TIER_KEY, '0');
   },
 
   startGame: () => {
@@ -201,6 +136,9 @@ export const stepsState = proxy({
     stepsState.pressure = 0;
     stepsState.failReason = '';
     stepsState.lastUnlockedVariant = '';
+    stepsState.tileVariant = LOCKED_TILE_VARIANT;
+    stepsState.runnerShape = LOCKED_RUNNER_SHAPE;
+    stepsState.unlockedVariants = [LOCKED_TILE_VARIANT];
     stepsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
@@ -224,6 +162,9 @@ export const stepsState = proxy({
     stepsState.pressure = 0;
     stepsState.failReason = '';
     stepsState.lastUnlockedVariant = '';
+    stepsState.tileVariant = LOCKED_TILE_VARIANT;
+    stepsState.runnerShape = LOCKED_RUNNER_SHAPE;
+    stepsState.unlockedVariants = [LOCKED_TILE_VARIANT];
     stepsState.worldSeed = Math.floor(Math.random() * 1_000_000_000);
   },
 
@@ -236,15 +177,9 @@ export const stepsState = proxy({
       window.localStorage.setItem(GEMS_KEY, String(stepsState.gems));
     }
 
-    while (
-      stepsState.variantUnlockTier < UNLOCK_THRESHOLDS.length &&
-      stepsState.gems >= UNLOCK_THRESHOLDS[stepsState.variantUnlockTier]
-    ) {
-      stepsState.variantUnlockTier += 1;
-      unlockNextVariant();
-    }
-
-    persistUnlocked();
+    stepsState.variantUnlockTier = 0;
+    stepsState.lastUnlockedVariant = '';
+    stepsState.unlockedVariants = [LOCKED_TILE_VARIANT];
   },
 
   setPressure: (value: number) => {
@@ -252,39 +187,32 @@ export const stepsState = proxy({
   },
 
   setTileVariant: (variant: StepsTileVariant) => {
-    if (!stepsState.unlockedVariants.includes(variant)) return;
-    stepsState.tileVariant = variant;
+    if (variant !== LOCKED_TILE_VARIANT) return;
+    stepsState.tileVariant = LOCKED_TILE_VARIANT;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STYLE_KEY, variant);
+      window.localStorage.setItem(STYLE_KEY, LOCKED_TILE_VARIANT);
     }
   },
 
-  cycleTileVariant: (direction = 1) => {
-    if (stepsState.unlockedVariants.length <= 1) return;
-    const currentIndex = Math.max(0, stepsState.unlockedVariants.indexOf(stepsState.tileVariant));
-    const nextIndex = (currentIndex + direction + stepsState.unlockedVariants.length) % stepsState.unlockedVariants.length;
-    const next = stepsState.unlockedVariants[nextIndex] ?? 'classic';
-    stepsState.tileVariant = next;
+  cycleTileVariant: () => {
+    stepsState.tileVariant = LOCKED_TILE_VARIANT;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(STYLE_KEY, next);
+      window.localStorage.setItem(STYLE_KEY, LOCKED_TILE_VARIANT);
     }
   },
 
   setRunnerShape: (shape: StepsRunnerShape) => {
-    if (!isRunnerShape(shape)) return;
-    stepsState.runnerShape = shape;
+    if (shape !== LOCKED_RUNNER_SHAPE) return;
+    stepsState.runnerShape = LOCKED_RUNNER_SHAPE;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(RUNNER_SHAPE_KEY, shape);
+      window.localStorage.setItem(RUNNER_SHAPE_KEY, LOCKED_RUNNER_SHAPE);
     }
   },
 
-  cycleRunnerShape: (direction = 1) => {
-    const currentIndex = Math.max(0, RUNNER_SHAPES.indexOf(stepsState.runnerShape));
-    const nextIndex = (currentIndex + direction + RUNNER_SHAPES.length) % RUNNER_SHAPES.length;
-    const next = RUNNER_SHAPES[nextIndex] ?? 'cube';
-    stepsState.runnerShape = next;
+  cycleRunnerShape: () => {
+    stepsState.runnerShape = LOCKED_RUNNER_SHAPE;
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(RUNNER_SHAPE_KEY, next);
+      window.localStorage.setItem(RUNNER_SHAPE_KEY, LOCKED_RUNNER_SHAPE);
     }
   },
 });

@@ -71,8 +71,6 @@ type PathStyleDefinition = {
   menuAccent: string;
 };
 
-const PATH_STYLE_IDS: GrowthPathStyleId[] = ['voxelized', 'classic', 'apex'];
-
 const PATH_STYLES: Record<GrowthPathStyleId, PathStyleDefinition> = {
   voxelized: {
     id: 'voxelized',
@@ -1067,41 +1065,6 @@ const Growth: React.FC = () => {
     else growthState.resume();
   }, [paused]);
 
-  const setPathStyle = useCallback((style: GrowthPathStyleId) => {
-    growthState.setPathStyle(style);
-  }, []);
-
-  useEffect(() => {
-    const handleStyleShortcut = (event: KeyboardEvent) => {
-      if (snap.phase === 'playing') return;
-      if (event.target instanceof HTMLElement) {
-        const tag = event.target.tagName;
-        if (
-          event.target.isContentEditable ||
-          tag === 'INPUT' ||
-          tag === 'TEXTAREA' ||
-          tag === 'SELECT'
-        ) {
-          return;
-        }
-      }
-
-      if (event.key === '1') {
-        event.preventDefault();
-        setPathStyle('voxelized');
-      } else if (event.key === '2') {
-        event.preventDefault();
-        setPathStyle('classic');
-      } else if (event.key === '3') {
-        event.preventDefault();
-        setPathStyle('apex');
-      }
-    };
-
-    window.addEventListener('keydown', handleStyleShortcut);
-    return () => window.removeEventListener('keydown', handleStyleShortcut);
-  }, [setPathStyle, snap.phase]);
-
   useEffect(() => {
     if (tileMaterialRef.current) {
       tileMaterialRef.current.roughness = activePathStyle.tileRoughness;
@@ -1725,37 +1688,36 @@ const Growth: React.FC = () => {
                   gap: 8,
                 }}
               >
-                {PATH_STYLE_IDS.map((styleId, index) => {
-                  const option = PATH_STYLES[styleId];
-                  const active = styleId === snap.pathStyle;
-                  return (
-                    <button
-                      key={styleId}
-                      onClick={() => setPathStyle(styleId)}
-                      style={{
-                        borderRadius: 10,
-                        border: active
-                          ? `1px solid ${option.menuAccent}`
-                          : '1px solid rgba(255,255,255,0.2)',
-                        background: active
-                          ? 'rgba(255,255,255,0.12)'
-                          : 'rgba(0,0,0,0.18)',
-                        color: '#fff',
-                        textAlign: 'left',
-                        padding: '8px 10px',
-                        cursor: 'pointer',
-                        lineHeight: 1.35,
-                      }}
-                    >
-                      <div style={{ fontSize: 12, fontWeight: 700 }}>
-                        {index + 1}. {option.label}
-                      </div>
-                      <div style={{ fontSize: 11, opacity: 0.74 }}>
-                        {option.subtitle}
-                      </div>
-                    </button>
-                  );
-                })}
+                <div
+                  style={{
+                    borderRadius: 10,
+                    border: `1px solid ${activePathStyle.menuAccent}`,
+                    background: 'rgba(255,255,255,0.12)',
+                    color: '#fff',
+                    textAlign: 'left',
+                    padding: '8px 10px',
+                    lineHeight: 1.35,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>
+                    1. {activePathStyle.label}
+                  </div>
+                  <div style={{ fontSize: 11, opacity: 0.74 }}>
+                    {activePathStyle.subtitle}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, opacity: 0.72 }}>
+                  Extra Growth path styles are available on{' '}
+                  <a
+                    href="https://prism3d.studio"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#7dd3fc' }}
+                  >
+                    prism3d.studio
+                  </a>
+                  .
+                </div>
               </div>
               {snap.phase === 'gameover' && (
                 <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>
@@ -1763,7 +1725,7 @@ const Growth: React.FC = () => {
                 </div>
               )}
               <div style={{ marginTop: 13, fontSize: 12, opacity: 0.62 }}>
-                1/2/3 to switch style • Tap / Space to{' '}
+                Style locked to Voxelized • Tap / Space to{' '}
                 {snap.phase === 'menu' ? 'start' : 'restart'}
               </div>
             </div>

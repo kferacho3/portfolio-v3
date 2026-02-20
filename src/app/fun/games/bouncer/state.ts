@@ -234,6 +234,9 @@ type SaveV1 = {
 };
 
 const STORAGE_KEY = 'fun:bouncer:v1';
+const LOCKED_BOUNCER_PALETTE_INDEX = 0;
+const LOCKED_BOUNCER_SKIN_INDEX = 0;
+const LOCKED_BOUNCER_SKIN_ID = ballSkins[LOCKED_BOUNCER_SKIN_INDEX]?.id ?? 'rose';
 
 function load(): SaveV1 {
   try {
@@ -242,30 +245,26 @@ function load(): SaveV1 {
       return {
         bestScore: 0,
         squares: 0,
-        paletteIndex: 1,
-        selectedSkin: 0,
-        unlockedSkinIds: ['rose'],
+        paletteIndex: LOCKED_BOUNCER_PALETTE_INDEX,
+        selectedSkin: LOCKED_BOUNCER_SKIN_INDEX,
+        unlockedSkinIds: [LOCKED_BOUNCER_SKIN_ID],
       };
     }
     const parsed = JSON.parse(raw) as Partial<SaveV1>;
     return {
       bestScore: typeof parsed.bestScore === 'number' ? parsed.bestScore : 0,
       squares: typeof parsed.squares === 'number' ? parsed.squares : 0,
-      paletteIndex:
-        typeof parsed.paletteIndex === 'number' ? parsed.paletteIndex : 0,
-      selectedSkin:
-        typeof parsed.selectedSkin === 'number' ? parsed.selectedSkin : 0,
-      unlockedSkinIds: Array.isArray(parsed.unlockedSkinIds)
-        ? (parsed.unlockedSkinIds.filter(Boolean) as string[])
-        : ['rose'],
+      paletteIndex: LOCKED_BOUNCER_PALETTE_INDEX,
+      selectedSkin: LOCKED_BOUNCER_SKIN_INDEX,
+      unlockedSkinIds: [LOCKED_BOUNCER_SKIN_ID],
     };
   } catch {
     return {
       bestScore: 0,
       squares: 0,
-      paletteIndex: 0,
-      selectedSkin: 0,
-      unlockedSkinIds: ['rose'],
+      paletteIndex: LOCKED_BOUNCER_PALETTE_INDEX,
+      selectedSkin: LOCKED_BOUNCER_SKIN_INDEX,
+      unlockedSkinIds: [LOCKED_BOUNCER_SKIN_ID],
     };
   }
 }
@@ -277,13 +276,9 @@ export const bouncerState = proxy({
   score: 0,
   bestScore: saved.bestScore,
   squares: saved.squares,
-  paletteIndex: Number.isFinite(saved.paletteIndex)
-    ? Math.max(0, Math.floor(saved.paletteIndex))
-    : 0,
-  selectedSkin: Math.max(0, Math.min(ballSkins.length - 1, saved.selectedSkin)),
-  unlockedSkinIds: new Set<string>(
-    saved.unlockedSkinIds.length ? saved.unlockedSkinIds : ['rose']
-  ),
+  paletteIndex: LOCKED_BOUNCER_PALETTE_INDEX,
+  selectedSkin: LOCKED_BOUNCER_SKIN_INDEX,
+  unlockedSkinIds: new Set<string>([LOCKED_BOUNCER_SKIN_ID]),
 });
 
 let saveTimer: number | null = null;
@@ -295,9 +290,9 @@ function scheduleSave() {
       const payload: SaveV1 = {
         bestScore: bouncerState.bestScore,
         squares: bouncerState.squares,
-        paletteIndex: bouncerState.paletteIndex,
-        selectedSkin: bouncerState.selectedSkin,
-        unlockedSkinIds: Array.from(bouncerState.unlockedSkinIds),
+        paletteIndex: LOCKED_BOUNCER_PALETTE_INDEX,
+        selectedSkin: LOCKED_BOUNCER_SKIN_INDEX,
+        unlockedSkinIds: [LOCKED_BOUNCER_SKIN_ID],
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
@@ -333,30 +328,23 @@ export function setScore(score: number) {
 }
 
 export function cyclePalette() {
-  const next = Math.max(0, Math.floor(bouncerState.paletteIndex + 1));
-  bouncerState.paletteIndex = next > Number.MAX_SAFE_INTEGER - 8 ? 0 : next;
+  bouncerState.paletteIndex = LOCKED_BOUNCER_PALETTE_INDEX;
   scheduleSave();
 }
 
 export function isSkinUnlocked(index: number) {
-  const skin = ballSkins[index];
-  return bouncerState.unlockedSkinIds.has(skin.id);
+  return index === LOCKED_BOUNCER_SKIN_INDEX;
 }
 
 export function tryUnlockSkin(index: number) {
-  const skin = ballSkins[index];
-  if (bouncerState.unlockedSkinIds.has(skin.id)) return true;
-  if (bouncerState.squares < skin.price) return false;
-  bouncerState.squares -= skin.price;
-  bouncerState.unlockedSkinIds.add(skin.id);
+  if (index !== LOCKED_BOUNCER_SKIN_INDEX) return false;
+  bouncerState.selectedSkin = LOCKED_BOUNCER_SKIN_INDEX;
   scheduleSave();
   return true;
 }
 
 export function selectSkin(index: number) {
-  bouncerState.selectedSkin = Math.max(
-    0,
-    Math.min(ballSkins.length - 1, index)
-  );
+  if (index !== LOCKED_BOUNCER_SKIN_INDEX) return;
+  bouncerState.selectedSkin = LOCKED_BOUNCER_SKIN_INDEX;
   scheduleSave();
 }

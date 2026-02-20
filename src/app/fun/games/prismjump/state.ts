@@ -1,8 +1,9 @@
 import { proxy } from 'valtio';
-import { PRISM_CHARACTER_SKINS, STORAGE_KEYS } from './constants';
+import { STORAGE_KEYS } from './constants';
 import type { PrismJumpPhase } from './types';
 
 const randomSeed = () => Math.floor(Math.random() * 1_000_000_000);
+const LOCKED_PRISM_SKIN_INDEX = 0;
 
 export const prismJumpState = proxy({
   phase: 'menu' as PrismJumpPhase,
@@ -16,7 +17,7 @@ export const prismJumpState = proxy({
   runCubes: 0,
   lastRunCubes: 0,
   totalCubes: 0,
-  selectedSkin: 0,
+  selectedSkin: LOCKED_PRISM_SKIN_INDEX,
 
   edgeSafe: 1,
   toast: '' as string,
@@ -30,11 +31,7 @@ export const prismJumpState = proxy({
       Number(localStorage.getItem(STORAGE_KEYS.best) ?? '0') || 0;
     prismJumpState.totalCubes =
       Number(localStorage.getItem(STORAGE_KEYS.cubes) ?? '0') || 0;
-    const selectedSkin = Number(localStorage.getItem(STORAGE_KEYS.skin) ?? '0') || 0;
-    prismJumpState.selectedSkin = Math.max(
-      0,
-      Math.min(PRISM_CHARACTER_SKINS.length - 1, Math.floor(selectedSkin))
-    );
+    prismJumpState.selectedSkin = LOCKED_PRISM_SKIN_INDEX;
   },
 
   save: () => {
@@ -84,18 +81,14 @@ export const prismJumpState = proxy({
   },
 
   setSelectedSkin: (index: number) => {
-    prismJumpState.selectedSkin = Math.max(
-      0,
-      Math.min(PRISM_CHARACTER_SKINS.length - 1, Math.floor(index))
-    );
+    if (index !== LOCKED_PRISM_SKIN_INDEX) return;
+    prismJumpState.selectedSkin = LOCKED_PRISM_SKIN_INDEX;
     prismJumpState.save();
   },
 
   cycleSkin: (direction: -1 | 1) => {
-    const max = PRISM_CHARACTER_SKINS.length;
-    if (max <= 0) return;
-    const next = (prismJumpState.selectedSkin + direction + max) % max;
-    prismJumpState.selectedSkin = next;
+    void direction;
+    prismJumpState.selectedSkin = LOCKED_PRISM_SKIN_INDEX;
     prismJumpState.save();
   },
 

@@ -88,6 +88,8 @@ const getStoredArena = (): ArenaPresetKey | null => {
     : null;
 };
 
+const LOCKED_APEX_MODE: GameMode = 'curved';
+
 export const apexState = proxy<
   ApexGameState & {
     reset: () => void;
@@ -107,7 +109,7 @@ export const apexState = proxy<
   }
 >({
   phase: 'menu',
-  mode: 'classic',
+  mode: LOCKED_APEX_MODE,
   arena: getStoredArena() ?? 'classic',
   playerSkin: 'classic',
   score: 0,
@@ -132,6 +134,7 @@ export const apexState = proxy<
 
   reset() {
     this.phase = 'menu';
+    this.mode = LOCKED_APEX_MODE;
     this.score = 0;
     this.gems = 0;
     this.level = 1;
@@ -186,6 +189,7 @@ export const apexState = proxy<
 
   startGame() {
     this.phase = 'playing';
+    this.mode = LOCKED_APEX_MODE;
     this.score = 0;
     this.gems = 0;
     this.level = 1;
@@ -220,7 +224,8 @@ export const apexState = proxy<
   },
 
   setMode(mode: GameMode) {
-    this.mode = mode;
+    if (mode !== LOCKED_APEX_MODE) return;
+    this.mode = LOCKED_APEX_MODE;
   },
 
   setArena(arena: ArenaPresetKey) {

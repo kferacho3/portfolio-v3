@@ -8,13 +8,10 @@ import {
   addSquares,
   ballSkins,
   cyclePalette,
-  isSkinUnlocked,
   paletteAt,
-  selectSkin,
   setBestScore,
   setScore,
   bouncerState,
-  tryUnlockSkin,
 } from './state';
 
 export { bouncerState } from './state';
@@ -633,8 +630,7 @@ export default function Bouncer() {
                   style={{ color: palette.spikes }}
                 >
                   Hold click, touch, or space to lock into ground-roll mode.
-                  Release to launch back into bounce rhythm, dodge hazards, and
-                  stack shards for skins.
+                  Release to launch back into bounce rhythm and dodge hazards.
                 </div>
 
                 {snap.phase === 'gameover' && (
@@ -668,25 +664,19 @@ export default function Bouncer() {
                   </button>
 
                   <button
+                    disabled
                     className="px-4 py-2 rounded-xl border text-sm font-semibold"
                     style={{
                       background: colorWithAlpha(palette.bg, 0.75),
                       color: palette.spikes,
                       borderColor: colorWithAlpha(palette.pickupOuter, 0.48),
+                      cursor: 'not-allowed',
+                      opacity: 0.56,
                     }}
-                    onClick={() => {
-                      // Skin cycling / unlocking: if locked, try to buy.
-                      const next = (snap.selectedSkin + 1) % ballSkins.length;
-                      if (!isSkinUnlocked(next)) {
-                        const ok = tryUnlockSkin(next);
-                        if (ok) selectSkin(next);
-                      } else {
-                        selectSkin(next);
-                      }
-                    }}
-                    title="Cycle ball skins (unlocks cost squares)"
+                    onClick={(event) => event.preventDefault()}
+                    title="Additional Rollbounce skins are available on prism3d.studio"
                   >
-                    Ball
+                    Ball (Locked)
                   </button>
 
                   {snap.phase === 'gameover' && (
@@ -709,6 +699,12 @@ export default function Bouncer() {
                   style={{ color: palette.spikes }}
                 >
                   Roll with intention, bounce with timing.
+                </div>
+                <div
+                  className="mt-2 text-[11px]"
+                  style={{ color: palette.spikes }}
+                >
+                  Full Rollbounce skins and palette rotations: <a href="https://prism3d.studio" target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'underline', color: palette.pickupOuter }}>prism3d.studio</a>
                 </div>
               </div>
             </div>

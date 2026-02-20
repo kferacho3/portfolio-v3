@@ -103,19 +103,19 @@ export const advanceCurvedState = (
   // - Use sign flips (tap) to change curvature direction.
   const targetAbsYaw = THREE.MathUtils.clamp(
     Math.abs(curvature) > 0.001 ? Math.abs(curvature) : CURVE_DEFAULT_CURVATURE,
-    0.46,
-    CURVE_MAX_YAW * 0.88
+    0.4,
+    CURVE_MAX_YAW * 0.8
   );
   const turnEnergy = THREE.MathUtils.clamp(
     Math.abs(curvatureVel) > 0.001
       ? Math.abs(curvatureVel)
       : CURVE_DEFAULT_CURVATURE_VEL,
-    0.85,
-    1.4
+    0.72,
+    1.12
   );
   const sign = directionSign >= 0 ? 1 : -1;
   const turnRate =
-    CURVE_BASE_CURVATURE * (0.2 + targetAbsYaw * 0.42) * turnEnergy;
+    CURVE_BASE_CURVATURE * (0.16 + targetAbsYaw * 0.34) * turnEnergy;
 
   const lateral = pos.dot(curveRight);
   const boundaryT = THREE.MathUtils.clamp(
@@ -132,7 +132,7 @@ export const advanceCurvedState = (
   theta = THREE.MathUtils.damp(
     theta,
     0,
-    CURVE_FORWARD_BIAS * (0.35 + boundaryT * 0.8),
+    CURVE_FORWARD_BIAS * (0.5 + boundaryT * 0.92),
     step
   );
   theta = THREE.MathUtils.clamp(theta, -CURVE_MAX_YAW, CURVE_MAX_YAW);
@@ -240,7 +240,7 @@ export const generateCurvedTiles = () => {
       CURVE_BOUNDARY_SOFT * 0.5;
     const shouldFlip =
       Math.abs(mutation.pathCurveTheta) > 0.34 ||
-      (nearCenter ? Math.random() < 0.52 : Math.random() < 0.72);
+      (nearCenter ? Math.random() < 0.38 : Math.random() < 0.56);
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_RANGE[0],
       CURVE_SEGMENT_RANGE[1]
@@ -251,26 +251,26 @@ export const generateCurvedTiles = () => {
       mutation.pathCurveDirection *= -1;
     }
     mutation.pathCurveCurvature = THREE.MathUtils.clamp(
-      CURVE_DEFAULT_CURVATURE + THREE.MathUtils.randFloatSpread(0.2),
-      0.46,
-      0.76
+      CURVE_DEFAULT_CURVATURE + THREE.MathUtils.randFloatSpread(0.14),
+      0.42,
+      0.68
     );
     mutation.pathCurveCurvatureVel = THREE.MathUtils.clamp(
-      CURVE_DEFAULT_CURVATURE_VEL + THREE.MathUtils.randFloatSpread(0.35),
-      0.85,
-      1.25
+      CURVE_DEFAULT_CURVATURE_VEL + THREE.MathUtils.randFloatSpread(0.24),
+      0.74,
+      1.08
     );
   }
 
-  const nearYawLimit = Math.abs(mutation.pathCurveTheta) > CURVE_MAX_YAW * 0.95;
+  const nearYawLimit = Math.abs(mutation.pathCurveTheta) > CURVE_MAX_YAW * 0.9;
   if (nearYawLimit) {
     mutation.pathCurveDirection *= -1;
     mutation.pathCurveSegmentRemaining = THREE.MathUtils.randInt(
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.56, 0.72);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.95, 1.25);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.46, 0.64);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.78, 1.02);
   }
 
   const lateral = mutation.lastTilePos.dot(curveRight);
@@ -280,8 +280,8 @@ export const generateCurvedTiles = () => {
       CURVE_SEGMENT_SHORT_RANGE[0],
       CURVE_SEGMENT_SHORT_RANGE[1]
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.58, 0.74);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.98, 1.3);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.48, 0.66);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.8, 1.05);
   }
 
   const prevPos = mutation.lastTilePos.clone();
@@ -317,8 +317,8 @@ export const generateCurvedTiles = () => {
         CURVE_SEGMENT_SHORT_RANGE[1]
       )
     );
-    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.56, 0.74);
-    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.95, 1.3);
+    mutation.pathCurveCurvature = THREE.MathUtils.randFloat(0.48, 0.66);
+    mutation.pathCurveCurvatureVel = THREE.MathUtils.randFloat(0.8, 1.05);
 
     result = advanceCurvedState(
       mutation.lastTilePos,

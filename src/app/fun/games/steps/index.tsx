@@ -3140,42 +3140,53 @@ function Steps() {
             Path: {snap.pathStyle === 'smooth-classic' ? 'Smooth Classic' : snap.pathStyle}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {TILE_STYLES.map((style) => (
-              <button
-                key={style}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={() => stepsState.setTileVariant(style)}
-                style={{
-                  opacity: snap.unlockedVariants.includes(style) ? 1 : 0.45,
-                  cursor: 'pointer',
-                  borderRadius: 999,
-                  border:
-                    snap.tileVariant === style ? '1px solid rgba(255,255,255,0.8)' : '1px solid rgba(255,255,255,0.25)',
-                  background:
-                    snap.tileVariant === style ? 'linear-gradient(180deg, rgba(255,94,158,0.55), rgba(255,50,94,0.38))' : 'rgba(255,255,255,0.08)',
-                  color: 'white',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: '5px 9px',
-                }}
-              >
-                {trailStyleLabel(style)}{snap.unlockedVariants.includes(style) ? '' : ' 🔒'}
-              </button>
-            ))}
+            {TILE_STYLES.map((style) => {
+              const isDefaultStyle = style === 'classic';
+              return (
+                <button
+                  key={style}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={() => {
+                    if (isDefaultStyle) {
+                      stepsState.setTileVariant(style);
+                    }
+                  }}
+                  style={{
+                    opacity: isDefaultStyle ? 1 : 0.45,
+                    cursor: isDefaultStyle ? 'pointer' : 'not-allowed',
+                    borderRadius: 999,
+                    border:
+                      snap.tileVariant === style
+                        ? '1px solid rgba(255,255,255,0.8)'
+                        : '1px solid rgba(255,255,255,0.25)',
+                    background:
+                      snap.tileVariant === style
+                        ? 'linear-gradient(180deg, rgba(255,94,158,0.55), rgba(255,50,94,0.38))'
+                        : 'rgba(255,255,255,0.08)',
+                    color: 'white',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: '5px 9px',
+                  }}
+                >
+                  {trailStyleLabel(style)}
+                  {isDefaultStyle ? '' : ' 🔒'}
+                </button>
+              );
+            })}
           </div>
           <div style={{ marginTop: 7, fontSize: 10, opacity: 0.74 }}>
-            Unlocks from gem milestones. Unlocked {snap.unlockedVariants.length}/{TILE_STYLES.length}
+            Classic style is locked for this arcade build.
           </div>
-          {snap.lastUnlockedVariant && (
-            <div style={{ marginTop: 4, fontSize: 10, color: '#fff4a3', fontWeight: 700 }}>
-              New style unlocked: {trailStyleLabel(snap.lastUnlockedVariant)}
-            </div>
-          )}
+          <div style={{ marginTop: 4, fontSize: 10, opacity: 0.8 }}>
+            Full Steps styles and runner shapes: <a href="https://prism3d.studio" target="_blank" rel="noopener noreferrer" style={{ color: '#7dd3fc' }}>prism3d.studio</a>
+          </div>
           <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
             <button
+              disabled
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -3190,12 +3201,14 @@ function Steps() {
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '4px 0',
-                cursor: 'pointer',
+                cursor: 'not-allowed',
+                opacity: 0.5,
               }}
             >
-              Prev
+              Prev (Locked)
             </button>
             <button
+              disabled
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -3210,10 +3223,11 @@ function Steps() {
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '4px 0',
-                cursor: 'pointer',
+                cursor: 'not-allowed',
+                opacity: 0.5,
               }}
             >
-              Next
+              Next (Locked)
             </button>
           </div>
           <div style={{ marginTop: 9, fontSize: 10, opacity: 0.76, letterSpacing: 0.3 }}>
@@ -3221,6 +3235,7 @@ function Steps() {
           </div>
           <div style={{ marginTop: 5, display: 'flex', gap: 6 }}>
             <button
+              disabled
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -3235,12 +3250,14 @@ function Steps() {
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '4px 0',
-                cursor: 'pointer',
+                cursor: 'not-allowed',
+                opacity: 0.5,
               }}
             >
-              Prev Shape
+              Prev Shape (Locked)
             </button>
             <button
+              disabled
               onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -3255,40 +3272,52 @@ function Steps() {
                 fontSize: 10,
                 fontWeight: 700,
                 padding: '4px 0',
-                cursor: 'pointer',
+                cursor: 'not-allowed',
+                opacity: 0.5,
               }}
             >
-              Next Shape
+              Next Shape (Locked)
             </button>
           </div>
           <div style={{ marginTop: 6, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {RUNNER_SHAPES.map((shape) => (
-              <button
-                key={shape}
-                onPointerDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={() => stepsState.setRunnerShape(shape)}
-                style={{
-                  borderRadius: 999,
-                  border:
-                    snap.runnerShape === shape ? '1px solid rgba(255,255,255,0.9)' : '1px solid rgba(255,255,255,0.22)',
-                  background:
-                    snap.runnerShape === shape
-                      ? 'linear-gradient(180deg, rgba(116,227,255,0.45), rgba(74,155,255,0.28))'
-                      : 'rgba(255,255,255,0.08)',
-                  color: 'white',
-                  fontSize: 9,
-                  fontWeight: 700,
-                  padding: '4px 8px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {runnerShapeLabel(shape)}
-              </button>
-            ))}
+            {RUNNER_SHAPES.map((shape) => {
+              const isDefaultShape = shape === 'cube';
+              return (
+                <button
+                  key={shape}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onClick={() => {
+                    if (isDefaultShape) {
+                      stepsState.setRunnerShape(shape);
+                    }
+                  }}
+                  style={{
+                    borderRadius: 999,
+                    border:
+                      snap.runnerShape === shape
+                        ? '1px solid rgba(255,255,255,0.9)'
+                        : '1px solid rgba(255,255,255,0.22)',
+                    background:
+                      snap.runnerShape === shape
+                        ? 'linear-gradient(180deg, rgba(116,227,255,0.45), rgba(74,155,255,0.28))'
+                        : 'rgba(255,255,255,0.08)',
+                    color: 'white',
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '4px 8px',
+                    cursor: isDefaultShape ? 'pointer' : 'not-allowed',
+                    whiteSpace: 'nowrap',
+                    opacity: isDefaultShape ? 1 : 0.45,
+                  }}
+                >
+                  {runnerShapeLabel(shape)}
+                  {isDefaultShape ? '' : ' 🔒'}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -3457,7 +3486,7 @@ function Steps() {
                 New obstacle suite: laser grids, gravity wells, cross blades, mines, lava, portals, trapdoors, and more.
               </div>
               <div style={{ marginTop: 5, fontSize: 11, opacity: 0.74 }}>
-                Smooth Classic path + collapse chase. Special platforms and obstacle telegraphs are now color-coded for readability. Active style: {trailStyleLabel(snap.tileVariant)} | Runner: {runnerShapeLabel(snap.runnerShape)}
+                Smooth Classic path + collapse chase. Special platforms and obstacle telegraphs are now color-coded for readability. Active style: {trailStyleLabel(snap.tileVariant)} | Runner: {runnerShapeLabel(snap.runnerShape)}. Full variants live on prism3d.studio.
               </div>
 
               {snap.phase === 'gameover' && (

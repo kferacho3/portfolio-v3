@@ -24,14 +24,17 @@ export const BALL_SKINS: BallSkin[] = [
 export type SlowMoPhase = 'menu' | 'playing' | 'finish';
 export type SlowMoDifficulty = 'easy' | 'medium' | 'hard';
 
+const LOCKED_SLOWMO_DIFFICULTY: SlowMoDifficulty = 'medium';
+const LOCKED_SLOWMO_BALL_ID = 0;
+
 export const state = proxy({
   phase: 'menu' as SlowMoPhase,
   highScore: 0,
   stars: 0,
-  selectedBall: 0,
+  selectedBall: LOCKED_SLOWMO_BALL_ID,
   unlocked: [true, false, false, false] as boolean[],
-  unlockedBallIds: [0] as number[],
-  difficulty: 'medium' as SlowMoDifficulty,
+  unlockedBallIds: [LOCKED_SLOWMO_BALL_ID] as number[],
+  difficulty: LOCKED_SLOWMO_DIFFICULTY as SlowMoDifficulty,
   // cosmetic toggle: show credits line in UI
   showCredits: true,
 
@@ -49,6 +52,7 @@ export const state = proxy({
 
   setDifficulty: (difficulty: SlowMoDifficulty) => {
     if (state.phase === 'playing') return;
+    if (difficulty !== LOCKED_SLOWMO_DIFFICULTY) return;
     if (state.difficulty === difficulty) return;
     state.difficulty = difficulty;
     save();
@@ -65,28 +69,10 @@ export function load() {
 
     if (typeof data?.highScore === 'number') state.highScore = data.highScore;
     if (typeof data?.stars === 'number') state.stars = data.stars;
-    if (typeof data?.selectedBall === 'number')
-      state.selectedBall = data.selectedBall;
-    if (Array.isArray(data?.unlocked)) state.unlocked = data.unlocked;
-    if (Array.isArray(data?.unlockedBallIds)) {
-      state.unlockedBallIds = data.unlockedBallIds.filter(
-        (id: number) => typeof id === 'number'
-      );
-    } else if (Array.isArray(data?.unlocked)) {
-      // Migrate from old unlocked array format
-      state.unlockedBallIds = data.unlocked
-        .map((unlocked: boolean, idx: number) => (unlocked ? idx : -1))
-        .filter((id: number) => id >= 0);
-    }
-    if (
-      data?.difficulty === 'easy' ||
-      data?.difficulty === 'medium' ||
-      data?.difficulty === 'hard'
-    ) {
-      state.difficulty = data.difficulty;
-    } else {
-      state.difficulty = 'medium';
-    }
+    state.selectedBall = LOCKED_SLOWMO_BALL_ID;
+    state.unlocked = [true, false, false, false];
+    state.unlockedBallIds = [LOCKED_SLOWMO_BALL_ID];
+    state.difficulty = LOCKED_SLOWMO_DIFFICULTY;
     if (typeof data?.showCredits === 'boolean')
       state.showCredits = data.showCredits;
   } catch {
@@ -128,10 +114,7 @@ export function addStars(amount: number) {
 }
 
 export function canUnlock(ballId: number) {
-  const skin = BALL_SKINS.find((b) => b.id === ballId);
-  if (!skin) return false;
-  if (state.unlocked[ballId]) return true;
-  return state.stars >= skin.cost;
+  return ballId === LOCKED_SLOWMO_BALL_ID;
 }
 
 // UI-friendly alias
@@ -140,33 +123,21 @@ export function canUnlockBall(ballId: number) {
 }
 
 export function unlockAndSelect(ballId: number) {
-  const skin = BALL_SKINS.find((b) => b.id === ballId);
-  if (!skin) return;
-
-  if (!state.unlocked[ballId]) {
-    if (state.stars < skin.cost) return;
-    state.stars -= skin.cost;
-    state.unlocked[ballId] = true;
-  }
-  state.selectedBall = ballId;
+  if (ballId !== LOCKED_SLOWMO_BALL_ID) return;
+  state.selectedBall = LOCKED_SLOWMO_BALL_ID;
   save();
 }
 
 // UI-friendly helpers used by the game overlay
 export function unlockBall(ballId: number) {
-  const skin = BALL_SKINS.find((b) => b.id === ballId);
-  if (!skin) return;
-  if (state.unlocked[ballId]) return;
-  if (state.stars < skin.cost) return;
-
-  state.stars -= skin.cost;
-  state.unlocked[ballId] = true;
+  if (ballId !== LOCKED_SLOWMO_BALL_ID) return;
+  state.selectedBall = LOCKED_SLOWMO_BALL_ID;
   save();
 }
 
 export function setSelectedBall(ballId: number) {
-  if (!state.unlocked[ballId]) return;
-  state.selectedBall = ballId;
+  if (ballId !== LOCKED_SLOWMO_BALL_ID) return;
+  state.selectedBall = LOCKED_SLOWMO_BALL_ID;
   save();
 }
 

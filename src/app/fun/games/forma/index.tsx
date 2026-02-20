@@ -154,7 +154,8 @@ export const formaState = proxy({
   },
 
   setGridSize: (size: GridSizeOption) => {
-    formaState.gridSize = size;
+    if (size !== 4) return;
+    formaState.gridSize = 4;
     formaState.reset();
   },
 
@@ -898,43 +899,46 @@ const ModeSelection: React.FC<{
           <h1 className="text-6xl font-bold text-white mb-2">FORMA</h1>
           <p className="text-lg text-white/60 mb-8">Polygon Evolution Game</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {([4, 8, 12, 16] as GridSizeOption[]).map((size) => {
-              const config = GRID_CONFIGS[size];
-              const isHovered = hoveredSize === size;
+          <div className="mb-8 flex justify-center">
+            <button
+              onClick={() => onSelect(4)}
+              onMouseEnter={() => setHoveredSize(4)}
+              onMouseLeave={() => setHoveredSize(null)}
+              className={`p-5 rounded-xl border-2 text-left transition-all duration-300 w-full max-w-md ${
+                hoveredSize === 4
+                  ? 'bg-white/20 border-white/60 scale-[1.02]'
+                  : 'bg-white/5 border-white/20 hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-baseline justify-between">
+                <div className="text-3xl font-bold text-white">4×4</div>
+                <div className="text-[11px] uppercase tracking-wider text-white/60">
+                  {GRID_CONFIGS[4].name}
+                </div>
+              </div>
+              <div className="text-xs text-white/60 mt-2">
+                {GRID_CONFIGS[4].description}
+              </div>
+              <div className="mt-4 flex items-center justify-between text-[11px] text-white/40">
+                <span>{GRID_CONFIGS[4].initialTiles} start</span>
+                <span>
+                  {(GRID_CONFIGS[4].unstableDecayRate * 100).toFixed(0)}% decay
+                </span>
+              </div>
+            </button>
+          </div>
 
-              return (
-                <button
-                  key={size}
-                  onClick={() => onSelect(size)}
-                  onMouseEnter={() => setHoveredSize(size)}
-                  onMouseLeave={() => setHoveredSize(null)}
-                  className={`p-5 rounded-xl border-2 text-left transition-all duration-300 ${
-                    isHovered
-                      ? 'bg-white/20 border-white/60 scale-[1.02]'
-                      : 'bg-white/5 border-white/20 hover:bg-white/10'
-                  }`}
-                >
-                  <div className="flex items-baseline justify-between">
-                    <div className="text-3xl font-bold text-white">
-                      {size}×{size}
-                    </div>
-                    <div className="text-[11px] uppercase tracking-wider text-white/60">
-                      {config.name}
-                    </div>
-                  </div>
-                  <div className="text-xs text-white/60 mt-2">
-                    {config.description}
-                  </div>
-                  <div className="mt-4 flex items-center justify-between text-[11px] text-white/40">
-                    <span>{config.initialTiles} start</span>
-                    <span>
-                      {(config.unstableDecayRate * 100).toFixed(0)}% decay
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="text-white/50 text-sm mb-8">
+            Extended Forma grid modes are available on{' '}
+            <a
+              href="https://prism3d.studio"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-200 underline underline-offset-2"
+            >
+              prism3d.studio
+            </a>
+            .
           </div>
 
           <div className="text-white/40 text-sm">
@@ -1769,7 +1773,7 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
                   onClick={() => formaState.backToMenu()}
                   className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
                 >
-                  Change Mode
+                  Back to Menu
                 </button>
               </div>
             </div>

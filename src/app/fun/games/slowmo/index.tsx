@@ -13,9 +13,6 @@ import {
   load,
   addStars,
   setHighScore,
-  unlockBall,
-  setSelectedBall,
-  canUnlockBall,
 } from './state';
 
 const TRACK_WIDTH = 3.4;
@@ -52,8 +49,6 @@ type SlowMoDifficultyProfile = {
   energyDrainMultiplier: number;
   energyRegenMultiplier: number;
 };
-
-const DIFFICULTY_ORDER: SlowMoDifficulty[] = ['easy', 'medium', 'hard'];
 
 const SLOWMO_DIFFICULTY_PROFILES: Record<
   SlowMoDifficulty,
@@ -1737,10 +1732,19 @@ function SlowMoOverlay() {
               back to speed.
             </div>
             <div className="text-white/70 text-xs">
-              Default mode is Medium. Switch difficulty before starting.
+              Arcade mode is locked to Medium with the Classic ball.
             </div>
             <div className="text-white/70 text-xs">
-              Collect stars and gifts to unlock skins and refill slow energy.
+              Full SlowMo difficulty and ball skins are available on{' '}
+              <a
+                href="https://prism3d.studio"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-200 underline underline-offset-2"
+              >
+                prism3d.studio
+              </a>
+              .
             </div>
           </div>
 
@@ -1750,24 +1754,8 @@ function SlowMoOverlay() {
           >
             <div className="bg-black/35 rounded-2xl p-4 border border-white/20 backdrop-blur-sm">
               <div className="text-white font-semibold mb-3">Difficulty</div>
-              <div className="grid grid-cols-3 gap-2">
-                {DIFFICULTY_ORDER.map((difficulty) => {
-                  const profile = SLOWMO_DIFFICULTY_PROFILES[difficulty];
-                  const active = snap.difficulty === difficulty;
-                  return (
-                    <button
-                      key={difficulty}
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${
-                        active
-                          ? 'bg-white text-black'
-                          : 'bg-white/10 text-white hover:bg-white/20'
-                      }`}
-                      onClick={() => persistState.setDifficulty(difficulty)}
-                    >
-                      {profile.label}
-                    </button>
-                  );
-                })}
+              <div className="px-3 py-2 rounded-lg text-sm font-semibold bg-white text-black inline-flex">
+                {difficultyProfile.label} (Locked)
               </div>
               <div className="text-white/70 text-xs mt-2">
                 {difficultyProfile.description}
@@ -1776,39 +1764,14 @@ function SlowMoOverlay() {
 
             <div className="bg-black/35 rounded-2xl p-4 border border-white/20 backdrop-blur-sm">
               <div className="text-white font-semibold mb-3">Balls</div>
-              <div className="flex gap-2 flex-wrap">
-                {BALL_SKINS.map((skin) => {
-                  const unlocked = snap.unlockedBallIds.includes(skin.id);
-                  const selected = snap.selectedBall === skin.id;
-                  const afford = canUnlockBall(skin.id);
-
-                  return (
-                    <button
-                      key={skin.id}
-                      className={`relative w-14 h-14 rounded-full border-2 ${selected ? 'border-white' : 'border-white/30'} ${unlocked ? '' : 'opacity-70'}`}
-                      style={{ background: skin.color }}
-                      onClick={() => {
-                        if (unlocked) {
-                          setSelectedBall(skin.id);
-                          return;
-                        }
-                        if (afford) {
-                          unlockBall(skin.id);
-                          setSelectedBall(skin.id);
-                        }
-                      }}
-                      title={
-                        unlocked ? skin.name : `${skin.name} - ${skin.cost}★`
-                      }
-                    >
-                      {!unlocked && (
-                        <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center text-white text-xs font-bold">
-                          {skin.cost}★
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-14 h-14 rounded-full border-2 border-white"
+                  style={{ background: BALL_SKINS[0]?.color ?? '#ffffff' }}
+                />
+                <div className="text-sm text-white/85">
+                  {BALL_SKINS[0]?.name ?? 'Classic'} (Locked)
+                </div>
               </div>
               <div className="text-white/85 text-sm mt-3">
                 Stars: {snap.stars}

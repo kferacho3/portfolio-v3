@@ -3,6 +3,7 @@ import type { GrowthGameState, GrowthPathStyleId } from './types';
 import { BEST_SCORE_KEY, PATH_STYLE_KEY } from './constants';
 
 const PATH_STYLE_IDS: GrowthPathStyleId[] = ['voxelized', 'classic', 'apex'];
+const LOCKED_PATH_STYLE: GrowthPathStyleId = 'voxelized';
 
 const isGrowthPathStyle = (value: string): value is GrowthPathStyleId =>
   PATH_STYLE_IDS.includes(value as GrowthPathStyleId);
@@ -34,7 +35,7 @@ export const growthState = proxy<
   perfectTurns: 0,
   shieldMs: 0,
   boostMs: 0,
-  pathStyle: 'voxelized',
+  pathStyle: LOCKED_PATH_STYLE,
 
   reset() {
     this.phase = 'menu';
@@ -102,6 +103,7 @@ export const growthState = proxy<
   },
 
   setPathStyle(style) {
+    if (style !== LOCKED_PATH_STYLE) return;
     if (this.pathStyle === style) return;
     this.pathStyle = style;
     try {
@@ -134,11 +136,14 @@ export const growthState = proxy<
       const best = localStorage.getItem(BEST_SCORE_KEY);
       if (best) this.bestScore = parseInt(best, 10) || 0;
       const pathStyle = localStorage.getItem(PATH_STYLE_KEY);
-      if (pathStyle && isGrowthPathStyle(pathStyle)) {
+      if (pathStyle && isGrowthPathStyle(pathStyle) && pathStyle === LOCKED_PATH_STYLE) {
         this.pathStyle = pathStyle;
+      } else {
+        this.pathStyle = LOCKED_PATH_STYLE;
       }
     } catch {
       // ignore
+      this.pathStyle = LOCKED_PATH_STYLE;
     }
   },
 });

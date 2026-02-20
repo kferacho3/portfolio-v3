@@ -11,8 +11,10 @@ import {
   getArenaTheme,
 } from '../constants';
 import { apexState } from '../state';
-import type { ArenaPresetKey, GameMode, PlayerSkin } from '../types';
+import type { ArenaPresetKey, PlayerSkin } from '../types';
 import FullscreenOverlay from './FullscreenOverlay';
+
+const FULL_MODES_URL = 'https://prism3d.studio';
 
 const GameUI: React.FC = () => {
   const snap = useSnapshot(apexState);
@@ -156,9 +158,7 @@ const GameUI: React.FC = () => {
                 <div style={{ position: 'relative', flex: 1 }}>
                   <select
                     value={snap.mode}
-                    onChange={(event) =>
-                      apexState.setMode(event.target.value as GameMode)
-                    }
+                    disabled
                     style={{
                       width: '100%',
                       appearance: 'none',
@@ -170,15 +170,11 @@ const GameUI: React.FC = () => {
                       fontSize: '0.95rem',
                       letterSpacing: '0.08em',
                       textTransform: 'uppercase',
-                      cursor: 'pointer',
+                      cursor: 'not-allowed',
                       paddingRight: '2rem',
                     }}
                   >
-                    {(Object.keys(MODE_INFO) as GameMode[]).map((mode) => (
-                      <option key={mode} value={mode}>
-                        {MODE_INFO[mode].name}
-                      </option>
-                    ))}
+                    <option value="curved">{MODE_INFO.curved.name}</option>
                   </select>
 
                   <span
@@ -191,7 +187,7 @@ const GameUI: React.FC = () => {
                       pointerEvents: 'none',
                     }}
                   >
-                    ▾
+                    🔒
                   </span>
                 </div>
               </div>
@@ -211,6 +207,9 @@ const GameUI: React.FC = () => {
                   }}
                 >
                   {selectedMode.description}
+                  <div style={{ marginTop: '0.35rem', fontSize: '0.75rem' }}>
+                    Full Apex mode catalog: <a href={FULL_MODES_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#7dd3fc' }}>prism3d.studio</a>
+                  </div>
                 </div>
                 {selectedModeBest > 0 && (
                   <div
