@@ -8,6 +8,7 @@ import { proxy, useSnapshot } from 'valtio';
 import FixedViewportOverlay from '../_shared/FixedViewportOverlay';
 import {
   BALL_SKINS,
+  type SlowMoDifficulty,
   state as persistState,
   load,
   addStars,
@@ -33,6 +34,83 @@ const HUD_PUBLISH_INTERVAL = 1 / 15;
 const SLOW_VISUAL_STEP = 0.07;
 
 const OBST_COLORS = ['#ff6b6b', '#ffe4b8', '#b6ffcc', '#a3d4ff'];
+
+type SlowMoDifficultyProfile = {
+  label: string;
+  description: string;
+  sideObstacleChance: number;
+  sideLenMin: number;
+  sideLenMax: number;
+  centerLenMin: number;
+  centerLenMax: number;
+  giftChance: number;
+  starChance: number;
+  spawnGapMin: number;
+  spawnGapMax: number;
+  spawnLookAhead: number;
+  scoreRampMultiplier: number;
+  energyDrainMultiplier: number;
+  energyRegenMultiplier: number;
+};
+
+const DIFFICULTY_ORDER: SlowMoDifficulty[] = ['easy', 'medium', 'hard'];
+
+const SLOWMO_DIFFICULTY_PROFILES: Record<
+  SlowMoDifficulty,
+  SlowMoDifficultyProfile
+> = {
+  easy: {
+    label: 'Easy',
+    description: 'Wider obstacle gaps and more pickups.',
+    sideObstacleChance: 0.94,
+    sideLenMin: 0.42,
+    sideLenMax: 0.88,
+    centerLenMin: 0.38,
+    centerLenMax: 0.66,
+    giftChance: 0.12,
+    starChance: 0.48,
+    spawnGapMin: 3.1,
+    spawnGapMax: 5.1,
+    spawnLookAhead: 74,
+    scoreRampMultiplier: 0.76,
+    energyDrainMultiplier: 0.78,
+    energyRegenMultiplier: 1.22,
+  },
+  medium: {
+    label: 'Medium',
+    description: 'Balanced pacing with fair reaction windows.',
+    sideObstacleChance: 0.9,
+    sideLenMin: 0.48,
+    sideLenMax: 1.05,
+    centerLenMin: 0.45,
+    centerLenMax: 0.78,
+    giftChance: 0.09,
+    starChance: 0.4,
+    spawnGapMin: 2.65,
+    spawnGapMax: 4.45,
+    spawnLookAhead: 70,
+    scoreRampMultiplier: 0.88,
+    energyDrainMultiplier: 0.92,
+    energyRegenMultiplier: 1.06,
+  },
+  hard: {
+    label: 'Hard',
+    description: 'Dense patterns, faster escalation.',
+    sideObstacleChance: 0.82,
+    sideLenMin: 0.62,
+    sideLenMax: 1.26,
+    centerLenMin: 0.6,
+    centerLenMax: 0.98,
+    giftChance: 0.05,
+    starChance: 0.28,
+    spawnGapMin: 2.1,
+    spawnGapMax: 3.6,
+    spawnLookAhead: 66,
+    scoreRampMultiplier: 1.25,
+    energyDrainMultiplier: 1.1,
+    energyRegenMultiplier: 0.9,
+  },
+};
 
 const GAME_TUNING = {
   forward: {
@@ -239,16 +317,21 @@ function createImpactFxSlot(id: number): ImpactFx {
   };
 }
 
-function makeObstacle(id: number, z: number): Obstacle {
-  const kind: ObstacleKind = Math.random() < 0.86 ? 'side' : 'center';
+function makeObstacle(
+  id: number,
+  z: number,
+  profile: SlowMoDifficultyProfile
+): Obstacle {
+  const kind: ObstacleKind =
+    Math.random() < profile.sideObstacleChance ? 'side' : 'center';
   const side: -1 | 1 = Math.random() < 0.5 ? -1 : 1;
   const lenX =
     kind === 'side'
-      ? rand(LANE_HALF * 0.55, LANE_HALF * 1.22)
-      : rand(LANE_HALF * 0.55, LANE_HALF * 0.9);
+      ? rand(LANE_HALF * profile.sideLenMin, LANE_HALF * profile.sideLenMax)
+      : rand(LANE_HALF * profile.centerLenMin, LANE_HALF * profile.centerLenMax);
 
-  const hasGift = Math.random() < 0.07;
-  const hasStar = !hasGift && Math.random() < 0.35;
+  const hasGift = Math.random() < profile.giftChance;
+  const hasStar = !hasGift && Math.random() < profile.starChance;
 
   return {
     id,
@@ -285,6 +368,9 @@ function pickupX(o: Obstacle) {
 
 function SlowMoScene() {
   const snap = useSnapshot(persistState);
+  const difficultyProfile =
+    SLOWMO_DIFFICULTY_PROFILES[snap.difficulty] ??
+    SLOWMO_DIFFICULTY_PROFILES.medium;
 
   const cameraRef = useRef<THREE.OrthographicCamera>(null!);
   const ballRef = useRef<THREE.Mesh>(null!);
@@ -605,7 +691,7 @@ function SlowMoScene() {
   }
 
   function spawnObstacleAt(slotIndex: number, z: number) {
-    const fresh = makeObstacle(obstacles[slotIndex].id, z);
+    const fresh = makeObstacle(obstacles[slotIndex].id, z, difficultyProfile);
     Object.assign(obstacles[slotIndex], fresh, { active: true, z });
     syncObstacleVisual(slotIndex);
   }
@@ -614,7 +700,7 @@ function SlowMoScene() {
     let guard = obstacles.length * 2;
     while (
       world.current.nextSpawnAt <
-        world.current.runnerDistance + GAME_TUNING.spawn.lookAhead &&
+        world.current.runnerDistance + difficultyProfile.spawnLookAhead &&
       guard > 0
     ) {
       const slot = takeInactiveSlot();
@@ -622,8 +708,8 @@ function SlowMoScene() {
 
       spawnObstacleAt(slot, world.current.nextSpawnAt);
       world.current.nextSpawnAt += rand(
-        GAME_TUNING.spawn.gapMin,
-        GAME_TUNING.spawn.gapMax
+        difficultyProfile.spawnGapMin,
+        difficultyProfile.spawnGapMax
       );
 
       guard -= 1;
@@ -760,12 +846,18 @@ function SlowMoScene() {
     if (holdInput.isHolding && w.slowEnergy > 0) {
       w.slowEnergy = Math.max(
         0,
-        w.slowEnergy - GAME_TUNING.energy.drainPerSecond * delta
+        w.slowEnergy -
+          GAME_TUNING.energy.drainPerSecond *
+            difficultyProfile.energyDrainMultiplier *
+            delta
       );
     } else {
       w.slowEnergy = Math.min(
         1,
-        w.slowEnergy + GAME_TUNING.energy.regenPerSecond * delta
+        w.slowEnergy +
+          GAME_TUNING.energy.regenPerSecond *
+            difficultyProfile.energyRegenMultiplier *
+            delta
       );
     }
 
@@ -791,7 +883,10 @@ function SlowMoScene() {
     w.isSlow = w.slowStrength > 0.08;
 
     const forwardSpeed =
-      GAME_TUNING.forward.baseSpeed + run.score * GAME_TUNING.forward.scoreRamp;
+      GAME_TUNING.forward.baseSpeed +
+      run.score *
+        GAME_TUNING.forward.scoreRamp *
+        difficultyProfile.scoreRampMultiplier;
     w.runnerDistance += forwardSpeed * delta;
 
     const targetXVel = w.sideDir * GAME_TUNING.side.baseSpeed;
@@ -1525,6 +1620,9 @@ function SlowMoHoldInputLayer() {
 function SlowMoOverlay() {
   const snap = useSnapshot(persistState);
   const r = useSnapshot(run);
+  const difficultyProfile =
+    SLOWMO_DIFFICULTY_PROFILES[snap.difficulty] ??
+    SLOWMO_DIFFICULTY_PROFILES.medium;
 
   const handleTapStart = () => {
     if (snap.phase === 'menu') persistState.start();
@@ -1567,6 +1665,9 @@ function SlowMoOverlay() {
           <div className="absolute top-4 right-4 flex items-center gap-2">
             <div className="px-3 py-2 rounded-full bg-black/30 text-white font-semibold border border-white/15">
               Star {snap.stars}
+            </div>
+            <div className="px-3 py-2 rounded-full bg-black/30 text-white font-semibold border border-white/15">
+              {difficultyProfile.label}
             </div>
             {r.slow && (
               <div className="px-3 py-2 rounded-full bg-cyan-200/20 text-cyan-50 font-semibold border border-cyan-100/30">
@@ -1636,6 +1737,9 @@ function SlowMoOverlay() {
               back to speed.
             </div>
             <div className="text-white/70 text-xs">
+              Default mode is Medium. Switch difficulty before starting.
+            </div>
+            <div className="text-white/70 text-xs">
               Collect stars and gifts to unlock skins and refill slow energy.
             </div>
           </div>
@@ -1644,6 +1748,32 @@ function SlowMoOverlay() {
             className="w-full max-w-md flex flex-col gap-4"
             onClick={(event) => event.stopPropagation()}
           >
+            <div className="bg-black/35 rounded-2xl p-4 border border-white/20 backdrop-blur-sm">
+              <div className="text-white font-semibold mb-3">Difficulty</div>
+              <div className="grid grid-cols-3 gap-2">
+                {DIFFICULTY_ORDER.map((difficulty) => {
+                  const profile = SLOWMO_DIFFICULTY_PROFILES[difficulty];
+                  const active = snap.difficulty === difficulty;
+                  return (
+                    <button
+                      key={difficulty}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${
+                        active
+                          ? 'bg-white text-black'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                      onClick={() => persistState.setDifficulty(difficulty)}
+                    >
+                      {profile.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-white/70 text-xs mt-2">
+                {difficultyProfile.description}
+              </div>
+            </div>
+
             <div className="bg-black/35 rounded-2xl p-4 border border-white/20 backdrop-blur-sm">
               <div className="text-white font-semibold mb-3">Balls</div>
               <div className="flex gap-2 flex-wrap">
@@ -1702,6 +1832,9 @@ function SlowMoOverlay() {
           </div>
           <div className="text-white/70">Best: {snap.highScore}</div>
           <div className="text-white/80">Star +{r.starsThisRun} this run</div>
+          <div className="text-white/75 text-sm">
+            Difficulty: {difficultyProfile.label}
+          </div>
 
           <div className="pointer-events-auto flex gap-3 mt-4">
             <button

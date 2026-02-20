@@ -151,6 +151,74 @@ const PATH_STYLES: Record<GrowthPathStyleId, PathStyleDefinition> = {
   },
 };
 
+type GrowthDifficultyProfile = {
+  difficultyScale: number;
+  densityScale: number;
+  hardPatternOffset: number;
+  breatherEverySegments: number;
+  turnGapMultiplier: number;
+  maxHardStreak: number;
+  obstacleHeightScale: number;
+  obstacleGrowthRateScale: number;
+  gemChanceBonus: number;
+  powerupChanceBonus: number;
+  baseSpeedScale: number;
+  speedRampTimeScale: number;
+  speedRampScoreScale: number;
+  maxSpeedScale: number;
+};
+
+const PATH_STYLE_DIFFICULTY: Record<GrowthPathStyleId, GrowthDifficultyProfile> = {
+  voxelized: {
+    difficultyScale: 0.76,
+    densityScale: 0.72,
+    hardPatternOffset: 0.16,
+    breatherEverySegments: 7,
+    turnGapMultiplier: 1.5,
+    maxHardStreak: 1,
+    obstacleHeightScale: 0.82,
+    obstacleGrowthRateScale: 0.78,
+    gemChanceBonus: 0.06,
+    powerupChanceBonus: 0.03,
+    baseSpeedScale: 0.94,
+    speedRampTimeScale: 0.84,
+    speedRampScoreScale: 0.86,
+    maxSpeedScale: 0.93,
+  },
+  classic: {
+    difficultyScale: 1,
+    densityScale: 1,
+    hardPatternOffset: 0,
+    breatherEverySegments: gameplayConfig.breatherEverySegments,
+    turnGapMultiplier: 1,
+    maxHardStreak: 2,
+    obstacleHeightScale: 1,
+    obstacleGrowthRateScale: 1,
+    gemChanceBonus: 0,
+    powerupChanceBonus: 0,
+    baseSpeedScale: 1,
+    speedRampTimeScale: 1,
+    speedRampScoreScale: 1,
+    maxSpeedScale: 1,
+  },
+  apex: {
+    difficultyScale: 1,
+    densityScale: 1,
+    hardPatternOffset: 0,
+    breatherEverySegments: gameplayConfig.breatherEverySegments,
+    turnGapMultiplier: 1,
+    maxHardStreak: 2,
+    obstacleHeightScale: 1,
+    obstacleGrowthRateScale: 1,
+    gemChanceBonus: 0,
+    powerupChanceBonus: 0,
+    baseSpeedScale: 1,
+    speedRampTimeScale: 1,
+    speedRampScoreScale: 1,
+    maxSpeedScale: 1,
+  },
+};
+
 const OBSTACLE_INSTANCES_PER_SEGMENT = 3;
 const OBSTACLE_INSTANCE_COUNT = SEGMENT_POOL * OBSTACLE_INSTANCES_PER_SEGMENT;
 
@@ -203,9 +271,18 @@ const buildBlockedFaces = (
   safeFace: Face,
   difficulty: number,
   density: number,
-  sequence: number
+  sequence: number,
+  options?: {
+    breatherEverySegments?: number;
+    hardPatternStart?: number;
+  }
 ): Face[] => {
-  if (sequence > 0 && sequence % gameplayConfig.breatherEverySegments === 0) {
+  const breatherEvery =
+    options?.breatherEverySegments ?? gameplayConfig.breatherEverySegments;
+  const hardPatternStart =
+    options?.hardPatternStart ?? gameplayConfig.hardPatternStart;
+
+  if (breatherEvery > 0 && sequence > 0 && sequence % breatherEvery === 0) {
     const choices = FACE_LIST.filter((face) => face !== safeFace) as Face[];
     return [rng.pick(choices)];
   }
@@ -215,7 +292,7 @@ const buildBlockedFaces = (
     blockedCount = 2;
   }
   if (
-    difficulty > gameplayConfig.hardPatternStart &&
+    difficulty > hardPatternStart &&
     density > 0.56 &&
     rng.bool(clamp((density - 0.54) * 0.95, 0.08, 0.38))
   ) {
@@ -392,6 +469,16 @@ const Growth: React.FC = () => {
   const { setPaused } = useGameStateActions();
   const { camera, scene, gl } = useThree();
   const activePathStyle = PATH_STYLES[snap.pathStyle] ?? PATH_STYLES.voxelized;
+  const activeDifficultyProfile =
+    PATH_STYLE_DIFFICULTY[snap.pathStyle] ?? PATH_STYLE_DIFFICULTY.voxelized;
+  const tunedBaseSpeed = gameplayConfig.baseSpeed * activeDifficultyProfile.baseSpeedScale;
+  const tunedSpeedRampPerSecond =
+    gameplayConfig.speedRampPerSecond * activeDifficultyProfile.speedRampTimeScale;
+  const tunedSpeedRampFromScore =
+    gameplayConfig.speedRampFromScore * activeDifficultyProfile.speedRampScoreScale;
+  const tunedMaxSpeed = gameplayConfig.maxSpeed * activeDifficultyProfile.maxSpeedScale;
+  const paceBonusThreshold =
+    tunedBaseSpeed + 2.3 * activeDifficultyProfile.maxSpeedScale;
 
   const graphicsPreset = useMemo(() => pickGraphicsPreset(), []);
   const rotation = useWorldRotation();
@@ -406,9 +493,7 @@ const Growth: React.FC = () => {
   } = rotation;
   const cameraShake = useCameraShake();
   const jellySquash = useJellySquash();
-  const [displaySpeed, setDisplaySpeed] = useState<number>(
-    gameplayConfig.baseSpeed
-  );
+  const [displaySpeed, setDisplaySpeed] = useState<number>(tunedBaseSpeed);
 
   const worldRef = useRef<THREE.Group>(null);
   const playerRef = useRef<THREE.Group>(null);
@@ -444,7 +529,7 @@ const Growth: React.FC = () => {
     hardStreak: 0,
     scroll: 0,
     elapsed: 0,
-    speed: gameplayConfig.baseSpeed,
+    speed: tunedBaseSpeed,
     uiSpeedAccumulator: 0,
     lastTurnSequence: -1000,
   });
@@ -641,12 +726,17 @@ const Growth: React.FC = () => {
         0,
         sequence - gameplayConfig.warmupSegments
       );
-      const difficulty = clamp(
+      const baseDifficulty = clamp(
         normalizedSequence / gameplayConfig.difficultyRampSegments,
         0,
         1
       );
-      const density =
+      const difficulty = clamp(
+        baseDifficulty * activeDifficultyProfile.difficultyScale,
+        0,
+        1
+      );
+      const baseDensity =
         difficulty < 0.45
           ? lerp(
               gameplayConfig.obstacleDensityCurve.early,
@@ -658,6 +748,11 @@ const Growth: React.FC = () => {
               gameplayConfig.obstacleDensityCurve.late,
               (difficulty - 0.45) / 0.55
             );
+      const density = clamp(
+        baseDensity * activeDifficultyProfile.densityScale,
+        0.08,
+        gameplayConfig.obstacleDensityCurve.late
+      );
       const requestedSafeFace = buildSafeFace(
         runtime.current.rng,
         previousSafeFace,
@@ -668,7 +763,16 @@ const Growth: React.FC = () => {
         requestedSafeFace,
         difficulty,
         density,
-        sequence
+        sequence,
+        {
+          breatherEverySegments: activeDifficultyProfile.breatherEverySegments,
+          hardPatternStart: clamp(
+            gameplayConfig.hardPatternStart +
+              activeDifficultyProfile.hardPatternOffset,
+            0,
+            0.95
+          ),
+        }
       );
       let safeFace = validateObstacleLayout(
         blockedFaces,
@@ -677,9 +781,16 @@ const Growth: React.FC = () => {
       );
 
       const turnsSinceLastChange = sequence - runtime.current.lastTurnSequence;
+      const minSegmentsBetweenTurns = Math.max(
+        1,
+        Math.round(
+          gameplayConfig.minSegmentsBetweenTurns *
+            activeDifficultyProfile.turnGapMultiplier
+        )
+      );
       if (
         safeFace !== previousSafeFace &&
-        turnsSinceLastChange < gameplayConfig.minSegmentsBetweenTurns
+        turnsSinceLastChange < minSegmentsBetweenTurns
       ) {
         safeFace = previousSafeFace;
       }
@@ -687,7 +798,7 @@ const Growth: React.FC = () => {
       blockedFaces = sanitizeBlockedFaces(runtime.current.rng, blockedFaces, safeFace);
 
       if (blockedFaces.length >= 2) {
-        if (runtime.current.hardStreak >= 2) {
+        if (runtime.current.hardStreak >= activeDifficultyProfile.maxHardStreak) {
           blockedFaces = blockedFaces.slice(0, 1);
           runtime.current.hardStreak = 0;
         } else {
@@ -703,15 +814,23 @@ const Growth: React.FC = () => {
       }
 
       const obstacleTargetHeights = blockedFaces.map(() =>
-        buildObstacleTargetHeight(runtime.current.rng, difficulty)
+        clamp(
+          buildObstacleTargetHeight(runtime.current.rng, difficulty) *
+            activeDifficultyProfile.obstacleHeightScale,
+          0.5,
+          1.5
+        )
       );
       const obstacleHeights = obstacleTargetHeights.map(() =>
         runtime.current.rng.float(BRANCH_INITIAL_HEIGHT, BRANCH_INITIAL_HEIGHT * 1.8)
       );
       const obstacleGrowthRates = blockedFaces.map(() =>
-        runtime.current.rng.float(
-          gameplayConfig.branchGrowthRate.min,
-          gameplayConfig.branchGrowthRate.max
+        Math.max(
+          0.18,
+          runtime.current.rng.float(
+            gameplayConfig.branchGrowthRate.min,
+            gameplayConfig.branchGrowthRate.max
+          ) * activeDifficultyProfile.obstacleGrowthRateScale
         )
       );
 
@@ -722,9 +841,11 @@ const Growth: React.FC = () => {
       let gemFace: Face | null = null;
       if (availableForPickup.length > 0) {
         const gemChance = clamp(
-          gameplayConfig.gemChance - difficulty * 0.08,
+          gameplayConfig.gemChance -
+            difficulty * 0.08 +
+            activeDifficultyProfile.gemChanceBonus,
           0.15,
-          0.28
+          0.45
         );
         if (runtime.current.rng.bool(gemChance)) {
           gemFace = runtime.current.rng.pick(availableForPickup);
@@ -735,7 +856,14 @@ const Growth: React.FC = () => {
       let powerupType: PowerupType | null = null;
       if (
         availableForPickup.length > 0 &&
-        runtime.current.rng.bool(gameplayConfig.powerupChance)
+        runtime.current.rng.bool(
+          clamp(
+            gameplayConfig.powerupChance +
+              activeDifficultyProfile.powerupChanceBonus,
+            0.06,
+            0.3
+          )
+        )
       ) {
         const pool = availableForPickup.filter((face) => face !== gemFace);
         if (pool.length > 0) {
@@ -770,7 +898,7 @@ const Growth: React.FC = () => {
         cleared: false,
       };
     },
-    []
+    [activeDifficultyProfile]
   );
 
   const recycleSegment = useCallback(
@@ -832,7 +960,7 @@ const Growth: React.FC = () => {
     runtime.current.lastSafeFace = 2;
     runtime.current.scroll = 0;
     runtime.current.elapsed = 0;
-    runtime.current.speed = gameplayConfig.baseSpeed;
+    runtime.current.speed = tunedBaseSpeed;
     runtime.current.uiSpeedAccumulator = 0;
     runtime.current.lastTurnSequence = -1000;
     jumpState.current.height = 0;
@@ -880,10 +1008,10 @@ const Growth: React.FC = () => {
     }
     resetWorldRotation(worldRef);
     flushInstances();
-    setDisplaySpeed(gameplayConfig.baseSpeed);
+    setDisplaySpeed(tunedBaseSpeed);
 
     growthState.time = 0;
-    growthState.speed = gameplayConfig.baseSpeed;
+    growthState.speed = tunedBaseSpeed;
     growthState.score = 0;
     growthState.gems = 0;
     growthState.boostMs = 0;
@@ -897,6 +1025,7 @@ const Growth: React.FC = () => {
     writeObstacleInstances,
     writePowerupInstance,
     writeTileInstance,
+    tunedBaseSpeed,
   ]);
 
   const startOrRestart = useCallback(() => {
@@ -1120,12 +1249,12 @@ const Growth: React.FC = () => {
       growthState.tickTimers(dt);
 
       let speed =
-        gameplayConfig.baseSpeed +
-        runtime.current.elapsed * gameplayConfig.speedRampPerSecond +
-        growthState.score * gameplayConfig.speedRampFromScore;
+        tunedBaseSpeed +
+        runtime.current.elapsed * tunedSpeedRampPerSecond +
+        growthState.score * tunedSpeedRampFromScore;
 
       if (growthState.boostMs > 0) speed *= BOOST_MULTIPLIER;
-      speed = Math.min(gameplayConfig.maxSpeed, speed);
+      speed = Math.min(tunedMaxSpeed, speed);
       runtime.current.speed = speed;
       runtime.current.uiSpeedAccumulator += dt;
       if (runtime.current.uiSpeedAccumulator >= 0.08) {
@@ -1233,7 +1362,7 @@ const Growth: React.FC = () => {
             growthState.addClearScore(
               CLEAR_SCORE +
                 Math.max(0, segment.blockedFaces.length - 1) +
-                (runtime.current.speed >= gameplayConfig.baseSpeed + 2.3 ? 1 : 0)
+                (runtime.current.speed >= paceBonusThreshold ? 1 : 0)
             );
 
             const turnDelta = nowMs - getLastRotateAtMs();
@@ -1291,11 +1420,7 @@ const Growth: React.FC = () => {
 
     const shake = cameraShake.updateShake(dt, state.clock.elapsedTime);
     const cam = orthoRef.current ?? (camera as THREE.OrthographicCamera);
-    const speedRatio = clamp(
-      runtime.current.speed / gameplayConfig.maxSpeed,
-      0,
-      1
-    );
+    const speedRatio = clamp(runtime.current.speed / tunedMaxSpeed, 0, 1);
     const targetZoom = 78 + speedRatio * 5;
     cam.zoom = THREE.MathUtils.lerp(
       cam.zoom,

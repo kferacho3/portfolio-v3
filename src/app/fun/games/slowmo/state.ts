@@ -22,6 +22,7 @@ export const BALL_SKINS: BallSkin[] = [
 ];
 
 export type SlowMoPhase = 'menu' | 'playing' | 'finish';
+export type SlowMoDifficulty = 'easy' | 'medium' | 'hard';
 
 export const state = proxy({
   phase: 'menu' as SlowMoPhase,
@@ -30,6 +31,7 @@ export const state = proxy({
   selectedBall: 0,
   unlocked: [true, false, false, false] as boolean[],
   unlockedBallIds: [0] as number[],
+  difficulty: 'medium' as SlowMoDifficulty,
   // cosmetic toggle: show credits line in UI
   showCredits: true,
 
@@ -43,6 +45,13 @@ export const state = proxy({
 
   backToMenu: () => {
     state.phase = 'menu';
+  },
+
+  setDifficulty: (difficulty: SlowMoDifficulty) => {
+    if (state.phase === 'playing') return;
+    if (state.difficulty === difficulty) return;
+    state.difficulty = difficulty;
+    save();
   },
 });
 
@@ -69,6 +78,15 @@ export function load() {
         .map((unlocked: boolean, idx: number) => (unlocked ? idx : -1))
         .filter((id: number) => id >= 0);
     }
+    if (
+      data?.difficulty === 'easy' ||
+      data?.difficulty === 'medium' ||
+      data?.difficulty === 'hard'
+    ) {
+      state.difficulty = data.difficulty;
+    } else {
+      state.difficulty = 'medium';
+    }
     if (typeof data?.showCredits === 'boolean')
       state.showCredits = data.showCredits;
   } catch {
@@ -88,6 +106,7 @@ export function save() {
         unlockedBallIds: Array.isArray(state.unlockedBallIds)
           ? state.unlockedBallIds
           : [0],
+        difficulty: state.difficulty,
         showCredits: state.showCredits,
       })
     );
