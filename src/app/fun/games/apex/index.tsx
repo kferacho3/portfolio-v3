@@ -31,6 +31,10 @@ interface ApexProps {
   soundsOn?: boolean;
 }
 
+const APEX_UNMOUNT_RESET_DELAY_MS = 250;
+let apexMountCount = 0;
+let apexPendingResetTimer: number | null = null;
+
 const Apex: React.FC<ApexProps> = ({ soundsOn = true }) => {
   const snap = useSnapshot(apexState);
   const { scene, camera } = useThree();
@@ -80,8 +84,22 @@ const Apex: React.FC<ApexProps> = ({ soundsOn = true }) => {
   }, [snap.mode, snap.phase, setupCamera]);
 
   useEffect(() => {
+    apexMountCount += 1;
+    if (apexPendingResetTimer !== null) {
+      clearTimeout(apexPendingResetTimer);
+      apexPendingResetTimer = null;
+    }
+
     return () => {
-      apexState.reset();
+      apexMountCount = Math.max(0, apexMountCount - 1);
+      if (apexMountCount !== 0) return;
+
+      apexPendingResetTimer = window.setTimeout(() => {
+        if (apexMountCount === 0) {
+          apexState.reset();
+        }
+        apexPendingResetTimer = null;
+      }, APEX_UNMOUNT_RESET_DELAY_MS);
     };
   }, []);
 

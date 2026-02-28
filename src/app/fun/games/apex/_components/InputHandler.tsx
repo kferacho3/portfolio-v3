@@ -1,3 +1,4 @@
+import { useThree } from '@react-three/fiber';
 import React, { useEffect } from 'react';
 import { useSnapshot } from 'valtio';
 import {
@@ -13,8 +14,14 @@ import { apexState, mutation } from '../state';
 
 const InputHandler: React.FC = () => {
   const snap = useSnapshot(apexState);
+  const { gl } = useThree();
 
   useEffect(() => {
+    const isCanvasEventTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Node)) return false;
+      return target === gl.domElement || gl.domElement.contains(target);
+    };
+
     const handleInput = (e: KeyboardEvent | PointerEvent) => {
       const target = e.target as HTMLElement | null;
       const activeElement = document.activeElement as HTMLElement | null;
@@ -24,20 +31,32 @@ const InputHandler: React.FC = () => {
       );
       if (isUiEvent) return;
 
+      const isPointerDown = e.type === 'pointerdown';
+      if (isPointerDown) {
+        const pointer = e as PointerEvent;
+        if (pointer.button !== 0) return;
+        if (!isCanvasEventTarget(pointer.target)) return;
+      }
+
       if (e.type === 'contextmenu') {
-        if (snap.mode === 'curved' && snap.phase === 'playing') {
+        if (
+          snap.mode === 'curved' &&
+          snap.phase === 'playing' &&
+          isCanvasEventTarget((e as PointerEvent).target)
+        ) {
           e.preventDefault();
         }
         return;
       }
 
-      const isPrimaryPointer =
-        e.type === 'pointerdown' && (e as PointerEvent).button === 0;
+      const isPrimaryPointer = e.type === 'pointerdown';
       const keyCode = e.type === 'keydown' ? (e as KeyboardEvent).code : '';
       const isAction =
         isPrimaryPointer ||
         (e.type === 'keydown' &&
           ['Space', 'Enter', 'ArrowUp', 'ArrowDown'].includes(keyCode));
+      const isMenuOrGameOverKeyboardStart =
+        e.type === 'keydown' && ['Space', 'Enter'].includes(keyCode);
 
       if (isAction) {
         if (e.type === 'keydown') {
@@ -74,17 +93,15 @@ const InputHandler: React.FC = () => {
             mutation.targetDirection.copy(DIRECTIONS[mutation.directionIndex]);
           }
           apexState.addScore(1);
-        } else if (snap.phase === 'menu') {
+        } else if (snap.phase === 'menu' && isMenuOrGameOverKeyboardStart) {
           apexState.reset();
           apexState.startGame();
-        } else if (snap.phase === 'gameover') {
-          if (e.type === 'keydown' && (e as KeyboardEvent).code === 'Space') {
-            apexState.reset();
-          }
-          if (e.type === 'pointerdown') {
-            apexState.reset();
-            apexState.startGame();
-          }
+        } else if (
+          snap.phase === 'gameover' &&
+          isMenuOrGameOverKeyboardStart
+        ) {
+          apexState.reset();
+          apexState.startGame();
         }
       }
     };
@@ -98,7 +115,7 @@ const InputHandler: React.FC = () => {
       window.removeEventListener('contextmenu', handleInput);
       window.removeEventListener('keydown', handleInput);
     };
-  }, [snap.phase, snap.mode]);
+  }, [gl, snap.phase, snap.mode]);
 
   usePowerUpTimer();
 
