@@ -8,6 +8,12 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import './globals.css';
 
 const SITE_URL = 'https://rachodevs.com';
+const SYMBOL_ICON_PATH = '/symbol.png';
+const FAVICON_PATH = '/favicon.ico';
+const FAVICON_PNG_PATH = '/favicon-48x48.png';
+const APPLE_ICON_PATH = '/apple-touch-icon.png';
+const ICON_192_PATH = '/icon-192.png';
+const ICON_512_PATH = '/icon-512.png';
 const gaId = process.env.NEXT_PUBLIC_GA_ID;
 
 export const metadata: Metadata = {
@@ -40,6 +46,7 @@ export const metadata: Metadata = {
   creator: 'Kamal Feracho',
   publisher: 'Kamal Feracho',
   category: 'Technology',
+  manifest: '/manifest.webmanifest',
   openGraph: {
     title: 'Kamal Feracho | Full-Stack Engineer & UI Architect',
     description:
@@ -77,8 +84,14 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: '/favicon.ico',
-    apple: '/logo.png',
+    icon: [
+      { url: FAVICON_PNG_PATH, type: 'image/png', sizes: '48x48' },
+      { url: ICON_192_PATH, type: 'image/png', sizes: '192x192' },
+      { url: ICON_512_PATH, type: 'image/png', sizes: '512x512' },
+      { url: FAVICON_PATH, sizes: 'any' },
+    ],
+    apple: [{ url: APPLE_ICON_PATH, type: 'image/png', sizes: '180x180' }],
+    shortcut: FAVICON_PATH,
   },
   alternates: {
     canonical: SITE_URL,
@@ -125,6 +138,7 @@ const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                 url: SITE_URL,
                 name: 'Kamal Feracho Portfolio',
                 inLanguage: 'en-US',
+                image: `${SITE_URL}${SYMBOL_ICON_PATH}`,
               },
               {
                 '@type': 'Person',
@@ -133,6 +147,7 @@ const RootLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
                 alternateName: 'kferacho3',
                 jobTitle: 'Full-Stack Engineer',
                 url: SITE_URL,
+                image: `${SITE_URL}${SYMBOL_ICON_PATH}`,
                 sameAs: [
                   'https://github.com/kferacho3',
                   'https://www.linkedin.com/in/kamal-feracho-075a5a1aa/',
