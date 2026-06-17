@@ -65,12 +65,13 @@ const GameUI: React.FC = () => {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'flex-start',
-            padding:
-              'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+            padding: 'var(--arcade-shell-inline)',
             background:
               'linear-gradient(180deg, rgba(10,10,21,0.45) 0%, rgba(26,26,46,0.55) 50%, rgba(15,15,26,0.45) 100%)',
             fontFamily: '"Geist", system-ui, sans-serif',
             overflowX: 'hidden',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
             textAlign: 'center',
           }}
         >
@@ -542,11 +543,12 @@ const GameUI: React.FC = () => {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding:
-              'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+            padding: 'var(--arcade-shell-inline)',
             background: 'rgba(10, 10, 21, 0.75)',
             fontFamily: '"Geist", system-ui, sans-serif',
-            overflow: 'hidden',
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
             textAlign: 'center',
           }}
         >

@@ -119,10 +119,6 @@ const SharedCanvasContent = dynamic(
   }
 );
 
-interface GamePageProps {
-  params: Promise<{ gameId: string }>;
-}
-
 const LockedGameGate: React.FC<{
   gameId: GameId;
   onBackToArcade: () => void;
@@ -131,8 +127,8 @@ const LockedGameGate: React.FC<{
   const title = card?.title ?? 'This game';
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 px-4">
-      <div className="w-full max-w-[640px] rounded-3xl border border-cyan-300/40 bg-slate-950/90 p-7 text-white shadow-2xl backdrop-blur-xl">
+    <div className="arcade-safe-area arcade-safe-scroll fixed inset-0 z-[10000] flex items-center justify-center bg-black/80">
+      <div className="arcade-safe-card w-full max-w-[640px] rounded-3xl border border-cyan-300/40 bg-slate-950/90 p-7 text-white shadow-2xl backdrop-blur-xl">
         <p className="text-[11px] uppercase tracking-[0.3em] text-cyan-200/80">
           Locked In This Arcade
         </p>
@@ -163,7 +159,7 @@ const LockedGameGate: React.FC<{
   );
 };
 
-export default function GamePage(_props: GamePageProps) {
+export default function GamePage() {
   const router = useRouter();
   const params = useParams<{ gameId: string }>();
   const gameId = params.gameId as GameId;

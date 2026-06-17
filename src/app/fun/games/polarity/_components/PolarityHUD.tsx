@@ -184,7 +184,7 @@ export const PolarityHUD: React.FC = () => {
       </ArcadeHudShell>
 
       {snap.gameOver && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/70 pointer-events-auto">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/70 pointer-events-auto">
           <ArcadeHudShell gameId="polarity">
             <ArcadeHudCard className="text-center">
               <div className="text-3xl font-semibold text-white">Game Over</div>
@@ -201,7 +201,7 @@ export const PolarityHUD: React.FC = () => {
 
       {snap.toastTime > 0 && snap.toastText && (
         <div
-          className="fixed top-6 left-1/2 -translate-x-1/2 pointer-events-none"
+          className="absolute top-6 left-1/2 -translate-x-1/2 pointer-events-none"
           style={{ opacity: toastOpacity }}
         >
           <ArcadeHudShell gameId="polarity">

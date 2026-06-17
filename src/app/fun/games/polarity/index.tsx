@@ -367,7 +367,7 @@ function PolarityOverlay() {
 
       {status === 'START' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/80 via-cyan-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
+          <div className="arcade-safe-card rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/80 via-cyan-950/44 to-fuchsia-950/34 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black tracking-wide">POLARITY</div>
             <div className="mt-2 text-sm text-white/80">Tap to toggle charge.</div>
             <div className="mt-1 text-sm text-white/80">Blue lanes magnetize left. Pink lanes magnetize right.</div>
@@ -378,7 +378,7 @@ function PolarityOverlay() {
 
       {status === 'GAMEOVER' && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/42 to-cyan-950/26 px-6 py-5 text-center backdrop-blur-md">
+          <div className="arcade-safe-card rounded-xl border border-rose-100/45 bg-gradient-to-br from-black/84 via-rose-950/42 to-cyan-950/26 px-6 py-5 text-center backdrop-blur-md">
             <div className="text-2xl font-black text-fuchsia-200">Magnetic Crash</div>
             <div className="mt-2 text-sm text-white/80">Score {score}</div>
             <div className="mt-1 text-sm text-white/75">Best {best}</div>

@@ -894,8 +894,8 @@ const ModeSelection: React.FC<{
 
   return (
     <FixedViewportOverlay pointerEvents="auto">
-      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-[#0a0a1a] to-[#1a1a3a]">
-        <div className="text-center max-w-5xl px-4">
+      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-[#0a0a1a] to-[#1a1a3a]">
+        <div className="arcade-safe-card max-w-5xl px-4 text-center">
           <h1 className="text-6xl font-bold text-white mb-2">FORMA</h1>
           <p className="text-lg text-white/60 mb-8">Polygon Evolution Game</p>
 
@@ -1737,9 +1737,9 @@ const Forma: React.FC<{ soundsOn?: boolean }> = ({ soundsOn = true }) => {
         </div>
 
         {snap.gameOver && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50 pointer-events-auto">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 pointer-events-auto">
             <div
-              className="text-center border rounded-2xl px-8 py-7"
+              className="arcade-safe-card rounded-2xl border px-8 py-7 text-center"
               style={{
                 borderColor: withAlpha(hudAccent, 0.52),
                 background: `linear-gradient(160deg, rgba(6, 8, 20, 0.92), ${withAlpha(hudAccent, 0.18)})`,

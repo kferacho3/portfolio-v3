@@ -11,7 +11,7 @@ const ControlsOverlay: React.FC<{
 }> = ({ status, combo, bestCombo, onMove }) => {
   return (
     <FixedViewportOverlay>
-      <div className="fixed left-6 top-6 flex flex-col gap-2 text-white pointer-events-none">
+      <div className="absolute left-6 top-6 flex flex-col gap-2 text-white pointer-events-none">
         <div
           className="rounded-xl border border-cyan-400/30 bg-slate-950/80 px-3 py-2 text-xs uppercase tracking-[0.3em]"
           style={{
@@ -39,7 +39,7 @@ const ControlsOverlay: React.FC<{
       </div>
 
       {status === 'running' && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 text-white pointer-events-auto">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white pointer-events-auto">
           <div
             className="mb-2 text-center text-xs uppercase tracking-[0.3em] text-white/60"
             style={{ fontFamily: '"Geist Mono", monospace' }}

@@ -25,7 +25,7 @@ const GameStartOverlay: React.FC<GameStartOverlayProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center transition-opacity duration-300 ${
+      className={`arcade-safe-area arcade-safe-scroll fixed inset-0 z-[9999] flex items-center justify-center transition-opacity duration-300 ${
         visible ? 'opacity-100' : 'pointer-events-none opacity-0'
       }`}
       style={panelStyles}
@@ -42,7 +42,7 @@ const GameStartOverlay: React.FC<GameStartOverlayProps> = ({
         }}
       />
       <div
-        className="relative w-full max-w-sm border border-white/10 bg-white/5 px-6 py-5 text-center backdrop-blur-2xl"
+        className="arcade-safe-card relative w-full max-w-sm border border-white/10 bg-white/5 px-6 py-5 text-center backdrop-blur-2xl"
         style={{
           borderRadius: 'var(--arcade-radius)',
           boxShadow: `var(--arcade-elevation), 0 0 36px ${accent}22`,

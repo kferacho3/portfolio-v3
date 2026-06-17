@@ -1603,8 +1603,8 @@ const Growth: React.FC = () => {
         <div
           style={{
             position: 'fixed',
-            top: 'max(14px, env(safe-area-inset-top))',
-            left: 'max(14px, env(safe-area-inset-left))',
+            top: 'var(--arcade-shell-top)',
+            left: 'var(--arcade-shell-inline)',
             color: '#ffffff',
             fontFamily: '"Avenir Next", "Segoe UI", sans-serif',
             textShadow: '0 2px 10px rgba(0,0,0,0.5)',
@@ -1646,7 +1646,7 @@ const Growth: React.FC = () => {
               justifyContent: 'center',
               pointerEvents: 'auto',
               padding:
-                'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
+                'var(--arcade-shell-top) var(--arcade-shell-inline) var(--arcade-shell-bottom)',
             }}
           >
             <div
@@ -1659,7 +1659,7 @@ const Growth: React.FC = () => {
                 color: '#fff',
                 textAlign: 'center',
                 boxShadow: '0 18px 46px rgba(0,0,0,0.35)',
-                maxHeight: 'min(86vh, 760px)',
+                maxHeight: 'min(var(--arcade-shell-max-height), 760px)',
                 overflowY: 'auto',
               }}
             >

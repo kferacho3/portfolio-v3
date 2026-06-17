@@ -33,7 +33,7 @@ export default function GrowthViewportOverlay({
       style={{
         position: 'fixed',
         inset: 0,
-        width: '100vw',
+        width: '100dvw',
         height: '100dvh',
         pointerEvents: 'none',
         zIndex,
@@ -44,6 +44,9 @@ export default function GrowthViewportOverlay({
         style={{
           position: 'fixed',
           inset: 0,
+          boxSizing: 'border-box',
+          padding:
+            'var(--arcade-shell-top) var(--arcade-shell-inline) var(--arcade-shell-bottom)',
           width: '100%',
           height: '100%',
           pointerEvents,

@@ -656,7 +656,7 @@ function Overlay() {
 
         {snap.phase === 'menu' && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-[min(760px,95vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur-md">
+            <div className="arcade-safe-card w-[min(760px,95vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur-md">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h1 className="text-4xl font-black text-black">
@@ -745,13 +745,13 @@ function Overlay() {
                 </div>
               )}
 
-              <div className="mt-5 flex items-center justify-between gap-3">
+              <div className="sticky bottom-0 -mx-6 mt-4 flex flex-col gap-3 border-t border-black/10 bg-white/95 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-xs text-black/45">
                   Tap / Space / Enter to switch walls. Timing near hazards
                   increases multiplier.
                 </div>
                 <button
-                  className="rounded-2xl bg-black px-5 py-3 text-white font-semibold active:scale-[0.99]"
+                  className="w-full rounded-2xl bg-black px-5 py-3 text-white font-semibold active:scale-[0.99] sm:w-auto"
                   onClick={() => {
                     if (snap.mode === 'infinite') onePathState.startInfinite();
                     else onePathState.start();
@@ -766,7 +766,7 @@ function Overlay() {
 
         {snap.phase === 'cleared' && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-[min(560px,94vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur-md">
+            <div className="arcade-safe-card w-[min(560px,94vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur-md">
               <div className="text-4xl font-black text-black">
                 Level Cleared
               </div>
@@ -793,7 +793,7 @@ function Overlay() {
 
         {snap.phase === 'gameover' && (
           <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div className="w-[min(560px,94vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur-md">
+            <div className="arcade-safe-card w-[min(560px,94vw)] rounded-3xl bg-white/90 p-6 shadow-xl backdrop-blur-md">
               <div className="text-4xl font-black text-black">Run Ended</div>
               <div className="mt-2 text-black/70">
                 Distance {snap.lastDistance}m · +{snap.lastRunGems} gems

@@ -61,17 +61,15 @@ export const PauseMenu: React.FC<PauseMenuProps> = ({
 
   return (
     <div
-      className="fixed inset-0 flex items-center justify-center bg-black/70 z-[9999] pointer-events-auto animate-in fade-in duration-300"
+      className="arcade-safe-area arcade-safe-scroll fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 pointer-events-auto animate-in fade-in duration-300"
       style={panelStyles}
     >
       <div
-        className="flex flex-col items-center text-white p-6 border border-white/10 bg-white/5 backdrop-blur-2xl"
+        className="arcade-safe-card flex flex-col items-center border border-white/10 bg-white/5 p-6 text-white backdrop-blur-2xl"
         style={{
           borderRadius: 'var(--arcade-radius)',
           boxShadow: 'var(--arcade-elevation)',
           width: showStepsMenu ? 'min(92vw, 760px)' : undefined,
-          maxHeight: '84vh',
-          overflowY: 'auto',
         }}
       >
         <div

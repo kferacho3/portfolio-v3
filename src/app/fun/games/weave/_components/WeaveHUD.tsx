@@ -156,8 +156,8 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
       </div>
 
       {!gameStarted && !gameOver && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50">
-          <div className="text-center max-w-md px-8">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="arcade-safe-card max-w-md px-8 text-center">
             <h1
               className="text-6xl font-thin tracking-[0.3em] mb-6"
               style={{
@@ -205,8 +205,8 @@ const WeaveHUD: React.FC<WeaveHUDProps> = ({
       )}
 
       {gameOver && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/80 z-50">
-          <div className="text-center">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="arcade-safe-card text-center">
             <h1
               className="text-5xl font-thin tracking-widest mb-6"
               style={{ color: '#ff3366' }}

@@ -36,7 +36,7 @@ const GameLoadingOverlay: React.FC<GameLoadingOverlayProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-[10000] transition-opacity duration-500 ${
+      className={`arcade-safe-area arcade-safe-scroll fixed inset-0 z-[10000] transition-opacity duration-500 ${
         visible ? 'opacity-100' : 'pointer-events-none opacity-0'
       }`}
       style={panelStyles}
@@ -56,9 +56,9 @@ const GameLoadingOverlay: React.FC<GameLoadingOverlayProps> = ({
           mixBlendMode: 'screen',
         }}
       />
-      <div className="relative flex min-h-screen items-center justify-center px-6">
+      <div className="relative flex min-h-full items-center justify-center">
         <div
-          className="w-full max-w-md border border-white/10 bg-white/5 p-6 text-center backdrop-blur-2xl"
+          className="arcade-safe-card w-full max-w-md border border-white/10 bg-white/5 p-6 text-center backdrop-blur-2xl"
           style={{
             borderRadius: 'var(--arcade-radius)',
             boxShadow: `var(--arcade-elevation), 0 0 40px ${accent}33`,

@@ -588,7 +588,7 @@ export default function Bouncer() {
       <canvas ref={canvasRef} className="w-full h-full block" />
 
       {/* Rollbounce UI */}
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="arcade-safe-area absolute inset-0 pointer-events-none">
         <div
           className="absolute top-4 left-4 rounded-full border px-3 py-1.5 text-[10px] font-semibold tracking-[0.16em]"
           style={hudChipStyle}
@@ -615,7 +615,7 @@ export default function Bouncer() {
         {snap.phase !== 'playing' && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div
-              className="pointer-events-auto w-[min(420px,92vw)] rounded-3xl border px-7 py-6 backdrop-blur-md"
+              className="arcade-safe-card pointer-events-auto w-[min(420px,92vw)] rounded-3xl border px-7 py-6 backdrop-blur-md"
               style={menuPanelStyle}
             >
               <div className="text-center">

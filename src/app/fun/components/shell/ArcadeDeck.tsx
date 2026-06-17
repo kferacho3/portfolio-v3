@@ -63,7 +63,7 @@ export const ArcadeDeck: React.FC<ArcadeDeckProps> = ({
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}
     >
       <div
-        className="pointer-events-auto w-full max-w-[760px] animate-in fade-in slide-in-from-bottom-4 duration-700"
+        className="arcade-safe-card pointer-events-auto w-full max-w-[760px] animate-in fade-in slide-in-from-bottom-4 duration-700"
         style={panelStyles}
       >
         <div

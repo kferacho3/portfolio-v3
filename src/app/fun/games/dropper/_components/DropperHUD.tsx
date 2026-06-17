@@ -112,8 +112,8 @@ const DropperHUD: React.FC<DropperHUDProps> = ({
     </div>
 
     {gameOver && (
-      <div className="fixed inset-0 flex items-center justify-center bg-black/70 z-50 pointer-events-auto">
-        <div className="text-center bg-slate-950/90 rounded-3xl border border-white/10 p-8 backdrop-blur-xl">
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 pointer-events-auto">
+        <div className="arcade-safe-card max-w-[min(92vw,420px)] rounded-3xl border border-white/10 bg-slate-950/90 p-8 text-center backdrop-blur-xl">
           <h1 className="text-4xl font-bold text-red-400 mb-4">Game Over!</h1>
           <p className="text-2xl text-white mb-2">Score: {score}</p>
           <p className="text-lg text-white/60 mb-1">

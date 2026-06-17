@@ -194,7 +194,7 @@ export const stepsState = proxy({
     }
   },
 
-  cycleTileVariant: () => {
+  cycleTileVariant: (_direction?: -1 | 1) => {
     stepsState.tileVariant = LOCKED_TILE_VARIANT;
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STYLE_KEY, LOCKED_TILE_VARIANT);
@@ -209,7 +209,7 @@ export const stepsState = proxy({
     }
   },
 
-  cycleRunnerShape: () => {
+  cycleRunnerShape: (_direction?: -1 | 1) => {
     stepsState.runnerShape = LOCKED_RUNNER_SHAPE;
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(RUNNER_SHAPE_KEY, LOCKED_RUNNER_SHAPE);

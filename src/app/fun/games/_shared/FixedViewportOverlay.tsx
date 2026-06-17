@@ -43,23 +43,35 @@ export default function FixedViewportOverlay({
       style={{
         position: 'fixed',
         inset: 0,
-        width: '100vw',
-        height: '100vh',
+        width: '100dvw',
+        height: '100dvh',
         transform: 'none',
         pointerEvents: 'none',
       }}
     >
       <div
-        className={className}
         style={{
-          position: 'fixed',
+          position: 'absolute',
           inset: 0,
+          boxSizing: 'border-box',
+          padding:
+            'var(--arcade-shell-top) var(--arcade-shell-inline) var(--arcade-shell-bottom)',
           width: '100%',
           height: '100%',
-          pointerEvents,
+          pointerEvents: 'none',
         }}
       >
-        {children}
+        <div
+          className={className}
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            pointerEvents,
+          }}
+        >
+          {children}
+        </div>
       </div>
     </Html>
   );

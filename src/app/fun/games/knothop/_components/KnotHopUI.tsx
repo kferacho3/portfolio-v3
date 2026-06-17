@@ -92,7 +92,7 @@ export function KnotHopUI() {
 
         {snap.phase === 'menu' && (
           <div className="absolute inset-0 grid place-items-center">
-            <div className="rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/84 via-cyan-950/38 to-teal-950/30 px-6 py-5 text-center backdrop-blur-md">
+            <div className="arcade-safe-card rounded-xl border border-cyan-100/40 bg-gradient-to-br from-slate-950/84 via-cyan-950/38 to-teal-950/30 px-6 py-5 text-center backdrop-blur-md">
               <div className="text-2xl font-black tracking-wide">KNOT HOP</div>
               <div className="mt-2 text-sm text-white/85">
                 A spiral runner through black/red/rust hazard lanes.
@@ -131,7 +131,7 @@ export function KnotHopUI() {
 
         {snap.phase === 'gameover' && (
           <div className="absolute inset-0 grid place-items-center">
-            <div className="rounded-xl border border-rose-100/40 bg-gradient-to-br from-black/84 via-rose-950/34 to-cyan-950/26 px-6 py-5 text-center backdrop-blur-md">
+            <div className="arcade-safe-card rounded-xl border border-rose-100/40 bg-gradient-to-br from-black/84 via-rose-950/34 to-cyan-950/26 px-6 py-5 text-center backdrop-blur-md">
               <div className="text-2xl font-black text-cyan-100">Signal Lost</div>
               <div className="mt-2 text-sm text-white/80">Score {snap.score}</div>
               <div className="mt-1 text-sm text-white/75">Best {snap.best}</div>

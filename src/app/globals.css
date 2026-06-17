@@ -251,6 +251,14 @@ main {
     --brand-neon-green: #39ff14;
     --brand-neon-purple: #9400d3;
     --brand-neon-orange: #ffa500;
+    --site-nav-height: 74px;
+    --site-nav-offset: calc(env(safe-area-inset-top, 0px) + var(--site-nav-height));
+    --arcade-shell-inline: clamp(0.75rem, 2vw, 1.25rem);
+    --arcade-shell-top: calc(var(--site-nav-offset) + var(--arcade-shell-inline));
+    --arcade-shell-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--arcade-shell-inline));
+    --arcade-shell-max-height: calc(
+      100dvh - var(--arcade-shell-top) - var(--arcade-shell-bottom)
+    );
     --brand-gradient-main: linear-gradient(
       112deg,
       #39ff14 0%,
@@ -288,6 +296,27 @@ main {
 
   body {
     @apply text-foreground;
+  }
+}
+
+@layer utilities {
+  .arcade-safe-area {
+    box-sizing: border-box;
+    padding: var(--arcade-shell-top) var(--arcade-shell-inline)
+      var(--arcade-shell-bottom);
+  }
+
+  .arcade-safe-card {
+    max-height: max(16rem, var(--arcade-shell-max-height));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .arcade-safe-scroll {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

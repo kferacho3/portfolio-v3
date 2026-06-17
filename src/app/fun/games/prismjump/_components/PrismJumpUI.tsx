@@ -17,6 +17,9 @@ export function PrismJumpUI() {
         position: 'fixed',
         inset: 0,
         zIndex: 2147483600,
+        boxSizing: 'border-box',
+        padding:
+          'var(--arcade-shell-top) var(--arcade-shell-inline) var(--arcade-shell-bottom)',
         pointerEvents: 'none',
         fontFamily:
           'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
@@ -176,6 +179,8 @@ export function PrismJumpUI() {
                 border: '1px solid rgba(255,255,255,0.2)',
                 background: 'rgba(0,0,0,0.5)',
                 boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+                maxHeight: 'var(--arcade-shell-max-height)',
+                overflowY: 'auto',
                 padding: '24px 22px',
                 textAlign: 'center',
                 pointerEvents: 'auto',
@@ -274,6 +279,8 @@ export function PrismJumpUI() {
                 border: '1px solid rgba(255,255,255,0.2)',
                 background: 'rgba(0,0,0,0.56)',
                 boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+                maxHeight: 'var(--arcade-shell-max-height)',
+                overflowY: 'auto',
                 padding: '24px 22px',
                 textAlign: 'center',
                 pointerEvents: 'auto',

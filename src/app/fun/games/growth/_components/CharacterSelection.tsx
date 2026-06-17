@@ -12,8 +12,8 @@ export default function CharacterSelection() {
       <div
         style={{
           position: 'fixed',
-          right: 'max(18px, env(safe-area-inset-right))',
-          bottom: 'max(18px, env(safe-area-inset-bottom))',
+          right: 'var(--arcade-shell-inline)',
+          bottom: 'var(--arcade-shell-bottom)',
           padding: '10px 12px',
           borderRadius: 12,
           background: 'rgba(12, 18, 36, 0.72)',

@@ -36,8 +36,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
   return (
     <div
-      className="fixed bottom-4 right-4 flex flex-col items-end space-y-2 text-white z-[9999] pointer-events-auto"
-      style={panelStyles}
+      className="fixed z-[9999] flex flex-col items-end space-y-2 text-white pointer-events-auto"
+      style={{
+        ...panelStyles,
+        right: 'var(--arcade-shell-inline)',
+        bottom: 'var(--arcade-shell-bottom)',
+      }}
     >
       {/* Score Display */}
       <ScoreDisplay score={score} />

@@ -8,7 +8,10 @@ import React from 'react';
 
 export default function FunLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fun-vibrant relative h-screen w-screen overflow-hidden bg-black">
+    <div
+      className="fun-vibrant relative w-screen overflow-hidden bg-black"
+      style={{ height: 'calc(100dvh - var(--site-nav-offset))' }}
+    >
       {children}
       <div
         aria-hidden="true"

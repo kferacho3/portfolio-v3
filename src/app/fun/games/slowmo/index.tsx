@@ -1835,7 +1835,7 @@ export default function SlowMo() {
     <>
       <SlowMoScene />
       <FixedViewportOverlay pointerEvents="auto">
-        <div className="fixed inset-0 pointer-events-auto select-none">
+        <div className="absolute inset-0 pointer-events-auto select-none">
           <SlowMoHoldInputLayer />
           <SlowMoOverlay />
         </div>

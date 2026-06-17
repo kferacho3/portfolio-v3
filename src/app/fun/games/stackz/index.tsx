@@ -880,8 +880,8 @@ const Stackz: React.FC<StackzProps> = ({ soundsOn: _soundsOn = true }) => {
 
         {/* Game Over / Start Screen */}
         {(!gameStarted || gameOver) && (
-          <div className="fixed inset-0 flex items-center justify-center bg-black/60 z-50 pointer-events-auto">
-            <div className="text-center bg-slate-950/90 rounded-3xl border border-white/10 p-8 backdrop-blur-xl">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 pointer-events-auto">
+            <div className="arcade-safe-card max-w-[min(92vw,460px)] rounded-3xl border border-white/10 bg-slate-950/90 p-8 text-center backdrop-blur-xl">
               {gameOver ? (
                 <>
                   <h1 className="text-4xl font-bold text-red-400 mb-4">

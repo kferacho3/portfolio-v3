@@ -134,14 +134,19 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
 
   return (
     <div
-      className="pointer-events-none fixed right-3 z-[9999] sm:right-4"
-      style={{ top: 'calc(env(safe-area-inset-top) + 78px)' }}
+      className="pointer-events-none fixed z-[9999]"
+      style={{
+        right: 'var(--arcade-shell-inline)',
+        top: 'var(--arcade-shell-top)',
+      }}
     >
       <div
         className="pointer-events-auto relative"
         style={{
           ...panelStyles,
-          width: isExpanded ? 'min(94vw, 348px)' : '64px',
+          width: isExpanded
+            ? 'min(calc(100dvw - var(--arcade-shell-inline) - var(--arcade-shell-inline)), 348px)'
+            : '64px',
           minHeight: '58px',
           transition: 'width 280ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}
@@ -157,10 +162,12 @@ export const GameControlPanel: React.FC<GameControlPanelProps> = ({
               ? 'pointer-events-auto translate-x-0 opacity-100'
               : 'pointer-events-none translate-x-2 opacity-0'
           }`}
-          style={{ width: 'min(94vw, 348px)' }}
+          style={{
+            width: 'min(calc(100dvw - var(--arcade-shell-inline) - var(--arcade-shell-inline)), 348px)',
+          }}
         >
           <div
-            className="relative overflow-hidden border p-3.5 backdrop-blur-2xl sm:p-4"
+            className="arcade-safe-card relative border p-3.5 backdrop-blur-2xl sm:p-4"
             style={{
               borderColor: 'var(--arcade-stroke)',
               background: 'var(--arcade-panel)',
