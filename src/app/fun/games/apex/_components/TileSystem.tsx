@@ -63,10 +63,21 @@ const applyTopShader = (
       `
     );
     shader.vertexShader = shader.vertexShader.replace(
-      '#include <worldpos_vertex>',
+      '#include <begin_vertex>',
       `
-        #include <worldpos_vertex>
-        vWorldPos = worldPosition.xyz;
+        #include <begin_vertex>
+        vec4 apexTileWorldPosition = vec4(transformed, 1.0);
+
+        #ifdef USE_BATCHING
+          apexTileWorldPosition = batchingMatrix * apexTileWorldPosition;
+        #endif
+
+        #ifdef USE_INSTANCING
+          apexTileWorldPosition = instanceMatrix * apexTileWorldPosition;
+        #endif
+
+        apexTileWorldPosition = modelMatrix * apexTileWorldPosition;
+        vWorldPos = apexTileWorldPosition.xyz;
       `
     );
     shader.fragmentShader = shader.fragmentShader.replace(
@@ -295,10 +306,10 @@ const applyTopShader = (
       .replace(/emissiveColor/g, 'totalEmissiveRadiance');
 
     shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <dithering_fragment>',
+      '#include <lights_fragment_begin>',
       `
         ${shaderBodySafe}
-        #include <dithering_fragment>
+        #include <lights_fragment_begin>
       `
     );
 

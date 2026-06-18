@@ -47,14 +47,18 @@ const applyGroundShader = (
       '#include <begin_vertex>',
       `
         #include <begin_vertex>
-        vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
-        vWorldPos = worldPosition.xyz;
+        vec4 apexWorldPosition = modelMatrix * vec4(transformed, 1.0);
+        vWorldPos = apexWorldPosition.xyz;
       `
     );
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',
       `
         #include <common>
+        uniform float uTime;
+        uniform vec3 uBase;
+        uniform vec3 uAccent;
+        uniform float uWorldScale;
         varying vec3 vWorldPos;
       `
     );
@@ -63,11 +67,11 @@ const applyGroundShader = (
       switch (kind) {
         case 'alloy':
           return `
-            vec2 uv = vUv * 6.0;
+            vec2 uv = vWorldPos.xz * uWorldScale * 6.0;
             vec2 cell = abs(fract(uv) - 0.5);
             float seam = smoothstep(0.46, 0.5, max(cell.x, cell.y));
             float panel = step(0.5, fract(floor(uv.x) * 0.5 + floor(uv.y) * 0.25));
-            float brush = 0.5 + 0.5 * sin(vUv.x * 120.0 + uTime * 0.15);
+            float brush = 0.5 + 0.5 * sin(uv.x * 20.0 + uTime * 0.15);
             vec3 panelTone = mix(uBase, uAccent, panel * 0.12);
             diffuseColor.rgb = mix(diffuseColor.rgb, panelTone, 0.6);
             diffuseColor.rgb += brush * 0.08;
@@ -75,7 +79,7 @@ const applyGroundShader = (
           `;
         case 'quilt':
           return `
-            vec2 uv = vUv * 8.0;
+            vec2 uv = vWorldPos.xz * uWorldScale * 8.0;
             vec2 cell = abs(fract(uv) - 0.5);
             float stitch = smoothstep(0.42, 0.5, max(cell.x, cell.y));
             float patch = step(0.5, fract(floor(uv.x) * 0.5 + floor(uv.y) * 0.25));
@@ -85,7 +89,7 @@ const applyGroundShader = (
           `;
         case 'prismatic':
           return `
-            vec2 uv = vUv * 6.5;
+            vec2 uv = vWorldPos.xz * uWorldScale * 6.5;
             float diag = abs(fract(uv.x + uv.y) - 0.5);
             float facet = smoothstep(0.18, 0.45, diag);
             vec2 cell = abs(fract(uv) - 0.5);
@@ -138,11 +142,16 @@ const applyGroundShader = (
       }
     })();
 
+    const shaderBodySafe = shaderBody.replace(
+      /emissiveColor/g,
+      'totalEmissiveRadiance'
+    );
+
     shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <dithering_fragment>',
+      '#include <lights_fragment_begin>',
       `
-        ${shaderBody}
-        #include <dithering_fragment>
+        ${shaderBodySafe}
+        #include <lights_fragment_begin>
       `
     );
 

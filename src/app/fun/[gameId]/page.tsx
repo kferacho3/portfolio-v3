@@ -27,6 +27,7 @@ import { useGameAudio, useArcadeKeyboard, useVisibilityPause } from '../hooks';
 import type { GameId } from '../store/types';
 import { proxy, useSnapshot } from 'valtio';
 import type { LoadedGame } from '../games/registry';
+import GrowthOverlay from '../games/growth/_components/GrowthOverlay';
 import { PrismJumpUI } from '../games/prismjump/_components/PrismJumpUI';
 import { OctaSurgeUI } from '../games/octasurge/_components/OctaSurgeUI';
 import { octaSurgeState } from '../games/octasurge/state';
@@ -436,6 +437,8 @@ export default function GamePage() {
       )}
 
       {gameId === 'prismjump' && <PrismJumpUI />}
+
+      {gameId === 'growth' && <GrowthOverlay />}
 
       {gameId === 'octasurge' && (
         <OctaSurgeUI

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { OrthographicCamera } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -28,8 +28,6 @@ import { pickGraphicsPreset } from './graphicsPresets';
 import { growthState } from './state';
 import type { Face, GrowthPathStyleId, GrowthSegment, PowerupType } from './types';
 import { validateObstacleLayout } from './validateObstacleLayout';
-import CharacterSelection from './_components/CharacterSelection';
-import GrowthViewportOverlay from './_components/GrowthViewportOverlay';
 import { useCameraShake } from './useCameraShake';
 import { useJellySquash } from './useJellySquash';
 import { useKeyboardControls } from './useKeyboardControls';
@@ -491,7 +489,6 @@ const Growth: React.FC = () => {
   } = rotation;
   const cameraShake = useCameraShake();
   const jellySquash = useJellySquash();
-  const [displaySpeed, setDisplaySpeed] = useState<number>(tunedBaseSpeed);
 
   const worldRef = useRef<THREE.Group>(null);
   const playerRef = useRef<THREE.Group>(null);
@@ -1006,8 +1003,6 @@ const Growth: React.FC = () => {
     }
     resetWorldRotation(worldRef);
     flushInstances();
-    setDisplaySpeed(tunedBaseSpeed);
-
     growthState.time = 0;
     growthState.speed = tunedBaseSpeed;
     growthState.score = 0;
@@ -1223,10 +1218,7 @@ const Growth: React.FC = () => {
       if (runtime.current.uiSpeedAccumulator >= 0.08) {
         runtime.current.uiSpeedAccumulator = 0;
         const nextSpeed = Number(speed.toFixed(1));
-        if (nextSpeed !== displaySpeed) {
-          setDisplaySpeed(nextSpeed);
-        }
-        growthState.speed = nextSpeed;
+        if (nextSpeed !== growthState.speed) growthState.speed = nextSpeed;
       }
 
       const previousScroll = runtime.current.scroll;
@@ -1598,147 +1590,6 @@ const Growth: React.FC = () => {
           />
         </mesh>
       </group>
-
-      <GrowthViewportOverlay>
-        <div
-          style={{
-            position: 'fixed',
-            top: 'var(--arcade-shell-top)',
-            left: 'var(--arcade-shell-inline)',
-            color: '#ffffff',
-            fontFamily: '"Avenir Next", "Segoe UI", sans-serif',
-            textShadow: '0 2px 10px rgba(0,0,0,0.5)',
-            maxWidth: 'min(260px, calc(100vw - 28px))',
-            zIndex: 4,
-          }}
-        >
-          <div style={{ fontSize: 13, opacity: 0.84 }}>GROWTH</div>
-          <div style={{ fontSize: 30, fontWeight: 800 }}>{snap.score}</div>
-          <div style={{ fontSize: 13, opacity: 0.9 }}>Gems: {snap.gems}</div>
-          <div style={{ fontSize: 12, opacity: 0.78 }}>
-            Best: {snap.bestScore}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            Style: {activePathStyle.label}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.78 }}>
-            Speed: {displaySpeed.toFixed(1)}
-          </div>
-          {snap.shieldMs > 0 && (
-            <div style={{ fontSize: 12, color: '#c4b5fd' }}>
-              Shield {Math.ceil(snap.shieldMs / 1000)}s
-            </div>
-          )}
-          {snap.boostMs > 0 && (
-            <div style={{ fontSize: 12, color: '#67e8f9' }}>
-              Boost {Math.ceil(snap.boostMs / 1000)}s
-            </div>
-          )}
-        </div>
-
-        {(snap.phase === 'menu' || snap.phase === 'gameover') && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'auto',
-              padding:
-                'var(--arcade-shell-top) var(--arcade-shell-inline) var(--arcade-shell-bottom)',
-            }}
-          >
-            <div
-              style={{
-                width: 'min(420px, calc(100vw - 32px))',
-                borderRadius: 18,
-                padding: '20px 22px',
-                background:
-                  'linear-gradient(160deg, rgba(12, 22, 38, 0.88), rgba(18, 44, 70, 0.82))',
-                color: '#fff',
-                textAlign: 'center',
-                boxShadow: '0 18px 46px rgba(0,0,0,0.35)',
-                maxHeight: 'min(var(--arcade-shell-max-height), 760px)',
-                overflowY: 'auto',
-              }}
-            >
-              <div style={{ fontSize: 30, fontWeight: 900 }}>Growth</div>
-              <div
-                style={{
-                  marginTop: 9,
-                  fontSize: 13,
-                  opacity: 0.86,
-                  lineHeight: 1.45,
-                }}
-              >
-                Jump low branches and rotate to safer faces when tall branches
-                grow too high.
-              </div>
-              <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
-                A / Q / Left Arrow / Swipe Left: rotate +90°
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
-                D / E / Right Arrow / Swipe Right: rotate -90°
-              </div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>
-                Tap / Space: jump
-              </div>
-              <div style={{ marginTop: 12, fontSize: 12, opacity: 0.9 }}>
-                Path style
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  display: 'grid',
-                  gap: 8,
-                }}
-              >
-                <div
-                  style={{
-                    borderRadius: 10,
-                    border: `1px solid ${activePathStyle.menuAccent}`,
-                    background: 'rgba(255,255,255,0.12)',
-                    color: '#fff',
-                    textAlign: 'left',
-                    padding: '8px 10px',
-                    lineHeight: 1.35,
-                  }}
-                >
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>
-                    1. {activePathStyle.label}
-                  </div>
-                  <div style={{ fontSize: 11, opacity: 0.74 }}>
-                    {activePathStyle.subtitle}
-                  </div>
-                </div>
-                <div style={{ fontSize: 11, opacity: 0.72 }}>
-                  Extra Growth path styles are available on{' '}
-                  <a
-                    href="https://prism3d.studio"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: '#7dd3fc' }}
-                  >
-                    prism3d.studio
-                  </a>
-                  .
-                </div>
-              </div>
-              {snap.phase === 'gameover' && (
-                <div style={{ marginTop: 14, fontSize: 13, opacity: 0.95 }}>
-                  Run ended • Score {snap.score}
-                </div>
-              )}
-              <div style={{ marginTop: 13, fontSize: 12, opacity: 0.62 }}>
-                Style locked to Voxelized • Tap / Space to{' '}
-                {snap.phase === 'menu' ? 'start' : 'restart'}
-              </div>
-            </div>
-          </div>
-        )}
-      </GrowthViewportOverlay>
-      <CharacterSelection />
     </group>
   );
 };
