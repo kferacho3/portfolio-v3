@@ -27,7 +27,7 @@ interface ProjectConstellationProps {
 }
 
 const nodeSize = (n: GraphNode) =>
-  n.ring === 1 ? 58 + n.weight * 30 : 44 + n.weight * 26;
+  n.ring === 1 ? 50 + n.weight * 24 : 38 + n.weight * 20;
 
 export default function ProjectConstellation({
   reducedMotion,
@@ -107,7 +107,11 @@ export default function ProjectConstellation({
     >
       <div
         ref={containerRef}
-        className="relative h-[540px] w-full overflow-hidden rounded-3xl border border-white/10 bg-[radial-gradient(ellipse_at_center,#12101f_0%,#07060d_70%)] sm:h-[600px] lg:h-[660px]"
+        className="relative h-[600px] w-full overflow-hidden sm:h-[700px] lg:h-[780px]"
+        style={{
+          background:
+            'radial-gradient(ellipse 55% 55% at 50% 48%, rgba(122,60,255,0.07), transparent 72%)',
+        }}
       >
         {ready && (
           <>
@@ -158,20 +162,20 @@ export default function ProjectConstellation({
                   !!activeId && (e.a === activeId || e.b === activeId);
                 const opacity = isCore
                   ? touchesActive
-                    ? 0.25
-                    : 0.045
+                    ? 0.2
+                    : 0.03
                   : touchesActive
-                    ? 0.75
+                    ? 0.7
                     : activeId
-                      ? 0.05
-                      : 0.16;
+                      ? 0.04
+                      : 0.11;
                 return (
                   <path
                     key={i}
                     d={edgePath(pa, pb)}
                     fill="none"
-                    stroke={touchesActive ? accent : '#8a7cff'}
-                    strokeWidth={touchesActive ? 1.8 : 1}
+                    stroke={touchesActive ? accent : '#7c74c8'}
+                    strokeWidth={touchesActive ? 1.5 : 0.8}
                     strokeOpacity={opacity}
                     style={{ transition: 'stroke-opacity 0.25s, stroke 0.25s' }}
                   />

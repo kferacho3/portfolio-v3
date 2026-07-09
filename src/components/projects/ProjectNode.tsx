@@ -1,8 +1,9 @@
 /* =====================================================================
  *  projects/ProjectNode.tsx
- *  A single constellation node: a glowing glass orb ringed in the
- *  project accent, showing a hint of the site + its label. Elastic pulse
- *  on hover/focus; dims when another node is active. Focus === hover.
+ *  A single constellation node: a clean glowing glass orb ringed in the
+ *  project accent, with its initials + a quiet label. Elastic pulse on
+ *  hover/focus; dims when another node is active. Focus === hover.
+ *  (The screenshot lives in the hover preview card, not the orb.)
  * ===================================================================== */
 'use client';
 
@@ -48,16 +49,18 @@ export default function ProjectNode({
   return (
     <div
       className="pointer-events-none absolute"
-      style={{ left: x, top: y, transform: 'translate(-50%, -50%)', zIndex: active ? 30 : 10 }}
+      style={{
+        left: x,
+        top: y,
+        transform: 'translate(-50%, -50%)',
+        zIndex: active ? 30 : 10,
+      }}
     >
       <motion.div
         animate={
           reducedMotion
-            ? { opacity: dimmed ? 0.35 : 1 }
-            : {
-                y: [0, -5, 0],
-                opacity: dimmed ? 0.32 : 1,
-              }
+            ? { opacity: dimmed ? 0.28 : 1 }
+            : { y: [0, -5, 0], opacity: dimmed ? 0.24 : 1 }
         }
         transition={{
           y: {
@@ -78,59 +81,47 @@ export default function ProjectNode({
           onBlur={onDeactivate}
           onClick={() => onOpen(node)}
           aria-label={`${node.title} — ${node.category}. ${node.valueProp}`}
-          className="pointer-events-auto relative grid place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          className="pointer-events-auto relative grid place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
           style={{ width: size, height: size }}
-          animate={{ scale: active ? 1.16 : 1 }}
+          animate={{ scale: active ? 1.18 : 1 }}
           transition={{ type: 'spring', stiffness: 320, damping: 16 }}
           whileTap={{ scale: 0.94 }}
         >
-          {/* accent glow */}
+          {/* soft accent halo */}
           <span
             aria-hidden
-            className="absolute inset-0 rounded-full blur-md transition-opacity"
+            className="absolute rounded-full blur-xl transition-opacity duration-300"
             style={{
-              background: `radial-gradient(circle, ${node.accent}cc, transparent 70%)`,
-              opacity: active ? 0.9 : 0.4,
+              inset: '-32%',
+              background: `radial-gradient(circle, ${node.accent}, transparent 66%)`,
+              opacity: active ? 0.5 : 0.18,
             }}
           />
-          {/* orb body */}
+          {/* clean glass orb — no screenshot, no muddy fill */}
           <span
             aria-hidden
-            className="absolute inset-0 overflow-hidden rounded-full border bg-[#0a0912]"
-            style={{ borderColor: `${node.accent}${active ? 'ff' : '88'}` }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={node.previewImage}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="h-full w-full object-cover transition-opacity"
-              style={{ opacity: active ? 0.6 : 0.32 }}
-            />
-            <span
-              className="absolute inset-0"
-              style={{
-                background: `radial-gradient(circle at 50% 30%, ${node.accent}44, #0a0912cc 80%)`,
-              }}
-            />
-          </span>
+            className="absolute inset-0 rounded-full border transition-all duration-300"
+            style={{
+              borderColor: `${node.accent}${active ? 'ff' : '66'}`,
+              background: `radial-gradient(circle at 50% 34%, ${node.accent}2b, #0b0a14 74%)`,
+              boxShadow: active
+                ? `0 0 24px ${node.accent}55, inset 0 0 16px ${node.accent}30`
+                : `inset 0 0 10px ${node.accent}1f`,
+            }}
+          />
           {/* initials */}
           <span
             className="relative text-[10px] font-black tracking-wider sm:text-xs"
-            style={{ color: '#fff', textShadow: `0 0 8px ${node.accent}` }}
+            style={{ color: '#fff', textShadow: `0 0 10px ${node.accent}` }}
           >
             {initials}
           </span>
         </motion.button>
 
-        {/* label */}
+        {/* quiet label — brightens only when active */}
         <motion.span
-          className="mt-2 max-w-[120px] truncate rounded-full px-2 py-0.5 text-center text-[10px] font-semibold text-white"
-          style={{
-            background: active ? `${node.accent}22` : 'transparent',
-          }}
-          animate={{ opacity: dimmed ? 0.4 : active ? 1 : 0.72 }}
+          className="pointer-events-none mt-2 max-w-[130px] truncate text-center text-[10px] font-medium tracking-wide text-white"
+          animate={{ opacity: dimmed ? 0.28 : active ? 1 : 0.5 }}
         >
           {node.title}
         </motion.span>
