@@ -42,8 +42,8 @@ export default function CinematicPostFX({
   useFrame(() => {
     if (!bloomRef.current) return;
     const swell = Math.sin(morphMixRef.current * Math.PI);
-    const base = 0.5 + moodRef.current.bloomBias * 0.5;
-    bloomRef.current.intensity = base + swell * 0.5;
+    const base = 0.26 + moodRef.current.bloomBias * 0.28;
+    bloomRef.current.intensity = base + swell * 0.3;
   });
 
   if (!settings.bloomEnabled) return null;
@@ -52,11 +52,11 @@ export default function CinematicPostFX({
     <Bloom
       key="bloom"
       ref={bloomRef as unknown as React.Ref<typeof BloomEffect>}
-      intensity={0.7}
-      luminanceThreshold={0.62}
-      luminanceSmoothing={0.2}
+      intensity={0.45}
+      luminanceThreshold={0.72}
+      luminanceSmoothing={0.25}
       mipmapBlur
-      radius={0.72}
+      radius={0.6}
     />,
     <Vignette key="vignette" eskil={false} offset={0.26} darkness={0.82} />,
     <Noise

@@ -1706,19 +1706,19 @@ const tmpN = new THREE.Vector3();
 /* ══════════════════════════════════════════════════════════════════════════════════════
    LIQUID SIMULATION PARAMETERS - Controls the viscous, fluid-like behavior
    ══════════════════════════════════════════════════════════════════════════════════════ */
-const LIQUID_VISCOSITY = 0.75; // Lower = more fluid-like (0.5-1.0)
+const LIQUID_VISCOSITY = 0.88; // higher = silkier, cleaner peaks
 const LIQUID_SURFACE_TENSION = 0.55; // Creates cohesive blob-like behavior
-const LIQUID_WAVE_SPEED = 2.5; // FASTER ripple propagation
+const LIQUID_WAVE_SPEED = 2.5; // ripple propagation
 const LIQUID_RIPPLE_DECAY = 2.0; // Slower decay = longer-lasting ripples
-const LIQUID_BLOB_INTENSITY = 0.45; // STRONGER blob-like deformation
+const LIQUID_BLOB_INTENSITY = 0.24; // gentler blob deformation (cleaner)
 
 /* ══════════════════════════════════════════════════════════════════════════════════════
-   PARTICLE BREAKDOWN PARAMETERS - Controls particles detaching on hover
+   PARTICLE BREAKDOWN PARAMETERS - kept subtle so hover reads clean, not chaotic
    ══════════════════════════════════════════════════════════════════════════════════════ */
-const PARTICLE_DETACH_THRESHOLD = 0.9; // LARGER zone for particle breakup
-const PARTICLE_SCATTER_INTENSITY = 0.55; // MORE scatter effect
-const PARTICLE_FLOAT_SPEED = 2.8; // FASTER vertical drift
-const PARTICLE_ORBIT_RADIUS = 0.22; // LARGER orbital motion
+const PARTICLE_DETACH_THRESHOLD = 0.5; // smaller breakup zone
+const PARTICLE_SCATTER_INTENSITY = 0.12; // much less scatter (cleaner)
+const PARTICLE_FLOAT_SPEED = 1.6; // calmer drift
+const PARTICLE_ORBIT_RADIUS = 0.06; // subtle orbital motion
 
 function displace(
   v: THREE.Vector3,
@@ -1733,7 +1733,7 @@ function displace(
   noiseScale: number = 1,
   cursorVelocity: number = 0
 ): THREE.Vector3 {
-  const complexity = (isMobileView ? 0.75 : 1.4) * noiseScale; // INCREASED complexity
+  const complexity = (isMobileView ? 0.7 : 1.05) * noiseScale; // smoother, cleaner
   const tFlow = t * 0.025; // Slightly faster flow
 
   const x = v.x * complexity;
@@ -2087,9 +2087,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
     >
   >({});
   // Mobile starts with a vivid, clearly colored coating; desktop keeps prior default look.
-  const [materialIndex, setMaterialIndex] = useState(() =>
-    isMobileView ? 20 : 4
-  ); // 20 = Crystal Geode, 4 = meshNormalMaterial
+  const [materialIndex, setMaterialIndex] = useState(() => 20); // 20 = Crystal Geode — clean, vivid default on all devices
   const [color, setColor] = useState(() =>
     isMobileView ? '#7ee2ff' : randHex()
   );
@@ -4285,13 +4283,16 @@ export default function Background3D({ onAnimationComplete }: Props) {
       <PerformanceMonitor onDecline={() => quality.degrade()} />
 
       <CameraRig draggingRef={isDragging} disabled={quality.reducedMotion}>
-        {/* restrained cinematic dust (parallaxes gently with the rig) */}
-        <ArtifactParticles
-          count={quality.settings.particleCount}
-          moodRef={morph.currentMetaRef}
-          morphMixRef={morph.morphMixRef}
-          pixelRatio={gl.getPixelRatio()}
+        {/* Background field — the original sparkle + drifting particle system */}
+        <Sparkles
+          count={isMobileView ? 100 : 200}
+          scale={[200, 200, 200]}
+          size={isMobileView ? 1.5 : 2}
+          speed={0.5}
+          opacity={0.5}
+          color="#ffffff"
         />
+        <Particles particlesCount={isMobileView ? 400 : 800} />
 
         <EGroup theatreKey="Dodecahedron">
           {/* Main group - static scale (includes icons) */}
