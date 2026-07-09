@@ -1,198 +1,252 @@
 /* ===========================  SectionOne.tsx  =========================== */
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { AiFillGithub, AiFillLinkedin } from 'react-icons/ai';
-import AnimatedLink from './AnimatedLink';
 
 interface SectionOneProps {
   onAnimationComplete: () => void;
 }
 
 /* ------------------------------------------------------------------ */
-/*  SERVICES - Enhanced capability showcase                           */
+/*  Rotating capability phrases (what the artifact "currently renders")*/
 /* ------------------------------------------------------------------ */
-const SERVICES = [
-  'Product-Ready UI',
-  'Design Systems',
-  'Realtime Interfaces',
-  'Immersive 3D',
-  'High-Performance Apps',
-  'API Integrations',
-  'Authenticated Flows',
-  'Mobile-First UX',
-];
+const ROTATING = [
+  'Immersive 3D Interfaces',
+  'Product-Ready UI Systems',
+  'Real-Time Web Experiences',
+  'Creative Technology',
+  'Full-Stack Product Builds',
+  'WebGL Experiments',
+  'Interactive Case Studies',
+  'AI-Accelerated Workflows',
+] as const;
+
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+const ringStyle = (v: string) =>
+  ({ ['--tw-ring-color' as string]: v }) as React.CSSProperties;
 
 export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
+  const reduceMotion = useReducedMotion();
+
   /* 1. wait for 3-D intro to finish -------------------------------- */
   const [shown, setShown] = useState(false);
   useEffect(() => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    const reducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    const introDelay = reducedMotion ? 120 : isMobile ? 380 : 900;
+    const introDelay = reduceMotion ? 120 : isMobile ? 380 : 900;
     const id = setTimeout(() => {
       setShown(true);
       onAnimationComplete();
     }, introDelay);
     return () => clearTimeout(id);
-  }, [onAnimationComplete]);
+  }, [onAnimationComplete, reduceMotion]);
 
-  /* 2. type-writer FSM -------------------------------------------- */
-  const [idx, setIdx] = useState(0); // which service
-  const [txt, setTxt] = useState(''); // rendered substring
+  /* 2. type-writer FSM (skipped under reduced motion) -------------- */
+  const [idx, setIdx] = useState(0);
+  const [txt, setTxt] = useState('');
   const [del, setDel] = useState(false);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    const word = SERVICES[idx];
-
-    /* typing phase */
-    if (!del && txt.length < word.length) {
-      timer = setTimeout(() => {
-        setTxt(word.slice(0, txt.length + 1));
-      }, 50);
-    } else if (!del && txt.length === word.length) {
-      /* hold full word 2 s */
-      timer = setTimeout(() => setDel(true), 2000);
-    } else if (del && txt.length > 0) {
-      /* deleting phase */
-      timer = setTimeout(() => {
-        setTxt(word.slice(0, txt.length - 1));
-      }, 35);
-    } else if (del && txt.length === 0) {
-      /* finished deleting – move to next word */
-      setDel(false);
-      setIdx((i) => (i + 1) % SERVICES.length);
+    if (reduceMotion) {
+      setTxt(ROTATING[idx]);
+      return;
     }
-
+    let timer: ReturnType<typeof setTimeout>;
+    const word = ROTATING[idx];
+    if (!del && txt.length < word.length) {
+      timer = setTimeout(() => setTxt(word.slice(0, txt.length + 1)), 55);
+    } else if (!del && txt.length === word.length) {
+      timer = setTimeout(() => setDel(true), 2100);
+    } else if (del && txt.length > 0) {
+      timer = setTimeout(() => setTxt(word.slice(0, txt.length - 1)), 32);
+    } else if (del && txt.length === 0) {
+      setDel(false);
+      setIdx((i) => (i + 1) % ROTATING.length);
+    }
     return () => clearTimeout(timer);
-  }, [txt, del, idx]);
+  }, [txt, del, idx, reduceMotion]);
 
-  /* 4. markup ------------------------------------------------------ */
+  const rise = (delay: number) =>
+    reduceMotion
+      ? {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          transition: { duration: 0.3 },
+        }
+      : {
+          initial: { opacity: 0, y: 14 },
+          animate: { opacity: 1, y: 0 },
+          transition: { delay, duration: 0.55, ease: EASE_OUT },
+        };
+
+  const triggerMorph = () => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('racho:morph'));
+    }
+  };
+
   return (
     <section
       id="home"
       aria-labelledby="hero-title"
       className="relative flex min-h-[calc(100svh-74px)] w-full flex-col items-center justify-between overflow-hidden sm:min-h-screen"
     >
-      {/* ═══════════════════════════════════════════════════════════════════
-          TOP: Eyebrow text positioned above the 3D model
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── TOP: eyebrow above the artifact ─────────────────────────── */}
       {shown && (
         <motion.div
-          className="relative z-10 pt-[max(0.25rem,env(safe-area-inset-top))] sm:pt-4 text-center"
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 pt-[max(0.35rem,env(safe-area-inset-top))] text-center sm:pt-6"
+          {...rise(0.1)}
         >
-          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] font-semibold text-[#9400D3] dark:text-[#9400D3]/70">
-            Kamal Feracho
+          <p
+            className="text-[11px] font-semibold uppercase tracking-[0.42em] sm:text-xs"
+            style={{ color: 'var(--brand-neon-purple)' }}
+          >
+            Kamal&nbsp;Feracho
           </p>
-          <p className="mt-0.5 text-[9px] sm:text-[10px] uppercase tracking-[0.15em] text-[#39FF14]/80 dark:text-[#39FF14]/50">
-            Full-Stack Engineer
+          <p className="mt-1 text-[9px] uppercase tracking-[0.28em] text-white/55 sm:text-[10px]">
+            Creative Technologist · Full-Stack Engineer
           </p>
         </motion.div>
       )}
 
-      {/* CENTER: Clear zone for 3D model */}
-      <div className="flex-1 min-h-[32svh] sm:min-h-0" aria-hidden="true" />
+      {/* ── CENTER: clear stage for the artifact + morph hint ───────── */}
+      <div className="pointer-events-none flex min-h-[34svh] flex-1 items-end justify-center sm:min-h-0">
+        {shown && (
+          <motion.button
+            type="button"
+            onClick={triggerMorph}
+            aria-label="Morph the 3D artifact into its next form"
+            className="pointer-events-auto mb-2 inline-flex items-center gap-2 rounded-full border bg-black/45 px-3.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/75 backdrop-blur-md transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 sm:text-[11px]"
+            style={{
+              borderColor:
+                'color-mix(in srgb, var(--brand-neon-purple) 45%, transparent)',
+              ...ringStyle('var(--brand-neon-green)'),
+            }}
+            {...rise(0.55)}
+          >
+            <span
+              className={`brand-gradient-dot h-1.5 w-1.5 rounded-full ${reduceMotion ? '' : 'animate-pulse'}`}
+            />
+            Click&nbsp;the&nbsp;artifact&nbsp;to&nbsp;morph
+            <span className="hidden text-white/40 sm:inline">· drag to inspect</span>
+          </motion.button>
+        )}
+      </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          BOTTOM: ULTRA COMPACT hero content - FULLY VISIBLE ON LOAD
-          ═══════════════════════════════════════════════════════════════════ */}
+      {/* ── BOTTOM: editorial content block ─────────────────────────── */}
       {shown && (
         <motion.div
-          className="relative z-10 w-full pb-[max(7rem,calc(env(safe-area-inset-bottom)+6rem))] sm:pb-32 md:pb-36 lg:pb-40"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 w-full pb-[max(6.5rem,calc(env(safe-area-inset-bottom)+5.5rem))] sm:pb-28 md:pb-32 lg:pb-36"
+          {...rise(0.28)}
         >
-          {/* Super compact container - theme aware */}
-          <div className="mx-auto w-full max-w-[min(100%,27rem)] sm:max-w-xl px-3 sm:px-2">
-            <div
-              className="
-                relative rounded-lg
-                backdrop-blur-xl
-                px-3 py-2.5 sm:px-4 sm:py-3
-                transition-all duration-300
-                bg-white/80 dark:bg-slate-950/95 
-                border border-gray-200/60 dark:border-[#9400D3]/40 
-                shadow-[0_20px_50px_rgba(0,0,0,0.08),0_0_30px_rgba(148,0,211,0.1)] dark:shadow-[0_0_40px_rgba(148,0,211,0.25),0_0_80px_rgba(57,255,20,0.15)]
-              "
-            >
-              {/* Neon top edge */}
-              <div className="absolute inset-x-0 -top-px h-[2px] bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500]" />
-
-              {/* SUPER TIGHT Content */}
-              <div className="text-center space-y-1.5">
-                {/* Main headline */}
-                <h1
-                  id="hero-title"
-                  className="text-base font-black leading-none sm:text-lg md:text-xl lg:text-2xl text-gray-900 dark:text-white"
-                >
-                  <span>I craft</span>{' '}
-                  <span
-                    className="inline-block font-black italic bg-clip-text text-transparent"
-                    style={{
-                      backgroundImage:
-                        'linear-gradient(135deg, #39FF14 0%, #9400D3 50%, #FFA500 100%)',
-                      backgroundSize: '250%',
-                      backgroundPosition: del ? '100% 50%' : '0% 50%',
-                      transition:
-                        'background-position 1.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                    }}
-                  >
-                    {txt || '\u00A0'}
-                  </span>
+          <div className="mx-auto w-full max-w-[min(100%,44rem)] px-4 text-center">
+            {/* rotating capability chip */}
+            <div className="mb-3 flex justify-center">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-white/70 backdrop-blur-md sm:text-[11px]">
+                <span
+                  className="h-1.5 w-1.5 rounded-full"
+                  style={{ background: 'var(--brand-neon-green)' }}
+                />
+                <span className="brand-gradient-text font-semibold">
+                  {txt || ' '}
+                </span>
+                {!reduceMotion && (
                   <motion.span
-                    className="inline-block ml-0.5 text-[#39FF14]"
-                    animate={{ opacity: [1, 0.2, 1] }}
-                    transition={{ duration: 0.8, repeat: Infinity }}
+                    aria-hidden
+                    className="inline-block"
+                    style={{ color: 'var(--brand-neon-green)' }}
+                    animate={{ opacity: [1, 0.15, 1] }}
+                    transition={{ duration: 0.85, repeat: Infinity }}
                   >
                     _
                   </motion.span>
-                </h1>
+                )}
+              </span>
+            </div>
 
-                {/* Subtitle */}
-                <p className="text-[9px] sm:text-[10px] text-gray-600 dark:text-white/70">
-                  Building product-ready UI systems & immersive 3D worlds.
-                </p>
+            {/* headline */}
+            <h1
+              id="hero-title"
+              className="text-balance text-[1.5rem] font-black leading-[1.08] tracking-tight text-white sm:text-3xl md:text-4xl lg:text-[2.9rem]"
+            >
+              Engineering{' '}
+              <span className="brand-gradient-text italic">
+                immersive product interfaces
+              </span>{' '}
+              from concept to production.
+            </h1>
 
-                {/* CTA Buttons + Socials - SINGLE ROW */}
-                <div className="flex flex-wrap justify-center items-center gap-1.5 sm:gap-2">
-                  <AnimatedLink
-                    text="VIEW PROJECTS"
-                    link="#projects"
-                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider transition-all duration-300 hover:scale-105 bg-gray-900 dark:bg-white text-white dark:text-slate-900 shadow-[0_8px_20px_rgba(0,0,0,0.15)] dark:shadow-[0_0_25px_rgba(255,255,255,0.5)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.25)] dark:hover:shadow-[0_0_35px_rgba(255,255,255,0.7)]"
-                  />
-                  <AnimatedLink
-                    text="DOWNLOAD CV"
-                    link="/Resume.pdf"
-                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider bg-gradient-to-r from-[#39FF14] via-[#9400D3] to-[#FFA500] text-white shadow-[0_0_30px_rgba(148,0,211,0.6)] hover:shadow-[0_0_40px_rgba(148,0,211,0.8)] transition-all duration-300 hover:scale-105"
-                  />
-                  <AnimatedLink
-                    text="ATS RESUME"
-                    link="/resume"
-                    className="px-3 py-1.5 sm:px-4 sm:py-1.5 rounded-md font-black text-[10px] sm:text-[11px] uppercase tracking-wider transition-all duration-300 hover:scale-105 bg-gray-100 dark:bg-[#9400D3]/30 text-gray-900 dark:text-white border border-gray-300 dark:border-[#9400D3]/50"
-                  />
-                  <AnimatedLink
-                    icon={
-                      <AiFillGithub className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    }
-                    link="https://github.com/kferacho3"
-                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-all duration-300 text-gray-700 dark:text-white border border-gray-300 dark:border-[#9400D3]/50 bg-gray-100 dark:bg-[#9400D3]/30 hover:bg-[#9400D3]/10 dark:hover:bg-[#9400D3]/50 hover:border-[#9400D3]/50 dark:hover:border-[#9400D3] hover:text-[#9400D3] dark:hover:text-white"
-                  />
-                  <AnimatedLink
-                    icon={
-                      <AiFillLinkedin className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    }
-                    link="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
-                    className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-md transition-all duration-300 text-gray-700 dark:text-white border border-gray-300 dark:border-[#9400D3]/50 bg-gray-100 dark:bg-[#9400D3]/30 hover:bg-[#9400D3]/10 dark:hover:bg-[#9400D3]/50 hover:border-[#9400D3]/50 dark:hover:border-[#9400D3] hover:text-[#9400D3] dark:hover:text-white"
-                  />
-                </div>
+            {/* subhead */}
+            <p className="mx-auto mt-3 max-w-[42rem] text-pretty text-xs leading-relaxed text-white/65 sm:text-sm md:text-base">
+              I build product-ready UI systems, 3D web experiences, full-stack
+              platforms, and interactive products that feel polished before they
+              ever feel complicated.
+            </p>
+
+            {/* CTA hierarchy */}
+            <div className="mt-5 flex flex-col items-center gap-3">
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                <a
+                  href="#projects"
+                  className="brand-gradient-button rounded-lg px-5 py-2.5 text-[11px] font-black uppercase tracking-wider text-white shadow-lg transition-transform duration-300 hover:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 sm:text-xs"
+                  style={ringStyle('var(--brand-neon-green)')}
+                >
+                  Explore Projects
+                </a>
+                <a
+                  href="/case-studies"
+                  className="rounded-lg border border-white/20 bg-white/[0.05] px-5 py-2.5 text-[11px] font-black uppercase tracking-wider text-white backdrop-blur-md transition-all duration-300 hover:scale-[1.04] hover:border-white/40 focus-visible:outline-none focus-visible:ring-2 sm:text-xs"
+                  style={ringStyle('var(--brand-neon-purple)')}
+                >
+                  View Case Studies
+                </a>
+              </div>
+
+              {/* utility row */}
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/55 sm:text-[11px]">
+                <a
+                  href="/Resume.pdf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors hover:text-white focus-visible:text-white focus-visible:outline-none"
+                >
+                  Download CV
+                </a>
+                <span aria-hidden className="text-white/20">
+                  /
+                </span>
+                <a
+                  href="/resume"
+                  className="transition-colors hover:text-white focus-visible:text-white focus-visible:outline-none"
+                >
+                  ATS Resume
+                </a>
+                <span
+                  aria-hidden
+                  className="h-3 w-px"
+                  style={{ background: 'rgba(255,255,255,0.15)' }}
+                />
+                <a
+                  href="https://github.com/kferacho3"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="GitHub profile"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/[0.05] text-white/80 transition-all duration-300 hover:scale-110 hover:text-white focus-visible:outline-none focus-visible:ring-2"
+                  style={ringStyle('var(--brand-neon-purple)')}
+                >
+                  <AiFillGithub className="h-4 w-4" />
+                </a>
+                <a
+                  href="https://www.linkedin.com/in/kamal-feracho-075a5a1aa/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="LinkedIn profile"
+                  className="flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-white/[0.05] text-white/80 transition-all duration-300 hover:scale-110 hover:text-white focus-visible:outline-none focus-visible:ring-2"
+                  style={ringStyle('var(--brand-neon-purple)')}
+                >
+                  <AiFillLinkedin className="h-4 w-4" />
+                </a>
               </div>
             </div>
           </div>

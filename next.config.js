@@ -8,11 +8,16 @@ module.exports = {
       },
       {
         protocol: 'https',
-        hostname: 'zomtech.com',
+        hostname: 'zom.ai',
       },
       {
         protocol: 'https',
-        hostname: 'www.zomtech.com',
+        hostname: 'www.zom.ai',
+      },
+      // Preview hosts for constellation projects (Cycle 2)
+      {
+        protocol: 'https',
+        hostname: '**.vercel.app',
       },
     ],
   },
