@@ -233,6 +233,19 @@ import {
   getTorusLinkParams,
 } from './Background3DHelpers/geometryRecipes';
 
+/* ── Cinematic hero: Solid⇄Liquid morph engine + scene chamber ── */
+import { useSceneQuality } from './Background3D/quality';
+import {
+  useHeroMorphController,
+  LIQUID_FIELD_SCALE,
+} from './Background3D/morph/useHeroMorphController';
+import LiquidField from './Background3D/morph/LiquidField';
+import { getHeroShapeMeta } from './Background3D/morph/morphTargets';
+import HeroSceneChamber from './Background3D/scene/HeroSceneChamber';
+import CinematicPostFX from './Background3D/scene/CinematicPostFX';
+import ArtifactParticles from './Background3D/scene/ArtifactParticles';
+import { PerformanceMonitor } from '@react-three/drei';
+
 /* NEW: Phase 4 - Advanced Materials */
 import {
   ThinFilmIridescentMaterial,
@@ -3278,41 +3291,51 @@ export default function Background3D({ onAnimationComplete }: Props) {
     setColor(randHex());
   };
 
+  /* ── Cinematic scene quality + Solid⇄Liquid morph controller ── */
+  const quality = useSceneQuality();
+  const solidGroupRef = useRef<THREE.Group>(null);
+  const morph = useHeroMorphController({
+    shape,
+    isMobile: isMobileView,
+    reducedMotion: quality.reducedMotion,
+    morphVertexCount: quality.morphVertexCount,
+    onCommitShape: (next) => {
+      startShapeTransition(() => setShape(next));
+      cycleMaterial();
+    },
+  });
+
   const cycleInProgress = useRef(false);
 
   /* click => cycle to next shape + next material */
   const cycleShape = () => {
-    if (cycleInProgress.current) return;
-    cycleInProgress.current = true;
+    // Begin an organic Solid⇄Liquid morph (replaces shrink/swap/grow).
+    const next = morph.begin();
+    if (!next) return; // a morph is already in flight
+
+    // subtle "ignition" pulse on the whole artifact (1.0 → 1.035 → 1.0)
     shapeApi.start({
-      to: async (next) => {
-        await next({
-          scale: [0.72, 0.72, 0.72],
-          config: { duration: 160, easing: easings.easeOutCubic },
-        });
-
-        const nextShape = getNextShapeInPool(shape);
-        console.log('[Background3D] switching to', nextShape);
-        await prewarmShape(nextShape);
-
-        startShapeTransition(() => {
-          setShape(nextShape);
-        });
-
-        cycleMaterial();
-
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-        await next({
+      to: async (n) => {
+        await n({ scale: [1.035, 1.035, 1.035], config: { duration: 200 } });
+        await n({
           scale: [1, 1, 1],
-          config: { duration: 260, easing: easings.easeOutBack },
+          config: { duration: 460, easing: easings.easeOutBack },
         });
-      },
-      onRest: () => {
-        cycleInProgress.current = false;
       },
     });
+
+    // idle-warm the likely next target for the following click
+    morph.prewarm();
   };
+
+  /* Bridge: accessible DOM controls (keyboard hint button) trigger a morph. */
+  const cycleShapeRef = useRef(cycleShape);
+  cycleShapeRef.current = cycleShape;
+  useEffect(() => {
+    const handler = () => cycleShapeRef.current();
+    window.addEventListener('racho:morph', handler);
+    return () => window.removeEventListener('racho:morph', handler);
+  }, []);
 
   const handleModelClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -4147,6 +4170,23 @@ export default function Background3D({ onAnimationComplete }: Props) {
       b.update(clock.elapsedTime);
     });
 
+    /* 6.5 ▸ Solid⇄Liquid morph timeline + scene reaction --------------- */
+    morph.frame(delta, clock.elapsedTime);
+    if (solidGroupRef.current) {
+      const sv = morph.solidVisibilityRef.current;
+      solidGroupRef.current.scale.setScalar(sv);
+      solidGroupRef.current.visible = sv > 0.02;
+    }
+    // feed pointer + interaction into the liquid field shader
+    morph.uniforms.uPointer.value
+      .copy(localHoverPos)
+      .multiplyScalar(1 / LIQUID_FIELD_SCALE);
+    morph.uniforms.uHoverAmp.value = hoverMix.current;
+    morph.uniforms.uDragTurb.value = isDragging.current
+      ? dragIntensity.current
+      : 0;
+    morph.uniforms.uPixelRatio.value = gl.getPixelRatio();
+
     /* 7 ▸ icon float ----------------------------------------------------- */
     const bobAmplitude = isMobileView ? 0.016 : 0.026;
     const driftAmplitude = bobAmplitude * 0.65;
@@ -4231,43 +4271,29 @@ export default function Background3D({ onAnimationComplete }: Props) {
       {/* Environment and lighting */}
       {hdr && <Environment background={false} map={hdr} />}
 
-      <CameraRig>
-        {/* Background effects */}
-        <Sparkles
-          count={isMobileView ? 100 : 200}
-          scale={[200, 200, 200]}
-          size={isMobileView ? 1.5 : 2}
-          speed={0.5}
-          opacity={0.5}
-          color="#ffffff"
+      {/* Cinematic chamber: world-space backdrop, lighting, haze, floor */}
+      <HeroSceneChamber
+        moodRef={morph.currentMetaRef}
+        morphMixRef={morph.morphMixRef}
+        quality={quality}
+        reducedMotion={quality.reducedMotion}
+        isMobile={isMobileView}
+        castShadow={!isMobileView}
+        shadowMapSize={isMobileView ? 1024 : 2048}
+      />
+
+      <PerformanceMonitor onDecline={() => quality.degrade()} />
+
+      <CameraRig draggingRef={isDragging} disabled={quality.reducedMotion}>
+        {/* restrained cinematic dust (parallaxes gently with the rig) */}
+        <ArtifactParticles
+          count={quality.settings.particleCount}
+          moodRef={morph.currentMetaRef}
+          morphMixRef={morph.morphMixRef}
+          pixelRatio={gl.getPixelRatio()}
         />
 
-        {/* Enhanced particles */}
-        <Particles particlesCount={isMobileView ? 400 : 800} />
-
         <EGroup theatreKey="Dodecahedron">
-          {/* Enhanced lighting */}
-          <ambientLight intensity={0.25} />
-          <directionalLight
-            position={[10, 10, 10]}
-            intensity={1}
-            castShadow
-            shadow-mapSize={[
-              isMobileView ? 1024 : 2048,
-              isMobileView ? 1024 : 2048,
-            ]}
-          />
-          <pointLight
-            position={[-10, -10, -10]}
-            intensity={0.5}
-            color="#ff0080"
-          />
-          <pointLight
-            position={[10, -10, 10]}
-            intensity={0.5}
-            color="#0080ff"
-          />
-
           {/* Main group - static scale (includes icons) */}
           <group ref={outerGroupRef} scale={outerScale}>
             {/* 3D SHAPE with drop-in + scale animations */}
@@ -4310,6 +4336,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
                           ]
                         }
                       >
+                        {/* solid artifact — crossfades to 0 during morph */}
+                        <group ref={solidGroupRef}>
                         {hdr && (
                           <CubeCamera
                             resolution={isMobileView ? 256 : 512}
@@ -4343,32 +4371,37 @@ export default function Background3D({ onAnimationComplete }: Props) {
                                   {geometryNode}
                                   {materialFns[materialIndex](envMap)}
                                 </e.mesh>
-
-                                {/* Invisible hover / click shell */}
-                                <mesh
-                                  ref={hoverShellRef}
-                                  visible={false}
-                                  onPointerEnter={
-                                    isMobileView
-                                      ? undefined
-                                      : handlePointerEnter
-                                  }
-                                  onPointerLeave={
-                                    isMobileView
-                                      ? undefined
-                                      : handlePointerLeave
-                                  }
-                                  onPointerDown={onPointerDownMesh}
-                                  onPointerMove={onPointerMoveMesh}
-                                  onClick={handleModelClick}
-                                >
-                                  <sphereGeometry args={[1, 32, 32]} />
-                                  <meshBasicMaterial transparent opacity={0} />
-                                </mesh>
                               </>
                             )}
                           </CubeCamera>
                         )}
+                        </group>
+
+                        {/* Liquid morph field — carries the Solid⇄Liquid transition */}
+                        <LiquidField
+                          ref={morph.liquidRef}
+                          uniforms={morph.uniforms}
+                          scale={LIQUID_FIELD_SCALE}
+                        />
+
+                        {/* Invisible hover / click shell — full size so hover +
+                            click keep working while the solid is dissolved */}
+                        <mesh
+                          ref={hoverShellRef}
+                          visible={false}
+                          onPointerEnter={
+                            isMobileView ? undefined : handlePointerEnter
+                          }
+                          onPointerLeave={
+                            isMobileView ? undefined : handlePointerLeave
+                          }
+                          onPointerDown={onPointerDownMesh}
+                          onPointerMove={onPointerMoveMesh}
+                          onClick={handleModelClick}
+                        >
+                          <sphereGeometry args={[1, 32, 32]} />
+                          <meshBasicMaterial transparent opacity={0} />
+                        </mesh>
                       </a.group>
                     </a.group>
                   </Float>
@@ -4410,8 +4443,15 @@ export default function Background3D({ onAnimationComplete }: Props) {
         </EGroup>
       </CameraRig>
 
-      {/* Additional atmospheric effects */}
-      <fog attach="fog" args={['#000000', 10, 50]} />
+      {/* Cinematic post-processing (bloom / vignette / grain / DOF) */}
+      <CinematicPostFX
+        moodRef={morph.currentMetaRef}
+        morphMixRef={morph.morphMixRef}
+        quality={quality}
+      />
+
+      {/* Retuned atmospheric depth fog */}
+      <fog attach="fog" args={['#05040c', 14, 60]} />
     </>
   );
 }

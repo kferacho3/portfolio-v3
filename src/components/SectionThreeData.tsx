@@ -1,5 +1,45 @@
 // components/SectionTwoData.tsx
 
+export type ProjectStatus =
+  | 'Live'
+  | 'Case Study'
+  | 'Prototype'
+  | 'Private'
+  | 'Coming Soon'
+  | 'Personal';
+
+export type ProjectOrbit =
+  | 'core'
+  | 'featured'
+  | 'client'
+  | 'experiment'
+  | 'archive';
+
+/** Optional metadata that powers the Project Constellation Atlas. */
+export interface ProjectGraphMeta {
+  status?: ProjectStatus;
+  /** relative node size, 0..1 */
+  weight?: number;
+  /** display category */
+  category?: string;
+  /** ring placement in the constellation */
+  orbit?: ProjectOrbit;
+  /** my role on the project */
+  role?: string;
+  /** one-line value proposition for the preview card */
+  valueProp?: string;
+  /** local/remote preview override */
+  previewImage?: string;
+  /** capability tags used to draw edges between projects */
+  graphTags?: string[];
+  /** explicit connections (by project title) */
+  connections?: string[];
+  /** node accent color (hex) */
+  accent?: string;
+  /** explicit publish flag for otherwise-private work */
+  publishable?: boolean;
+}
+
 export interface Project {
   id: number;
   title: string;
@@ -29,6 +69,7 @@ export interface Project {
     ctaLabel: string;
     ctaHref?: string;
   }>;
+  graph?: ProjectGraphMeta;
   techStack: string[];
   frameworks: string[];
 }
@@ -45,10 +86,7 @@ export const featuredWebsites: Project[] = [
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
     imageMobile:
       'https://racho-devs.s3.us-east-2.amazonaws.com/portfolio/Featured+Projects/ZomAIPreview.webp',
-    link: 'https://zomtech.com',
-    visibility: {
-      hideEverywhere: true,
-    },
+    link: 'https://zom.ai',
     description:
       'Lead frontend and UI engineering across the product. Built the app shell and component architecture, delivered responsive UX from mobile to desktop, and orchestrated complex API integrations with authenticated workflows and synchronized state.',
     featureTabs: [
@@ -126,6 +164,206 @@ export const featuredWebsites: Project[] = [
       'Design Systems',
     ],
     frameworks: [],
+    graph: {
+      status: 'Case Study',
+      orbit: 'featured',
+      weight: 0.9,
+      category: 'AI / Fintech Product',
+      role: 'Lead Frontend Engineer',
+      valueProp:
+        'Advisor-workflow AI where I lead frontend architecture and product UI.',
+      accent: '#5b8cff',
+      graphTags: [
+        'ai',
+        'fintech',
+        'product-ui',
+        'design-systems',
+        'auth',
+        'react',
+        'nextjs',
+      ],
+      connections: ['Prism Ultimate'],
+      publishable: true,
+    },
+  },
+  {
+    id: 9,
+    title: 'Muzeum',
+    imageDesktop: '/projects/muzeum.png',
+    imageMobile: '/projects/muzeum.png',
+    link: 'https://muzeum.vercel.app/',
+    description:
+      'A 3D "portfolio operating system" — a no-code studio for building immersive, explorable gallery worlds around your art, with edition drops, private client rooms, and a real-time analytics command center.',
+    highlights: [
+      'Designed the cinematic WebGL room engine and a six-phase build journey (Arrival → Builder → Studio → Layer → Signal → Launch).',
+      'Built a no-code studio with pre-composed room layouts and adjustable lighting, texture, pacing, and motion.',
+      'Shipped edition/commerce surfaces, password-protected client passages, and a views/selects/revenue dashboard.',
+      'Engineered a responsive renderer budget across desktop, tablet, and mobile with reduced-motion paths.',
+    ],
+    caseStudy: {
+      slug: 'muzeum',
+      oneLiner:
+        'One engine, infinite rooms — an immersive gallery OS I design and build as my flagship personal product.',
+      role: 'Founder / Creative Technologist / Full-Stack',
+      challenge:
+        'Turn flat portfolios into navigable 3D worlds without asking artists to touch code, while keeping WebGL performant on every device.',
+      constraints: [
+        'Real-time 3D that must degrade gracefully on mobile and reduced-motion.',
+        'No-code authoring for non-technical artists.',
+        'Commerce, private client links, and analytics in one surface.',
+      ],
+      architecture: [
+        'Next.js + a WebGL room engine with adaptive quality tiers.',
+        'Composable room/layout system driving lighting, motion, and pacing from data.',
+        'Edition/commerce + private-link access + an analytics command center.',
+      ],
+      execution: [
+        'Built the cinematic intro, portal navigation, and room composition studio.',
+        'Implemented editions, collector surfaces, and password-protected client rooms.',
+        'Instrumented dwell-time, selects, and revenue signals in a live dashboard.',
+      ],
+      outcomes: [
+        'A living product that reframes the portfolio as an explorable world.',
+        'A reusable 3D room engine powering unlimited gallery compositions.',
+        'A foundation for public world discovery and an artist community.',
+      ],
+    },
+    techStack: [
+      'TypeScript',
+      'React',
+      'Next.js',
+      'React Three Fiber',
+      'WebGL',
+      'GLSL',
+      'Framer Motion',
+    ],
+    frameworks: ['Three.js', 'Drei', 'Stripe', 'Prisma'],
+    graph: {
+      status: 'Personal',
+      orbit: 'core',
+      weight: 0.98,
+      category: 'Immersive SaaS',
+      role: 'Founder / Creative Technologist',
+      valueProp:
+        'Build immersive 3D gallery worlds around your art — one engine, infinite rooms.',
+      accent: '#7a3cff',
+      graphTags: [
+        '3d',
+        'webgl',
+        'r3f',
+        'saas',
+        'creative-tech',
+        'full-stack',
+        'commerce',
+      ],
+      connections: ['Prism Ultimate', 'Dorvell Ferguson Jr.', 'Wardrobe X'],
+      publishable: true,
+    },
+  },
+  {
+    id: 10,
+    title: 'Cold As Ice',
+    imageDesktop: '/projects/coldasice.png',
+    imageMobile: '/projects/coldasice.png',
+    link: 'https://cold-as-ice.vercel.app/',
+    description:
+      'A farm-born botanical cultivation house and apparel brand — "Grown in Black Gold." A dark, editorial brand world spanning apparel, botanicals, living-soil stewardship, and a license-first partner program.',
+    highlights: [
+      'Designed a cinematic, serif-led brand system with gold-on-charcoal editorial art direction.',
+      'Built the apparel + botanicals storefront surfaces and a "Partner with the farm" pipeline.',
+      'Told the regenerative living-soil story through layered, scroll-reactive composition.',
+    ],
+    techStack: ['TypeScript', 'React', 'Next.js', 'Tailwind CSS', 'Framer Motion'],
+    frameworks: ['E-commerce', 'CMS'],
+    graph: {
+      status: 'Live',
+      orbit: 'client',
+      weight: 0.7,
+      category: 'Brand / E-commerce',
+      role: 'Design + Frontend',
+      valueProp: 'Farm-born botanical cultivation + apparel, grown in black gold.',
+      accent: '#d9a441',
+      graphTags: [
+        'branding',
+        'ecommerce',
+        'editorial',
+        'client',
+        'nextjs',
+        'agriculture',
+      ],
+      connections: ["Carolyn's Black Gold Farm"],
+      publishable: true,
+    },
+  },
+  {
+    id: 11,
+    title: "Carolyn's Black Gold Farm",
+    imageDesktop: '/projects/wormfarm.png',
+    imageMobile: '/projects/wormfarm.png',
+    link: 'https://carolyns-black-gold-worm-farm.vercel.app/',
+    description:
+      'A regenerative family farm turning organic matter into living value — worm castings, comfrey, feeders, and farm-made goods. "Black gold for living soil," with Etsy commerce and a waitlist funnel.',
+    highlights: [
+      'Built an earthy, editorial brand site around living-soil storytelling.',
+      'Wired Etsy commerce plus a "Join Waitlist" capture for upcoming product lines.',
+      'Structured Mission / Living Soil / Comfrey / Feeders sections for a growing catalog.',
+    ],
+    techStack: ['TypeScript', 'React', 'Next.js', 'Tailwind CSS'],
+    frameworks: ['Etsy', 'E-commerce'],
+    graph: {
+      status: 'Live',
+      orbit: 'client',
+      weight: 0.6,
+      category: 'Brand / E-commerce',
+      role: 'Design + Frontend',
+      valueProp: 'Regenerative worm-casting farm — black gold for living soil.',
+      accent: '#c9a15a',
+      graphTags: [
+        'branding',
+        'ecommerce',
+        'editorial',
+        'client',
+        'nextjs',
+        'agriculture',
+      ],
+      connections: ['Cold As Ice'],
+      publishable: true,
+    },
+  },
+  {
+    id: 12,
+    title: 'Dorvell Ferguson Jr.',
+    imageDesktop: '/projects/photoportfolio.png',
+    imageMobile: '/projects/photoportfolio.png',
+    link: 'https://dorvell-ferguson-tawny.vercel.app/',
+    description:
+      'A cinematic photography portfolio for a Tampa multimedia creative — "Enter the Archive." A living archive of 1,847 frames across portraits, music, sports, and fashion, with bold editorial type and filmic gallery navigation.',
+    highlights: [
+      'Designed a bold, condensed-type editorial identity with a filmstrip archive entry.',
+      'Built category-filtered galleries (portraits, music, sports, fashion) with smooth frame navigation.',
+      'Optimized large image delivery with Next.js image + WebP responsive sizing.',
+    ],
+    techStack: ['TypeScript', 'React', 'Next.js', 'Framer Motion'],
+    frameworks: ['Image Optimization'],
+    graph: {
+      status: 'Live',
+      orbit: 'client',
+      weight: 0.72,
+      category: 'Photography / Portfolio',
+      role: 'Design + Frontend',
+      valueProp: 'A living photographic archive — portraits first, movement everywhere.',
+      accent: '#e8b04b',
+      graphTags: [
+        'photography',
+        'portfolio',
+        'editorial',
+        'client',
+        'nextjs',
+        'gallery',
+      ],
+      connections: ['Muzeum'],
+      publishable: true,
+    },
   },
   {
     id: 8,
