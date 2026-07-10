@@ -1,9 +1,9 @@
 /* =====================================================================
  *  projects/ProjectNode.tsx
- *  A single constellation node: a clean glowing glass orb ringed in the
- *  project accent, with its initials + a quiet label. Elastic pulse on
- *  hover/focus; dims when another node is active. Focus === hover.
- *  (The screenshot lives in the hover preview card, not the orb.)
+ *  A single constellation node: a glossy gradient-avatar orb with the
+ *  project initials + a quiet label. Featured (inner-ring) projects are
+ *  larger, brighter and white-ringed. Elastic pulse on hover/focus; dims
+ *  when another node is active. Focus === hover.
  * ===================================================================== */
 'use client';
 
@@ -46,6 +46,9 @@ export default function ProjectNode({
     .join('')
     .toUpperCase();
 
+  const [g0, g1, g2] = node.gradient;
+  const featured = node.ring === 1; // inner ring = featured websites
+
   return (
     <div
       className="pointer-events-none absolute"
@@ -53,14 +56,14 @@ export default function ProjectNode({
         left: x,
         top: y,
         transform: 'translate(-50%, -50%)',
-        zIndex: active ? 30 : 10,
+        zIndex: active ? 30 : featured ? 20 : 10,
       }}
     >
       <motion.div
         animate={
           reducedMotion
-            ? { opacity: dimmed ? 0.28 : 1 }
-            : { y: [0, -5, 0], opacity: dimmed ? 0.24 : 1 }
+            ? { opacity: dimmed ? 0.3 : 1 }
+            : { y: [0, -5, 0], opacity: dimmed ? 0.26 : 1 }
         }
         transition={{
           y: {
@@ -81,47 +84,60 @@ export default function ProjectNode({
           onBlur={onDeactivate}
           onClick={() => onOpen(node)}
           aria-label={`${node.title} — ${node.category}. ${node.valueProp}`}
-          className="pointer-events-auto relative grid place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+          className="pointer-events-auto relative grid place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
           style={{ width: size, height: size }}
-          animate={{ scale: active ? 1.18 : 1 }}
+          animate={{ scale: active ? 1.16 : 1 }}
           transition={{ type: 'spring', stiffness: 320, damping: 16 }}
           whileTap={{ scale: 0.94 }}
         >
-          {/* soft accent halo */}
+          {/* soft gradient halo */}
           <span
             aria-hidden
             className="absolute rounded-full blur-xl transition-opacity duration-300"
             style={{
-              inset: '-32%',
-              background: `radial-gradient(circle, ${node.accent}, transparent 66%)`,
-              opacity: active ? 0.5 : 0.18,
+              inset: '-34%',
+              background: `radial-gradient(circle, ${g1}, transparent 64%)`,
+              opacity: featured
+                ? active
+                  ? 0.7
+                  : 0.42
+                : active
+                  ? 0.5
+                  : 0.22,
             }}
           />
-          {/* clean glass orb — no screenshot, no muddy fill */}
+          {/* glossy gradient orb */}
           <span
             aria-hidden
-            className="absolute inset-0 rounded-full border transition-all duration-300"
+            className="absolute inset-0 rounded-full transition-all duration-300"
             style={{
-              borderColor: `${node.accent}${active ? 'ff' : '66'}`,
-              background: `radial-gradient(circle at 50% 34%, ${node.accent}2b, #0b0a14 74%)`,
-              boxShadow: active
-                ? `0 0 24px ${node.accent}55, inset 0 0 16px ${node.accent}30`
-                : `inset 0 0 10px ${node.accent}1f`,
+              background: `radial-gradient(circle at 32% 24%, rgba(255,255,255,0.45), transparent 46%), linear-gradient(140deg, ${g0} 0%, ${g1} 55%, ${g2} 100%)`,
+              border: featured
+                ? '2px solid rgba(255,255,255,0.55)'
+                : '1px solid rgba(255,255,255,0.18)',
+              boxShadow: featured
+                ? `0 0 ${active ? 30 : 20}px ${g1}88, inset 0 -6px 14px rgba(0,0,0,0.35)`
+                : `0 0 ${active ? 20 : 11}px ${g1}66, inset 0 -5px 10px rgba(0,0,0,0.32)`,
             }}
           />
           {/* initials */}
           <span
-            className="relative text-[10px] font-black tracking-wider sm:text-xs"
-            style={{ color: '#fff', textShadow: `0 0 10px ${node.accent}` }}
+            className="relative font-black tracking-wider text-white"
+            style={{
+              fontSize: featured ? '0.8rem' : '0.68rem',
+              textShadow: '0 1px 4px rgba(0,0,0,0.55)',
+            }}
           >
             {initials}
           </span>
         </motion.button>
 
-        {/* quiet label — brightens only when active */}
+        {/* label — brighter for featured, brightest when active */}
         <motion.span
-          className="pointer-events-none mt-2 max-w-[130px] truncate text-center text-[10px] font-medium tracking-wide text-white"
-          animate={{ opacity: dimmed ? 0.28 : active ? 1 : 0.5 }}
+          className="pointer-events-none mt-2 max-w-[132px] truncate text-center text-[10px] font-semibold tracking-wide text-white"
+          animate={{
+            opacity: dimmed ? 0.3 : active ? 1 : featured ? 0.8 : 0.42,
+          }}
         >
           {node.title}
         </motion.span>

@@ -27,7 +27,7 @@ interface ProjectConstellationProps {
 }
 
 const nodeSize = (n: GraphNode) =>
-  n.ring === 1 ? 50 + n.weight * 24 : 38 + n.weight * 20;
+  n.ring === 1 ? 62 + n.weight * 34 : 40 + n.weight * 16;
 
 export default function ProjectConstellation({
   reducedMotion,
@@ -107,7 +107,7 @@ export default function ProjectConstellation({
     >
       <div
         ref={containerRef}
-        className="relative h-[600px] w-full overflow-hidden sm:h-[700px] lg:h-[780px]"
+        className="relative h-[600px] w-full overflow-visible sm:h-[700px] lg:h-[780px]"
         style={{
           background:
             'radial-gradient(ellipse 55% 55% at 50% 48%, rgba(122,60,255,0.07), transparent 72%)',

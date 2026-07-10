@@ -28,6 +28,7 @@ export interface GraphNode {
   valueProp: string;
   tags: string[];
   accent: string;
+  gradient: [string, string, string];
   previewImage: string;
   connections: string[];
 }
@@ -226,6 +227,32 @@ export function getConstellationEntries(): ConstellationEntry[] {
   ];
 }
 
+/* Beautiful gradient-avatar palettes (outpace-style) for the node orbs. */
+export const NODE_GRADIENTS: readonly (readonly [string, string, string])[] = [
+  ['#ff6b9d', '#feca57', '#ff6348'],
+  ['#a55eea', '#778beb', '#54a0ff'],
+  ['#26de81', '#2bcbba', '#0fb9b1'],
+  ['#fd79a8', '#a29bfe', '#6c5ce7'],
+  ['#00cec9', '#0984e3', '#6c5ce7'],
+  ['#f6b93b', '#e55039', '#eb2f06'],
+  ['#ff9ff3', '#f368e0', '#ee5253'],
+  ['#48dbfb', '#0abde3', '#5352ed'],
+  ['#1dd1a1', '#10ac84', '#00d2d3'],
+  ['#feca57', '#ff9ff3', '#a29bfe'],
+  ['#7d5fff', '#5f27cd', '#341f97'],
+  ['#ff6348', '#ff7979', '#f8a5c2'],
+  ['#7bed9f', '#2ed573', '#17c0eb'],
+  ['#70a1ff', '#5352ed', '#cd84f1'],
+  ['#ffa502', '#ff6348', '#ff4757'],
+  ['#18dcff', '#7d5fff', '#cd84f1'],
+];
+
+function pickGradient(id: string): [string, string, string] {
+  const idx = Math.floor(hash01(`${id}~grad`) * NODE_GRADIENTS.length);
+  const g = NODE_GRADIENTS[idx % NODE_GRADIENTS.length];
+  return [g[0], g[1], g[2]];
+}
+
 function toNode(entry: ConstellationEntry): GraphNode {
   const { project, sourceOrbit } = entry;
   const meta = resolveMeta(project);
@@ -257,6 +284,7 @@ function toNode(entry: ConstellationEntry): GraphNode {
       meta.valueProp ?? project.caseStudy?.oneLiner ?? project.description,
     tags,
     accent: meta.accent ?? DEFAULT_ACCENTS[Math.floor(hash01(id) * DEFAULT_ACCENTS.length)],
+    gradient: pickGradient(id),
     previewImage: meta.previewImage ?? project.imageDesktop ?? project.imageMobile,
     connections: meta.connections ?? [],
   };

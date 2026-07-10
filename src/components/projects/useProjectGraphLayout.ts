@@ -31,7 +31,9 @@ export function useProjectGraphLayout(
     const ringRadii = [0, maxR * 0.32, maxR * 0.6, maxR * 0.88];
     // spread wider on landscape containers so it fills the space
     const xScale = width > height ? Math.min(1.5, width / height) : 1;
-    const pad = 64;
+    const padX = 78;
+    const padTop = 78;
+    const padBottom = 116; // extra room so bottom-row labels never clip
 
     const positions: Record<string, NodePosition> = { [CORE_ID]: center };
     for (const n of graph.nodes) {
@@ -39,8 +41,8 @@ export function useProjectGraphLayout(
       const x = center.x + Math.cos(n.angle) * r * xScale;
       const y = center.y + Math.sin(n.angle) * r;
       positions[n.id] = {
-        x: Math.max(pad, Math.min(width - pad, x)),
-        y: Math.max(pad, Math.min(height - pad, y)),
+        x: Math.max(padX, Math.min(width - padX, x)),
+        y: Math.max(padTop, Math.min(height - padBottom, y)),
       };
     }
     return { positions, center, ringRadii };
