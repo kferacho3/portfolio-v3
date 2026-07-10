@@ -7,8 +7,6 @@
  * ===================================================================== */
 'use client';
 
-import { MeshReflectorMaterial } from '@react-three/drei';
-import * as THREE from 'three';
 import type { SceneQualityState } from '../quality';
 import type { HeroShapeMeta } from '../morph/types';
 import AtmosphericHaze from './AtmosphericHaze';
@@ -56,29 +54,6 @@ export default function HeroSceneChamber({
         />
       )}
 
-      {settings.reflectionEnabled && (
-        <mesh
-          rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, -1.9, 0]}
-          raycast={() => null}
-          receiveShadow={castShadow}
-        >
-          <planeGeometry args={[44, 44]} />
-          <MeshReflectorMaterial
-            blur={[300, 90]}
-            resolution={1024}
-            mixBlur={1}
-            mixStrength={0.5}
-            depthScale={1}
-            minDepthThreshold={0.4}
-            maxDepthThreshold={1.25}
-            color="#05040a"
-            metalness={0.6}
-            roughness={0.92}
-            mirror={0.35}
-          />
-        </mesh>
-      )}
     </group>
   );
 }

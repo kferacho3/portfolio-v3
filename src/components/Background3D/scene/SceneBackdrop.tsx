@@ -28,16 +28,16 @@ uniform float uGlow;
 uniform float uTime;
 
 void main() {
-  float h = clamp(vDir.y * 0.5 + 0.5, 0.0, 1.0);
-  vec3 base = mix(uBottom, uTop, pow(h, 1.35));
+  // uniform deep-space void — no horizon / floor line
+  vec3 base = uTop;
 
-  // soft mood glow low-behind the artifact
-  vec3 focus = normalize(vec3(0.0, -0.15, 1.0));
-  float g = pow(max(dot(vDir, focus), 0.0), 3.0);
+  // soft mood glow behind the artifact (opposite the camera) for depth
+  vec3 focus = normalize(vec3(-0.65, 0.05, -0.75));
+  float g = pow(max(dot(vDir, focus), 0.0), 2.0);
   base += uAccent * g * uGlow;
 
   // faint breathing shimmer
-  base += uAccent * 0.02 * (0.5 + 0.5 * sin(uTime * 0.3));
+  base += uAccent * 0.015 * (0.5 + 0.5 * sin(uTime * 0.3));
 
   gl_FragColor = vec4(base, 1.0);
 }
@@ -58,8 +58,8 @@ export default function SceneBackdrop({
 
   const uniforms = useMemo(
     () => ({
-      uTop: { value: new THREE.Color('#04030a') },
-      uBottom: { value: new THREE.Color('#0a0716') },
+      uTop: { value: new THREE.Color('#06050f') },
+      uBottom: { value: new THREE.Color('#06050f') },
       uAccent: { value: new THREE.Color('#9400D3') },
       uGlow: { value: 0.18 },
       uTime: { value: 0 },
@@ -74,7 +74,7 @@ export default function SceneBackdrop({
     accent.current.lerp(target.current, Math.min(1, delta * 1.5));
     uniforms.uAccent.value.copy(accent.current);
     // brighten the chamber glow during a morph
-    const glow = 0.16 + morphMixRef.current * 0.22 + meta.bloomBias * 0.06;
+    const glow = 0.24 + morphMixRef.current * 0.22 + meta.bloomBias * 0.06;
     uniforms.uGlow.value += (glow - uniforms.uGlow.value) * Math.min(1, delta * 3);
   });
 

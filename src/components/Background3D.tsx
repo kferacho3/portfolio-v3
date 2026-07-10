@@ -3904,8 +3904,8 @@ export default function Background3D({ onAnimationComplete }: Props) {
       0.8,
       1.25
     );
-    const R = (isMobileView ? 1.95 : 2.72) * viewportScale;
-    const tilt = 0.42; // radians — tips the ribbon toward the camera
+    const R = (isMobileView ? 2.1 : 3.0) * viewportScale;
+    const tilt = 0.5; // radians — tips the ribbon toward the camera
     const baseAngles = Array.from(
       { length: count },
       (_, i) => (i / Math.max(1, count)) * Math.PI * 2
@@ -4139,11 +4139,12 @@ export default function Background3D({ onAnimationComplete }: Props) {
       const ct = Math.cos(ring.tilt);
       const st = Math.sin(ring.tilt);
       const te = clock.elapsedTime;
-      const band = isMobileView ? 0.42 : 0.58;
+      const band = isMobileView ? 0.5 : 0.72;
+      const baseOpacity = isMobileView ? 0.62 : 0.74;
       for (let i = 0; i < iconRefs.current.length; i++) {
         const m = iconRefs.current[i];
         if (!m) continue;
-        const u = ring.baseAngles[i] + te * 0.1; // slow orbit around the artifact
+        const u = ring.baseAngles[i] + te * 0.12; // slow orbit around the artifact
         const cu = Math.cos(u);
         const su = Math.sin(u);
         const a = u * 0.5; // half-twist over one loop → the Möbius signature
@@ -4160,6 +4161,14 @@ export default function Background3D({ onAnimationComplete }: Props) {
         m.position.set(cx + band * dx, cy + band * dy, cz + band * dz);
         m.lookAt(camera.position);
         m.rotateZ(Math.sin(te * 0.5 + i * 0.7) * 0.12);
+        // depth fade: icons on the far side of the loop recede into the void
+        m.getWorldPosition(tmpV);
+        const vis = THREE.MathUtils.clamp(
+          (9.5 - tmpV.distanceTo(camera.position)) / 5.0,
+          0.2,
+          1
+        );
+        (m.material as THREE.MeshBasicMaterial).opacity = baseOpacity * vis;
       }
     }
 
