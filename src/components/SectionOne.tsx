@@ -50,7 +50,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
     <section
       id="home"
       aria-labelledby="hero-title"
-      className="relative flex min-h-[calc(100svh-74px)] w-full flex-col items-center justify-between overflow-hidden sm:min-h-screen"
+      className="relative flex min-h-[calc(100svh-74px)] w-full flex-col items-center justify-between overflow-hidden"
     >
       {/* ── TOP: name / role, kept minimal above the artifact ─────────── */}
       {shown && (
@@ -76,7 +76,7 @@ export default function SectionOne({ onAnimationComplete }: SectionOneProps) {
       {/* ── BOTTOM: compact, minimal cluster anchored to the edge ─────── */}
       {shown && (
         <motion.div
-          className="relative z-10 w-full pb-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.75rem))] text-center sm:pb-8 md:pb-10"
+          className="relative z-10 w-full pb-[max(1.75rem,calc(env(safe-area-inset-bottom)+1rem))] text-center sm:pb-10 md:pb-12"
           {...rise(0.3)}
         >
           {/* tiny morph hint (also a keyboard-accessible trigger) */}

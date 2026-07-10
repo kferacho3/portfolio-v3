@@ -3040,7 +3040,7 @@ export default function Background3D({ onAnimationComplete }: Props) {
   type BufferAttrWithSetUsage = THREE.BufferAttribute & {
     setUsage: (usage: number) => THREE.BufferAttribute;
   };
-  const TARGET_R = 1.2; // all geometries will end up with this radius
+  const TARGET_R = 1.65; // all geometries normalize to this radius (bigger, cinematic)
   const radiusRef = useRef(TARGET_R); // expose for useFrame fall-off
 
   /* ---------------- helper: capture pristine vertices ------------------ */
@@ -3895,75 +3895,23 @@ export default function Background3D({ onAnimationComplete }: Props) {
     [icons]
   );
 
-  /* icon positions - 3D shell distribution around the model (full XYZ) */
-  const iconPositions = useMemo(() => {
+  /* Möbius-ribbon layout: a base angle per icon + shared ring radius/tilt.
+     Positions + twisting orientations are computed per-frame (see useFrame). */
+  const iconRing = useMemo(() => {
     const count = icons.length;
-    if (!count) return [];
-
-    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
     const viewportScale = THREE.MathUtils.clamp(
-      Math.min(viewport.width, viewport.height) / (isMobileView ? 3.7 : 3.25),
-      0.78,
-      1.18
+      Math.min(viewport.width, viewport.height) / (isMobileView ? 4.4 : 3.7),
+      0.8,
+      1.25
     );
-    const innerRadius = (isMobileView ? 1.12 : 1.72) * viewportScale;
-    const outerRadius = (isMobileView ? 1.72 : 2.56) * viewportScale;
-    const minGapSq = (isMobileView ? 0.34 : 0.48) ** 2;
-    const maxY = isMobileView ? 0.98 : 1.44;
-    const minY = isMobileView ? -0.68 : -1.38;
-    const points: THREE.Vector3[] = [];
-    const canPlace = (candidate: THREE.Vector3) =>
-      points.every((existing) => candidate.distanceToSquared(existing) >= minGapSq);
-
-    // Build a layered shell by sweeping Fibonacci directions and jittering radius.
-    for (let pass = 0; pass < 6 && points.length < count; pass++) {
-      for (let idx = 0; idx < count && points.length < count; idx++) {
-        const t = (idx + 0.5) / count;
-        const y = 1 - 2 * t;
-        const ring = Math.sqrt(Math.max(0, 1 - y * y));
-        const theta = goldenAngle * idx + pass * 0.42;
-        const dir = new THREE.Vector3(
-          Math.cos(theta) * ring,
-          y,
-          Math.sin(theta) * ring
-        );
-
-        const jitter = isMobileView ? 0.08 : 0.12;
-        dir.x += Math.sin((idx + 1) * 1.93 + pass * 0.31) * jitter;
-        dir.y += Math.cos((idx + 1) * 1.41 + pass * 0.27) * jitter * 0.72;
-        dir.z += Math.sin((idx + 1) * 2.07 + pass * 0.35) * jitter;
-        dir.normalize();
-
-        const shellMix = (idx * 0.61803398875 + pass * 0.173) % 1;
-        const radius = THREE.MathUtils.lerp(innerRadius, outerRadius, shellMix);
-        const candidate = dir.multiplyScalar(radius);
-        candidate.y = THREE.MathUtils.clamp(candidate.y, minY, maxY);
-
-        if (!canPlace(candidate)) continue;
-        points.push(candidate);
-      }
-    }
-
-    // Fallback to random sphere points if strict spacing misses any slots.
-    while (points.length < count) {
-      const u = Math.random();
-      const v = Math.random();
-      const theta = 2 * Math.PI * u;
-      const phi = Math.acos(2 * v - 1);
-      const sinPhi = Math.sin(phi);
-      const radius = THREE.MathUtils.lerp(innerRadius, outerRadius, Math.random());
-      const candidate = new THREE.Vector3(
-        radius * sinPhi * Math.cos(theta),
-        THREE.MathUtils.clamp(radius * Math.cos(phi), minY, maxY),
-        radius * sinPhi * Math.sin(theta)
-      );
-
-      if (!canPlace(candidate) && points.length > 0) continue;
-      points.push(candidate);
-    }
-
-    return points.slice(0, count);
-  }, [icons.length, isMobileView, viewport.height, viewport.width]);
+    const R = (isMobileView ? 1.95 : 2.72) * viewportScale;
+    const tilt = 0.42; // radians — tips the ribbon toward the camera
+    const baseAngles = Array.from(
+      { length: count },
+      (_, i) => (i / Math.max(1, count)) * Math.PI * 2
+    );
+    return { count, R, tilt, baseAngles };
+  }, [icons.length, isMobileView, viewport.width, viewport.height]);
 
   /* ================================================================
    * Frame-loop setup
@@ -4185,20 +4133,35 @@ export default function Background3D({ onAnimationComplete }: Props) {
       : 0;
     morph.uniforms.uPixelRatio.value = gl.getPixelRatio();
 
-    /* 7 ▸ icon float ----------------------------------------------------- */
-    const bobAmplitude = isMobileView ? 0.016 : 0.026;
-    const driftAmplitude = bobAmplitude * 0.65;
-    iconRefs.current.forEach((m, i) => {
-      if (!m) return;
-      const base = iconPositions[i];
-      const t = clock.elapsedTime;
-      m.position.x = base.x + Math.sin(t * 0.68 + i * 1.11) * driftAmplitude;
-      m.position.y = base.y + Math.cos(t * 0.92 + i * 0.87) * bobAmplitude;
-      m.position.z = base.z + Math.sin(t * 0.77 + i * 1.29) * driftAmplitude;
-      // Keep icon planes facing the viewer even when distributed in depth.
-      m.lookAt(camera.position);
-      m.rotateZ(Math.sin(t * 0.62 + i * 0.45) * 0.2);
-    });
+    /* 7 ▸ Möbius icon ribbon — twisting band, billboarded for readability */
+    {
+      const ring = iconRing;
+      const ct = Math.cos(ring.tilt);
+      const st = Math.sin(ring.tilt);
+      const te = clock.elapsedTime;
+      const band = isMobileView ? 0.42 : 0.58;
+      for (let i = 0; i < iconRefs.current.length; i++) {
+        const m = iconRefs.current[i];
+        if (!m) continue;
+        const u = ring.baseAngles[i] + te * 0.1; // slow orbit around the artifact
+        const cu = Math.cos(u);
+        const su = Math.sin(u);
+        const a = u * 0.5; // half-twist over one loop → the Möbius signature
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        // center curve: horizontal circle radius R, tilted toward the camera
+        const cx = ring.R * cu;
+        const cy = -(ring.R * su) * st;
+        const cz = ring.R * su * ct;
+        // twisting cross-section D (tilted): rides the ribbon's twisting edge
+        const dx = ca * cu;
+        const dy = ca * (-su * st) + sa * ct;
+        const dz = ca * (su * ct) + sa * st;
+        m.position.set(cx + band * dx, cy + band * dy, cz + band * dz);
+        m.lookAt(camera.position);
+        m.rotateZ(Math.sin(te * 0.5 + i * 0.7) * 0.12);
+      }
+    }
 
     /* 8 ▸ inertial spin -------------------------------------------------- */
     if (outerGroupRef.current && !isDragging.current) {
@@ -4409,34 +4372,27 @@ export default function Background3D({ onAnimationComplete }: Props) {
                 </a.group>
               </group>
             </a.group>
-            {/* Tech icons - static position, NOT affected by drop-in or scale */}
+            {/* Tech icons — a slowly-turning Möbius ribbon (positioned per-frame) */}
             <group position={targetPosition}>
               <Suspense fallback={null}>
-                {iconPositions.map((p, i) => (
-                  <Float
+                {iconRing.baseAngles.map((_, i) => (
+                  <mesh
                     key={i}
-                    speed={isMobileView ? 1.15 : 1.5}
-                    rotationIntensity={0.1}
-                    floatIntensity={0.08}
-                    floatingRange={isMobileView ? [-0.01, 0.01] : [-0.014, 0.014]}
+                    ref={(el) => {
+                      iconRefs.current[i] = el;
+                    }}
                   >
-                    <mesh
-                      position={p}
-                      ref={(el) => {
-                        iconRefs.current[i] = el;
-                      }}
-                    >
-                      <planeGeometry
-                        args={[isMobileView ? 0.15 : 0.19, isMobileView ? 0.15 : 0.19]}
-                      />
-                      <meshBasicMaterial
-                        map={iconTextures[i]}
-                        transparent
-                        opacity={isMobileView ? 0.58 : 0.64}
-                        side={THREE.DoubleSide}
-                      />
-                    </mesh>
-                  </Float>
+                    <planeGeometry
+                      args={[isMobileView ? 0.13 : 0.15, isMobileView ? 0.13 : 0.15]}
+                    />
+                    <meshBasicMaterial
+                      map={iconTextures[i]}
+                      transparent
+                      opacity={isMobileView ? 0.62 : 0.72}
+                      side={THREE.DoubleSide}
+                      depthWrite={false}
+                    />
+                  </mesh>
                 ))}
               </Suspense>
             </group>

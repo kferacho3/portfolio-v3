@@ -22,7 +22,7 @@ const easeInOutCubic = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 /** matches the solid artifact's normalized radius so points sit on its surface */
-export const LIQUID_FIELD_SCALE = 1.2;
+export const LIQUID_FIELD_SCALE = 1.65;
 
 interface UseHeroMorphControllerArgs {
   shape: ShapeName;
