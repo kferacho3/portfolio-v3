@@ -18,6 +18,8 @@ interface ProjectPreviewCardProps {
   containerW: number;
   containerH: number;
   onOpen: (node: GraphNode) => void;
+  onActivate: (id: string) => void;
+  onDeactivate: () => void;
 }
 
 const CARD_W = 320;
@@ -39,6 +41,8 @@ export default function ProjectPreviewCard({
   containerW,
   containerH,
   onOpen,
+  onActivate,
+  onDeactivate,
 }: ProjectPreviewCardProps) {
   const clamp = (v: number, lo: number, hi: number) =>
     Math.max(lo, Math.min(hi, v));
@@ -58,6 +62,8 @@ export default function ProjectPreviewCard({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.94, y: 8 }}
       transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+      onMouseEnter={() => onActivate(node.id)}
+      onMouseLeave={onDeactivate}
       role="group"
       aria-label={`${node.title} preview`}
     >

@@ -67,7 +67,8 @@ export default function ProjectConstellation({
     setActiveId(id);
   }, []);
   const deactivate = useCallback(() => {
-    clearTimer.current = window.setTimeout(() => setActiveId(null), 140);
+    // grace period so the cursor can travel from the node onto the preview card
+    clearTimer.current = window.setTimeout(() => setActiveId(null), 260);
   }, []);
 
   const openNode = useCallback((node: GraphNode) => {
@@ -238,6 +239,8 @@ export default function ProjectConstellation({
                   containerW={size.w}
                   containerH={size.h}
                   onOpen={openNode}
+                  onActivate={activate}
+                  onDeactivate={deactivate}
                 />
               )}
             </AnimatePresence>

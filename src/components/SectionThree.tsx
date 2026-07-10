@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { trackEvent, trackProjectInteraction } from '../lib/analytics';
 import ProjectConstellation from './projects/ProjectConstellation';
 import ProjectDetailPanel from './projects/ProjectDetailPanel';
+import ProjectMobileCarousel from './projects/ProjectMobileCarousel';
 import {
   Project,
   earlyProjectsForProjectPreviews,
@@ -287,6 +288,17 @@ export default function SectionThree() {
     });
   };
 
+  const openFromMobile = (project: Project) => {
+    trackProjectInteraction({
+      action: 'open_project_modal_carousel',
+      category: 'mobile',
+      projectSlug: project.caseStudy?.slug,
+      projectTitle: project.title,
+      projectUrl: project.link,
+    });
+    setSelectedProject(project);
+  };
+
   return (
     <section
       id="projects"
@@ -311,8 +323,10 @@ export default function SectionThree() {
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-sm text-muted-foreground sm:text-base">
             A living map of my work — projects linked by the technology, craft,
-            and clients behind them. Explore the network, or switch to a
-            classic grid.
+            and clients behind them.{' '}
+            {capable
+              ? 'Explore the network, or switch to a classic grid.'
+              : 'Swipe through the work below.'}
           </p>
         </motion.div>
 
@@ -346,7 +360,9 @@ export default function SectionThree() {
           </div>
         )}
 
-        {view === 'constellation' ? (
+        {!capable ? (
+          <ProjectMobileCarousel onOpen={openFromMobile} />
+        ) : view === 'constellation' ? (
           <div className="mt-8">
             <ProjectConstellation reducedMotion={reduced} />
           </div>
