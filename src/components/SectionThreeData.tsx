@@ -335,7 +335,7 @@ export const featuredWebsites: Project[] = [
     title: 'Dorvell Ferguson Jr.',
     imageDesktop: '/projects/photoportfolio.png',
     imageMobile: '/projects/photoportfolio.png',
-    link: 'https://dorvell-ferguson-tawny.vercel.app/',
+    link: 'https://www.dorvellferguson.com/',
     description:
       'A cinematic photography portfolio for a Tampa multimedia creative — "Enter the Archive." A living archive of 1,847 frames across portraits, music, sports, and fashion, with bold editorial type and filmic gallery navigation.',
     highlights: [
