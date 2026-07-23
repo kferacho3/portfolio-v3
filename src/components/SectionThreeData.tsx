@@ -36,6 +36,10 @@ export interface ProjectGraphMeta {
   connections?: string[];
   /** node accent color (hex) */
   accent?: string;
+  /** brand logo path under /public (preferred constellation face) */
+  logo?: string;
+  /** how the logo fills the orb — cover for photo marks, contain for symbols */
+  logoFit?: 'contain' | 'cover';
   /** explicit publish flag for otherwise-private work */
   publishable?: boolean;
 }
@@ -172,7 +176,9 @@ export const featuredWebsites: Project[] = [
       role: 'Lead Frontend Engineer',
       valueProp:
         'Advisor-workflow AI where I lead frontend architecture and product UI.',
-      accent: '#5b8cff',
+      accent: '#3b82f6',
+      logo: '/projects/logos/zom-ai.png',
+      logoFit: 'contain',
       graphTags: [
         'ai',
         'fintech',
@@ -246,7 +252,9 @@ export const featuredWebsites: Project[] = [
       role: 'Founder / Creative Technologist',
       valueProp:
         'Build immersive 3D gallery worlds around your art — one engine, infinite rooms.',
-      accent: '#7a3cff',
+      accent: '#7b3cff',
+      logo: '/projects/logos/muzeum.png',
+      logoFit: 'contain',
       graphTags: [
         '3d',
         'webgl',
@@ -282,7 +290,9 @@ export const featuredWebsites: Project[] = [
       category: 'Brand / E-commerce',
       role: 'Design + Frontend',
       valueProp: 'Farm-born botanical cultivation + apparel, grown in black gold.',
-      accent: '#d9a441',
+      accent: '#8ec8e8',
+      logo: '/projects/logos/cold-as-ice.svg',
+      logoFit: 'contain',
       graphTags: [
         'branding',
         'ecommerce',
@@ -317,7 +327,9 @@ export const featuredWebsites: Project[] = [
       category: 'Brand / E-commerce',
       role: 'Design + Frontend',
       valueProp: 'Regenerative worm-casting farm — black gold for living soil.',
-      accent: '#c9a15a',
+      accent: '#a67c3a',
+      logo: '/projects/logos/carolyns-black-gold.png',
+      logoFit: 'contain',
       graphTags: [
         'branding',
         'ecommerce',
@@ -352,7 +364,9 @@ export const featuredWebsites: Project[] = [
       category: 'Photography / Portfolio',
       role: 'Design + Frontend',
       valueProp: 'A living photographic archive — portraits first, movement everywhere.',
-      accent: '#e8b04b',
+      accent: '#f0b35a',
+      logo: '/projects/logos/dorvell-ferguson.png',
+      logoFit: 'contain',
       graphTags: [
         'photography',
         'portfolio',

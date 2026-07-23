@@ -1,13 +1,14 @@
 /* =====================================================================
  *  projects/ProjectNode.tsx
- *  A single constellation node: a glossy gradient-avatar orb with the
- *  project initials + a quiet label. Featured (inner-ring) projects are
- *  larger, brighter and white-ringed. Elastic pulse on hover/focus; dims
+ *  A single constellation node: brand logo on a dark disc, ringed and
+ *  haloed in the project's own accent color. Featured (inner-ring)
+ *  projects are larger and brighter. Elastic pulse on hover/focus; dims
  *  when another node is active. Focus === hover.
  * ===================================================================== */
 'use client';
 
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 import type { GraphNode } from './projectGraph';
 
 interface ProjectNodeProps {
@@ -37,6 +38,7 @@ export default function ProjectNode({
   onDeactivate,
   onOpen,
 }: ProjectNodeProps) {
+  const [imgFailed, setImgFailed] = useState(false);
   const initials = node.title
     .replace(/[^A-Za-z0-9 ]/g, '')
     .split(' ')
@@ -46,8 +48,10 @@ export default function ProjectNode({
     .join('')
     .toUpperCase();
 
-  const [g0, g1, g2] = node.gradient;
-  const featured = node.ring === 1; // inner ring = featured websites
+  const accent = node.accent;
+  const featured = node.ring === 1;
+  const showLogo = Boolean(node.logo) && !imgFailed;
+  const pad = node.logoFit === 'cover' ? 0 : Math.max(6, size * 0.16);
 
   return (
     <div
@@ -90,46 +94,67 @@ export default function ProjectNode({
           transition={{ type: 'spring', stiffness: 320, damping: 16 }}
           whileTap={{ scale: 0.94 }}
         >
-          {/* soft gradient halo */}
+          {/* brand-colored halo */}
           <span
             aria-hidden
             className="absolute rounded-full blur-xl transition-opacity duration-300"
             style={{
               inset: '-34%',
-              background: `radial-gradient(circle, ${g1}, transparent 64%)`,
+              background: `radial-gradient(circle, ${accent}, transparent 64%)`,
               opacity: featured
                 ? active
-                  ? 0.7
-                  : 0.42
+                  ? 0.55
+                  : 0.28
                 : active
-                  ? 0.5
-                  : 0.22,
+                  ? 0.42
+                  : 0.16,
             }}
           />
-          {/* glossy gradient orb */}
+
+          {/* dark brand disc */}
           <span
             aria-hidden
-            className="absolute inset-0 rounded-full transition-all duration-300"
+            className="absolute inset-0 overflow-hidden rounded-full transition-all duration-300"
             style={{
-              background: `radial-gradient(circle at 32% 24%, rgba(255,255,255,0.45), transparent 46%), linear-gradient(140deg, ${g0} 0%, ${g1} 55%, ${g2} 100%)`,
+              background:
+                'radial-gradient(circle at 32% 24%, rgba(255,255,255,0.12), transparent 46%), #0a0a0f',
               border: featured
-                ? '2px solid rgba(255,255,255,0.55)'
-                : '1px solid rgba(255,255,255,0.18)',
+                ? `2px solid ${accent}cc`
+                : `1.5px solid ${accent}88`,
               boxShadow: featured
-                ? `0 0 ${active ? 30 : 20}px ${g1}88, inset 0 -6px 14px rgba(0,0,0,0.35)`
-                : `0 0 ${active ? 20 : 11}px ${g1}66, inset 0 -5px 10px rgba(0,0,0,0.32)`,
+                ? `0 0 ${active ? 28 : 16}px ${accent}66, inset 0 -6px 14px rgba(0,0,0,0.45)`
+                : `0 0 ${active ? 18 : 10}px ${accent}44, inset 0 -5px 10px rgba(0,0,0,0.4)`,
             }}
           />
-          {/* initials */}
-          <span
-            className="relative font-black tracking-wider text-white"
-            style={{
-              fontSize: featured ? '0.8rem' : '0.68rem',
-              textShadow: '0 1px 4px rgba(0,0,0,0.55)',
-            }}
-          >
-            {initials}
-          </span>
+
+          {showLogo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={node.logo}
+              alt=""
+              aria-hidden
+              draggable={false}
+              onError={() => setImgFailed(true)}
+              className="relative z-[1] select-none"
+              style={{
+                width: size - pad * 2,
+                height: size - pad * 2,
+                objectFit: node.logoFit,
+                borderRadius: node.logoFit === 'cover' ? '9999px' : 0,
+              }}
+            />
+          ) : (
+            <span
+              className="relative z-[1] font-black tracking-wider text-white"
+              style={{
+                fontSize: featured ? '0.8rem' : '0.68rem',
+                textShadow: '0 1px 4px rgba(0,0,0,0.55)',
+                color: accent,
+              }}
+            >
+              {initials}
+            </span>
+          )}
         </motion.button>
 
         {/* label — brighter for featured, brightest when active */}

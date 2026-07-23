@@ -111,7 +111,7 @@ export default function ProjectConstellation({
         className="relative h-[600px] w-full overflow-visible sm:h-[700px] lg:h-[780px]"
         style={{
           background:
-            'radial-gradient(ellipse 55% 55% at 50% 48%, rgba(122,60,255,0.07), transparent 72%)',
+            'radial-gradient(ellipse 55% 55% at 50% 48%, rgba(148,0,211,0.06), transparent 72%)',
         }}
       >
         {ready && (
@@ -125,7 +125,8 @@ export default function ProjectConstellation({
             >
               <defs>
                 <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="#9400D3" stopOpacity="0.4" />
+                  <stop offset="0%" stopColor="#9400D3" stopOpacity="0.28" />
+                  <stop offset="55%" stopColor="#39FF14" stopOpacity="0.08" />
                   <stop offset="100%" stopColor="#9400D3" stopOpacity="0" />
                 </radialGradient>
               </defs>
@@ -193,10 +194,21 @@ export default function ProjectConstellation({
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              <div className="grid h-16 w-16 place-items-center rounded-full border border-white/20 bg-black/60 backdrop-blur-md sm:h-20 sm:w-20">
-                <span className="brand-gradient-text text-sm font-black tracking-tight sm:text-base">
-                  RACHO
-                </span>
+              <div
+                className="grid h-16 w-16 place-items-center overflow-hidden rounded-full border bg-black/80 backdrop-blur-md sm:h-20 sm:w-20"
+                style={{
+                  borderColor: 'rgba(148,0,211,0.55)',
+                  boxShadow:
+                    '0 0 28px rgba(148,0,211,0.35), 0 0 18px rgba(57,255,20,0.12)',
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/projects/logos/racho-core.png"
+                  alt="Racho"
+                  className="h-[72%] w-[72%] object-contain"
+                  draggable={false}
+                />
               </div>
               <span className="mt-2 text-[9px] uppercase tracking-[0.3em] text-white/40">
                 Core
