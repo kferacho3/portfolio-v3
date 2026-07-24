@@ -38,8 +38,14 @@ export interface ProjectGraphMeta {
   accent?: string;
   /** brand logo path under /public (preferred constellation face) */
   logo?: string;
+  /** dark-mode logo override (e.g. white mark on dark orbs) */
+  logoDark?: string;
+  /** light-mode logo override */
+  logoLight?: string;
   /** how the logo fills the orb — cover for photo marks, contain for symbols */
   logoFit?: 'contain' | 'cover';
+  /** 0..1 fraction of the orb the logo should occupy (default ~0.72 contain / 1 cover) */
+  logoScale?: number;
   /** explicit publish flag for otherwise-private work */
   publishable?: boolean;
 }
@@ -170,15 +176,18 @@ export const featuredWebsites: Project[] = [
     frameworks: [],
     graph: {
       status: 'Case Study',
-      orbit: 'featured',
-      weight: 0.9,
+      orbit: 'core',
+      weight: 1,
       category: 'AI / Fintech Product',
       role: 'Lead Frontend Engineer',
       valueProp:
         'Advisor-workflow AI where I lead frontend architecture and product UI.',
       accent: '#3b82f6',
-      logo: '/projects/logos/zom-ai.png',
+      logo: '/projects/logos/zom-ai-light.png',
+      logoDark: '/projects/logos/zom-ai-light.png',
+      logoLight: '/projects/logos/zom-ai-dark.png',
       logoFit: 'contain',
+      logoScale: 0.86,
       graphTags: [
         'ai',
         'fintech',
@@ -188,7 +197,39 @@ export const featuredWebsites: Project[] = [
         'react',
         'nextjs',
       ],
-      connections: ['Prism Ultimate'],
+      connections: ['Monitorium', 'Muzeum'],
+      publishable: true,
+    },
+  },
+  {
+    id: 14,
+    title: 'Monitorium',
+    imageDesktop: '/projects/logos/monitorium.png',
+    imageMobile: '/projects/logos/monitorium.png',
+    link: 'https://github.com/kferacho3/monitorium',
+    description:
+      'One machine. Two minds. A cinematic interactive portfolio built as a living 3D monitor rig — drag 180° to flip between CONTROL (systems, product, engineering) and CHAOS (film, sound, generative art).',
+    highlights: [
+      'Mapped 17 real display surfaces across CONTROL and CHAOS with a data-driven screen engine.',
+      'Built live media canvases, interactive 3D portals, and GLINT // SIGNAL PONG inside the rig.',
+      'Engineered a React Three Fiber experience driven by semantically-named GLB meshes.',
+    ],
+    techStack: ['TypeScript', 'React', 'Next.js', 'React Three Fiber', 'Three.js'],
+    frameworks: ['GSAP', 'Zustand', 'Framer Motion', 'Tailwind CSS'],
+    graph: {
+      status: 'Personal',
+      orbit: 'core',
+      weight: 0.9,
+      category: 'Immersive Portfolio System',
+      role: 'Founder / Creative Technologist',
+      valueProp:
+        'One machine, two minds — a living 3D monitor rig that is the portfolio.',
+      accent: '#e8eef7',
+      logo: '/projects/logos/monitorium.png',
+      logoFit: 'contain',
+      logoScale: 0.78,
+      graphTags: ['3d', 'r3f', 'webgl', 'portfolio', 'creative-tech', 'nextjs'],
+      connections: ['Zom AI', 'Muzeum', 'Prism Ultimate'],
       publishable: true,
     },
   },
@@ -247,7 +288,7 @@ export const featuredWebsites: Project[] = [
     graph: {
       status: 'Personal',
       orbit: 'core',
-      weight: 0.98,
+      weight: 0.96,
       category: 'Immersive SaaS',
       role: 'Founder / Creative Technologist',
       valueProp:
@@ -255,6 +296,7 @@ export const featuredWebsites: Project[] = [
       accent: '#7b3cff',
       logo: '/projects/logos/muzeum.png',
       logoFit: 'contain',
+      logoScale: 0.94,
       graphTags: [
         '3d',
         'webgl',
@@ -264,7 +306,12 @@ export const featuredWebsites: Project[] = [
         'full-stack',
         'commerce',
       ],
-      connections: ['Prism Ultimate', 'Dorvell Ferguson Jr.', 'Wardrobe X'],
+      connections: [
+        'Prism Ultimate',
+        'Dorvell Ferguson Jr.',
+        'Wardrobe X',
+        'Monitorium',
+      ],
       publishable: true,
     },
   },
@@ -285,14 +332,15 @@ export const featuredWebsites: Project[] = [
     frameworks: ['E-commerce', 'CMS'],
     graph: {
       status: 'Live',
-      orbit: 'client',
-      weight: 0.7,
+      orbit: 'featured',
+      weight: 0.74,
       category: 'Brand / E-commerce',
       role: 'Design + Frontend',
       valueProp: 'Farm-born botanical cultivation + apparel, grown in black gold.',
       accent: '#8ec8e8',
       logo: '/projects/logos/cold-as-ice.svg',
       logoFit: 'contain',
+      logoScale: 0.88,
       graphTags: [
         'branding',
         'ecommerce',
@@ -322,14 +370,15 @@ export const featuredWebsites: Project[] = [
     frameworks: ['Etsy', 'E-commerce'],
     graph: {
       status: 'Live',
-      orbit: 'client',
-      weight: 0.6,
+      orbit: 'featured',
+      weight: 0.7,
       category: 'Brand / E-commerce',
       role: 'Design + Frontend',
       valueProp: 'Regenerative worm-casting farm — black gold for living soil.',
       accent: '#a67c3a',
       logo: '/projects/logos/carolyns-black-gold.png',
       logoFit: 'contain',
+      logoScale: 0.94,
       graphTags: [
         'branding',
         'ecommerce',
@@ -359,14 +408,15 @@ export const featuredWebsites: Project[] = [
     frameworks: ['Image Optimization'],
     graph: {
       status: 'Live',
-      orbit: 'client',
-      weight: 0.72,
+      orbit: 'core',
+      weight: 0.92,
       category: 'Photography / Portfolio',
       role: 'Design + Frontend',
       valueProp: 'A living photographic archive — portraits first, movement everywhere.',
       accent: '#f0b35a',
       logo: '/projects/logos/dorvell-ferguson.png',
       logoFit: 'contain',
+      logoScale: 0.9,
       graphTags: [
         'photography',
         'portfolio',

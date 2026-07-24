@@ -10,10 +10,12 @@ import ProjectDetailPanel from './projects/ProjectDetailPanel';
 import ProjectMobileCarousel from './projects/ProjectMobileCarousel';
 import {
   Project,
+  type ProjectStatus,
   earlyProjectsForProjectPreviews,
   featuredWebsitesForProjectPreviews,
   uiUxDesignsForProjectPreviews,
 } from './SectionThreeData';
+import type { GraphNode } from './projects/projectGraph';
 
 type CategoryKey = 'featured' | 'early' | 'uiux';
 
@@ -217,27 +219,41 @@ export default function SectionThree() {
     useState<CategoryKey>('featured');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Device capability → default to constellation on desktop/fine-pointer.
-  const [capable, setCapable] = useState(false);
-  const [reduced, setReduced] = useState(false);
-  const [userView, setUserView] = useState<'constellation' | 'grid' | null>(
-    null
+  // Device tiers:
+  // - phone (<768): brand carousel
+  // - tablet (768–1023): carousel by default, optional touch constellation
+  // - desktop (≥1024 + fine pointer): constellation by default, grid toggle
+  const [viewport, setViewport] = useState<'phone' | 'tablet' | 'desktop'>(
+    'phone'
   );
+  const [touchMode, setTouchMode] = useState(true);
+  const [reduced, setReduced] = useState(false);
+  const [userView, setUserView] = useState<
+    'constellation' | 'grid' | 'carousel' | null
+  >(null);
 
   useEffect(() => {
     const check = () => {
       const fine = window.matchMedia('(pointer: fine)').matches;
-      const wide = window.innerWidth >= 1024;
+      const w = window.innerWidth;
       const rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       setReduced(rm);
-      setCapable(fine && wide && !rm);
+      setTouchMode(!fine || w < 1024);
+      if (w >= 1024 && fine && !rm) setViewport('desktop');
+      else if (w >= 768) setViewport('tablet');
+      else setViewport('phone');
     };
     check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  const view = userView ?? (capable ? 'constellation' : 'grid');
+  const defaultView =
+    viewport === 'desktop' ? 'constellation' : 'carousel';
+  // Phones always use the brand carousel — no hover map.
+  const view =
+    viewport === 'phone' ? 'carousel' : (userView ?? defaultView);
+  const showViewToggle = viewport !== 'phone' && !reduced;
 
   const categories: Record<CategoryKey, { label: string; projects: Project[] }> =
     {
@@ -288,71 +304,91 @@ export default function SectionThree() {
     });
   };
 
-  const openFromMobile = (project: Project) => {
+  const openFromMobile = (project: Project, node?: GraphNode) => {
     trackProjectInteraction({
       action: 'open_project_modal_carousel',
-      category: 'mobile',
+      category: node?.category ?? 'mobile',
       projectSlug: project.caseStudy?.slug,
       projectTitle: project.title,
       projectUrl: project.link,
     });
-    setSelectedProject(project);
+    setSelectedProject({
+      ...project,
+      graph: {
+        ...project.graph,
+        accent: node?.accent ?? project.graph?.accent,
+        status: (node?.status as ProjectStatus | undefined) ?? project.graph?.status,
+        role: node?.role ?? project.graph?.role,
+        category: node?.category ?? project.graph?.category,
+      },
+    });
   };
 
   return (
     <section
       id="projects"
       aria-labelledby="projects-title"
-      className="relative w-full px-4 py-14 sm:px-6 md:px-8 md:py-20 lg:px-12"
+      className="relative w-full max-w-[100vw] overflow-x-clip px-4 py-14 sm:px-6 md:px-8 md:py-20 lg:px-12"
     >
-      <div className="relative z-10 mx-auto max-w-6xl">
+      <div className="relative z-10 mx-auto w-full max-w-6xl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center"
+          className="px-1 text-center"
         >
           <p className="text-xs uppercase tracking-[0.35em] text-muted-foreground">
             Portfolio
           </p>
           <h2
             id="projects-title"
-            className="mt-3 text-4xl font-black text-foreground sm:text-5xl md:text-6xl"
+            className="mt-3 text-balance text-3xl font-black leading-tight text-foreground sm:text-5xl md:text-6xl"
           >
             <span className="brand-gradient-text">Project Constellation</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-sm text-muted-foreground sm:text-base">
+          <p className="mx-auto mt-4 max-w-2xl text-pretty text-sm text-muted-foreground sm:text-base">
             A living map of my work — projects linked by the technology, craft,
             and clients behind them.{' '}
-            {capable
+            {viewport === 'desktop'
               ? 'Explore the network, or switch to a classic grid.'
-              : 'Swipe through the work below.'}
+              : viewport === 'tablet'
+                ? 'Swipe the deck, or open the interactive map.'
+                : 'Swipe through each brand below.'}
           </p>
         </motion.div>
 
-        {/* view toggle (desktop only) */}
-        {capable && (
-          <div className="mt-8 flex justify-center">
+        {/* view toggle — tablet + desktop */}
+        {showViewToggle && (
+          <div className="mt-6 flex justify-center sm:mt-8">
             <div
               role="tablist"
               aria-label="Project view"
-              className="flex items-center gap-1 rounded-full border border-white/10 bg-card/40 p-1 backdrop-blur-xl"
+              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-card/40 p-1 backdrop-blur-xl"
             >
-              {(['constellation', 'grid'] as const).map((v) => {
+              {(viewport === 'desktop'
+                ? (['constellation', 'grid'] as const)
+                : (['carousel', 'constellation'] as const)
+              ).map((v) => {
                 const active = view === v;
+                const label =
+                  v === 'constellation'
+                    ? 'Map'
+                    : v === 'carousel'
+                      ? 'Browse'
+                      : 'Grid';
                 return (
                   <button
                     key={v}
                     role="tab"
                     aria-selected={active}
                     onClick={() => setUserView(v)}
-                    className={`rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.2em] transition ${
+                    className={`min-h-10 rounded-full px-5 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
                       active
                         ? 'bg-white text-slate-900 dark:bg-white'
                         : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
-                    {v === 'constellation' ? 'Constellation' : 'Grid'}
+                    {label}
                   </button>
                 );
               })}
@@ -360,11 +396,14 @@ export default function SectionThree() {
           </div>
         )}
 
-        {!capable ? (
+        {view === 'carousel' ? (
           <ProjectMobileCarousel onOpen={openFromMobile} />
         ) : view === 'constellation' ? (
-          <div className="mt-8">
-            <ProjectConstellation reducedMotion={reduced} />
+          <div className="mt-6 sm:mt-8">
+            <ProjectConstellation
+              reducedMotion={reduced}
+              touchMode={touchMode || viewport !== 'desktop'}
+            />
           </div>
         ) : (
           <>

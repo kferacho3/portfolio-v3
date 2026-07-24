@@ -1,9 +1,8 @@
 /* =====================================================================
  *  projects/ProjectConstellation.tsx
  *  The Project Constellation Atlas: a deterministic network of project
- *  nodes on orbit rings, connected by shared capabilities. Hover/focus a
- *  node → it pulses, its edges brighten, unrelated nodes dim, and a glass
- *  preview card appears. Click/Enter → the project dossier.
+ *  nodes on orbit rings, connected by shared capabilities.
+ *  Desktop: hover → preview card. Touch / tablet: tap → sticky sheet.
  * ===================================================================== */
 'use client';
 
@@ -24,13 +23,21 @@ import { useProjectPreviewPreload } from './useProjectPreviewPreload';
 
 interface ProjectConstellationProps {
   reducedMotion: boolean;
+  /** Force touch-friendly interactions (tap-to-select + bottom sheet). */
+  touchMode?: boolean;
 }
 
-const nodeSize = (n: GraphNode) =>
-  n.ring === 1 ? 62 + n.weight * 34 : 40 + n.weight * 16;
+function nodeSizeFor(n: GraphNode, compact: boolean) {
+  // Emphasize importance hierarchy: top-weighted core nodes read largest.
+  if (compact) {
+    return n.ring === 1 ? 44 + n.weight * 36 : 30 + n.weight * 16;
+  }
+  return n.ring === 1 ? 50 + n.weight * 50 : 34 + n.weight * 20;
+}
 
 export default function ProjectConstellation({
   reducedMotion,
+  touchMode = false,
 }: ProjectConstellationProps) {
   const graph = useMemo(() => buildProjectGraph(), []);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -38,8 +45,11 @@ export default function ProjectConstellation({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const clearTimer = useRef<number | undefined>(undefined);
+  const compact = touchMode || (size.w > 0 && size.w < 900);
 
-  useProjectPreviewPreload(useMemo(() => graph.nodes.map((n) => n.previewImage), [graph]));
+  useProjectPreviewPreload(
+    useMemo(() => graph.nodes.map((n) => n.previewImage), [graph])
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -52,7 +62,7 @@ export default function ProjectConstellation({
     return () => ro.disconnect();
   }, []);
 
-  const layout = useProjectGraphLayout(graph, size.w, size.h);
+  const layout = useProjectGraphLayout(graph, size.w, size.h, { compact });
   const neighbors = useMemo(
     () => (activeId ? neighborsOf(graph, activeId) : new Set<string>()),
     [graph, activeId]
@@ -66,9 +76,15 @@ export default function ProjectConstellation({
     window.clearTimeout(clearTimer.current);
     setActiveId(id);
   }, []);
+
   const deactivate = useCallback(() => {
-    // grace period so the cursor can travel from the node onto the preview card
+    if (touchMode) return; // sticky selection on touch
     clearTimer.current = window.setTimeout(() => setActiveId(null), 260);
+  }, [touchMode]);
+
+  const clearActive = useCallback(() => {
+    window.clearTimeout(clearTimer.current);
+    setActiveId(null);
   }, []);
 
   const openNode = useCallback((node: GraphNode) => {
@@ -82,6 +98,21 @@ export default function ProjectConstellation({
     setSelected(node);
   }, []);
 
+  const handleNodeSelect = useCallback(
+    (node: GraphNode) => {
+      if (touchMode) {
+        if (activeId === node.id) {
+          openNode(node);
+          return;
+        }
+        activate(node.id);
+        return;
+      }
+      openNode(node);
+    },
+    [touchMode, activeId, activate, openNode]
+  );
+
   const openRelated = useCallback(
     (title: string) => {
       const n = graph.nodes.find((node) => node.title === title);
@@ -92,6 +123,7 @@ export default function ProjectConstellation({
 
   const ready = size.w > 0 && size.h > 0;
   const accent = activeNode?.accent ?? '#9400D3';
+  const previewVariant = touchMode || size.w < 720 ? 'sheet' : 'float';
 
   const relatedFor = (node: GraphNode): RelatedRef[] =>
     Array.from(neighborsOf(graph, node.id))
@@ -104,14 +136,32 @@ export default function ProjectConstellation({
     <div
       className="relative w-full"
       role="group"
-      aria-label="Interactive project constellation. Use Tab to move between projects, Enter to open a project dossier."
+      aria-label={
+        touchMode
+          ? 'Interactive project constellation. Tap a project to preview, tap again to open the dossier.'
+          : 'Interactive project constellation. Use Tab to move between projects, Enter to open a project dossier.'
+      }
     >
+      {touchMode && (
+        <p className="mb-3 px-2 text-center text-[11px] leading-relaxed text-muted-foreground/80 sm:text-xs">
+          Tap a logo to preview · tap again to open the dossier
+        </p>
+      )}
+
       <div
         ref={containerRef}
-        className="relative h-[600px] w-full overflow-visible sm:h-[700px] lg:h-[780px]"
+        className={`relative w-full max-w-full overflow-hidden touch-manipulation ${
+          compact
+            ? 'h-[min(68dvh,560px)] sm:h-[620px]'
+            : 'h-[600px] sm:h-[700px] lg:h-[780px]'
+        }`}
         style={{
           background:
             'radial-gradient(ellipse 55% 55% at 50% 48%, rgba(148,0,211,0.06), transparent 72%)',
+        }}
+        onClick={(e) => {
+          if (!touchMode) return;
+          if (e.target === e.currentTarget) clearActive();
         }}
       >
         {ready && (
@@ -131,7 +181,6 @@ export default function ProjectConstellation({
                 </radialGradient>
               </defs>
 
-              {/* orbit rings */}
               {layout.ringRadii.slice(1).map((r, i) => (
                 <ellipse
                   key={i}
@@ -146,15 +195,13 @@ export default function ProjectConstellation({
                 />
               ))}
 
-              {/* core glow */}
               <circle
                 cx={layout.center.x}
                 cy={layout.center.y}
-                r={Math.min(size.w, size.h) * 0.22}
+                r={Math.min(size.w, size.h) * (compact ? 0.18 : 0.22)}
                 fill="url(#core-glow)"
               />
 
-              {/* edges */}
               {graph.edges.map((e, i) => {
                 const pa = layout.positions[e.a];
                 const pb = layout.positions[e.b];
@@ -185,6 +232,16 @@ export default function ProjectConstellation({
               })}
             </svg>
 
+            {/* dismiss hit area for touch (behind nodes) */}
+            {touchMode && activeId && (
+              <button
+                type="button"
+                aria-label="Dismiss project preview"
+                className="absolute inset-0 z-[5] cursor-default bg-transparent"
+                onClick={clearActive}
+              />
+            )}
+
             {/* core node */}
             <div
               className="pointer-events-none absolute z-20 flex flex-col items-center"
@@ -195,7 +252,9 @@ export default function ProjectConstellation({
               }}
             >
               <div
-                className="grid h-16 w-16 place-items-center overflow-hidden rounded-full border bg-black/80 backdrop-blur-md sm:h-20 sm:w-20"
+                className={`grid place-items-center overflow-hidden rounded-full border bg-black/80 backdrop-blur-md ${
+                  compact ? 'h-14 w-14 sm:h-16 sm:w-16' : 'h-16 w-16 sm:h-20 sm:w-20'
+                }`}
                 style={{
                   borderColor: 'rgba(148,0,211,0.55)',
                   boxShadow:
@@ -210,7 +269,7 @@ export default function ProjectConstellation({
                   draggable={false}
                 />
               </div>
-              <span className="mt-2 text-[9px] uppercase tracking-[0.3em] text-white/40">
+              <span className="mt-1.5 text-[9px] uppercase tracking-[0.3em] text-white/40">
                 Core
               </span>
             </div>
@@ -227,19 +286,20 @@ export default function ProjectConstellation({
                   node={n}
                   x={p.x}
                   y={p.y}
-                  size={nodeSize(n)}
+                  size={nodeSizeFor(n, compact)}
                   active={isActive}
                   dimmed={isDimmed}
                   reducedMotion={reducedMotion}
+                  touchMode={touchMode}
                   index={i}
                   onActivate={activate}
                   onDeactivate={deactivate}
-                  onOpen={openNode}
+                  onOpen={handleNodeSelect}
                 />
               );
             })}
 
-            {/* hover / focus preview card */}
+            {/* hover / focus / touch preview */}
             <AnimatePresence>
               {activeNode && layout.positions[activeNode.id] && (
                 <ProjectPreviewCard
@@ -247,9 +307,10 @@ export default function ProjectConstellation({
                   node={activeNode}
                   nodeX={layout.positions[activeNode.id].x}
                   nodeY={layout.positions[activeNode.id].y}
-                  nodeSize={nodeSize(activeNode)}
+                  nodeSize={nodeSizeFor(activeNode, compact)}
                   containerW={size.w}
                   containerH={size.h}
+                  variant={previewVariant}
                   onOpen={openNode}
                   onActivate={activate}
                   onDeactivate={deactivate}

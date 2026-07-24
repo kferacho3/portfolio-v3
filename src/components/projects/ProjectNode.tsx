@@ -8,8 +8,9 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useState } from 'react';
-import type { GraphNode } from './projectGraph';
+import { useContext, useState } from 'react';
+import { ThemeContext } from '../../contexts/ThemeContext';
+import { logoForTheme, type GraphNode } from './projectGraph';
 
 interface ProjectNodeProps {
   node: GraphNode;
@@ -19,6 +20,7 @@ interface ProjectNodeProps {
   active: boolean;
   dimmed: boolean;
   reducedMotion: boolean;
+  touchMode?: boolean;
   index: number;
   onActivate: (id: string) => void;
   onDeactivate: () => void;
@@ -33,11 +35,13 @@ export default function ProjectNode({
   active,
   dimmed,
   reducedMotion,
+  touchMode = false,
   index,
   onActivate,
   onDeactivate,
   onOpen,
 }: ProjectNodeProps) {
+  const { theme } = useContext(ThemeContext);
   const [imgFailed, setImgFailed] = useState(false);
   const initials = node.title
     .replace(/[^A-Za-z0-9 ]/g, '')
@@ -50,8 +54,13 @@ export default function ProjectNode({
 
   const accent = node.accent;
   const featured = node.ring === 1;
-  const showLogo = Boolean(node.logo) && !imgFailed;
-  const pad = node.logoFit === 'cover' ? 0 : Math.max(6, size * 0.16);
+  const logoSrc = logoForTheme(node, theme);
+  const showLogo = Boolean(logoSrc) && !imgFailed;
+  const fill = Math.min(
+    0.98,
+    Math.max(0.55, node.logoScale ?? (node.logoFit === 'cover' ? 1 : 0.78))
+  );
+  const logoSize = size * fill;
 
   return (
     <div
@@ -82,24 +91,38 @@ export default function ProjectNode({
       >
         <motion.button
           type="button"
-          onMouseEnter={() => onActivate(node.id)}
-          onMouseLeave={onDeactivate}
+          onMouseEnter={() => {
+            if (!touchMode) onActivate(node.id);
+          }}
+          onMouseLeave={() => {
+            if (!touchMode) onDeactivate();
+          }}
           onFocus={() => onActivate(node.id)}
-          onBlur={onDeactivate}
+          onBlur={() => {
+            if (!touchMode) onDeactivate();
+          }}
           onClick={() => onOpen(node)}
           aria-label={`${node.title} — ${node.category}. ${node.valueProp}`}
-          className="pointer-events-auto relative grid place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
-          style={{ width: size, height: size }}
-          animate={{ scale: active ? 1.16 : 1 }}
+          className="pointer-events-auto relative z-10 grid place-items-center rounded-full outline-none touch-manipulation focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+          style={{
+            width: size,
+            height: size,
+            padding: touchMode ? Math.max(0, (44 - size) / 2) : 0,
+            boxSizing: 'content-box',
+          }}
+          animate={{ scale: active ? 1.12 : 1 }}
           transition={{ type: 'spring', stiffness: 320, damping: 16 }}
           whileTap={{ scale: 0.94 }}
         >
-          {/* brand-colored halo */}
           <span
             aria-hidden
             className="absolute rounded-full blur-xl transition-opacity duration-300"
             style={{
-              inset: '-34%',
+              width: size,
+              height: size,
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%) scale(1.68)',
               background: `radial-gradient(circle, ${accent}, transparent 64%)`,
               opacity: featured
                 ? active
@@ -107,17 +130,23 @@ export default function ProjectNode({
                   : 0.28
                 : active
                   ? 0.42
-                  : 0.16,
+                  : 0.14,
             }}
           />
 
-          {/* dark brand disc */}
           <span
             aria-hidden
-            className="absolute inset-0 overflow-hidden rounded-full transition-all duration-300"
+            className="absolute overflow-hidden rounded-full transition-all duration-300"
             style={{
+              width: size,
+              height: size,
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
               background:
-                'radial-gradient(circle at 32% 24%, rgba(255,255,255,0.12), transparent 46%), #0a0a0f',
+                theme === 'light'
+                  ? 'radial-gradient(circle at 32% 24%, rgba(255,255,255,0.55), transparent 46%), #f4f2ec'
+                  : 'radial-gradient(circle at 32% 24%, rgba(255,255,255,0.12), transparent 46%), #0a0a0f',
               border: featured
                 ? `2px solid ${accent}cc`
                 : `1.5px solid ${accent}88`,
@@ -130,22 +159,24 @@ export default function ProjectNode({
           {showLogo ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={node.logo}
+              key={logoSrc}
+              src={logoSrc}
               alt=""
               aria-hidden
               draggable={false}
               onError={() => setImgFailed(true)}
               className="relative z-[1] select-none"
               style={{
-                width: size - pad * 2,
-                height: size - pad * 2,
+                width: logoSize,
+                height: logoSize,
                 objectFit: node.logoFit,
+                objectPosition: 'center',
                 borderRadius: node.logoFit === 'cover' ? '9999px' : 0,
               }}
             />
           ) : (
             <span
-              className="relative z-[1] font-black tracking-wider text-white"
+              className="relative z-[1] font-black tracking-wider"
               style={{
                 fontSize: featured ? '0.8rem' : '0.68rem',
                 textShadow: '0 1px 4px rgba(0,0,0,0.55)',
@@ -157,11 +188,10 @@ export default function ProjectNode({
           )}
         </motion.button>
 
-        {/* label — brighter for featured, brightest when active */}
         <motion.span
-          className="pointer-events-none mt-2 max-w-[132px] truncate text-center text-[10px] font-semibold tracking-wide text-white"
+          className="pointer-events-none mt-1.5 max-w-[110px] truncate text-center text-[9px] font-semibold tracking-wide text-white sm:mt-2 sm:max-w-[132px] sm:text-[10px]"
           animate={{
-            opacity: dimmed ? 0.3 : active ? 1 : featured ? 0.8 : 0.42,
+            opacity: dimmed ? 0.28 : active ? 1 : featured ? 0.82 : 0.4,
           }}
         >
           {node.title}

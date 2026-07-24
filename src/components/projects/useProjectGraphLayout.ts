@@ -23,17 +23,27 @@ export interface GraphLayout {
 export function useProjectGraphLayout(
   graph: ProjectGraph,
   width: number,
-  height: number
+  height: number,
+  opts?: { compact?: boolean }
 ): GraphLayout {
+  const compact = opts?.compact ?? false;
+
   return useMemo(() => {
     const center = { x: width / 2, y: height / 2 };
     const maxR = Math.min(width, height) / 2;
-    const ringRadii = [0, maxR * 0.32, maxR * 0.6, maxR * 0.88];
+    // Pull rings in a bit on compact/touch stages so labels stay inside
+    const ringScale = compact ? 0.92 : 1;
+    const ringRadii = [
+      0,
+      maxR * 0.3 * ringScale,
+      maxR * 0.56 * ringScale,
+      maxR * 0.82 * ringScale,
+    ];
     // spread wider on landscape containers so it fills the space
-    const xScale = width > height ? Math.min(1.5, width / height) : 1;
-    const padX = 78;
-    const padTop = 78;
-    const padBottom = 116; // extra room so bottom-row labels never clip
+    const xScale = width > height ? Math.min(1.45, width / height) : 1;
+    const padX = compact ? Math.max(48, width * 0.08) : 78;
+    const padTop = compact ? 64 : 78;
+    const padBottom = compact ? 148 : 116; // room for labels + bottom sheet
 
     const positions: Record<string, NodePosition> = { [CORE_ID]: center };
     for (const n of graph.nodes) {
@@ -46,7 +56,7 @@ export function useProjectGraphLayout(
       };
     }
     return { positions, center, ringRadii };
-  }, [graph, width, height]);
+  }, [graph, width, height, compact]);
 }
 
 /** Curved (quadratic bezier) path between two points, gently bowed. */

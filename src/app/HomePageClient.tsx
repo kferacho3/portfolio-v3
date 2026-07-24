@@ -69,8 +69,11 @@ function HomePage() {
         </Suspense>
 
         {/* DOM layer ----------------------------------------------------- */}
-        <Scroll html style={{ width: '100vw', overflowX: 'hidden' }}>
-          <main className="min-h-screen overflow-x-hidden px-3 py-4 sm:p-6">
+        <Scroll
+          html
+          style={{ width: '100%', maxWidth: '100vw', overflowX: 'hidden' }}
+        >
+          <main className="min-h-screen w-full max-w-[100vw] overflow-x-clip px-3 py-4 sm:p-6">
             {bgAnimationDone && (
               <>
                 <SectionOne onAnimationComplete={handleSectionOneComplete} />

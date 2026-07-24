@@ -30,7 +30,11 @@ export interface GraphNode {
   accent: string;
   gradient: [string, string, string];
   logo?: string;
+  logoDark?: string;
+  logoLight?: string;
   logoFit: 'contain' | 'cover';
+  /** 0..1 fraction of orb filled by the logo */
+  logoScale: number;
   previewImage: string;
   connections: string[];
 }
@@ -69,115 +73,172 @@ export function slugify(title: string): string {
 /* ── brand logos + accents (keyed by project title) ── */
 const BRAND_MARKS: Record<
   string,
-  Pick<ProjectGraphMeta, 'logo' | 'logoFit' | 'accent'>
+  Pick<
+    ProjectGraphMeta,
+    | 'logo'
+    | 'logoDark'
+    | 'logoLight'
+    | 'logoFit'
+    | 'logoScale'
+    | 'accent'
+  >
 > = {
   'Zom AI': {
-    logo: '/projects/logos/zom-ai.png',
+    logo: '/projects/logos/zom-ai-light.png',
+    logoDark: '/projects/logos/zom-ai-light.png',
+    logoLight: '/projects/logos/zom-ai-dark.png',
     logoFit: 'contain',
+    logoScale: 0.86,
     accent: '#3b82f6',
   },
   Muzeum: {
     logo: '/projects/logos/muzeum.png',
     logoFit: 'contain',
+    logoScale: 0.94,
     accent: '#7b3cff',
+  },
+  Monitorium: {
+    logo: '/projects/logos/monitorium.png',
+    logoFit: 'contain',
+    logoScale: 0.78,
+    accent: '#e8eef7',
   },
   'Sunny Island Pepper Sauce': {
     logo: '/projects/logos/sunny-island.png',
     logoFit: 'contain',
+    logoScale: 0.96,
     accent: '#f5b800',
   },
   'Wardrobe X': {
     logo: '/projects/logos/wardrobe-x.png',
     logoFit: 'cover',
+    logoScale: 1,
     accent: '#d4a853',
   },
   'ANTI-HEROES v2': {
     logo: '/projects/logos/anti-heroes.png',
     logoFit: 'cover',
+    logoScale: 1,
     accent: '#ff2bd6',
   },
   'ANTI-HEROES v1': {
     logo: '/projects/logos/anti-heroes.png',
     logoFit: 'cover',
+    logoScale: 1,
     accent: '#ff2bd6',
   },
   'Bodega Danes': {
     logo: '/projects/logos/bodega-danes.png',
     logoFit: 'contain',
+    logoScale: 0.9,
     accent: '#c45c26',
   },
   'Vape Aura': {
     logo: '/projects/logos/vape-aura.png',
     logoFit: 'contain',
+    logoScale: 0.86,
     accent: '#10d080',
   },
   'BT GOD': {
     logo: '/projects/logos/bt-god.png',
     logoFit: 'contain',
+    logoScale: 0.88,
     accent: '#e2be73',
   },
   'Cold As Ice': {
     logo: '/projects/logos/cold-as-ice.svg',
     logoFit: 'contain',
+    logoScale: 0.88,
     accent: '#8ec8e8',
   },
   "Carolyn's Black Gold Farm": {
     logo: '/projects/logos/carolyns-black-gold.png',
     logoFit: 'contain',
+    logoScale: 0.94,
     accent: '#a67c3a',
   },
   'Dorvell Ferguson Jr.': {
     logo: '/projects/logos/dorvell-ferguson.png',
     logoFit: 'contain',
+    logoScale: 0.9,
     accent: '#f0b35a',
   },
   MetaTunes: {
     logo: '/projects/logos/metatunes.png',
     logoFit: 'cover',
+    logoScale: 1,
     accent: '#9b30ff',
   },
   'Get Relocate': {
-    logo: '/projects/logos/get-relocate.svg',
+    logo: '/projects/logos/get-relocate.png',
     logoFit: 'contain',
+    logoScale: 0.9,
     accent: '#218207',
   },
   'K & M Renovation and Restoration': {
     logo: '/projects/logos/k-and-m.png',
     logoFit: 'contain',
-    accent: '#d4b84a',
+    logoScale: 0.92,
+    accent: '#6b7a3a',
   },
   'Portfolio v1 (First Iteration)': {
     logo: '/projects/logos/portfolio-v1.png',
     logoFit: 'contain',
+    logoScale: 0.82,
     accent: '#9400d3',
   },
   'st Home Rental': {
     logo: '/projects/logos/st-home-rental.png',
     logoFit: 'cover',
+    logoScale: 1,
     accent: '#c03c18',
   },
   'Black C.A.T.': {
     logo: '/projects/logos/black-cat.png',
-    logoFit: 'cover',
-    accent: '#8aa0b8',
+    logoFit: 'contain',
+    logoScale: 0.92,
+    accent: '#c0c8d4',
   },
   'Show No Love Apparel': {
     logo: '/projects/logos/show-no-love.png',
     logoFit: 'cover',
+    logoScale: 1,
     accent: '#e11d48',
   },
   'Flow Collaborative': {
     logo: '/projects/logos/flow-collaborative.png',
-    logoFit: 'cover',
-    accent: '#6b8f71',
+    logoFit: 'contain',
+    logoScale: 0.96,
+    accent: '#9cb89a',
   },
 };
 
+/* Importance hierarchy → weight / orbit (higher = larger orb). */
 /* ── curated overrides for existing projects (keyed by title) ── */
 const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
+  'Zom AI': {
+    orbit: 'core',
+    weight: 1,
+    ...BRAND_MARKS['Zom AI'],
+  },
+  Muzeum: {
+    orbit: 'core',
+    weight: 0.96,
+    ...BRAND_MARKS.Muzeum,
+  },
+  'Dorvell Ferguson Jr.': {
+    orbit: 'core',
+    weight: 0.92,
+    ...BRAND_MARKS['Dorvell Ferguson Jr.'],
+  },
+  Monitorium: {
+    orbit: 'core',
+    weight: 0.9,
+    ...BRAND_MARKS.Monitorium,
+  },
   'Sunny Island Pepper Sauce': {
     orbit: 'core',
-    weight: 0.85,
+    weight: 0.84,
     category: 'Headless 3D Commerce',
     role: 'Design + Full-Stack',
     valueProp: 'Headless Shopify + 3D storefront for a Caribbean pepper-sauce brand.',
@@ -188,7 +249,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   'Wardrobe X': {
     orbit: 'core',
-    weight: 0.82,
+    weight: 0.8,
     category: '3D Commerce',
     role: 'Design + Frontend / R3F',
     valueProp: 'An immersive 3D closet and catalog-scale commerce experience.',
@@ -197,20 +258,19 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
     connections: ['Muzeum', 'Sunny Island Pepper Sauce'],
     ...BRAND_MARKS['Wardrobe X'],
   },
-  'ANTI-HEROES v2': {
+  'Cold As Ice': {
     orbit: 'featured',
-    weight: 0.8,
-    category: 'Audio-Reactive Creative Tech',
-    role: 'Creative Technologist',
-    valueProp: 'Audio-reactive music visuals rebuilt with Web Audio + GLSL.',
-    status: 'Case Study',
-    graphTags: ['audio', 'glsl', 'webgl', 'music', 'creative-tech', 'r3f'],
-    connections: ['ANTI-HEROES v1', 'MetaTunes'],
-    ...BRAND_MARKS['ANTI-HEROES v2'],
+    weight: 0.74,
+    ...BRAND_MARKS['Cold As Ice'],
+  },
+  "Carolyn's Black Gold Farm": {
+    orbit: 'featured',
+    weight: 0.7,
+    ...BRAND_MARKS["Carolyn's Black Gold Farm"],
   },
   'Bodega Danes': {
     orbit: 'client',
-    weight: 0.7,
+    weight: 0.66,
     category: 'Booking Platform',
     role: 'Full-Stack',
     valueProp: 'Booking-first catering platform with Stripe + an admin dashboard.',
@@ -219,9 +279,20 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
     connections: ['Sunny Island Pepper Sauce'],
     ...BRAND_MARKS['Bodega Danes'],
   },
+  'ANTI-HEROES v2': {
+    orbit: 'archive',
+    weight: 0.34,
+    category: 'Audio-Reactive Creative Tech',
+    role: 'Creative Technologist',
+    valueProp: 'Audio-reactive music visuals rebuilt with Web Audio + GLSL.',
+    status: 'Case Study',
+    graphTags: ['audio', 'glsl', 'webgl', 'music', 'creative-tech', 'r3f'],
+    connections: ['ANTI-HEROES v1', 'MetaTunes'],
+    ...BRAND_MARKS['ANTI-HEROES v2'],
+  },
   'Vape Aura': {
     orbit: 'client',
-    weight: 0.55,
+    weight: 0.36,
     category: 'Product Showcase',
     role: 'Design + Frontend',
     valueProp: 'Atmospheric product showcase with a catalog/admin roadmap.',
@@ -231,7 +302,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   'BT GOD': {
     orbit: 'client',
-    weight: 0.55,
+    weight: 0.34,
     category: 'Artist Brand',
     role: 'Design + Frontend',
     valueProp: "An artist's digital destination and brand world.",
@@ -241,7 +312,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   'ANTI-HEROES v1': {
     orbit: 'archive',
-    weight: 0.5,
+    weight: 0.3,
     category: 'Audio Visualizer',
     role: 'Creative Technologist',
     valueProp: 'Spotify + FFT audio visualizer with GLSL music visuals.',
@@ -252,7 +323,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   MetaTunes: {
     orbit: 'archive',
-    weight: 0.45,
+    weight: 0.3,
     category: 'NFT / Music Prototype',
     role: 'Full-Stack',
     valueProp: 'An early NFT + music marketplace prototype.',
@@ -263,7 +334,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   'Get Relocate': {
     orbit: 'archive',
-    weight: 0.42,
+    weight: 0.32,
     category: 'Business Site',
     role: 'Design + Frontend',
     valueProp: 'A moving-company site with a quote workflow.',
@@ -273,7 +344,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   'K & M Renovation and Restoration': {
     orbit: 'archive',
-    weight: 0.4,
+    weight: 0.32,
     category: 'Client Site',
     role: 'Design + Frontend',
     valueProp: 'An early client site for a renovation & restoration company.',
@@ -283,7 +354,7 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
   },
   'Portfolio v1 (First Iteration)': {
     orbit: 'archive',
-    weight: 0.4,
+    weight: 0.3,
     category: 'Portfolio',
     role: 'Design + Frontend',
     valueProp: 'The first iteration of my creative portfolio.',
@@ -293,15 +364,23 @@ const GRAPH_OVERRIDES: Record<string, ProjectGraphMeta> = {
     ...BRAND_MARKS['Portfolio v1 (First Iteration)'],
   },
   'st Home Rental': {
+    orbit: 'experiment',
+    weight: 0.3,
     ...BRAND_MARKS['st Home Rental'],
   },
   'Black C.A.T.': {
+    orbit: 'experiment',
+    weight: 0.3,
     ...BRAND_MARKS['Black C.A.T.'],
   },
   'Show No Love Apparel': {
+    orbit: 'experiment',
+    weight: 0.3,
     ...BRAND_MARKS['Show No Love Apparel'],
   },
   'Flow Collaborative': {
+    orbit: 'experiment',
+    weight: 0.3,
     ...BRAND_MARKS['Flow Collaborative'],
   },
 };
@@ -410,7 +489,13 @@ function toNode(entry: ConstellationEntry): GraphNode {
     accent,
     gradient: gradientFromAccent(accent),
     logo: meta.logo ?? brand?.logo,
+    logoDark: meta.logoDark ?? brand?.logoDark,
+    logoLight: meta.logoLight ?? brand?.logoLight,
     logoFit: meta.logoFit ?? brand?.logoFit ?? 'contain',
+    logoScale:
+      meta.logoScale ??
+      brand?.logoScale ??
+      (meta.logoFit === 'cover' || brand?.logoFit === 'cover' ? 1 : 0.78),
     previewImage: meta.previewImage ?? project.imageDesktop ?? project.imageMobile,
     connections: meta.connections ?? [],
   };
@@ -496,6 +581,15 @@ export function buildProjectGraph(): ProjectGraph {
   const edges = buildEdges(nodes);
   cachedGraph = { nodes, edges };
   return cachedGraph;
+}
+
+/** Resolve the logo path for the active color theme. */
+export function logoForTheme(
+  node: Pick<GraphNode, 'logo' | 'logoDark' | 'logoLight'>,
+  theme: 'light' | 'dark'
+): string | undefined {
+  if (theme === 'dark') return node.logoDark ?? node.logo;
+  return node.logoLight ?? node.logo;
 }
 
 /** Nodes directly connected to a given node id (excludes core tethers). */

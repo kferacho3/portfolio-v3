@@ -86,7 +86,7 @@ export default function ProjectDetailPanel({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+        className="fixed inset-0 z-[1000] flex items-end justify-center bg-black/80 p-0 backdrop-blur-md sm:items-center sm:p-4"
         onClick={onClose}
       >
         <motion.div
@@ -95,17 +95,18 @@ export default function ProjectDetailPanel({
           aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={descId}
-          initial={{ scale: 0.94, opacity: 0, y: 16 }}
+          initial={{ scale: 0.98, opacity: 0, y: 28 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.94, opacity: 0, y: 16 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 26 }}
-          className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0a0912]/95 shadow-2xl shadow-black/50"
+          exit={{ scale: 0.98, opacity: 0, y: 20 }}
+          transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+          className="relative flex max-h-[min(94dvh,940px)] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-white/10 bg-[#0a0912]/96 shadow-2xl shadow-black/50 sm:max-h-[90vh] sm:rounded-3xl"
           onClick={(e) => e.stopPropagation()}
           style={{
             boxShadow: `0 30px 80px rgba(0,0,0,0.6), 0 0 60px ${accent}22`,
+            paddingBottom: 'env(safe-area-inset-bottom)',
           }}
         >
-          <div className="relative aspect-video overflow-hidden rounded-t-3xl">
+          <div className="relative aspect-[16/10] shrink-0 overflow-hidden sm:aspect-video sm:rounded-t-3xl">
             <Image
               src={project.imageDesktop || project.imageMobile}
               alt={`${project.title} preview`}
@@ -122,11 +123,11 @@ export default function ProjectDetailPanel({
             <button
               aria-label="Close project details"
               onClick={onClose}
-              className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] grid h-11 w-11 place-items-center rounded-full bg-black/60 text-white transition hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white sm:right-4 sm:top-4 sm:h-10 sm:w-10"
             >
               ✕
             </button>
-            <div className="absolute bottom-4 left-6 right-6">
+            <div className="absolute bottom-3 left-4 right-4 sm:bottom-4 sm:left-6 sm:right-6">
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em]">
                 {category && (
                   <span
@@ -150,14 +151,14 @@ export default function ProjectDetailPanel({
             </div>
           </div>
 
-          <div className="space-y-8 p-6 md:p-10">
+          <div className="space-y-7 overflow-y-auto overscroll-contain p-5 sm:space-y-8 sm:p-6 md:p-10">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-white/50">
                 Project Dossier
               </p>
               <h3
                 id={titleId}
-                className="mt-2 text-3xl font-bold text-white md:text-4xl"
+                className="mt-2 text-2xl font-bold text-white sm:text-3xl md:text-4xl"
               >
                 {project.title}
               </h3>
@@ -353,7 +354,7 @@ export default function ProjectDetailPanel({
               {caseStudyHref ? (
                 <a
                   href={caseStudyHref}
-                  className="flex-1 rounded-lg border border-white/20 bg-white/5 px-6 py-3 text-center font-medium text-white transition hover:bg-white/10"
+                  className="min-h-12 flex-1 rounded-xl border border-white/20 bg-white/5 px-6 py-3.5 text-center font-medium text-white transition hover:bg-white/10"
                   onClick={() =>
                     trackProjectInteraction({
                       action: 'open_case_study_page',
@@ -371,7 +372,7 @@ export default function ProjectDetailPanel({
                 href={project.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 rounded-lg px-6 py-3 text-center font-semibold text-white transition"
+                className="min-h-12 flex-1 rounded-xl px-6 py-3.5 text-center font-semibold text-white transition"
                 style={{ background: accent }}
                 onClick={() =>
                   trackProjectInteraction({
@@ -398,7 +399,7 @@ export default function ProjectDetailPanel({
                   projectUrl: project.link,
                 })
               }
-              className="block rounded-xl border border-white/10 bg-gradient-to-r from-[#39FF14]/10 via-[#9400D3]/10 to-[#FFA500]/10 px-6 py-4 text-center text-sm font-semibold text-white transition hover:border-white/20"
+              className="block min-h-12 rounded-xl border border-white/10 bg-gradient-to-r from-[#39FF14]/10 via-[#9400D3]/10 to-[#FFA500]/10 px-6 py-4 text-center text-sm font-semibold text-white transition hover:border-white/20"
             >
               Build something like this with me →
             </a>
