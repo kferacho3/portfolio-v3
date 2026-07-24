@@ -33,6 +33,8 @@ export interface GraphNode {
   logoDark?: string;
   logoLight?: string;
   logoFit: 'contain' | 'cover';
+  /** circle badges fill+mask the orb; marks keep padded contain */
+  logoShape: 'circle' | 'mark';
   /** 0..1 fraction of orb filled by the logo */
   logoScale: number;
   previewImage: string;
@@ -79,6 +81,7 @@ const BRAND_MARKS: Record<
     | 'logoDark'
     | 'logoLight'
     | 'logoFit'
+    | 'logoShape'
     | 'logoScale'
     | 'accent'
   >
@@ -88,130 +91,163 @@ const BRAND_MARKS: Record<
     logoDark: '/projects/logos/zom-ai-light.png',
     logoLight: '/projects/logos/zom-ai-dark.png',
     logoFit: 'contain',
+    logoShape: 'mark',
     logoScale: 0.86,
     accent: '#3b82f6',
   },
   Muzeum: {
     logo: '/projects/logos/muzeum.png',
-    logoFit: 'contain',
-    logoScale: 0.94,
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
     accent: '#7b3cff',
   },
   Monitorium: {
     logo: '/projects/logos/monitorium.png',
     logoFit: 'contain',
+    logoShape: 'mark',
     logoScale: 0.78,
     accent: '#e8eef7',
   },
   'Sunny Island Pepper Sauce': {
     logo: '/projects/logos/sunny-island.png',
-    logoFit: 'contain',
-    logoScale: 0.96,
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
     accent: '#f5b800',
   },
   'Wardrobe X': {
     logo: '/projects/logos/wardrobe-x.png',
     logoFit: 'cover',
+    logoShape: 'circle',
     logoScale: 1,
     accent: '#d4a853',
   },
   'ANTI-HEROES v2': {
     logo: '/projects/logos/anti-heroes.png',
     logoFit: 'cover',
+    logoShape: 'circle',
     logoScale: 1,
     accent: '#ff2bd6',
   },
   'ANTI-HEROES v1': {
     logo: '/projects/logos/anti-heroes.png',
     logoFit: 'cover',
+    logoShape: 'circle',
     logoScale: 1,
     accent: '#ff2bd6',
   },
   'Bodega Danes': {
     logo: '/projects/logos/bodega-danes.png',
-    logoFit: 'contain',
-    logoScale: 0.9,
-    accent: '#c45c26',
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
+    accent: '#c23b3b',
   },
   'Vape Aura': {
     logo: '/projects/logos/vape-aura.png',
-    logoFit: 'contain',
-    logoScale: 0.86,
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
     accent: '#10d080',
   },
   'BT GOD': {
     logo: '/projects/logos/bt-god.png',
     logoFit: 'contain',
+    logoShape: 'mark',
     logoScale: 0.88,
     accent: '#e2be73',
   },
   'Cold As Ice': {
     logo: '/projects/logos/cold-as-ice.svg',
     logoFit: 'contain',
+    logoShape: 'mark',
     logoScale: 0.88,
     accent: '#8ec8e8',
   },
   "Carolyn's Black Gold Farm": {
     logo: '/projects/logos/carolyns-black-gold.png',
-    logoFit: 'contain',
-    logoScale: 0.94,
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
     accent: '#a67c3a',
   },
   'Dorvell Ferguson Jr.': {
     logo: '/projects/logos/dorvell-ferguson.png',
     logoFit: 'contain',
+    logoShape: 'mark',
     logoScale: 0.9,
     accent: '#f0b35a',
   },
   MetaTunes: {
     logo: '/projects/logos/metatunes.png',
     logoFit: 'cover',
+    logoShape: 'circle',
     logoScale: 1,
     accent: '#9b30ff',
   },
   'Get Relocate': {
     logo: '/projects/logos/get-relocate.png',
     logoFit: 'contain',
-    logoScale: 0.9,
+    logoShape: 'mark',
+    logoScale: 0.88,
     accent: '#218207',
   },
   'K & M Renovation and Restoration': {
     logo: '/projects/logos/k-and-m.png',
     logoFit: 'contain',
-    logoScale: 0.92,
+    logoShape: 'mark',
+    logoScale: 0.86,
     accent: '#6b7a3a',
   },
   'Portfolio v1 (First Iteration)': {
     logo: '/projects/logos/portfolio-v1.png',
-    logoFit: 'contain',
-    logoScale: 0.82,
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
     accent: '#9400d3',
   },
   'st Home Rental': {
     logo: '/projects/logos/st-home-rental.png',
-    logoFit: 'cover',
-    logoScale: 1,
+    logoFit: 'contain',
+    logoShape: 'mark',
+    logoScale: 0.82,
     accent: '#c03c18',
   },
   'Black C.A.T.': {
     logo: '/projects/logos/black-cat.png',
     logoFit: 'contain',
-    logoScale: 0.92,
+    logoShape: 'mark',
+    logoScale: 0.9,
     accent: '#c0c8d4',
   },
   'Show No Love Apparel': {
     logo: '/projects/logos/show-no-love.png',
     logoFit: 'cover',
+    logoShape: 'circle',
     logoScale: 1,
     accent: '#e11d48',
   },
   'Flow Collaborative': {
     logo: '/projects/logos/flow-collaborative.png',
-    logoFit: 'contain',
-    logoScale: 0.96,
+    logoFit: 'cover',
+    logoShape: 'circle',
+    logoScale: 1,
     accent: '#9cb89a',
   },
 };
+
+/** Inner-ring priority order — evenly spaced so mains never clump. */
+export const PRIORITY_TITLES = [
+  'Zom AI',
+  'Muzeum',
+  'Dorvell Ferguson Jr.',
+  'Monitorium',
+  'Sunny Island Pepper Sauce',
+  'Wardrobe X',
+  'Cold As Ice',
+  "Carolyn's Black Gold Farm",
+] as const;
 
 /* Importance hierarchy → weight / orbit (higher = larger orb). */
 /* ── curated overrides for existing projects (keyed by title) ── */
@@ -492,6 +528,10 @@ function toNode(entry: ConstellationEntry): GraphNode {
     logoDark: meta.logoDark ?? brand?.logoDark,
     logoLight: meta.logoLight ?? brand?.logoLight,
     logoFit: meta.logoFit ?? brand?.logoFit ?? 'contain',
+    logoShape:
+      meta.logoShape ??
+      brand?.logoShape ??
+      (meta.logoFit === 'cover' || brand?.logoFit === 'cover' ? 'circle' : 'mark'),
     logoScale:
       meta.logoScale ??
       brand?.logoScale ??
@@ -502,20 +542,43 @@ function toNode(entry: ConstellationEntry): GraphNode {
 }
 
 function assignAngles(nodes: GraphNode[]): void {
+  const priorityIndex = new Map<string, number>(
+    PRIORITY_TITLES.map((title, i) => [title, i])
+  );
+
+  // Force priority projects onto ring 1 with even angular spacing
+  const priority = PRIORITY_TITLES.map((title) =>
+    nodes.find((n) => n.title === title)
+  ).filter((n): n is GraphNode => !!n);
+
+  priority.forEach((n, i) => {
+    n.ring = 1;
+    n.angle = -Math.PI / 2 + (i / priority.length) * Math.PI * 2;
+  });
+
+  const priorityIds = new Set(priority.map((n) => n.id));
   const byRing = new Map<number, GraphNode[]>();
   for (const n of nodes) {
+    if (priorityIds.has(n.id)) continue;
+    // Keep non-priority off the crowded inner ring
+    if (n.ring === 1) n.ring = 2;
     const arr = byRing.get(n.ring) ?? [];
     arr.push(n);
     byRing.set(n.ring, arr);
   }
+
   for (const [ring, arr] of byRing) {
-    // stable order by title so reloads match
-    arr.sort((a, b) => a.title.localeCompare(b.title));
-    const offset = ring * 0.7; // stagger rings so nodes don't line up radially
+    arr.sort((a, b) => {
+      const pa = priorityIndex.get(a.title);
+      const pb = priorityIndex.get(b.title);
+      if (pa != null || pb != null) {
+        return (pa ?? 999) - (pb ?? 999);
+      }
+      return a.title.localeCompare(b.title);
+    });
+    const offset = ring * 0.55;
     arr.forEach((n, i) => {
-      const base = (i / arr.length) * Math.PI * 2 + offset;
-      const jitter = (hash01(n.id) - 0.5) * ((Math.PI * 2) / arr.length) * 0.4;
-      n.angle = base + jitter;
+      n.angle = (i / Math.max(arr.length, 1)) * Math.PI * 2 + offset;
     });
   }
 }

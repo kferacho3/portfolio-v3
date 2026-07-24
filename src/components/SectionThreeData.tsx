@@ -44,6 +44,8 @@ export interface ProjectGraphMeta {
   logoLight?: string;
   /** how the logo fills the orb — cover for photo marks, contain for symbols */
   logoFit?: 'contain' | 'cover';
+  /** circle = badge that should fill+mask the orb; mark = symbol with padding */
+  logoShape?: 'circle' | 'mark';
   /** 0..1 fraction of the orb the logo should occupy (default ~0.72 contain / 1 cover) */
   logoScale?: number;
   /** explicit publish flag for otherwise-private work */

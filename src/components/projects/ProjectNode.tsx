@@ -8,7 +8,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useContext, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { ThemeContext } from '../../contexts/ThemeContext';
 import { logoForTheme, type GraphNode } from './projectGraph';
 
@@ -16,6 +16,8 @@ interface ProjectNodeProps {
   node: GraphNode;
   x: number;
   y: number;
+  centerX: number;
+  centerY: number;
   size: number;
   active: boolean;
   dimmed: boolean;
@@ -27,10 +29,39 @@ interface ProjectNodeProps {
   onOpen: (node: GraphNode) => void;
 }
 
+/** Short constellation labels — compact by default, full for a few exceptions. */
+function displayLabel(title: string): { lines: string[]; wrap: boolean } {
+  if (title === 'Sunny Island Pepper Sauce') {
+    return { lines: ['Sunny Island', 'Pepper Sauce'], wrap: true };
+  }
+  if (
+    title === 'Show No Love Apparel' ||
+    title === 'Show No Love'
+  ) {
+    return { lines: ['Show No Love'], wrap: false };
+  }
+  if (title === 'Portfolio v1 (First Iteration)' || title === 'Portfolio v1') {
+    return { lines: ['Portfolio v1'], wrap: false };
+  }
+  if (title === "Carolyn's Black Gold Farm" || title === "Carolyn's Black Gold") {
+    return { lines: ["Carolyn's Black Gold"], wrap: true };
+  }
+
+  const words = title.replace(/\s+/g, ' ').trim().split(' ');
+  const take = words.length <= 2 ? words.length : Math.min(3, words.length);
+  // Prefer 2 words when the third is a weak trailing token
+  const weak = /^(and|the|of|for|inc|llc|jr\.?|v\d+|v2|v1)$/i;
+  let n = take;
+  if (n === 3 && weak.test(words[2])) n = 2;
+  return { lines: [words.slice(0, n).join(' ')], wrap: false };
+}
+
 export default function ProjectNode({
   node,
   x,
   y,
+  centerX,
+  centerY,
   size,
   active,
   dimmed,
@@ -43,6 +74,7 @@ export default function ProjectNode({
 }: ProjectNodeProps) {
   const { theme } = useContext(ThemeContext);
   const [imgFailed, setImgFailed] = useState(false);
+  const [settled, setSettled] = useState(reducedMotion);
   const initials = node.title
     .replace(/[^A-Za-z0-9 ]/g, '')
     .split(' ')
@@ -56,26 +88,59 @@ export default function ProjectNode({
   const featured = node.ring === 1;
   const logoSrc = logoForTheme(node, theme);
   const showLogo = Boolean(logoSrc) && !imgFailed;
+  const isCircle = node.logoShape === 'circle' || node.logoFit === 'cover';
   const fill = Math.min(
     0.98,
-    Math.max(0.55, node.logoScale ?? (node.logoFit === 'cover' ? 1 : 0.78))
+    Math.max(
+      0.55,
+      node.logoScale ?? (isCircle ? 1 : 0.78)
+    )
   );
-  const logoSize = size * fill;
+  const logoSize = isCircle ? size : size * fill;
+  const label = displayLabel(node.title);
+  const scatterDelay = 0.08 + node.ring * 0.07 + (index % 6) * 0.035;
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setSettled(true);
+      return;
+    }
+    const t = window.setTimeout(() => setSettled(true), (scatterDelay + 0.85) * 1000);
+    return () => window.clearTimeout(t);
+  }, [reducedMotion, scatterDelay]);
 
   return (
-    <div
+    <motion.div
       className="pointer-events-none absolute"
-      style={{
+      style={{ zIndex: active ? 30 : featured ? 20 : 10 }}
+      initial={
+        reducedMotion
+          ? { left: x, top: y, opacity: 0, x: '-50%', y: '-50%' }
+          : { left: centerX, top: centerY, opacity: 0, x: '-50%', y: '-50%' }
+      }
+      animate={{
         left: x,
         top: y,
-        transform: 'translate(-50%, -50%)',
-        zIndex: active ? 30 : featured ? 20 : 10,
+        opacity: 1,
+        x: '-50%',
+        y: '-50%',
       }}
+      transition={
+        reducedMotion
+          ? { opacity: { duration: 0.25 } }
+          : {
+              type: 'spring',
+              stiffness: 120,
+              damping: 18,
+              mass: 0.9,
+              delay: scatterDelay,
+            }
+      }
     >
       <motion.div
         animate={
-          reducedMotion
-            ? { opacity: dimmed ? 0.3 : 1 }
+          reducedMotion || !settled
+            ? { opacity: dimmed ? 0.3 : 1, y: 0 }
             : { y: [0, -5, 0], opacity: dimmed ? 0.26 : 1 }
         }
         transition={{
@@ -134,6 +199,7 @@ export default function ProjectNode({
             }}
           />
 
+          {/* Disc + circular clip so square badges never show corners */}
           <span
             aria-hidden
             className="absolute overflow-hidden rounded-full transition-all duration-300"
@@ -154,27 +220,29 @@ export default function ProjectNode({
                 ? `0 0 ${active ? 28 : 16}px ${accent}66, inset 0 -6px 14px rgba(0,0,0,0.45)`
                 : `0 0 ${active ? 18 : 10}px ${accent}44, inset 0 -5px 10px rgba(0,0,0,0.4)`,
             }}
-          />
+          >
+            {showLogo && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={logoSrc}
+                src={logoSrc}
+                alt=""
+                aria-hidden
+                draggable={false}
+                onError={() => setImgFailed(true)}
+                className="absolute left-1/2 top-1/2 max-w-none select-none"
+                style={{
+                  width: logoSize,
+                  height: logoSize,
+                  transform: 'translate(-50%, -50%)',
+                  objectFit: isCircle ? 'cover' : 'contain',
+                  objectPosition: 'center',
+                }}
+              />
+            )}
+          </span>
 
-          {showLogo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={logoSrc}
-              src={logoSrc}
-              alt=""
-              aria-hidden
-              draggable={false}
-              onError={() => setImgFailed(true)}
-              className="relative z-[1] select-none"
-              style={{
-                width: logoSize,
-                height: logoSize,
-                objectFit: node.logoFit,
-                objectPosition: 'center',
-                borderRadius: node.logoFit === 'cover' ? '9999px' : 0,
-              }}
-            />
-          ) : (
+          {!showLogo && (
             <span
               className="relative z-[1] font-black tracking-wider"
               style={{
@@ -189,14 +257,22 @@ export default function ProjectNode({
         </motion.button>
 
         <motion.span
-          className="pointer-events-none mt-1.5 max-w-[110px] truncate text-center text-[9px] font-semibold tracking-wide text-white sm:mt-2 sm:max-w-[132px] sm:text-[10px]"
+          className={`pointer-events-none mt-1.5 text-center text-[9px] font-semibold leading-tight tracking-wide text-white sm:mt-2 sm:text-[10px] ${
+            label.wrap
+              ? 'max-w-[128px] whitespace-normal sm:max-w-[148px]'
+              : 'max-w-[110px] sm:max-w-[132px]'
+          }`}
           animate={{
             opacity: dimmed ? 0.28 : active ? 1 : featured ? 0.82 : 0.4,
           }}
         >
-          {node.title}
+          {label.lines.map((line) => (
+            <span key={line} className="block">
+              {line}
+            </span>
+          ))}
         </motion.span>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

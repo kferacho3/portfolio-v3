@@ -163,7 +163,10 @@ export default function ProjectMobileCarousel({
           const logoSrc = logoForTheme(n, theme);
           const showLogo = Boolean(logoSrc) && !imgFailed[n.id];
           const isActive = n.id === activeId;
-          const logoFill = Math.min(0.92, Math.max(0.62, n.logoScale ?? 0.78));
+          const isCircle = n.logoShape === 'circle' || n.logoFit === 'cover';
+          const logoFill = isCircle
+            ? 1
+            : Math.min(0.92, Math.max(0.62, n.logoScale ?? 0.78));
 
           return (
             <motion.article
@@ -224,9 +227,8 @@ export default function ProjectMobileCarousel({
                         style={{
                           width: `${logoFill * 100}%`,
                           height: `${logoFill * 100}%`,
-                          objectFit: n.logoFit,
+                          objectFit: isCircle ? 'cover' : 'contain',
                           objectPosition: 'center',
-                          borderRadius: n.logoFit === 'cover' ? '9999px' : 0,
                         }}
                       />
                     ) : (

@@ -28,11 +28,11 @@ interface ProjectConstellationProps {
 }
 
 function nodeSizeFor(n: GraphNode, compact: boolean) {
-  // Emphasize importance hierarchy: top-weighted core nodes read largest.
+  // Cap ceilings so weight-1 mains don't collide on the inner ring.
   if (compact) {
-    return n.ring === 1 ? 44 + n.weight * 36 : 30 + n.weight * 16;
+    return n.ring === 1 ? 40 + n.weight * 30 : 28 + n.weight * 14;
   }
-  return n.ring === 1 ? 50 + n.weight * 50 : 34 + n.weight * 20;
+  return n.ring === 1 ? 46 + n.weight * 38 : 32 + n.weight * 16;
 }
 
 export default function ProjectConstellation({
@@ -152,8 +152,8 @@ export default function ProjectConstellation({
         ref={containerRef}
         className={`relative w-full max-w-full overflow-hidden touch-manipulation ${
           compact
-            ? 'h-[min(68dvh,560px)] sm:h-[620px]'
-            : 'h-[600px] sm:h-[700px] lg:h-[780px]'
+            ? 'h-[min(72dvh,600px)] sm:h-[660px]'
+            : 'h-[640px] sm:h-[760px] lg:h-[860px]'
         }`}
         style={{
           background:
@@ -286,6 +286,8 @@ export default function ProjectConstellation({
                   node={n}
                   x={p.x}
                   y={p.y}
+                  centerX={layout.center.x}
+                  centerY={layout.center.y}
                   size={nodeSizeFor(n, compact)}
                   active={isActive}
                   dimmed={isDimmed}
